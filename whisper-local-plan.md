@@ -75,14 +75,15 @@ Why whisper.cpp and not the alternatives:
   model with quality clearly better than Google dictation, and the Pixel
   8 transcribes a 10-second clip in roughly 1–2 seconds.
 - Offer **`ggml-small.en.bin`** (~466 MB) as an optional upgrade in
-  Settings for users who want max quality and don't mind the size.
-- Do **not** bundle the model inside the APK — that bloats the Play
-  Store listing and forces every user to redownload on every update.
-  Instead: download on first use of the local-whisper option, into the
-  app's private files dir, with a visible progress UI and a "cancel /
-  retry" option. Show file size up front.
+  Settings for max quality.
+- Do **not** bundle the model inside the APK. Download on first use of
+  the local-whisper option, into the app's private files dir. Use a
+  **blocking modal dialog** with progress bar, MB count, and Cancel
+  button — the feature is unusable until the model is on disk, so
+  there's no point letting the user wander off and tap the mic to find
+  nothing happens.
 - Verify SHA-256 after download. If verification fails, delete and
-  prompt to retry.
+  prompt to retry inside the same dialog.
 
 ### JNI layer
 
@@ -91,9 +92,9 @@ Why whisper.cpp and not the alternatives:
   and `whisper_full`, exposed as `nativeInit(modelPath: String)`,
   `nativeTranscribe(pcm: ShortArray, sampleRate: Int): String`,
   `nativeRelease()`.
-- Build via Gradle's `externalNativeBuild` (CMake). Targets:
-  arm64-v8a (primary), armeabi-v7a (optional, drop if Play Store
-  baseline allows), x86_64 (emulator only).
+- Build via Gradle's `externalNativeBuild` (CMake). Target arm64-v8a
+  only — this is a personal build for a Pixel 8, no need for other
+  ABIs.
 - The first `nativeInit` after process start loads the model into RAM
   (~150 MB for base, ~500 MB for small). Keep the handle alive until
   the chat activity is destroyed; don't re-init per utterance.
@@ -203,7 +204,8 @@ Today `Preferences.getSystemMessage()` stores one global prompt. Plan:
   replaces the global system message when building the API request.
 - Migration: on first launch after upgrade, create a "Default" persona
   seeded from the current `getSystemMessage()` value and mark it
-  active. Leave the global key in place so nothing else breaks.
+  active. Leave the legacy `systemMessage` key untouched as a read-only
+  fallback so anything else that reads it keeps working.
 - UI: a small dropdown above the chat input (or next to the call
   button in hands-free mode) shows the active persona name. Tapping it
   opens a list with Add/Edit/Delete. Switching mid-conversation is
@@ -260,6 +262,25 @@ New entries under existing settings screen:
 
 ---
 
+## Screen-off operation: foreground service
+
+Hands-free mode runs a foreground service with type `microphone` for the
+entire duration of an active call. This is what keeps the mic alive when
+the screen locks — without it Android will kill the recognizer within
+seconds of the screen turning off.
+
+- Service started in the Listening transition out of Idle, stopped on
+  End Call or Idle hang-up.
+- Persistent notification while the service runs ("SpeakGPT call
+  active"). Tap to bring the chat back to the foreground.
+- Manifest needs `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_MICROPHONE`,
+  `POST_NOTIFICATIONS`, `WAKE_LOCK`, plus the service declaration with
+  `android:foregroundServiceType="microphone"`.
+- Use a `PARTIAL_WAKE_LOCK` while the service is running so the CPU
+  doesn't doze on us. Release it when the call ends.
+
+---
+
 ## Files we expect to touch
 
 Not exhaustive, but a starting map:
@@ -275,6 +296,8 @@ Not exhaustive, but a starting map:
 - New: `app/src/main/java/org/teslasoft/assistant/stt/VoiceLoopController.kt`
   — owns the Idle/Listening/Thinking/Speaking/Paused state machine and
   the two timers.
+- New: `app/src/main/java/org/teslasoft/assistant/voice/VoiceCallService.kt`
+  — the foreground service that holds the mic alive across screen-off.
 - `app/src/main/java/org/teslasoft/assistant/ui/activities/ChatActivity.kt`
   — thread the new engine into `handleWhisperSpeechRecognition` /
   `handleGoogleSpeechRecognition` dispatch, wire up the hands-free
@@ -282,9 +305,11 @@ Not exhaustive, but a starting map:
 - `app/src/main/java/org/teslasoft/assistant/ui/fragments/AssistantFragment.kt`
   — mirror the same engine selection so the assistant floating UI
   benefits too.
-- `app/src/main/AndroidManifest.xml` — verify `RECORD_AUDIO`,
+- `app/src/main/AndroidManifest.xml` — add `RECORD_AUDIO`,
   `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_MICROPHONE`,
-  `POST_NOTIFICATIONS` are all declared (some likely already are).
+  `POST_NOTIFICATIONS`, `WAKE_LOCK` if missing, plus the
+  `VoiceCallService` declaration with
+  `android:foregroundServiceType="microphone"`.
 - New layout XMLs for the persona dropdown, hands-free panel, and
   Settings entries.
 
@@ -301,49 +326,24 @@ Not exhaustive, but a starting map:
 
 ---
 
-## Rollout order (suggested milestones)
+## Rollout order
 
-1. **STT swap proof-of-life**: bring up whisper.cpp + JNI, transcribe a
-   single 5-second `AudioRecord` clip from a debug button, print result
-   in a toast. No UI, no settings. Confirm Pixel 8 can run base.en.
-2. **Engine selector**: wire `whisper-local` into `getAudioModel()` and
-   the existing dispatch so the user can pick it from settings and
-   one-shot mic input uses it just like Whisper-cloud does today.
-3. **VoiceLoopController + hands-free button**: build the state
-   machine, add the hands-free toggle to the chat screen, get the
-   listen → submit → respond → listen loop working with the 5 s
-   end-of-utterance timer.
-4. **Idle hang-up + Pause button + status indicator.**
-5. **Re-read button on assistant messages.**
-6. **Personas: storage, dropdown UI, settings management screen,
-   migration from `getSystemMessage()`.**
-7. **Polish**: model download UI, SHA-256 check, "small.en" upgrade
-   path, settings sliders for all three timers.
+1. **Engine swap + model download dialog**: vendor whisper.cpp, build
+   the JNI shim for arm64-v8a, wire `whisper-local` into
+   `getAudioModel()` and the existing dispatch, and ship the blocking
+   model-download modal. After this step, tapping the existing mic
+   button uses on-device Whisper end-to-end.
+2. **Foreground service + hands-free button**: add `VoiceCallService`,
+   manifest permissions, and the hands-free toggle on the chat screen.
+   Mic survives screen-off.
+3. **VoiceLoopController**: Idle → Listening → Thinking → Speaking →
+   Listening state machine, 5 s end-of-utterance timer, status
+   indicator.
+4. **Idle hang-up (8 min) + Pause button.**
+5. **Re-read button on every assistant message.**
+6. **Personas: storage, dropdown UI, settings management, migration
+   from `getSystemMessage()`.**
+7. **Polish**: SHA-256 verify, `small.en` upgrade path, settings
+   sliders for the three timers.
 
-Each milestone should be testable on the Pixel 8 before moving on.
-
----
-
-## Open questions to confirm before coding
-
-1. **Foreground service for screen-off mic?** Hands-free mode is most
-   useful with the screen off. SpeakGPT today doesn't run a foreground
-   service for the mic, which means Android may kill the recognizer
-   when the screen locks. Adding one is straightforward but it
-   introduces a persistent notification while the call is active. OK to
-   add?
-2. **Model download UX**: blocking modal on first selection, or
-   background download with a "ready when finished" toast? Recommend
-   blocking modal with cancel, since the feature can't work until the
-   model is on disk.
-3. **Persona migration**: keep the legacy `systemMessage` field as a
-   read-only fallback, or copy-and-clear it once migrated? Recommend
-   keep — any other code path that still reads it stays functional.
-4. **TTS engine**: stick with Android's built-in TTS for now (the same
-   one SpeakGPT uses today), or revisit? On-device TTS quality is the
-   second-biggest "feels cheap" complaint after Google STT. Out of
-   scope for this plan but worth flagging.
-5. **Battery**: continuous on-device Whisper transcription is more
-   battery-hungry than Google's cloud recognizer. Worth surfacing a
-   one-time warning on first hands-free session? Recommend yes, with a
-   "don't show again" checkbox.
+Each step is testable on the Pixel 8 before moving on.
