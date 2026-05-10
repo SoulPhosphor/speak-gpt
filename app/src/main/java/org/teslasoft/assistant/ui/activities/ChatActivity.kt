@@ -706,7 +706,17 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
     private val ttsProgressListener = object : UtteranceProgressListener() {
         override fun onStart(utteranceId: String?) { /* no-op */ }
-        override fun onDone(utteranceId: String?) { /* no-op */ }
+        override fun onDone(utteranceId: String?) {
+            if (preferences?.getAudioModel() == "google" && preferences?.getNotSilence() == true && !cancelState && !isRecording) {
+                Handler(Looper.getMainLooper()).post {
+                    if (!isFinishing && !isDestroyed) {
+                        isRecording = true
+                        btnMicro?.setImageResource(R.drawable.ic_stop_recording)
+                        startRecognition()
+                    }
+                }
+            }
+        }
         @Suppress("OverridingDeprecatedMember")
         override fun onError(utteranceId: String?) {
             Log.w("TTS", "TTS utterance error: $utteranceId; re-initialising engine")
