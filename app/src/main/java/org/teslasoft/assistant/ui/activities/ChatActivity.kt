@@ -52,6 +52,7 @@ import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import android.speech.tts.Voice
 import android.text.Editable
 import android.text.TextWatcher
@@ -685,12 +686,46 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
     // Init TTS
     private var tts: TextToSpeech? = null
+    private var pendingSpeak: String? = null
+    private var ttsUtteranceCounter: Long = 0
     private val ttsListener: TextToSpeech.OnInitListener =
         TextToSpeech.OnInitListener { status ->
             if (status == TextToSpeech.SUCCESS) {
                 ttsPostInit()
+                tts?.setOnUtteranceProgressListener(ttsProgressListener)
+                isTTSInitialized = true
+                pendingSpeak?.let {
+                    pendingSpeak = null
+                    Handler(Looper.getMainLooper()).post { speak(it) }
+                }
+            } else {
+                isTTSInitialized = false
+                Log.w("TTS", "TextToSpeech init failed with status $status")
             }
         }
+
+    private val ttsProgressListener = object : UtteranceProgressListener() {
+        override fun onStart(utteranceId: String?) { /* no-op */ }
+        override fun onDone(utteranceId: String?) { /* no-op */ }
+        @Suppress("OverridingDeprecatedMember")
+        override fun onError(utteranceId: String?) {
+            Log.w("TTS", "TTS utterance error: $utteranceId; re-initialising engine")
+            Handler(Looper.getMainLooper()).post { reinitTTS() }
+        }
+        override fun onError(utteranceId: String?, errorCode: Int) {
+            Log.w("TTS", "TTS utterance error code $errorCode: $utteranceId; re-initialising engine")
+            Handler(Looper.getMainLooper()).post { reinitTTS() }
+        }
+    }
+
+    private fun reinitTTS() {
+        try {
+            tts?.stop()
+            tts?.shutdown()
+        } catch (_: Exception) { /* ignore */ }
+        isTTSInitialized = false
+        tts = TextToSpeech(this, ttsListener)
+    }
 
     private fun ttsPostInit() {
         if (!autoLangDetect) {
@@ -700,8 +735,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 )
             )
 
-            isTTSInitialized =
-                !(result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED)
+            if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
+                Log.w("TTS", "Language missing or unsupported: ${preferences!!.getLanguage()}")
+            }
 
             val voices: Set<Voice> = tts!!.voices
             for (v: Voice in voices) {
@@ -2516,7 +2552,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     }
 
     private fun pronounce(st: Boolean, message: String) {
-        if ((st && isTTSInitialized && !silenceMode) || preferences!!.getNotSilence()) {
+        if ((st && !silenceMode) || preferences!!.getNotSilence()) {
             if (autoLangDetect) {
                 try {
                     languageIdentifier = LanguageIdentification.getClient()
@@ -2553,7 +2589,29 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
     private fun speak(message: String) {
         if (preferences!!.getTtsEngine() == "google") {
-            tts!!.speak(message, TextToSpeech.QUEUE_FLUSH, null, "")
+            val engine = tts
+            if (engine == null || !isTTSInitialized) {
+                pendingSpeak = message
+                if (engine == null) {
+                    Handler(Looper.getMainLooper()).post { initTTS() }
+                }
+                return
+            }
+            val runSpeak = {
+                ttsUtteranceCounter++
+                val utteranceId = "speakgpt-$ttsUtteranceCounter"
+                val result = engine.speak(message, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
+                if (result == TextToSpeech.ERROR) {
+                    Log.w("TTS", "speak() returned ERROR; re-initialising engine and queueing message")
+                    pendingSpeak = message
+                    reinitTTS()
+                }
+            }
+            if (Looper.myLooper() == Looper.getMainLooper()) {
+                runSpeak()
+            } else {
+                Handler(Looper.getMainLooper()).post { runSpeak() }
+            }
         } else {
             if (openAIKey == null) {
                 openAIMissing("tts", message)
