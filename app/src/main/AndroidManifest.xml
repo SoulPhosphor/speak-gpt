@@ -79,6 +79,12 @@
         </activity>
 
         <activity
+            android:name=".ui.activities.PersonasListActivity"
+            android:exported="false"
+            android:label="@string/title_personas">
+        </activity>
+
+        <activity
             android:name=".ui.activities.LogitBiasConfigActivity"
             android:exported="false">
         </activity>

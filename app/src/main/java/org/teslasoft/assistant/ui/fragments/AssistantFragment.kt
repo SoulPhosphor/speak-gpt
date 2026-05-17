@@ -138,6 +138,7 @@ import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.LogitBiasPreferences
+import org.teslasoft.assistant.preferences.PersonaPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.ui.activities.MainActivity
@@ -1765,7 +1766,7 @@ class AssistantFragment : BottomSheetDialogFragment(), ChatAdapter.OnUpdateListe
 
         val msgs: ArrayList<ChatMessage> = arrayListOf()
 
-        val systemMessage = preferences!!.getSystemMessage()
+        val systemMessage = PersonaPreferences.resolveSystemMessage(requireContext(), preferences!!.getSystemMessage())
 
         if (systemMessage != "") {
             msgs.add(
@@ -2727,7 +2728,7 @@ class AssistantFragment : BottomSheetDialogFragment(), ChatAdapter.OnUpdateListe
                 val activationPrompt = globalPreferences.getPrompt()
                 val layout = globalPreferences.getLayout()
                 val silent = globalPreferences.getSilence()
-                val systemMessage = globalPreferences.getSystemMessage()
+                val systemMessage = PersonaPreferences.resolveSystemMessage(requireContext(), globalPreferences.getSystemMessage())
                 val alwaysSpeak = globalPreferences.getNotSilence()
                 val autoLanguageDetect = globalPreferences.getAutoLangDetect()
                 val functionCalling = globalPreferences.getFunctionCalling()

@@ -162,6 +162,7 @@ import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.LogitBiasPreferences
+import org.teslasoft.assistant.preferences.PersonaPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.theme.ThemeManager
@@ -2376,7 +2377,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
         val msgs: ArrayList<ChatMessage> = arrayListOf()
 
-        val systemMessage = preferences!!.getSystemMessage()
+        val systemMessage = PersonaPreferences.resolveSystemMessage(this, preferences!!.getSystemMessage())
         if (systemMessage != "") {
             msgs.add(
                 ChatMessage(
@@ -2499,7 +2500,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     val activationPrompt = preferences.getPrompt()
                     val layout = preferences.getLayout()
                     val silent = preferences.getSilence()
-                    val systemMessage1 = preferences.getSystemMessage()
+                    val systemMessage1 = PersonaPreferences.resolveSystemMessage(this@ChatActivity, preferences.getSystemMessage())
                     val alwaysSpeak = preferences.getNotSilence()
                     val autoLanguageDetect = preferences.getAutoLangDetect()
                     val functionCalling = preferences.getFunctionCalling()
