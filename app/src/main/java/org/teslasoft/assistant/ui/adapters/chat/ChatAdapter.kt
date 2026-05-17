@@ -197,6 +197,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         private val btnRetry: ImageButton = itemView.findViewById(R.id.btn_retry)
         private val btnReport: ImageButton = itemView.findViewById(R.id.btn_report)
         private val btnShare: ImageButton = itemView.findViewById(R.id.btn_share)
+        private val btnSpeak: ImageButton? = itemView.findViewById(R.id.btn_speak)
 
         @SuppressLint("SetTextI18n", "SetJavaScriptEnabled")
         open fun bind(chatMessage: HashMap<String, Any>, position: Int) {
@@ -205,6 +206,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             updateRetryButton(chatMessage, position)
             updateReportButton(chatMessage)
             updateShareButton(chatMessage)
+            updateSpeakButton(chatMessage)
 
             if (selectorProjection[position]["selected"].toString() == "true") {
                 ui.setBackgroundColor(getSurface3Color(context))
@@ -327,6 +329,23 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 btnShare.visibility = View.VISIBLE
             } else {
                 btnShare.visibility = View.GONE
+            }
+        }
+
+        private fun updateSpeakButton(chatMessage: HashMap<String, Any>) {
+            val speak = btnSpeak ?: return
+            val text = chatMessage["message"].toString()
+            val isBot = chatMessage["isBot"] == true
+            val isImageOrFile = text.contains("data:image") || text.contains("~file:")
+            if (isBot && !isImageOrFile && text.isNotBlank()) {
+                speak.visibility = View.VISIBLE
+                speak.setOnClickListener {
+                    if (!bulkActionMode) {
+                        listener?.onSpeakClick(text)
+                    }
+                }
+            } else {
+                speak.visibility = View.GONE
             }
         }
 
@@ -690,5 +709,6 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         fun onMessageDeleted()
         fun onBulkSelectionChanged(position: Int, selected: Boolean)
         fun onChangeBulkActionMode(mode: Boolean)
+        fun onSpeakClick(text: String) { /* default no-op */ }
     }
 }

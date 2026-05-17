@@ -162,6 +162,7 @@ import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.LogitBiasPreferences
+import org.teslasoft.assistant.preferences.PersonaPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.theme.ThemeManager
@@ -492,7 +493,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     private var cameraIntentLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == RESULT_OK) {
             val imageFile = File(getExternalFilesDir(Environment.DIRECTORY_PICTURES), "tmp.jpg")
-            val uri = FileProvider.getUriForFile(this, "org.teslasoft.assistant.fileprovider", imageFile)
+            val uri = FileProvider.getUriForFile(this, "${packageName}.fileprovider", imageFile)
 
             bitmap = readFile(uri)
 
@@ -541,7 +542,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 intent.putExtra("android.intent.extra.quickCapture", true)
                 val externalFilesDir = getExternalFilesDir(Environment.DIRECTORY_PICTURES)
                 val imageFile = File(externalFilesDir, "tmp.jpg")
-                intent.putExtra(MediaStore.EXTRA_OUTPUT, FileProvider.getUriForFile(this, "org.teslasoft.assistant.fileprovider", imageFile))
+                intent.putExtra(MediaStore.EXTRA_OUTPUT, FileProvider.getUriForFile(this, "${packageName}.fileprovider", imageFile))
                 cameraIntentLauncher.launch(intent)
             }
         }
@@ -2376,7 +2377,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
         val msgs: ArrayList<ChatMessage> = arrayListOf()
 
-        val systemMessage = preferences!!.getSystemMessage()
+        val systemMessage = PersonaPreferences.resolveSystemMessage(this, preferences!!.getSystemMessage())
         if (systemMessage != "") {
             msgs.add(
                 ChatMessage(
@@ -2499,7 +2500,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     val activationPrompt = preferences.getPrompt()
                     val layout = preferences.getLayout()
                     val silent = preferences.getSilence()
-                    val systemMessage1 = preferences.getSystemMessage()
+                    val systemMessage1 = PersonaPreferences.resolveSystemMessage(this@ChatActivity, preferences.getSystemMessage())
                     val alwaysSpeak = preferences.getNotSilence()
                     val autoLanguageDetect = preferences.getAutoLangDetect()
                     val functionCalling = preferences.getFunctionCalling()
@@ -3030,6 +3031,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
     override fun onMessageDeleted() {
         syncChatProjection()
+    }
+
+    override fun onSpeakClick(text: String) {
+        speak(text)
     }
 
     @SuppressLint("SetTextI18n")

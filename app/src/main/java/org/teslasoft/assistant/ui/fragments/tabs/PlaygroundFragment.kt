@@ -64,6 +64,7 @@ import kotlinx.coroutines.launch
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.LogitBiasPreferences
+import org.teslasoft.assistant.preferences.PersonaPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.ui.fragments.dialogs.QuickSettingsBottomSheetDialogFragment
@@ -283,7 +284,7 @@ class PlaygroundFragment : Fragment() {
         try {
             val msgs: ArrayList<ChatMessage> = arrayListOf()
 
-            val systemMessage = preferences!!.getSystemMessage()
+            val systemMessage = PersonaPreferences.resolveSystemMessage(requireContext(), preferences!!.getSystemMessage())
             if (systemMessage != "") {
                 msgs.add(
                     ChatMessage(
