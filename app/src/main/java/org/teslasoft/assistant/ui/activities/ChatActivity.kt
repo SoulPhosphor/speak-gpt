@@ -493,7 +493,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     private var cameraIntentLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == RESULT_OK) {
             val imageFile = File(getExternalFilesDir(Environment.DIRECTORY_PICTURES), "tmp.jpg")
-            val uri = FileProvider.getUriForFile(this, "org.teslasoft.assistant.fileprovider", imageFile)
+            val uri = FileProvider.getUriForFile(this, "${packageName}.fileprovider", imageFile)
 
             bitmap = readFile(uri)
 
@@ -542,7 +542,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 intent.putExtra("android.intent.extra.quickCapture", true)
                 val externalFilesDir = getExternalFilesDir(Environment.DIRECTORY_PICTURES)
                 val imageFile = File(externalFilesDir, "tmp.jpg")
-                intent.putExtra(MediaStore.EXTRA_OUTPUT, FileProvider.getUriForFile(this, "org.teslasoft.assistant.fileprovider", imageFile))
+                intent.putExtra(MediaStore.EXTRA_OUTPUT, FileProvider.getUriForFile(this, "${packageName}.fileprovider", imageFile))
                 cameraIntentLauncher.launch(intent)
             }
         }
