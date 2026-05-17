@@ -3033,6 +3033,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         syncChatProjection()
     }
 
+    override fun onSpeakClick(text: String) {
+        speak(text)
+    }
+
     @SuppressLint("SetTextI18n")
     override fun onBulkSelectionChanged(position: Int, selected: Boolean) {
         messagesSelectionProjection[position]["selected"] = selected
