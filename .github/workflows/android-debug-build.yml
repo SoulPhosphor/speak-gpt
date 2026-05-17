@@ -25,6 +25,12 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
+      - name: Accept Android SDK licenses
+        run: yes | sdkmanager --licenses > /dev/null 2>&1 || true
+
+      - name: Install required Android SDK components
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools"
+
       - name: Cache Gradle
         uses: actions/cache@v4
         with:
@@ -39,17 +45,25 @@ jobs:
         run: chmod +x ./gradlew
 
       - name: Assemble debug APK
-        run: ./gradlew :app:assembleDebug --stacktrace
+        run: ./gradlew :app:assembleDebug --stacktrace --info 2>&1 | tee gradle-output.log
 
-      - name: Locate APK
-        id: locate_apk
+      - name: Show failure tail
+        if: failure()
         run: |
-          set -e
-          apk=$(find app/build/outputs/apk -name '*.apk' | head -n 1)
-          echo "Found APK: $apk"
-          echo "apk_path=$apk" >> "$GITHUB_OUTPUT"
+          echo "===== last 400 lines of gradle output ====="
+          tail -n 400 gradle-output.log || true
+
+      - name: Upload Gradle output on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gradle-output-${{ github.sha }}
+          path: gradle-output.log
+          if-no-files-found: warn
+          retention-days: 30
 
       - name: Upload APK artifact
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: speakgpt-debug-${{ github.sha }}
