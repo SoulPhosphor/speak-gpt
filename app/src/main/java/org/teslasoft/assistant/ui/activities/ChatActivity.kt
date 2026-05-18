@@ -1384,17 +1384,23 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
         messageInput?.setOnKeyListener { v, keyCode, event -> run {
             when (event.action) {
-                KeyEvent.ACTION_DOWN if keyCode == KeyEvent.KEYCODE_ENTER && event.isShiftPressed && isHardKB() && preferences!!.getDesktopMode() -> {
-                    (v as EditText).append("\n")
-                    return@run true
-                }
-                KeyEvent.ACTION_DOWN if keyCode == KeyEvent.KEYCODE_ENTER && isHardKB() && preferences!!.getDesktopMode() -> {
-                    parseMessage((v as EditText).text.toString())
-                    return@run true
-                }
-                KeyEvent.ACTION_DOWN if ((keyCode == KeyEvent.KEYCODE_ESCAPE && event.isShiftPressed) || keyCode == KeyEvent.KEYCODE_BACK) && preferences!!.getDesktopMode() -> {
-                    finishActivity()
-                    return@run true
+                KeyEvent.ACTION_DOWN -> {
+                    if (keyCode == KeyEvent.KEYCODE_ENTER && event.isShiftPressed && isHardKB() && preferences!!.getDesktopMode()) {
+                        (v as EditText).append("\n")
+                        return@run true
+                    }
+
+                    if (keyCode == KeyEvent.KEYCODE_ENTER && isHardKB() && preferences!!.getDesktopMode()) {
+                        parseMessage((v as EditText).text.toString())
+                        return@run true
+                    }
+
+                    if (((keyCode == KeyEvent.KEYCODE_ESCAPE && event.isShiftPressed) || keyCode == KeyEvent.KEYCODE_BACK) && preferences!!.getDesktopMode()) {
+                        finishActivity()
+                        return@run true
+                    }
+
+                    return@run false
                 }
                 else -> return@run false
             }
