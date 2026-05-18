@@ -31,6 +31,17 @@ jobs:
       - name: Rename APK
         run: cp app/build/outputs/apk/debug/app-debug.apk speak-gpt.apk
 
+      - name: Write release notes
+        run: |
+          cat > notes.md << 'NOTES'
+          ## How to install SpeakGPT on your Android phone
+
+          1. Click **speak-gpt.apk** below to download it
+          2. Transfer the file to your Android phone (or open this page on your phone and download directly)
+          3. Tap the downloaded file to install it
+          4. If your phone asks about installing from unknown sources, tap Allow
+          NOTES
+
       - name: Delete existing latest release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -44,12 +55,5 @@ jobs:
         run: |
           gh release create latest speak-gpt.apk \
             --title "Latest Build" \
-            --notes "## How to install SpeakGPT on your Android phone
-
-1. Click **speak-gpt.apk** below to download it
-2. Transfer the file to your Android phone (or download directly on your phone)
-3. Tap the file on your phone to install it
-4. If your phone asks about installing from unknown sources, tap Allow
-
-Built from commit: ${{ github.sha }}" \
+            --notes-file notes.md \
             --latest
