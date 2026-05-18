@@ -142,7 +142,7 @@ open class RequestNetworkController {
             }
 
             override fun onResponse(call: Call, response: Response) {
-                val responseBody: String = response.body.string().trim()
+                val responseBody: String = response.body?.string()?.trim().orEmpty()
 
                 /* Reminder: Do not forget to add runOnUiThread {} when working with UI elements */
                 requestListener.onResponse(tag, responseBody)

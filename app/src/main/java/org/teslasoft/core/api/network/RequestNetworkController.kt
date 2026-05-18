@@ -145,7 +145,7 @@ open class RequestNetworkController {
             }
 
             override fun onResponse(call: Call, response: Response) {
-                val responseBody: String = response.body.string().trim()
+                val responseBody: String = response.body?.string()?.trim().orEmpty()
 
                 requestNetwork.getActivity().runOnUiThread {
                     requestListener.onResponse(

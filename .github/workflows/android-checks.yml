@@ -1,0 +1,50 @@
+name: Android Checks
+
+on:
+  push:
+    branches:
+      - '**'
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - name: Ensure Gradle wrapper is executable
+        run: chmod +x ./gradlew
+
+      - name: Run unit tests
+        run: ./gradlew --no-daemon test
+
+      - name: Build debug APK
+        run: ./gradlew --no-daemon assembleDebug
+
+      - name: Prepare APK artifact
+        run: |
+          mkdir -p artifacts
+          cp app/build/outputs/apk/debug/app-debug.apk artifacts/speak-gpt-debug.apk
+
+      - name: Upload debug APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug-apk
+          path: artifacts/speak-gpt-debug.apk
+          if-no-files-found: error
+
+      - name: Add download instructions to run summary
+        run: |
+          {
+            echo "## APK download";
+            echo "Download artifact **app-debug-apk** from this run and install **speak-gpt-debug.apk** on your phone.";
+          } >> "$GITHUB_STEP_SUMMARY"
