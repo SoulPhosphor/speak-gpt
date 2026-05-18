@@ -1,0 +1,55 @@
+name: Release APK
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x ./gradlew
+
+      - name: Build APK
+        run: ./gradlew --no-daemon assembleDebug
+
+      - name: Rename APK
+        run: cp app/build/outputs/apk/debug/app-debug.apk speak-gpt.apk
+
+      - name: Delete existing latest release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release delete latest --yes 2>/dev/null || true
+          git push origin :refs/tags/latest 2>/dev/null || true
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create latest speak-gpt.apk \
+            --title "Latest Build" \
+            --notes "## How to install SpeakGPT on your Android phone
+
+1. Click **speak-gpt.apk** below to download it
+2. Transfer the file to your Android phone (or download directly on your phone)
+3. Tap the file on your phone to install it
+4. If your phone asks about installing from unknown sources, tap Allow
+
+Built from commit: ${{ github.sha }}" \
+            --latest
