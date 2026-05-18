@@ -61,7 +61,7 @@ class PersonaPreferences private constructor(private var preferences: SharedPref
     }
 
     fun setPersonas(personas: List<PersonaObject>) {
-        preferences.edit { putString(KEY_PERSONAS, json.encodeToString(personas)) }
+        preferences.edit { putString(KEY_PERSONAS, json.encodeToString<List<PersonaObject>>(personas)) }
     }
 
     fun getActivePersonaId(): String {
