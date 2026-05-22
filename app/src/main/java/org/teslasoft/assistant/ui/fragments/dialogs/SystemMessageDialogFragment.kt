@@ -18,16 +18,21 @@ package org.teslasoft.assistant.ui.fragments.dialogs
 
 import android.app.Dialog
 import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Button
 import android.widget.EditText
+import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.DialogFragment
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.preferences.PersonaPreferences
+import org.teslasoft.assistant.ui.activities.PersonasListActivity
 
 class SystemMessageDialogFragment : DialogFragment() {
     companion object {
@@ -48,6 +53,8 @@ class SystemMessageDialogFragment : DialogFragment() {
     private var context: Context? = null
 
     private var promptInput: EditText? = null
+    private var personaStatus: TextView? = null
+    private var btnManagePersonas: Button? = null
 
     private var listener: StateChangesListener? = null
 
@@ -66,7 +73,16 @@ class SystemMessageDialogFragment : DialogFragment() {
         val view: View = this.layoutInflater.inflate(R.layout.fragment_system, null)
 
         promptInput = view.findViewById(R.id.prompt_input)
+        personaStatus = view.findViewById(R.id.persona_status)
+        btnManagePersonas = view.findViewById(R.id.btn_manage_personas)
+
         promptInput?.setText(requireArguments().getString("prompt"))
+
+        refreshPersonaStatus()
+
+        btnManagePersonas?.setOnClickListener {
+            startActivity(Intent(requireContext(), PersonasListActivity::class.java))
+        }
 
         builder!!.setView(view)
             .setCancelable(false)
@@ -74,6 +90,21 @@ class SystemMessageDialogFragment : DialogFragment() {
             .setNegativeButton(R.string.btn_cancel) { _, _ ->  }
 
         return builder!!.create()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        refreshPersonaStatus()
+    }
+
+    private fun refreshPersonaStatus() {
+        val ctx = context ?: return
+        val active = PersonaPreferences.getInstance(ctx).getActivePersona()
+        personaStatus?.text = if (active != null) {
+            getString(R.string.persona_status_using, active.name)
+        } else {
+            getString(R.string.persona_status_none)
+        }
     }
 
     private fun validateForm() {

@@ -524,4 +524,26 @@
     <string name="title_before_you_begin">Before you begin</string>
     <string name="before_you_begin">Please read this carefully before using this app. In case you haven\'t read app description, we would like to notice you that this app is the OPEN-SOURCE CLIENT for AI APIs. You will not find GPT or Gemini for free here. This app is just a convenient tool you can access your AI models through. THIS APP IS PROVIDED AS IS WITH NO WARRANTY UNDER LICENSE APACHE 2.0. By using this app you are agreeing that all your question about free usage will be rejected with no answer. Although some free APIs exists so you can use it with this app.\n\n\"Free cheese could be only in a mousetrap so you cannot use work of someone else for free making no effort and giving no credit. It is unethical.\"\n\nP.S This disclaimer has been put here after some of users reported that SpeakGPT does not contain free access to flagship ChatGPT models.</string>
     <string name="app_description_new">SpeakGPT is an advanced and highly intuitive open-source assistant that uses the powerful LLMs. You can use online models like ChatGPT, Gemini, Perplexity, or your local models with this app.</string>
+
+    <!-- Personas -->
+    <string name="title_personas">Personas</string>
+    <string name="btn_new_persona">New persona</string>
+    <string name="btn_manage_personas">Manage personas</string>
+    <string name="label_add_persona">Add persona</string>
+    <string name="label_edit_persona">Edit persona</string>
+    <string name="label_delete_persona">Delete persona</string>
+    <string name="message_delete_persona">Are you sure you want to delete this persona?</string>
+    <string name="persona_name_hint">Persona name</string>
+    <string name="persona_prompt_hint">System prompt for this persona</string>
+    <string name="persona_make_active">Use this persona for new and ongoing chats</string>
+    <string name="persona_override_note">When a persona is active, its system prompt is sent to the model in place of the global System message below.</string>
+    <string name="persona_active_badge">ACTIVE</string>
+    <string name="persona_name_required">A persona needs a name.</string>
+    <string name="persona_empty_prompt_preview">(no system prompt yet)</string>
+    <string name="personas_empty_hint">No personas yet. Tap "New persona" to create one. A persona is a saved system prompt — when active, it overrides the global System message for every chat.</string>
+    <string name="persona_status_using">Active persona: %1$s</string>
+    <string name="persona_status_none">No persona active — using the global System message below.</string>
+
+    <!-- Re-read assistant message -->
+    <string name="btn_msg_speak">Read aloud</string>
 </resources>
