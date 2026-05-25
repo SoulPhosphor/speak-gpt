@@ -1757,7 +1757,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 timeout = Timeout(socket = 30.seconds),
                 organization = null,
                 headers = emptyMap(),
-                host = OpenAIHost(apiEndpointObject?.host!!),
+                host = OpenAIHost(apiEndpointObject?.host!!.let { if (it.isBlank() || it.endsWith("/")) it else "$it/" }),
                 proxy = null,
                 retry = RetryStrategy()
             )
@@ -2364,8 +2364,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 e.stackTraceToString().contains("You exceeded your current quota") -> {
                     getString(R.string.prompt_quota_reached)
                 }
+                e.stackTraceToString().contains("404") || e.stackTraceToString().contains("Not Found") -> {
+                    "Endpoint not found (HTTP 404).\n\nProfile: ${apiEndpointObject?.label}\nBase URL: ${apiEndpointObject?.host}\n\nThe server returned 404 for this address. Check that this profile's Base URL includes the full path, and that this chat is set to the intended profile."
+                }
                 else -> {
-                    e.stackTraceToString() + "\n\n" + e.message
+                    "Profile: ${apiEndpointObject?.label}\nBase URL: ${apiEndpointObject?.host}\n\n" + e.stackTraceToString() + "\n\n" + e.message
                 }
             }
 
