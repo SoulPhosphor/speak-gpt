@@ -2240,7 +2240,7 @@ class AssistantFragment : BottomSheetDialogFragment(), ChatAdapter.OnUpdateListe
     private var cameraIntentLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
             val imageFile = File(mContext?.getExternalFilesDir(Environment.DIRECTORY_PICTURES), "tmp.jpg")
-            val uri = FileProvider.getUriForFile(mContext ?: return@registerForActivityResult, "org.teslasoft.assistant.fileprovider", imageFile)
+            val uri = FileProvider.getUriForFile(mContext ?: return@registerForActivityResult, "${mContext?.packageName}.fileprovider", imageFile)
 
             bitmap = readFile(uri)
 
@@ -2289,7 +2289,7 @@ class AssistantFragment : BottomSheetDialogFragment(), ChatAdapter.OnUpdateListe
                 intent.putExtra("android.intent.extra.quickCapture", true)
                 val externalFilesDir = mContext?.getExternalFilesDir(Environment.DIRECTORY_PICTURES)
                 val imageFile = File(externalFilesDir, "tmp.jpg")
-                intent.putExtra(MediaStore.EXTRA_OUTPUT, FileProvider.getUriForFile(mContext ?: return@registerForActivityResult, "org.teslasoft.assistant.fileprovider", imageFile))
+                intent.putExtra(MediaStore.EXTRA_OUTPUT, FileProvider.getUriForFile(mContext ?: return@registerForActivityResult, "${mContext?.packageName}.fileprovider", imageFile))
                 cameraIntentLauncher.launch(intent)
             }
         }
