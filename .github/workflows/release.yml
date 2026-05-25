@@ -6,6 +6,10 @@ on:
       - main
   workflow_dispatch:
 
+concurrency:
+  group: release-apk
+  cancel-in-progress: true
+
 jobs:
   build-and-release:
     runs-on: ubuntu-latest
@@ -30,14 +34,14 @@ jobs:
         run: ./gradlew --no-daemon assembleDebug
 
       - name: Rename APK
-        run: cp app/build/outputs/apk/debug/app-debug.apk speak-gpt.apk
+        run: cp app/build/outputs/apk/debug/app-debug.apk phosphor-shines.apk
 
       - name: Write release notes
         run: |
           cat > notes.md << 'NOTES'
-          ## How to install SpeakGPT on your Android phone
+          ## How to install Phosphor Shines on your Android phone
 
-          1. Click **speak-gpt.apk** below to download it
+          1. Click **phosphor-shines.apk** below to download it
           2. Transfer the file to your Android phone (or open this page on your phone and download directly)
           3. Tap the downloaded file to install it
           4. If your phone asks about installing from unknown sources, tap Allow
@@ -54,7 +58,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create latest speak-gpt.apk \
-            --title "Latest Build" \
+          gh release create latest phosphor-shines.apk \
+            --title "Phosphor Shines (Latest Build)" \
             --notes-file notes.md \
             --latest
