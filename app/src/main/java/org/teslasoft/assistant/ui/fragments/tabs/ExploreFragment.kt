@@ -359,7 +359,7 @@ class ExploreFragment : Fragment(), SwipeRefreshLayout.OnRefreshListener, AISetA
         if (apiObject != null) {
             function(apiObject.label, suggestedChatName, model, avatarType, avatarId, assistantName)
         } else {
-            val apiEndpointDialog: EditApiEndpointDialogFragment = EditApiEndpointDialogFragment.newInstance(endpointName, endpointUrl, "", -1)
+            val apiEndpointDialog: EditApiEndpointDialogFragment = EditApiEndpointDialogFragment.newInstance(endpointName, endpointUrl, "", ApiEndpointObject.DEFAULT_CHAT_ENDPOINT, ApiEndpointObject.AUTH_BEARER, -1)
             apiEndpointDialog.setListener(object : EditApiEndpointDialogFragment.StateChangesListener {
                 override fun onAdd(apiEndpoint: ApiEndpointObject) {
                     apiEndpointPreferences?.setApiEndpoint(mContext ?: return, apiEndpoint)

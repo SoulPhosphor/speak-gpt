@@ -1000,13 +1000,19 @@ class AssistantFragment : BottomSheetDialogFragment(), ChatAdapter.OnUpdateListe
 
             (mContext as Activity?)?.finish()
         } else {
+            val extraHeaders: Map<String, String> = when (apiEndpointObject?.authType) {
+                ApiEndpointObject.AUTH_X_API_KEY -> mapOf("x-api-key" to key!!)
+                ApiEndpointObject.AUTH_API_KEY -> mapOf("api-key" to key!!)
+                else -> emptyMap()
+            }
+
             val config = OpenAIConfig(
                 token = key!!,
                 logging = LoggingConfig(LogLevel.None, Logger.Simple),
                 timeout = Timeout(socket = 30.seconds),
                 organization = null,
-                headers = emptyMap(),
-                host = OpenAIHost(apiEndpointObject?.host!!),
+                headers = extraHeaders,
+                host = OpenAIHost(composeChatHost(apiEndpointObject?.host, apiEndpointObject?.chatEndpoint)),
                 proxy = null,
                 retry = RetryStrategy()
             )
@@ -2973,8 +2979,19 @@ class AssistantFragment : BottomSheetDialogFragment(), ChatAdapter.OnUpdateListe
             .show()
     }
 
+    private fun composeChatHost(rawBase: String?, rawEndpoint: String?): String {
+        var base = (rawBase ?: "").trim()
+        if (base.isBlank()) return base
+        if (!base.endsWith("/")) base += "/"
+
+        val endpoint = (rawEndpoint ?: ApiEndpointObject.DEFAULT_CHAT_ENDPOINT).trim().trimStart('/')
+        val marker = "chat/completions"
+        val full = base + endpoint
+        return if (full.endsWith(marker)) full.removeSuffix(marker) else base
+    }
+
     private fun requestAddApiEndpoint(feature: String, prompt: String) {
-        val apiEndpointDialog: EditApiEndpointDialogFragment = EditApiEndpointDialogFragment.newInstance("OpenAI", "https://api.openai.com/v1/", "", -1)
+        val apiEndpointDialog: EditApiEndpointDialogFragment = EditApiEndpointDialogFragment.newInstance("OpenAI", "https://api.openai.com/v1/", "", ApiEndpointObject.DEFAULT_CHAT_ENDPOINT, ApiEndpointObject.AUTH_BEARER, -1)
         apiEndpointDialog.setListener(object : EditApiEndpointDialogFragment.StateChangesListener {
             override fun onAdd(apiEndpoint: ApiEndpointObject) {
                 apiEndpointPreferences?.setApiEndpoint(mContext ?: return, apiEndpoint)

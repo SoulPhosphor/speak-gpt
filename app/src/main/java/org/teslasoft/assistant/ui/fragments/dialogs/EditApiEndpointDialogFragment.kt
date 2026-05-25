@@ -26,32 +26,45 @@ import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.DialogFragment
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.textfield.TextInputLayout
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.util.Hash
 
 class EditApiEndpointDialogFragment : DialogFragment() {
     companion object {
-        fun newInstance(label: String, host: String, apiKey: String, position: Int) : EditApiEndpointDialogFragment {
+        fun newInstance(label: String, host: String, apiKey: String, chatEndpoint: String, authType: String, position: Int) : EditApiEndpointDialogFragment {
             val editApiEndpointDialogFragment = EditApiEndpointDialogFragment()
 
             val args = Bundle()
             args.putString("label", label)
             args.putString("host", host)
             args.putString("apiKey", apiKey)
+            args.putString("chatEndpoint", chatEndpoint)
+            args.putString("authType", authType)
             args.putInt("position", position)
 
             editApiEndpointDialogFragment.arguments = args
 
             return editApiEndpointDialogFragment
         }
+
+        private val authTypes = arrayOf(
+            ApiEndpointObject.AUTH_BEARER,
+            ApiEndpointObject.AUTH_X_API_KEY,
+            ApiEndpointObject.AUTH_API_KEY
+        )
     }
 
     private var textDialogTitle: TextView? = null
     private var fieldLabel: TextInputEditText? = null
     private var fieldHost: TextInputEditText? = null
+    private var fieldChatEndpoint: TextInputEditText? = null
     private var fieldApiKey: TextInputEditText? = null
+    private var fieldAuthType: TextInputEditText? = null
     private var apiNote: TextView? = null
+
+    private var selectedAuthType: String = ApiEndpointObject.AUTH_BEARER
 
     private var builder: AlertDialog.Builder? = null
 
@@ -59,6 +72,14 @@ class EditApiEndpointDialogFragment : DialogFragment() {
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
         return inflater.inflate(R.layout.fragment_edit_api_endpoint, container, false)
+    }
+
+    private fun authLabel(authType: String): String {
+        return when (authType) {
+            ApiEndpointObject.AUTH_X_API_KEY -> getString(R.string.auth_mode_x_api_key)
+            ApiEndpointObject.AUTH_API_KEY -> getString(R.string.auth_mode_api_key)
+            else -> getString(R.string.auth_mode_bearer)
+        }
     }
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
@@ -69,11 +90,26 @@ class EditApiEndpointDialogFragment : DialogFragment() {
         textDialogTitle = view.findViewById(R.id.text_dialog_title)
         fieldLabel = view.findViewById(R.id.field_label)
         fieldHost = view.findViewById(R.id.field_host)
+        fieldChatEndpoint = view.findViewById(R.id.field_chat_endpoint)
         fieldApiKey = view.findViewById(R.id.field_api_key)
+        fieldAuthType = view.findViewById(R.id.field_auth_type)
         apiNote = view.findViewById(R.id.api_note)
 
         fieldLabel?.setText(requireArguments().getString("label"))
         fieldHost?.setText(requireArguments().getString("host"))
+
+        val chatEndpoint = requireArguments().getString("chatEndpoint").let {
+            if (it.isNullOrBlank()) ApiEndpointObject.DEFAULT_CHAT_ENDPOINT else it
+        }
+        fieldChatEndpoint?.setText(chatEndpoint)
+
+        selectedAuthType = requireArguments().getString("authType").let {
+            if (it.isNullOrBlank()) ApiEndpointObject.AUTH_BEARER else it
+        }
+        fieldAuthType?.setText(authLabel(selectedAuthType))
+
+        fieldAuthType?.setOnClickListener { showAuthTypeChooser() }
+        view.findViewById<TextInputLayout>(R.id.textInputLayoutAuth)?.setOnClickListener { showAuthTypeChooser() }
 
         if (requireArguments().getInt("position") == -1) {
             textDialogTitle?.text = getString(R.string.label_add_api_endpoint)
@@ -98,6 +134,26 @@ class EditApiEndpointDialogFragment : DialogFragment() {
         return builder!!.create()
     }
 
+    private fun showAuthTypeChooser() {
+        val labels = authTypes.map { authLabel(it) }.toTypedArray()
+        val current = authTypes.indexOf(selectedAuthType).coerceAtLeast(0)
+
+        MaterialAlertDialogBuilder(this.requireContext(), R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.api_endpoint_auth_mode)
+            .setSingleChoiceItems(labels, current) { dialog, which ->
+                selectedAuthType = authTypes[which]
+                fieldAuthType?.setText(authLabel(selectedAuthType))
+                dialog.dismiss()
+            }
+            .setNegativeButton(R.string.btn_cancel) { _, _ -> }
+            .show()
+    }
+
+    private fun normalizedChatEndpoint(): String {
+        val value = fieldChatEndpoint?.text.toString().trim()
+        return if (value.isEmpty()) ApiEndpointObject.DEFAULT_CHAT_ENDPOINT else value
+    }
+
     private fun validateForm() {
         if (fieldLabel?.text.toString().isEmpty()) {
             listener!!.onError(getString(R.string.label_error_api_endpoint_empty), requireArguments().getInt("position"))
@@ -118,7 +174,9 @@ class EditApiEndpointDialogFragment : DialogFragment() {
                 ApiEndpointObject(
                     fieldLabel?.text.toString(),
                     fieldHost?.text.toString(),
-                    fieldApiKey?.text.toString()
+                    fieldApiKey?.text.toString(),
+                    normalizedChatEndpoint(),
+                    selectedAuthType
                 )
             )
         } else {
@@ -127,7 +185,9 @@ class EditApiEndpointDialogFragment : DialogFragment() {
                 ApiEndpointObject(
                     fieldLabel?.text.toString(),
                     fieldHost?.text.toString(),
-                    fieldApiKey?.text.toString()
+                    fieldApiKey?.text.toString(),
+                    normalizedChatEndpoint(),
+                    selectedAuthType
                 ),
                 requireArguments().getInt("position")
             )

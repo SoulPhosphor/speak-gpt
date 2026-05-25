@@ -48,14 +48,18 @@ class ApiEndpointPreferences private constructor(private var preferences: Shared
     fun getApiEndpoint(context: Context, id: String): ApiEndpointObject {
         val label = getString(id + "_label", "")
         val host = getString(id + "_host", "")
+        val chatEndpoint = getString(id + "_chat_endpoint", ApiEndpointObject.DEFAULT_CHAT_ENDPOINT)
+        val authType = getString(id + "_auth_type", ApiEndpointObject.AUTH_BEARER)
         val apiKey: String = EncryptedPreferences.getEncryptedPreference(context, "api_endpoint", id + "_api_key")
 
-        return ApiEndpointObject(label, host, apiKey)
+        return ApiEndpointObject(label, host, apiKey, chatEndpoint, authType)
     }
 
     fun deleteApiEndpoint(context: Context, id: String) {
         preferences.edit { remove(id + "_label") }
         preferences.edit { remove(id + "_host") }
+        preferences.edit { remove(id + "_chat_endpoint") }
+        preferences.edit { remove(id + "_auth_type") }
         EncryptedPreferences.setEncryptedPreference(context, "api_endpoint", id + "_api_key", "null")
 
         for (listener in listeners) {
@@ -67,6 +71,8 @@ class ApiEndpointPreferences private constructor(private var preferences: Shared
         val id = Hash.hash(endpoint.label)
         putString(id + "_label", endpoint.label)
         putString(id + "_host", endpoint.host)
+        putString(id + "_chat_endpoint", endpoint.chatEndpoint)
+        putString(id + "_auth_type", endpoint.authType)
         EncryptedPreferences.setEncryptedPreference(context, "api_endpoint", id + "_api_key", endpoint.apiKey)
 
         for (listener in listeners) {
@@ -97,8 +103,10 @@ class ApiEndpointPreferences private constructor(private var preferences: Shared
                 val id = key.replace("_label", "")
                 val label = getString(id + "_label", "")
                 val host = getString(id + "_host", "")
+                val chatEndpoint = getString(id + "_chat_endpoint", ApiEndpointObject.DEFAULT_CHAT_ENDPOINT)
+                val authType = getString(id + "_auth_type", ApiEndpointObject.AUTH_BEARER)
                 val apiKey: String = EncryptedPreferences.getEncryptedPreference(context, "api_endpoint", id + "_api_key")
-                list.add(ApiEndpointObject(label, host, apiKey))
+                list.add(ApiEndpointObject(label, host, apiKey, chatEndpoint, authType))
             }
         }
 
