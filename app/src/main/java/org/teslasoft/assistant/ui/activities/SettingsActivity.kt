@@ -90,6 +90,8 @@ class SettingsActivity : FragmentActivity() {
     private var tileSTT: TileFragment? = null
     private var tileSilentMode: TileFragment? = null
     private var tileAlwaysSpeak: TileFragment? = null
+    private var tileHandsFree: TileFragment? = null
+    private var tileHandsFreeTiming: TileFragment? = null
     private var tileTextModel: TileFragment? = null
     private var tileActivationMessage: TileFragment? = null
     private var tileSystemMessage: TileFragment? = null
@@ -706,6 +708,36 @@ class SettingsActivity : FragmentActivity() {
                 getString(R.string.tile_always_speak_desc)
             )
 
+            tileHandsFree = TileFragment.newInstance(
+                preferences?.getHandsFreeMode() == true,
+                true,
+                getString(R.string.tile_hands_free_title),
+                null,
+                getString(R.string.on),
+                getString(R.string.off),
+                R.drawable.ic_microphone,
+                false,
+                chatId,
+                getString(R.string.tile_hands_free_desc)
+            )
+
+            tileHandsFreeTiming = TileFragment.newInstance(
+                checked = false,
+                checkable = false,
+                enabledText = getString(R.string.tile_hands_free_timing_title),
+                disabledText = null,
+                enabledDesc = getString(
+                    R.string.tile_hands_free_timing_value,
+                    preferences?.getHandsFreeSilenceSeconds() ?: 5,
+                    preferences?.getHandsFreeNoSpeechSeconds() ?: 10
+                ),
+                disabledDesc = null,
+                icon = R.drawable.ic_play,
+                disabled = false,
+                chatId = chatId,
+                functionDesc = getString(R.string.tile_hands_free_timing_desc)
+            )
+
             tileTextModel = TileFragment.newInstance(
                 checked = false,
                 checkable = false,
@@ -1061,6 +1093,60 @@ class SettingsActivity : FragmentActivity() {
         t7.join()
     }
 
+    private fun showHandsFreeTimingDialog() {
+        val density = resources.displayMetrics.density
+        val pad = (20 * density).toInt()
+
+        val container = android.widget.LinearLayout(this)
+        container.orientation = android.widget.LinearLayout.VERTICAL
+        container.setPadding(pad, pad, pad, 0)
+
+        val silenceLabel = android.widget.TextView(this)
+        silenceLabel.text = getString(R.string.tile_hands_free_silence_title)
+        val silenceInput = android.widget.EditText(this)
+        silenceInput.inputType = android.text.InputType.TYPE_CLASS_NUMBER
+        silenceInput.setText((preferences?.getHandsFreeSilenceSeconds() ?: 5).toString())
+
+        val noSpeechLabel = android.widget.TextView(this)
+        noSpeechLabel.text = getString(R.string.tile_hands_free_no_speech_title)
+        val noSpeechInput = android.widget.EditText(this)
+        noSpeechInput.inputType = android.text.InputType.TYPE_CLASS_NUMBER
+        noSpeechInput.setText((preferences?.getHandsFreeNoSpeechSeconds() ?: 10).toString())
+
+        val labelParams = android.widget.LinearLayout.LayoutParams(
+            android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+            android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
+        )
+        labelParams.topMargin = (12 * density).toInt()
+
+        container.addView(silenceLabel)
+        container.addView(silenceInput)
+        noSpeechLabel.layoutParams = labelParams
+        container.addView(noSpeechLabel)
+        container.addView(noSpeechInput)
+
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.tile_hands_free_timing_title)
+            .setView(container)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                silenceInput.text.toString().toIntOrNull()?.coerceIn(1, 120)?.let {
+                    preferences?.setHandsFreeSilenceSeconds(it)
+                }
+                noSpeechInput.text.toString().toIntOrNull()?.coerceIn(1, 120)?.let {
+                    preferences?.setHandsFreeNoSpeechSeconds(it)
+                }
+                tileHandsFreeTiming?.updateSubtitle(
+                    getString(
+                        R.string.tile_hands_free_timing_value,
+                        preferences?.getHandsFreeSilenceSeconds() ?: 5,
+                        preferences?.getHandsFreeNoSpeechSeconds() ?: 10
+                    )
+                )
+            }
+            .setNegativeButton(android.R.string.cancel) { _, _ -> }
+            .show()
+    }
+
     private fun placeFragments() : FragmentTransaction {
         val operation = supportFragmentManager.beginTransaction().replace(R.id.tile_account, tileAccountFragment!!)
             .replace(R.id.tile_assistant, tileAssistant!!)
@@ -1074,6 +1160,8 @@ class SettingsActivity : FragmentActivity() {
             .replace(R.id.tile_stt, tileSTT!!)
             .replace(R.id.tile_silent_mode, tileSilentMode!!)
             .replace(R.id.tile_always_speak, tileAlwaysSpeak!!)
+            .replace(R.id.tile_hands_free, tileHandsFree!!)
+            .replace(R.id.tile_hands_free_timing, tileHandsFreeTiming!!)
             .replace(R.id.tile_text_model, tileTextModel!!)
             .replace(R.id.tile_activation_prompt, tileActivationMessage!!)
             .replace(R.id.tile_system_message, tileSystemMessage!!)
@@ -1219,6 +1307,14 @@ class SettingsActivity : FragmentActivity() {
                 tileSilentMode?.setEnabled(true)
             }
         }}
+
+        tileHandsFree?.setOnCheckedChangeListener { isChecked -> run {
+            preferences?.setHandsFreeMode(isChecked)
+        }}
+
+        tileHandsFreeTiming?.setOnTileClickListener {
+            showHandsFreeTimingDialog()
+        }
 
         tileTextModel?.setOnTileClickListener {
             val advancedSettingsDialogFragment: AdvancedSettingsDialogFragment = AdvancedSettingsDialogFragment.newInstance(model, chatId)

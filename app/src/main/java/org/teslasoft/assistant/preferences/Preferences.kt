@@ -855,6 +855,61 @@ class Preferences private constructor(private var preferences: SharedPreferences
     }
 
     /**
+     * Hands-free conversation mode. When enabled, after the assistant finishes
+     * speaking the microphone automatically restarts so the conversation can
+     * continue without tapping. Works with Google speech recognition and spoken
+     * (auto-send) responses.
+     *
+     * @return hands-free mode status
+     * */
+    fun getHandsFreeMode() : Boolean {
+        return getGlobalBoolean("hands_free_mode", false)
+    }
+
+    /**
+     * Enable/disable hands-free conversation mode.
+     *
+     * @param state hands-free mode status
+     * */
+    fun setHandsFreeMode(state: Boolean) {
+        putGlobalBoolean("hands_free_mode", state, false)
+    }
+
+    /**
+     * Seconds of silence tolerated after you start speaking before your turn is
+     * treated as finished. Gives you time to think mid-sentence.
+     *
+     * @return silence seconds (default 5)
+     * */
+    fun getHandsFreeSilenceSeconds() : Int {
+        return getGlobalString("hands_free_silence_seconds", "5").toIntOrNull() ?: 5
+    }
+
+    /**
+     * Set the hands-free silence tolerance in seconds.
+     * */
+    fun setHandsFreeSilenceSeconds(seconds: Int) {
+        putGlobalString("hands_free_silence_seconds", seconds.toString(), "5")
+    }
+
+    /**
+     * Seconds to wait for you to start speaking after the mic opens before the
+     * hands-free loop gives up and stops listening.
+     *
+     * @return no-speech seconds (default 10)
+     * */
+    fun getHandsFreeNoSpeechSeconds() : Int {
+        return getGlobalString("hands_free_no_speech_seconds", "10").toIntOrNull() ?: 10
+    }
+
+    /**
+     * Set the hands-free no-speech timeout in seconds.
+     * */
+    fun setHandsFreeNoSpeechSeconds(seconds: Int) {
+        putGlobalString("hands_free_no_speech_seconds", seconds.toString(), "10")
+    }
+
+    /**
      * Retrieves the encrypted API key from the shared preferences.
      *
      * @param context The context to access the encrypted shared preferences.

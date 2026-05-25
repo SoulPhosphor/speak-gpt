@@ -275,6 +275,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     private var recognizer: SpeechRecognizer? = null
     private var recorder: MediaRecorder? = null
 
+    // Hands-free conversation loop state
+    private var handsFreeUserSpoke = false
+    private var handsFreeStopped = false
+    private var handsFreeListenDeadline = 0L
+    private val handsFreeHandler = Handler(Looper.getMainLooper())
+
     // Media player for OpenAI TTS
     private var mediaPlayer: MediaPlayer? = null
 
@@ -298,6 +304,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         speakScope?.coroutineContext?.cancel(CancellationException("Killed"))
         generateGptImageJob?.cancel(CancellationException("Killed"))
         generateGptImageJob = null
+        handsFreeStopped = true
+        handsFreeHandler.removeCallbacksAndMessages(null)
     }
 
     private fun restoreUIState() {
@@ -367,18 +375,34 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
     private val speechListener = object : RecognitionListener {
         override fun onReadyForSpeech(params: Bundle?) { /* unused */ }
-        override fun onBeginningOfSpeech() { /* unused */ }
+        override fun onBeginningOfSpeech() { handsFreeUserSpoke = true }
         override fun onRmsChanged(rmsdB: Float) { /* unused */ }
         override fun onBufferReceived(buffer: ByteArray?) { /* unused */ }
         override fun onPartialResults(partialResults: Bundle?) { /* unused */ }
         override fun onEvent(eventType: Int, params: Bundle?) { /* unused */ }
 
         override fun onEndOfSpeech() {
+            // In hands-free mode the loop manages the recording state itself.
+            if (preferences?.getHandsFreeMode() == true && !handsFreeStopped) return
             isRecording = false
             btnMicro?.setImageResource(R.drawable.ic_microphone)
         }
 
         override fun onError(error: Int) {
+            if (preferences?.getHandsFreeMode() == true && !cancelState && !handsFreeStopped && isRecording) {
+                if (!handsFreeUserSpoke && System.currentTimeMillis() < handsFreeListenDeadline
+                    && (error == SpeechRecognizer.ERROR_NO_MATCH || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT)) {
+                    // Still waiting for the user to start talking - keep the mic open.
+                    handsFreeHandler.postDelayed({
+                        if (!isFinishing && !isDestroyed && isRecording && !handsFreeStopped && !cancelState) {
+                            startRecognition(false)
+                        }
+                    }, 350)
+                    return
+                }
+                stopHandsFreeLoop()
+                return
+            }
             isRecording = false
             btnMicro?.setImageResource(R.drawable.ic_microphone)
         }
@@ -706,7 +730,18 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
     private val ttsProgressListener = object : UtteranceProgressListener() {
         override fun onStart(utteranceId: String?) { /* no-op */ }
-        override fun onDone(utteranceId: String?) { /* no-op */ }
+        override fun onDone(utteranceId: String?) {
+            if (preferences?.getHandsFreeMode() == true && preferences?.getAudioModel() == "google"
+                && preferences?.autoSend() == true && !cancelState && !handsFreeStopped && !isRecording) {
+                Handler(Looper.getMainLooper()).post {
+                    if (!isFinishing && !isDestroyed) {
+                        isRecording = true
+                        btnMicro?.setImageResource(R.drawable.ic_stop_recording)
+                        startRecognition(true)
+                    }
+                }
+            }
+        }
         @Suppress("OverridingDeprecatedMember")
         override fun onError(utteranceId: String?) {
             Log.w("TTS", "TTS utterance error: $utteranceId; re-initialising engine")
@@ -1322,6 +1357,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         btnMicro?.setOnLongClickListener {
             if (isRecording) {
                 cancelState = true
+                handsFreeStopped = true
+                handsFreeHandler.removeCallbacksAndMessages(null)
                 try {
                     if (mediaPlayer!!.isPlaying) {
                         mediaPlayer!!.stop()
@@ -1941,13 +1978,37 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         }
     }
 
-    private fun startRecognition() {
+    private fun startRecognition(freshTurn: Boolean = true) {
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
         intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
         intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, LocaleParser.parse(preferences!!.getLanguage()))
         intent.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
 
+        if (preferences?.getHandsFreeMode() == true) {
+            if (freshTurn) {
+                handsFreeUserSpoke = false
+                handsFreeStopped = false
+                handsFreeListenDeadline = System.currentTimeMillis() +
+                        preferences!!.getHandsFreeNoSpeechSeconds().coerceAtLeast(1) * 1000L
+            }
+            // Best-effort: ask the recognizer to tolerate longer pauses so the
+            // user has time to think. Some engines ignore these; the restart
+            // logic in the listener backs them up.
+            val silenceMs = preferences!!.getHandsFreeSilenceSeconds().coerceAtLeast(1) * 1000L
+            intent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, silenceMs)
+            intent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, silenceMs)
+            intent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 1500L)
+        }
+
         recognizer?.startListening(intent)
+    }
+
+    private fun stopHandsFreeLoop() {
+        handsFreeStopped = true
+        handsFreeHandler.removeCallbacksAndMessages(null)
+        try { recognizer?.stopListening() } catch (_: Exception) { /* ignore */ }
+        isRecording = false
+        btnMicro?.setImageResource(R.drawable.ic_microphone)
     }
 
     private fun putMessage(message: String, isBot: Boolean, image: String = "", imageType: String = "") {
