@@ -21,6 +21,19 @@ android {
         versionName "4.38-stable"
     }
 
+    signingConfigs {
+        // Stable, checked-in debug key so every CI build signs APKs with the
+        // same certificate. Without this Android refuses to install one debug
+        // build over another because each ephemeral CI runner would otherwise
+        // generate a fresh debug.keystore.
+        debug {
+            storeFile file('debug.keystore')
+            storePassword 'android'
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+        }
+    }
+
     buildTypes {
         release {
             debuggable false
@@ -36,6 +49,7 @@ android {
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             multiDexEnabled true
+            signingConfig signingConfigs.debug
         }
     }
 
