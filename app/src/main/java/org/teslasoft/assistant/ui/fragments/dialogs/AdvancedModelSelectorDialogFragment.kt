@@ -121,19 +121,26 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
 
     private var requestListener: RequestNetwork.RequestListener = object : RequestNetwork.RequestListener {
         override fun onResponse(tag: String, message: String) {
-            val gson = com.google.gson.Gson()
-
             try {
-                val models: Map<String, Any> = gson.fromJson(message, Map::class.java) as Map<String, Any>
+                val parsed = com.google.gson.Gson().fromJson(message, com.google.gson.JsonObject::class.java)
+                    ?: throw IllegalStateException("Empty response from provider.")
 
-                var modelsList: List<Map<String, Any>> = models["data"] as ArrayList<Map<String, Any>>
-
-                if (modelsList == null) modelsList = arrayListOf()
-
-                for (model in modelsList) {
-                    val m = model.toMap()
-                    availableModels.add(m["id"].toString())
+                val dataEl = parsed.get("data")
+                if (dataEl == null || dataEl.isJsonNull || !dataEl.isJsonArray) {
+                    showProviderError(message)
+                    return
                 }
+
+                val ids = dataEl.asJsonArray.mapNotNull { el ->
+                    if (el.isJsonObject) el.asJsonObject.get("id")?.takeIf { !it.isJsonNull }?.asString else null
+                }
+
+                if (ids.isEmpty()) {
+                    showProviderError(message)
+                    return
+                }
+
+                availableModels.addAll(ids)
 
                 updateProjection("")
 
@@ -144,23 +151,32 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
                 modelListAdapter?.notifyDataSetChanged()
                 progressBar?.visibility = View.GONE
             } catch (e: Exception) {
-                if (context !== null) {
-                    MaterialAlertDialogBuilder(requireContext())
-                        .setTitle(R.string.label_error)
-                        .setMessage(getString(R.string.msg_model_loading_error_with_details) + e.message.toString())
-                        .setPositiveButton(R.string.btn_ok) { _, _ -> this@AdvancedModelSelectorDialogFragment.dismiss() }
-                        .show()
-                }
+                showProviderError(message, e)
             }
         }
 
         override fun onErrorResponse(tag: String, message: String) {
-            MaterialAlertDialogBuilder(requireContext())
-                .setTitle(R.string.label_error)
-                .setMessage(R.string.msg_error_loading_models)
-                .setPositiveButton(R.string.btn_ok) { _, _ -> this@AdvancedModelSelectorDialogFragment.dismiss() }
-                .show()
+            showProviderError(message)
         }
+    }
+
+    private fun showProviderError(responseBody: String?, e: Exception? = null) {
+        if (context == null) return
+        val excerpt = (responseBody ?: "").take(400)
+        val msg = buildString {
+            append("Couldn't read the models list from ")
+            append(apiEndpointObject?.label ?: "this profile")
+            append(".\n\nProvider returned:\n")
+            append(if (excerpt.isBlank()) "(empty response)" else excerpt)
+            if (e != null) {
+                append("\n\nDetails: ${e.javaClass.simpleName}: ${e.message}")
+            }
+        }
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle(R.string.label_error)
+            .setMessage(msg)
+            .setPositiveButton(R.string.btn_ok) { _, _ -> this@AdvancedModelSelectorDialogFragment.dismiss() }
+            .show()
     }
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
@@ -196,12 +212,18 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
         apiEndpointObject = apiEndpointPreferences?.getApiEndpoint(mContext ?: return builder!!.create(), preferences?.getApiEndpointId()!!)
         favoriteModelsPreferences = FavoriteModelsPreferences.getPreferences(mContext ?: return builder!!.create())
 
+        val extraHeaders: Map<String, String> = when (apiEndpointObject?.authType) {
+            ApiEndpointObject.AUTH_X_API_KEY -> mapOf("x-api-key" to apiEndpointObject!!.apiKey)
+            ApiEndpointObject.AUTH_API_KEY -> mapOf("api-key" to apiEndpointObject!!.apiKey)
+            else -> emptyMap()
+        }
+
         val config = OpenAIConfig(
             token = apiEndpointObject?.apiKey!!,
             logging = LoggingConfig(LogLevel.None, Logger.Simple),
             timeout = Timeout(socket = 30.seconds),
             organization = null,
-            headers = emptyMap(),
+            headers = extraHeaders,
             host = OpenAIHost(apiEndpointObject?.host!!),
             proxy = null,
             retry = RetryStrategy()
@@ -229,8 +251,16 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
                 progressBar?.visibility = View.GONE
             } catch (_: Exception) {
                 requestNetwork = RequestNetwork((mContext as Activity?) ?: return@launch)
-                requestNetwork?.setHeaders(hashMapOf("Authorization" to "Bearer " + apiEndpointObject?.apiKey))
-                requestNetwork?.startRequestNetwork("GET", apiEndpointObject?.host + "models", "A", requestListener)
+                val authHeaders = hashMapOf<String, String>()
+                val apiKey = apiEndpointObject?.apiKey ?: ""
+                when (apiEndpointObject?.authType) {
+                    ApiEndpointObject.AUTH_X_API_KEY -> authHeaders["x-api-key"] = apiKey
+                    ApiEndpointObject.AUTH_API_KEY -> authHeaders["api-key"] = apiKey
+                    else -> authHeaders["Authorization"] = "Bearer $apiKey"
+                }
+                requestNetwork?.setHeaders(authHeaders)
+                val base = (apiEndpointObject?.host ?: "").let { if (it.isBlank() || it.endsWith("/")) it else "$it/" }
+                requestNetwork?.startRequestNetwork("GET", base + "models", "A", requestListener)
             }
         }
 
