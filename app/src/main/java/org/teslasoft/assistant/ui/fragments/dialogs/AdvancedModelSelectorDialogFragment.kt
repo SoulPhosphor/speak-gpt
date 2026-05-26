@@ -251,7 +251,7 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
                 progressBar?.visibility = View.GONE
             } catch (_: Exception) {
                 requestNetwork = RequestNetwork((mContext as Activity?) ?: return@launch)
-                val authHeaders = hashMapOf<String, String>()
+                val authHeaders = HashMap<String, Any>()
                 val apiKey = apiEndpointObject?.apiKey ?: ""
                 when (apiEndpointObject?.authType) {
                     ApiEndpointObject.AUTH_X_API_KEY -> authHeaders["x-api-key"] = apiKey
