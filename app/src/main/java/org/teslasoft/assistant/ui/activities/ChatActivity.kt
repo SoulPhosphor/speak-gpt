@@ -1746,18 +1746,42 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         tts = TextToSpeech(this, ttsListener)
     }
 
+    /**
+     * Builds the base URL handed to the OpenAI client. The client always appends
+     * "chat/completions", so we compose the user's Base URL + Chat Endpoint and
+     * strip a trailing chat/completions, letting the client re-append it to the
+     * exact location the profile configured. Non-standard paths fall back to the
+     * Base URL (the client still appends chat/completions).
+     */
+    private fun composeChatHost(rawBase: String?, rawEndpoint: String?): String {
+        var base = (rawBase ?: "").trim()
+        if (base.isBlank()) return base
+        if (!base.endsWith("/")) base += "/"
+
+        val endpoint = (rawEndpoint ?: ApiEndpointObject.DEFAULT_CHAT_ENDPOINT).trim().trimStart('/')
+        val marker = "chat/completions"
+        val full = base + endpoint
+        return if (full.endsWith(marker)) full.removeSuffix(marker) else base
+    }
+
     private fun initAI() {
         if (key == null) {
             startActivity(Intent(this, WelcomeActivity::class.java).setAction(Intent.ACTION_VIEW))
             finishActivity()
         } else {
+            val extraHeaders: Map<String, String> = when (apiEndpointObject?.authType) {
+                ApiEndpointObject.AUTH_X_API_KEY -> mapOf("x-api-key" to key!!)
+                ApiEndpointObject.AUTH_API_KEY -> mapOf("api-key" to key!!)
+                else -> emptyMap()
+            }
+
             val config = OpenAIConfig(
                 token = key!!,
                 logging = LoggingConfig(LogLevel.None, Logger.Simple),
                 timeout = Timeout(socket = 30.seconds),
                 organization = null,
-                headers = emptyMap(),
-                host = OpenAIHost(apiEndpointObject?.host!!.let { if (it.isBlank() || it.endsWith("/")) it else "$it/" }),
+                headers = extraHeaders,
+                host = OpenAIHost(composeChatHost(apiEndpointObject?.host, apiEndpointObject?.chatEndpoint)),
                 proxy = null,
                 retry = RetryStrategy()
             )
@@ -3184,7 +3208,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     }
 
     private fun requestAddApiEndpoint(feature: String, prompt: String) {
-        val apiEndpointDialog: EditApiEndpointDialogFragment = EditApiEndpointDialogFragment.newInstance("OpenAI", "https://api.openai.com/v1/", "", -1)
+        val apiEndpointDialog: EditApiEndpointDialogFragment = EditApiEndpointDialogFragment.newInstance("OpenAI", "https://api.openai.com/v1/", "", ApiEndpointObject.DEFAULT_CHAT_ENDPOINT, ApiEndpointObject.AUTH_BEARER, -1)
         apiEndpointDialog.setListener(object : EditApiEndpointDialogFragment.StateChangesListener {
             override fun onAdd(apiEndpoint: ApiEndpointObject) {
                 apiEndpointPreferences?.setApiEndpoint(this@ChatActivity, apiEndpoint)

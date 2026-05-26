@@ -16,4 +16,19 @@
 
 package org.teslasoft.assistant.preferences.dto
 
-class ApiEndpointObject(var label: String, var host: String, var apiKey: String)
+class ApiEndpointObject(
+    var label: String,
+    var host: String,
+    var apiKey: String,
+    /* Path appended to the base URL for chat completions, e.g. "/chat/completions". */
+    var chatEndpoint: String = DEFAULT_CHAT_ENDPOINT,
+    /* How the API key is sent: "bearer", "x-api-key" or "api-key". */
+    var authType: String = AUTH_BEARER
+) {
+    companion object {
+        const val DEFAULT_CHAT_ENDPOINT = "/chat/completions"
+        const val AUTH_BEARER = "bearer"
+        const val AUTH_X_API_KEY = "x-api-key"
+        const val AUTH_API_KEY = "api-key"
+    }
+}

@@ -72,7 +72,6 @@ import org.teslasoft.core.auth.widget.TeslasoftIDCircledButton
 import java.util.EnumSet
 import java.util.Locale
 import kotlin.math.roundToInt
-import androidx.core.net.toUri
 import androidx.core.content.edit
 import androidx.core.view.WindowCompat
 
@@ -80,7 +79,6 @@ class SettingsActivity : FragmentActivity() {
 
     private var tileAccountFragment: TileFragment? = null
     private var tileAssistant: TileFragment? = null
-    private var tileApiKey: TileFragment? = null
     private var tileAutoSend: TileFragment? = null
     private var tileVoice: TileFragment? = null
     private var tileVoiceLanguage: TileFragment? = null
@@ -314,7 +312,6 @@ class SettingsActivity : FragmentActivity() {
         transition.excludeTarget(R.id.btn_back, true)
         transition.excludeTarget(R.id.tile_account, true)
         transition.excludeTarget(R.id.tile_assistant, true)
-        transition.excludeTarget(R.id.tile_api, true)
         transition.excludeTarget(R.id.tile_autosend, true)
         transition.excludeTarget(R.id.tile_voice, true)
         transition.excludeTarget(R.id.tile_voice_language, true)
@@ -378,7 +375,6 @@ class SettingsActivity : FragmentActivity() {
         transition2.excludeTarget(R.id.constraintLayout167, true)
         transition2.excludeTarget(R.id.tile_account, true)
         transition2.excludeTarget(R.id.tile_assistant, true)
-        transition2.excludeTarget(R.id.tile_api, true)
         transition2.excludeTarget(R.id.tile_autosend, true)
         transition2.excludeTarget(R.id.tile_voice, true)
         transition2.excludeTarget(R.id.tile_voice_language, true)
@@ -540,14 +536,15 @@ class SettingsActivity : FragmentActivity() {
             tileAccountFragment = TileFragment.newInstance(
                 checked = false,
                 checkable = false,
-                enabledText = getString(R.string.tile_account_title),
+                enabledText = getString(R.string.tile_profiles_title),
                 disabledText = null,
-                enabledDesc = getString(R.string.tile_account_subtitle),
+                enabledDesc = host,
                 disabledDesc = null,
-                icon = R.drawable.ic_user,
+                icon = R.drawable.ic_key,
                 disabled = false,
                 chatId = chatId,
-                functionDesc = getString(R.string.tile_account_desc)
+                functionDesc = getString(R.string.tile_profiles_desc),
+                transitionName = "expand_api_list"
             )
 
             tileAssistant = TileFragment.newInstance(
@@ -561,20 +558,6 @@ class SettingsActivity : FragmentActivity() {
                 false,
                 chatId,
                 getString(R.string.tile_assistant_desc)
-            )
-
-            tileApiKey = TileFragment.newInstance(
-                checked = false,
-                checkable = false,
-                enabledText = getString(R.string.tile_api_endpoint_title),
-                disabledText = null,
-                enabledDesc = host,
-                disabledDesc = null,
-                icon = R.drawable.ic_key,
-                disabled = false,
-                chatId = chatId,
-                functionDesc = getString(R.string.tile_api_endpoint_desc),
-                transitionName = "expand_api_list"
             )
 
             tileAutoSend = TileFragment.newInstance(
@@ -1150,7 +1133,6 @@ class SettingsActivity : FragmentActivity() {
     private fun placeFragments() : FragmentTransaction {
         val operation = supportFragmentManager.beginTransaction().replace(R.id.tile_account, tileAccountFragment!!)
             .replace(R.id.tile_assistant, tileAssistant!!)
-            .replace(R.id.tile_api, tileApiKey!!)
             .replace(R.id.tile_autosend, tileAutoSend!!)
             .replace(R.id.tile_voice, tileVoice!!)
             .replace(R.id.tile_voice_language, tileVoiceLanguage!!)
@@ -1204,7 +1186,7 @@ class SettingsActivity : FragmentActivity() {
                 apiEndpoint = apiEndpointPreferences?.getApiEndpoint(this, apiEndpointId)
                 host = apiEndpoint?.host ?: ""
                 preferences?.setApiEndpointId(apiEndpointId)
-                tileApiKey?.updateSubtitle(host)
+                tileAccountFragment?.updateSubtitle(host)
             }
         }
     }
@@ -1215,13 +1197,6 @@ class SettingsActivity : FragmentActivity() {
         }
 
         tileAccountFragment?.setOnTileClickListener {
-            val intent = Intent()
-            intent.action = Intent.ACTION_VIEW
-            intent.data = "https://platform.openai.com/account".toUri()
-            startActivity(intent)
-        }
-
-        tileApiKey?.setOnTileClickListener {
             apiEndpointActivityResultLauncher.launch(Intent(this, ApiEndpointsListActivity::class.java))
         }
 

@@ -194,8 +194,8 @@
     <string name="btn_remove_ads">Remove ads</string>
     <string name="go_back">Go back</string>
     <string name="label_api_endpoint">API endpoint</string>
-    <string name="title_api_endpoints">API endpoints</string>
-    <string name="btn_new_api_endpoint">New API endpoint</string>
+    <string name="title_api_endpoints">Profiles</string>
+    <string name="btn_new_api_endpoint">Add profile</string>
     <string name="btn_attach">Attach</string>
     <string name="btn_discard_image">Discard image</string>
     <string name="label_selected_image">Selected image</string>
@@ -260,10 +260,17 @@
     <string name="hint_assistant_name">Assistant name</string>
     <string name="label_select_an_avatar">Select an avatar</string>
     <string name="label_current_avatar">Current avatar</string>
-    <string name="label_edit_api_endpoint">Edit API endpoint</string>
-    <string name="api_endpoint_friendly_name">Friendly name</string>
-    <string name="api_endpoint_host">API endpoint host</string>
+    <string name="label_edit_api_endpoint">Edit profile</string>
+    <string name="api_endpoint_friendly_name">Profile name</string>
+    <string name="api_endpoint_host">Base URL</string>
     <string name="api_endpoint_key_unchanged">API key</string>
+    <string name="api_endpoint_chat_endpoint">Chat completions endpoint</string>
+    <string name="api_endpoint_chat_endpoint_help">Path added to the Base URL, e.g. /chat/completions. Most OpenAI-compatible providers use this default.</string>
+    <string name="api_endpoint_auth_mode">Auth mode</string>
+    <string name="api_endpoint_auth_help">How your API key is sent. Bearer works for OpenAI, GLM/z.ai, OpenRouter and Groq.</string>
+    <string name="auth_mode_bearer">Bearer token (Authorization)</string>
+    <string name="auth_mode_x_api_key">API key header (x-api-key)</string>
+    <string name="auth_mode_api_key">API key header (api-key)</string>
 
 
     <string name="api_key_blank_note">Leave API key field blank if you don\'t want to change API key.</string>
@@ -329,6 +336,9 @@
     <string name="tile_account_title">OpenAI Account</string>
     <string name="tile_account_subtitle">Manage OpenAI account</string>
     <string name="tile_account_desc">This feature allows you to manage your OpenAI account.</string>
+    <string name="tile_profiles_title">Profiles</string>
+    <string name="tile_profiles_subtitle">Manage API connection profiles</string>
+    <string name="tile_profiles_desc">Create and switch between API connection profiles. Each profile holds a base URL, API key, chat completions endpoint and auth mode.</string>
     <string name="tile_assistant_title">Default assistant</string>
     <string name="tile_assistant_desc">This feature allows you to set SpeakGPT as your default assistant.</string>
     <string name="tile_api_endpoint_title">API endpoint</string>

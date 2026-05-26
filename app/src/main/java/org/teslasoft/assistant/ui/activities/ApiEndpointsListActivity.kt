@@ -66,7 +66,7 @@ class ApiEndpointsListActivity : FragmentActivity() {
         }
 
         override fun onLongClick(position: Int) {
-            val dialog: EditApiEndpointDialogFragment = EditApiEndpointDialogFragment.newInstance(list[position]["label"] ?: return, list[position]["host"] ?: return, list[position]["apiKey"] ?: return, position)
+            val dialog: EditApiEndpointDialogFragment = EditApiEndpointDialogFragment.newInstance(list[position]["label"] ?: return, list[position]["host"] ?: return, list[position]["apiKey"] ?: return, list[position]["chatEndpoint"] ?: ApiEndpointObject.DEFAULT_CHAT_ENDPOINT, list[position]["authType"] ?: ApiEndpointObject.AUTH_BEARER, position)
             dialog.setListener(editDialogListener)
             dialog.setCancelable(false)
             dialog.show(supportFragmentManager, "EditApiEndpointDialogFragment")
@@ -102,12 +102,12 @@ class ApiEndpointsListActivity : FragmentActivity() {
         override fun onError(message: String, position: Int) {
             Toast.makeText(this@ApiEndpointsListActivity, message, Toast.LENGTH_SHORT).show()
             if (position == -1) {
-                val dialog: EditApiEndpointDialogFragment = EditApiEndpointDialogFragment.newInstance("", "", "", position)
+                val dialog: EditApiEndpointDialogFragment = EditApiEndpointDialogFragment.newInstance("", "", "", ApiEndpointObject.DEFAULT_CHAT_ENDPOINT, ApiEndpointObject.AUTH_BEARER, position)
                 dialog.setListener(this)
                 dialog.setCancelable(false)
                 dialog.show(supportFragmentManager, "EditApiEndpointDialogFragment")
             } else {
-                val dialog: EditApiEndpointDialogFragment = EditApiEndpointDialogFragment.newInstance(list[position]["label"] ?: return, list[position]["host"] ?: return, list[position]["apiKey"] ?: return, position)
+                val dialog: EditApiEndpointDialogFragment = EditApiEndpointDialogFragment.newInstance(list[position]["label"] ?: return, list[position]["host"] ?: return, list[position]["apiKey"] ?: return, list[position]["chatEndpoint"] ?: ApiEndpointObject.DEFAULT_CHAT_ENDPOINT, list[position]["authType"] ?: ApiEndpointObject.AUTH_BEARER, position)
                 dialog.setListener(this)
                 dialog.setCancelable(false)
                 dialog.show(supportFragmentManager, "EditApiEndpointDialogFragment")
@@ -171,6 +171,8 @@ class ApiEndpointsListActivity : FragmentActivity() {
             map["label"] = i.label
             map["host"] = i.host
             map["apiKey"] = i.apiKey
+            map["chatEndpoint"] = i.chatEndpoint
+            map["authType"] = i.authType
             list.add(map)
         }
 
@@ -204,7 +206,7 @@ class ApiEndpointsListActivity : FragmentActivity() {
         }
 
         btnAdd!!.setOnClickListener {
-            val dialog: EditApiEndpointDialogFragment = EditApiEndpointDialogFragment.newInstance("", "", "", -1)
+            val dialog: EditApiEndpointDialogFragment = EditApiEndpointDialogFragment.newInstance("", "", "", ApiEndpointObject.DEFAULT_CHAT_ENDPOINT, ApiEndpointObject.AUTH_BEARER, -1)
             dialog.setListener(editDialogListener)
             dialog.setCancelable(false)
             dialog.show(supportFragmentManager, "EditApiEndpointDialogFragment")
