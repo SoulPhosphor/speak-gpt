@@ -22,6 +22,13 @@ jobs:
           java-version: '21'
           cache: gradle
 
+      - name: Install Android NDK r26d via sdkmanager
+        run: |
+          set -euo pipefail
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;26.3.11579264" "cmake;3.22.1" >/dev/null
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/26.3.11579264" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/26.3.11579264" >> "$GITHUB_ENV"
+
       - name: Ensure Gradle wrapper is executable
         run: chmod +x ./gradlew
 
