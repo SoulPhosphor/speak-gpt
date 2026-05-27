@@ -31,6 +31,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.DialogFragment
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.util.Hash
@@ -192,10 +193,6 @@ class AddChatDialogFragment : DialogFragment() {
             // Write settings
             val resolution = preferences.getResolution()
             val speech = preferences.getAudioModel()
-            val model = if (requireArguments().getString("model") != "") requireArguments().getString("model") else preferences.getModel()
-            val maxTokens = preferences.getMaxTokens()
-            val prefix = preferences.getPrefix()
-            val endSeparator = preferences.getEndSeparator()
             val activationPrompt = preferences.getPrompt()
             val layout = preferences.getLayout()
             val silent = preferences.getSilence()
@@ -210,10 +207,18 @@ class AddChatDialogFragment : DialogFragment() {
             val voice: String = preferences.getVoice()
             val apiEndpointId = if (requireArguments().getString("endpointId") != "") requireArguments().getString("endpointId") else preferences.getApiEndpointId()
             val logitBiasConfigId = preferences.getLogitBiasesConfigId()
-            val temperature = preferences.getTemperature()
-            val topP = preferences.getTopP()
-            val frequencyPenalty = preferences.getFrequencyPenalty()
-            val presencePenalty = preferences.getPresencePenalty()
+
+            // Model + generation settings come from the active profile.
+            val profile = ApiEndpointPreferences.getApiEndpointPreferences(requireActivity())
+                .getApiEndpoint(requireActivity(), apiEndpointId!!)
+            val model = if (requireArguments().getString("model") != "") requireArguments().getString("model")!! else profile.model
+            val maxTokens = profile.maxTokens
+            val prefix = profile.prefix
+            val endSeparator = profile.endSeparator
+            val temperature = profile.temperature
+            val topP = profile.topP
+            val frequencyPenalty = profile.frequencyPenalty
+            val presencePenalty = profile.presencePenalty
             val avatarType = if (requireArguments().getString("avatarType") != "") requireArguments().getString("avatarType") else preferences.getAvatarType()
             val avatarId = if (requireArguments().getString("avatarId") != "") requireArguments().getString("avatarId") else preferences.getAvatarId()
             val assistantName = if (requireArguments().getString("assistantName") != "") requireArguments().getString("assistantName") else preferences.getAssistantName()
@@ -223,7 +228,7 @@ class AddChatDialogFragment : DialogFragment() {
             newPreferences.setPreferences(Hash.hash(chatName), requireActivity())
             newPreferences.setResolution(resolution)
             newPreferences.setAudioModel(speech)
-            newPreferences.setModel(model!!)
+            newPreferences.setModel(model)
             newPreferences.setMaxTokens(maxTokens)
             newPreferences.setPrefix(prefix)
             newPreferences.setEndSeparator(endSeparator)

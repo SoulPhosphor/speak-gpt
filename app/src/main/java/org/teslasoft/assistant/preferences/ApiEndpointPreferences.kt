@@ -51,8 +51,25 @@ class ApiEndpointPreferences private constructor(private var preferences: Shared
         val chatEndpoint = getString(id + "_chat_endpoint", ApiEndpointObject.DEFAULT_CHAT_ENDPOINT)
         val authType = getString(id + "_auth_type", ApiEndpointObject.AUTH_BEARER)
         val apiKey: String = EncryptedPreferences.getEncryptedPreference(context, "api_endpoint", id + "_api_key")
+        val model = getString(id + "_model", ApiEndpointObject.DEFAULT_MODEL)
+        val temperature = getString(id + "_temperature", ApiEndpointObject.DEFAULT_TEMPERATURE.toString()).toFloatOrNull()
+            ?: ApiEndpointObject.DEFAULT_TEMPERATURE
+        val topP = getString(id + "_top_p", ApiEndpointObject.DEFAULT_TOP_P.toString()).toFloatOrNull()
+            ?: ApiEndpointObject.DEFAULT_TOP_P
+        val frequencyPenalty = getString(id + "_frequency_penalty", ApiEndpointObject.DEFAULT_FREQUENCY_PENALTY.toString()).toFloatOrNull()
+            ?: ApiEndpointObject.DEFAULT_FREQUENCY_PENALTY
+        val presencePenalty = getString(id + "_presence_penalty", ApiEndpointObject.DEFAULT_PRESENCE_PENALTY.toString()).toFloatOrNull()
+            ?: ApiEndpointObject.DEFAULT_PRESENCE_PENALTY
+        val maxTokens = getString(id + "_max_tokens", ApiEndpointObject.DEFAULT_MAX_TOKENS.toString()).toIntOrNull()
+            ?: ApiEndpointObject.DEFAULT_MAX_TOKENS
+        val endSeparator = getString(id + "_end_separator", "")
+        val prefix = getString(id + "_prefix", "")
 
-        return ApiEndpointObject(label, host, apiKey, chatEndpoint, authType)
+        return ApiEndpointObject(
+            label, host, apiKey, chatEndpoint, authType,
+            model, temperature, topP, frequencyPenalty, presencePenalty,
+            maxTokens, endSeparator, prefix
+        )
     }
 
     fun deleteApiEndpoint(context: Context, id: String) {
@@ -60,6 +77,14 @@ class ApiEndpointPreferences private constructor(private var preferences: Shared
         preferences.edit { remove(id + "_host") }
         preferences.edit { remove(id + "_chat_endpoint") }
         preferences.edit { remove(id + "_auth_type") }
+        preferences.edit { remove(id + "_model") }
+        preferences.edit { remove(id + "_temperature") }
+        preferences.edit { remove(id + "_top_p") }
+        preferences.edit { remove(id + "_frequency_penalty") }
+        preferences.edit { remove(id + "_presence_penalty") }
+        preferences.edit { remove(id + "_max_tokens") }
+        preferences.edit { remove(id + "_end_separator") }
+        preferences.edit { remove(id + "_prefix") }
         EncryptedPreferences.setEncryptedPreference(context, "api_endpoint", id + "_api_key", "null")
 
         for (listener in listeners) {
@@ -73,6 +98,14 @@ class ApiEndpointPreferences private constructor(private var preferences: Shared
         putString(id + "_host", endpoint.host)
         putString(id + "_chat_endpoint", endpoint.chatEndpoint)
         putString(id + "_auth_type", endpoint.authType)
+        putString(id + "_model", endpoint.model)
+        putString(id + "_temperature", endpoint.temperature.toString())
+        putString(id + "_top_p", endpoint.topP.toString())
+        putString(id + "_frequency_penalty", endpoint.frequencyPenalty.toString())
+        putString(id + "_presence_penalty", endpoint.presencePenalty.toString())
+        putString(id + "_max_tokens", endpoint.maxTokens.toString())
+        putString(id + "_end_separator", endpoint.endSeparator)
+        putString(id + "_prefix", endpoint.prefix)
         EncryptedPreferences.setEncryptedPreference(context, "api_endpoint", id + "_api_key", endpoint.apiKey)
 
         for (listener in listeners) {
@@ -99,14 +132,9 @@ class ApiEndpointPreferences private constructor(private var preferences: Shared
     fun getApiEndpointsList(context: Context): ArrayList<ApiEndpointObject> {
         val list = ArrayList<ApiEndpointObject>()
         for (key in preferences.all.keys) {
-            if (key.contains("_label")) {
-                val id = key.replace("_label", "")
-                val label = getString(id + "_label", "")
-                val host = getString(id + "_host", "")
-                val chatEndpoint = getString(id + "_chat_endpoint", ApiEndpointObject.DEFAULT_CHAT_ENDPOINT)
-                val authType = getString(id + "_auth_type", ApiEndpointObject.AUTH_BEARER)
-                val apiKey: String = EncryptedPreferences.getEncryptedPreference(context, "api_endpoint", id + "_api_key")
-                list.add(ApiEndpointObject(label, host, apiKey, chatEndpoint, authType))
+            if (key.endsWith("_label")) {
+                val id = key.removeSuffix("_label")
+                list.add(getApiEndpoint(context, id))
             }
         }
 

@@ -82,6 +82,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     private var frequencyPenaltySeekbar: com.google.android.material.slider.Slider? = null
     private var presencePenaltySeekbar: com.google.android.material.slider.Slider? = null
     private var fieldSeed: TextInputEditText? = null
+    private var btnSaveToProfile: MaterialButton? = null
 
     private var textUsage: TextView? = null
     private var textCost: TextView? = null
@@ -303,6 +304,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         presencePenaltySeekbar = view.findViewById(R.id.presence_penalty_slider)
         topPSeekbar = view.findViewById(R.id.top_p_slider)
         fieldSeed = view.findViewById(R.id.field_seed)
+        btnSaveToProfile = view.findViewById(R.id.btn_save_to_profile)
         textModel = view.findViewById(R.id.text_model)
         textHost = view.findViewById(R.id.text_host)
         textLogitBiasesConfig = view.findViewById(R.id.text_logit_biases_config)
@@ -428,6 +430,37 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         btnSelectApiEndpoint?.setOnClickListener {
             apiEndpointActivityResultLauncher.launch(Intent(requireContext(), ApiEndpointsListActivity::class.java))
         }
+
+        btnSaveToProfile?.setOnClickListener {
+            saveCurrentSettingsToProfile()
+        }
+    }
+
+    private fun saveCurrentSettingsToProfile() {
+        val endpointId = preferences?.getApiEndpointId().orEmpty()
+        if (endpointId.isEmpty()) {
+            android.widget.Toast.makeText(requireContext(), R.string.msg_no_active_profile, android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val currentProfile = apiEndpointPreferences?.getApiEndpoint(requireContext(), endpointId) ?: return
+        val updated = ApiEndpointObject(
+            label = currentProfile.label,
+            host = currentProfile.host,
+            apiKey = currentProfile.apiKey,
+            chatEndpoint = currentProfile.chatEndpoint,
+            authType = currentProfile.authType,
+            model = preferences?.getModel() ?: currentProfile.model,
+            temperature = preferences?.getTemperature() ?: currentProfile.temperature,
+            topP = preferences?.getTopP() ?: currentProfile.topP,
+            frequencyPenalty = preferences?.getFrequencyPenalty() ?: currentProfile.frequencyPenalty,
+            presencePenalty = preferences?.getPresencePenalty() ?: currentProfile.presencePenalty,
+            maxTokens = preferences?.getMaxTokens() ?: currentProfile.maxTokens,
+            endSeparator = preferences?.getEndSeparator() ?: currentProfile.endSeparator,
+            prefix = preferences?.getPrefix() ?: currentProfile.prefix
+        )
+        apiEndpointPreferences?.setApiEndpoint(requireContext(), updated)
+        android.widget.Toast.makeText(requireContext(), R.string.msg_saved_to_profile, android.widget.Toast.LENGTH_SHORT).show()
     }
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {

@@ -3336,7 +3336,22 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     }
 
     private fun requestAddApiEndpoint(feature: String, prompt: String) {
-        val apiEndpointDialog: EditApiEndpointDialogFragment = EditApiEndpointDialogFragment.newInstance("OpenAI", "https://api.openai.com/v1/", "", ApiEndpointObject.DEFAULT_CHAT_ENDPOINT, ApiEndpointObject.AUTH_BEARER, -1)
+        val apiEndpointDialog: EditApiEndpointDialogFragment = EditApiEndpointDialogFragment.newInstance(
+            "OpenAI",
+            "https://api.openai.com/v1/",
+            "",
+            ApiEndpointObject.DEFAULT_CHAT_ENDPOINT,
+            ApiEndpointObject.AUTH_BEARER,
+            ApiEndpointObject.DEFAULT_MODEL,
+            ApiEndpointObject.DEFAULT_TEMPERATURE,
+            ApiEndpointObject.DEFAULT_TOP_P,
+            ApiEndpointObject.DEFAULT_FREQUENCY_PENALTY,
+            ApiEndpointObject.DEFAULT_PRESENCE_PENALTY,
+            ApiEndpointObject.DEFAULT_MAX_TOKENS,
+            "",
+            "",
+            -1
+        )
         apiEndpointDialog.setListener(object : EditApiEndpointDialogFragment.StateChangesListener {
             override fun onAdd(apiEndpoint: ApiEndpointObject) {
                 apiEndpointPreferences?.setApiEndpoint(this@ChatActivity, apiEndpoint)

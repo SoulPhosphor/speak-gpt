@@ -530,14 +530,14 @@
                     app:layout_constraintTop_toTopOf="parent">
 
                     <androidx.constraintlayout.widget.ConstraintLayout
-                        android:id="@+id/tile_text_model"
+                        android:id="@+id/tile_activation_prompt"
                         android:layout_width="0dp"
                         android:layout_height="match_parent"
                         android:layout_marginHorizontal="4dp"
                         android:layout_weight="1" />
 
                     <androidx.constraintlayout.widget.ConstraintLayout
-                        android:id="@+id/tile_activation_prompt"
+                        android:id="@+id/tile_system_message"
                         android:layout_width="0dp"
                         android:layout_height="match_parent"
                         android:layout_marginHorizontal="4dp"
@@ -556,16 +556,10 @@
                     android:layout_marginEnd="12dp"
                     android:baselineAligned="false"
                     android:orientation="horizontal"
+                    android:weightSum="2"
                     app:layout_constraintEnd_toEndOf="parent"
                     app:layout_constraintStart_toStartOf="parent"
                     app:layout_constraintTop_toBottomOf="@+id/linearLayout8">
-
-                    <androidx.constraintlayout.widget.ConstraintLayout
-                        android:id="@+id/tile_system_message"
-                        android:layout_width="0dp"
-                        android:layout_height="match_parent"
-                        android:layout_marginHorizontal="4dp"
-                        android:layout_weight="1" />
 
                     <androidx.constraintlayout.widget.ConstraintLayout
                         android:id="@+id/tile_auto_language_detection"

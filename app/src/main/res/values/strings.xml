@@ -271,6 +271,14 @@
     <string name="auth_mode_bearer">Bearer token (Authorization)</string>
     <string name="auth_mode_x_api_key">API key header (x-api-key)</string>
     <string name="auth_mode_api_key">API key header (api-key)</string>
+    <string name="api_endpoint_model">Model</string>
+    <string name="api_endpoint_model_help">Tap to choose from models available on this endpoint.</string>
+    <string name="label_max_tokens">Max tokens</string>
+    <string name="label_end_separator">End separator</string>
+    <string name="label_prefix">Prefix</string>
+    <string name="btn_save_to_profile">Save to profile</string>
+    <string name="msg_saved_to_profile">Saved to profile</string>
+    <string name="msg_no_active_profile">No active profile to save to</string>
 
 
     <string name="api_key_blank_note">Leave API key field blank if you don\'t want to change API key.</string>

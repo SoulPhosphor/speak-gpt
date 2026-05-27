@@ -23,12 +23,26 @@ class ApiEndpointObject(
     /* Path appended to the base URL for chat completions, e.g. "/chat/completions". */
     var chatEndpoint: String = DEFAULT_CHAT_ENDPOINT,
     /* How the API key is sent: "bearer", "x-api-key" or "api-key". */
-    var authType: String = AUTH_BEARER
+    var authType: String = AUTH_BEARER,
+    var model: String = DEFAULT_MODEL,
+    var temperature: Float = DEFAULT_TEMPERATURE,
+    var topP: Float = DEFAULT_TOP_P,
+    var frequencyPenalty: Float = DEFAULT_FREQUENCY_PENALTY,
+    var presencePenalty: Float = DEFAULT_PRESENCE_PENALTY,
+    var maxTokens: Int = DEFAULT_MAX_TOKENS,
+    var endSeparator: String = "",
+    var prefix: String = ""
 ) {
     companion object {
         const val DEFAULT_CHAT_ENDPOINT = "/chat/completions"
         const val AUTH_BEARER = "bearer"
         const val AUTH_X_API_KEY = "x-api-key"
         const val AUTH_API_KEY = "api-key"
+        const val DEFAULT_MODEL = "gpt-4o"
+        const val DEFAULT_TEMPERATURE = 0.7f
+        const val DEFAULT_TOP_P = 1.0f
+        const val DEFAULT_FREQUENCY_PENALTY = 0.0f
+        const val DEFAULT_PRESENCE_PENALTY = 0.0f
+        const val DEFAULT_MAX_TOKENS = 1500
     }
 }

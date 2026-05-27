@@ -104,9 +104,6 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
 
     private var modelSelectedListener: ModelListAdapter.OnItemClickListener = object : ModelListAdapter.OnItemClickListener {
         override fun onItemClick(model: String) {
-            val preferences = Preferences.getPreferences(mContext ?: return, requireArguments().getString("chatId").toString())
-
-            preferences.setModel(model)
             modelListAdapter?.notifyDataSetChanged()
             listener?.onModelSelected(model)
             dismiss()

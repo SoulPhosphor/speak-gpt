@@ -57,15 +57,33 @@ class ApiEndpointsListActivity : FragmentActivity() {
 
     private var actionBar: ConstraintLayout? = null
 
-    private fun openEditDialog(position: Int) {
-        val dialog: EditApiEndpointDialogFragment = EditApiEndpointDialogFragment.newInstance(
-            list[position]["label"] ?: return,
-            list[position]["host"] ?: return,
-            list[position]["apiKey"] ?: return,
-            list[position]["chatEndpoint"] ?: ApiEndpointObject.DEFAULT_CHAT_ENDPOINT,
-            list[position]["authType"] ?: ApiEndpointObject.AUTH_BEARER,
+    private fun newEditDialog(endpoint: ApiEndpointObject, position: Int): EditApiEndpointDialogFragment {
+        return EditApiEndpointDialogFragment.newInstance(
+            endpoint.label,
+            endpoint.host,
+            endpoint.apiKey,
+            endpoint.chatEndpoint,
+            endpoint.authType,
+            endpoint.model,
+            endpoint.temperature,
+            endpoint.topP,
+            endpoint.frequencyPenalty,
+            endpoint.presencePenalty,
+            endpoint.maxTokens,
+            endpoint.endSeparator,
+            endpoint.prefix,
             position
         )
+    }
+
+    private fun newEmptyEndpoint(): ApiEndpointObject {
+        return ApiEndpointObject("", "", "")
+    }
+
+    private fun openEditDialog(position: Int) {
+        val label = list[position]["label"] ?: return
+        val endpoint = apiEndpointPreferences!!.getApiEndpoint(this, Hash.hash(label))
+        val dialog = newEditDialog(endpoint, position)
         dialog.setListener(editDialogListener)
         dialog.setCancelable(false)
         dialog.show(supportFragmentManager, "EditApiEndpointDialogFragment")
@@ -116,17 +134,16 @@ class ApiEndpointsListActivity : FragmentActivity() {
 
         override fun onError(message: String, position: Int) {
             Toast.makeText(this@ApiEndpointsListActivity, message, Toast.LENGTH_SHORT).show()
-            if (position == -1) {
-                val dialog: EditApiEndpointDialogFragment = EditApiEndpointDialogFragment.newInstance("", "", "", ApiEndpointObject.DEFAULT_CHAT_ENDPOINT, ApiEndpointObject.AUTH_BEARER, position)
-                dialog.setListener(this)
-                dialog.setCancelable(false)
-                dialog.show(supportFragmentManager, "EditApiEndpointDialogFragment")
+            val endpoint = if (position == -1) {
+                newEmptyEndpoint()
             } else {
-                val dialog: EditApiEndpointDialogFragment = EditApiEndpointDialogFragment.newInstance(list[position]["label"] ?: return, list[position]["host"] ?: return, list[position]["apiKey"] ?: return, list[position]["chatEndpoint"] ?: ApiEndpointObject.DEFAULT_CHAT_ENDPOINT, list[position]["authType"] ?: ApiEndpointObject.AUTH_BEARER, position)
-                dialog.setListener(this)
-                dialog.setCancelable(false)
-                dialog.show(supportFragmentManager, "EditApiEndpointDialogFragment")
+                val label = list[position]["label"] ?: return
+                apiEndpointPreferences!!.getApiEndpoint(this@ApiEndpointsListActivity, Hash.hash(label))
             }
+            val dialog = newEditDialog(endpoint, position)
+            dialog.setListener(this)
+            dialog.setCancelable(false)
+            dialog.show(supportFragmentManager, "EditApiEndpointDialogFragment")
         }
     }
 
@@ -221,7 +238,7 @@ class ApiEndpointsListActivity : FragmentActivity() {
         }
 
         btnAdd!!.setOnClickListener {
-            val dialog: EditApiEndpointDialogFragment = EditApiEndpointDialogFragment.newInstance("", "", "", ApiEndpointObject.DEFAULT_CHAT_ENDPOINT, ApiEndpointObject.AUTH_BEARER, -1)
+            val dialog = newEditDialog(newEmptyEndpoint(), -1)
             dialog.setListener(editDialogListener)
             dialog.setCancelable(false)
             dialog.show(supportFragmentManager, "EditApiEndpointDialogFragment")

@@ -25,6 +25,7 @@ import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.DialogFragment
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.slider.Slider
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import org.teslasoft.assistant.R
@@ -33,7 +34,22 @@ import org.teslasoft.assistant.util.Hash
 
 class EditApiEndpointDialogFragment : DialogFragment() {
     companion object {
-        fun newInstance(label: String, host: String, apiKey: String, chatEndpoint: String, authType: String, position: Int) : EditApiEndpointDialogFragment {
+        fun newInstance(
+            label: String,
+            host: String,
+            apiKey: String,
+            chatEndpoint: String,
+            authType: String,
+            model: String,
+            temperature: Float,
+            topP: Float,
+            frequencyPenalty: Float,
+            presencePenalty: Float,
+            maxTokens: Int,
+            endSeparator: String,
+            prefix: String,
+            position: Int
+        ): EditApiEndpointDialogFragment {
             val editApiEndpointDialogFragment = EditApiEndpointDialogFragment()
 
             val args = Bundle()
@@ -42,6 +58,14 @@ class EditApiEndpointDialogFragment : DialogFragment() {
             args.putString("apiKey", apiKey)
             args.putString("chatEndpoint", chatEndpoint)
             args.putString("authType", authType)
+            args.putString("model", model)
+            args.putFloat("temperature", temperature)
+            args.putFloat("topP", topP)
+            args.putFloat("frequencyPenalty", frequencyPenalty)
+            args.putFloat("presencePenalty", presencePenalty)
+            args.putInt("maxTokens", maxTokens)
+            args.putString("endSeparator", endSeparator)
+            args.putString("prefix", prefix)
             args.putInt("position", position)
 
             editApiEndpointDialogFragment.arguments = args
@@ -62,9 +86,18 @@ class EditApiEndpointDialogFragment : DialogFragment() {
     private var fieldChatEndpoint: TextInputEditText? = null
     private var fieldApiKey: TextInputEditText? = null
     private var fieldAuthType: TextInputEditText? = null
+    private var fieldModel: TextInputEditText? = null
+    private var sliderTemperature: Slider? = null
+    private var sliderTopP: Slider? = null
+    private var sliderFrequencyPenalty: Slider? = null
+    private var sliderPresencePenalty: Slider? = null
+    private var fieldMaxTokens: TextInputEditText? = null
+    private var fieldEndSeparator: TextInputEditText? = null
+    private var fieldPrefix: TextInputEditText? = null
     private var apiNote: TextView? = null
 
     private var selectedAuthType: String = ApiEndpointObject.AUTH_BEARER
+    private var selectedModel: String = ApiEndpointObject.DEFAULT_MODEL
 
     private var builder: AlertDialog.Builder? = null
 
@@ -93,6 +126,14 @@ class EditApiEndpointDialogFragment : DialogFragment() {
         fieldChatEndpoint = view.findViewById(R.id.field_chat_endpoint)
         fieldApiKey = view.findViewById(R.id.field_api_key)
         fieldAuthType = view.findViewById(R.id.field_auth_type)
+        fieldModel = view.findViewById(R.id.field_model)
+        sliderTemperature = view.findViewById(R.id.slider_temperature)
+        sliderTopP = view.findViewById(R.id.slider_top_p)
+        sliderFrequencyPenalty = view.findViewById(R.id.slider_frequency_penalty)
+        sliderPresencePenalty = view.findViewById(R.id.slider_presence_penalty)
+        fieldMaxTokens = view.findViewById(R.id.field_max_tokens)
+        fieldEndSeparator = view.findViewById(R.id.field_end_separator)
+        fieldPrefix = view.findViewById(R.id.field_prefix)
         apiNote = view.findViewById(R.id.api_note)
 
         fieldLabel?.setText(requireArguments().getString("label"))
@@ -108,8 +149,36 @@ class EditApiEndpointDialogFragment : DialogFragment() {
         }
         fieldAuthType?.setText(authLabel(selectedAuthType))
 
+        selectedModel = requireArguments().getString("model").let {
+            if (it.isNullOrBlank()) ApiEndpointObject.DEFAULT_MODEL else it
+        }
+        fieldModel?.setText(selectedModel)
+
+        sliderTemperature?.value = (requireArguments().getFloat("temperature", ApiEndpointObject.DEFAULT_TEMPERATURE) * 10f)
+            .coerceIn(0f, 20f)
+        sliderTemperature?.setLabelFormatter { "${it / 10.0}" }
+
+        sliderTopP?.value = (requireArguments().getFloat("topP", ApiEndpointObject.DEFAULT_TOP_P) * 10f)
+            .coerceIn(0f, 10f)
+        sliderTopP?.setLabelFormatter { "${it / 10.0}" }
+
+        sliderFrequencyPenalty?.value = (requireArguments().getFloat("frequencyPenalty", ApiEndpointObject.DEFAULT_FREQUENCY_PENALTY) * 10f)
+            .coerceIn(-20f, 20f)
+        sliderFrequencyPenalty?.setLabelFormatter { "${it / 10.0}" }
+
+        sliderPresencePenalty?.value = (requireArguments().getFloat("presencePenalty", ApiEndpointObject.DEFAULT_PRESENCE_PENALTY) * 10f)
+            .coerceIn(-20f, 20f)
+        sliderPresencePenalty?.setLabelFormatter { "${it / 10.0}" }
+
+        fieldMaxTokens?.setText(requireArguments().getInt("maxTokens", ApiEndpointObject.DEFAULT_MAX_TOKENS).toString())
+        fieldEndSeparator?.setText(requireArguments().getString("endSeparator", ""))
+        fieldPrefix?.setText(requireArguments().getString("prefix", ""))
+
         fieldAuthType?.setOnClickListener { showAuthTypeChooser() }
         view.findViewById<TextInputLayout>(R.id.textInputLayoutAuth)?.setOnClickListener { showAuthTypeChooser() }
+
+        fieldModel?.setOnClickListener { showModelChooser() }
+        view.findViewById<TextInputLayout>(R.id.textInputLayoutModel)?.setOnClickListener { showModelChooser() }
 
         if (requireArguments().getInt("position") == -1) {
             textDialogTitle?.text = getString(R.string.label_add_api_endpoint)
@@ -149,9 +218,36 @@ class EditApiEndpointDialogFragment : DialogFragment() {
             .show()
     }
 
+    private fun showModelChooser() {
+        val modelDialog = AdvancedModelSelectorDialogFragment.newInstance(selectedModel, "")
+        modelDialog.setModelSelectedListener { model ->
+            selectedModel = model
+            fieldModel?.setText(model)
+        }
+        modelDialog.show(parentFragmentManager, "ProfileModelSelector")
+    }
+
     private fun normalizedChatEndpoint(): String {
         val value = fieldChatEndpoint?.text.toString().trim()
         return if (value.isEmpty()) ApiEndpointObject.DEFAULT_CHAT_ENDPOINT else value
+    }
+
+    private fun buildEndpointObject(): ApiEndpointObject {
+        return ApiEndpointObject(
+            label = fieldLabel?.text.toString(),
+            host = fieldHost?.text.toString(),
+            apiKey = fieldApiKey?.text.toString(),
+            chatEndpoint = normalizedChatEndpoint(),
+            authType = selectedAuthType,
+            model = selectedModel.ifBlank { ApiEndpointObject.DEFAULT_MODEL },
+            temperature = (sliderTemperature?.value ?: (ApiEndpointObject.DEFAULT_TEMPERATURE * 10f)) / 10f,
+            topP = (sliderTopP?.value ?: (ApiEndpointObject.DEFAULT_TOP_P * 10f)) / 10f,
+            frequencyPenalty = (sliderFrequencyPenalty?.value ?: (ApiEndpointObject.DEFAULT_FREQUENCY_PENALTY * 10f)) / 10f,
+            presencePenalty = (sliderPresencePenalty?.value ?: (ApiEndpointObject.DEFAULT_PRESENCE_PENALTY * 10f)) / 10f,
+            maxTokens = fieldMaxTokens?.text.toString().toIntOrNull() ?: ApiEndpointObject.DEFAULT_MAX_TOKENS,
+            endSeparator = fieldEndSeparator?.text.toString(),
+            prefix = fieldPrefix?.text.toString()
+        )
     }
 
     private fun validateForm() {
@@ -170,25 +266,11 @@ class EditApiEndpointDialogFragment : DialogFragment() {
         }
 
         if (requireArguments().getInt("position") == -1) {
-            listener!!.onAdd(
-                ApiEndpointObject(
-                    fieldLabel?.text.toString(),
-                    fieldHost?.text.toString(),
-                    fieldApiKey?.text.toString(),
-                    normalizedChatEndpoint(),
-                    selectedAuthType
-                )
-            )
+            listener!!.onAdd(buildEndpointObject())
         } else {
             listener!!.onEdit(
                 requireArguments().getString("label")!!,
-                ApiEndpointObject(
-                    fieldLabel?.text.toString(),
-                    fieldHost?.text.toString(),
-                    fieldApiKey?.text.toString(),
-                    normalizedChatEndpoint(),
-                    selectedAuthType
-                ),
+                buildEndpointObject(),
                 requireArguments().getInt("position")
             )
         }

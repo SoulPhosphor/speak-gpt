@@ -56,7 +56,6 @@ import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.ui.fragments.TileFragment
 import org.teslasoft.assistant.ui.fragments.dialogs.ActivationPromptDialogFragment
-import org.teslasoft.assistant.ui.fragments.dialogs.AdvancedSettingsDialogFragment
 import org.teslasoft.assistant.ui.fragments.dialogs.CustomizeAssistantDialog
 import org.teslasoft.assistant.ui.fragments.dialogs.LanguageSelectorDialogFragment
 import org.teslasoft.assistant.ui.fragments.dialogs.SelectImageModelFragment
@@ -90,7 +89,6 @@ class SettingsActivity : FragmentActivity() {
     private var tileAlwaysSpeak: TileFragment? = null
     private var tileHandsFree: TileFragment? = null
     private var tileHandsFreeTiming: TileFragment? = null
-    private var tileTextModel: TileFragment? = null
     private var tileActivationMessage: TileFragment? = null
     private var tileSystemMessage: TileFragment? = null
     private var tileLangDetect: TileFragment? = null
@@ -126,7 +124,6 @@ class SettingsActivity : FragmentActivity() {
     private var areFragmentsInitialized = false
     private var chatId = ""
     private var preferences: Preferences? = null
-    private var model = ""
     private var activationPrompt = ""
     private var systemMessage = ""
     private var language = "en"
@@ -139,27 +136,6 @@ class SettingsActivity : FragmentActivity() {
 
     private var teslasoftIDClient: TeslasoftIDClient? = null
     private var apiEndpointPreferences: ApiEndpointPreferences? = null
-
-    private var modelChangedListener: AdvancedSettingsDialogFragment.StateChangesListener = object : AdvancedSettingsDialogFragment.StateChangesListener {
-        override fun onSelected(name: String, maxTokens: String, endSeparator: String, prefix: String) {
-            model = name
-            preferences?.setModel(name)
-            preferences?.setMaxTokens(maxTokens.toInt())
-            preferences?.setEndSeparator(endSeparator)
-            preferences?.setPrefix(prefix)
-            tileTextModel?.updateSubtitle(model)
-            runOnUiThread {
-                Toast.makeText(this@SettingsActivity, "Settings saved", Toast.LENGTH_SHORT).show()
-            }
-        }
-
-        override fun onFormError(name: String, maxTokens: String, endSeparator: String, prefix: String) {
-            if (name == "") Toast.makeText(this@SettingsActivity, getString(R.string.model_error_empty), Toast.LENGTH_SHORT).show()
-            val advancedSettingsDialogFragment: AdvancedSettingsDialogFragment = AdvancedSettingsDialogFragment.newInstance(name, chatId)
-            advancedSettingsDialogFragment.setStateChangedListener(this)
-            advancedSettingsDialogFragment.show(supportFragmentManager.beginTransaction(), "ModelDialog")
-        }
-    }
 
     private var languageChangedListener: LanguageSelectorDialogFragment.StateChangesListener = object : LanguageSelectorDialogFragment.StateChangesListener {
         override fun onSelected(name: String) {
@@ -321,7 +297,6 @@ class SettingsActivity : FragmentActivity() {
         transition.excludeTarget(R.id.tile_stt, true)
         transition.excludeTarget(R.id.tile_silent_mode, true)
         transition.excludeTarget(R.id.tile_always_speak, true)
-        transition.excludeTarget(R.id.tile_text_model, true)
         transition.excludeTarget(R.id.tile_activation_prompt, true)
         transition.excludeTarget(R.id.tile_system_message, true)
         transition.excludeTarget(R.id.tile_auto_language_detection, true)
@@ -384,7 +359,6 @@ class SettingsActivity : FragmentActivity() {
         transition2.excludeTarget(R.id.tile_stt, true)
         transition2.excludeTarget(R.id.tile_silent_mode, true)
         transition2.excludeTarget(R.id.tile_always_speak, true)
-        transition2.excludeTarget(R.id.tile_text_model, true)
         transition2.excludeTarget(R.id.tile_activation_prompt, true)
         transition2.excludeTarget(R.id.tile_system_message, true)
         transition2.excludeTarget(R.id.tile_auto_language_detection, true)
@@ -460,7 +434,6 @@ class SettingsActivity : FragmentActivity() {
         apiEndpointPreferences = ApiEndpointPreferences.getApiEndpointPreferences(this)
         apiEndpoint = apiEndpointPreferences?.getApiEndpoint(this, preferences?.getApiEndpointId()!!)
 
-        model = preferences?.getModel() ?: "gpt-3.5-turbo"
         activationPrompt = preferences?.getPrompt() ?: ""
         systemMessage = preferences?.getSystemMessage() ?: ""
         language = preferences?.getLanguage() ?: "en"
@@ -719,19 +692,6 @@ class SettingsActivity : FragmentActivity() {
                 disabled = false,
                 chatId = chatId,
                 functionDesc = getString(R.string.tile_hands_free_timing_desc)
-            )
-
-            tileTextModel = TileFragment.newInstance(
-                checked = false,
-                checkable = false,
-                enabledText = getString(R.string.tile_text_model_title),
-                disabledText = null,
-                enabledDesc = model,
-                disabledDesc = null,
-                icon = R.drawable.chatgpt_icon,
-                disabled = false,
-                chatId = chatId,
-                functionDesc = getString(R.string.tile_text_generation_model_desc)
             )
 
             tileActivationMessage = TileFragment.newInstance(
@@ -1144,7 +1104,6 @@ class SettingsActivity : FragmentActivity() {
             .replace(R.id.tile_always_speak, tileAlwaysSpeak!!)
             .replace(R.id.tile_hands_free, tileHandsFree!!)
             .replace(R.id.tile_hands_free_timing, tileHandsFreeTiming!!)
-            .replace(R.id.tile_text_model, tileTextModel!!)
             .replace(R.id.tile_activation_prompt, tileActivationMessage!!)
             .replace(R.id.tile_system_message, tileSystemMessage!!)
             .replace(R.id.tile_auto_language_detection, tileLangDetect!!)
@@ -1289,12 +1248,6 @@ class SettingsActivity : FragmentActivity() {
 
         tileHandsFreeTiming?.setOnTileClickListener {
             showHandsFreeTimingDialog()
-        }
-
-        tileTextModel?.setOnTileClickListener {
-            val advancedSettingsDialogFragment: AdvancedSettingsDialogFragment = AdvancedSettingsDialogFragment.newInstance(model, chatId)
-            advancedSettingsDialogFragment.setStateChangedListener(modelChangedListener)
-            advancedSettingsDialogFragment.show(supportFragmentManager.beginTransaction(), "AdvancedSettingsDialog")
         }
 
         tileActivationMessage?.setOnTileClickListener {

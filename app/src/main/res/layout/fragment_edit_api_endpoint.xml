@@ -65,6 +65,241 @@
                 android:textColorHint="@color/text_hint" />
         </com.google.android.material.textfield.TextInputLayout>
 
+        <!-- Model picker (tap to open dynamic model selector) -->
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/textInputLayoutModel"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="24dp"
+            android:layout_marginTop="12dp"
+            android:layout_marginEnd="24dp"
+            android:textColorHint="@color/text_hint"
+            app:boxStrokeColor="@drawable/box_stroke_color"
+            app:boxCornerRadiusBottomEnd="16dp"
+            app:boxCornerRadiusBottomStart="16dp"
+            app:boxCornerRadiusTopEnd="16dp"
+            app:boxCornerRadiusTopStart="16dp"
+            app:helperTextEnabled="true"
+            app:helperText="@string/api_endpoint_model_help"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/textInputLayout10">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/field_model"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:clickable="true"
+                android:cursorVisible="false"
+                android:focusable="false"
+                android:focusableInTouchMode="false"
+                android:hint="@string/api_endpoint_model"
+                android:singleLine="true"
+                android:textColorHint="@color/text_hint" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <!-- Temperature -->
+        <TextView
+            android:id="@+id/label_temperature"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="28dp"
+            android:layout_marginTop="16dp"
+            android:layout_marginEnd="28dp"
+            android:text="@string/label_temperature"
+            android:textColor="@color/text_title"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/textInputLayoutModel" />
+
+        <com.google.android.material.slider.Slider
+            android:id="@+id/slider_temperature"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="20dp"
+            android:layout_marginEnd="20dp"
+            android:stepSize="1.0"
+            android:valueFrom="0.0"
+            android:valueTo="20.0"
+            android:value="7.0"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/label_temperature" />
+
+        <!-- Top P -->
+        <TextView
+            android:id="@+id/label_top_p"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="28dp"
+            android:layout_marginTop="4dp"
+            android:layout_marginEnd="28dp"
+            android:text="@string/label_top_p"
+            android:textColor="@color/text_title"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/slider_temperature" />
+
+        <com.google.android.material.slider.Slider
+            android:id="@+id/slider_top_p"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="20dp"
+            android:layout_marginEnd="20dp"
+            android:stepSize="1.0"
+            android:valueFrom="0.0"
+            android:valueTo="10.0"
+            android:value="10.0"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/label_top_p" />
+
+        <!-- Frequency penalty -->
+        <TextView
+            android:id="@+id/label_frequency_penalty"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="28dp"
+            android:layout_marginTop="4dp"
+            android:layout_marginEnd="28dp"
+            android:text="@string/label_frequency_penalty"
+            android:textColor="@color/text_title"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/slider_top_p" />
+
+        <com.google.android.material.slider.Slider
+            android:id="@+id/slider_frequency_penalty"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="20dp"
+            android:layout_marginEnd="20dp"
+            android:stepSize="1.0"
+            android:valueFrom="-20.0"
+            android:valueTo="20.0"
+            android:value="0.0"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/label_frequency_penalty" />
+
+        <!-- Presence penalty -->
+        <TextView
+            android:id="@+id/label_presence_penalty"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="28dp"
+            android:layout_marginTop="4dp"
+            android:layout_marginEnd="28dp"
+            android:text="@string/label_presence_penalty"
+            android:textColor="@color/text_title"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/slider_frequency_penalty" />
+
+        <com.google.android.material.slider.Slider
+            android:id="@+id/slider_presence_penalty"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="20dp"
+            android:layout_marginEnd="20dp"
+            android:stepSize="1.0"
+            android:valueFrom="-20.0"
+            android:valueTo="20.0"
+            android:value="0.0"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/label_presence_penalty" />
+
+        <!-- Max tokens -->
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/textInputLayoutMaxTokens"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="24dp"
+            android:layout_marginTop="12dp"
+            android:layout_marginEnd="24dp"
+            android:textColorHint="@color/text_hint"
+            app:boxStrokeColor="@drawable/box_stroke_color"
+            app:boxCornerRadiusBottomEnd="16dp"
+            app:boxCornerRadiusBottomStart="16dp"
+            app:boxCornerRadiusTopEnd="16dp"
+            app:boxCornerRadiusTopStart="16dp"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/slider_presence_penalty">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/field_max_tokens"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/label_max_tokens"
+                android:inputType="number"
+                android:singleLine="true"
+                android:textColorHint="@color/text_hint" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <!-- End separator -->
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/textInputLayoutEndSeparator"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="24dp"
+            android:layout_marginTop="12dp"
+            android:layout_marginEnd="24dp"
+            android:textColorHint="@color/text_hint"
+            app:boxStrokeColor="@drawable/box_stroke_color"
+            app:boxCornerRadiusBottomEnd="16dp"
+            app:boxCornerRadiusBottomStart="16dp"
+            app:boxCornerRadiusTopEnd="16dp"
+            app:boxCornerRadiusTopStart="16dp"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/textInputLayoutMaxTokens">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/field_end_separator"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/label_end_separator"
+                android:singleLine="true"
+                android:textColorHint="@color/text_hint" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <!-- Prefix -->
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/textInputLayoutPrefix"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="24dp"
+            android:layout_marginTop="12dp"
+            android:layout_marginEnd="24dp"
+            android:textColorHint="@color/text_hint"
+            app:boxStrokeColor="@drawable/box_stroke_color"
+            app:boxCornerRadiusBottomEnd="16dp"
+            app:boxCornerRadiusBottomStart="16dp"
+            app:boxCornerRadiusTopEnd="16dp"
+            app:boxCornerRadiusTopStart="16dp"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/textInputLayoutEndSeparator">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/field_prefix"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/label_prefix"
+                android:singleLine="true"
+                android:textColorHint="@color/text_hint" />
+        </com.google.android.material.textfield.TextInputLayout>
+
         <com.google.android.material.textfield.TextInputLayout
             android:id="@+id/textInputLayout11"
             android:layout_width="0dp"
@@ -80,7 +315,7 @@
             app:boxCornerRadiusTopStart="16dp"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@+id/textInputLayout10">
+            app:layout_constraintTop_toBottomOf="@+id/textInputLayoutPrefix">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/field_host"
