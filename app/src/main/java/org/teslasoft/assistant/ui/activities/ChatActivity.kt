@@ -1347,6 +1347,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
     private fun initLogic() {
         btnMicro?.setOnClickListener {
+            if (isAiCurrentlyBusy()) {
+                cancelAllAiActivity()
+                return@setOnClickListener
+            }
             if (preferences!!.getAudioModel() == "google") {
                 handleGoogleSpeechRecognition()
             } else {
@@ -1354,25 +1358,23 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             }
         }
 
+        // Touch interceptor: lets a tap during AI generation cancel everything
+        // even though the click handler is otherwise disabled by isEnabled=false
+        // in the generation/TTS code paths. OnTouchListener fires regardless of
+        // View.isEnabled, so a stop tap always lands.
+        btnMicro?.setOnTouchListener { _, event ->
+            if (event.action == MotionEvent.ACTION_UP && isAiCurrentlyBusy() && !isRecording) {
+                cancelAllAiActivity()
+                true
+            } else {
+                false
+            }
+        }
+
         attachedImage?.setOnClickListener { /* ignored */ }
 
         btnMicro?.setOnLongClickListener {
-            if (isRecording) {
-                cancelState = true
-                handsFreeStopped = true
-                handsFreeHandler.removeCallbacksAndMessages(null)
-                try {
-                    if (mediaPlayer!!.isPlaying) {
-                        mediaPlayer!!.stop()
-                        mediaPlayer!!.reset()
-                    }
-                    tts!!.stop()
-                } catch (_: java.lang.Exception) {/* ignored */}
-                btnMicro?.setImageResource(R.drawable.ic_microphone)
-                if (preferences!!.getAudioModel() == "google") recognizer?.stopListening()
-                isRecording = false
-            }
-
+            cancelAllAiActivity()
             return@setOnLongClickListener true
         }
 
@@ -2034,6 +2036,36 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         handsFreeStopped = true
         handsFreeHandler.removeCallbacksAndMessages(null)
         try { recognizer?.stopListening() } catch (_: Exception) { /* ignore */ }
+        isRecording = false
+        btnMicro?.setImageResource(R.drawable.ic_microphone)
+        stopHandsFreeService()
+    }
+
+    /** True while the AI is generating, speaking through TTS, or playing back
+     *  OpenAI TTS audio. Used so a single mic-button tap can cancel everything. */
+    private fun isAiCurrentlyBusy(): Boolean {
+        val ttsSpeaking = try { tts?.isSpeaking == true } catch (_: Exception) { false }
+        val mediaPlaying = try { mediaPlayer?.isPlaying == true } catch (_: Exception) { false }
+        val progressVisible = progress?.visibility == View.VISIBLE
+        return ttsSpeaking || mediaPlaying || progressVisible
+    }
+
+    /** Cancels generation, TTS, audio playback, recognizer, and the hands-free
+     *  loop in one shot. Mirrors what long-press has always done; also reachable
+     *  from a short tap when the AI is busy. */
+    private fun cancelAllAiActivity() {
+        cancelState = true
+        handsFreeStopped = true
+        handsFreeHandler.removeCallbacksAndMessages(null)
+        try {
+            if (mediaPlayer?.isPlaying == true) {
+                mediaPlayer?.stop()
+                mediaPlayer?.reset()
+            }
+        } catch (_: Exception) { /* ignore */ }
+        try { tts?.stop() } catch (_: Exception) { /* ignore */ }
+        try { recognizer?.stopListening() } catch (_: Exception) { /* ignore */ }
+        try { speakScope?.coroutineContext?.cancel(CancellationException("Cancelled by user")) } catch (_: Exception) { /* ignore */ }
         isRecording = false
         btnMicro?.setImageResource(R.drawable.ic_microphone)
         stopHandsFreeService()
