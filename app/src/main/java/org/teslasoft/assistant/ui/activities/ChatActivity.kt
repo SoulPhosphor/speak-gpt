@@ -282,6 +282,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     private var handsFreeListenDeadline = 0L
     private val handsFreeHandler = Handler(Looper.getMainLooper())
 
+    // Hands-free silence-aware submission. The native recognizer ignores
+    // EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS on most devices and
+    // cuts off after ~2s of silence, so we buffer each fragment, restart the
+    // mic, and only submit once the user has been quiet for the configured
+    // silence window.
+    private var handsFreeBuffer: String = ""
+    private var handsFreeSubmitRunnable: Runnable? = null
+
     // Media player for OpenAI TTS
     private var mediaPlayer: MediaPlayer? = null
 
@@ -307,6 +315,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         generateGptImageJob = null
         handsFreeStopped = true
         handsFreeHandler.removeCallbacksAndMessages(null)
+        handsFreeSubmitRunnable = null
+        handsFreeBuffer = ""
     }
 
     private fun restoreUIState() {
@@ -376,7 +386,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
     private val speechListener = object : RecognitionListener {
         override fun onReadyForSpeech(params: Bundle?) { /* unused */ }
-        override fun onBeginningOfSpeech() { handsFreeUserSpoke = true }
+        override fun onBeginningOfSpeech() {
+            handsFreeUserSpoke = true
+            // User is talking again before the silence window elapsed; hold
+            // the buffered transcript and wait for this fragment instead of
+            // sending what we already have.
+            handsFreeSubmitRunnable?.let { handsFreeHandler.removeCallbacks(it) }
+            handsFreeSubmitRunnable = null
+        }
         override fun onRmsChanged(rmsdB: Float) { /* unused */ }
         override fun onBufferReceived(buffer: ByteArray?) { /* unused */ }
         override fun onPartialResults(partialResults: Bundle?) { /* unused */ }
@@ -391,9 +408,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
         override fun onError(error: Int) {
             if (preferences?.getHandsFreeMode() == true && !cancelState && !handsFreeStopped && isRecording) {
-                if (!handsFreeUserSpoke && System.currentTimeMillis() < handsFreeListenDeadline
-                    && (error == SpeechRecognizer.ERROR_NO_MATCH || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT)) {
-                    // Still waiting for the user to start talking - keep the mic open.
+                val harmless = error == SpeechRecognizer.ERROR_NO_MATCH || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT
+                val waitingForFirstWord = !handsFreeUserSpoke && System.currentTimeMillis() < handsFreeListenDeadline
+                val midUtterance = handsFreeBuffer.isNotEmpty() || handsFreeSubmitRunnable != null
+                if (harmless && (waitingForFirstWord || midUtterance)) {
                     handsFreeHandler.postDelayed({
                         if (!isFinishing && !isDestroyed && isRecording && !handsFreeStopped && !cancelState) {
                             startRecognition(false)
@@ -417,49 +435,88 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 progress?.visibility = View.GONE
                 isRecording = false
                 btnMicro?.setImageResource(R.drawable.ic_microphone)
-            } else {
-                isRecording = false
-                btnMicro?.setImageResource(R.drawable.ic_microphone)
+                return
+            }
 
-                val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                if (!matches.isNullOrEmpty()) {
-                    val recognizedText = matches[0]
+            val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+            val recognizedText = matches?.firstOrNull().orEmpty().trim()
 
-                    putMessage(prefix + recognizedText + endSeparator, false)
-
-                    chatMessages.add(
-                        ChatMessage(
-                            role = ChatRole.User,
-                            content = prefix + recognizedText + endSeparator
-                        )
-                    )
-
-                    saveSettings()
-
-                    btnMicro?.isEnabled = false
-                    btnSend?.isEnabled = false
-                    progress?.visibility = View.VISIBLE
-
-                    if (preferences?.autoSend() == true) {
-                        onSpeechResultsScope = CoroutineScope(Dispatchers.Main)
-                        onSpeechResultsScope?.launch {
-                            progress?.setOnClickListener {
-                                cancel()
-                                restoreUIState()
-                            }
-
-                            try {
-                                generateResponse(prefix + recognizedText + endSeparator, true)
-                            } catch (_: CancellationException) {
-                                restoreUIState()
-                            }
+            if (preferences?.getHandsFreeMode() == true && !handsFreeStopped && isRecording) {
+                // Hands-free: buffer this fragment, keep the mic open, and
+                // schedule submission after the configured silence window so
+                // we honour the user's "give me time to think" setting even
+                // though the OS recognizer cut us off early.
+                if (recognizedText.isNotEmpty()) {
+                    handsFreeBuffer = if (handsFreeBuffer.isEmpty()) recognizedText
+                                      else "$handsFreeBuffer $recognizedText"
+                    scheduleHandsFreeSubmit()
+                }
+                if (!isFinishing && !isDestroyed && !cancelState) {
+                    handsFreeHandler.postDelayed({
+                        if (!isFinishing && !isDestroyed && isRecording && !handsFreeStopped && !cancelState) {
+                            startRecognition(false)
                         }
-                    } else {
-                        restoreUIState()
-                        messageInput?.setText(recognizedText)
-                    }
+                    }, 80)
+                }
+                return
+            }
+
+            isRecording = false
+            btnMicro?.setImageResource(R.drawable.ic_microphone)
+            if (recognizedText.isNotEmpty()) submitRecognizedText(recognizedText)
+        }
+    }
+
+    private fun scheduleHandsFreeSubmit() {
+        handsFreeSubmitRunnable?.let { handsFreeHandler.removeCallbacks(it) }
+        val silenceMs = (preferences?.getHandsFreeSilenceSeconds() ?: 5).coerceAtLeast(1) * 1000L
+        val runnable = Runnable {
+            val text = handsFreeBuffer
+            handsFreeBuffer = ""
+            handsFreeSubmitRunnable = null
+            if (text.isEmpty()) return@Runnable
+            try { recognizer?.cancel() } catch (_: Exception) { /* ignore */ }
+            isRecording = false
+            btnMicro?.setImageResource(R.drawable.ic_microphone)
+            submitRecognizedText(text)
+        }
+        handsFreeSubmitRunnable = runnable
+        handsFreeHandler.postDelayed(runnable, silenceMs)
+    }
+
+    private fun submitRecognizedText(recognizedText: String) {
+        putMessage(prefix + recognizedText + endSeparator, false)
+
+        chatMessages.add(
+            ChatMessage(
+                role = ChatRole.User,
+                content = prefix + recognizedText + endSeparator
+            )
+        )
+
+        saveSettings()
+
+        btnMicro?.isEnabled = false
+        btnSend?.isEnabled = false
+        progress?.visibility = View.VISIBLE
+
+        if (preferences?.autoSend() == true) {
+            onSpeechResultsScope = CoroutineScope(Dispatchers.Main)
+            onSpeechResultsScope?.launch {
+                progress?.setOnClickListener {
+                    cancel()
+                    restoreUIState()
+                }
+
+                try {
+                    generateResponse(prefix + recognizedText + endSeparator, true)
+                } catch (_: CancellationException) {
+                    restoreUIState()
                 }
             }
+        } else {
+            restoreUIState()
+            messageInput?.setText(recognizedText)
         }
     }
 
@@ -2018,6 +2075,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 handsFreeStopped = false
                 handsFreeListenDeadline = System.currentTimeMillis() +
                         preferences!!.getHandsFreeNoSpeechSeconds().coerceAtLeast(1) * 1000L
+                handsFreeBuffer = ""
+                handsFreeSubmitRunnable?.let { handsFreeHandler.removeCallbacks(it) }
+                handsFreeSubmitRunnable = null
                 startHandsFreeService()
             }
             // Best-effort: ask the recognizer to tolerate longer pauses so the
@@ -2035,6 +2095,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     private fun stopHandsFreeLoop() {
         handsFreeStopped = true
         handsFreeHandler.removeCallbacksAndMessages(null)
+        handsFreeSubmitRunnable = null
+        handsFreeBuffer = ""
         try { recognizer?.stopListening() } catch (_: Exception) { /* ignore */ }
         isRecording = false
         btnMicro?.setImageResource(R.drawable.ic_microphone)
@@ -2057,6 +2119,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         cancelState = true
         handsFreeStopped = true
         handsFreeHandler.removeCallbacksAndMessages(null)
+        handsFreeSubmitRunnable = null
+        handsFreeBuffer = ""
         try {
             if (mediaPlayer?.isPlaying == true) {
                 mediaPlayer?.stop()
