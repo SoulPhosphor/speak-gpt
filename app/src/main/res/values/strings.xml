@@ -371,6 +371,10 @@
     <string name="tile_hands_free_timing_value">Pause %1$d s · Start %2$d s</string>
     <string name="tile_hands_free_silence_title">Silence wait (seconds)</string>
     <string name="tile_hands_free_no_speech_title">Wait for speech (seconds)</string>
+    <string name="hands_free_channel_name">Hands-free conversation</string>
+    <string name="hands_free_channel_desc">Shown while a hands-free conversation is active so the system keeps the mic open with the screen off.</string>
+    <string name="hands_free_notification_title">Hands-free conversation active</string>
+    <string name="hands_free_notification_text">Tap to return to the chat</string>
     <string name="tile_text_model_title">Text generation model</string>
     <string name="tile_text_generation_model_desc">This feature allows you to set text generation model as well as model\'s params.</string>
     <string name="tile_activation_prompt_title">Activation prompt</string>

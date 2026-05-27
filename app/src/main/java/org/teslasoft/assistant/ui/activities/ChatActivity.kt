@@ -164,6 +164,7 @@ import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.LogitBiasPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
+import org.teslasoft.assistant.service.HandsFreeService
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.adapters.chat.ChatAdapter
 import org.teslasoft.assistant.ui.fragments.dialogs.EditApiEndpointDialogFragment
@@ -894,6 +895,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         }
 
         killAllProcesses()
+        stopHandsFreeService()
 
         super.onDestroy()
     }
@@ -2014,6 +2016,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 handsFreeStopped = false
                 handsFreeListenDeadline = System.currentTimeMillis() +
                         preferences!!.getHandsFreeNoSpeechSeconds().coerceAtLeast(1) * 1000L
+                startHandsFreeService()
             }
             // Best-effort: ask the recognizer to tolerate longer pauses so the
             // user has time to think. Some engines ignore these; the restart
@@ -2033,6 +2036,35 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         try { recognizer?.stopListening() } catch (_: Exception) { /* ignore */ }
         isRecording = false
         btnMicro?.setImageResource(R.drawable.ic_microphone)
+        stopHandsFreeService()
+    }
+
+    private val postNotificationsLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { /* result ignored; service runs regardless */ }
+
+    private fun ensurePostNotificationsPermission() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        if (ContextCompat.checkSelfPermission(
+                this, Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+        ) return
+        try {
+            postNotificationsLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } catch (_: Exception) { /* ignore */ }
+    }
+
+    private fun startHandsFreeService() {
+        ensurePostNotificationsPermission()
+        try {
+            HandsFreeService.start(this, chatId, chatName)
+        } catch (_: Exception) { /* ignore — service will be retried on next turn */ }
+    }
+
+    private fun stopHandsFreeService() {
+        try {
+            HandsFreeService.stop(this)
+        } catch (_: Exception) { /* ignore */ }
     }
 
     private fun putMessage(message: String, isBot: Boolean, image: String = "", imageType: String = "") {
