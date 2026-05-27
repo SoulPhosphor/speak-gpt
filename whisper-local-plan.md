@@ -410,16 +410,19 @@ Once whisper.cpp lives in `app/src/main/cpp/`, Gradle's
 `externalNativeBuild` (CMake) will fire during `assembleDebug` and need
 two extra things on the runner:
 
-1. **Android NDK r26d.** Installed via `nttld/setup-ndk@v1` (sets
-   `ANDROID_NDK_HOME` and puts the toolchain on PATH).
+1. **Android NDK r26d.** Needs a setup action with a current Node
+   runtime (the older `nttld/setup-ndk@v1` is Node 16 and modern GitHub
+   runners reject it). `android-actions/setup-android@v3` provisions the
+   full Android SDK + NDK in one step and is the safer bet — add it
+   right before the Gradle build.
 2. **CMake 3.22+.** No explicit install needed — the Android Gradle
    Plugin auto-downloads it via the Android SDK manager the first time
    it sees `externalNativeBuild { cmake { ... } }` in `app/build.gradle`.
 
-Pre-stage the NDK step in both workflows **before** vendoring any C++
-sources, so the first whisper.cpp push doesn't surface a "no C++
-toolchain" failure. With no native code yet, the NDK install is a no-op
-that adds ~30–60 s to the run.
+Add the NDK step in the same PR that vendors whisper.cpp, not earlier —
+we tried pre-staging on this branch and the Node-16 setup-ndk action
+broke both workflows, so the safer order is: vendor C++ code and adjust
+CI in one atomic change where the new step can actually be verified.
 
 ---
 
