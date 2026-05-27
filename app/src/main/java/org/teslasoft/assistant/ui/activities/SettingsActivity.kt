@@ -620,15 +620,16 @@ class SettingsActivity : FragmentActivity() {
             )
 
             tileSTT = TileFragment.newInstance(
-                preferences?.getAudioModel() == "whisper",
-                true,
-                getString(R.string.tile_whisper_stt),
-                null,getString(R.string.on),
-                getString(R.string.tile_google_stt),
-                R.drawable.ic_microphone,
-                false,
-                chatId,
-                getString(R.string.tile_stt_desc)
+                checked = false,
+                checkable = false,
+                enabledText = getString(R.string.tile_voice_input_title),
+                disabledText = null,
+                enabledDesc = voiceInputSubtitle(),
+                disabledDesc = null,
+                icon = R.drawable.ic_microphone,
+                disabled = false,
+                chatId = chatId,
+                functionDesc = getString(R.string.tile_voice_input_desc)
             )
         }
 
@@ -1090,6 +1091,46 @@ class SettingsActivity : FragmentActivity() {
             .show()
     }
 
+    private fun voiceInputSubtitle(): String {
+        val engine = preferences?.getAudioModel() ?: "google"
+        return when (engine) {
+            "whisper" -> getString(R.string.voice_engine_whisper_cloud)
+            "whisper-local" -> {
+                val model = preferences?.getActiveLocalWhisperModel() ?: ""
+                if (model.isNotEmpty()) {
+                    getString(R.string.voice_engine_whisper_local) + " · " + model
+                } else {
+                    getString(R.string.voice_engine_whisper_local)
+                }
+            }
+            else -> getString(R.string.voice_engine_google)
+        }
+    }
+
+    private fun showVoiceInputEnginePicker() {
+        val engines = arrayOf("google", "whisper", "whisper-local")
+        val labels = arrayOf(
+            getString(R.string.voice_engine_google),
+            getString(R.string.voice_engine_whisper_cloud),
+            getString(R.string.voice_engine_whisper_local)
+        )
+        val current = engines.indexOf(preferences?.getAudioModel() ?: "google").coerceAtLeast(0)
+
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.voice_engine_picker_title)
+            .setSingleChoiceItems(labels, current) { dialog, which ->
+                val picked = engines[which]
+                preferences?.setAudioModel(picked)
+                tileSTT?.updateSubtitle(voiceInputSubtitle())
+                dialog.dismiss()
+                if (picked == "whisper-local") {
+                    startActivity(Intent(this, LocalWhisperModelsActivity::class.java))
+                }
+            }
+            .setNegativeButton(android.R.string.cancel) { _, _ -> }
+            .show()
+    }
+
     private fun placeFragments() : FragmentTransaction {
         val operation = supportFragmentManager.beginTransaction().replace(R.id.tile_account, tileAccountFragment!!)
             .replace(R.id.tile_assistant, tileAssistant!!)
@@ -1210,13 +1251,9 @@ class SettingsActivity : FragmentActivity() {
             tileVoice?.updateSubtitle(voice)
         }}
 
-        tileSTT?.setOnCheckedChangeListener { isChecked -> run {
-            if (isChecked) {
-                preferences?.setAudioModel("whisper")
-            } else {
-                preferences?.setAudioModel("google")
-            }
-        }}
+        tileSTT?.setOnTileClickListener {
+            showVoiceInputEnginePicker()
+        }
 
         tileSilentMode?.setOnCheckedChangeListener { isChecked -> run {
             if (isChecked) {
@@ -1528,6 +1565,7 @@ class SettingsActivity : FragmentActivity() {
 
         if (areFragmentsInitialized) {
             tileAssistant?.setChecked(isDefaultAssistantApp(this))
+            tileSTT?.updateSubtitle(voiceInputSubtitle())
         }
 
         // Reset preferences singleton

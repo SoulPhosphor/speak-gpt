@@ -526,6 +526,11 @@ class Preferences private constructor(private var preferences: SharedPreferences
     /**
      * Retrieves the audio model from the shared preferences.
      *
+     * Recognized values:
+     *  - "google"        — Android on-device dictation (default)
+     *  - "whisper"       — paid OpenAI Whisper cloud API
+     *  - "whisper-local" — on-device whisper.cpp (user must download a model)
+     *
      * @return The audio model value or "google" if not found.
      */
     fun getAudioModel() : String {
@@ -539,6 +544,36 @@ class Preferences private constructor(private var preferences: SharedPreferences
      */
     fun setAudioModel(model: String) {
         putString("audio", model)
+    }
+
+    /**
+     * Engine the runtime should actually use.
+     *
+     * Until step 2 of whisper-local-plan.md lands the whisper.cpp runtime,
+     * a saved value of "whisper-local" routes to cloud Whisper at runtime so
+     * tapping the mic still produces a transcript. Settings UI keeps using
+     * getAudioModel() so the user's saved choice survives the upgrade.
+     */
+    fun getEffectiveAudioModel() : String {
+        val saved = getAudioModel()
+        return if (saved == "whisper-local") "whisper" else saved
+    }
+
+    /**
+     * Active on-device Whisper model name (e.g. "base.en"). Empty string when
+     * no model has been picked yet. Independent of which models are installed
+     * on disk — see LocalWhisperStorage for that.
+     *
+     * Stored globally rather than per-chat: the downloaded model file is a
+     * device-level resource, so it makes more sense for the "active model"
+     * choice to follow the device than each conversation.
+     */
+    fun getActiveLocalWhisperModel() : String {
+        return getGlobalString("audio_local_model", "")
+    }
+
+    fun setActiveLocalWhisperModel(name: String) {
+        putGlobalString("audio_local_model", name)
     }
 
     /**
