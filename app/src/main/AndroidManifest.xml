@@ -271,6 +271,20 @@
         </activity>
 
         <activity
+            android:name=".ui.activities.LocalWhisperModelsActivity"
+            android:exported="false"
+            android:label="@string/title_local_whisper"
+            android:launchMode="singleTask">
+        </activity>
+
+        <activity
+            android:name=".ui.activities.LocalWhisperManageActivity"
+            android:exported="false"
+            android:label="@string/title_manage_downloaded_models"
+            android:launchMode="singleTask">
+        </activity>
+
+        <activity
             android:name=".ui.activities.DataSafety"
             android:exported="false"
             android:label="@string/label_privacy_policy"

@@ -6,7 +6,8 @@ Capacitor-based ideas in `voice-chat-build-guide(1).md` and
 `corrected-prompt-block.md`, which describe a separate project and are
 kept only as reference.
 
-Branch: `claude/speech-to-text-solution-XjfTA`.
+Branch: `claude/whisper-versions-research-5dVb3` (planning + CI prep).
+Implementation will continue on follow-up branches.
 
 ---
 
@@ -69,21 +70,37 @@ Why whisper.cpp and not the alternatives:
 - **Vosk** is truly offline but punctuation and accuracy are clearly
   below Whisper-base.
 
-### Model
+### Models
 
-- Ship **`ggml-base.en.bin`** (~140 MB) as the default. It's the smallest
-  model with quality clearly better than Google dictation, and the Pixel
-  8 transcribes a 10-second clip in roughly 1–2 seconds.
-- Offer **`ggml-small.en.bin`** (~466 MB) as an optional upgrade in
-  Settings for max quality.
-- Do **not** bundle the model inside the APK. Download on first use of
-  the local-whisper option, into the app's private files dir. Use a
-  **blocking modal dialog** with progress bar, MB count, and Cancel
-  button — the feature is unusable until the model is on disk, so
-  there's no point letting the user wander off and tap the mic to find
-  nothing happens.
-- Verify SHA-256 after download. If verification fails, delete and
-  prompt to retry inside the same dialog.
+Offer three on-device models. The user picks which one(s) to download —
+we do not pre-download anything. Files live in the app's private files
+dir (`context.filesDir/whisper/`), which means they're removed if the app
+is uninstalled. No external storage permission needed.
+
+| Model              | Size    | Notes                                                  |
+|--------------------|---------|--------------------------------------------------------|
+| `ggml-base.en.bin` | ~140 MB | Fast default. Clearly better than Google dictation.    |
+| `ggml-small.en.bin`| ~466 MB | Bigger accuracy bump. Still real-time on Pixel 8.      |
+| `ggml-large-v3-turbo.bin` | ~809 MB | Max quality. Multilingual under the hood but excellent for English. ~2–3× slower than base; battery cost noticeable in long hands-free calls. |
+
+Behavior:
+
+- **Nothing is bundled in the APK.** APK growth is just the native lib
+  (~3–8 MB).
+- The settings UI lists the three models with a per-row **Download**
+  button. Tap to fetch into private storage with a progress bar (MB / MB
+  + Cancel). Verify SHA-256 after download; on mismatch, delete and
+  prompt to retry.
+- After a model is downloaded its row shows a green "Installed" badge
+  and tapping it makes it the **active** model. Switching active models
+  is instant — no re-download.
+- A **Manage downloaded models** screen lists installed models with a
+  **Delete** button per row. The currently active model can't be deleted
+  until the user picks another active model (or switches the STT engine
+  off "on-device").
+- If the user picks "On-device Whisper" as the engine but has no model
+  installed yet, the engine selector immediately routes them into the
+  model picker screen with a hint banner ("Pick a model to download").
 
 ### JNI layer
 
@@ -247,12 +264,68 @@ Today `Preferences.getSystemMessage()` stores one global prompt. Plan:
 
 ## Settings additions
 
-New entries under existing settings screen:
+The current Settings screen has a single on/off **Whisper STT** tile
+(SettingsActivity.kt:623, toggle handler at 1215). With three engines and
+three downloadable models, an on/off toggle no longer fits. Replace it.
 
-- **Voice input engine** — radio: Google / Whisper (cloud) / Whisper
-  (on-device). Default flips to on-device once a model is downloaded.
-- **On-device Whisper model** — radio: base.en (140 MB) / small.en
-  (466 MB). Shows current size on disk and a Re-download button.
+### Voice-input tile (top-level Settings)
+
+- Tile title: **Voice input**. Subtitle shows the active engine + active
+  model where applicable, e.g. "On-device Whisper · base.en" or
+  "Google dictation" or "OpenAI Whisper (cloud)".
+- Tapping the tile opens the **Voice input engine** picker.
+
+### Voice input engine picker (dialog)
+
+Single-select radio list:
+
+- ◯ Google dictation
+- ◯ OpenAI Whisper (cloud, paid)
+- ◯ On-device Whisper  →   (chevron — opens model picker)
+
+Picking Google/cloud applies immediately. Picking On-device pushes the
+**On-device Whisper** screen.
+
+### On-device Whisper screen
+
+```
+← On-device Whisper
+
+  Active model: base.en
+  ────────────────────────────────────────
+  ●  base.en          140 MB   [Installed]
+  ◯  small.en         466 MB   [Download]
+  ◯  large-v3-turbo   809 MB   [Download]
+
+  Storage used: 140 MB
+  [Manage downloaded models]
+```
+
+- Tap a non-installed row → starts download with a progress dialog.
+  Cancel is allowed and removes the partial file.
+- Tap an already-installed row → makes it the active model (instant).
+- Bottom button opens the **Manage downloaded models** screen.
+
+### Manage downloaded models screen
+
+```
+← Manage downloaded models
+
+  base.en          140 MB   [Delete]
+  small.en         466 MB   [Delete]
+
+  Total: 606 MB
+```
+
+- Each row has a confirm-before-delete tap target.
+- The currently active model's row says "Active — pick another to delete"
+  instead of Delete.
+- If the user deletes the last installed model while on-device Whisper is
+  the active engine, fall back to Google dictation and show a one-time
+  snackbar explaining the fallback.
+
+### Other new settings
+
 - **End-of-utterance silence** — slider 2–15 s, default 5 s.
 - **Idle hang-up** — slider 1–30 min + "Never", default 8 min.
 - **Max utterance length** — slider 15–120 s, default 60 s.
@@ -324,26 +397,65 @@ Not exhaustive, but a starting map:
 - Build requires NDK r26+ and CMake 3.22+. Update `build.gradle` as
   needed.
 
+## CI / GitHub Actions impact
+
+Both workflows currently install only Java 21:
+
+- `.github/workflows/android-checks.yml` — runs on every push and on PRs
+  to `main`. Builds `assembleDebug` + runs unit tests.
+- `.github/workflows/release.yml` — runs on pushes to `main`. Builds and
+  publishes `phosphor-shines.apk` to the `latest` GitHub release.
+
+Once whisper.cpp lives in `app/src/main/cpp/`, Gradle's
+`externalNativeBuild` (CMake) will fire during `assembleDebug` and need
+two extra things on the runner:
+
+1. **Android NDK r26d.** Needs a setup action with a current Node
+   runtime (the older `nttld/setup-ndk@v1` is Node 16 and modern GitHub
+   runners reject it). `android-actions/setup-android@v3` provisions the
+   full Android SDK + NDK in one step and is the safer bet — add it
+   right before the Gradle build.
+2. **CMake 3.22+.** No explicit install needed — the Android Gradle
+   Plugin auto-downloads it via the Android SDK manager the first time
+   it sees `externalNativeBuild { cmake { ... } }` in `app/build.gradle`.
+
+Add the NDK step in the same PR that vendors whisper.cpp, not earlier —
+we tried pre-staging on this branch and the Node-16 setup-ndk action
+broke both workflows, so the safer order is: vendor C++ code and adjust
+CI in one atomic change where the new step can actually be verified.
+
 ---
 
 ## Rollout order
 
-1. **Engine swap + model download dialog**: vendor whisper.cpp, build
-   the JNI shim for arm64-v8a, wire `whisper-local` into
-   `getAudioModel()` and the existing dispatch, and ship the blocking
-   model-download modal. After this step, tapping the existing mic
-   button uses on-device Whisper end-to-end.
-2. **Foreground service + hands-free button**: add `VoiceCallService`,
+0. **CI prep (this branch).** Update both workflows to install NDK r26d
+   before the Gradle build, and rewrite this plan doc to match
+   final scope (three models, user-picked download, delete UI, new
+   Settings picker). No app code touched yet.
+1. **Settings UI rewrite + model download manager.** Replace the on/off
+   STT tile with the Voice input picker + On-device Whisper screen +
+   Manage downloaded models screen described above. Wire the download
+   manager (DownloadManager + SHA-256 verify) so models land in
+   `filesDir/whisper/`. The local-Whisper *runtime* still isn't hooked
+   up at this point — picking on-device falls back to cloud Whisper
+   silently with a "not yet implemented" snackbar.
+2. **whisper.cpp integration.** Vendor whisper.cpp under
+   `app/src/main/cpp/`, add `CMakeLists.txt`, write the JNI shim, add
+   `LocalWhisper.kt`, and route `getAudioModel() == "whisper-local"`
+   through it in `ChatActivity.kt` + `AssistantFragment.kt`. Tapping
+   the existing mic button uses on-device Whisper end-to-end.
+3. **Foreground service + hands-free button**: add `VoiceCallService`,
    manifest permissions, and the hands-free toggle on the chat screen.
-   Mic survives screen-off.
-3. **VoiceLoopController**: Idle → Listening → Thinking → Speaking →
-   Listening state machine, 5 s end-of-utterance timer, status
-   indicator.
-4. **Idle hang-up (8 min) + Pause button.**
-5. **Re-read button on every assistant message.**
-6. **Personas: storage, dropdown UI, settings management, migration
+   Mic survives screen-off. (Most of this already exists from prior
+   hands-free work — verify it still works with the new engine.)
+4. **VoiceLoopController polish:** Idle → Listening → Thinking →
+   Speaking → Listening state machine, 5 s end-of-utterance timer,
+   status indicator. (Partial: silence/idle timers already exist.)
+5. **Idle hang-up (8 min) + Pause button.**
+6. **Re-read button on every assistant message.**
+7. **Personas: storage, dropdown UI, settings management, migration
    from `getSystemMessage()`.**
-7. **Polish**: SHA-256 verify, `small.en` upgrade path, settings
-   sliders for the three timers.
+8. **Polish**: settings sliders for the three timers, per-model SHA-256
+   re-verify button in Manage screen.
 
 Each step is testable on the Pixel 8 before moving on.

@@ -789,7 +789,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     private val ttsProgressListener = object : UtteranceProgressListener() {
         override fun onStart(utteranceId: String?) { /* no-op */ }
         override fun onDone(utteranceId: String?) {
-            if (preferences?.getHandsFreeMode() == true && preferences?.getAudioModel() == "google"
+            if (preferences?.getHandsFreeMode() == true && preferences?.getEffectiveAudioModel() == "google"
                 && preferences?.autoSend() == true && !cancelState && !handsFreeStopped && !isRecording) {
                 Handler(Looper.getMainLooper()).post {
                     if (!isFinishing && !isDestroyed) {
@@ -1408,7 +1408,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 cancelAllAiActivity()
                 return@setOnClickListener
             }
-            if (preferences!!.getAudioModel() == "google") {
+            if (preferences!!.getEffectiveAudioModel() == "google") {
                 handleGoogleSpeechRecognition()
             } else {
                 handleWhisperSpeechRecognition()

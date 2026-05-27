@@ -691,7 +691,7 @@ class AssistantFragment : BottomSheetDialogFragment(), ChatAdapter.OnUpdateListe
 
     private fun initLogic() {
         btnAssistantVoiceClickable?.setOnClickListener {
-            if (preferences!!.getAudioModel() == "google") {
+            if (preferences!!.getEffectiveAudioModel() == "google") {
                 handleGoogleSpeechRecognition()
             } else {
                 handleWhisperSpeechRecognition()
@@ -709,7 +709,7 @@ class AssistantFragment : BottomSheetDialogFragment(), ChatAdapter.OnUpdateListe
                     tts!!.stop()
                 } catch (_: java.lang.Exception) {/* ignored */}
                 btnAssistantVoiceClickable?.setImageResource(R.drawable.ic_microphone)
-                if (preferences!!.getAudioModel() == "google") recognizer?.stopListening()
+                if (preferences!!.getEffectiveAudioModel() == "google") recognizer?.stopListening()
                 isRecording = false
                 animation?.stop()
                 animation?.reset()
