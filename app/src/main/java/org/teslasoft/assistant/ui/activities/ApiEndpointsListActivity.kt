@@ -57,26 +57,41 @@ class ApiEndpointsListActivity : FragmentActivity() {
 
     private var actionBar: ConstraintLayout? = null
 
+    private fun openEditDialog(position: Int) {
+        val dialog: EditApiEndpointDialogFragment = EditApiEndpointDialogFragment.newInstance(
+            list[position]["label"] ?: return,
+            list[position]["host"] ?: return,
+            list[position]["apiKey"] ?: return,
+            list[position]["chatEndpoint"] ?: ApiEndpointObject.DEFAULT_CHAT_ENDPOINT,
+            list[position]["authType"] ?: ApiEndpointObject.AUTH_BEARER,
+            position
+        )
+        dialog.setListener(editDialogListener)
+        dialog.setCancelable(false)
+        dialog.show(supportFragmentManager, "EditApiEndpointDialogFragment")
+    }
+
+    private fun finishWithActive(label: String) {
+        val resultIntent = Intent()
+        resultIntent.putExtra("apiEndpointId", Hash.hash(label))
+        setResult(RESULT_OK, resultIntent)
+        finish()
+    }
+
     private var onSelectListener: ApiEndpointListItemAdapter.OnSelectListener = object : ApiEndpointListItemAdapter.OnSelectListener {
         override fun onClick(position: Int) {
-            val resultIntent = Intent()
-            resultIntent.putExtra("apiEndpointId", Hash.hash(list[position]["label"] ?: return))
-            setResult(RESULT_OK, resultIntent)
-            finish()
+            openEditDialog(position)
         }
 
         override fun onLongClick(position: Int) {
-            val dialog: EditApiEndpointDialogFragment = EditApiEndpointDialogFragment.newInstance(list[position]["label"] ?: return, list[position]["host"] ?: return, list[position]["apiKey"] ?: return, list[position]["chatEndpoint"] ?: ApiEndpointObject.DEFAULT_CHAT_ENDPOINT, list[position]["authType"] ?: ApiEndpointObject.AUTH_BEARER, position)
-            dialog.setListener(editDialogListener)
-            dialog.setCancelable(false)
-            dialog.show(supportFragmentManager, "EditApiEndpointDialogFragment")
+            openEditDialog(position)
         }
     }
 
     private var editDialogListener: EditApiEndpointDialogFragment.StateChangesListener = object : EditApiEndpointDialogFragment.StateChangesListener {
         override fun onAdd(apiEndpoint: ApiEndpointObject) {
             apiEndpointPreferences!!.setApiEndpoint(this@ApiEndpointsListActivity, apiEndpoint)
-            reloadList()
+            finishWithActive(apiEndpoint.label)
         }
 
         override fun onEdit(oldLabel: String, apiEndpoint: ApiEndpointObject, position: Int) {
@@ -85,7 +100,7 @@ class ApiEndpointsListActivity : FragmentActivity() {
                 return
             }
             apiEndpointPreferences!!.editEndpoint(this@ApiEndpointsListActivity, list[position]["label"]?: return, apiEndpoint)
-            reloadList()
+            finishWithActive(apiEndpoint.label)
         }
 
         override fun onDelete(position: Int, id: String) {
