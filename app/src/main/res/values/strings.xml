@@ -380,7 +380,6 @@
     <string name="btn_download">Download</string>
     <string name="btn_cancel_download">Cancel</string>
     <string name="btn_make_active">Make active</string>
-    <string name="btn_delete">Delete</string>
     <string name="local_whisper_status_installed">Installed</string>
     <string name="local_whisper_status_active">Active</string>
     <string name="local_whisper_status_not_installed">Not downloaded</string>
