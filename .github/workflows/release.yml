@@ -27,6 +27,12 @@ jobs:
           java-version: '21'
           cache: gradle
 
+      - name: Set up Android NDK r26d
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r26d
+          add-to-path: true
+
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
 
