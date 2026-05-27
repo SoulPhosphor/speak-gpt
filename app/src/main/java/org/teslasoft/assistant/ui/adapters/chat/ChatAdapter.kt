@@ -137,6 +137,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
     }
 
     private fun deleteMessage(position: Int) {
+        if (position < 0 || position >= dataArray.size) return
         dataArray.removeAt(position)
         notifyItemRemoved(position)
         if (position > 0) {
@@ -675,6 +676,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
     }
 
     override fun onDelete(position: Int) {
+        if (position < 0 || position >= dataArray.size) return
         deleteMessage(position)
 
         if (chatId !== "") {
