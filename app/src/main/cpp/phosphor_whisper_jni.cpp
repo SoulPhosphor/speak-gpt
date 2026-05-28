@@ -14,16 +14,30 @@
  * limitations under the License.
  **************************************************************************/
 
-// Steps 2A and 2B of the local-Whisper rollout. pingNative is the original
-// "we can load a .so" smoke test; systemInfoNative additionally proves
-// that whisper.cpp source compiled, linked, and that we can resolve
-// symbols from the upstream library. Step 2C replaces both with the real
-// transcription entry points.
+// Step 2C of the local-Whisper rollout: replaces the smoke-test stubs
+// with the actual transcription path. Three responsibilities exposed to
+// Kotlin via LocalWhisperNative:
+//
+//   - initContextNative(path)        -> opaque jlong handle (0 on failure)
+//   - releaseContextNative(handle)
+//   - transcribeNative(handle, pcm16, sampleRate, lang) -> joined text
+//
+// systemInfoNative + pingNative are kept as diagnostics; they're cheap
+// and the LocalWhisperEngine uses them to verify the .so loaded before
+// trusting init.
 
 #include <jni.h>
+#include <android/log.h>
 #include <string>
+#include <vector>
+#include <thread>
+#include <algorithm>
 
 #include "whisper.h"
+
+#define TAG "PhosphorWhisperJNI"
+#define LOGI(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
+#define LOGW(...) __android_log_print(ANDROID_LOG_WARN, TAG, __VA_ARGS__)
 
 extern "C" JNIEXPORT jstring JNICALL
 Java_org_teslasoft_assistant_stt_LocalWhisperNative_pingNative(
@@ -34,12 +48,103 @@ Java_org_teslasoft_assistant_stt_LocalWhisperNative_pingNative(
 extern "C" JNIEXPORT jstring JNICALL
 Java_org_teslasoft_assistant_stt_LocalWhisperNative_systemInfoNative(
         JNIEnv *env, jclass /*clazz*/) {
-    // whisper_print_system_info() returns a static C string with the
-    // backends/CPU features whisper.cpp built with. No model load
-    // required — it's safe to call before any context init.
     const char *info = whisper_print_system_info();
-    if (info == nullptr) {
-        return env->NewStringUTF("<no info>");
+    return env->NewStringUTF(info ? info : "<no info>");
+}
+
+extern "C" JNIEXPORT jlong JNICALL
+Java_org_teslasoft_assistant_stt_LocalWhisperNative_initContextNative(
+        JNIEnv *env, jclass /*clazz*/, jstring jpath) {
+    if (jpath == nullptr) return 0L;
+    const char *path = env->GetStringUTFChars(jpath, nullptr);
+    if (path == nullptr) return 0L;
+
+    struct whisper_context_params cparams = whisper_context_default_params();
+    cparams.use_gpu = false;
+
+    struct whisper_context *ctx = whisper_init_from_file_with_params(path, cparams);
+    if (ctx == nullptr) {
+        LOGW("whisper_init_from_file_with_params returned null for %s", path);
     }
-    return env->NewStringUTF(info);
+
+    env->ReleaseStringUTFChars(jpath, path);
+    return reinterpret_cast<jlong>(ctx);
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_org_teslasoft_assistant_stt_LocalWhisperNative_releaseContextNative(
+        JNIEnv * /*env*/, jclass /*clazz*/, jlong handle) {
+    if (handle == 0L) return;
+    auto *ctx = reinterpret_cast<whisper_context *>(handle);
+    whisper_free(ctx);
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_org_teslasoft_assistant_stt_LocalWhisperNative_transcribeNative(
+        JNIEnv *env, jclass /*clazz*/,
+        jlong handle, jshortArray jpcm, jint /*sampleRate*/, jstring jlang) {
+    if (handle == 0L || jpcm == nullptr) {
+        return env->NewStringUTF("");
+    }
+    auto *ctx = reinterpret_cast<whisper_context *>(handle);
+
+    jsize n = env->GetArrayLength(jpcm);
+    if (n <= 0) {
+        return env->NewStringUTF("");
+    }
+
+    // whisper expects float32 PCM in [-1, 1]; AudioRecord hands us int16.
+    std::vector<float> samples(static_cast<size_t>(n));
+    jshort *pcm = env->GetShortArrayElements(jpcm, nullptr);
+    if (pcm == nullptr) {
+        return env->NewStringUTF("");
+    }
+    for (jsize i = 0; i < n; i++) {
+        samples[i] = static_cast<float>(pcm[i]) / 32768.0f;
+    }
+    env->ReleaseShortArrayElements(jpcm, pcm, JNI_ABORT);
+
+    struct whisper_full_params wparams = whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
+    wparams.print_realtime   = false;
+    wparams.print_progress   = false;
+    wparams.print_timestamps = false;
+    wparams.print_special    = false;
+    wparams.translate        = false;
+    wparams.single_segment   = false;
+    wparams.no_context       = true;
+    wparams.suppress_blank   = true;
+
+    // Hold the lang string for the duration of whisper_full — wparams.language
+    // is a borrowed pointer into JNI-managed memory.
+    const char *lang = nullptr;
+    if (jlang != nullptr) {
+        lang = env->GetStringUTFChars(jlang, nullptr);
+    }
+    wparams.language = (lang && lang[0]) ? lang : "en";
+
+    unsigned int hc = std::thread::hardware_concurrency();
+    int n_threads = (hc == 0) ? 4 : static_cast<int>(hc) - 1;
+    if (n_threads < 1) n_threads = 1;
+    if (n_threads > 4) n_threads = 4;
+    wparams.n_threads = n_threads;
+
+    int result = whisper_full(ctx, wparams, samples.data(), n);
+
+    if (lang != nullptr) {
+        env->ReleaseStringUTFChars(jlang, lang);
+    }
+
+    if (result != 0) {
+        LOGW("whisper_full failed: %d", result);
+        return env->NewStringUTF("");
+    }
+
+    std::string out;
+    int n_segs = whisper_full_n_segments(ctx);
+    for (int i = 0; i < n_segs; i++) {
+        const char *txt = whisper_full_get_segment_text(ctx, i);
+        if (txt != nullptr) out += txt;
+    }
+
+    return env->NewStringUTF(out.c_str());
 }

@@ -19,14 +19,21 @@ package org.teslasoft.assistant.stt
 import android.util.Log
 
 /**
- * Bridge to libphosphorwhisper.so. Step 2A of the local-Whisper rollout
- * only exposes [pingNative] so we can confirm the NDK + CMake + JNI
- * pipeline works before whisper.cpp lands in step 2B.
+ * Bridge to libphosphorwhisper.so.
  *
  * The native library is loaded lazily via [ensureLoaded] on the first
  * call rather than from an init block; that lets the rest of the app keep
  * running if the .so is missing for any reason (e.g. stripped on an
  * unsupported ABI) instead of crashing at app startup.
+ *
+ * Diagnostic functions ([pingNative], [systemInfoNative]) are kept from
+ * step 2A/2B so [LocalWhisperEngine] can sanity-check the library before
+ * attempting a model load.
+ *
+ * Transcription functions:
+ *   - [initContextNative]    load a ggml model file → opaque handle (0 fail)
+ *   - [releaseContextNative] free an init'd context
+ *   - [transcribeNative]     run whisper_full on int16 PCM, return text
  */
 object LocalWhisperNative {
 
@@ -38,6 +45,15 @@ object LocalWhisperNative {
 
     @JvmStatic external fun pingNative(): String
     @JvmStatic external fun systemInfoNative(): String
+
+    @JvmStatic external fun initContextNative(modelPath: String): Long
+    @JvmStatic external fun releaseContextNative(handle: Long)
+    @JvmStatic external fun transcribeNative(
+        handle: Long,
+        pcm16: ShortArray,
+        sampleRate: Int,
+        language: String
+    ): String
 
     /**
      * Attempts System.loadLibrary once. Subsequent calls are no-ops. Safe
