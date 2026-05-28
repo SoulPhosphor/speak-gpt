@@ -21,6 +21,7 @@ import android.content.Context
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
+import android.os.SystemClock
 import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -28,6 +29,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /**
@@ -65,9 +68,28 @@ class LocalWhisperEngine private constructor() {
     @Volatile private var nativeHandle: Long = 0L
     @Volatile private var loadedModelId: String = ""
 
+    // Serializes context init/release so a warm-up preload and a real
+    // transcribe can't both call initContextNative for the same model and
+    // leak a handle (or double-free on a model swap).
+    private val contextMutex = Mutex()
+
     private var audioRecord: AudioRecord? = null
     private var captureJob: Job? = null
     @Volatile private var isCapturing: Boolean = false
+
+    /** True iff the context for [activeModelId] is already resident in RAM. */
+    fun isModelLoaded(activeModelId: String): Boolean =
+        nativeHandle != 0L && loadedModelId == activeModelId
+
+    /**
+     * Loads the model context into native RAM ahead of time. Safe to call
+     * repeatedly and concurrently with [stopAndTranscribe]; the heavy load
+     * happens once. Intended to be fired the moment recording starts so the
+     * (multi-second, for the larger models) load overlaps with the user
+     * speaking instead of blocking after they stop.
+     */
+    suspend fun preload(context: Context, activeModelId: String): Boolean =
+        ensureContext(context, activeModelId)
 
     // ArrayList<Short> would box every sample. Use a growable array of
     // short via mutableListOf<ShortArray>-of-chunks to stay primitive.
@@ -183,7 +205,11 @@ class LocalWhisperEngine private constructor() {
 
         return withContext(Dispatchers.IO) {
             try {
+                val audioMs = samples.size * 1000L / SAMPLE_RATE
+                val startedAt = SystemClock.elapsedRealtime()
                 val text = LocalWhisperNative.transcribeNative(handle, samples, SAMPLE_RATE, language)
+                val elapsed = SystemClock.elapsedRealtime() - startedAt
+                Log.i(TAG, "Transcribed ${audioMs}ms of audio in ${elapsed}ms")
                 val trimmed = text.trim()
                 trimmed.ifEmpty { null }
             } catch (t: Throwable) {
@@ -242,40 +268,44 @@ class LocalWhisperEngine private constructor() {
      */
     private suspend fun ensureContext(context: Context, activeModelId: String): Boolean =
         withContext(Dispatchers.IO) {
-            if (!LocalWhisperNative.ensureLoaded()) return@withContext false
-            if (activeModelId.isEmpty()) return@withContext false
+            contextMutex.withLock {
+                if (!LocalWhisperNative.ensureLoaded()) return@withLock false
+                if (activeModelId.isEmpty()) return@withLock false
 
-            // Reuse existing context if the model hasn't changed.
-            if (nativeHandle != 0L && loadedModelId == activeModelId) return@withContext true
+                // Reuse existing context if the model hasn't changed.
+                if (nativeHandle != 0L && loadedModelId == activeModelId) return@withLock true
 
-            // Swap out the old context if we're switching models.
-            if (nativeHandle != 0L) {
-                try { LocalWhisperNative.releaseContextNative(nativeHandle) } catch (_: Throwable) {}
-                nativeHandle = 0L
-                loadedModelId = ""
+                // Swap out the old context if we're switching models.
+                if (nativeHandle != 0L) {
+                    try { LocalWhisperNative.releaseContextNative(nativeHandle) } catch (_: Throwable) {}
+                    nativeHandle = 0L
+                    loadedModelId = ""
+                }
+
+                val model = LocalWhisperModels.byId(activeModelId) ?: return@withLock false
+                val file = LocalWhisperStorage.fileFor(context, model)
+                if (!file.exists() || file.length() == 0L) {
+                    Log.w(TAG, "Model file missing for $activeModelId at ${file.absolutePath}")
+                    return@withLock false
+                }
+
+                val startedAt = SystemClock.elapsedRealtime()
+                val handle = try {
+                    LocalWhisperNative.initContextNative(file.absolutePath)
+                } catch (t: Throwable) {
+                    Log.w(TAG, "initContextNative threw", t)
+                    0L
+                }
+                if (handle == 0L) {
+                    Log.w(TAG, "initContextNative returned 0 for ${file.absolutePath}")
+                    return@withLock false
+                }
+
+                nativeHandle = handle
+                loadedModelId = activeModelId
+                val elapsed = SystemClock.elapsedRealtime() - startedAt
+                Log.i(TAG, "Loaded whisper model $activeModelId in ${elapsed}ms")
+                true
             }
-
-            val model = LocalWhisperModels.byId(activeModelId) ?: return@withContext false
-            val file = LocalWhisperStorage.fileFor(context, model)
-            if (!file.exists() || file.length() == 0L) {
-                Log.w(TAG, "Model file missing for $activeModelId at ${file.absolutePath}")
-                return@withContext false
-            }
-
-            val handle = try {
-                LocalWhisperNative.initContextNative(file.absolutePath)
-            } catch (t: Throwable) {
-                Log.w(TAG, "initContextNative threw", t)
-                0L
-            }
-            if (handle == 0L) {
-                Log.w(TAG, "initContextNative returned 0 for ${file.absolutePath}")
-                return@withContext false
-            }
-
-            nativeHandle = handle
-            loadedModelId = activeModelId
-            Log.i(TAG, "Loaded whisper model $activeModelId")
-            true
         }
 }
