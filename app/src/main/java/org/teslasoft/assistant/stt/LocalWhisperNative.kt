@@ -37,6 +37,7 @@ object LocalWhisperNative {
     @Volatile private var loadError: Throwable? = null
 
     @JvmStatic external fun pingNative(): String
+    @JvmStatic external fun systemInfoNative(): String
 
     /**
      * Attempts System.loadLibrary once. Subsequent calls are no-ops. Safe
@@ -69,6 +70,21 @@ object LocalWhisperNative {
             pingNative()
         } catch (t: Throwable) {
             Log.w(TAG, "pingNative call failed", t)
+            null
+        }
+    }
+
+    /**
+     * Returns whisper.cpp's system info string (active backends + CPU
+     * features). Confirms upstream sources actually compiled in. null on
+     * failure for the same reasons as [safePing].
+     */
+    fun safeSystemInfo(): String? {
+        if (!ensureLoaded()) return null
+        return try {
+            systemInfoNative()
+        } catch (t: Throwable) {
+            Log.w(TAG, "systemInfoNative call failed", t)
             null
         }
     }
