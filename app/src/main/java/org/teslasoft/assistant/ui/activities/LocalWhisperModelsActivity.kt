@@ -39,6 +39,7 @@ import kotlinx.coroutines.launch
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.stt.LocalWhisperDownloader
+import org.teslasoft.assistant.stt.LocalWhisperEngine
 import org.teslasoft.assistant.stt.LocalWhisperModels
 import org.teslasoft.assistant.stt.LocalWhisperStorage
 
@@ -71,6 +72,7 @@ class LocalWhisperModelsActivity : FragmentActivity() {
         val meta: TextView,
         val description: TextView,
         val actionButton: MaterialButton,
+        val uninstallButton: MaterialButton,
         val progressContainer: View,
         val progress: LinearProgressIndicator,
         val progressLabel: TextView
@@ -128,6 +130,7 @@ class LocalWhisperModelsActivity : FragmentActivity() {
                 meta = rowView.findViewById(R.id.model_meta),
                 description = rowView.findViewById(R.id.model_description),
                 actionButton = rowView.findViewById(R.id.model_action_button),
+                uninstallButton = rowView.findViewById(R.id.model_uninstall_button),
                 progressContainer = rowView.findViewById(R.id.download_progress_container),
                 progress = rowView.findViewById(R.id.download_progress),
                 progressLabel = rowView.findViewById(R.id.download_progress_label)
@@ -141,6 +144,9 @@ class LocalWhisperModelsActivity : FragmentActivity() {
             }
             row.actionButton.setOnClickListener {
                 handleRowTap(model)
+            }
+            row.uninstallButton.setOnClickListener {
+                confirmUninstall(model)
             }
 
             rowsByModelId[model.id] = row
@@ -247,6 +253,12 @@ class LocalWhisperModelsActivity : FragmentActivity() {
             else -> getString(R.string.local_whisper_meta_not_installed_fmt, model.sizeMb)
         }
 
+        // The uninstall button is offered whenever the model is on disk,
+        // including the active one — deleting the active model just clears
+        // the active selection. It's hidden mid-download.
+        val downloading = downloadJobs[model.id]?.isActive == true
+        row.uninstallButton.visibility = if (installed && !downloading) View.VISIBLE else View.GONE
+
         when {
             !installed -> {
                 row.actionButton.visibility = View.VISIBLE
@@ -260,6 +272,25 @@ class LocalWhisperModelsActivity : FragmentActivity() {
                 row.actionButton.text = getString(R.string.btn_make_active)
             }
         }
+    }
+
+    private fun confirmUninstall(model: LocalWhisperModels.Model) {
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.local_whisper_delete_confirm_title)
+            .setMessage(getString(R.string.local_whisper_delete_confirm_msg_fmt, model.displayName))
+            .setPositiveButton(R.string.btn_uninstall) { _, _ ->
+                val wasActive = preferences?.getActiveLocalWhisperModel() == model.id
+                LocalWhisperStorage.delete(this, model)
+                if (wasActive) {
+                    // Drop the selection and free the native context so the
+                    // next transcription doesn't point at a deleted file.
+                    preferences?.setActiveLocalWhisperModel("")
+                    LocalWhisperEngine.get().release()
+                }
+                refreshAll()
+            }
+            .setNegativeButton(android.R.string.cancel) { _, _ -> }
+            .show()
     }
 
     private fun reloadAmoled() {
