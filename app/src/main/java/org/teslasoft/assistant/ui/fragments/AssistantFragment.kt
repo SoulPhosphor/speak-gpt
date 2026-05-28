@@ -116,6 +116,7 @@ import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.progressindicator.CircularProgressIndicator
+import androidx.lifecycle.lifecycleScope
 import com.google.gson.Gson
 import com.google.mlkit.nl.languageid.LanguageIdentification
 import com.google.mlkit.nl.languageid.LanguageIdentifier
@@ -623,6 +624,13 @@ class AssistantFragment : BottomSheetDialogFragment(), ChatAdapter.OnUpdateListe
     override fun onDismiss(dialog: DialogInterface) {
         super.onDismiss(dialog)
 
+        // If the user backs out mid-recording, stop the mic + capture
+        // coroutine so we don't leak an active AudioRecord (and leave the
+        // engine stuck thinking it's still capturing on the next open).
+        if (isRecording) {
+            LocalWhisperEngine.get().cancel()
+        }
+
         if (tts != null) {
             tts!!.stop()
             tts!!.shutdown()
@@ -965,6 +973,18 @@ class AssistantFragment : BottomSheetDialogFragment(), ChatAdapter.OnUpdateListe
             animation?.reset()
             btnAssistantVoiceClickable?.setImageResource(R.drawable.ic_microphone)
             Toast.makeText(ctx, R.string.local_whisper_capture_failed, Toast.LENGTH_LONG).show()
+            return
+        }
+
+        // Warm the model into RAM while the user is still talking so the
+        // load cost overlaps with recording instead of stalling the spinner
+        // after they tap stop.
+        val activeModel = preferences?.getActiveLocalWhisperModel().orEmpty()
+        if (activeModel.isNotEmpty()) {
+            val appCtx = ctx.applicationContext
+            lifecycleScope.launch {
+                try { LocalWhisperEngine.get().preload(appCtx, activeModel) } catch (_: Exception) { /* ignore */ }
+            }
         }
     }
 
@@ -984,21 +1004,27 @@ class AssistantFragment : BottomSheetDialogFragment(), ChatAdapter.OnUpdateListe
             return
         }
 
-        CoroutineScope(Dispatchers.Main).launch {
+        val activeModel = preferences?.getActiveLocalWhisperModel().orEmpty()
+        if (!LocalWhisperEngine.get().isModelLoaded(activeModel)) {
+            Toast.makeText(ctx, R.string.local_whisper_loading_model, Toast.LENGTH_SHORT).show()
+        }
+
+        lifecycleScope.launch {
             assistantLoading?.setOnClickListener {
                 cancel()
                 LocalWhisperEngine.get().cancel()
                 restoreUIState()
             }
             try {
-                val activeModel = preferences?.getActiveLocalWhisperModel().orEmpty()
                 val transcription = LocalWhisperEngine.get()
-                    .stopAndTranscribe(ctx, activeModel)
+                    .stopAndTranscribe(ctx.applicationContext, activeModel)
+                if (!isAdded) return@launch
                 processLocalWhisperTranscript(transcription)
             } catch (_: CancellationException) {
                 /* ignore */
             } catch (_: Exception) {
-                Toast.makeText(ctx, "Failed to transcribe on device", Toast.LENGTH_SHORT).show()
+                if (!isAdded) return@launch
+                Toast.makeText(mContext ?: return@launch, "Failed to transcribe on device", Toast.LENGTH_SHORT).show()
                 restoreUIState()
             }
         }
@@ -1029,7 +1055,7 @@ class AssistantFragment : BottomSheetDialogFragment(), ChatAdapter.OnUpdateListe
             btnAssistantSend?.isEnabled = false
             assistantLoading?.visibility = View.VISIBLE
 
-            CoroutineScope(Dispatchers.Main).launch {
+            lifecycleScope.launch {
                 assistantLoading?.setOnClickListener {
                     cancel()
                     restoreUIState()
