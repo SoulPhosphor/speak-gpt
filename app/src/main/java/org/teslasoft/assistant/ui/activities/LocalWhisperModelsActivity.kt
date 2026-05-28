@@ -82,10 +82,11 @@ class LocalWhisperModelsActivity : FragmentActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_local_whisper_models)
 
-        // Step 2A smoke test: confirm libphosphorwhisper.so loaded on this
-        // device and the JNI symbol resolved. Remove once step 2B wires
-        // real whisper.cpp calls through this activity.
+        // Step 2A/2B smoke tests. ping proves the .so loaded; systemInfo
+        // additionally proves whisper.cpp itself compiled and linked.
+        // Both go away in step 2C once real transcription runs here.
         Log.i("LocalWhisperModels", "Native ping: ${LocalWhisperNative.safePing() ?: "<unavailable>"}")
+        Log.i("LocalWhisperModels", "Whisper system info: ${LocalWhisperNative.safeSystemInfo() ?: "<unavailable>"}")
 
         preferences = Preferences.getPreferences(this, "")
 
