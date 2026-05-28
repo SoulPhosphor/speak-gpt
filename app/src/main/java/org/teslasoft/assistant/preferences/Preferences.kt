@@ -547,17 +547,15 @@ class Preferences private constructor(private var preferences: SharedPreferences
     }
 
     /**
-     * Engine the runtime should actually use.
-     *
-     * Until step 2 of whisper-local-plan.md lands the whisper.cpp runtime,
-     * a saved value of "whisper-local" routes to cloud Whisper at runtime so
-     * tapping the mic still produces a transcript. Settings UI keeps using
-     * getAudioModel() so the user's saved choice survives the upgrade.
+     * Engine the runtime should actually use. Identical to [getAudioModel]
+     * now that on-device Whisper is wired up; kept as a separate function
+     * so the dispatch sites in ChatActivity / AssistantFragment route
+     * through one well-named accessor. The fallback for the
+     * "whisper-local selected but no model installed" case lives in the
+     * dispatchers themselves, not here, because choosing the fallback
+     * surfaces UI (a snackbar).
      */
-    fun getEffectiveAudioModel() : String {
-        val saved = getAudioModel()
-        return if (saved == "whisper-local") "whisper" else saved
-    }
+    fun getEffectiveAudioModel() : String = getAudioModel()
 
     /**
      * Active on-device Whisper model name (e.g. "base.en"). Empty string when

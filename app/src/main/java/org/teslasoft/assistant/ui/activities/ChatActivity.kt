@@ -164,6 +164,9 @@ import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.LogitBiasPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
+import org.teslasoft.assistant.stt.LocalWhisperEngine
+import org.teslasoft.assistant.stt.LocalWhisperModels
+import org.teslasoft.assistant.stt.LocalWhisperStorage
 import org.teslasoft.assistant.service.HandsFreeService
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.adapters.chat.ChatAdapter
@@ -1408,10 +1411,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 cancelAllAiActivity()
                 return@setOnClickListener
             }
-            if (preferences!!.getEffectiveAudioModel() == "google") {
-                handleGoogleSpeechRecognition()
-            } else {
-                handleWhisperSpeechRecognition()
+            when (preferences!!.getEffectiveAudioModel()) {
+                "google" -> handleGoogleSpeechRecognition()
+                "whisper-local" -> handleLocalWhisperSpeechRecognition()
+                else -> handleWhisperSpeechRecognition()
             }
         }
 
@@ -1756,6 +1759,133 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     ).setAction(Intent.ACTION_VIEW)
                 )
             }
+        }
+    }
+
+    private fun handleLocalWhisperSpeechRecognition() {
+        if (isRecording) {
+            btnMicro?.setImageResource(R.drawable.ic_microphone)
+            isRecording = false
+            stopLocalWhisper()
+            return
+        }
+
+        val activeModel = preferences?.getActiveLocalWhisperModel().orEmpty()
+        val installed = activeModel.isNotEmpty() &&
+                LocalWhisperModels.byId(activeModel)?.let {
+                    LocalWhisperStorage.isInstalled(this, it)
+                } == true
+        if (!installed) {
+            // Selected on-device but no model on disk yet → fall back to
+            // cloud Whisper for this utterance so the user still gets a
+            // transcript. UI-level snackbar mirrors what the plan calls for.
+            Toast.makeText(this, R.string.local_whisper_no_model_snackbar, Toast.LENGTH_LONG).show()
+            handleWhisperSpeechRecognition()
+            return
+        }
+
+        btnMicro?.setImageResource(R.drawable.ic_stop_recording)
+        isRecording = true
+
+        if (ContextCompat.checkSelfPermission(
+                this, Manifest.permission.RECORD_AUDIO
+            ) == PackageManager.PERMISSION_GRANTED
+        ) {
+            startLocalWhisper()
+        } else {
+            permissionResultLauncherV2.launch(
+                Intent(this, MicrophonePermissionActivity::class.java)
+                    .setAction(Intent.ACTION_VIEW)
+            )
+        }
+    }
+
+    private fun startLocalWhisper() {
+        val ok = LocalWhisperEngine.get().startRecording()
+        if (!ok) {
+            isRecording = false
+            btnMicro?.setImageResource(R.drawable.ic_microphone)
+            Toast.makeText(this, R.string.local_whisper_capture_failed, Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun stopLocalWhisper() {
+        btnMicro?.isEnabled = false
+        btnSend?.isEnabled = false
+        progress?.visibility = View.VISIBLE
+
+        if (cancelState) {
+            cancelState = false
+            LocalWhisperEngine.get().cancel()
+            btnMicro?.setImageResource(R.drawable.ic_microphone)
+            isRecording = false
+            restoreUIState()
+            return
+        }
+
+        whisperScope = CoroutineScope(Dispatchers.Main)
+        whisperScope?.launch {
+            progress?.setOnClickListener {
+                cancel()
+                LocalWhisperEngine.get().cancel()
+                restoreUIState()
+            }
+
+            try {
+                val activeModel = preferences?.getActiveLocalWhisperModel().orEmpty()
+                val transcription = LocalWhisperEngine.get()
+                    .stopAndTranscribe(this@ChatActivity, activeModel)
+                processLocalWhisperTranscript(transcription)
+            } catch (_: CancellationException) {
+                restoreUIState()
+            } catch (_: Exception) {
+                Toast.makeText(this@ChatActivity, "Failed to transcribe on device", Toast.LENGTH_SHORT).show()
+                restoreUIState()
+            }
+        }
+    }
+
+    private fun processLocalWhisperTranscript(transcription: String?) {
+        // Mirrors the downstream half of processRecording(): if auto-send
+        // is on, push the transcript as a user turn and kick generation;
+        // otherwise drop it into the message input box.
+        if (transcription.isNullOrBlank()) {
+            isRecording = false
+            btnMicro?.isEnabled = true
+            btnSend?.isEnabled = true
+            progress?.visibility = View.GONE
+            btnMicro?.setImageResource(R.drawable.ic_microphone)
+            return
+        }
+        if (preferences?.autoSend() == true) {
+            putMessage(prefix + transcription + endSeparator, false)
+            chatMessages.add(
+                ChatMessage(
+                    role = ChatRole.User,
+                    content = prefix + transcription + endSeparator
+                )
+            )
+            saveSettings()
+
+            btnMicro?.isEnabled = false
+            btnSend?.isEnabled = false
+            progress?.visibility = View.VISIBLE
+
+            processRecordingScope = CoroutineScope(Dispatchers.Main)
+            processRecordingScope?.launch {
+                progress?.setOnClickListener {
+                    cancel()
+                    restoreUIState()
+                }
+                try {
+                    generateResponse(prefix + transcription + endSeparator, true)
+                } catch (_: CancellationException) {
+                    restoreUIState()
+                }
+            }
+        } else {
+            restoreUIState()
+            messageInput?.setText(transcription)
         }
     }
 

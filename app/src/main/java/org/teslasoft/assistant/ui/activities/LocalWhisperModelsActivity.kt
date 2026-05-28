@@ -20,7 +20,6 @@ import android.content.Intent
 import android.content.res.Configuration
 import android.graphics.drawable.Drawable
 import android.os.Bundle
-import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.widget.ImageButton
@@ -41,7 +40,6 @@ import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.stt.LocalWhisperDownloader
 import org.teslasoft.assistant.stt.LocalWhisperModels
-import org.teslasoft.assistant.stt.LocalWhisperNative
 import org.teslasoft.assistant.stt.LocalWhisperStorage
 
 /**
@@ -81,12 +79,6 @@ class LocalWhisperModelsActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_local_whisper_models)
-
-        // Step 2A/2B smoke tests. ping proves the .so loaded; systemInfo
-        // additionally proves whisper.cpp itself compiled and linked.
-        // Both go away in step 2C once real transcription runs here.
-        Log.i("LocalWhisperModels", "Native ping: ${LocalWhisperNative.safePing() ?: "<unavailable>"}")
-        Log.i("LocalWhisperModels", "Whisper system info: ${LocalWhisperNative.safeSystemInfo() ?: "<unavailable>"}")
 
         preferences = Preferences.getPreferences(this, "")
 
