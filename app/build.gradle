@@ -9,10 +9,27 @@ configurations {
     implementation.exclude group: 'org.jetbrains', module: 'annotations'
 }
 
+// Build stamp so the About screen can show exactly which commit produced
+// the APK — versionName rarely changes, but the short git SHA does on every
+// build. Guarded so a source-zip build (no .git) still compiles.
+def gitSha = "unknown"
+try {
+    gitSha = providers.exec {
+        commandLine 'git', 'rev-parse', '--short', 'HEAD'
+    }.standardOutput.asText.get().trim()
+} catch (Throwable ignored) {
+    gitSha = "unknown"
+}
+def buildDate = new java.text.SimpleDateFormat("yyyy-MM-dd").format(new Date())
+
 android {
     namespace 'org.teslasoft.assistant'
     compileSdk = 36
     ndkVersion '26.3.11579264'
+
+    buildFeatures {
+        buildConfig true
+    }
 
     defaultConfig {
         applicationId "com.soulphosphor.phosphorshines"
@@ -20,6 +37,9 @@ android {
         targetSdk 36
         versionCode 43810
         versionName "4.38-stable"
+
+        buildConfigField "String", "GIT_SHA", "\"${gitSha}\""
+        buildConfigField "String", "BUILD_DATE", "\"${buildDate}\""
 
         ndk {
             // Only ship arm64 binaries. The target user runs a Pixel 8 and

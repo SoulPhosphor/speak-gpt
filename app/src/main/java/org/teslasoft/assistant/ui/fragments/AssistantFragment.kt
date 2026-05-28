@@ -1005,9 +1005,6 @@ class AssistantFragment : BottomSheetDialogFragment(), ChatAdapter.OnUpdateListe
         }
 
         val activeModel = preferences?.getActiveLocalWhisperModel().orEmpty()
-        if (!LocalWhisperEngine.get().isModelLoaded(activeModel)) {
-            Toast.makeText(ctx, R.string.local_whisper_loading_model, Toast.LENGTH_SHORT).show()
-        }
 
         lifecycleScope.launch {
             assistantLoading?.setOnClickListener {
@@ -1017,7 +1014,16 @@ class AssistantFragment : BottomSheetDialogFragment(), ChatAdapter.OnUpdateListe
             }
             try {
                 val transcription = LocalWhisperEngine.get()
-                    .stopAndTranscribe(ctx.applicationContext, activeModel)
+                    .stopAndTranscribe(ctx.applicationContext, activeModel) { phase ->
+                        if (!isAdded) return@stopAndTranscribe
+                        // Repurpose the input field's hint as a status line so
+                        // the user can see whether they're waiting on the model
+                        // load or the actual transcription.
+                        assistantMessage?.hint = when (phase) {
+                            LocalWhisperEngine.Phase.LOADING_MODEL -> getString(R.string.hint_loading_whisper)
+                            LocalWhisperEngine.Phase.TRANSCRIBING -> getString(R.string.hint_transcribing)
+                        }
+                    }
                 if (!isAdded) return@launch
                 processLocalWhisperTranscript(transcription)
             } catch (_: CancellationException) {
@@ -1031,6 +1037,8 @@ class AssistantFragment : BottomSheetDialogFragment(), ChatAdapter.OnUpdateListe
     }
 
     private fun processLocalWhisperTranscript(transcription: String?) {
+        // Transcription phase is over either way — drop the status hint.
+        assistantMessage?.hint = getString(R.string.hint_message)
         if (transcription.isNullOrBlank()) {
             isRecording = false
             animation?.stop()
@@ -2325,6 +2333,7 @@ class AssistantFragment : BottomSheetDialogFragment(), ChatAdapter.OnUpdateListe
         isRecording = false
         cancelState = false
         btnAssistantVoiceClickable?.setImageResource(R.drawable.ic_microphone)
+        assistantMessage?.hint = getString(R.string.hint_message)
         animation?.stop()
         animation?.reset()
     }

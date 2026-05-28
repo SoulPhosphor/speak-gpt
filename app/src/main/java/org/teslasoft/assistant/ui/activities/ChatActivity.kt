@@ -792,16 +792,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     private val ttsProgressListener = object : UtteranceProgressListener() {
         override fun onStart(utteranceId: String?) { /* no-op */ }
         override fun onDone(utteranceId: String?) {
-            if (preferences?.getHandsFreeMode() == true && preferences?.getEffectiveAudioModel() == "google"
-                && preferences?.autoSend() == true && !cancelState && !handsFreeStopped && !isRecording) {
-                Handler(Looper.getMainLooper()).post {
-                    if (!isFinishing && !isDestroyed) {
-                        isRecording = true
-                        btnMicro?.setImageResource(R.drawable.ic_stop_recording)
-                        startRecognition(true)
-                    }
-                }
-            }
+            maybeRestartHandsFreeAfterReadback()
         }
         @Suppress("OverridingDeprecatedMember")
         override fun onError(utteranceId: String?) {
@@ -811,6 +802,32 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         override fun onError(utteranceId: String?, errorCode: Int) {
             Log.w("TTS", "TTS utterance error code $errorCode: $utteranceId; re-initialising engine")
             Handler(Looper.getMainLooper()).post { reinitTTS() }
+        }
+    }
+
+    /**
+     * Re-arm the mic after the assistant finishes reading a reply, so the
+     * hands-free conversation keeps looping. Called both from the device-TTS
+     * UtteranceProgressListener and from the OpenAI-voice MediaPlayer
+     * completion — previously only the device-TTS path restarted, so picking
+     * a cloud voice silently broke hands-free. Logs why it skipped a restart
+     * to make this diagnosable from logcat.
+     */
+    private fun maybeRestartHandsFreeAfterReadback() {
+        val handsFree = preferences?.getHandsFreeMode() == true
+        val googleStt = preferences?.getEffectiveAudioModel() == "google"
+        val auto = preferences?.autoSend() == true
+        if (handsFree && googleStt && auto && !cancelState && !handsFreeStopped && !isRecording) {
+            Handler(Looper.getMainLooper()).post {
+                if (!isFinishing && !isDestroyed) {
+                    isRecording = true
+                    btnMicro?.setImageResource(R.drawable.ic_stop_recording)
+                    startRecognition(true)
+                }
+            }
+        } else if (handsFree) {
+            Log.i("HandsFree", "No restart after readback: googleStt=$googleStt auto=$auto " +
+                    "cancelState=$cancelState handsFreeStopped=$handsFreeStopped isRecording=$isRecording")
         }
     }
 
@@ -3000,6 +3017,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                                 val fis = FileInputStream(tempMp3)
                                 mediaPlayer?.setDataSource(fis.fd)
                                 mediaPlayer?.prepare()
+                                mediaPlayer?.setOnCompletionListener {
+                                    // Mirror the device-TTS onDone path so a
+                                    // cloud voice also keeps hands-free looping.
+                                    maybeRestartHandsFreeAfterReadback()
+                                }
                                 mediaPlayer?.start()
                             } catch (ex: IOException) {
                                 MaterialAlertDialogBuilder(this@ChatActivity, R.style.App_MaterialAlertDialog)

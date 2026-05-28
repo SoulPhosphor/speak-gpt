@@ -399,6 +399,11 @@
     <string name="local_whisper_no_model_snackbar">No on-device Whisper model installed yet — using cloud Whisper for this transcription.</string>
     <string name="local_whisper_capture_failed">Could not open the microphone for on-device Whisper. Try again or check permissions.</string>
     <string name="local_whisper_loading_model">Loading speech model…</string>
+    <string name="btn_uninstall">Uninstall</string>
+    <string name="hint_loading_whisper">Loading Whisper…</string>
+    <string name="hint_transcribing">Transcribing…</string>
+    <string name="about_build_label">Build</string>
+    <string name="about_build_note">Whisper optimizations + model management</string>
     <string name="local_whisper_meta_installed_fmt">%1$d MB · Installed</string>
     <string name="local_whisper_meta_active_fmt">%1$d MB · Active</string>
     <string name="local_whisper_meta_not_installed_fmt">%1$d MB · Not downloaded</string>

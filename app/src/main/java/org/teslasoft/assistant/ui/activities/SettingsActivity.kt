@@ -1281,6 +1281,14 @@ class SettingsActivity : FragmentActivity() {
 
         tileHandsFree?.setOnCheckedChangeListener { isChecked -> run {
             preferences?.setHandsFreeMode(isChecked)
+            if (isChecked) {
+                // Hands-free can't work without auto-send: the conversation
+                // loop relies on each transcript being sent automatically
+                // rather than parked in the input box. Force it on and mirror
+                // that in the auto-send tile so the dependency is visible.
+                preferences?.setAutoSend(true)
+                tileAutoSend?.setChecked(true)
+            }
         }}
 
         tileHandsFreeTiming?.setOnTileClickListener {

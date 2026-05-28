@@ -35,6 +35,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.fragment.app.FragmentActivity
 import com.google.android.material.button.MaterialButton
+import org.teslasoft.assistant.BuildConfig
 import org.teslasoft.assistant.Config
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
@@ -136,6 +137,12 @@ class AboutActivity : FragmentActivity() {
 
         tidVer?.text = "${getString(R.string.teslasoft_id_version)} ${SystemInfo.VERSION} (${SystemInfo.VERSION_CODE})"
 
+        // Build stamp lines: git SHA + date prove which commit shipped, and
+        // the note says what that build changed (handy for verifying that an
+        // update actually landed on the device).
+        val buildStamp = "\n${getString(R.string.about_build_label)} ${BuildConfig.GIT_SHA} · ${BuildConfig.BUILD_DATE}" +
+                "\n${getString(R.string.about_build_note)}"
+
         try {
             val pInfo: PackageInfo = if (android.os.Build.VERSION.SDK_INT >= 33) {
                 packageManager.getPackageInfo(packageName, PackageManager.PackageInfoFlags.of(0))
@@ -145,9 +152,9 @@ class AboutActivity : FragmentActivity() {
 
             val version = pInfo.versionName
 
-            appVer?.text = "${getString(R.string.app_version)} $version"
+            appVer?.text = "${getString(R.string.app_version)} $version$buildStamp"
         } catch (_: PackageManager.NameNotFoundException) {
-            appVer?.text = "${getString(R.string.app_version)} unknown"
+            appVer?.text = "${getString(R.string.app_version)} unknown$buildStamp"
         }
 
         btnProjects?.setOnClickListener {

@@ -175,15 +175,23 @@ class LocalWhisperEngine private constructor() {
         return true
     }
 
+    /** Coarse phases reported to the UI so the user knows what they're waiting on. */
+    enum class Phase { LOADING_MODEL, TRANSCRIBING }
+
     /**
      * Stops capture and transcribes the accumulated samples. Returns the
      * trimmed transcript on success, null on any failure (model load,
      * whisper_full error, empty audio, missing context).
+     *
+     * [onPhase] is invoked on the caller's dispatcher (Main when launched
+     * from a UI coroutine) as the work moves from loading the model to
+     * running transcription, so the caller can surface a status to the user.
      */
     suspend fun stopAndTranscribe(
         context: Context,
         activeModelId: String,
-        language: String = "en"
+        language: String = "en",
+        onPhase: ((Phase) -> Unit)? = null
     ): String? {
         if (!isCapturing && audioRecord == null) {
             return null
@@ -199,9 +207,12 @@ class LocalWhisperEngine private constructor() {
         val samples = drainBuffer()
         if (samples.isEmpty()) return null
 
+        if (!isModelLoaded(activeModelId)) onPhase?.invoke(Phase.LOADING_MODEL)
         if (!ensureContext(context, activeModelId)) return null
         val handle = nativeHandle
         if (handle == 0L) return null
+
+        onPhase?.invoke(Phase.TRANSCRIBING)
 
         return withContext(Dispatchers.IO) {
             try {
