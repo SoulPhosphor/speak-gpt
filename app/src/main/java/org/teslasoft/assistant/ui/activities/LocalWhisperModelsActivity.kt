@@ -20,6 +20,7 @@ import android.content.Intent
 import android.content.res.Configuration
 import android.graphics.drawable.Drawable
 import android.os.Bundle
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.widget.ImageButton
@@ -40,6 +41,7 @@ import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.stt.LocalWhisperDownloader
 import org.teslasoft.assistant.stt.LocalWhisperModels
+import org.teslasoft.assistant.stt.LocalWhisperNative
 import org.teslasoft.assistant.stt.LocalWhisperStorage
 
 /**
@@ -79,6 +81,11 @@ class LocalWhisperModelsActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_local_whisper_models)
+
+        // Step 2A smoke test: confirm libphosphorwhisper.so loaded on this
+        // device and the JNI symbol resolved. Remove once step 2B wires
+        // real whisper.cpp calls through this activity.
+        Log.i("LocalWhisperModels", "Native ping: ${LocalWhisperNative.safePing() ?: "<unavailable>"}")
 
         preferences = Preferences.getPreferences(this, "")
 
