@@ -422,6 +422,17 @@
     <string name="tile_vad_method_desc">How hands-free decides you\'ve stopped talking (on-device Whisper only).</string>
     <string name="vad_method_webrtc">WebRTC (recommended)</string>
     <string name="vad_method_energy">Energy (simple)</string>
+    <string name="vad_method_options_cd">Options</string>
+    <string name="vad_sensitivity_title">Detection sensitivity</string>
+    <string name="vad_sensitivity_high">High — hear everything (default)</string>
+    <string name="vad_sensitivity_medium_high">Medium-high</string>
+    <string name="vad_sensitivity_medium_low">Medium-low</string>
+    <string name="vad_sensitivity_low">Low — strict noise rejection</string>
+    <string name="vad_sensitivity_short_high">High</string>
+    <string name="vad_sensitivity_short_medium_high">Medium-high</string>
+    <string name="vad_sensitivity_short_medium_low">Medium-low</string>
+    <string name="vad_sensitivity_short_low">Low</string>
+    <string name="vad_method_subtitle_webrtc">%1$s · %2$s</string>
     <string name="tile_hands_free_silence_title">Silence wait (seconds)</string>
     <string name="tile_hands_free_no_speech_title">Wait for speech (seconds)</string>
     <string name="hands_free_channel_name">Hands-free conversation</string>

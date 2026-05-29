@@ -962,6 +962,25 @@ class Preferences private constructor(private var preferences: SharedPreferences
     }
 
     /**
+     * WebRTC VAD aggressiveness (libfvad mode) used when [getVadMethod] is
+     * "webrtc". 0 = most sensitive (hears the most speech, default), 3 = most
+     * aggressive (rejects the most noise, may miss quiet/distant speech). See
+     * [org.teslasoft.assistant.stt.VadMethods].
+     *
+     * @return fvad mode 0..3 (default 0)
+     * */
+    fun getVadWebRtcMode() : Int {
+        return (getGlobalString("vad_webrtc_mode", "0").toIntOrNull() ?: 0).coerceIn(0, 3)
+    }
+
+    /**
+     * Set the WebRTC VAD aggressiveness (clamped to 0..3).
+     * */
+    fun setVadWebRtcMode(mode: Int) {
+        putGlobalString("vad_webrtc_mode", mode.coerceIn(0, 3).toString(), "0")
+    }
+
+    /**
      * Retrieves the encrypted API key from the shared preferences.
      *
      * @param context The context to access the encrypted shared preferences.

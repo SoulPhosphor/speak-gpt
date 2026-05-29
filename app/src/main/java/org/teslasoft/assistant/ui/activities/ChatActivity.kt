@@ -1900,7 +1900,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         val silenceMs = preferences!!.getHandsFreeSilenceSeconds().coerceAtLeast(1) * 1000L
         val noSpeechMs = preferences!!.getHandsFreeNoSpeechSeconds().coerceAtLeast(1) * 1000L
         val ok = LocalWhisperEngine.get().startRecording(
-            vad = LocalWhisperEngine.VadConfig(silenceMs, noSpeechMs, preferences!!.getVadMethod()),
+            vad = LocalWhisperEngine.VadConfig(silenceMs, noSpeechMs, preferences!!.getVadMethod(), preferences!!.getVadWebRtcMode()),
             onEndOfTurn = { runOnUiThread { onHandsFreeWhisperEndOfTurn() } },
             onNoSpeechTimeout = { runOnUiThread { onHandsFreeWhisperNoSpeech() } }
         )
