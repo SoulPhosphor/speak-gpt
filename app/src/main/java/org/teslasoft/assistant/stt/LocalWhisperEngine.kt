@@ -56,6 +56,14 @@ class LocalWhisperEngine private constructor() {
         const val SAMPLE_RATE = 16_000
         private const val TAG = "LocalWhisperEngine"
 
+        // Energy-based voice-activity-detection tuning. A 16-bit PCM frame's
+        // RMS runs 0..32767. Speech is "clearly above the adaptive noise
+        // floor" — MIN_SPEECH_RMS is an absolute floor so dead-quiet rooms
+        // (tiny noise floor) don't trip on faint fluctuations. These are the
+        // numbers most likely to need on-device tuning.
+        private const val MIN_SPEECH_RMS = 600.0
+        private const val SPEECH_FLOOR_FACTOR = 2.5
+
         @Volatile private var instance: LocalWhisperEngine? = null
         fun get(): LocalWhisperEngine {
             instance?.let { return it }
@@ -86,6 +94,30 @@ class LocalWhisperEngine private constructor() {
     private var captureJob: Job? = null
     @Volatile private var isCapturing: Boolean = false
 
+    // Voice-activity-detection state for hands-free capture. Null config =>
+    // plain push-to-talk (caller decides when to stop), matching the
+    // original behaviour. Callbacks fire on the capture (IO) thread; the UI
+    // caller is expected to marshal back to the main thread.
+    @Volatile private var vadConfig: VadConfig? = null
+    private var onVadEndOfTurn: (() -> Unit)? = null
+    private var onVadNoSpeech: (() -> Unit)? = null
+
+    /**
+     * Voice-activity-detection config for hands-free capture. Recreates the
+     * end-of-speech behaviour the platform SpeechRecognizer gives Google STT
+     * (which whisper.cpp lacks): the capture loop owns the [silenceMs] /
+     * [noSpeechMs] timers and fires [onEndOfTurn] once the user has spoken
+     * and then gone quiet for the silence window, or [onNoSpeechTimeout] if
+     * they never start. [method] selects which detector answers the per-frame
+     * "is this speech?" question (see [VadMethods]); the timer behaviour is
+     * identical across methods. Each callback fires at most once per recording.
+     */
+    data class VadConfig(
+        val silenceMs: Long,
+        val noSpeechMs: Long,
+        val method: String = VadMethods.DEFAULT
+    )
+
     /** True iff the context for [activeModelId] is already resident in RAM. */
     fun isModelLoaded(activeModelId: String): Boolean =
         nativeHandle != 0L && loadedModelId == activeModelId
@@ -115,12 +147,19 @@ class LocalWhisperEngine private constructor() {
      * have already verified RECORD_AUDIO permission.
      */
     @SuppressLint("MissingPermission")
-    fun startRecording(): Boolean {
+    fun startRecording(
+        vad: VadConfig? = null,
+        onEndOfTurn: (() -> Unit)? = null,
+        onNoSpeechTimeout: (() -> Unit)? = null
+    ): Boolean {
         if (isCapturing) return true
         synchronized(chunkLock) {
             capturedChunks.clear()
             capturedCount = 0
         }
+        vadConfig = vad
+        onVadEndOfTurn = onEndOfTurn
+        onVadNoSpeech = onNoSpeechTimeout
 
         val minBuf = AudioRecord.getMinBufferSize(
             SAMPLE_RATE,
@@ -163,22 +202,58 @@ class LocalWhisperEngine private constructor() {
 
         isCapturing = true
         val readSize = bufferBytes / 2 // shorts per read
+        // Build the detector once per recording, off the main thread. The
+        // capture loop owns the silence/no-speech timers (so the user's
+        // configured timings behave identically no matter which detector is
+        // chosen); the detector only answers "is this frame speech?".
+        val cfg = vadConfig
+        val detector = cfg?.let { VadFactory.create(it.method, SAMPLE_RATE) }
+        detector?.reset()
         captureJob = CoroutineScope(Dispatchers.IO).launch {
             val readBuffer = ShortArray(readSize)
-            while (isActive && isCapturing) {
-                val read = try {
-                    record.read(readBuffer, 0, readBuffer.size)
-                } catch (t: Throwable) {
-                    Log.w(TAG, "AudioRecord.read threw", t)
-                    break
-                }
-                if (read > 0) {
-                    val copy = readBuffer.copyOf(read)
-                    synchronized(chunkLock) {
-                        capturedChunks.add(copy)
-                        capturedCount += read
+            val startedAt = SystemClock.elapsedRealtime()
+            var speechStarted = false
+            var lastVoiceAt = startedAt
+            var vadFired = false
+            try {
+                while (isActive && isCapturing) {
+                    val read = try {
+                        record.read(readBuffer, 0, readBuffer.size)
+                    } catch (t: Throwable) {
+                        Log.w(TAG, "AudioRecord.read threw", t)
+                        break
+                    }
+                    if (read > 0) {
+                        val copy = readBuffer.copyOf(read)
+                        synchronized(chunkLock) {
+                            capturedChunks.add(copy)
+                            capturedCount += read
+                        }
+
+                        // Hands-free turn detection. Whisper has no end-of-speech
+                        // signal, so we derive one: once the user has spoken and
+                        // then stayed silent for the silence window, fire
+                        // end-of-turn; if they never start within the no-speech
+                        // window, fire that instead. Each fires once.
+                        if (detector != null && !vadFired) {
+                            val isSpeech = detector.accept(readBuffer, read)
+                            val now = SystemClock.elapsedRealtime()
+                            if (isSpeech) {
+                                speechStarted = true
+                                lastVoiceAt = now
+                            }
+                            if (speechStarted && now - lastVoiceAt >= cfg.silenceMs) {
+                                vadFired = true
+                                onVadEndOfTurn?.invoke()
+                            } else if (!speechStarted && now - startedAt >= cfg.noSpeechMs) {
+                                vadFired = true
+                                onVadNoSpeech?.invoke()
+                            }
+                        }
                     }
                 }
+            } finally {
+                detector?.close()
             }
         }
         return true
@@ -206,6 +281,7 @@ class LocalWhisperEngine private constructor() {
             return null
         }
         isCapturing = false
+        clearVad()
         try { captureJob?.cancelAndJoin() } catch (_: Throwable) {}
         captureJob = null
 
@@ -256,6 +332,7 @@ class LocalWhisperEngine private constructor() {
         // coroutine layer can't interrupt it on its own.
         LocalWhisperNative.signalAbort()
         isCapturing = false
+        clearVad()
         try { captureJob?.cancel() } catch (_: Throwable) {}
         captureJob = null
         try { audioRecord?.stop() } catch (_: Throwable) {}
@@ -265,6 +342,13 @@ class LocalWhisperEngine private constructor() {
             capturedChunks.clear()
             capturedCount = 0
         }
+    }
+
+    /** Drops VAD config + callbacks so no stale turn callback can fire. */
+    private fun clearVad() {
+        vadConfig = null
+        onVadEndOfTurn = null
+        onVadNoSpeech = null
     }
 
     /**

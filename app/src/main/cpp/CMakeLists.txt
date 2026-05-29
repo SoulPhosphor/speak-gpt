@@ -64,15 +64,28 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(whisper)
 
+# libfvad: the standalone WebRTC voice-activity detector. Tiny, C-only, no
+# external deps — provides the "webrtc" VAD option for hands-free Whisper.
+# It exposes a `fvad` static library target with its include dir as PUBLIC.
+FetchContent_Declare(
+    fvad
+    GIT_REPOSITORY https://github.com/dpirch/libfvad.git
+    GIT_TAG        master
+)
+FetchContent_MakeAvailable(fvad)
+
 add_library(phosphorwhisper SHARED
-    phosphor_whisper_jni.cpp)
+    phosphor_whisper_jni.cpp
+    webrtc_vad_jni.cpp)
 
 target_include_directories(phosphorwhisper PRIVATE
     ${whisper_SOURCE_DIR}/include
-    ${whisper_SOURCE_DIR}/ggml/include)
+    ${whisper_SOURCE_DIR}/ggml/include
+    ${fvad_SOURCE_DIR}/include)
 
 find_library(log-lib log)
 
 target_link_libraries(phosphorwhisper
     whisper
+    fvad
     ${log-lib})

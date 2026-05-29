@@ -418,6 +418,10 @@
     <string name="tile_hands_free_timing_title">Hands-free timing</string>
     <string name="tile_hands_free_timing_desc">Set how many seconds the mic tolerates a pause while you think, and how long it waits for you to start talking.</string>
     <string name="tile_hands_free_timing_value">Pause %1$d s · Start %2$d s</string>
+    <string name="tile_vad_method_title">Voice detection method</string>
+    <string name="tile_vad_method_desc">How hands-free decides you\'ve stopped talking (on-device Whisper only).</string>
+    <string name="vad_method_webrtc">WebRTC (recommended)</string>
+    <string name="vad_method_energy">Energy (simple)</string>
     <string name="tile_hands_free_silence_title">Silence wait (seconds)</string>
     <string name="tile_hands_free_no_speech_title">Wait for speech (seconds)</string>
     <string name="hands_free_channel_name">Hands-free conversation</string>

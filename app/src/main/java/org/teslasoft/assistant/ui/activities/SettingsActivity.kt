@@ -89,6 +89,7 @@ class SettingsActivity : FragmentActivity() {
     private var tileAlwaysSpeak: TileFragment? = null
     private var tileHandsFree: TileFragment? = null
     private var tileHandsFreeTiming: TileFragment? = null
+    private var tileVadMethod: TileFragment? = null
     private var tileActivationMessage: TileFragment? = null
     private var tileSystemMessage: TileFragment? = null
     private var tileLangDetect: TileFragment? = null
@@ -695,6 +696,19 @@ class SettingsActivity : FragmentActivity() {
                 functionDesc = getString(R.string.tile_hands_free_timing_desc)
             )
 
+            tileVadMethod = TileFragment.newInstance(
+                checked = false,
+                checkable = false,
+                enabledText = getString(R.string.tile_vad_method_title),
+                disabledText = null,
+                enabledDesc = vadMethodSubtitle(),
+                disabledDesc = null,
+                icon = R.drawable.ic_microphone,
+                disabled = false,
+                chatId = chatId,
+                functionDesc = getString(R.string.tile_vad_method_desc)
+            )
+
             tileActivationMessage = TileFragment.newInstance(
                 checked = false,
                 checkable = false,
@@ -1107,6 +1121,37 @@ class SettingsActivity : FragmentActivity() {
         }
     }
 
+    // Voice-activity-detection method picker. Only applies to on-device
+    // Whisper hands-free (the Google path uses the platform recognizer's own
+    // end-of-speech detection). Silero is not in the list yet — it's planned
+    // as a third option once the neural model is bundled.
+    private fun vadMethodSelector() {
+        val methods = arrayOf("webrtc", "energy")
+        val labels = arrayOf(
+            getString(R.string.vad_method_webrtc),
+            getString(R.string.vad_method_energy)
+        )
+        val current = preferences?.getVadMethod() ?: "webrtc"
+        var selected = methods.indexOf(current).coerceAtLeast(0)
+
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.tile_vad_method_title)
+            .setSingleChoiceItems(labels, selected) { _, which -> selected = which }
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                preferences?.setVadMethod(methods[selected])
+                tileVadMethod?.updateSubtitle(vadMethodSubtitle())
+            }
+            .setNegativeButton(android.R.string.cancel) { _, _ -> }
+            .show()
+    }
+
+    private fun vadMethodSubtitle(): String {
+        return when (preferences?.getVadMethod() ?: "webrtc") {
+            "energy" -> getString(R.string.vad_method_energy)
+            else -> getString(R.string.vad_method_webrtc)
+        }
+    }
+
     private fun showVoiceInputEnginePicker() {
         val engines = arrayOf("google", "whisper", "whisper-local")
         val labels = arrayOf(
@@ -1145,6 +1190,7 @@ class SettingsActivity : FragmentActivity() {
             .replace(R.id.tile_always_speak, tileAlwaysSpeak!!)
             .replace(R.id.tile_hands_free, tileHandsFree!!)
             .replace(R.id.tile_hands_free_timing, tileHandsFreeTiming!!)
+            .replace(R.id.tile_vad_method, tileVadMethod!!)
             .replace(R.id.tile_activation_prompt, tileActivationMessage!!)
             .replace(R.id.tile_system_message, tileSystemMessage!!)
             .replace(R.id.tile_auto_language_detection, tileLangDetect!!)
@@ -1293,6 +1339,10 @@ class SettingsActivity : FragmentActivity() {
 
         tileHandsFreeTiming?.setOnTileClickListener {
             showHandsFreeTimingDialog()
+        }
+
+        tileVadMethod?.setOnTileClickListener {
+            vadMethodSelector()
         }
 
         tileActivationMessage?.setOnTileClickListener {
