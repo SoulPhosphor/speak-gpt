@@ -848,18 +848,25 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
      */
     private fun maybeRestartHandsFreeAfterReadback() {
         val handsFree = preferences?.getHandsFreeMode() == true
-        val googleStt = preferences?.getEffectiveAudioModel() == "google"
+        val effModel = preferences?.getEffectiveAudioModel()
+        val sttSupported = effModel == "google" || effModel == "whisper-local"
         val auto = preferences?.autoSend() == true
-        if (handsFree && googleStt && auto && !cancelState && !handsFreeStopped && !isRecording) {
+        if (handsFree && sttSupported && auto && !cancelState && !handsFreeStopped && !isRecording) {
             Handler(Looper.getMainLooper()).post {
                 if (!isFinishing && !isDestroyed) {
-                    isRecording = true
-                    micRecording()
-                    startRecognition(true)
+                    if (effModel == "whisper-local") {
+                        // Re-arm an on-device Whisper turn; the service and
+                        // loop are already running so this is not a fresh turn.
+                        startLocalWhisperHandsFreeTurn(freshTurn = false)
+                    } else {
+                        isRecording = true
+                        micRecording()
+                        startRecognition(true)
+                    }
                 }
             }
         } else if (handsFree) {
-            Log.i("HandsFree", "No restart after readback: googleStt=$googleStt auto=$auto " +
+            Log.i("HandsFree", "No restart after readback: effModel=$effModel auto=$auto " +
                     "cancelState=$cancelState handsFreeStopped=$handsFreeStopped isRecording=$isRecording")
         }
     }
@@ -1813,10 +1820,19 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     }
 
     private fun handleLocalWhisperSpeechRecognition() {
+        val handsFree = preferences?.getHandsFreeMode() == true
+
         if (isRecording) {
-            micIdle()
-            isRecording = false
-            stopLocalWhisper()
+            if (handsFree) {
+                // A tap during a hands-free listening turn ends the whole loop,
+                // matching how a tap ends the Google hands-free conversation.
+                stopHandsFreeLoop()
+                LocalWhisperEngine.get().cancel()
+            } else {
+                micIdle()
+                isRecording = false
+                stopLocalWhisper()
+            }
             return
         }
 
@@ -1834,14 +1850,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             return
         }
 
-        micRecording()
-        isRecording = true
-
         if (ContextCompat.checkSelfPermission(
                 this, Manifest.permission.RECORD_AUDIO
             ) == PackageManager.PERMISSION_GRANTED
         ) {
-            startLocalWhisper()
+            if (handsFree) startLocalWhisperHandsFreeTurn(freshTurn = true)
+            else startLocalWhisper()
         } else {
             permissionResultLauncherV2.launch(
                 Intent(this, MicrophonePermissionActivity::class.java)
@@ -1851,6 +1865,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     }
 
     private fun startLocalWhisper() {
+        micRecording()
+        isRecording = true
         val ok = LocalWhisperEngine.get().startRecording()
         if (!ok) {
             isRecording = false
@@ -1858,12 +1874,68 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             Toast.makeText(this, R.string.local_whisper_capture_failed, Toast.LENGTH_LONG).show()
             return
         }
+        preloadActiveLocalWhisperModel()
+    }
 
-        // Warm the model into RAM while the user is still talking so the
-        // (multi-second, for the mid/large models) load overlaps with
-        // recording instead of stalling on "Loading Whisper" after they tap
-        // stop. preload() is idempotent and serialized internally, so it's a
-        // no-op once the context is resident. Mirrors AssistantFragment.
+    /**
+     * Hands-free Whisper turn. Whisper has no end-of-speech detection, so we
+     * hand the engine a VAD config built from the same silence/no-speech
+     * timers the Google hands-free loop uses, and let it tell us when the turn
+     * is over. End-of-turn transcribes and submits (which reads the reply
+     * aloud and re-arms the next turn); no-speech ends the loop. This makes
+     * on-device Whisper behave like Google hands-free — the only difference
+     * being the local transcription step.
+     */
+    private fun startLocalWhisperHandsFreeTurn(freshTurn: Boolean) {
+        if (freshTurn) {
+            handsFreeStopped = false
+            cancelState = false
+            startHandsFreeService()
+        }
+        if (handsFreeStopped) return
+
+        micRecording()
+        isRecording = true
+
+        val silenceMs = preferences!!.getHandsFreeSilenceSeconds().coerceAtLeast(1) * 1000L
+        val noSpeechMs = preferences!!.getHandsFreeNoSpeechSeconds().coerceAtLeast(1) * 1000L
+        val ok = LocalWhisperEngine.get().startRecording(
+            vad = LocalWhisperEngine.VadConfig(silenceMs, noSpeechMs),
+            onEndOfTurn = { runOnUiThread { onHandsFreeWhisperEndOfTurn() } },
+            onNoSpeechTimeout = { runOnUiThread { onHandsFreeWhisperNoSpeech() } }
+        )
+        if (!ok) {
+            isRecording = false
+            micIdle()
+            stopHandsFreeLoop()
+            Toast.makeText(this, R.string.local_whisper_capture_failed, Toast.LENGTH_LONG).show()
+            return
+        }
+        preloadActiveLocalWhisperModel()
+    }
+
+    /** VAD said the user finished speaking — transcribe + submit this turn. */
+    private fun onHandsFreeWhisperEndOfTurn() {
+        if (!isRecording || handsFreeStopped || cancelState) return
+        isRecording = false
+        // stopLocalWhisper() transcribes the buffered audio and routes through
+        // processLocalWhisperTranscript → generateResponse → speak; the
+        // readback completion re-arms the next turn.
+        stopLocalWhisper()
+    }
+
+    /** VAD saw no speech within the window — end the loop like Google does. */
+    private fun onHandsFreeWhisperNoSpeech() {
+        if (handsFreeStopped) return
+        stopHandsFreeLoop()
+        LocalWhisperEngine.get().cancel()
+    }
+
+    // Warm the model into RAM while the user is still talking so the
+    // (multi-second, for the mid/large models) load overlaps with recording
+    // instead of stalling on "Loading Whisper" after they stop. preload() is
+    // idempotent and serialized internally, so it's a no-op once resident.
+    private fun preloadActiveLocalWhisperModel() {
         val activeModel = preferences?.getActiveLocalWhisperModel().orEmpty()
         if (activeModel.isNotEmpty()) {
             val appCtx = applicationContext
@@ -1930,6 +2002,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             btnSend?.isEnabled = true
             progress?.visibility = View.GONE
             micIdle()
+            // Hands-free: a blank result (background noise tripped the VAD, or
+            // whisper produced nothing) shouldn't end the conversation — just
+            // re-open the mic for another turn.
+            if (preferences?.getHandsFreeMode() == true && !handsFreeStopped && !cancelState) {
+                startLocalWhisperHandsFreeTurn(freshTurn = false)
+            }
             return
         }
         if (preferences?.autoSend() == true) {
