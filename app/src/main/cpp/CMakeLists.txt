@@ -8,6 +8,19 @@ project(phosphorwhisper)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# whisper.cpp/ggml are unusably slow without compiler optimization: an -O0
+# build turns a few-second transcription into *minutes* on real hardware.
+# The catch is that Android Gradle compiles native code for the *debug*
+# APK with CMAKE_BUILD_TYPE=Debug (i.e. -O0), and the `-O3` cppFlags in
+# build.gradle only reach our own JNI wrapper — NOT the ggml/whisper
+# static libraries pulled in below via FetchContent. So on a debug build
+# every transcription ran on unoptimized matmul kernels.
+#
+# Force release-grade optimization for ALL native code in this project
+# (must come before FetchContent_MakeAvailable so the fetched whisper/ggml
+# targets inherit it). NDEBUG also drops ggml's asserts, matching release.
+add_compile_options(-O3 -DNDEBUG)
+
 include(FetchContent)
 
 # Trim whisper.cpp's optional features to the bare minimum needed on

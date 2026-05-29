@@ -73,6 +73,15 @@ class LocalWhisperEngine private constructor() {
     // leak a handle (or double-free on a model swap).
     private val contextMutex = Mutex()
 
+    // Serializes the actual whisper_full call. A whisper_context is NOT
+    // thread-safe: running two transcriptions on the same loaded model at
+    // once corrupts native memory and crashes the process with no Java
+    // exception (the app just vanishes back to the previous app). The UI's
+    // "cancel" only stops the coroutine awaiting the result — the native
+    // call keeps running — so without this lock a user who gives up and
+    // re-records would kick off a second concurrent whisper_full.
+    private val transcribeMutex = Mutex()
+
     private var audioRecord: AudioRecord? = null
     private var captureJob: Job? = null
     @Volatile private var isCapturing: Boolean = false
@@ -215,23 +224,37 @@ class LocalWhisperEngine private constructor() {
         onPhase?.invoke(Phase.TRANSCRIBING)
 
         return withContext(Dispatchers.IO) {
-            try {
-                val audioMs = samples.size * 1000L / SAMPLE_RATE
-                val startedAt = SystemClock.elapsedRealtime()
-                val text = LocalWhisperNative.transcribeNative(handle, samples, SAMPLE_RATE, language)
-                val elapsed = SystemClock.elapsedRealtime() - startedAt
-                Log.i(TAG, "Transcribed ${audioMs}ms of audio in ${elapsed}ms")
-                val trimmed = text.trim()
-                trimmed.ifEmpty { null }
-            } catch (t: Throwable) {
-                Log.w(TAG, "transcribeNative threw", t)
-                null
+            // Ask any still-running transcription to bail. If a previous run
+            // is hung (the model is slow and the user gave up), this lets us
+            // take the lock promptly instead of blocking behind it — and,
+            // critically, guarantees we never run two whisper_full calls on
+            // the same context at once.
+            LocalWhisperNative.signalAbort()
+            transcribeMutex.withLock {
+                // We now own the only transcription. Clear the abort flag so
+                // this run isn't cut short by the signal we just raised.
+                LocalWhisperNative.clearAbort()
+                try {
+                    val audioMs = samples.size * 1000L / SAMPLE_RATE
+                    val startedAt = SystemClock.elapsedRealtime()
+                    val text = LocalWhisperNative.transcribeNative(handle, samples, SAMPLE_RATE, language)
+                    val elapsed = SystemClock.elapsedRealtime() - startedAt
+                    Log.i(TAG, "Transcribed ${audioMs}ms of audio in ${elapsed}ms")
+                    val trimmed = text.trim()
+                    trimmed.ifEmpty { null }
+                } catch (t: Throwable) {
+                    Log.w(TAG, "transcribeNative threw", t)
+                    null
+                }
             }
         }
     }
 
     /** Aborts the current recording (if any) without transcribing. */
     fun cancel() {
+        // Stop a transcription that's already running natively, too — the
+        // coroutine layer can't interrupt it on its own.
+        LocalWhisperNative.signalAbort()
         isCapturing = false
         try { captureJob?.cancel() } catch (_: Throwable) {}
         captureJob = null
@@ -286,11 +309,19 @@ class LocalWhisperEngine private constructor() {
                 // Reuse existing context if the model hasn't changed.
                 if (nativeHandle != 0L && loadedModelId == activeModelId) return@withLock true
 
-                // Swap out the old context if we're switching models.
+                // Swap out the old context if we're switching models. Freeing
+                // a context out from under a running whisper_full is a
+                // use-after-free, so abort any in-flight run and wait for it
+                // to release the transcribe lock before we free. (No deadlock:
+                // transcription only takes transcribeMutex after ensureContext
+                // has already returned and released contextMutex.)
                 if (nativeHandle != 0L) {
-                    try { LocalWhisperNative.releaseContextNative(nativeHandle) } catch (_: Throwable) {}
-                    nativeHandle = 0L
-                    loadedModelId = ""
+                    LocalWhisperNative.signalAbort()
+                    transcribeMutex.withLock {
+                        try { LocalWhisperNative.releaseContextNative(nativeHandle) } catch (_: Throwable) {}
+                        nativeHandle = 0L
+                        loadedModelId = ""
+                    }
                 }
 
                 val model = LocalWhisperModels.byId(activeModelId) ?: return@withLock false
