@@ -55,6 +55,14 @@ object LocalWhisperNative {
         language: String
     ): String
 
+    // Cooperative abort for an in-flight transcribeNative call. whisper_full
+    // polls a callback between decode steps, so signalling here lets a hung
+    // or unwanted transcription stop instead of running to completion on a
+    // background thread (where it could otherwise race the next run on the
+    // same context).
+    @JvmStatic external fun signalAbortNative()
+    @JvmStatic external fun clearAbortNative()
+
     /**
      * Attempts System.loadLibrary once. Subsequent calls are no-ops. Safe
      * to call repeatedly from any thread. Returns true when the library is
@@ -77,6 +85,21 @@ object LocalWhisperNative {
             }
         }
         return loaded
+    }
+
+    /**
+     * Requests that any in-flight [transcribeNative] call abort as soon as
+     * possible. No-op if the library isn't loaded or nothing is running.
+     */
+    fun signalAbort() {
+        if (!loaded) return
+        try { signalAbortNative() } catch (t: Throwable) { Log.w(TAG, "signalAbort failed", t) }
+    }
+
+    /** Clears a pending abort request before starting a fresh transcription. */
+    fun clearAbort() {
+        if (!loaded) return
+        try { clearAbortNative() } catch (t: Throwable) { Log.w(TAG, "clearAbort failed", t) }
     }
 
     /** Convenience wrapper: returns the native ping or null on failure. */

@@ -28,6 +28,7 @@
 
 #include <jni.h>
 #include <android/log.h>
+#include <atomic>
 #include <string>
 #include <vector>
 #include <thread>
@@ -38,6 +39,32 @@
 #define TAG "PhosphorWhisperJNI"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
 #define LOGW(...) __android_log_print(ANDROID_LOG_WARN, TAG, __VA_ARGS__)
+
+// Cooperative abort flag for the in-flight whisper_full run. whisper.cpp
+// can't be interrupted from the outside, but it polls an abort callback
+// between decode steps, so wiring this flag lets the app bail out of a
+// transcription the user has given up on (instead of the native call
+// running to completion in the background — which previously left a
+// stale whisper_full racing the next one on the same context). Only one
+// transcription runs at a time (serialized on the Kotlin side), so a
+// single process-wide flag is sufficient.
+static std::atomic<bool> g_abortRequested{false};
+
+static bool phosphor_whisper_abort_cb(void * /*user_data*/) {
+    return g_abortRequested.load(std::memory_order_relaxed);
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_org_teslasoft_assistant_stt_LocalWhisperNative_signalAbortNative(
+        JNIEnv * /*env*/, jclass /*clazz*/) {
+    g_abortRequested.store(true, std::memory_order_relaxed);
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_org_teslasoft_assistant_stt_LocalWhisperNative_clearAbortNative(
+        JNIEnv * /*env*/, jclass /*clazz*/) {
+    g_abortRequested.store(false, std::memory_order_relaxed);
+}
 
 extern "C" JNIEXPORT jstring JNICALL
 Java_org_teslasoft_assistant_stt_LocalWhisperNative_pingNative(
@@ -113,6 +140,12 @@ Java_org_teslasoft_assistant_stt_LocalWhisperNative_transcribeNative(
     wparams.single_segment   = false;
     wparams.no_context       = true;
     wparams.suppress_blank   = true;
+
+    // Let the user abort a long-running transcription. The flag is cleared
+    // by the caller (under the transcribe lock) immediately before this
+    // call, and set via signalAbortNative() when the run should stop.
+    wparams.abort_callback           = phosphor_whisper_abort_cb;
+    wparams.abort_callback_user_data = nullptr;
 
     // Hold the lang string for the duration of whisper_full — wparams.language
     // is a borrowed pointer into JNI-managed memory.
