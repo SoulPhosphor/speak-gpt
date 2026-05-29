@@ -1190,6 +1190,7 @@ class SettingsActivity : FragmentActivity() {
             .replace(R.id.tile_always_speak, tileAlwaysSpeak!!)
             .replace(R.id.tile_hands_free, tileHandsFree!!)
             .replace(R.id.tile_hands_free_timing, tileHandsFreeTiming!!)
+            .replace(R.id.tile_vad_method, tileVadMethod!!)
             .replace(R.id.tile_activation_prompt, tileActivationMessage!!)
             .replace(R.id.tile_system_message, tileSystemMessage!!)
             .replace(R.id.tile_auto_language_detection, tileLangDetect!!)
@@ -1338,6 +1339,10 @@ class SettingsActivity : FragmentActivity() {
 
         tileHandsFreeTiming?.setOnTileClickListener {
             showHandsFreeTimingDialog()
+        }
+
+        tileVadMethod?.setOnTileClickListener {
+            vadMethodSelector()
         }
 
         tileActivationMessage?.setOnTileClickListener {
