@@ -27,9 +27,12 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.transition.TransitionInflater
+import android.util.TypedValue
+import android.view.Gravity
 import android.view.View
 import android.widget.ImageButton
 import android.widget.LinearLayout
+import android.widget.RadioButton
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
@@ -37,6 +40,7 @@ import android.window.OnBackInvokedDispatcher
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.DrawableCompat
 import androidx.fragment.app.FragmentActivity
@@ -1125,30 +1129,137 @@ class SettingsActivity : FragmentActivity() {
     // Whisper hands-free (the Google path uses the platform recognizer's own
     // end-of-speech detection). Silero is not in the list yet — it's planned
     // as a third option once the neural model is bundled.
+    // A selectable VAD method plus, optionally, an action to open that
+    // method's own options. [openOptions] == null means the method has no
+    // tunables (so no cog is shown). New methods — e.g. Silero — drop in here
+    // with their own options lambda; the picker scales without further wiring.
+    private data class VadMethodEntry(
+        val id: String,
+        val label: String,
+        val openOptions: (() -> Unit)?
+    )
+
+    // Custom picker: a radio per method, plus a settings cog on any method that
+    // has options (mirrors how Android's own input-method picker lets you
+    // configure each entry). A plain single-choice dialog can't host per-row
+    // buttons, so the rows are built by hand.
     private fun vadMethodSelector() {
-        val methods = arrayOf("webrtc", "energy")
-        val labels = arrayOf(
-            getString(R.string.vad_method_webrtc),
-            getString(R.string.vad_method_energy)
+        val entries = listOf(
+            VadMethodEntry("webrtc", getString(R.string.vad_method_webrtc)) { showWebRtcSensitivityDialog() },
+            VadMethodEntry("energy", getString(R.string.vad_method_energy), null)
+            // VadMethodEntry("silero", getString(R.string.vad_method_silero)) { showSileroOptionsDialog() } // TODO
         )
-        val current = preferences?.getVadMethod() ?: "webrtc"
-        var selected = methods.indexOf(current).coerceAtLeast(0)
+
+        val density = resources.displayMetrics.density
+        fun dp(v: Int) = (v * density).toInt()
+
+        var selectedId = preferences?.getVadMethod() ?: "webrtc"
+        val radios = ArrayList<RadioButton>()
+
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(4), dp(8), dp(4))
+        }
+
+        for (entry in entries) {
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                isClickable = true
+                isFocusable = true
+            }
+
+            val radio = RadioButton(this).apply {
+                text = entry.label
+                isChecked = entry.id == selectedId
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                setPadding(dp(8), dp(10), 0, dp(10))
+            }
+            radios.add(radio)
+
+            val select = {
+                selectedId = entry.id
+                for (r in radios) r.isChecked = false
+                radio.isChecked = true
+            }
+            radio.setOnClickListener { select() }
+            row.setOnClickListener { select() }
+            row.addView(radio)
+
+            entry.openOptions?.let { open ->
+                val cog = ImageButton(this).apply {
+                    setImageResource(R.drawable.ic_settings)
+                    contentDescription = getString(R.string.vad_method_options_cd)
+                    layoutParams = LinearLayout.LayoutParams(dp(48), dp(48))
+                    val bg = TypedValue()
+                    if (theme.resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, bg, true)) {
+                        setBackgroundResource(bg.resourceId)
+                    }
+                    val tint = TypedValue()
+                    if (theme.resolveAttribute(android.R.attr.colorControlNormal, tint, true)) {
+                        val color = if (tint.resourceId != 0)
+                            ContextCompat.getColor(this@SettingsActivity, tint.resourceId) else tint.data
+                        imageTintList = ColorStateList.valueOf(color)
+                    }
+                    setOnClickListener { open() }
+                }
+                row.addView(cog)
+            }
+
+            container.addView(row)
+        }
 
         MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
             .setTitle(R.string.tile_vad_method_title)
-            .setSingleChoiceItems(labels, selected) { _, which -> selected = which }
+            .setView(container)
             .setPositiveButton(android.R.string.ok) { _, _ ->
-                preferences?.setVadMethod(methods[selected])
+                preferences?.setVadMethod(selectedId)
                 tileVadMethod?.updateSubtitle(vadMethodSubtitle())
             }
             .setNegativeButton(android.R.string.cancel) { _, _ -> }
             .show()
     }
 
+    // WebRTC aggressiveness, as a user-facing "sensitivity" (inverse of
+    // libfvad's mode: index 0 = mode 0 = most sensitive). Persisted immediately
+    // so the cog works whether or not the method is currently selected.
+    private fun showWebRtcSensitivityDialog() {
+        val labels = arrayOf(
+            getString(R.string.vad_sensitivity_high),        // mode 0
+            getString(R.string.vad_sensitivity_medium_high), // mode 1
+            getString(R.string.vad_sensitivity_medium_low),  // mode 2
+            getString(R.string.vad_sensitivity_low)          // mode 3
+        )
+        var selected = (preferences?.getVadWebRtcMode() ?: 0).coerceIn(0, 3)
+
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.vad_sensitivity_title)
+            .setSingleChoiceItems(labels, selected) { _, which -> selected = which }
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                preferences?.setVadWebRtcMode(selected)
+                tileVadMethod?.updateSubtitle(vadMethodSubtitle())
+            }
+            .setNegativeButton(android.R.string.cancel) { _, _ -> }
+            .show()
+    }
+
+    private fun webRtcSensitivityShortLabel(): String {
+        return when ((preferences?.getVadWebRtcMode() ?: 0).coerceIn(0, 3)) {
+            1 -> getString(R.string.vad_sensitivity_short_medium_high)
+            2 -> getString(R.string.vad_sensitivity_short_medium_low)
+            3 -> getString(R.string.vad_sensitivity_short_low)
+            else -> getString(R.string.vad_sensitivity_short_high)
+        }
+    }
+
     private fun vadMethodSubtitle(): String {
         return when (preferences?.getVadMethod() ?: "webrtc") {
             "energy" -> getString(R.string.vad_method_energy)
-            else -> getString(R.string.vad_method_webrtc)
+            else -> getString(
+                R.string.vad_method_subtitle_webrtc,
+                getString(R.string.vad_method_webrtc),
+                webRtcSensitivityShortLabel()
+            )
         }
     }
 

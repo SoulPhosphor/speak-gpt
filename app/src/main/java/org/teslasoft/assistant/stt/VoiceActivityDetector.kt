@@ -55,20 +55,39 @@ object VadMethods {
     const val WEBRTC = "webrtc"
     const val SILERO = "silero" // reserved; not yet implemented
     const val DEFAULT = WEBRTC
+
+    /**
+     * WebRTC aggressiveness range (libfvad). 0 = "quality" (most sensitive,
+     * hears the most speech), 3 = "very aggressive" (rejects the most noise,
+     * most likely to drop quiet/distant speech). Exposed to the user as a
+     * "detection sensitivity" picker; default 0 because missing the user is
+     * the cardinal sin for a hands-free assistant — the higher modes were
+     * observed clipping normal speech entirely when the mic isn't close/loud
+     * (e.g. talking with a headset on), making the loop time out as if nothing
+     * was said. WebRTC still rejects steady noise (fan/AC) at mode 0 because it
+     * adapts to stationary noise.
+     */
+    const val WEBRTC_MIN_MODE = 0
+    const val WEBRTC_MAX_MODE = 3
+    const val WEBRTC_DEFAULT_MODE = 0
 }
 
 /** Builds the detector for the selected method, falling back to energy. */
 object VadFactory {
     private const val TAG = "VadFactory"
 
-    fun create(method: String, sampleRate: Int): VoiceActivityDetector {
+    fun create(
+        method: String,
+        sampleRate: Int,
+        webRtcMode: Int = VadMethods.WEBRTC_DEFAULT_MODE
+    ): VoiceActivityDetector {
         return when (method) {
             VadMethods.WEBRTC -> {
-                // libfvad mode 2 ("aggressive") is a good balance: rejects
-                // most non-voice without clipping quiet speech. If the native
-                // lib is missing or init fails, transparently use energy so
-                // hands-free still works.
-                WebRtcVad.create(mode = 2, sampleRate = sampleRate) ?: run {
+                // Aggressiveness is user-tunable (see VadMethods.WEBRTC_*). If
+                // the native lib is missing or init fails, transparently use
+                // energy so hands-free still works.
+                val mode = webRtcMode.coerceIn(VadMethods.WEBRTC_MIN_MODE, VadMethods.WEBRTC_MAX_MODE)
+                WebRtcVad.create(mode = mode, sampleRate = sampleRate) ?: run {
                     Log.w(TAG, "WebRTC VAD unavailable, falling back to energy")
                     EnergyVad()
                 }

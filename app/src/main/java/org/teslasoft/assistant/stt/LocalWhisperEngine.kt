@@ -111,11 +111,14 @@ class LocalWhisperEngine private constructor() {
      * they never start. [method] selects which detector answers the per-frame
      * "is this speech?" question (see [VadMethods]); the timer behaviour is
      * identical across methods. Each callback fires at most once per recording.
+     * [webRtcMode] is the WebRTC-only aggressiveness (libfvad 0..3); ignored by
+     * the other detectors.
      */
     data class VadConfig(
         val silenceMs: Long,
         val noSpeechMs: Long,
-        val method: String = VadMethods.DEFAULT
+        val method: String = VadMethods.DEFAULT,
+        val webRtcMode: Int = VadMethods.WEBRTC_DEFAULT_MODE
     )
 
     /** True iff the context for [activeModelId] is already resident in RAM. */
@@ -207,7 +210,7 @@ class LocalWhisperEngine private constructor() {
         // configured timings behave identically no matter which detector is
         // chosen); the detector only answers "is this frame speech?".
         val cfg = vadConfig
-        val detector = cfg?.let { VadFactory.create(it.method, SAMPLE_RATE) }
+        val detector = cfg?.let { VadFactory.create(it.method, SAMPLE_RATE, it.webRtcMode) }
         detector?.reset()
         captureJob = CoroutineScope(Dispatchers.IO).launch {
             val readBuffer = ShortArray(readSize)
