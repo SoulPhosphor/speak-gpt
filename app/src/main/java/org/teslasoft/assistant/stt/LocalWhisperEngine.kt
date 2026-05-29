@@ -105,12 +105,18 @@ class LocalWhisperEngine private constructor() {
     /**
      * Voice-activity-detection config for hands-free capture. Recreates the
      * end-of-speech behaviour the platform SpeechRecognizer gives Google STT
-     * (which whisper.cpp lacks): watch mic energy and fire [onEndOfTurn] once
-     * the user has spoken and then gone quiet for [silenceMs], or
-     * [onNoSpeechTimeout] if they never start within [noSpeechMs]. Each fires
-     * at most once per recording.
+     * (which whisper.cpp lacks): the capture loop owns the [silenceMs] /
+     * [noSpeechMs] timers and fires [onEndOfTurn] once the user has spoken
+     * and then gone quiet for the silence window, or [onNoSpeechTimeout] if
+     * they never start. [method] selects which detector answers the per-frame
+     * "is this speech?" question (see [VadMethods]); the timer behaviour is
+     * identical across methods. Each callback fires at most once per recording.
      */
-    data class VadConfig(val silenceMs: Long, val noSpeechMs: Long)
+    data class VadConfig(
+        val silenceMs: Long,
+        val noSpeechMs: Long,
+        val method: String = VadMethods.DEFAULT
+    )
 
     /** True iff the context for [activeModelId] is already resident in RAM. */
     fun isModelLoaded(activeModelId: String): Boolean =
@@ -196,70 +202,61 @@ class LocalWhisperEngine private constructor() {
 
         isCapturing = true
         val readSize = bufferBytes / 2 // shorts per read
+        // Build the detector once per recording, off the main thread. The
+        // capture loop owns the silence/no-speech timers (so the user's
+        // configured timings behave identically no matter which detector is
+        // chosen); the detector only answers "is this frame speech?".
+        val cfg = vadConfig
+        val detector = cfg?.let { VadFactory.create(it.method, SAMPLE_RATE) }
+        detector?.reset()
         captureJob = CoroutineScope(Dispatchers.IO).launch {
             val readBuffer = ShortArray(readSize)
             val startedAt = SystemClock.elapsedRealtime()
             var speechStarted = false
             var lastVoiceAt = startedAt
-            var noiseFloor = 0.0
-            var floorInit = false
             var vadFired = false
-            while (isActive && isCapturing) {
-                val read = try {
-                    record.read(readBuffer, 0, readBuffer.size)
-                } catch (t: Throwable) {
-                    Log.w(TAG, "AudioRecord.read threw", t)
-                    break
-                }
-                if (read > 0) {
-                    val copy = readBuffer.copyOf(read)
-                    synchronized(chunkLock) {
-                        capturedChunks.add(copy)
-                        capturedCount += read
+            try {
+                while (isActive && isCapturing) {
+                    val read = try {
+                        record.read(readBuffer, 0, readBuffer.size)
+                    } catch (t: Throwable) {
+                        Log.w(TAG, "AudioRecord.read threw", t)
+                        break
                     }
+                    if (read > 0) {
+                        val copy = readBuffer.copyOf(read)
+                        synchronized(chunkLock) {
+                            capturedChunks.add(copy)
+                            capturedCount += read
+                        }
 
-                    // Hands-free turn detection. Whisper has no end-of-speech
-                    // signal, so we derive one from frame energy: once the user
-                    // has spoken and then stayed below the speech threshold for
-                    // the silence window, fire end-of-turn; if they never start
-                    // within the no-speech window, fire that instead. Fires once.
-                    val cfg = vadConfig
-                    if (cfg != null && !vadFired) {
-                        val rms = rmsOf(readBuffer, read)
-                        if (!floorInit) { noiseFloor = rms; floorInit = true }
-                        val speechThreshold = maxOf(noiseFloor * SPEECH_FLOOR_FACTOR, MIN_SPEECH_RMS)
-                        val now = SystemClock.elapsedRealtime()
-                        if (rms >= speechThreshold) {
-                            speechStarted = true
-                            lastVoiceAt = now
-                        } else {
-                            // Track the ambient floor on quiet frames so the
-                            // threshold adapts to the room over a few hundred ms.
-                            noiseFloor = noiseFloor * 0.97 + rms * 0.03
-                        }
-                        if (speechStarted && now - lastVoiceAt >= cfg.silenceMs) {
-                            vadFired = true
-                            onVadEndOfTurn?.invoke()
-                        } else if (!speechStarted && now - startedAt >= cfg.noSpeechMs) {
-                            vadFired = true
-                            onVadNoSpeech?.invoke()
+                        // Hands-free turn detection. Whisper has no end-of-speech
+                        // signal, so we derive one: once the user has spoken and
+                        // then stayed silent for the silence window, fire
+                        // end-of-turn; if they never start within the no-speech
+                        // window, fire that instead. Each fires once.
+                        if (detector != null && !vadFired) {
+                            val isSpeech = detector.accept(readBuffer, read)
+                            val now = SystemClock.elapsedRealtime()
+                            if (isSpeech) {
+                                speechStarted = true
+                                lastVoiceAt = now
+                            }
+                            if (speechStarted && now - lastVoiceAt >= cfg.silenceMs) {
+                                vadFired = true
+                                onVadEndOfTurn?.invoke()
+                            } else if (!speechStarted && now - startedAt >= cfg.noSpeechMs) {
+                                vadFired = true
+                                onVadNoSpeech?.invoke()
+                            }
                         }
                     }
                 }
+            } finally {
+                detector?.close()
             }
         }
         return true
-    }
-
-    /** Root-mean-square energy of the first [len] samples in [buf]. */
-    private fun rmsOf(buf: ShortArray, len: Int): Double {
-        if (len <= 0) return 0.0
-        var sum = 0.0
-        for (i in 0 until len) {
-            val s = buf[i].toDouble()
-            sum += s * s
-        }
-        return kotlin.math.sqrt(sum / len)
     }
 
     /** Coarse phases reported to the UI so the user knows what they're waiting on. */

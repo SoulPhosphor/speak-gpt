@@ -943,6 +943,25 @@ class Preferences private constructor(private var preferences: SharedPreferences
     }
 
     /**
+     * Voice-activity-detection method used to decide when a hands-free turn
+     * has ended when on-device Whisper is the STT engine. One of the ids in
+     * [org.teslasoft.assistant.stt.VadMethods] ("energy", "webrtc", ...).
+     * Defaults to WebRTC.
+     *
+     * @return VAD method id
+     * */
+    fun getVadMethod() : String {
+        return getGlobalString("vad_method", "webrtc")
+    }
+
+    /**
+     * Set the hands-free voice-activity-detection method.
+     * */
+    fun setVadMethod(method: String) {
+        putGlobalString("vad_method", method, "webrtc")
+    }
+
+    /**
      * Retrieves the encrypted API key from the shared preferences.
      *
      * @param context The context to access the encrypted shared preferences.
