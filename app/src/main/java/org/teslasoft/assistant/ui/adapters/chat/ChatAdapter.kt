@@ -198,6 +198,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         private val btnRetry: ImageButton = itemView.findViewById(R.id.btn_retry)
         private val btnReport: ImageButton = itemView.findViewById(R.id.btn_report)
         private val btnShare: ImageButton = itemView.findViewById(R.id.btn_share)
+        private val btnSpeak: ImageButton = itemView.findViewById(R.id.btn_speak)
 
         @SuppressLint("SetTextI18n", "SetJavaScriptEnabled")
         open fun bind(chatMessage: HashMap<String, Any>, position: Int) {
@@ -206,6 +207,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             updateRetryButton(chatMessage, position)
             updateReportButton(chatMessage)
             updateShareButton(chatMessage)
+            updateSpeakButton(chatMessage)
 
             if (selectorProjection[position]["selected"].toString() == "true") {
                 ui.setBackgroundColor(getSurface3Color(context))
@@ -328,6 +330,22 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 btnShare.visibility = View.VISIBLE
             } else {
                 btnShare.visibility = View.GONE
+            }
+        }
+
+        private fun updateSpeakButton(chatMessage: HashMap<String, Any>) {
+            // Re-read only makes sense for assistant text replies. Hide it for
+            // user messages and for image/file messages (nothing to speak).
+            val msg = chatMessage["message"].toString()
+            val speakable = chatMessage["isBot"] == true &&
+                    !msg.contains("data:image") && !msg.contains("~file:")
+            if (speakable) {
+                btnSpeak.visibility = View.VISIBLE
+                btnSpeak.setOnClickListener {
+                    if (!bulkActionMode) listener?.onSpeakClick(msg)
+                }
+            } else {
+                btnSpeak.visibility = View.GONE
             }
         }
 
@@ -692,5 +710,6 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         fun onMessageDeleted()
         fun onBulkSelectionChanged(position: Int, selected: Boolean)
         fun onChangeBulkActionMode(mode: Boolean)
+        fun onSpeakClick(message: String)
     }
 }

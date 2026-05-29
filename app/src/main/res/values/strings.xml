@@ -402,8 +402,10 @@
     <string name="btn_uninstall">Uninstall</string>
     <string name="hint_loading_whisper">Loading Whisper…</string>
     <string name="hint_transcribing">Transcribing…</string>
+    <string name="hint_listening">Listening…</string>
+    <string name="btn_msg_speak">Read aloud</string>
     <string name="about_build_label">Build</string>
-    <string name="about_build_note">Whisper optimizations + model management</string>
+    <string name="about_build_note">STT status hint, mic listening/stop states, per-message read-aloud</string>
     <string name="local_whisper_meta_installed_fmt">%1$d MB · Installed</string>
     <string name="local_whisper_meta_active_fmt">%1$d MB · Active</string>
     <string name="local_whisper_meta_not_installed_fmt">%1$d MB · Not downloaded</string>

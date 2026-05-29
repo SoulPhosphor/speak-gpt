@@ -64,6 +64,7 @@
     <color name="green">#FF00FF00</color>
     <color name="light_red">#E83A3A</color>
     <color name="light_green">#AADC79</color>
+    <color name="mic_listening_green">#4CBB17</color>
     <color name="tip1">#333b2f</color>
     <color name="tip">#201C5500</color>
     <color name="light_blue">#9592E4</color>

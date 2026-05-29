@@ -328,8 +328,39 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             btnMicro?.isEnabled = true
             btnSend?.isEnabled = true
             isRecording = false
-            btnMicro?.setImageResource(R.drawable.ic_microphone)
+            micIdle()
             cancelState = false
+        }
+    }
+
+    // ---- Mic button visual states ------------------------------------------
+    // The mic button doubles as a status light. Idle = plain mic (no tint);
+    // listening = kelly-green stop icon + "Listening…" hint; hands-free stop =
+    // red ✕ so the user can end the loop even while the reply is being read
+    // back (the existing touch listener turns that tap into a full cancel).
+    // These wrap the raw setImageResource() calls so a single helper owns both
+    // the icon and the tint/hint; the apply{} form keeps the literal
+    // setImageResource strings out of here so the bulk swap below is safe.
+    private fun micIdle() {
+        btnMicro?.apply {
+            setImageResource(R.drawable.ic_microphone)
+            clearColorFilter()
+        }
+        messageInput?.hint = getString(R.string.hint_message)
+    }
+
+    private fun micRecording() {
+        btnMicro?.apply {
+            setImageResource(R.drawable.ic_stop_recording)
+            setColorFilter(ResourcesCompat.getColor(resources, R.color.mic_listening_green, theme))
+        }
+        messageInput?.hint = getString(R.string.hint_listening)
+    }
+
+    private fun micHandsFreeStop() {
+        btnMicro?.apply {
+            setImageResource(R.drawable.ic_close)
+            setColorFilter(ResourcesCompat.getColor(resources, R.color.light_red, theme))
         }
     }
 
@@ -406,7 +437,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             // In hands-free mode the loop manages the recording state itself.
             if (preferences?.getHandsFreeMode() == true && !handsFreeStopped) return
             isRecording = false
-            btnMicro?.setImageResource(R.drawable.ic_microphone)
+            micIdle()
         }
 
         override fun onError(error: Int) {
@@ -426,7 +457,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 return
             }
             isRecording = false
-            btnMicro?.setImageResource(R.drawable.ic_microphone)
+            micIdle()
         }
 
         override fun onResults(results: Bundle?) {
@@ -437,7 +468,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 btnSend?.isEnabled = true
                 progress?.visibility = View.GONE
                 isRecording = false
-                btnMicro?.setImageResource(R.drawable.ic_microphone)
+                micIdle()
                 return
             }
 
@@ -465,7 +496,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             }
 
             isRecording = false
-            btnMicro?.setImageResource(R.drawable.ic_microphone)
+            micIdle()
             if (recognizedText.isNotEmpty()) submitRecognizedText(recognizedText)
         }
     }
@@ -480,7 +511,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             if (text.isEmpty()) return@Runnable
             try { recognizer?.cancel() } catch (_: Exception) { /* ignore */ }
             isRecording = false
-            btnMicro?.setImageResource(R.drawable.ic_microphone)
+            micIdle()
             submitRecognizedText(text)
         }
         handsFreeSubmitRunnable = runnable
@@ -821,7 +852,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             Handler(Looper.getMainLooper()).post {
                 if (!isFinishing && !isDestroyed) {
                     isRecording = true
-                    btnMicro?.setImageResource(R.drawable.ic_stop_recording)
+                    micRecording()
                     startRecognition(true)
                 }
             }
@@ -1101,7 +1132,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
         progress?.visibility = View.GONE
 
-        btnMicro?.setImageResource(R.drawable.ic_microphone)
+        micIdle()
         btnSettings?.setImageResource(R.drawable.ic_settings)
 
         btnSelectAll?.setOnClickListener {
@@ -1605,7 +1636,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     try {
                         prepare()
                     } catch (_: IOException) {
-                        btnMicro?.setImageResource(R.drawable.ic_microphone)
+                        micIdle()
                         isRecording = false
                         MaterialAlertDialogBuilder(
                             this@ChatActivity,
@@ -1620,7 +1651,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     start()
                 } else {
                     cancelState = false
-                    btnMicro?.setImageResource(R.drawable.ic_microphone)
+                    micIdle()
                     isRecording = false
                 }
             }
@@ -1638,7 +1669,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     try {
                         prepare()
                     } catch (_: IOException) {
-                        btnMicro?.setImageResource(R.drawable.ic_microphone)
+                        micIdle()
                         isRecording = false
                         MaterialAlertDialogBuilder(
                             this@ChatActivity,
@@ -1653,7 +1684,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     start()
                 } else {
                     cancelState = false
-                    btnMicro?.setImageResource(R.drawable.ic_microphone)
+                    micIdle()
                     isRecording = false
                 }
             }
@@ -1688,7 +1719,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             }
         } else {
             cancelState = false
-            btnMicro?.setImageResource(R.drawable.ic_microphone)
+            micIdle()
             isRecording = false
         }
     }
@@ -1709,7 +1740,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 btnMicro?.isEnabled = true
                 btnSend?.isEnabled = true
                 progress?.visibility = View.GONE
-                btnMicro?.setImageResource(R.drawable.ic_microphone)
+                micIdle()
             } else {
                 if (preferences?.autoSend() == true) {
                     putMessage(prefix + transcription + endSeparator, false)
@@ -1756,11 +1787,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
     private fun handleWhisperSpeechRecognition() {
         if (isRecording) {
-            btnMicro?.setImageResource(R.drawable.ic_microphone)
+            micIdle()
             isRecording = false
             stopWhisper()
         } else {
-            btnMicro?.setImageResource(R.drawable.ic_stop_recording)
+            micRecording()
             isRecording = true
 
             if (ContextCompat.checkSelfPermission(
@@ -1781,7 +1812,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
     private fun handleLocalWhisperSpeechRecognition() {
         if (isRecording) {
-            btnMicro?.setImageResource(R.drawable.ic_microphone)
+            micIdle()
             isRecording = false
             stopLocalWhisper()
             return
@@ -1801,7 +1832,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             return
         }
 
-        btnMicro?.setImageResource(R.drawable.ic_stop_recording)
+        micRecording()
         isRecording = true
 
         if (ContextCompat.checkSelfPermission(
@@ -1821,7 +1852,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         val ok = LocalWhisperEngine.get().startRecording()
         if (!ok) {
             isRecording = false
-            btnMicro?.setImageResource(R.drawable.ic_microphone)
+            micIdle()
             Toast.makeText(this, R.string.local_whisper_capture_failed, Toast.LENGTH_LONG).show()
         }
     }
@@ -1834,7 +1865,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         if (cancelState) {
             cancelState = false
             LocalWhisperEngine.get().cancel()
-            btnMicro?.setImageResource(R.drawable.ic_microphone)
+            micIdle()
             isRecording = false
             restoreUIState()
             return
@@ -1851,7 +1882,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             try {
                 val activeModel = preferences?.getActiveLocalWhisperModel().orEmpty()
                 val transcription = LocalWhisperEngine.get()
-                    .stopAndTranscribe(this@ChatActivity, activeModel)
+                    .stopAndTranscribe(this@ChatActivity, activeModel) { phase ->
+                        // Surface progress in the input hint so the user can see
+                        // whether they're waiting on the model load or the actual
+                        // transcription (key for diagnosing the larger models).
+                        messageInput?.hint = when (phase) {
+                            LocalWhisperEngine.Phase.LOADING_MODEL -> getString(R.string.hint_loading_whisper)
+                            LocalWhisperEngine.Phase.TRANSCRIBING -> getString(R.string.hint_transcribing)
+                        }
+                    }
                 processLocalWhisperTranscript(transcription)
             } catch (_: CancellationException) {
                 restoreUIState()
@@ -1866,12 +1905,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         // Mirrors the downstream half of processRecording(): if auto-send
         // is on, push the transcript as a user turn and kick generation;
         // otherwise drop it into the message input box.
+        // Transcription phase is over either way — drop the status hint.
+        messageInput?.hint = getString(R.string.hint_message)
         if (transcription.isNullOrBlank()) {
             isRecording = false
             btnMicro?.isEnabled = true
             btnSend?.isEnabled = true
             progress?.visibility = View.GONE
-            btnMicro?.setImageResource(R.drawable.ic_microphone)
+            micIdle()
             return
         }
         if (preferences?.autoSend() == true) {
@@ -1915,7 +1956,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 }
                 tts!!.stop()
             } catch (_: java.lang.Exception) {/* unused */}
-            btnMicro?.setImageResource(R.drawable.ic_microphone)
+            micIdle()
             recognizer?.stopListening()
             isRecording = false
         } else {
@@ -1926,7 +1967,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 }
                 tts!!.stop()
             } catch (_: java.lang.Exception) {/* unused */}
-            btnMicro?.setImageResource(R.drawable.ic_stop_recording)
+            micRecording()
             if (ContextCompat.checkSelfPermission(
                     this, Manifest.permission.RECORD_AUDIO
                 ) == PackageManager.PERMISSION_GRANTED
@@ -2246,7 +2287,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         handsFreeBuffer = ""
         try { recognizer?.stopListening() } catch (_: Exception) { /* ignore */ }
         isRecording = false
-        btnMicro?.setImageResource(R.drawable.ic_microphone)
+        micIdle()
         stopHandsFreeService()
     }
 
@@ -2278,7 +2319,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         try { recognizer?.stopListening() } catch (_: Exception) { /* ignore */ }
         try { speakScope?.coroutineContext?.cancel(CancellationException("Cancelled by user")) } catch (_: Exception) { /* ignore */ }
         isRecording = false
-        btnMicro?.setImageResource(R.drawable.ic_microphone)
+        micIdle()
         stopHandsFreeService()
     }
 
@@ -2921,6 +2962,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     }
 
     private fun pronounce(st: Boolean, message: String) {
+        // In hands-free mode the reply is about to be read back; show a red ✕
+        // on the mic so the user can end the loop mid-readback. A tap is turned
+        // into a full cancel by btnMicro's touch listener (works while busy).
+        if (preferences?.getHandsFreeMode() == true) runOnUiThread { micHandsFreeStop() }
         if ((st && !silenceMode) || preferences!!.getNotSilence()) {
             if (autoLangDetect) {
                 try {
@@ -3315,6 +3360,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         if (chatMessages.isNotEmpty() && chatMessages.size - 1 > 0 && chatMessages[chatMessages.size - 1].role == Role.Assistant) {
             chatMessages.removeAt(chatMessages.size - 1)
         }
+    }
+
+    override fun onSpeakClick(message: String) {
+        // Manual re-read of a single message via the existing TTS path. Stop any
+        // current playback first so taps don't pile up.
+        try { tts?.stop() } catch (_: Exception) { /* ignore */ }
+        try { if (mediaPlayer?.isPlaying == true) { mediaPlayer?.stop(); mediaPlayer?.reset() } } catch (_: Exception) { /* ignore */ }
+        speak(message)
     }
 
     override fun onRetryClick() {

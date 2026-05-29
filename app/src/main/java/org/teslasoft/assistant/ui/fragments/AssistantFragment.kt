@@ -3002,6 +3002,14 @@ class AssistantFragment : BottomSheetDialogFragment(), ChatAdapter.OnUpdateListe
         }
     }
 
+    override fun onSpeakClick(message: String) {
+        // Manual re-read of a single message via the existing TTS path. Stop any
+        // current playback first so taps don't pile up.
+        try { tts?.stop() } catch (_: Exception) { /* ignore */ }
+        try { if (mediaPlayer?.isPlaying == true) { mediaPlayer?.stop(); mediaPlayer?.reset() } } catch (_: Exception) { /* ignore */ }
+        speak(message)
+    }
+
     override fun onRetryClick() {
         removeLastAssistantMessageIfAvailable()
         saveSettings()
