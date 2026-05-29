@@ -64,11 +64,17 @@ object VadFactory {
     fun create(method: String, sampleRate: Int): VoiceActivityDetector {
         return when (method) {
             VadMethods.WEBRTC -> {
-                // libfvad mode 2 ("aggressive") is a good balance: rejects
-                // most non-voice without clipping quiet speech. If the native
-                // lib is missing or init fails, transparently use energy so
-                // hands-free still works.
-                WebRtcVad.create(mode = 2, sampleRate = sampleRate) ?: run {
+                // libfvad mode 0 ("quality") is the least-aggressive setting:
+                // it still rejects steady non-voice (a fan, AC hum — WebRTC
+                // adapts to stationary noise), but is the mode least likely to
+                // drop real speech. The higher "aggressive" modes (2/3) were
+                // observed clipping normal speech entirely when the mic isn't
+                // close/loud (e.g. talking with a headset on), which made the
+                // hands-free loop time out as if nothing was said. Missing the
+                // user is the cardinal sin here, so we err toward sensitivity.
+                // If the native lib is missing or init fails, transparently use
+                // energy so hands-free still works.
+                WebRtcVad.create(mode = 0, sampleRate = sampleRate) ?: run {
                     Log.w(TAG, "WebRTC VAD unavailable, falling back to energy")
                     EnergyVad()
                 }
