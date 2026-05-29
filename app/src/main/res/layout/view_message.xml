@@ -51,6 +51,19 @@
         app:layout_constraintTop_toTopOf="@+id/btn_edit"
         app:srcCompat="@drawable/ic_share" />
 
+    <ImageButton
+        android:id="@+id/btn_speak"
+        android:layout_width="36dp"
+        android:layout_height="36dp"
+        android:background="@color/transparent"
+        android:contentDescription="@string/btn_msg_speak"
+        android:descendantFocusability="blocksDescendants"
+        android:src="@drawable/ic_volume_up"
+        android:tooltipText="@string/btn_msg_speak"
+        app:layout_constraintEnd_toStartOf="@+id/btn_share"
+        app:layout_constraintTop_toTopOf="@+id/btn_edit"
+        app:srcCompat="@drawable/ic_volume_up" />
+
     <TextView
         android:id="@+id/username"
         android:layout_width="0dp"
