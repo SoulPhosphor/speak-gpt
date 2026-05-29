@@ -301,6 +301,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
     private var onSpeechResultsScope: CoroutineScope? = null
     private var whisperScope: CoroutineScope? = null
+    private var whisperPreloadScope: CoroutineScope? = null
     private var processRecordingScope: CoroutineScope? = null
     private var setupScope: CoroutineScope? = null
     private var imageRequestScope: CoroutineScope? = null
@@ -310,6 +311,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     private fun killAllProcesses() {
         onSpeechResultsScope?.coroutineContext?.cancel(CancellationException("Killed"))
         whisperScope?.coroutineContext?.cancel(CancellationException("Killed"))
+        whisperPreloadScope?.coroutineContext?.cancel(CancellationException("Killed"))
         processRecordingScope?.coroutineContext?.cancel(CancellationException("Killed"))
         setupScope?.coroutineContext?.cancel(CancellationException("Killed"))
         imageRequestScope?.coroutineContext?.cancel(CancellationException("Killed"))
@@ -1854,6 +1856,21 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             isRecording = false
             micIdle()
             Toast.makeText(this, R.string.local_whisper_capture_failed, Toast.LENGTH_LONG).show()
+            return
+        }
+
+        // Warm the model into RAM while the user is still talking so the
+        // (multi-second, for the mid/large models) load overlaps with
+        // recording instead of stalling on "Loading Whisper" after they tap
+        // stop. preload() is idempotent and serialized internally, so it's a
+        // no-op once the context is resident. Mirrors AssistantFragment.
+        val activeModel = preferences?.getActiveLocalWhisperModel().orEmpty()
+        if (activeModel.isNotEmpty()) {
+            val appCtx = applicationContext
+            whisperPreloadScope = CoroutineScope(Dispatchers.IO)
+            whisperPreloadScope?.launch {
+                try { LocalWhisperEngine.get().preload(appCtx, activeModel) } catch (_: Exception) { /* ignore */ }
+            }
         }
     }
 
