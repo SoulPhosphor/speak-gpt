@@ -2846,7 +2846,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     /**
      * Plays a short descending three-note tone when a response fails, so the user
      * knows a reply isn't coming even when they aren't looking at the screen.
-     * Routed through the notification stream, so it respects silent mode / Do Not Disturb.
+     * Routed through the alarm stream so it is still audible when the phone's
+     * ringer is set to silent / vibrate (alarms bypass ringer-silent, the same way
+     * an alarm clock still sounds on a muted phone).
      */
     private fun playErrorSignal() {
         if (preferences?.getErrorSound() != true) return
@@ -2881,7 +2883,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 }
 
                 val attributes = AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_NOTIFICATION_EVENT)
+                    .setUsage(AudioAttributes.USAGE_ALARM)
                     .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                     .build()
                 val format = AudioFormat.Builder()
