@@ -37,6 +37,10 @@ import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
+import android.media.AudioAttributes
+import android.media.AudioFormat
+import android.media.AudioManager
+import android.media.AudioTrack
 import android.media.MediaPlayer
 import android.media.MediaRecorder
 import android.net.Uri
@@ -2772,6 +2776,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 restoreUIState()
             }
         } catch (e: Exception) {
+            playErrorSignal()
             val response = when {
                 e.stackTraceToString().contains("invalid model") -> {
                     getString(R.string.prompt_no_model_provided)
@@ -2836,6 +2841,73 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 restoreUIState()
             }
         }
+    }
+
+    /**
+     * Plays a short descending three-note tone when a response fails, so the user
+     * knows a reply isn't coming even when they aren't looking at the screen.
+     * Routed through the notification stream, so it respects silent mode / Do Not Disturb.
+     */
+    private fun playErrorSignal() {
+        if (preferences?.getErrorSound() != true) return
+
+        Thread {
+            var track: AudioTrack? = null
+            try {
+                val sampleRate = 44100
+                // A4 -> F4 -> D4: a descending, "disappointed" cadence.
+                val notes = floatArrayOf(440.0f, 349.23f, 293.66f)
+                val noteMs = 200
+                val gapMs = 45
+                val samplesPerNote = sampleRate * noteMs / 1000
+                val samplesPerGap = sampleRate * gapMs / 1000
+                val totalSamples = (samplesPerNote + samplesPerGap) * notes.size
+                val buffer = ShortArray(totalSamples)
+
+                var idx = 0
+                for (freq in notes) {
+                    for (i in 0 until samplesPerNote) {
+                        val t = i.toDouble() / sampleRate
+                        // Linear fade in/out to avoid clicks at note boundaries.
+                        val envelope = when {
+                            i < samplesPerNote * 0.1 -> i / (samplesPerNote * 0.1)
+                            i > samplesPerNote * 0.8 -> (samplesPerNote - i) / (samplesPerNote * 0.2)
+                            else -> 1.0
+                        }
+                        val sample = Math.sin(2.0 * Math.PI * freq * t) * envelope * 0.5 * Short.MAX_VALUE
+                        buffer[idx++] = sample.toInt().toShort()
+                    }
+                    idx += samplesPerGap // leave silence (buffer is zero-initialized)
+                }
+
+                val attributes = AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_NOTIFICATION_EVENT)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build()
+                val format = AudioFormat.Builder()
+                    .setSampleRate(sampleRate)
+                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                    .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                    .build()
+
+                track = AudioTrack(
+                    attributes,
+                    format,
+                    totalSamples * 2,
+                    AudioTrack.MODE_STATIC,
+                    AudioManager.AUDIO_SESSION_ID_GENERATE
+                )
+                track.write(buffer, 0, totalSamples)
+                track.play()
+
+                Thread.sleep(((noteMs + gapMs) * notes.size + 150).toLong())
+                track.stop()
+            } catch (_: Exception) {
+                // Never let the alert sound interfere with surfacing the actual error.
+            } finally {
+                try { track?.release() } catch (_: Exception) { /* ignore */ }
+            }
+        }.start()
     }
 
     private val availableFunctions = mapOf("generateImage" to ::generateImage, "searchAtInternet" to ::searchAtInternet)
@@ -3398,6 +3470,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 restoreUIState()
             }
         } catch (e: Exception) {
+            playErrorSignal()
             if (preferences?.showChatErrors() == true) {
                 putMessage(
                     when {

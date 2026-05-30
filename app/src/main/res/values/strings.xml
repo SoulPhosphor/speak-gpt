@@ -501,6 +501,8 @@
     <string name="tile_autosave_desc">This feature allows you to enable auto-save chats in assistant window. When auto-save chats is enabled, SpeakGPT will save all chats to the device storage.</string>
     <string name="tile_show_chat_errors_title">Show chat errors</string>
     <string name="tile_show_chat_errors_desc">This feature allows you to enable chat errors. When chat errors is enabled, SpeakGPT will show errors in chat of occurred.</string>
+    <string name="tile_error_sound_title">Error sound</string>
+    <string name="tile_error_sound_desc">Play a short descending tone when a response fails (for example when the model is overloaded or the connection drops), so you know a reply is not coming even when you are not looking at the screen.</string>
     <string name="on">On</string>
     <string name="off">Off</string>
     <string name="tile_about_app_subtitle">About SpeakGPT</string>

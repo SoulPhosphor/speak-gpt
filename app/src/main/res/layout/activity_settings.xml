@@ -936,13 +936,11 @@
                         android:layout_weight="1" />
 
                     <androidx.constraintlayout.widget.ConstraintLayout
-                        android:id="@+id/tile_empty_8"
+                        android:id="@+id/tile_error_sound"
                         android:layout_width="0dp"
                         android:layout_height="match_parent"
                         android:layout_marginHorizontal="4dp"
-                        android:layout_weight="1">
-
-                    </androidx.constraintlayout.widget.ConstraintLayout>
+                        android:layout_weight="1" />
 
                 </LinearLayout>
 

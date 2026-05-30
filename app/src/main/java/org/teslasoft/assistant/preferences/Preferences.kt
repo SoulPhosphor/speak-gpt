@@ -161,6 +161,25 @@ class Preferences private constructor(private var preferences: SharedPreferences
     }
 
     /**
+     * Whether to play an audible alert when a response fails (e.g. the model is
+     * overloaded or the connection drops), so the user knows a reply isn't coming.
+     *
+     * @return whether the error sound is enabled
+     * */
+    fun getErrorSound() : Boolean {
+        return getGlobalBoolean("error_sound", true)
+    }
+
+    /**
+     * Enable or disable the audible alert played when a response fails.
+     *
+     * @param state whether the error sound is enabled
+     * */
+    fun setErrorSound(state: Boolean) {
+        putGlobalBoolean("error_sound", state, true)
+    }
+
+    /**
      * Retrieves the model name from the shared preferences.
      *
      * @return The model name or "gpt-4o" if not found. GPT4-o is now much more capable than gpt 3.5 and 15x cheaper.
