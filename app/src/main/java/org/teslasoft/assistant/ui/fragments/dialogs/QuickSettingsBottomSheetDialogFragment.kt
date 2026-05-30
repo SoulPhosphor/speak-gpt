@@ -41,10 +41,12 @@ import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
 import org.teslasoft.assistant.preferences.LogitBiasConfigPreferences
+import org.teslasoft.assistant.preferences.PersonaPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.ui.activities.ApiEndpointsListActivity
 import org.teslasoft.assistant.ui.activities.LogitBiasConfigListActivity
+import org.teslasoft.assistant.ui.activities.PersonasListActivity
 import org.teslasoft.core.api.network.RequestNetwork
 
 class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
@@ -68,6 +70,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     private var btnSelectSystemMessage: ConstraintLayout? = null
     private var btnSelectLogitBias: ConstraintLayout? = null
     private var btnSelectApiEndpoint: ConstraintLayout? = null
+    private var btnSelectPersona: ConstraintLayout? = null
     private var bgTemperature: ConstraintLayout? = null
     private var bgTopP: ConstraintLayout? = null
     private var bgFrequencyPenalty: ConstraintLayout? = null
@@ -76,6 +79,9 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     private var apiEndpoint: ApiEndpointObject? = null
 
     private var logitBiasConfigPreferences: LogitBiasConfigPreferences? = null
+
+    private var personaPreferences: PersonaPreferences? = null
+    private var textPersona: TextView? = null
 
     private var temperatureSeekbar: com.google.android.material.slider.Slider? = null
     private var topPSeekbar: com.google.android.material.slider.Slider? = null
@@ -184,6 +190,28 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         }
     }
 
+    private var personaActivityResultLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val data: Intent? = result.data
+            val personaId = data?.getStringExtra("personaId")
+
+            if (personaId != null) {
+                preferences?.setPersonaId(personaId)
+                updatePersonaLabel(personaId)
+                shouldForceUpdate = true
+            }
+        }
+    }
+
+    private fun updatePersonaLabel(personaId: String) {
+        textPersona?.text = if (personaId != "") {
+            val label = personaPreferences?.getPersona(personaId)?.label ?: ""
+            if (label != "") label else getString(R.string.label_tap_to_set)
+        } else {
+            getString(R.string.label_tap_to_set)
+        }
+    }
+
     private var systemChangedListener: SystemMessageDialogFragment.StateChangesListener =
         SystemMessageDialogFragment.StateChangesListener { prompt ->
             preferences?.setSystemMessage(prompt)
@@ -289,11 +317,14 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         apiEndpoint = apiEndpointPreferences?.getApiEndpoint(requireContext(), preferences?.getApiEndpointId()!!)
         logitBiasConfigPreferences = LogitBiasConfigPreferences.getLogitBiasConfigPreferences(requireContext())
         favoriteModelsPreferences = FavoriteModelsPreferences.getPreferences(requireContext())
+        personaPreferences = PersonaPreferences.getPersonaPreferences(requireContext())
 
         btnSelectModel = view.findViewById(R.id.btn_select_model)
         btnSelectSystemMessage = view.findViewById(R.id.btn_select_system)
         btnSelectLogitBias = view.findViewById(R.id.btn_set_logit_biases)
         btnSelectApiEndpoint = view.findViewById(R.id.btn_select_api_endpoint)
+        btnSelectPersona = view.findViewById(R.id.btn_select_persona)
+        textPersona = view.findViewById(R.id.text_persona)
         bgTemperature = view.findViewById(R.id.bg_temperature)
         bgTopP = view.findViewById(R.id.bg_top_p)
         bgFrequencyPenalty = view.findViewById(R.id.bg_frequency_penalty)
@@ -315,6 +346,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         btnSelectSystemMessage?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(activity ?: return))
         btnSelectLogitBias?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(activity ?: return))
         btnSelectApiEndpoint?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(activity ?: return))
+        btnSelectPersona?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(activity ?: return))
         bgTemperature?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(activity ?: return))
         bgTopP?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(activity ?: return))
         bgFrequencyPenalty?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(activity ?: return))
@@ -326,6 +358,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         btnCostInfo = view.findViewById(R.id.btn_cost_info)
 
         textHost?.text = if (apiEndpoint?.label != "") apiEndpoint?.label ?: getString(R.string.label_tap_to_set) else getString(R.string.label_tap_to_set)
+        updatePersonaLabel(preferences?.getPersonaId() ?: "")
         textLogitBiasesConfig?.text = if (preferences?.getLogitBiasesConfigId() != "") {
             logitBiasConfigPreferences?.getConfigById(preferences?.getLogitBiasesConfigId()!!)?.get("label") ?: getString(R.string.label_tap_to_set)
         } else {
@@ -429,6 +462,10 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
 
         btnSelectApiEndpoint?.setOnClickListener {
             apiEndpointActivityResultLauncher.launch(Intent(requireContext(), ApiEndpointsListActivity::class.java))
+        }
+
+        btnSelectPersona?.setOnClickListener {
+            personaActivityResultLauncher.launch(Intent(requireContext(), PersonasListActivity::class.java))
         }
 
         btnSaveToProfile?.setOnClickListener {

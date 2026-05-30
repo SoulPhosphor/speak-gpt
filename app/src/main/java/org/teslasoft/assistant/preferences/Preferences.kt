@@ -1021,6 +1021,25 @@ class Preferences private constructor(private var preferences: SharedPreferences
     }
 
     /**
+     * Users can set a persona per chat. The persona prompt is merged before the
+     * system message when building requests.
+     *
+     * @return Persona ID, or an empty String when no persona is selected
+     * */
+    fun getPersonaId() : String {
+        return getString("persona_id", "")
+    }
+
+    /**
+     * Set the active persona for this chat.
+     *
+     * @param id Persona ID, or an empty String to clear the selection
+     * */
+    fun setPersonaId(id: String) {
+        putString("persona_id", id)
+    }
+
+    /**
      * Get logit biases config ID
      *
      * @return logit biases config ID

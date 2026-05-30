@@ -159,6 +159,7 @@ import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
+import org.teslasoft.assistant.preferences.PersonaPreferences
 import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.LogitBiasPreferences
@@ -2881,12 +2882,25 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
         val msgs: ArrayList<ChatMessage> = arrayListOf()
 
+        // Merge the selected persona prompt (first) with the always-on system message
+        // into a single, stable System message. Keeping it identical and first on every
+        // request is what lets providers' automatic prefix caching kick in.
         val systemMessage = preferences!!.getSystemMessage()
-        if (systemMessage != "") {
+        val personaId = preferences!!.getPersonaId()
+        val personaPrompt = if (personaId != "") {
+            PersonaPreferences.getPersonaPreferences(this).getPersona(personaId).prompt
+        } else {
+            ""
+        }
+        val effectiveSystemMessage = listOf(personaPrompt, systemMessage)
+            .filter { it.isNotBlank() }
+            .joinToString("\n\n")
+
+        if (effectiveSystemMessage != "") {
             msgs.add(
                 ChatMessage(
                     role = ChatRole.System,
-                    content = systemMessage
+                    content = effectiveSystemMessage
                 )
             )
         }
