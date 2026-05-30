@@ -196,6 +196,18 @@
     <string name="label_api_endpoint">API endpoint</string>
     <string name="title_api_endpoints">Profiles</string>
     <string name="btn_new_api_endpoint">Add profile</string>
+    <string name="label_persona">Persona</string>
+    <string name="title_personas">Personas</string>
+    <string name="btn_new_persona">Add persona</string>
+    <string name="label_add_persona">Add persona</string>
+    <string name="label_edit_persona">Edit persona</string>
+    <string name="label_delete_persona">Delete persona</string>
+    <string name="message_delete_persona">Are you sure you want to delete this persona? This action cannot be undone.</string>
+    <string name="persona_friendly_name">Persona name</string>
+    <string name="persona_prompt_hint">Persona prompt</string>
+    <string name="persona_prompt_help">Sent before your system message at the start of every request.</string>
+    <string name="label_error_persona_empty">Please enter a persona name</string>
+    <string name="label_persona_none">No persona</string>
     <string name="btn_attach">Attach</string>
     <string name="btn_discard_image">Discard image</string>
     <string name="label_selected_image">Selected image</string>
@@ -489,6 +501,8 @@
     <string name="tile_autosave_desc">This feature allows you to enable auto-save chats in assistant window. When auto-save chats is enabled, SpeakGPT will save all chats to the device storage.</string>
     <string name="tile_show_chat_errors_title">Show chat errors</string>
     <string name="tile_show_chat_errors_desc">This feature allows you to enable chat errors. When chat errors is enabled, SpeakGPT will show errors in chat of occurred.</string>
+    <string name="tile_error_sound_title">Error sound</string>
+    <string name="tile_error_sound_desc">Play a short descending tone when a response fails (for example when the model is overloaded or the connection drops), so you know a reply is not coming even when you are not looking at the screen. Uses the alarm volume, so it is still audible when the phone is on silent.</string>
     <string name="on">On</string>
     <string name="off">Off</string>
     <string name="tile_about_app_subtitle">About SpeakGPT</string>

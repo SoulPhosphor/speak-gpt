@@ -115,6 +115,7 @@ class SettingsActivity : FragmentActivity() {
     private var tileEventLog: TileFragment? = null
     private var tileChatsAutoSave: TileFragment? = null
     private var tileShowChatErrors: TileFragment? = null
+    private var tileErrorSound: TileFragment? = null
     private var tileHideModelNames: TileFragment? = null
     private var tileMonochromeBackgroundForChatList: TileFragment? = null
     // private var threadLoading: LinearLayout? = null
@@ -323,6 +324,7 @@ class SettingsActivity : FragmentActivity() {
         transition.excludeTarget(R.id.tile_event_log, true)
         transition.excludeTarget(R.id.tile_chats_autosave, true)
         transition.excludeTarget(R.id.tile_show_chat_errors, true)
+        transition.excludeTarget(R.id.tile_error_sound, true)
         transition.excludeTarget(R.id.tile_hide_model_names, true)
         transition.excludeTarget(R.id.tile_monochrome_background_for_chat_list, true)
         transition.excludeTarget(R.id.teslasoft_id_btn, true)
@@ -385,6 +387,7 @@ class SettingsActivity : FragmentActivity() {
         transition2.excludeTarget(R.id.tile_event_log, true)
         transition2.excludeTarget(R.id.tile_chats_autosave, true)
         transition2.excludeTarget(R.id.tile_show_chat_errors, true)
+        transition2.excludeTarget(R.id.tile_error_sound, true)
         transition2.excludeTarget(R.id.tile_hide_model_names, true)
         transition2.excludeTarget(R.id.tile_monochrome_background_for_chat_list, true)
         transition2.excludeTarget(R.id.teslasoft_id_btn, true)
@@ -1049,6 +1052,19 @@ class SettingsActivity : FragmentActivity() {
                 chatId,
                 getString(R.string.tile_show_chat_errors_desc)
             )
+
+            tileErrorSound = TileFragment.newInstance(
+                preferences?.getErrorSound() == true,
+                true,
+                getString(R.string.tile_error_sound_title),
+                null,
+                getString(R.string.on),
+                getString(R.string.off),
+                R.drawable.ic_experiment,
+                false,
+                chatId,
+                getString(R.string.tile_error_sound_desc)
+            )
         }
 
         t7.start()
@@ -1323,6 +1339,7 @@ class SettingsActivity : FragmentActivity() {
             .replace(R.id.tile_crash_log, tileCrashLog!!)
             .replace(R.id.tile_event_log, tileEventLog!!)
             .replace(R.id.tile_show_chat_errors, tileShowChatErrors!!)
+            .replace(R.id.tile_error_sound, tileErrorSound!!)
             .replace(R.id.tile_hide_model_names, tileHideModelNames!!)
             .replace(R.id.tile_monochrome_background_for_chat_list, tileMonochromeBackgroundForChatList!!)
 
@@ -1660,6 +1677,14 @@ class SettingsActivity : FragmentActivity() {
                 preferences?.setShowChatErrors(true)
             } else {
                 preferences?.setShowChatErrors(false)
+            }
+        }
+
+        tileErrorSound?.setOnCheckedChangeListener { isChecked ->
+            if (isChecked) {
+                preferences?.setErrorSound(true)
+            } else {
+                preferences?.setErrorSound(false)
             }
         }
 

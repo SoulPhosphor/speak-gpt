@@ -161,6 +161,25 @@ class Preferences private constructor(private var preferences: SharedPreferences
     }
 
     /**
+     * Whether to play an audible alert when a response fails (e.g. the model is
+     * overloaded or the connection drops), so the user knows a reply isn't coming.
+     *
+     * @return whether the error sound is enabled
+     * */
+    fun getErrorSound() : Boolean {
+        return getGlobalBoolean("error_sound", true)
+    }
+
+    /**
+     * Enable or disable the audible alert played when a response fails.
+     *
+     * @param state whether the error sound is enabled
+     * */
+    fun setErrorSound(state: Boolean) {
+        putGlobalBoolean("error_sound", state, true)
+    }
+
+    /**
      * Retrieves the model name from the shared preferences.
      *
      * @return The model name or "gpt-4o" if not found. GPT4-o is now much more capable than gpt 3.5 and 15x cheaper.
@@ -1018,6 +1037,25 @@ class Preferences private constructor(private var preferences: SharedPreferences
      * */
     fun setApiEndpointId(id: String) {
         putString("api_endpoint_id", id)
+    }
+
+    /**
+     * Users can set a persona per chat. The persona prompt is merged before the
+     * system message when building requests.
+     *
+     * @return Persona ID, or an empty String when no persona is selected
+     * */
+    fun getPersonaId() : String {
+        return getString("persona_id", "")
+    }
+
+    /**
+     * Set the active persona for this chat.
+     *
+     * @param id Persona ID, or an empty String to clear the selection
+     * */
+    fun setPersonaId(id: String) {
+        putString("persona_id", id)
     }
 
     /**
