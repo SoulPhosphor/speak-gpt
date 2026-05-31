@@ -1955,6 +1955,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     /** VAD saw no speech within the window — end the loop like Google does. */
     private fun onHandsFreeWhisperNoSpeech() {
         if (handsFreeStopped) return
+        // Diagnostic: when WebRTC times out hearing nothing, show what libfvad
+        // actually saw (voiced-frame count + peak input level) so "it never hears
+        // me" can be pinned to either a dead/quiet mic or fvad rejecting speech.
+        if (preferences?.getVadMethod() == org.teslasoft.assistant.stt.VadMethods.WEBRTC) {
+            val diag = LocalWhisperEngine.get().lastVadDiagnostics()
+            if (diag.isNotEmpty()) Toast.makeText(this, diag, Toast.LENGTH_LONG).show()
+        }
         stopHandsFreeLoop()
         LocalWhisperEngine.get().cancel()
     }

@@ -102,6 +102,13 @@ class LocalWhisperEngine private constructor() {
     private var onVadEndOfTurn: (() -> Unit)? = null
     private var onVadNoSpeech: (() -> Unit)? = null
 
+    // Snapshot of the detector's stats taken when a no-speech timeout fires, so
+    // the UI can show the user why WebRTC heard nothing. Read on the main thread.
+    @Volatile private var lastVadDiagnostics: String = ""
+
+    /** Detector stats from the most recent no-speech timeout (may be empty). */
+    fun lastVadDiagnostics(): String = lastVadDiagnostics
+
     /**
      * Voice-activity-detection config for hands-free capture. Recreates the
      * end-of-speech behaviour the platform SpeechRecognizer gives Google STT
@@ -160,6 +167,7 @@ class LocalWhisperEngine private constructor() {
             capturedChunks.clear()
             capturedCount = 0
         }
+        lastVadDiagnostics = ""
         vadConfig = vad
         onVadEndOfTurn = onEndOfTurn
         onVadNoSpeech = onNoSpeechTimeout
@@ -250,6 +258,7 @@ class LocalWhisperEngine private constructor() {
                                 onVadEndOfTurn?.invoke()
                             } else if (!speechStarted && now - startedAt >= cfg.noSpeechMs) {
                                 vadFired = true
+                                lastVadDiagnostics = detector.diagnostics()
                                 onVadNoSpeech?.invoke()
                             }
                         }
