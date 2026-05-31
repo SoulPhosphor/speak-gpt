@@ -96,7 +96,11 @@ class HandsFreeService : Service() {
         }
 
         acquireWakeLock()
-        return START_STICKY
+        // NOT sticky: if the OS kills this service (or the app is closed), it must
+        // stay dead. START_STICKY would have Android resurrect it with a null
+        // intent and no Activity driving it — a zombie that re-holds the mic
+        // foreground type + wake lock and starves other apps' voice/mic input.
+        return START_NOT_STICKY
     }
 
     private fun acquireWakeLock() {

@@ -41,14 +41,14 @@
             android:layout_height="wrap_content"
             android:layout_marginStart="16dp"
             android:layout_marginTop="12dp"
-            android:layout_marginEnd="16dp"
+            android:layout_marginEnd="8dp"
             android:ellipsize="end"
             android:lines="1"
             android:text="Activation prompt"
             android:textColor="@color/accent_900"
             android:textSize="18sp"
             android:textStyle="bold"
-            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintEnd_toStartOf="@+id/btn_edit_activation_prompt"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
 
@@ -57,7 +57,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginStart="16dp"
-            android:layout_marginEnd="16dp"
+            android:layout_marginEnd="8dp"
             android:layout_marginBottom="12dp"
             android:ellipsize="end"
             android:maxLines="2"
@@ -65,9 +65,23 @@
             android:textColor="@color/text_subtitle"
             android:textSize="14sp"
             app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toEndOf="@+id/activation_label"
+            app:layout_constraintEnd_toStartOf="@+id/btn_edit_activation_prompt"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@+id/activation_label" />
+
+        <ImageButton
+            android:id="@+id/btn_edit_activation_prompt"
+            android:layout_width="42dp"
+            android:layout_height="42dp"
+            android:layout_marginEnd="12dp"
+            android:background="@drawable/btn_accent_tonal_selector_v7"
+            android:contentDescription="@string/btn_edit_activation_prompt"
+            android:src="@drawable/ic_settings"
+            android:tooltipText="@string/btn_edit_activation_prompt"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            app:srcCompat="@drawable/ic_settings" />
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 </androidx.constraintlayout.widget.ConstraintLayout>

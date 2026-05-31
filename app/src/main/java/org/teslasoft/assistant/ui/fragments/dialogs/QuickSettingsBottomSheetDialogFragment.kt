@@ -38,12 +38,14 @@ import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.textfield.TextInputEditText
 import org.teslasoft.assistant.Config
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.preferences.ActivationPromptPreferences
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
 import org.teslasoft.assistant.preferences.LogitBiasConfigPreferences
 import org.teslasoft.assistant.preferences.PersonaPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
+import org.teslasoft.assistant.ui.activities.ActivationPromptsListActivity
 import org.teslasoft.assistant.ui.activities.ApiEndpointsListActivity
 import org.teslasoft.assistant.ui.activities.LogitBiasConfigListActivity
 import org.teslasoft.assistant.ui.activities.PersonasListActivity
@@ -71,6 +73,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     private var btnSelectLogitBias: ConstraintLayout? = null
     private var btnSelectApiEndpoint: ConstraintLayout? = null
     private var btnSelectPersona: ConstraintLayout? = null
+    private var btnSelectActivation: ConstraintLayout? = null
     private var bgTemperature: ConstraintLayout? = null
     private var bgTopP: ConstraintLayout? = null
     private var bgFrequencyPenalty: ConstraintLayout? = null
@@ -82,6 +85,9 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
 
     private var personaPreferences: PersonaPreferences? = null
     private var textPersona: TextView? = null
+
+    private var activationPromptPreferences: ActivationPromptPreferences? = null
+    private var textActivation: TextView? = null
 
     private var temperatureSeekbar: com.google.android.material.slider.Slider? = null
     private var topPSeekbar: com.google.android.material.slider.Slider? = null
@@ -212,6 +218,34 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         }
     }
 
+    private var activationActivityResultLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val data: Intent? = result.data
+            val activationPromptId = data?.getStringExtra("activationPromptId")
+
+            if (activationPromptId != null) {
+                preferences?.setActivationPromptId(activationPromptId)
+                // Keep the existing chat-activation flow working: the selected
+                // prompt text is what actually gets sent as the first message.
+                val prompt = if (activationPromptId != "") {
+                    activationPromptPreferences?.getActivationPrompt(activationPromptId)?.prompt ?: ""
+                } else ""
+                preferences?.setPrompt(prompt)
+                updateActivationLabel(activationPromptId)
+                shouldForceUpdate = true
+            }
+        }
+    }
+
+    private fun updateActivationLabel(activationPromptId: String) {
+        textActivation?.text = if (activationPromptId != "") {
+            val label = activationPromptPreferences?.getActivationPrompt(activationPromptId)?.label ?: ""
+            if (label != "") label else getString(R.string.label_tap_to_set)
+        } else {
+            getString(R.string.label_tap_to_set)
+        }
+    }
+
     private var systemChangedListener: SystemMessageDialogFragment.StateChangesListener =
         SystemMessageDialogFragment.StateChangesListener { prompt ->
             preferences?.setSystemMessage(prompt)
@@ -318,6 +352,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         logitBiasConfigPreferences = LogitBiasConfigPreferences.getLogitBiasConfigPreferences(requireContext())
         favoriteModelsPreferences = FavoriteModelsPreferences.getPreferences(requireContext())
         personaPreferences = PersonaPreferences.getPersonaPreferences(requireContext())
+        activationPromptPreferences = ActivationPromptPreferences.getActivationPromptPreferences(requireContext())
 
         btnSelectModel = view.findViewById(R.id.btn_select_model)
         btnSelectSystemMessage = view.findViewById(R.id.btn_select_system)
@@ -325,6 +360,8 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         btnSelectApiEndpoint = view.findViewById(R.id.btn_select_api_endpoint)
         btnSelectPersona = view.findViewById(R.id.btn_select_persona)
         textPersona = view.findViewById(R.id.text_persona)
+        btnSelectActivation = view.findViewById(R.id.btn_select_activation)
+        textActivation = view.findViewById(R.id.text_activation)
         bgTemperature = view.findViewById(R.id.bg_temperature)
         bgTopP = view.findViewById(R.id.bg_top_p)
         bgFrequencyPenalty = view.findViewById(R.id.bg_frequency_penalty)
@@ -347,6 +384,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         btnSelectLogitBias?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(activity ?: return))
         btnSelectApiEndpoint?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(activity ?: return))
         btnSelectPersona?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(activity ?: return))
+        btnSelectActivation?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(activity ?: return))
         bgTemperature?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(activity ?: return))
         bgTopP?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(activity ?: return))
         bgFrequencyPenalty?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(activity ?: return))
@@ -359,6 +397,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
 
         textHost?.text = if (apiEndpoint?.label != "") apiEndpoint?.label ?: getString(R.string.label_tap_to_set) else getString(R.string.label_tap_to_set)
         updatePersonaLabel(preferences?.getPersonaId() ?: "")
+        updateActivationLabel(preferences?.getActivationPromptId() ?: "")
         textLogitBiasesConfig?.text = if (preferences?.getLogitBiasesConfigId() != "") {
             logitBiasConfigPreferences?.getConfigById(preferences?.getLogitBiasesConfigId()!!)?.get("label") ?: getString(R.string.label_tap_to_set)
         } else {
@@ -465,7 +504,16 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         }
 
         btnSelectPersona?.setOnClickListener {
-            personaActivityResultLauncher.launch(Intent(requireContext(), PersonasListActivity::class.java))
+            val intent = Intent(requireContext(), PersonasListActivity::class.java)
+            intent.putExtra("currentPersonaId", preferences?.getPersonaId() ?: "")
+            personaActivityResultLauncher.launch(intent)
+        }
+
+        btnSelectActivation?.setOnClickListener {
+            val intent = Intent(requireContext(), ActivationPromptsListActivity::class.java)
+            intent.putExtra("pickMode", true)
+            intent.putExtra("currentActivationId", preferences?.getActivationPromptId() ?: "")
+            activationActivityResultLauncher.launch(intent)
         }
 
         btnSaveToProfile?.setOnClickListener {

@@ -22,10 +22,13 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.BaseAdapter
+import android.widget.ImageButton
 import android.widget.TextView
 import androidx.constraintlayout.widget.ConstraintLayout
+import androidx.core.content.ContextCompat
 import com.google.android.material.elevation.SurfaceColors
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.util.Hash
 
 class PersonaListItemAdapter(private val dataArray: ArrayList<HashMap<String, String>>, private var mContext: Context) : BaseAdapter() {
     override fun getCount(): Int {
@@ -43,11 +46,20 @@ class PersonaListItemAdapter(private val dataArray: ArrayList<HashMap<String, St
     private var ui: ConstraintLayout? = null
     private var personaLabel: TextView? = null
     private var personaPrompt: TextView? = null
+    private var btnEdit: ImageButton? = null
 
     private var listener: OnSelectListener? = null
 
+    // Id of the persona that's currently active for the chat, so it can be drawn
+    // inverted (same scheme as a checked tile in Settings). Empty = none active.
+    private var selectedId: String = ""
+
     fun setOnSelectListener(listener: OnSelectListener) {
         this.listener = listener
+    }
+
+    fun setSelectedId(id: String) {
+        this.selectedId = id
     }
 
     override fun getView(position: Int, convertView: View?, parent: ViewGroup?): View {
@@ -62,13 +74,28 @@ class PersonaListItemAdapter(private val dataArray: ArrayList<HashMap<String, St
         ui = mView?.findViewById(R.id.ui)
         personaLabel = mView?.findViewById(R.id.persona_label)
         personaPrompt = mView?.findViewById(R.id.persona_prompt)
-
-        ui?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_2.getColor(mContext))
+        btnEdit = mView?.findViewById(R.id.btn_edit_persona)
 
         val item = dataArray[position]
 
         personaLabel?.text = item["label"]
         personaPrompt?.text = item["prompt"]
+
+        // Recycled views must have both states set explicitly every bind.
+        val isSelected = selectedId.isNotEmpty() && Hash.hash(item["label"] ?: "") == selectedId
+        if (isSelected) {
+            ui?.backgroundTintList = null
+            ui?.background = ContextCompat.getDrawable(mContext, R.drawable.tile_active)
+            personaLabel?.setTextColor(mContext.getColor(R.color.text_title_inv))
+            personaPrompt?.setTextColor(mContext.getColor(R.color.text_subtitle_inv))
+            btnEdit?.imageTintList = ColorStateList.valueOf(mContext.getColor(R.color.window_background))
+        } else {
+            ui?.background = ContextCompat.getDrawable(mContext, R.drawable.btn_accent_tonal_selector_v3)
+            ui?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_2.getColor(mContext))
+            personaLabel?.setTextColor(mContext.getColor(R.color.accent_900))
+            personaPrompt?.setTextColor(mContext.getColor(R.color.text_subtitle))
+            btnEdit?.imageTintList = ColorStateList.valueOf(mContext.getColor(R.color.accent_900))
+        }
 
         ui?.setOnClickListener {
             listener?.onClick(position)
@@ -79,11 +106,16 @@ class PersonaListItemAdapter(private val dataArray: ArrayList<HashMap<String, St
             return@setOnLongClickListener true
         }
 
+        btnEdit?.setOnClickListener {
+            listener?.onSettingsClick(position)
+        }
+
         return mView!!
     }
 
     interface OnSelectListener {
         fun onClick(position: Int)
         fun onLongClick(position: Int)
+        fun onSettingsClick(position: Int)
     }
 }

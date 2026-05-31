@@ -16,6 +16,7 @@
 
 package org.teslasoft.assistant.ui.activities
 
+import android.content.Intent
 import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.os.Build
@@ -56,6 +57,11 @@ class ActivationPromptsListActivity : FragmentActivity() {
 
     private var actionBar: ConstraintLayout? = null
 
+    // Pick mode (launched from Quick Settings): tapping a pill selects it for the
+    // chat and returns. Manager mode (launched from Characters): tapping edits.
+    private var pickMode: Boolean = false
+    private var currentActivationId: String = ""
+
     private fun newEditDialog(activationPrompt: ActivationPromptObject, position: Int): EditActivationPromptDialogFragment {
         return EditActivationPromptDialogFragment.newInstance(
             activationPrompt.label,
@@ -77,12 +83,28 @@ class ActivationPromptsListActivity : FragmentActivity() {
         dialog.show(supportFragmentManager, "EditActivationPromptDialogFragment")
     }
 
+    private fun finishWithActive(label: String) {
+        val resultIntent = Intent()
+        resultIntent.putExtra("activationPromptId", Hash.hash(label))
+        setResult(RESULT_OK, resultIntent)
+        finish()
+    }
+
     private var onSelectListener: ActivationPromptListItemAdapter.OnSelectListener = object : ActivationPromptListItemAdapter.OnSelectListener {
         override fun onClick(position: Int) {
-            openEditDialog(position)
+            if (pickMode) {
+                val label = list[position]["label"] ?: return
+                finishWithActive(label)
+            } else {
+                openEditDialog(position)
+            }
         }
 
         override fun onLongClick(position: Int) {
+            openEditDialog(position)
+        }
+
+        override fun onSettingsClick(position: Int) {
             openEditDialog(position)
         }
     }
@@ -159,6 +181,9 @@ class ActivationPromptsListActivity : FragmentActivity() {
 
         listView?.divider = null
 
+        pickMode = intent.getBooleanExtra("pickMode", false)
+        currentActivationId = intent.getStringExtra("currentActivationId") ?: ""
+
         activationPromptPreferences = ActivationPromptPreferences.getActivationPromptPreferences(this)
         initialize()
     }
@@ -182,6 +207,7 @@ class ActivationPromptsListActivity : FragmentActivity() {
         runOnUiThread {
             adapter = ActivationPromptListItemAdapter(list, this)
             adapter!!.setOnSelectListener(onSelectListener)
+            adapter!!.setSelectedId(if (pickMode) currentActivationId else "")
             listView!!.adapter = adapter
             adapter!!.notifyDataSetChanged()
         }

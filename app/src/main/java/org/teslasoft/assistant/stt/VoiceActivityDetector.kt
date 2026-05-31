@@ -47,6 +47,13 @@ interface VoiceActivityDetector {
 
     /** Release any native resources. Safe to call more than once. */
     fun close()
+
+    /**
+     * Human-readable stats for the most recent recording, shown on-screen when a
+     * hands-free turn times out so "it never heard me" can be diagnosed without
+     * logcat. Empty by default; detectors that can explain themselves override it.
+     */
+    fun diagnostics(): String = ""
 }
 
 /** Stable ids persisted in preferences and shown in the settings picker. */
@@ -167,8 +174,19 @@ class WebRtcVad private constructor(
     private val pending = ShortArray(frameSamples)
     private var pendingCount = 0
 
+    // Per-recording diagnostics so a "WebRTC never hears me" timeout can report
+    // whether libfvad saw any voiced frames and how loud the input actually was.
+    private var totalFrames = 0
+    private var voicedFrames = 0
+    private var errorFrames = 0
+    private var peakAbs = 0
+
     override fun reset() {
         pendingCount = 0
+        totalFrames = 0
+        voicedFrames = 0
+        errorFrames = 0
+        peakAbs = 0
         if (handle != 0L) {
             try { WebRtcVadNative.nativeReset(handle) } catch (_: Throwable) {}
         }
@@ -184,14 +202,24 @@ class WebRtcVad private constructor(
             pendingCount += n
             i += n
             if (pendingCount == frameSamples) {
+                for (s in pending) {
+                    val a = if (s < 0) -s.toInt() else s.toInt()
+                    if (a > peakAbs) peakAbs = a
+                }
                 val r = try {
                     WebRtcVadNative.nativeProcess(handle, pending, frameSamples)
                 } catch (_: Throwable) { -1 }
-                if (r == 1) speech = true
+                totalFrames++
+                if (r == 1) { speech = true; voicedFrames++ } else if (r < 0) errorFrames++
                 pendingCount = 0
             }
         }
         return speech
+    }
+
+    override fun diagnostics(): String {
+        val base = "WebRTC: voiced $voicedFrames/$totalFrames, peak $peakAbs/32767"
+        return if (errorFrames > 0) "$base, errors $errorFrames" else base
     }
 
     override fun close() {

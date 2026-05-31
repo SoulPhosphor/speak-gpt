@@ -57,6 +57,9 @@ class PersonasListActivity : FragmentActivity() {
 
     private var actionBar: ConstraintLayout? = null
 
+    // The persona currently active for the chat, so the list can highlight it.
+    private var currentPersonaId: String = ""
+
     private fun newEditDialog(persona: PersonaObject, position: Int): EditPersonaDialogFragment {
         return EditPersonaDialogFragment.newInstance(
             persona.label,
@@ -87,11 +90,17 @@ class PersonasListActivity : FragmentActivity() {
     }
 
     private var onSelectListener: PersonaListItemAdapter.OnSelectListener = object : PersonaListItemAdapter.OnSelectListener {
+        // Tapping the pill body selects the persona for the chat (the cog edits).
         override fun onClick(position: Int) {
-            openEditDialog(position)
+            val label = list[position]["label"] ?: return
+            finishWithActive(label)
         }
 
         override fun onLongClick(position: Int) {
+            openEditDialog(position)
+        }
+
+        override fun onSettingsClick(position: Int) {
             openEditDialog(position)
         }
     }
@@ -168,6 +177,8 @@ class PersonasListActivity : FragmentActivity() {
 
         listView?.divider = null
 
+        currentPersonaId = intent.getStringExtra("currentPersonaId") ?: ""
+
         personaPreferences = PersonaPreferences.getPersonaPreferences(this)
         initialize()
     }
@@ -191,6 +202,7 @@ class PersonasListActivity : FragmentActivity() {
         runOnUiThread {
             adapter = PersonaListItemAdapter(list, this)
             adapter!!.setOnSelectListener(onSelectListener)
+            adapter!!.setSelectedId(currentPersonaId)
             listView!!.adapter = adapter
             adapter!!.notifyDataSetChanged()
         }

@@ -171,7 +171,9 @@ class CharactersActivity : FragmentActivity() {
             .commit()
 
         tilePersonas?.setOnTileClickListener {
-            personasActivityResultLauncher.launch(Intent(this, PersonasListActivity::class.java))
+            val intent = Intent(this, PersonasListActivity::class.java)
+            intent.putExtra("currentPersonaId", preferences?.getPersonaId() ?: "")
+            personasActivityResultLauncher.launch(intent)
         }
 
         tileActivationPrompts?.setOnTileClickListener {
