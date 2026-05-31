@@ -573,6 +573,25 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             logitBiasPreferences = LogitBiasPreferences(this, preferences?.getLogitBiasesConfigId()!!)
             apiEndpointObject = apiEndpointPreferences?.getApiEndpoint(this, preferences?.getApiEndpointId()!!)
         }
+
+        // Safety net for the top action bar. The settings cog is a shared-element
+        // scene-transition target, so Android hides it (and can leave the bar in a
+        // half-transitioned state) during the animation, restoring it when the
+        // transition finishes. If that transition is interrupted — backgrounding
+        // the app or killing the screen mid-animation — those views can get stuck
+        // INVISIBLE until a manual redraw. Re-assert the bar shortly after we're
+        // back in the foreground: a no-op once a normal transition has completed,
+        // a fix when one was left dangling. The delay lets a legitimate return
+        // animation play out instead of snapping.
+        actionBar?.postDelayed({ restoreTopBarVisibility() }, 500)
+    }
+
+    /** Force the chat's top action bar and its buttons back to fully visible. */
+    private fun restoreTopBarVisibility() {
+        for (v in listOf(actionBar, btnBack, activityTitle, btnExport, btnSettings)) {
+            v?.visibility = View.VISIBLE
+            v?.alpha = 1f
+        }
     }
 
     @Suppress("deprecation")
