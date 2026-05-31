@@ -1186,7 +1186,7 @@ class SettingsActivity : FragmentActivity() {
         val density = resources.displayMetrics.density
         fun dp(v: Int) = (v * density).toInt()
 
-        var selectedId = preferences?.getVadMethod() ?: "webrtc"
+        var selectedId = preferences?.getVadMethod() ?: "energy"
         val radios = ArrayList<RadioButton>()
 
         val container = LinearLayout(this).apply {
@@ -1207,6 +1207,13 @@ class SettingsActivity : FragmentActivity() {
                 isChecked = entry.id == selectedId
                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
                 setPadding(dp(8), dp(10), 0, dp(10))
+                // Explicit tint: under the custom dialog theme the default
+                // control tint can resolve to an (near-)invisible color, so the
+                // selected dot didn't show and users couldn't tell what was
+                // picked. Force the accent so checked state is always visible.
+                buttonTintList = ColorStateList.valueOf(
+                    ContextCompat.getColor(this@SettingsActivity, R.color.accent_900)
+                )
             }
             radios.add(radio)
 
@@ -1248,6 +1255,13 @@ class SettingsActivity : FragmentActivity() {
             .setPositiveButton(android.R.string.ok) { _, _ ->
                 preferences?.setVadMethod(selectedId)
                 tileVadMethod?.updateSubtitle(vadMethodSubtitle())
+                // WebRTC needs a native lib that isn't present on every device.
+                // It used to fall back to energy silently, so "I picked WebRTC
+                // and nothing changed" was indistinguishable from a bug. Tell
+                // the user up front so they know it isn't actually active.
+                if (selectedId == "webrtc" && !org.teslasoft.assistant.stt.WebRtcVadNative.ensureLoaded()) {
+                    Toast.makeText(this, R.string.vad_webrtc_unavailable, Toast.LENGTH_LONG).show()
+                }
             }
             .setNegativeButton(android.R.string.cancel) { _, _ -> }
             .show()
@@ -1265,9 +1279,42 @@ class SettingsActivity : FragmentActivity() {
         )
         var selected = (preferences?.getVadWebRtcMode() ?: 0).coerceIn(0, 3)
 
+        val density = resources.displayMetrics.density
+        fun dp(v: Int) = (v * density).toInt()
+
+        // Built by hand with explicitly-tinted radios for the same reason as the
+        // method picker: a plain setSingleChoiceItems under the custom dialog
+        // theme didn't visibly highlight the chosen level, so the user couldn't
+        // tell which sensitivity was selected.
+        val radios = ArrayList<RadioButton>()
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(4), dp(8), dp(4))
+        }
+        for (i in labels.indices) {
+            val radio = RadioButton(this).apply {
+                text = labels[i]
+                isChecked = i == selected
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+                setPadding(dp(8), dp(10), 0, dp(10))
+                buttonTintList = ColorStateList.valueOf(
+                    ContextCompat.getColor(this@SettingsActivity, R.color.accent_900)
+                )
+            }
+            radio.setOnClickListener {
+                selected = i
+                for (r in radios) r.isChecked = false
+                radio.isChecked = true
+            }
+            radios.add(radio)
+            container.addView(radio)
+        }
+
         MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
             .setTitle(R.string.vad_sensitivity_title)
-            .setSingleChoiceItems(labels, selected) { _, which -> selected = which }
+            .setView(container)
             .setPositiveButton(android.R.string.ok) { _, _ ->
                 preferences?.setVadWebRtcMode(selected)
                 tileVadMethod?.updateSubtitle(vadMethodSubtitle())
@@ -1286,7 +1333,7 @@ class SettingsActivity : FragmentActivity() {
     }
 
     private fun vadMethodSubtitle(): String {
-        return when (preferences?.getVadMethod() ?: "webrtc") {
+        return when (preferences?.getVadMethod() ?: "energy") {
             "energy" -> getString(R.string.vad_method_energy)
             else -> getString(
                 R.string.vad_method_subtitle_webrtc,

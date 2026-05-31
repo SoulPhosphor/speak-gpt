@@ -453,9 +453,10 @@
     <string name="tile_hands_free_timing_value">Pause %1$d s · Start %2$d s</string>
     <string name="tile_vad_method_title">Voice detection method</string>
     <string name="tile_vad_method_desc">How hands-free decides you\'ve stopped talking (on-device Whisper only).</string>
-    <string name="vad_method_webrtc">WebRTC (recommended)</string>
-    <string name="vad_method_energy">Energy (simple)</string>
+    <string name="vad_method_webrtc">WebRTC (noise rejection)</string>
+    <string name="vad_method_energy">Energy (recommended)</string>
     <string name="vad_method_options_cd">Options</string>
+    <string name="vad_webrtc_unavailable">WebRTC voice detection isn\'t available on this device, so Energy will be used instead. Switch to Energy to avoid this.</string>
     <string name="vad_sensitivity_title">Detection sensitivity</string>
     <string name="vad_sensitivity_high">High — hear everything (default)</string>
     <string name="vad_sensitivity_medium_high">Medium-high</string>
