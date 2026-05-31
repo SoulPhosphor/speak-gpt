@@ -1062,6 +1062,27 @@ class Preferences private constructor(private var preferences: SharedPreferences
     }
 
     /**
+     * Get the active activation prompt for this chat.
+     *
+     * @return Activation prompt ID, or an empty String when none is selected
+     * */
+    fun getActivationPromptId() : String {
+        return getString("activation_prompt_id", "")
+    }
+
+    /**
+     * Set the active activation prompt for this chat. The prompt text itself is
+     * stored separately via [setPrompt] so the existing chat-activation flow
+     * keeps working; this id only tracks which library entry is selected so the
+     * UI can show its label and highlight it.
+     *
+     * @param id Activation prompt ID, or an empty String to clear the selection
+     * */
+    fun setActivationPromptId(id: String) {
+        putString("activation_prompt_id", id)
+    }
+
+    /**
      * Get logit biases config ID
      *
      * @return logit biases config ID

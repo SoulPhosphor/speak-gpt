@@ -1030,6 +1030,18 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         killAllProcesses()
         stopHandsFreeService()
 
+        // Fully release the microphone when the chat is destroyed (app closed).
+        // The SpeechRecognizer holds a live binding to the system recognition
+        // service; if it's never destroyed it can keep the mic/recognizer tied
+        // up system-wide and starve other apps' voice input (keyboard voice
+        // typing, other AI voice). Releasing the whisper AudioRecord here covers
+        // the on-device path the same way. Background/screen-off hands-free is
+        // intentionally untouched — this only runs when the activity is gone.
+        try { recognizer?.cancel() } catch (_: Exception) { /* ignore */ }
+        try { recognizer?.destroy() } catch (_: Exception) { /* ignore */ }
+        recognizer = null
+        try { LocalWhisperEngine.get().cancel() } catch (_: Exception) { /* ignore */ }
+
         super.onDestroy()
     }
 

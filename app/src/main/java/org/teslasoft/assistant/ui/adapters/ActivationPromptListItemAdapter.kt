@@ -22,10 +22,13 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.BaseAdapter
+import android.widget.ImageButton
 import android.widget.TextView
 import androidx.constraintlayout.widget.ConstraintLayout
+import androidx.core.content.ContextCompat
 import com.google.android.material.elevation.SurfaceColors
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.util.Hash
 
 class ActivationPromptListItemAdapter(private val dataArray: ArrayList<HashMap<String, String>>, private var mContext: Context) : BaseAdapter() {
     override fun getCount(): Int {
@@ -43,11 +46,20 @@ class ActivationPromptListItemAdapter(private val dataArray: ArrayList<HashMap<S
     private var ui: ConstraintLayout? = null
     private var activationLabel: TextView? = null
     private var activationPrompt: TextView? = null
+    private var btnEdit: ImageButton? = null
 
     private var listener: OnSelectListener? = null
 
+    // Id of the activation prompt active for the chat, drawn inverted (same
+    // scheme as a checked tile in Settings). Empty = none active / manager mode.
+    private var selectedId: String = ""
+
     fun setOnSelectListener(listener: OnSelectListener) {
         this.listener = listener
+    }
+
+    fun setSelectedId(id: String) {
+        this.selectedId = id
     }
 
     override fun getView(position: Int, convertView: View?, parent: ViewGroup?): View {
@@ -62,13 +74,28 @@ class ActivationPromptListItemAdapter(private val dataArray: ArrayList<HashMap<S
         ui = mView?.findViewById(R.id.ui)
         activationLabel = mView?.findViewById(R.id.activation_label)
         activationPrompt = mView?.findViewById(R.id.activation_prompt)
-
-        ui?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_2.getColor(mContext))
+        btnEdit = mView?.findViewById(R.id.btn_edit_activation_prompt)
 
         val item = dataArray[position]
 
         activationLabel?.text = item["label"]
         activationPrompt?.text = item["prompt"]
+
+        // Recycled views must have both states set explicitly every bind.
+        val isSelected = selectedId.isNotEmpty() && Hash.hash(item["label"] ?: "") == selectedId
+        if (isSelected) {
+            ui?.backgroundTintList = null
+            ui?.background = ContextCompat.getDrawable(mContext, R.drawable.tile_active)
+            activationLabel?.setTextColor(mContext.getColor(R.color.text_title_inv))
+            activationPrompt?.setTextColor(mContext.getColor(R.color.text_subtitle_inv))
+            btnEdit?.imageTintList = ColorStateList.valueOf(mContext.getColor(R.color.window_background))
+        } else {
+            ui?.background = ContextCompat.getDrawable(mContext, R.drawable.btn_accent_tonal_selector_v3)
+            ui?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_2.getColor(mContext))
+            activationLabel?.setTextColor(mContext.getColor(R.color.accent_900))
+            activationPrompt?.setTextColor(mContext.getColor(R.color.text_subtitle))
+            btnEdit?.imageTintList = ColorStateList.valueOf(mContext.getColor(R.color.accent_900))
+        }
 
         ui?.setOnClickListener {
             listener?.onClick(position)
@@ -79,11 +106,16 @@ class ActivationPromptListItemAdapter(private val dataArray: ArrayList<HashMap<S
             return@setOnLongClickListener true
         }
 
+        btnEdit?.setOnClickListener {
+            listener?.onSettingsClick(position)
+        }
+
         return mView!!
     }
 
     interface OnSelectListener {
         fun onClick(position: Int)
         fun onLongClick(position: Int)
+        fun onSettingsClick(position: Int)
     }
 }
