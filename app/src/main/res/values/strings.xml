@@ -367,8 +367,6 @@
     <string name="title_characters">Characters</string>
     <string name="tile_activation_prompts_title">Activation prompts</string>
     <string name="tile_activation_prompts_desc">Reusable opening messages. Create several, give each a title, and attach one to a persona.</string>
-    <string name="tile_system_message_title">System message</string>
-    <string name="tile_system_message_desc">Global instructions appended to every chat. Shared across all characters.</string>
     <string name="title_activation_prompts">Activation prompts</string>
     <string name="btn_new_activation_prompt">Add activation prompt</string>
     <string name="label_add_activation_prompt">Add activation prompt</string>
@@ -479,7 +477,7 @@
     <string name="tile_activation_prompt_title">Activation prompt</string>
     <string name="tile_activation_prompt_desc">This feature allows you to set activation prompt which will be sent as a first user message.</string>
     <string name="tile_system_message_title">System message</string>
-    <string name="tile_system_message_desc">This feature allows you to set system message which will be sent as a system message.</string>
+    <string name="tile_system_message_desc">Global instructions appended to every chat. Shared across all characters.</string>
     <string name="tile_ale_title">Automatic language detection</string>
     <string name="tile_ale_desc">This feature allows you to enable automatic language detection of speech.</string>
     <string name="tile_classic_layout_title">Classic chat layout</string>
