@@ -64,6 +64,16 @@ class LocalWhisperEngine private constructor() {
         private const val MIN_SPEECH_RMS = 600.0
         private const val SPEECH_FLOOR_FACTOR = 2.5
 
+        // Hard backstop on a single hands-free turn. The silence timer normally
+        // ends a turn a few seconds after the user stops, but if the detector
+        // keeps classifying *continuous* sound as speech — wind outdoors, a fan,
+        // a TV — lastVoiceAt never stops refreshing and the turn would run
+        // forever ("WebRTC just listens and never stops"). Once speech has been
+        // detected continuously for this long with no qualifying silence gap,
+        // force end-of-turn so we transcribe what we have and re-arm instead of
+        // recording indefinitely. whisper.cpp handles ~30 s windows natively.
+        const val DEFAULT_MAX_TURN_MS = 30_000L
+
         @Volatile private var instance: LocalWhisperEngine? = null
         fun get(): LocalWhisperEngine {
             instance?.let { return it }
@@ -125,7 +135,8 @@ class LocalWhisperEngine private constructor() {
         val silenceMs: Long,
         val noSpeechMs: Long,
         val method: String = VadMethods.DEFAULT,
-        val webRtcMode: Int = VadMethods.WEBRTC_DEFAULT_MODE
+        val webRtcMode: Int = VadMethods.WEBRTC_DEFAULT_MODE,
+        val maxTurnMs: Long = DEFAULT_MAX_TURN_MS
     )
 
     /** True iff the context for [activeModelId] is already resident in RAM. */
@@ -256,6 +267,13 @@ class LocalWhisperEngine private constructor() {
                             if (speechStarted && now - lastVoiceAt >= cfg.silenceMs) {
                                 vadFired = true
                                 onVadEndOfTurn?.invoke()
+                            } else if (speechStarted && now - startedAt >= cfg.maxTurnMs) {
+                                // Backstop: continuous sound (wind/fan/TV) kept the
+                                // silence timer from ever elapsing. End the turn so
+                                // we don't record forever; transcribe what we have.
+                                Log.w(TAG, "Hands-free turn hit max length (${cfg.maxTurnMs}ms) with no silence gap; forcing end-of-turn")
+                                vadFired = true
+                                onVadEndOfTurn?.invoke()
                             } else if (!speechStarted && now - startedAt >= cfg.noSpeechMs) {
                                 vadFired = true
                                 lastVadDiagnostics = detector.diagnostics()
@@ -329,13 +347,44 @@ class LocalWhisperEngine private constructor() {
                     val elapsed = SystemClock.elapsedRealtime() - startedAt
                     Log.i(TAG, "Transcribed ${audioMs}ms of audio in ${elapsed}ms")
                     val trimmed = text.trim()
-                    trimmed.ifEmpty { null }
+                    when {
+                        trimmed.isEmpty() -> null
+                        // Whisper labels non-speech audio with a bracketed tag —
+                        // "(wind blowing)", "[BLANK_AUDIO]", "[Music]", "(silence)".
+                        // When the whole turn is nothing but such tags, the mic
+                        // caught ambient noise, not the user; drop it so it isn't
+                        // submitted as if they'd said "wind blowing" (the caller
+                        // treats null as "re-open the mic" in hands-free mode).
+                        isNonSpeechArtifact(trimmed) -> {
+                            Log.i(TAG, "Discarding non-speech transcript: \"$trimmed\"")
+                            null
+                        }
+                        else -> trimmed
+                    }
                 } catch (t: Throwable) {
                     Log.w(TAG, "transcribeNative threw", t)
                     null
                 }
             }
         }
+    }
+
+    /**
+     * True when [text] is nothing but Whisper's non-speech annotations and
+     * stray punctuation — i.e. the model heard ambient sound, not words. We
+     * strip every parenthesised "(...)", bracketed "[...]" and asterisked
+     * "*...*" tag (the forms whisper.cpp uses for "(wind blowing)",
+     * "[BLANK_AUDIO]", "[Music]", "*coughs*", ...); if only punctuation and
+     * whitespace remain, there was no actual speech. Deliberately conservative:
+     * a tag embedded in real speech ("turn it (up)") leaves residue and is kept,
+     * so genuine turns are never dropped.
+     */
+    private fun isNonSpeechArtifact(text: String): Boolean {
+        val stripped = text
+            .replace(Regex("\\([^)]*\\)"), " ")
+            .replace(Regex("\\[[^\\]]*]"), " ")
+            .replace(Regex("\\*[^*]*\\*"), " ")
+        return stripped.replace(Regex("[\\p{Punct}\\s]+"), "").isEmpty()
     }
 
     /** Aborts the current recording (if any) without transcribing. */

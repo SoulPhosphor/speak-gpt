@@ -18,9 +18,7 @@ package org.teslasoft.assistant.util
 
 import android.app.Activity
 import android.content.Context
-import android.os.Build
 import android.view.View
-import android.view.WindowInsets
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import java.util.EnumSet
@@ -34,108 +32,62 @@ class WindowInsetsUtil {
         }
 
         fun adjustPaddings(activity: Activity, parentView: View?, res: Int, flags: EnumSet<Flags>, customPaddingTop: Int = 0, customPaddingBottom: Int = 0, forceFromAndroidR: Boolean = false) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S || (forceFromAndroidR && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)) {
-                try {
-                    val view = parentView?.findViewById<View>(res)
-                    view?.setPadding(
-                        0,
-                        activity.window.decorView.rootWindowInsets.getInsets(WindowInsets.Type.statusBars()).top * (if (flags.contains(Flags.STATUS_BAR)) 1 else 0) + view.paddingTop * (if (flags.contains(Flags.IGNORE_PADDINGS)) 0 else 1) + pxToDp(
-                            activity,
-                            customPaddingTop
-                        ),
-                        0,
-                        activity.window.decorView.rootWindowInsets.getInsets(WindowInsets.Type.navigationBars()).bottom * (if (flags.contains(Flags.NAVIGATION_BAR)) 1 else 0) + view.paddingBottom * (if (flags.contains(Flags.IGNORE_PADDINGS)) 0 else 1) + pxToDp(
-                            activity,
-                            customPaddingBottom
-                        )
-                    )
-                } catch (_: Exception) { /* unused */ }
-            } else {
-                try {
-                    val view = parentView?.findViewById<View>(res) ?: return
-
-                    // Cache original paddings so we don't "stack" padding if this is called multiple times
-                    val cached = view.getTag(res) as? Pair<*, *>
-                    val originalTop = cached?.first as? Int ?: view.paddingTop
-                    val originalBottom = cached?.second as? Int ?: view.paddingBottom
-                    if (cached == null) view.setTag(res, originalTop to originalBottom)
-
-                    ViewCompat.setOnApplyWindowInsetsListener(view) { v, insets ->
-                        val statusTop = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
-                        val navBottom = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
-
-                        val baseTop = if (flags.contains(Flags.IGNORE_PADDINGS)) 0 else originalTop
-                        val baseBottom = if (flags.contains(Flags.IGNORE_PADDINGS)) 0 else originalBottom
-
-                        val topInsetPart = if (flags.contains(Flags.STATUS_BAR)) statusTop else 0
-                        val bottomInsetPart = if (flags.contains(Flags.NAVIGATION_BAR)) navBottom else 0
-
-                        v.setPadding(
-                            0,
-                            topInsetPart + baseTop + pxToDp(activity, customPaddingTop),
-                            0,
-                            bottomInsetPart + baseBottom + pxToDp(activity, customPaddingBottom)
-                        )
-
-                        insets
-                    }
-
-                    // Trigger first insets dispatch
-                    ViewCompat.requestApplyInsets(view)
-                } catch (_: Exception) { /* unused */ }
-            }
+            val view = parentView?.findViewById<View>(res) ?: return
+            applyInsetPaddings(activity, view, res, flags, customPaddingTop, customPaddingBottom)
         }
 
         fun adjustPaddings(activity: Activity, res: Int, flags: EnumSet<Flags>, customPaddingTop: Int = 0, customPaddingBottom: Int = 0, forceFromAndroidR: Boolean = false) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S || (forceFromAndroidR && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)) {
-                try {
-                    val view = activity.findViewById<View>(res)
-                    view.setPadding(
+            val view = activity.findViewById<View>(res) ?: return
+            applyInsetPaddings(activity, view, res, flags, customPaddingTop, customPaddingBottom)
+        }
+
+        /**
+         * Apply system-bar insets as padding, re-applying on every insets
+         * dispatch via an [androidx.core.view.OnApplyWindowInsetsListener].
+         *
+         * This deliberately replaces the previous Android-12+ path, which read
+         * `decorView.rootWindowInsets` a single time. With edge-to-edge enabled
+         * that read can land before the first insets dispatch (right after a
+         * shared-element transition, a re-attach, or a config change) and return
+         * *zero* insets — leaving the action bar tucked under the status bar
+         * (its buttons look "gone" while the bar's space remains) and the input
+         * row behind the gesture nav bar, with nothing to correct it afterwards.
+         * A listener that fires on every dispatch is self-correcting and works
+         * identically on all API levels via [WindowInsetsCompat].
+         */
+        private fun applyInsetPaddings(activity: Activity, view: View, res: Int, flags: EnumSet<Flags>, customPaddingTop: Int, customPaddingBottom: Int) {
+            try {
+                // Cache the view's own paddings once so repeated dispatches add
+                // the inset to the original padding instead of stacking onto an
+                // already-inset value.
+                val cached = view.getTag(res) as? Pair<*, *>
+                val originalTop = cached?.first as? Int ?: view.paddingTop
+                val originalBottom = cached?.second as? Int ?: view.paddingBottom
+                if (cached == null) view.setTag(res, originalTop to originalBottom)
+
+                ViewCompat.setOnApplyWindowInsetsListener(view) { v, insets ->
+                    val statusTop = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
+                    val navBottom = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
+
+                    val baseTop = if (flags.contains(Flags.IGNORE_PADDINGS)) 0 else originalTop
+                    val baseBottom = if (flags.contains(Flags.IGNORE_PADDINGS)) 0 else originalBottom
+
+                    val topInsetPart = if (flags.contains(Flags.STATUS_BAR)) statusTop else 0
+                    val bottomInsetPart = if (flags.contains(Flags.NAVIGATION_BAR)) navBottom else 0
+
+                    v.setPadding(
                         0,
-                        activity.window.decorView.rootWindowInsets.getInsets(WindowInsets.Type.statusBars()).top * (if (flags.contains(Flags.STATUS_BAR)) 1 else 0) + view.paddingTop * (if (flags.contains(Flags.IGNORE_PADDINGS)) 0 else 1) + pxToDp(
-                            activity,
-                            customPaddingTop
-                        ),
+                        topInsetPart + baseTop + pxToDp(activity, customPaddingTop),
                         0,
-                        activity.window.decorView.rootWindowInsets.getInsets(WindowInsets.Type.navigationBars()).bottom * (if (flags.contains(Flags.NAVIGATION_BAR)) 1 else 0) + view.paddingBottom * (if (flags.contains(Flags.IGNORE_PADDINGS)) 0 else 1) + pxToDp(
-                            activity,
-                            customPaddingBottom
-                        )
+                        bottomInsetPart + baseBottom + pxToDp(activity, customPaddingBottom)
                     )
-                } catch (_: Exception) { /* unused */ }
-            } else {
-                try {
-                    val view = activity.findViewById<View>(res) ?: return
 
-                    // cache original paddings to avoid stacking
-                    val cached = view.getTag(res) as? Pair<*, *>
-                    val originalTop = cached?.first as? Int ?: view.paddingTop
-                    val originalBottom = cached?.second as? Int ?: view.paddingBottom
-                    if (cached == null) view.setTag(res, originalTop to originalBottom)
+                    insets
+                }
 
-                    ViewCompat.setOnApplyWindowInsetsListener(view) { v, insets ->
-                        val statusTop = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
-                        val navBottom = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
-
-                        val baseTop = if (flags.contains(Flags.IGNORE_PADDINGS)) 0 else originalTop
-                        val baseBottom = if (flags.contains(Flags.IGNORE_PADDINGS)) 0 else originalBottom
-
-                        val topInsetPart = if (flags.contains(Flags.STATUS_BAR)) statusTop else 0
-                        val bottomInsetPart = if (flags.contains(Flags.NAVIGATION_BAR)) navBottom else 0
-
-                        v.setPadding(
-                            0,
-                            topInsetPart + baseTop + pxToDp(activity, customPaddingTop),
-                            0,
-                            bottomInsetPart + baseBottom + pxToDp(activity, customPaddingBottom)
-                        )
-
-                        insets
-                    }
-
-                    ViewCompat.requestApplyInsets(view)
-                } catch (_: Exception) { /* unused */ }
-            }
+                // Kick off the first dispatch (and re-dispatch if already attached).
+                ViewCompat.requestApplyInsets(view)
+            } catch (_: Exception) { /* unused */ }
         }
 
         private fun pxToDp(context: Context, px: Int): Int {

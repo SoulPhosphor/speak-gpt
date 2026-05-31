@@ -68,7 +68,6 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.ViewOutlineProvider
-import android.view.WindowInsets
 import android.view.animation.Animation
 import android.view.animation.AnimationUtils
 import android.widget.EditText
@@ -3981,19 +3980,22 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         WindowInsetsUtil.adjustPaddings(this, R.id.messages, EnumSet.of(WindowInsetsUtil.Companion.Flags.NAVIGATION_BAR))
 
         val messages = findViewById<RecyclerView>(R.id.messages)
-        val layoutParams = messages.layoutParams as ViewGroup.MarginLayoutParams
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            layoutParams.topMargin = dpToPx(64) + window.decorView.rootWindowInsets.getInsets(WindowInsets.Type.statusBars()).top
-        } else {
-            val view = findViewById<View>(android.R.id.content) ?: return
-            ViewCompat.setOnApplyWindowInsetsListener(view) { _, insets ->
-                layoutParams.topMargin = dpToPx(64) + insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
-                insets
-            }
+        // Keep the message list clear of the status bar by re-applying the top
+        // margin on every insets dispatch. The previous Android-12+ path read
+        // rootWindowInsets once; if that read landed before insets arrived it
+        // saw a zero status-bar inset and the first messages slid up under the
+        // status bar. Drive it off a listener (here on the content view, so we
+        // don't replace the navigation-bar padding listener WindowInsetsUtil
+        // installs on the messages view itself) so it self-corrects.
+        val content = findViewById<View>(android.R.id.content) ?: return
+        ViewCompat.setOnApplyWindowInsetsListener(content) { _, insets ->
+            val lp = messages.layoutParams as ViewGroup.MarginLayoutParams
+            lp.topMargin = dpToPx(64) + insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
+            messages.layoutParams = lp
+            insets
         }
-
-        messages.layoutParams = layoutParams
+        ViewCompat.requestApplyInsets(content)
     }
 
     private fun finishActivity() {
