@@ -16,7 +16,6 @@
 
 package org.teslasoft.assistant.ui.activities
 
-import android.content.Intent
 import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.os.Build
@@ -35,15 +34,15 @@ import androidx.fragment.app.FragmentActivity
 import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
 import org.teslasoft.assistant.R
-import org.teslasoft.assistant.preferences.PersonaPreferences
+import org.teslasoft.assistant.preferences.ActivationPromptPreferences
 import org.teslasoft.assistant.preferences.Preferences
-import org.teslasoft.assistant.preferences.dto.PersonaObject
+import org.teslasoft.assistant.preferences.dto.ActivationPromptObject
 import org.teslasoft.assistant.theme.ThemeManager
-import org.teslasoft.assistant.ui.adapters.PersonaListItemAdapter
-import org.teslasoft.assistant.ui.fragments.dialogs.EditPersonaDialogFragment
+import org.teslasoft.assistant.ui.adapters.ActivationPromptListItemAdapter
+import org.teslasoft.assistant.ui.fragments.dialogs.EditActivationPromptDialogFragment
 import org.teslasoft.assistant.util.Hash
 
-class PersonasListActivity : FragmentActivity() {
+class ActivationPromptsListActivity : FragmentActivity() {
 
     private var btnAdd: ExtendedFloatingActionButton? = null
     private var btnBack: ImageButton? = null
@@ -51,42 +50,34 @@ class PersonasListActivity : FragmentActivity() {
     private var listView: ListView? = null
 
     private var list: ArrayList<HashMap<String, String>> = arrayListOf()
-    private var adapter: PersonaListItemAdapter? = null
+    private var adapter: ActivationPromptListItemAdapter? = null
 
-    private var personaPreferences: PersonaPreferences? = null
+    private var activationPromptPreferences: ActivationPromptPreferences? = null
 
     private var actionBar: ConstraintLayout? = null
 
-    private fun newEditDialog(persona: PersonaObject, position: Int): EditPersonaDialogFragment {
-        return EditPersonaDialogFragment.newInstance(
-            persona.label,
-            persona.prompt,
-            persona.activationPromptId,
+    private fun newEditDialog(activationPrompt: ActivationPromptObject, position: Int): EditActivationPromptDialogFragment {
+        return EditActivationPromptDialogFragment.newInstance(
+            activationPrompt.label,
+            activationPrompt.prompt,
             position
         )
     }
 
-    private fun newEmptyPersona(): PersonaObject {
-        return PersonaObject("", "")
+    private fun newEmptyActivationPrompt(): ActivationPromptObject {
+        return ActivationPromptObject("", "")
     }
 
     private fun openEditDialog(position: Int) {
         val label = list[position]["label"] ?: return
-        val persona = personaPreferences!!.getPersona(Hash.hash(label))
-        val dialog = newEditDialog(persona, position)
+        val activationPrompt = activationPromptPreferences!!.getActivationPrompt(Hash.hash(label))
+        val dialog = newEditDialog(activationPrompt, position)
         dialog.setListener(editDialogListener)
         dialog.setCancelable(false)
-        dialog.show(supportFragmentManager, "EditPersonaDialogFragment")
+        dialog.show(supportFragmentManager, "EditActivationPromptDialogFragment")
     }
 
-    private fun finishWithActive(label: String) {
-        val resultIntent = Intent()
-        resultIntent.putExtra("personaId", Hash.hash(label))
-        setResult(RESULT_OK, resultIntent)
-        finish()
-    }
-
-    private var onSelectListener: PersonaListItemAdapter.OnSelectListener = object : PersonaListItemAdapter.OnSelectListener {
+    private var onSelectListener: ActivationPromptListItemAdapter.OnSelectListener = object : ActivationPromptListItemAdapter.OnSelectListener {
         override fun onClick(position: Int) {
             openEditDialog(position)
         }
@@ -96,34 +87,34 @@ class PersonasListActivity : FragmentActivity() {
         }
     }
 
-    private var editDialogListener: EditPersonaDialogFragment.StateChangesListener = object : EditPersonaDialogFragment.StateChangesListener {
-        override fun onAdd(persona: PersonaObject) {
-            personaPreferences!!.setPersona(persona)
-            finishWithActive(persona.label)
+    private var editDialogListener: EditActivationPromptDialogFragment.StateChangesListener = object : EditActivationPromptDialogFragment.StateChangesListener {
+        override fun onAdd(activationPrompt: ActivationPromptObject) {
+            activationPromptPreferences!!.setActivationPrompt(activationPrompt)
+            reloadList()
         }
 
-        override fun onEdit(oldLabel: String, persona: PersonaObject, position: Int) {
-            personaPreferences!!.editPersona(list[position]["label"] ?: return, persona)
-            finishWithActive(persona.label)
+        override fun onEdit(oldLabel: String, activationPrompt: ActivationPromptObject, position: Int) {
+            activationPromptPreferences!!.editActivationPrompt(list[position]["label"] ?: return, activationPrompt)
+            reloadList()
         }
 
         override fun onDelete(position: Int, id: String) {
-            personaPreferences!!.deletePersona(id)
+            activationPromptPreferences!!.deleteActivationPrompt(id)
             reloadList()
         }
 
         override fun onError(message: String, position: Int) {
-            Toast.makeText(this@PersonasListActivity, message, Toast.LENGTH_SHORT).show()
-            val persona = if (position == -1) {
-                newEmptyPersona()
+            Toast.makeText(this@ActivationPromptsListActivity, message, Toast.LENGTH_SHORT).show()
+            val activationPrompt = if (position == -1) {
+                newEmptyActivationPrompt()
             } else {
                 val label = list[position]["label"] ?: return
-                personaPreferences!!.getPersona(Hash.hash(label))
+                activationPromptPreferences!!.getActivationPrompt(Hash.hash(label))
             }
-            val dialog = newEditDialog(persona, position)
+            val dialog = newEditDialog(activationPrompt, position)
             dialog.setListener(this)
             dialog.setCancelable(false)
-            dialog.show(supportFragmentManager, "EditPersonaDialogFragment")
+            dialog.show(supportFragmentManager, "EditActivationPromptDialogFragment")
         }
     }
 
@@ -131,7 +122,7 @@ class PersonasListActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        setContentView(R.layout.activity_persona_list)
+        setContentView(R.layout.activity_activation_prompt_list)
 
         btnAdd = findViewById(R.id.btn_add)
         btnBack = findViewById(R.id.btn_back)
@@ -168,7 +159,7 @@ class PersonasListActivity : FragmentActivity() {
 
         listView?.divider = null
 
-        personaPreferences = PersonaPreferences.getPersonaPreferences(this)
+        activationPromptPreferences = ActivationPromptPreferences.getActivationPromptPreferences(this)
         initialize()
     }
 
@@ -176,9 +167,9 @@ class PersonasListActivity : FragmentActivity() {
         if (list == null) list = arrayListOf()
 
         list.clear()
-        val personasList = personaPreferences!!.getPersonasList()
+        val promptsList = activationPromptPreferences!!.getActivationPromptsList()
 
-        for (i in personasList) {
+        for (i in promptsList) {
             val map = HashMap<String, String>()
             map["label"] = i.label
             map["prompt"] = i.prompt
@@ -189,7 +180,7 @@ class PersonasListActivity : FragmentActivity() {
         if (list == null) list = arrayListOf()
 
         runOnUiThread {
-            adapter = PersonaListItemAdapter(list, this)
+            adapter = ActivationPromptListItemAdapter(list, this)
             adapter!!.setOnSelectListener(onSelectListener)
             listView!!.adapter = adapter
             adapter!!.notifyDataSetChanged()
@@ -197,11 +188,8 @@ class PersonasListActivity : FragmentActivity() {
     }
 
     private fun isDarkThemeEnabled(): Boolean {
-        return when (resources.configuration.uiMode and
-                Configuration.UI_MODE_NIGHT_MASK) {
+        return when (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) {
             Configuration.UI_MODE_NIGHT_YES -> true
-            Configuration.UI_MODE_NIGHT_NO -> false
-            Configuration.UI_MODE_NIGHT_UNDEFINED -> false
             else -> false
         }
     }
@@ -210,15 +198,14 @@ class PersonasListActivity : FragmentActivity() {
         reloadList()
 
         btnBack!!.setOnClickListener {
-            setResult(RESULT_CANCELED)
             finish()
         }
 
         btnAdd!!.setOnClickListener {
-            val dialog = newEditDialog(newEmptyPersona(), -1)
+            val dialog = newEditDialog(newEmptyActivationPrompt(), -1)
             dialog.setListener(editDialogListener)
             dialog.setCancelable(false)
-            dialog.show(supportFragmentManager, "EditPersonaDialogFragment")
+            dialog.show(supportFragmentManager, "EditActivationPromptDialogFragment")
         }
     }
 

@@ -54,7 +54,10 @@ object VadMethods {
     const val ENERGY = "energy"
     const val WEBRTC = "webrtc"
     const val SILERO = "silero" // reserved; not yet implemented
-    const val DEFAULT = WEBRTC
+    // Energy is the default: dependency-free and works on every device. WebRTC
+    // needs a native lib that isn't always present (and silently falls back to
+    // energy when it isn't), so it's opt-in rather than the default.
+    const val DEFAULT = ENERGY
 
     /**
      * WebRTC aggressiveness range (libfvad). 0 = "quality" (most sensitive,

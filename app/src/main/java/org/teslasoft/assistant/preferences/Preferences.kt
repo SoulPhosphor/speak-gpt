@@ -494,7 +494,7 @@ class Preferences private constructor(private var preferences: SharedPreferences
      * @return System message.
      */
     fun getSystemMessage() : String {
-        return getString("system_message", "")
+        return getGlobalString("system_message", "")
     }
 
     /**
@@ -503,7 +503,7 @@ class Preferences private constructor(private var preferences: SharedPreferences
      * @param message The system message.
      */
     fun setSystemMessage(message: String) {
-        putString("system_message", message)
+        putGlobalString("system_message", message)
     }
 
     /**
@@ -965,19 +965,22 @@ class Preferences private constructor(private var preferences: SharedPreferences
      * Voice-activity-detection method used to decide when a hands-free turn
      * has ended when on-device Whisper is the STT engine. One of the ids in
      * [org.teslasoft.assistant.stt.VadMethods] ("energy", "webrtc", ...).
-     * Defaults to WebRTC.
+     * Defaults to Energy: it is dependency-free and reliable across devices,
+     * whereas WebRTC depends on a native lib that isn't available everywhere
+     * (and silently falls back to energy when it isn't). Users who want
+     * noise-rejection can opt into WebRTC in settings.
      *
      * @return VAD method id
      * */
     fun getVadMethod() : String {
-        return getGlobalString("vad_method", "webrtc")
+        return getGlobalString("vad_method", "energy")
     }
 
     /**
      * Set the hands-free voice-activity-detection method.
      * */
     fun setVadMethod(method: String) {
-        putGlobalString("vad_method", method, "webrtc")
+        putGlobalString("vad_method", method, "energy")
     }
 
     /**

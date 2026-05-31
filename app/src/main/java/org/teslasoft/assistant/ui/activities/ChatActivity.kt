@@ -897,10 +897,21 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 Log.w("TTS", "Language missing or unsupported: ${preferences!!.getLanguage()}")
             }
 
-            val voices: Set<Voice> = tts!!.voices
-            for (v: Voice in voices) {
-                if (v.name == preferences!!.getVoice()) {
-                    tts!!.voice = v
+            // tts.voices is declared non-null but the platform can return null
+            // (engine reports init success before voice metadata is ready, or
+            // doesn't support enumeration), which previously crashed the app
+            // with an NPE on the TTS init thread. Guard it and fail soft.
+            val voices: Set<Voice>? = try {
+                tts!!.voices
+            } catch (t: Throwable) {
+                Log.w("TTS", "Could not query voices", t)
+                null
+            }
+            if (voices != null) {
+                for (v: Voice in voices) {
+                    if (v.name == preferences!!.getVoice()) {
+                        tts!!.voice = v
+                    }
                 }
             }
         }
@@ -2391,6 +2402,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         stopHandsFreeService()
     }
 
+    /** A failed turn must not silently re-arm the hands-free loop. Otherwise a
+     *  single error (overloaded model, dropped connection, etc.) becomes an
+     *  endless retry cycle that keeps erroring without the user touching the
+     *  mic. Stopping the loop here means a fresh mic tap is required to resume. */
+    private fun stopHandsFreeOnError() {
+        if (preferences?.getHandsFreeMode() == true) {
+            runOnUiThread { stopHandsFreeLoop() }
+        }
+    }
+
     /** True while the AI is generating, speaking through TTS, or playing back
      *  OpenAI TTS audio. Used so a single mic-button tap can cancel everything. */
     private fun isAiCurrentlyBusy(): Boolean {
@@ -2777,6 +2798,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             }
         } catch (e: Exception) {
             playErrorSignal()
+            stopHandsFreeOnError()
             val response = when {
                 e.stackTraceToString().contains("invalid model") -> {
                     getString(R.string.prompt_no_model_provided)
@@ -3473,6 +3495,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             }
         } catch (e: Exception) {
             playErrorSignal()
+            stopHandsFreeOnError()
             if (preferences?.showChatErrors() == true) {
                 putMessage(
                     when {
