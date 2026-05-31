@@ -89,6 +89,12 @@
         </activity>
 
         <activity
+            android:name=".ui.activities.CharactersActivity"
+            android:exported="false"
+            android:label="@string/title_characters">
+        </activity>
+
+        <activity
             android:name=".ui.activities.LogitBiasConfigActivity"
             android:exported="false">
         </activity>

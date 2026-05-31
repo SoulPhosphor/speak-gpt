@@ -263,6 +263,16 @@
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toBottomOf="@+id/textView30">
 
+                <androidx.constraintlayout.widget.ConstraintLayout
+                    android:id="@+id/tile_characters"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="4dp"
+                    android:layout_marginEnd="4dp"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toTopOf="parent" />
+
                 <LinearLayout
                     android:id="@+id/linearLayout5"
                     android:layout_width="0dp"
@@ -275,7 +285,7 @@
                     android:weightSum="2"
                     app:layout_constraintEnd_toEndOf="parent"
                     app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toTopOf="parent">
+                    app:layout_constraintTop_toBottomOf="@+id/tile_characters">
 
                     <androidx.constraintlayout.widget.ConstraintLayout
                         android:id="@+id/tile_account"
@@ -317,8 +327,7 @@
 
                     </androidx.constraintlayout.widget.ConstraintLayout>
 
-                    <androidx.constraintlayout.widget.ConstraintLayout
-                        android:id="@+id/tile_personas"
+                    <View
                         android:layout_width="0dp"
                         android:layout_height="match_parent"
                         android:layout_marginHorizontal="4dp"
