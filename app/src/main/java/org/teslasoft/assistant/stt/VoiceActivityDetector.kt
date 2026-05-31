@@ -218,7 +218,7 @@ class WebRtcVad private constructor(
     }
 
     override fun diagnostics(): String {
-        val base = "WebRTC: voiced $voicedFrames/$totalFrames, peak $peakAbs/32767"
+        val base = "WebRTC frame=$frameSamples: voiced $voicedFrames/$totalFrames, peak $peakAbs/32767"
         return if (errorFrames > 0) "$base, errors $errorFrames" else base
     }
 
@@ -242,7 +242,35 @@ class WebRtcVad private constructor(
                 0L
             }
             if (handle == 0L) return null
-            val frameSamples = sampleRate / 1000 * 30 // 30 ms frame
+
+            // Self-test: the WebRTC VAD only accepts 10/20/30 ms frames for the
+            // configured rate. On at least one real device, fvad_process rejected
+            // the 30 ms frame on *every* call (returning -1), so hands-free heard
+            // nothing and just timed out. Probe a silent frame at 30/20/10 ms and
+            // keep the first length the detector actually accepts; if none work,
+            // free the handle and return null so the caller falls back to energy
+            // (which works everywhere) instead of silently erroring forever.
+            val candidates = intArrayOf(
+                sampleRate / 1000 * 30,
+                sampleRate / 1000 * 20,
+                sampleRate / 1000 * 10
+            )
+            var frameSamples = 0
+            for (len in candidates) {
+                val probe = ShortArray(len)
+                val r = try {
+                    WebRtcVadNative.nativeProcess(handle, probe, len)
+                } catch (t: Throwable) { -1 }
+                if (r >= 0) { frameSamples = len; break }
+            }
+            try { WebRtcVadNative.nativeReset(handle) } catch (_: Throwable) {}
+
+            if (frameSamples == 0) {
+                Log.w(TAG, "WebRTC VAD self-test failed (rate=$sampleRate, all frame lengths errored); falling back to energy")
+                try { WebRtcVadNative.nativeFree(handle) } catch (_: Throwable) {}
+                return null
+            }
+            Log.i(TAG, "WebRTC VAD ready: rate=$sampleRate frame=$frameSamples")
             return WebRtcVad(handle, frameSamples)
         }
     }

@@ -27,6 +27,7 @@
 
 #define TAG "WebRtcVadJNI"
 #define LOGW(...) __android_log_print(ANDROID_LOG_WARN, TAG, __VA_ARGS__)
+#define LOGI(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
 
 extern "C" JNIEXPORT jlong JNICALL
 Java_org_teslasoft_assistant_stt_WebRtcVadNative_nativeNew(
@@ -46,6 +47,12 @@ Java_org_teslasoft_assistant_stt_WebRtcVadNative_nativeNew(
         fvad_free(vad);
         return 0L;
     }
+    // Defensive: ensure the detector core is in a clean, fully-initialised state
+    // after (re)configuring rate/mode before any frame is processed. Cheap, and
+    // rules out a "configured but not initialised → every fvad_process returns
+    // -1" failure mode seen in the field.
+    fvad_reset(vad);
+    LOGI("fvad ready: mode=%d rate=%d", mode, sampleRate);
     return reinterpret_cast<jlong>(vad);
 }
 
@@ -71,6 +78,15 @@ Java_org_teslasoft_assistant_stt_WebRtcVadNative_nativeProcess(
                               static_cast<size_t>(length));
 
     env->ReleaseShortArrayElements(frame, samples, JNI_ABORT);
+
+    // A -1 means fvad rejected the (rate, frame_length) pairing. Log it once so
+    // a "WebRTC hears nothing" report has a root cause in logcat instead of a
+    // fleeting on-screen toast. Throttled to the first occurrence per process.
+    static bool loggedError = false;
+    if (result < 0 && !loggedError) {
+        loggedError = true;
+        LOGW("fvad_process returned -1 for frame length %d (invalid rate/frame pairing)", length);
+    }
     return result; // 1 voice, 0 non-voice, -1 error
 }
 
