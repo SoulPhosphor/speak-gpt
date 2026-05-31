@@ -19,26 +19,20 @@ package org.teslasoft.assistant.preferences
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
-import org.teslasoft.assistant.preferences.dto.PersonaObject
+import org.teslasoft.assistant.preferences.dto.ActivationPromptObject
 import org.teslasoft.assistant.util.Hash
 
-class PersonaPreferences private constructor(private var preferences: SharedPreferences) {
+class ActivationPromptPreferences private constructor(private var preferences: SharedPreferences) {
     companion object {
-        private var personaPreferences: PersonaPreferences? = null
+        private var activationPromptPreferences: ActivationPromptPreferences? = null
 
-        fun getPersonaPreferences(context: Context): PersonaPreferences {
-            if (personaPreferences == null) {
-                personaPreferences = PersonaPreferences(context.getSharedPreferences("personas", Context.MODE_PRIVATE))
+        fun getActivationPromptPreferences(context: Context): ActivationPromptPreferences {
+            if (activationPromptPreferences == null) {
+                activationPromptPreferences = ActivationPromptPreferences(context.getSharedPreferences("activation_prompts", Context.MODE_PRIVATE))
             }
 
-            return personaPreferences!!
+            return activationPromptPreferences!!
         }
-    }
-
-    private var listeners: ArrayList<OnPersonaChangeListener> = ArrayList()
-
-    fun addOnPersonaChangeListener(listener: OnPersonaChangeListener) {
-        listeners.add(listener)
     }
 
     private fun getString(key: String, defValue: String): String {
@@ -49,45 +43,34 @@ class PersonaPreferences private constructor(private var preferences: SharedPref
         preferences.edit { putString(key, value) }
     }
 
-    fun getPersona(id: String): PersonaObject {
+    fun getActivationPrompt(id: String): ActivationPromptObject {
         val label = getString(id + "_label", "")
         val prompt = getString(id + "_prompt", "")
-        val activationPromptId = getString(id + "_activation_prompt_id", "")
-        return PersonaObject(label, prompt, activationPromptId)
+        return ActivationPromptObject(label, prompt)
     }
 
-    fun setPersona(persona: PersonaObject) {
-        val id = Hash.hash(persona.label)
-        putString(id + "_label", persona.label)
-        putString(id + "_prompt", persona.prompt)
-        putString(id + "_activation_prompt_id", persona.activationPromptId)
-
-        for (listener in listeners) {
-            listener.onPersonaChange()
-        }
+    fun setActivationPrompt(activationPrompt: ActivationPromptObject) {
+        val id = Hash.hash(activationPrompt.label)
+        putString(id + "_label", activationPrompt.label)
+        putString(id + "_prompt", activationPrompt.prompt)
     }
 
-    fun deletePersona(id: String) {
+    fun deleteActivationPrompt(id: String) {
         preferences.edit { remove(id + "_label") }
         preferences.edit { remove(id + "_prompt") }
-        preferences.edit { remove(id + "_activation_prompt_id") }
-
-        for (listener in listeners) {
-            listener.onPersonaChange()
-        }
     }
 
-    fun editPersona(oldLabel: String, persona: PersonaObject) {
-        deletePersona(Hash.hash(oldLabel))
-        setPersona(persona)
+    fun editActivationPrompt(oldLabel: String, activationPrompt: ActivationPromptObject) {
+        deleteActivationPrompt(Hash.hash(oldLabel))
+        setActivationPrompt(activationPrompt)
     }
 
-    fun getPersonasList(): ArrayList<PersonaObject> {
-        val list = ArrayList<PersonaObject>()
+    fun getActivationPromptsList(): ArrayList<ActivationPromptObject> {
+        val list = ArrayList<ActivationPromptObject>()
         for (key in preferences.all.keys) {
             if (key.endsWith("_label")) {
                 val id = key.removeSuffix("_label")
-                list.add(getPersona(id))
+                list.add(getActivationPrompt(id))
             }
         }
 
@@ -97,9 +80,5 @@ class PersonaPreferences private constructor(private var preferences: SharedPref
         }
 
         return list
-    }
-
-    fun interface OnPersonaChangeListener {
-        fun onPersonaChange()
     }
 }

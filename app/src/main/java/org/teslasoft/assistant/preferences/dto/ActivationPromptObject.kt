@@ -16,11 +16,9 @@
 
 package org.teslasoft.assistant.preferences.dto
 
-class PersonaObject(
-    /* Friendly name. Used as the unique identifier (hashed) and shown as the card label. */
+class ActivationPromptObject(
+    /* Friendly title. Used as the unique identifier (hashed) and shown as the card label. */
     var label: String,
-    /* The persona prompt. Prepended before the always-on system message. */
-    var prompt: String = "",
-    /* Hashed id of the associated activation prompt, or "" for None (always available). */
-    var activationPromptId: String = ""
+    /* The activation prompt text, sent as a first user message when applied. */
+    var prompt: String = ""
 )

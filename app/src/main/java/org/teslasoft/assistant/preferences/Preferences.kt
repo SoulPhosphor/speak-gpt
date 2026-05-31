@@ -494,7 +494,7 @@ class Preferences private constructor(private var preferences: SharedPreferences
      * @return System message.
      */
     fun getSystemMessage() : String {
-        return getString("system_message", "")
+        return getGlobalString("system_message", "")
     }
 
     /**
@@ -503,7 +503,7 @@ class Preferences private constructor(private var preferences: SharedPreferences
      * @param message The system message.
      */
     fun setSystemMessage(message: String) {
-        putString("system_message", message)
+        putGlobalString("system_message", message)
     }
 
     /**

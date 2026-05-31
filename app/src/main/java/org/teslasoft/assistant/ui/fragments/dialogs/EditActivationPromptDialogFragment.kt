@@ -26,98 +26,56 @@ import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.DialogFragment
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.textfield.TextInputEditText
-import com.google.android.material.textfield.TextInputLayout
 import org.teslasoft.assistant.R
-import org.teslasoft.assistant.preferences.ActivationPromptPreferences
-import org.teslasoft.assistant.preferences.dto.PersonaObject
+import org.teslasoft.assistant.preferences.dto.ActivationPromptObject
 import org.teslasoft.assistant.util.Hash
 
-class EditPersonaDialogFragment : DialogFragment() {
+class EditActivationPromptDialogFragment : DialogFragment() {
     companion object {
         fun newInstance(
             label: String,
             prompt: String,
-            activationPromptId: String,
             position: Int
-        ): EditPersonaDialogFragment {
-            val editPersonaDialogFragment = EditPersonaDialogFragment()
+        ): EditActivationPromptDialogFragment {
+            val fragment = EditActivationPromptDialogFragment()
 
             val args = Bundle()
             args.putString("label", label)
             args.putString("prompt", prompt)
-            args.putString("activationPromptId", activationPromptId)
             args.putInt("position", position)
 
-            editPersonaDialogFragment.arguments = args
+            fragment.arguments = args
 
-            return editPersonaDialogFragment
+            return fragment
         }
     }
 
     private var textDialogTitle: TextView? = null
     private var fieldLabel: TextInputEditText? = null
     private var fieldPrompt: TextInputEditText? = null
-    private var fieldActivationPrompt: TextInputEditText? = null
-
-    private var selectedActivationPromptId: String = ""
 
     private var builder: AlertDialog.Builder? = null
 
     private var listener: StateChangesListener? = null
 
-    private fun activationPromptLabel(id: String): String {
-        if (id == "") return getString(R.string.label_activation_none)
-        val label = ActivationPromptPreferences.getActivationPromptPreferences(requireContext()).getActivationPrompt(id).label
-        return if (label != "") label else getString(R.string.label_activation_none)
-    }
-
-    private fun showActivationPromptChooser() {
-        val prompts = ActivationPromptPreferences.getActivationPromptPreferences(requireContext()).getActivationPromptsList()
-        val ids = arrayListOf("")
-        val labels = arrayListOf(getString(R.string.label_activation_none))
-        for (p in prompts) {
-            ids.add(Hash.hash(p.label))
-            labels.add(p.label)
-        }
-
-        val current = ids.indexOf(selectedActivationPromptId).coerceAtLeast(0)
-
-        MaterialAlertDialogBuilder(requireContext(), R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.persona_activation_hint)
-            .setSingleChoiceItems(labels.toTypedArray(), current) { dialog, which ->
-                selectedActivationPromptId = ids[which]
-                fieldActivationPrompt?.setText(activationPromptLabel(selectedActivationPromptId))
-                dialog.dismiss()
-            }
-            .setNegativeButton(R.string.btn_cancel) { _, _ -> }
-            .show()
-    }
-
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
-        return inflater.inflate(R.layout.fragment_edit_persona, container, false)
+        return inflater.inflate(R.layout.fragment_edit_activation_prompt, container, false)
     }
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         builder = MaterialAlertDialogBuilder(this.requireContext(), R.style.App_MaterialAlertDialog)
 
-        val view: View = this.layoutInflater.inflate(R.layout.fragment_edit_persona, null)
+        val view: View = this.layoutInflater.inflate(R.layout.fragment_edit_activation_prompt, null)
 
         textDialogTitle = view.findViewById(R.id.text_dialog_title)
         fieldLabel = view.findViewById(R.id.field_label)
         fieldPrompt = view.findViewById(R.id.field_prompt)
-        fieldActivationPrompt = view.findViewById(R.id.field_activation_prompt)
 
         fieldLabel?.setText(requireArguments().getString("label"))
         fieldPrompt?.setText(requireArguments().getString("prompt"))
 
-        selectedActivationPromptId = requireArguments().getString("activationPromptId") ?: ""
-        fieldActivationPrompt?.setText(activationPromptLabel(selectedActivationPromptId))
-
-        fieldActivationPrompt?.setOnClickListener { showActivationPromptChooser() }
-        view.findViewById<TextInputLayout>(R.id.textInputLayoutActivation)?.setOnClickListener { showActivationPromptChooser() }
-
         if (requireArguments().getInt("position") == -1) {
-            textDialogTitle?.text = getString(R.string.label_add_persona)
+            textDialogTitle?.text = getString(R.string.label_add_activation_prompt)
         }
 
         builder!!.setView(view)
@@ -128,8 +86,8 @@ class EditPersonaDialogFragment : DialogFragment() {
         if (requireArguments().getInt("position") != -1) {
             builder!!.setNeutralButton(R.string.btn_delete) { _, _ -> run {
                 MaterialAlertDialogBuilder(this.requireContext(), R.style.App_MaterialAlertDialog)
-                    .setTitle(R.string.label_delete_persona)
-                    .setMessage(R.string.message_delete_persona)
+                    .setTitle(R.string.label_delete_activation_prompt)
+                    .setMessage(R.string.message_delete_activation_prompt)
                     .setPositiveButton(R.string.yes) { _, _ -> listener!!.onDelete(requireArguments().getInt("position"), Hash.hash(requireArguments().getString("label")!!)) }
                     .setNegativeButton(R.string.no) { _, _ -> listener!!.onCancel(requireArguments().getInt("position")) }
                     .show()
@@ -139,26 +97,25 @@ class EditPersonaDialogFragment : DialogFragment() {
         return builder!!.create()
     }
 
-    private fun buildPersonaObject(): PersonaObject {
-        return PersonaObject(
+    private fun buildActivationPromptObject(): ActivationPromptObject {
+        return ActivationPromptObject(
             label = fieldLabel?.text.toString(),
-            prompt = fieldPrompt?.text.toString(),
-            activationPromptId = selectedActivationPromptId
+            prompt = fieldPrompt?.text.toString()
         )
     }
 
     private fun validateForm() {
         if (fieldLabel?.text.toString().isEmpty()) {
-            listener!!.onError(getString(R.string.label_error_persona_empty), requireArguments().getInt("position"))
+            listener!!.onError(getString(R.string.label_error_activation_prompt_empty), requireArguments().getInt("position"))
             return
         }
 
         if (requireArguments().getInt("position") == -1) {
-            listener!!.onAdd(buildPersonaObject())
+            listener!!.onAdd(buildActivationPromptObject())
         } else {
             listener!!.onEdit(
                 requireArguments().getString("label")!!,
-                buildPersonaObject(),
+                buildActivationPromptObject(),
                 requireArguments().getInt("position")
             )
         }
@@ -169,8 +126,8 @@ class EditPersonaDialogFragment : DialogFragment() {
     }
 
     interface StateChangesListener {
-        fun onAdd(persona: PersonaObject) { /* default */ }
-        fun onEdit(oldLabel: String, persona: PersonaObject, position: Int) { /* default */ }
+        fun onAdd(activationPrompt: ActivationPromptObject) { /* default */ }
+        fun onEdit(oldLabel: String, activationPrompt: ActivationPromptObject, position: Int) { /* default */ }
         fun onDelete(position: Int, id: String) { /* default */ }
         fun onError(message: String, position: Int) { /* default */ }
         fun onCancel(position: Int) { /* default */ }
