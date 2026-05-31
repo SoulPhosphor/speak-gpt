@@ -194,7 +194,7 @@
     <string name="btn_remove_ads">Remove ads</string>
     <string name="go_back">Go back</string>
     <string name="label_api_endpoint">API endpoint</string>
-    <string name="title_api_endpoints">Profiles</string>
+    <string name="title_api_endpoints">API Profiles</string>
     <string name="btn_new_api_endpoint">Add profile</string>
     <string name="label_persona">Persona</string>
     <string name="title_personas">Personas</string>
@@ -356,9 +356,12 @@
     <string name="tile_account_title">OpenAI Account</string>
     <string name="tile_account_subtitle">Manage OpenAI account</string>
     <string name="tile_account_desc">This feature allows you to manage your OpenAI account.</string>
-    <string name="tile_profiles_title">Profiles</string>
+    <string name="tile_profiles_title">API Profiles</string>
     <string name="tile_profiles_subtitle">Manage API connection profiles</string>
     <string name="tile_profiles_desc">Create and switch between API connection profiles. Each profile holds a base URL, API key, chat completions endpoint and auth mode.</string>
+    <string name="tile_personas_title">Personas</string>
+    <string name="tile_personas_subtitle">Manage personas</string>
+    <string name="tile_personas_desc">Create and switch between personas. A persona is a reusable prompt that is merged ahead of your system message. Personas are shared across all chats.</string>
     <string name="tile_assistant_title">Default assistant</string>
     <string name="tile_assistant_desc">This feature allows you to set SpeakGPT as your default assistant.</string>
     <string name="tile_api_endpoint_title">API endpoint</string>

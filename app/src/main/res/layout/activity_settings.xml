@@ -317,7 +317,8 @@
 
                     </androidx.constraintlayout.widget.ConstraintLayout>
 
-                    <View
+                    <androidx.constraintlayout.widget.ConstraintLayout
+                        android:id="@+id/tile_personas"
                         android:layout_width="0dp"
                         android:layout_height="match_parent"
                         android:layout_marginHorizontal="4dp"

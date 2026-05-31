@@ -52,6 +52,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.elevation.SurfaceColors
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
+import org.teslasoft.assistant.preferences.PersonaPreferences
 import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.DeviceInfoProvider
 import org.teslasoft.assistant.preferences.GlobalPreferences
@@ -81,6 +82,7 @@ import androidx.core.view.WindowCompat
 class SettingsActivity : FragmentActivity() {
 
     private var tileAccountFragment: TileFragment? = null
+    private var tilePersonas: TileFragment? = null
     private var tileAssistant: TileFragment? = null
     private var tileAutoSend: TileFragment? = null
     private var tileVoice: TileFragment? = null
@@ -142,6 +144,7 @@ class SettingsActivity : FragmentActivity() {
 
     private var teslasoftIDClient: TeslasoftIDClient? = null
     private var apiEndpointPreferences: ApiEndpointPreferences? = null
+    private var personaPreferences: PersonaPreferences? = null
 
     private var languageChangedListener: LanguageSelectorDialogFragment.StateChangesListener = object : LanguageSelectorDialogFragment.StateChangesListener {
         override fun onSelected(name: String) {
@@ -293,6 +296,7 @@ class SettingsActivity : FragmentActivity() {
         transition.excludeTarget(R.id.activity_new_settings_title, true)
         transition.excludeTarget(R.id.btn_back, true)
         transition.excludeTarget(R.id.tile_account, true)
+        transition.excludeTarget(R.id.tile_personas, true)
         transition.excludeTarget(R.id.tile_assistant, true)
         transition.excludeTarget(R.id.tile_autosend, true)
         transition.excludeTarget(R.id.tile_voice, true)
@@ -356,6 +360,7 @@ class SettingsActivity : FragmentActivity() {
         transition2.excludeTarget(R.id.constraintLayout17, true)
         transition2.excludeTarget(R.id.constraintLayout167, true)
         transition2.excludeTarget(R.id.tile_account, true)
+        transition2.excludeTarget(R.id.tile_personas, true)
         transition2.excludeTarget(R.id.tile_assistant, true)
         transition2.excludeTarget(R.id.tile_autosend, true)
         transition2.excludeTarget(R.id.tile_voice, true)
@@ -440,6 +445,7 @@ class SettingsActivity : FragmentActivity() {
 
         preferences = Preferences.getPreferences(this, chatId)
         apiEndpointPreferences = ApiEndpointPreferences.getApiEndpointPreferences(this)
+        personaPreferences = PersonaPreferences.getPersonaPreferences(this)
         apiEndpoint = apiEndpointPreferences?.getApiEndpoint(this, preferences?.getApiEndpointId()!!)
 
         activationPrompt = preferences?.getPrompt() ?: ""
@@ -512,6 +518,13 @@ class SettingsActivity : FragmentActivity() {
         }.start()
     }
 
+    private fun getActivePersonaLabel(): String {
+        val personaId = preferences?.getPersonaId() ?: ""
+        if (personaId == "") return getString(R.string.label_tap_to_set)
+        val label = personaPreferences?.getPersona(personaId)?.label ?: ""
+        return if (label != "") label else getString(R.string.label_tap_to_set)
+    }
+
     private fun createFragments1() {
         val t1 = Thread {
             tileAccountFragment = TileFragment.newInstance(
@@ -526,6 +539,20 @@ class SettingsActivity : FragmentActivity() {
                 chatId = chatId,
                 functionDesc = getString(R.string.tile_profiles_desc),
                 transitionName = "expand_api_list"
+            )
+
+            tilePersonas = TileFragment.newInstance(
+                checked = false,
+                checkable = false,
+                enabledText = getString(R.string.tile_personas_title),
+                disabledText = null,
+                enabledDesc = getActivePersonaLabel(),
+                disabledDesc = null,
+                icon = R.drawable.ic_user,
+                disabled = false,
+                chatId = chatId,
+                functionDesc = getString(R.string.tile_personas_desc),
+                transitionName = "expand_persona_list"
             )
 
             tileAssistant = TileFragment.newInstance(
@@ -1305,6 +1332,7 @@ class SettingsActivity : FragmentActivity() {
 
     private fun placeFragments() : FragmentTransaction {
         val operation = supportFragmentManager.beginTransaction().replace(R.id.tile_account, tileAccountFragment!!)
+            .replace(R.id.tile_personas, tilePersonas!!)
             .replace(R.id.tile_assistant, tileAssistant!!)
             .replace(R.id.tile_autosend, tileAutoSend!!)
             .replace(R.id.tile_voice, tileVoice!!)
@@ -1365,6 +1393,18 @@ class SettingsActivity : FragmentActivity() {
         }
     }
 
+    private var personaActivityResultLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == RESULT_OK) {
+            val data: Intent? = result.data
+            val personaId = data?.getStringExtra("personaId")
+
+            if (personaId != null) {
+                preferences?.setPersonaId(personaId)
+                tilePersonas?.updateSubtitle(getActivePersonaLabel())
+            }
+        }
+    }
+
     private fun initializeLogic() {
         btnBack?.setOnClickListener {
             finishActivity()
@@ -1372,6 +1412,10 @@ class SettingsActivity : FragmentActivity() {
 
         tileAccountFragment?.setOnTileClickListener {
             apiEndpointActivityResultLauncher.launch(Intent(this, ApiEndpointsListActivity::class.java))
+        }
+
+        tilePersonas?.setOnTileClickListener {
+            personaActivityResultLauncher.launch(Intent(this, PersonasListActivity::class.java))
         }
 
         tileAutoSend?.setOnCheckedChangeListener { isChecked -> run {
