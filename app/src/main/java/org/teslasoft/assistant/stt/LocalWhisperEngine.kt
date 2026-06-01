@@ -105,9 +105,13 @@ class LocalWhisperEngine private constructor() {
     // Snapshot of the detector's stats taken when a no-speech timeout fires, so
     // the UI can show the user why WebRTC heard nothing. Read on the main thread.
     @Volatile private var lastVadDiagnostics: String = ""
+    @Volatile private var lastVadMayContainSpeech: Boolean = false
 
     /** Detector stats from the most recent no-speech timeout (may be empty). */
     fun lastVadDiagnostics(): String = lastVadDiagnostics
+
+    /** True when a no-speech timeout still had loud input worth transcribing. */
+    fun lastVadMayContainSpeech(): Boolean = lastVadMayContainSpeech
 
     /**
      * Voice-activity-detection config for hands-free capture. Recreates the
@@ -162,12 +166,16 @@ class LocalWhisperEngine private constructor() {
         onEndOfTurn: (() -> Unit)? = null,
         onNoSpeechTimeout: (() -> Unit)? = null
     ): Boolean {
-        if (isCapturing) return true
+        if (isCapturing || audioRecord != null) {
+            Log.w(TAG, "startRecording called while a capture was still active; resetting stale capture")
+            cancel()
+        }
         synchronized(chunkLock) {
             capturedChunks.clear()
             capturedCount = 0
         }
         lastVadDiagnostics = ""
+        lastVadMayContainSpeech = false
         vadConfig = vad
         onVadEndOfTurn = onEndOfTurn
         onVadNoSpeech = onNoSpeechTimeout
@@ -253,12 +261,14 @@ class LocalWhisperEngine private constructor() {
                                 speechStarted = true
                                 lastVoiceAt = now
                             }
-                            if (speechStarted && now - lastVoiceAt >= cfg.silenceMs) {
+                            val maxTurnMs = maxOf(cfg.noSpeechMs * 3, cfg.silenceMs * 2, 30_000L)
+                            if (speechStarted && (now - lastVoiceAt >= cfg.silenceMs || now - startedAt >= maxTurnMs)) {
                                 vadFired = true
                                 onVadEndOfTurn?.invoke()
                             } else if (!speechStarted && now - startedAt >= cfg.noSpeechMs) {
                                 vadFired = true
                                 lastVadDiagnostics = detector.diagnostics()
+                                lastVadMayContainSpeech = detector.mayContainRejectedSpeech()
                                 onVadNoSpeech?.invoke()
                             }
                         }
