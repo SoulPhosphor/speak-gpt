@@ -121,16 +121,39 @@ class EnergyVad(
 
     private var noiseFloor = 0.0
     private var floorInit = false
+    private var bootstrapSpeechFrames = 0
 
     override fun reset() {
         noiseFloor = 0.0
         floorInit = false
+        bootstrapSpeechFrames = 0
     }
 
     override fun accept(frame: ShortArray, len: Int): Boolean {
         if (len <= 0) return false
         val rms = rmsOf(frame, len)
-        if (!floorInit) { noiseFloor = rms; floorInit = true }
+
+        // AudioRecord can deliver the first usable chunk after the user has
+        // already started speaking. The old energy detector treated that first
+        // chunk as the room floor, making the threshold 2.5x the user's own
+        // voice and causing the entire hands-free turn to no-speech timeout.
+        // For a small startup window, let clearly-loud speech start the turn
+        // without poisoning the floor. If the same loud energy continues with
+        // no quieter startup frame (fan/car noise, music, etc.), stop treating
+        // it as tentative speech and seed the floor from that steady input so
+        // the hands-free loop can finish instead of refreshing lastVoiceAt
+        // forever.
+        if (!floorInit) {
+            if (rms >= minSpeechRms * BOOTSTRAP_SPEECH_FACTOR) {
+                bootstrapSpeechFrames++
+                if (bootstrapSpeechFrames <= MAX_BOOTSTRAP_SPEECH_FRAMES) {
+                    return true
+                }
+            }
+            noiseFloor = rms
+            floorInit = true
+        }
+
         val threshold = maxOf(noiseFloor * floorFactor, minSpeechRms)
         return if (rms >= threshold) {
             true
@@ -157,6 +180,8 @@ class EnergyVad(
         // These are the numbers most likely to need on-device tuning.
         const val MIN_SPEECH_RMS = 600.0
         const val SPEECH_FLOOR_FACTOR = 2.5
+        private const val BOOTSTRAP_SPEECH_FACTOR = 2.0
+        private const val MAX_BOOTSTRAP_SPEECH_FRAMES = 3
     }
 }
 
