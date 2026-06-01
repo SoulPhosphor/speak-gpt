@@ -2177,6 +2177,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             startActivity(Intent(this, WelcomeActivity::class.java).setAction(Intent.ACTION_VIEW))
             finishActivity()
         } else {
+            val isBearerAuth = apiEndpointObject?.authType == null ||
+                    apiEndpointObject?.authType == ApiEndpointObject.AUTH_BEARER
             val extraHeaders: Map<String, String> = when (apiEndpointObject?.authType) {
                 ApiEndpointObject.AUTH_X_API_KEY -> mapOf("x-api-key" to key!!)
                 ApiEndpointObject.AUTH_API_KEY -> mapOf("api-key" to key!!)
@@ -2184,7 +2186,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             }
 
             val config = OpenAIConfig(
-                token = key!!,
+                // OpenAIConfig.token unconditionally generates an
+                // "Authorization: Bearer <token>" header. When the user picks
+                // x-api-key or api-key as their auth mode, the key already
+                // goes through extraHeaders, and passing it as token here too
+                // sends BOTH a Bearer header and the alternate-auth header —
+                // which 4xx's at providers like Anthropic that reject the
+                // extra Authorization header. Empty token suppresses the
+                // Bearer line and lets the alternate header carry auth alone.
+                token = if (isBearerAuth) key!! else "",
                 logging = LoggingConfig(LogLevel.None, Logger.Simple),
                 timeout = Timeout(socket = 30.seconds),
                 organization = null,
