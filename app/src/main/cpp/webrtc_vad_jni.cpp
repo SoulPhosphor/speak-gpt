@@ -47,11 +47,14 @@ Java_org_teslasoft_assistant_stt_WebRtcVadNative_nativeNew(
         fvad_free(vad);
         return 0L;
     }
-    // Defensive: ensure the detector core is in a clean, fully-initialised state
-    // after (re)configuring rate/mode before any frame is processed. Cheap, and
-    // rules out a "configured but not initialised → every fvad_process returns
-    // -1" failure mode seen in the field.
-    fvad_reset(vad);
+    // NB: do NOT call fvad_reset() here. Despite the name, fvad_reset wipes
+    // mode and sample rate back to defaults (mode 0, 8 kHz) — not just the
+    // classification state. That's why on Pixel 8 the self-test only
+    // accepted 10 ms frames (the one valid length at 8 kHz, since 20 and
+    // 30 ms at 16 kHz translate to 320/480-sample frames that are invalid
+    // at 8 kHz), and why the user's mode 2/3 sensitivity settings were
+    // silently overridden back to mode 0. fvad_new returns a fresh
+    // instance, and set_mode + set_sample_rate fully configure it.
     LOGI("fvad ready: mode=%d rate=%d", mode, sampleRate);
     return reinterpret_cast<jlong>(vad);
 }
