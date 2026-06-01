@@ -130,7 +130,22 @@ class EnergyVad(
     override fun accept(frame: ShortArray, len: Int): Boolean {
         if (len <= 0) return false
         val rms = rmsOf(frame, len)
-        if (!floorInit) { noiseFloor = rms; floorInit = true }
+
+        // AudioRecord can deliver the first usable chunk after the user has
+        // already started speaking. The old energy detector treated that first
+        // chunk as the room floor, making the threshold 2.5x the user's own
+        // voice and causing the entire hands-free turn to no-speech timeout.
+        // Until a quieter frame appears, let clearly-loud speech start the
+        // turn without poisoning the floor; that later quiet frame still seeds
+        // the adaptive ambient estimate as before.
+        if (!floorInit) {
+            if (rms >= minSpeechRms * BOOTSTRAP_SPEECH_FACTOR) {
+                return true
+            }
+            noiseFloor = rms
+            floorInit = true
+        }
+
         val threshold = maxOf(noiseFloor * floorFactor, minSpeechRms)
         return if (rms >= threshold) {
             true
@@ -157,6 +172,7 @@ class EnergyVad(
         // These are the numbers most likely to need on-device tuning.
         const val MIN_SPEECH_RMS = 600.0
         const val SPEECH_FLOOR_FACTOR = 2.5
+        private const val BOOTSTRAP_SPEECH_FACTOR = 2.0
     }
 }
 
