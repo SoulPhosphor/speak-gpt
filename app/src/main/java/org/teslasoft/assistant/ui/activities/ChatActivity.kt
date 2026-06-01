@@ -167,7 +167,6 @@ import org.teslasoft.assistant.preferences.PersonaPreferences
 import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.LogitBiasPreferences
-import org.teslasoft.assistant.preferences.Logger
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.stt.LocalWhisperEngine
@@ -1992,7 +1991,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         if (diag.isEmpty()) return
         Toast.makeText(this, diag, Toast.LENGTH_LONG).show()
         try {
-            Logger.log(this, "event", "WebRtcVad", "debug", "$reason: $diag")
+            org.teslasoft.assistant.preferences.Logger.log(this, "event", "WebRtcVad", "debug", "$reason: $diag")
         } catch (_: Throwable) { /* event-log opt-out is fine */ }
     }
 
