@@ -130,13 +130,23 @@ class EnergyVad(
     override fun accept(frame: ShortArray, len: Int): Boolean {
         if (len <= 0) return false
         val rms = rmsOf(frame, len)
-        if (!floorInit) { noiseFloor = rms; floorInit = true }
+        // Anchor the noise floor to the quietest frame seen, not the first.
+        // In hands-free, the next turn's mic opens the instant the AI stops
+        // talking, so the first frame is often the user already mid-word.
+        // Snapshotting that as "ambient" pinned the threshold above the user's
+        // own speech volume, so every following frame read as silence and the
+        // silence timer fired in the middle of a sentence. The running min
+        // recalibrates the moment a natural gap between words slips through.
+        if (!floorInit || rms < noiseFloor) {
+            noiseFloor = rms
+            floorInit = true
+        }
         val threshold = maxOf(noiseFloor * floorFactor, minSpeechRms)
         return if (rms >= threshold) {
             true
         } else {
-            // Track the ambient floor on quiet frames so the threshold adapts
-            // to the room over a few hundred ms.
+            // Below threshold = ambient — let the floor drift up so a noisier
+            // room (fan turned on mid-recording) raises the bar over time.
             noiseFloor = noiseFloor * 0.97 + rms * 0.03
             false
         }
