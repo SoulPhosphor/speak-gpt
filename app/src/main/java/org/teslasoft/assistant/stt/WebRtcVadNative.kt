@@ -54,6 +54,17 @@ object WebRtcVadNative {
         synchronized(this) {
             if (loaded) return true
             if (loadError != null) return false
+            // Same CPU gate as LocalWhisperNative: libphosphorwhisper.so is
+            // built with armv8.2 dotprod+fp16 instructions. Refuse the load
+            // on pre-A55/A75 arm64 CPUs so the energy-VAD fallback runs
+            // instead of the app crashing on first nativeProcess call.
+            if (!NativeCpuSupport.isSupported()) {
+                loadError = UnsupportedOperationException(
+                    "WebRTC VAD requires ARMv8.2 dotprod+fp16; not present on this CPU"
+                )
+                Log.w(TAG, "Skipping lib$LIB_NAME.so load: CPU unsupported")
+                return false
+            }
             try {
                 System.loadLibrary(LIB_NAME)
                 loaded = true

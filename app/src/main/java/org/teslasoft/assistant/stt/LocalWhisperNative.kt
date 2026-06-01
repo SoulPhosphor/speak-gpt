@@ -75,6 +75,18 @@ object LocalWhisperNative {
         synchronized(this) {
             if (loaded) return true
             if (loadError != null) return false
+            // The shipped arm64-v8a .so is built with armv8.2 dotprod + fp16
+            // instructions. On a CPU without those (pre-Cortex-A55/A75
+            // arm64), the first native call SIGILLs and the app vanishes
+            // with no Java exception. Refuse the load and let callers fall
+            // back to cloud STT.
+            if (!NativeCpuSupport.isSupported()) {
+                loadError = UnsupportedOperationException(
+                    "On-device Whisper requires ARMv8.2 dotprod+fp16; not present on this CPU"
+                )
+                Log.w(TAG, "Skipping lib$LIB_NAME.so load: CPU unsupported")
+                return false
+            }
             try {
                 System.loadLibrary(LIB_NAME)
                 loaded = true
