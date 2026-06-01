@@ -187,16 +187,31 @@ class WebRtcVad private constructor(
     // Per-recording diagnostics so a "WebRTC never hears me" timeout can report
     // whether libfvad saw any voiced frames and how loud the input actually was.
     private var totalFrames = 0
-    private var voicedFrames = 0
+    private var voicedFrames = 0       // libfvad raw vote
+    private var gatedVoicedFrames = 0  // libfvad vote AND above the energy floor
     private var errorFrames = 0
     private var peakAbs = 0
+
+    // Adaptive energy floor that gates libfvad's vote. The GMM still tags
+    // continuous fan/AC rumble as voice on some devices (seen on Pixel 8 +
+    // a desk fan: 99.8% voiced frames at mode 2 AND mode 3), which keeps
+    // lastVoiceAt fresh forever and means the silence timer never fires —
+    // hands-free "listens forever". Tracking the running-minimum RMS and
+    // requiring the frame to clear floor*2.5 (or an absolute 600 in a
+    // dead-quiet room) lets steady noise raise the gate without blocking
+    // real speech, which sits well above any room noise floor.
+    private var noiseFloor = 0.0
+    private var floorInit = false
 
     override fun reset() {
         pendingCount = 0
         totalFrames = 0
         voicedFrames = 0
+        gatedVoicedFrames = 0
         errorFrames = 0
         peakAbs = 0
+        noiseFloor = 0.0
+        floorInit = false
         if (handle != 0L) {
             try { WebRtcVadNative.nativeReset(handle) } catch (_: Throwable) {}
         }
@@ -212,15 +227,37 @@ class WebRtcVad private constructor(
             pendingCount += n
             i += n
             if (pendingCount == frameSamples) {
+                var sumSq = 0.0
                 for (s in pending) {
+                    val v = s.toDouble()
+                    sumSq += v * v
                     val a = if (s < 0) -s.toInt() else s.toInt()
                     if (a > peakAbs) peakAbs = a
                 }
+                val rms = kotlin.math.sqrt(sumSq / frameSamples)
+                if (!floorInit || rms < noiseFloor) {
+                    noiseFloor = rms
+                    floorInit = true
+                }
+                val energyThreshold = maxOf(noiseFloor * ENERGY_FLOOR_FACTOR, MIN_ENERGY_RMS)
+                val aboveEnergy = rms >= energyThreshold
+
                 val r = try {
                     WebRtcVadNative.nativeProcess(handle, pending, frameSamples)
                 } catch (_: Throwable) { -1 }
                 totalFrames++
-                if (r == 1) { speech = true; voicedFrames++ } else if (r < 0) errorFrames++
+                if (r == 1) voicedFrames++
+                if (r == 1 && aboveEnergy) {
+                    speech = true
+                    gatedVoicedFrames++
+                } else if (r < 0) {
+                    errorFrames++
+                }
+                if (!aboveEnergy) {
+                    // Drift floor up toward steady ambient so the gate adapts
+                    // to a fan turning on mid-recording.
+                    noiseFloor = noiseFloor * 0.97 + rms * 0.03
+                }
                 pendingCount = 0
             }
         }
@@ -228,7 +265,8 @@ class WebRtcVad private constructor(
     }
 
     override fun diagnostics(): String {
-        val base = "WebRTC frame=$frameSamples: voiced $voicedFrames/$totalFrames, peak $peakAbs/32767"
+        val base = "WebRTC frame=$frameSamples: voiced $voicedFrames/$totalFrames " +
+                "(gated $gatedVoicedFrames), peak $peakAbs/32767, floor ${noiseFloor.toInt()}"
         return if (errorFrames > 0) "$base, errors $errorFrames" else base
     }
 
@@ -241,6 +279,13 @@ class WebRtcVad private constructor(
 
     companion object {
         private const val TAG = "WebRtcVad"
+
+        // Energy-gate tuning: same constants as EnergyVad so behaviour is
+        // consistent between methods. A normal voice 30 cm from a phone mic
+        // runs RMS 1500-6000; fan/AC rumble runs 200-1200 — so floor*2.5
+        // (or the 600 absolute) cleanly separates them once the floor adapts.
+        private const val ENERGY_FLOOR_FACTOR = 2.5
+        private const val MIN_ENERGY_RMS = 600.0
 
         /** @param mode libfvad aggressiveness 0..3. Returns null if unavailable. */
         fun create(mode: Int, sampleRate: Int): WebRtcVad? {
