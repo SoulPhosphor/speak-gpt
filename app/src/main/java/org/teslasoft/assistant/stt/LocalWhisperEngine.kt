@@ -354,7 +354,12 @@ class LocalWhisperEngine private constructor() {
                     val elapsed = SystemClock.elapsedRealtime() - startedAt
                     Log.i(TAG, "Transcribed ${audioMs}ms of audio in ${elapsed}ms")
                     val filtered = filterNonSpeechMarkers(text)
-                    filtered.ifEmpty { null }
+                    // After stripping non-speech markers, Whisper-generated
+                    // punctuation around them ("[Music].", "♪♪♪…") can leave
+                    // a content-less remainder like "." or "…". Treat that as
+                    // empty so hands-free re-arms the mic instead of submitting
+                    // bare punctuation as a "real" transcript.
+                    if (filtered.any { it.isLetterOrDigit() }) filtered else null
                 } catch (t: Throwable) {
                     Log.w(TAG, "transcribeNative threw", t)
                     null
