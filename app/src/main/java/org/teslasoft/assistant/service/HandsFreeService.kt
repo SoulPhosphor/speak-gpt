@@ -79,7 +79,15 @@ class HandsFreeService : Service() {
 
         val notification = buildNotification(chatId, chatName)
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            // Typed startForeground (3-arg, with FOREGROUND_SERVICE_TYPE_MICROPHONE)
+            // was added in API 29 and is what tells the OS this service is the
+            // one using the mic — required for background mic access on
+            // Android 11+ when the screen goes off. Previously gated to API 34,
+            // which left Android 11/12/13 falling back to the untyped overload
+            // and (per playstore reports) silently losing the mic mid-session.
+            // The manifest already declares foregroundServiceType="microphone";
+            // the runtime type is the authoritative signal the OS checks.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 startForeground(
                     NOTIFICATION_ID,
                     notification,
