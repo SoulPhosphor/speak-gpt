@@ -1884,6 +1884,17 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             return
         }
 
+        // Pre-A55/A75 arm64 CPUs can't run the shipped native lib (built
+        // with armv8.2 dotprod+fp16) without SIGILL. Detect early and fall
+        // back to cloud Whisper so unsupported devices get a transcript
+        // instead of silently recording into a void (or in hands-free,
+        // looping no-result turns forever).
+        if (!org.teslasoft.assistant.stt.NativeCpuSupport.isSupported()) {
+            Toast.makeText(this, R.string.local_whisper_no_model_snackbar, Toast.LENGTH_LONG).show()
+            handleWhisperSpeechRecognition()
+            return
+        }
+
         val activeModel = preferences?.getActiveLocalWhisperModel().orEmpty()
         val installed = activeModel.isNotEmpty() &&
                 LocalWhisperModels.byId(activeModel)?.let {
