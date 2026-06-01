@@ -172,6 +172,7 @@ import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.stt.LocalWhisperEngine
 import org.teslasoft.assistant.stt.LocalWhisperModels
 import org.teslasoft.assistant.stt.LocalWhisperStorage
+import org.teslasoft.assistant.stt.SpeechTranscriptFilter
 import org.teslasoft.assistant.service.HandsFreeService
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.adapters.chat.ChatAdapter
@@ -584,6 +585,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         // a fix when one was left dangling. The delay lets a legitimate return
         // animation play out instead of snapping.
         actionBar?.postDelayed({ restoreTopBarVisibility() }, 500)
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) restoreTopBarVisibility()
     }
 
     /** Force the chat's top action bar and its buttons back to fully visible. */
@@ -1190,6 +1196,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
         micIdle()
         btnSettings?.setImageResource(R.drawable.ic_settings)
+        restoreTopBarVisibility()
+        actionBar?.postDelayed({ restoreTopBarVisibility() }, 100)
+        actionBar?.postDelayed({ restoreTopBarVisibility() }, 700)
 
         btnSelectAll?.setOnClickListener {
             selectAll()
@@ -1789,9 +1798,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 ),
                 model = ModelId("whisper-1"),
             )
-            val transcription = openAIAI?.transcription(transcriptionRequest)!!.text
+            val transcription = SpeechTranscriptFilter.cleanedOrNull(openAIAI?.transcription(transcriptionRequest)!!.text)
 
-            if (transcription.trim() == "") {
+            if (transcription == null) {
                 isRecording = false
                 btnMicro?.isEnabled = true
                 btnSend?.isEnabled = true
@@ -1981,6 +1990,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             val diag = LocalWhisperEngine.get().lastVadDiagnostics()
             if (diag.isNotEmpty()) Toast.makeText(this, diag, Toast.LENGTH_LONG).show()
         }
+        if (LocalWhisperEngine.get().lastVadMayContainSpeech()) {
+            onHandsFreeWhisperEndOfTurn()
+            return
+        }
         stopHandsFreeLoop()
         LocalWhisperEngine.get().cancel()
     }
@@ -2045,12 +2058,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     }
 
     private fun processLocalWhisperTranscript(transcription: String?) {
+        val cleanedTranscription = SpeechTranscriptFilter.cleanedOrNull(transcription)
         // Mirrors the downstream half of processRecording(): if auto-send
         // is on, push the transcript as a user turn and kick generation;
         // otherwise drop it into the message input box.
         // Transcription phase is over either way — drop the status hint.
         messageInput?.hint = getString(R.string.hint_message)
-        if (transcription.isNullOrBlank()) {
+        if (cleanedTranscription == null) {
             isRecording = false
             btnMicro?.isEnabled = true
             btnSend?.isEnabled = true
@@ -2065,11 +2079,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             return
         }
         if (preferences?.autoSend() == true) {
-            putMessage(prefix + transcription + endSeparator, false)
+            putMessage(prefix + cleanedTranscription + endSeparator, false)
             chatMessages.add(
                 ChatMessage(
                     role = ChatRole.User,
-                    content = prefix + transcription + endSeparator
+                    content = prefix + cleanedTranscription + endSeparator
                 )
             )
             saveSettings()
@@ -2085,14 +2099,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     restoreUIState()
                 }
                 try {
-                    generateResponse(prefix + transcription + endSeparator, true)
+                    generateResponse(prefix + cleanedTranscription + endSeparator, true)
                 } catch (_: CancellationException) {
                     restoreUIState()
                 }
             }
         } else {
             restoreUIState()
-            messageInput?.setText(transcription)
+            messageInput?.setText(cleanedTranscription)
         }
     }
 
@@ -2477,9 +2491,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         try { tts?.stop() } catch (_: Exception) { /* ignore */ }
         try { recognizer?.stopListening() } catch (_: Exception) { /* ignore */ }
         try { speakScope?.coroutineContext?.cancel(CancellationException("Cancelled by user")) } catch (_: Exception) { /* ignore */ }
+        try { processRecordingScope?.coroutineContext?.cancel(CancellationException("Cancelled by user")) } catch (_: Exception) { /* ignore */ }
+        try { onSpeechResultsScope?.coroutineContext?.cancel(CancellationException("Cancelled by user")) } catch (_: Exception) { /* ignore */ }
+        try { whisperScope?.coroutineContext?.cancel(CancellationException("Cancelled by user")) } catch (_: Exception) { /* ignore */ }
+        try { LocalWhisperEngine.get().cancel() } catch (_: Exception) { /* ignore */ }
         isRecording = false
-        micIdle()
         stopHandsFreeService()
+        restoreUIState()
     }
 
     private val postNotificationsLauncher = registerForActivityResult(

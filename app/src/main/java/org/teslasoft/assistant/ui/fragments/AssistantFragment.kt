@@ -144,6 +144,7 @@ import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.stt.LocalWhisperEngine
 import org.teslasoft.assistant.stt.LocalWhisperModels
 import org.teslasoft.assistant.stt.LocalWhisperStorage
+import org.teslasoft.assistant.stt.SpeechTranscriptFilter
 import org.teslasoft.assistant.ui.activities.MainActivity
 import org.teslasoft.assistant.ui.activities.SettingsActivity
 import org.teslasoft.assistant.ui.adapters.chat.ChatAdapter
@@ -873,9 +874,9 @@ class AssistantFragment : BottomSheetDialogFragment(), ChatAdapter.OnUpdateListe
                 ),
                 model = ModelId("whisper-1"),
             )
-            val transcription = openAIAI?.transcription(transcriptionRequest)!!.text
+            val transcription = SpeechTranscriptFilter.cleanedOrNull(openAIAI?.transcription(transcriptionRequest)!!.text)
 
-            if (transcription.trim() == "") {
+            if (transcription == null) {
                 isRecording = false
                 animation?.stop()
                 animation?.reset()
@@ -1037,9 +1038,10 @@ class AssistantFragment : BottomSheetDialogFragment(), ChatAdapter.OnUpdateListe
     }
 
     private fun processLocalWhisperTranscript(transcription: String?) {
+        val cleanedTranscription = SpeechTranscriptFilter.cleanedOrNull(transcription)
         // Transcription phase is over either way — drop the status hint.
         assistantMessage?.hint = getString(R.string.hint_message)
-        if (transcription.isNullOrBlank()) {
+        if (cleanedTranscription == null) {
             isRecording = false
             animation?.stop()
             animation?.reset()
@@ -1050,11 +1052,11 @@ class AssistantFragment : BottomSheetDialogFragment(), ChatAdapter.OnUpdateListe
             return
         }
         if (preferences?.autoSend() == true) {
-            putMessage(prefix + transcription + endSeparator, false)
+            putMessage(prefix + cleanedTranscription + endSeparator, false)
             chatMessages.add(
                 ChatMessage(
                     role = ChatRole.User,
-                    content = prefix + transcription + endSeparator
+                    content = prefix + cleanedTranscription + endSeparator
                 )
             )
             saveSettings()
@@ -1069,12 +1071,12 @@ class AssistantFragment : BottomSheetDialogFragment(), ChatAdapter.OnUpdateListe
                     restoreUIState()
                 }
                 try {
-                    generateResponse(prefix + transcription + endSeparator, true)
+                    generateResponse(prefix + cleanedTranscription + endSeparator, true)
                 } catch (_: CancellationException) { /* ignore */ }
             }
         } else {
             restoreUIState()
-            assistantMessage?.setText(transcription)
+            assistantMessage?.setText(cleanedTranscription)
             showKeyboard(true)
         }
     }

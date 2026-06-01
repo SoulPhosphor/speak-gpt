@@ -54,6 +54,13 @@ interface VoiceActivityDetector {
      * logcat. Empty by default; detectors that can explain themselves override it.
      */
     fun diagnostics(): String = ""
+
+    /**
+     * True when the detector did not classify speech but the raw input was loud
+     * enough that a user may have been talking. Callers can then prefer a
+     * best-effort transcription over dropping the turn.
+     */
+    fun mayContainRejectedSpeech(): Boolean = false
 }
 
 /** Stable ids persisted in preferences and shown in the settings picker. */
@@ -222,6 +229,8 @@ class WebRtcVad private constructor(
         return if (errorFrames > 0) "$base, errors $errorFrames" else base
     }
 
+    override fun mayContainRejectedSpeech(): Boolean = voicedFrames == 0 && peakAbs >= REJECTED_SPEECH_PEAK
+
     override fun close() {
         if (handle != 0L) {
             try { WebRtcVadNative.nativeFree(handle) } catch (_: Throwable) {}
@@ -231,6 +240,7 @@ class WebRtcVad private constructor(
 
     companion object {
         private const val TAG = "WebRtcVad"
+        private const val REJECTED_SPEECH_PEAK = 1200
 
         /** @param mode libfvad aggressiveness 0..3. Returns null if unavailable. */
         fun create(mode: Int, sampleRate: Int): WebRtcVad? {
