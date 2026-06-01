@@ -64,6 +64,27 @@ class LocalWhisperEngine private constructor() {
         private const val MIN_SPEECH_RMS = 600.0
         private const val SPEECH_FLOOR_FACTOR = 2.5
 
+        // On-device Whisper output filter. Whisper emits non-speech annotations
+        // for ambient sound — "[Music]", "(applause)", "[wind blowing]",
+        // "[coughs]", and ♪ glyphs for music — which the user (a) didn't say
+        // and (b) doesn't want sent as a chat message. Strip them by default,
+        // but keep expressive vocal sounds that carry intent: laughter,
+        // sighs, gasps, sobs/crying. Cloud Whisper output is not touched.
+        private val NON_SPEECH_TOKEN = Regex("""[\[(]([^\])]+)[\])]""")
+        private val MUSIC_GLYPHS = Regex("[♪♫♬♩]")
+        private val EXPRESSIVE_KEYWORDS = listOf(
+            "laugh", "chuckl", "gigg", "sigh", "gasp", "sob", "cry"
+        )
+
+        private fun filterNonSpeechMarkers(text: String): String {
+            val withoutGlyphs = text.replace(MUSIC_GLYPHS, "")
+            val filtered = NON_SPEECH_TOKEN.replace(withoutGlyphs) { m ->
+                val inner = m.groupValues[1].lowercase()
+                if (EXPRESSIVE_KEYWORDS.any { inner.contains(it) }) m.value else ""
+            }
+            return filtered.replace(Regex("\\s+"), " ").trim()
+        }
+
         @Volatile private var instance: LocalWhisperEngine? = null
         fun get(): LocalWhisperEngine {
             instance?.let { return it }
@@ -332,8 +353,8 @@ class LocalWhisperEngine private constructor() {
                     val text = LocalWhisperNative.transcribeNative(handle, samples, SAMPLE_RATE, language)
                     val elapsed = SystemClock.elapsedRealtime() - startedAt
                     Log.i(TAG, "Transcribed ${audioMs}ms of audio in ${elapsed}ms")
-                    val trimmed = text.trim()
-                    trimmed.ifEmpty { null }
+                    val filtered = filterNonSpeechMarkers(text)
+                    filtered.ifEmpty { null }
                 } catch (t: Throwable) {
                     Log.w(TAG, "transcribeNative threw", t)
                     null
