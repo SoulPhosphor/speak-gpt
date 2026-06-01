@@ -72,11 +72,14 @@ object NativeCpuSupport {
                 .trim()
                 .split("\\s+".toRegex())
                 .toHashSet()
-            // asimddp = FEAT_DotProd (udot/sdot); fphp = FEAT_FP16 scalar;
-            // asimdhp = NEON half-precision. ggml's fp16 kernels need at
-            // least asimdhp, so accept either fphp or asimdhp as the fp16 bit.
+            // asimddp = FEAT_DotProd (udot/sdot). asimdhp = NEON / Advanced
+            // SIMD half-precision — which is what ggml's fp16 quantized
+            // matmul kernels actually execute. The scalar `fphp` flag covers
+            // FP16 scalar instructions only; a CPU that advertises fphp but
+            // not asimdhp would still SIGILL on the SIMD path, so require
+            // asimdhp specifically.
             val hasDotprod = "asimddp" in tokens
-            val hasFp16 = "asimdhp" in tokens || "fphp" in tokens
+            val hasFp16 = "asimdhp" in tokens
             val ok = hasDotprod && hasFp16
             if (!ok) {
                 Log.w(TAG, "CPU lacks ARMv8.2 dotprod/fp16; on-device Whisper disabled. " +
