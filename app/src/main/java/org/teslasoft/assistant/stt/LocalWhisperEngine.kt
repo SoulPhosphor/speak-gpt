@@ -248,6 +248,11 @@ class LocalWhisperEngine private constructor() {
                         // window, fire that instead. Each fires once.
                         if (detector != null && !vadFired) {
                             val isSpeech = detector.accept(readBuffer, read)
+                            // Refresh diagnostics every frame so a manual stop
+                            // (mic-tap while "listens forever") still has the
+                            // current voiced/total/peak counters to surface,
+                            // not just a no-speech timeout.
+                            lastVadDiagnostics = detector.diagnostics()
                             val now = SystemClock.elapsedRealtime()
                             if (isSpeech) {
                                 speechStarted = true
@@ -258,7 +263,6 @@ class LocalWhisperEngine private constructor() {
                                 onVadEndOfTurn?.invoke()
                             } else if (!speechStarted && now - startedAt >= cfg.noSpeechMs) {
                                 vadFired = true
-                                lastVadDiagnostics = detector.diagnostics()
                                 onVadNoSpeech?.invoke()
                             }
                         }

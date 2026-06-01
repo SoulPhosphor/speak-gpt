@@ -167,6 +167,7 @@ import org.teslasoft.assistant.preferences.PersonaPreferences
 import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.LogitBiasPreferences
+import org.teslasoft.assistant.preferences.Logger
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.stt.LocalWhisperEngine
@@ -1873,6 +1874,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             if (handsFree) {
                 // A tap during a hands-free listening turn ends the whole loop,
                 // matching how a tap ends the Google hands-free conversation.
+                logWebRtcVadDiagnostics("manual-stop")
                 stopHandsFreeLoop()
                 LocalWhisperEngine.get().cancel()
             } else {
@@ -1974,15 +1976,24 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     /** VAD saw no speech within the window — end the loop like Google does. */
     private fun onHandsFreeWhisperNoSpeech() {
         if (handsFreeStopped) return
-        // Diagnostic: when WebRTC times out hearing nothing, show what libfvad
-        // actually saw (voiced-frame count + peak input level) so "it never hears
-        // me" can be pinned to either a dead/quiet mic or fvad rejecting speech.
-        if (preferences?.getVadMethod() == org.teslasoft.assistant.stt.VadMethods.WEBRTC) {
-            val diag = LocalWhisperEngine.get().lastVadDiagnostics()
-            if (diag.isNotEmpty()) Toast.makeText(this, diag, Toast.LENGTH_LONG).show()
-        }
+        logWebRtcVadDiagnostics("no-speech-timeout")
         stopHandsFreeLoop()
         LocalWhisperEngine.get().cancel()
+    }
+
+    /** Surface the WebRTC detector's per-recording counters when a hands-free
+     *  turn ends. Toast for live feedback; Event log (Settings -> Event log) so
+     *  the user can read it after the fact when "mic listens forever" is the
+     *  symptom (Toasts disappear before they can be grabbed). WebRTC-only:
+     *  Energy mode doesn't expose meaningful counters. */
+    private fun logWebRtcVadDiagnostics(reason: String) {
+        if (preferences?.getVadMethod() != org.teslasoft.assistant.stt.VadMethods.WEBRTC) return
+        val diag = LocalWhisperEngine.get().lastVadDiagnostics()
+        if (diag.isEmpty()) return
+        Toast.makeText(this, diag, Toast.LENGTH_LONG).show()
+        try {
+            Logger.log(this, "event", "WebRtcVad", "debug", "$reason: $diag")
+        } catch (_: Throwable) { /* event-log opt-out is fine */ }
     }
 
     // Warm the model into RAM while the user is still talking so the
@@ -3984,7 +3995,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         val layoutParams = messages.layoutParams as ViewGroup.MarginLayoutParams
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            layoutParams.topMargin = dpToPx(64) + window.decorView.rootWindowInsets.getInsets(WindowInsets.Type.statusBars()).top
+            // rootWindowInsets is nullable — Pixel 8 / API 36 returned null here
+            // and crashed the app. Fall back to a zero status-bar inset rather
+            // than tearing down the activity; the layout settles correctly the
+            // next time insets dispatch.
+            val statusTop = window.decorView.rootWindowInsets
+                ?.getInsets(WindowInsets.Type.statusBars())?.top ?: 0
+            layoutParams.topMargin = dpToPx(64) + statusTop
         } else {
             val view = findViewById<View>(android.R.id.content) ?: return
             ViewCompat.setOnApplyWindowInsetsListener(view) { _, insets ->
