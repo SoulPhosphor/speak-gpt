@@ -2902,12 +2902,22 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 e.stackTraceToString().contains("404") || e.stackTraceToString().contains("Not Found") -> {
                     "Endpoint not found (HTTP 404).\n\nProfile: ${apiEndpointObject?.label}\nBase URL: ${apiEndpointObject?.host}\n\nThe server returned 404 for this address. Check that this profile's Base URL includes the full path, and that this chat is set to the intended profile."
                 }
+                // Streaming was requested (Accept: text/event-stream) but the
+                // server answered with a non-streaming body — almost always an
+                // error response (e.g. HTTP 400) that the Ktor client then
+                // couldn't deserialize as a stream, surfacing the opaque
+                // NoTransformationFoundException. Explain it in plain terms
+                // instead of dumping the Ktor stack trace.
+                e.stackTraceToString().contains("NoTransformationFoundException") ||
+                e.stackTraceToString().contains("Expected response body of the type") -> {
+                    "Profile: ${apiEndpointObject?.label}\nBase URL: ${apiEndpointObject?.host}\n\nThe server rejected the request (likely HTTP 400) and returned a non-streaming response, so it couldn't be read as a stream.\n\nThis usually means the request was malformed or this endpoint/model doesn't support streaming chat completions. Check that the model is correct for this profile and try again."
+                }
                 else -> {
                     "Profile: ${apiEndpointObject?.label}\nBase URL: ${apiEndpointObject?.host}\n\n" + e.stackTraceToString() + "\n\n" + e.message
                 }
             }
 
-            if (messages[messages.size - 1]["isBot"] == false) {
+            if (messages.isEmpty() || messages[messages.size - 1]["isBot"] == false) {
                 putMessage("", true)
             }
 
@@ -3707,19 +3717,26 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         if (chatMessages == null) chatMessages = arrayListOf()
 
         for (message: HashMap<String, Any> in messages) {
-            if (!message["message"].toString().contains("data:image")) {
+            val content = message["message"].toString()
+            // Skip blank-content turns. An empty user/assistant message (e.g. an
+            // error placeholder, or a turn the user blanked out while editing)
+            // makes OpenAI-compatible servers reject the whole request with HTTP
+            // 400. With streaming on (Accept: text/event-stream) the Ktor client
+            // then can't parse the non-SSE error body and throws the opaque
+            // NoTransformationFoundException instead of a real error.
+            if (!content.contains("data:image") && content.isNotBlank()) {
                 if (message["isBot"] == true) {
                     chatMessages.add(
                         ChatMessage(
                             role = ChatRole.Assistant,
-                            content = message["message"].toString()
+                            content = content
                         )
                     )
                 } else {
                     chatMessages.add(
                         ChatMessage(
                             role = ChatRole.User,
-                            content = message["message"].toString()
+                            content = content
                         )
                     )
                 }
