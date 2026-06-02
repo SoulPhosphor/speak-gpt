@@ -200,6 +200,33 @@
     <string name="title_personas">Personas</string>
     <string name="btn_new_persona">Add persona</string>
     <string name="label_add_persona">Add persona</string>
+
+    <!-- Lorebook / memory system (Phase 1) -->
+    <string name="label_lorebook">Lorebook</string>
+    <string name="title_lorebook">Lorebook</string>
+    <string name="lorebook_subtitle">Manage memories</string>
+    <string name="btn_new_memory">Add memory</string>
+    <string name="label_add_memory">Add memory</string>
+    <string name="label_edit_memory">Edit memory</string>
+    <string name="label_delete_memory">Delete memory</string>
+    <string name="message_delete_memory">Are you sure you want to delete this memory?</string>
+    <string name="memory_label_hint">Name</string>
+    <string name="memory_label_help">A friendly name to recognize this memory.</string>
+    <string name="memory_content_hint">Memory content</string>
+    <string name="memory_content_help">This text is injected into the prompt when a trigger matches.</string>
+    <string name="memory_triggers_hint">Triggers</string>
+    <string name="memory_triggers_help">One trigger per line. The memory is injected when any trigger appears in your message.</string>
+    <string name="memory_source_hint">Original source text (optional)</string>
+    <string name="memory_source_help">The raw text this memory came from. Kept for later use.</string>
+    <string name="memory_enabled">Enabled</string>
+    <string name="label_error_memory_empty">Name and content cannot be empty.</string>
+    <string name="label_memory_disabled">Disabled</string>
+    <string name="label_no_triggers">No triggers</string>
+    <string name="lorebook_injection_header">Relevant memories:</string>
+    <string name="title_lorebook_debug">Lorebook debug</string>
+    <string name="btn_lorebook_debug">Debug</string>
+    <string name="lorebook_debug_empty">No memories have been injected yet. Create a memory with a trigger, then send a message containing that trigger.</string>
+    <string name="lorebook_debug_clear">Clear</string>
     <string name="label_edit_persona">Edit persona</string>
     <string name="label_delete_persona">Delete persona</string>
     <string name="message_delete_persona">Are you sure you want to delete this persona? This action cannot be undone.</string>

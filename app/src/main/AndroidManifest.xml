@@ -89,6 +89,19 @@
         </activity>
 
         <activity
+            android:name=".ui.activities.LoreBookListActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize"
+            android:label="@string/title_lorebook">
+        </activity>
+
+        <activity
+            android:name=".ui.activities.LoreBookDebugActivity"
+            android:exported="false"
+            android:label="@string/title_lorebook_debug">
+        </activity>
+
+        <activity
             android:name=".ui.activities.CharactersActivity"
             android:exported="false"
             android:label="@string/title_characters">

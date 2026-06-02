@@ -48,6 +48,7 @@ import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.ui.activities.ActivationPromptsListActivity
 import org.teslasoft.assistant.ui.activities.ApiEndpointsListActivity
 import org.teslasoft.assistant.ui.activities.LogitBiasConfigListActivity
+import org.teslasoft.assistant.ui.activities.LoreBookListActivity
 import org.teslasoft.assistant.ui.activities.PersonasListActivity
 import org.teslasoft.core.api.network.RequestNetwork
 
@@ -74,6 +75,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     private var btnSelectApiEndpoint: ConstraintLayout? = null
     private var btnSelectPersona: ConstraintLayout? = null
     private var btnSelectActivation: ConstraintLayout? = null
+    private var btnSelectLoreBook: ConstraintLayout? = null
     private var bgTemperature: ConstraintLayout? = null
     private var bgTopP: ConstraintLayout? = null
     private var bgFrequencyPenalty: ConstraintLayout? = null
@@ -362,6 +364,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         textPersona = view.findViewById(R.id.text_persona)
         btnSelectActivation = view.findViewById(R.id.btn_select_activation)
         textActivation = view.findViewById(R.id.text_activation)
+        btnSelectLoreBook = view.findViewById(R.id.btn_select_lorebook)
         bgTemperature = view.findViewById(R.id.bg_temperature)
         bgTopP = view.findViewById(R.id.bg_top_p)
         bgFrequencyPenalty = view.findViewById(R.id.bg_frequency_penalty)
@@ -385,6 +388,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         btnSelectApiEndpoint?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(activity ?: return))
         btnSelectPersona?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(activity ?: return))
         btnSelectActivation?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(activity ?: return))
+        btnSelectLoreBook?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(activity ?: return))
         bgTemperature?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(activity ?: return))
         bgTopP?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(activity ?: return))
         bgFrequencyPenalty?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(activity ?: return))
@@ -514,6 +518,10 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
             intent.putExtra("pickMode", true)
             intent.putExtra("currentActivationId", preferences?.getActivationPromptId() ?: "")
             activationActivityResultLauncher.launch(intent)
+        }
+
+        btnSelectLoreBook?.setOnClickListener {
+            startActivity(Intent(requireContext(), LoreBookListActivity::class.java))
         }
 
         btnSaveToProfile?.setOnClickListener {
