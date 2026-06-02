@@ -164,6 +164,7 @@ import kotlinx.serialization.json.putJsonObject
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.PersonaPreferences
+import org.teslasoft.assistant.preferences.ActivationPromptPreferences
 import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.LogitBiasPreferences
@@ -2254,11 +2255,51 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         reloadAmoled()
     }
 
+    /**
+     * Carry the persona/activation you were last using into a brand-new chat.
+     * A fresh chat starts with no selection, which previously always showed
+     * "none"; instead seed it once from the global last-used defaults so a new
+     * chat continues with the same persona/activation. The per-chat one-shot
+     * flag means this only happens on the chat's first setup — if you later set
+     * the chat to "none", it stays none. Only runs for an empty chat (called
+     * from [setup] inside its messages.isEmpty() guard), so existing
+     * conversations are never retroactively changed. A last-used id whose
+     * persona/activation has since been deleted is skipped (falls back to none).
+     */
+    private fun seedPersonaAndActivationDefaults() {
+        if (preferences?.isPersonaActivationSeeded() == true) return
+        preferences?.setPersonaActivationSeeded(true)
+
+        if (preferences?.getPersonaId().isNullOrEmpty()) {
+            val lastPersona = preferences?.getLastUsedPersonaId().orEmpty()
+            if (lastPersona.isNotEmpty() &&
+                PersonaPreferences.getPersonaPreferences(this).getPersona(lastPersona).label.isNotEmpty()) {
+                preferences?.setPersonaId(lastPersona)
+            }
+        }
+
+        if (preferences?.getActivationPromptId().isNullOrEmpty()) {
+            val lastActivation = preferences?.getLastUsedActivationPromptId().orEmpty()
+            if (lastActivation.isNotEmpty()) {
+                val activation = ActivationPromptPreferences
+                    .getActivationPromptPreferences(this)
+                    .getActivationPrompt(lastActivation)
+                if (activation.label.isNotEmpty()) {
+                    preferences?.setActivationPromptId(lastActivation)
+                    // Mirror the QuickSettings selection flow: the prompt text is
+                    // what setup() reads and sends as the first message.
+                    preferences?.setPrompt(activation.prompt)
+                }
+            }
+        }
+    }
+
     /*
     * Setup SpeakGPT with activation prompt.
     * */
     private fun setup() {
         if (messages.isEmpty()) {
+            seedPersonaAndActivationDefaults()
             val prompt: String = preferences!!.getPrompt()
 
             if (prompt.toString() != "" && prompt.toString() != "null" && prompt != "") {

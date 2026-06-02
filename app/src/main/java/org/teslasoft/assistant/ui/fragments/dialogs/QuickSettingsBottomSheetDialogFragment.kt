@@ -203,6 +203,10 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
 
             if (personaId != null) {
                 preferences?.setPersonaId(personaId)
+                // Remember this as the global default so the next new chat opens
+                // with it instead of resetting to none. Recorded even when it's
+                // "none" (empty), so the latest choice always wins.
+                preferences?.setLastUsedPersonaId(personaId)
                 updatePersonaLabel(personaId)
                 shouldForceUpdate = true
             }
@@ -210,11 +214,13 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     }
 
     private fun updatePersonaLabel(personaId: String) {
+        // Empty id — or an id whose persona was deleted — reads as "none" rather
+        // than "Tap to set", so a chat with no persona says so explicitly.
         textPersona?.text = if (personaId != "") {
             val label = personaPreferences?.getPersona(personaId)?.label ?: ""
-            if (label != "") label else getString(R.string.label_tap_to_set)
+            if (label != "") label else getString(R.string.label_persona_none)
         } else {
-            getString(R.string.label_tap_to_set)
+            getString(R.string.label_persona_none)
         }
     }
 
@@ -225,6 +231,9 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
 
             if (activationPromptId != null) {
                 preferences?.setActivationPromptId(activationPromptId)
+                // Remember this as the global default for the next new chat
+                // (recorded even when it's "none", so the latest choice wins).
+                preferences?.setLastUsedActivationPromptId(activationPromptId)
                 // Keep the existing chat-activation flow working: the selected
                 // prompt text is what actually gets sent as the first message.
                 val prompt = if (activationPromptId != "") {
@@ -238,11 +247,13 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     }
 
     private fun updateActivationLabel(activationPromptId: String) {
+        // Empty id — or an id whose activation prompt was deleted — reads as
+        // "None" rather than "Tap to set", so "no activation" is explicit.
         textActivation?.text = if (activationPromptId != "") {
             val label = activationPromptPreferences?.getActivationPrompt(activationPromptId)?.label ?: ""
-            if (label != "") label else getString(R.string.label_tap_to_set)
+            if (label != "") label else getString(R.string.label_activation_none)
         } else {
-            getString(R.string.label_tap_to_set)
+            getString(R.string.label_activation_none)
         }
     }
 
