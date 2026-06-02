@@ -47,20 +47,36 @@ Java_org_teslasoft_assistant_stt_WebRtcVadNative_nativeNew(
         fvad_free(vad);
         return 0L;
     }
-    // Defensive: ensure the detector core is in a clean, fully-initialised state
-    // after (re)configuring rate/mode before any frame is processed. Cheap, and
-    // rules out a "configured but not initialised → every fvad_process returns
-    // -1" failure mode seen in the field.
-    fvad_reset(vad);
+    // NB: do NOT call fvad_reset() here. Despite the name, fvad_reset wipes
+    // mode and sample rate back to defaults (mode 0, 8 kHz) — not just the
+    // classification state. That's why on Pixel 8 the self-test only
+    // accepted 10 ms frames (the one valid length at 8 kHz, since 20 and
+    // 30 ms at 16 kHz translate to 320/480-sample frames that are invalid
+    // at 8 kHz), and why the user's mode 2/3 sensitivity settings were
+    // silently overridden back to mode 0. fvad_new returns a fresh
+    // instance, and set_mode + set_sample_rate fully configure it.
     LOGI("fvad ready: mode=%d rate=%d", mode, sampleRate);
     return reinterpret_cast<jlong>(vad);
 }
 
 extern "C" JNIEXPORT void JNICALL
 Java_org_teslasoft_assistant_stt_WebRtcVadNative_nativeReset(
-        JNIEnv * /*env*/, jclass /*clazz*/, jlong handle) {
+        JNIEnv * /*env*/, jclass /*clazz*/, jlong handle, jint mode, jint sampleRate) {
     if (handle == 0L) return;
-    fvad_reset(reinterpret_cast<Fvad *>(handle));
+    Fvad *vad = reinterpret_cast<Fvad *>(handle);
+    // libfvad's fvad_reset clears mode + sample rate back to defaults
+    // (mode 0, 8 kHz) along with the classification state, so re-apply the
+    // configured mode/rate after the reset. Without this, every reset path
+    // (self-test post-probe, per-recording detector.reset()) silently put
+    // the detector back into 8 kHz mode 0 and 16 kHz frame processing
+    // returned -1 for the rest of the session.
+    fvad_reset(vad);
+    if (fvad_set_mode(vad, mode) != 0) {
+        LOGW("nativeReset: fvad_set_mode(%d) failed", mode);
+    }
+    if (fvad_set_sample_rate(vad, sampleRate) != 0) {
+        LOGW("nativeReset: fvad_set_sample_rate(%d) failed", sampleRate);
+    }
 }
 
 extern "C" JNIEXPORT jint JNICALL

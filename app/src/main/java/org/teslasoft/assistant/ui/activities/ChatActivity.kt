@@ -1537,10 +1537,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
         attachedImage?.setOnClickListener { /* ignored */ }
 
-        btnMicro?.setOnLongClickListener {
-            cancelAllAiActivity()
-            return@setOnLongClickListener true
-        }
+        // (No long-press listener on btnMicro: View.performLongClick is gated
+        // on isEnabled, which is exactly false during generation — the only
+        // window where cancelAllAiActivity has anything to do — so this
+        // listener could never fire when it would matter. The OnTouchListener
+        // above already carries the "tap to cancel mid-generation" behaviour
+        // because OnTouchListener fires before View.onTouchEvent regardless
+        // of isEnabled.)
 
         messageInput?.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {

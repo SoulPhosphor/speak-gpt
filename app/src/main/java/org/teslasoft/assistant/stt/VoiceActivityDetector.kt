@@ -178,7 +178,9 @@ class EnergyVad(
  */
 class WebRtcVad private constructor(
     private var handle: Long,
-    private val frameSamples: Int
+    private val frameSamples: Int,
+    private val mode: Int,
+    private val sampleRate: Int
 ) : VoiceActivityDetector {
 
     private val pending = ShortArray(frameSamples)
@@ -213,7 +215,10 @@ class WebRtcVad private constructor(
         noiseFloor = 0.0
         floorInit = false
         if (handle != 0L) {
-            try { WebRtcVadNative.nativeReset(handle) } catch (_: Throwable) {}
+            // nativeReset re-applies mode + sampleRate after fvad_reset so the
+            // detector doesn't silently drop back to 8 kHz / mode 0 between
+            // turns (libfvad's reset clears config along with state).
+            try { WebRtcVadNative.nativeReset(handle, mode, sampleRate) } catch (_: Throwable) {}
         }
     }
 
@@ -318,7 +323,7 @@ class WebRtcVad private constructor(
                 } catch (t: Throwable) { -1 }
                 if (r >= 0) { frameSamples = len; break }
             }
-            try { WebRtcVadNative.nativeReset(handle) } catch (_: Throwable) {}
+            try { WebRtcVadNative.nativeReset(handle, mode, sampleRate) } catch (_: Throwable) {}
 
             if (frameSamples == 0) {
                 Log.w(TAG, "WebRTC VAD self-test failed (rate=$sampleRate, all frame lengths errored); falling back to energy")
@@ -326,7 +331,7 @@ class WebRtcVad private constructor(
                 return null
             }
             Log.i(TAG, "WebRTC VAD ready: rate=$sampleRate frame=$frameSamples")
-            return WebRtcVad(handle, frameSamples)
+            return WebRtcVad(handle, frameSamples, mode, sampleRate)
         }
     }
 }
