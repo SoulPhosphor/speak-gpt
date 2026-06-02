@@ -39,7 +39,7 @@ object WebRtcVadNative {
     @Volatile private var loadError: Throwable? = null
 
     @JvmStatic external fun nativeNew(mode: Int, sampleRate: Int): Long
-    @JvmStatic external fun nativeReset(handle: Long)
+    @JvmStatic external fun nativeReset(handle: Long, mode: Int, sampleRate: Int)
     @JvmStatic external fun nativeProcess(handle: Long, frame: ShortArray, length: Int): Int
     @JvmStatic external fun nativeFree(handle: Long)
 
