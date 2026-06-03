@@ -41,6 +41,10 @@ android {
         buildConfigField "String", "GIT_SHA", "\"${gitSha}\""
         buildConfigField "String", "BUILD_DATE", "\"${buildDate}\""
 
+        // App name is driven by a manifest placeholder so the beta build type can
+        // override it. Release/debug keep the normal name.
+        manifestPlaceholders = [appLabel: "@string/app_name"]
+
         ndk {
             // Only ship arm64 binaries. The target user runs a Pixel 8 and
             // we don't need to bloat the APK with x86_64 / armeabi-v7a.
@@ -83,6 +87,16 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             multiDexEnabled true
             signingConfig signingConfigs.debug
+        }
+
+        // Beta channel. Inherits the debug build (same checked-in signing key and
+        // shrink/proguard setup) but ships under a distinct applicationId and name
+        // so it installs ALONGSIDE the stable build instead of replacing it.
+        beta {
+            initWith debug
+            applicationIdSuffix ".beta"
+            versionNameSuffix "-beta"
+            manifestPlaceholders = [appLabel: "Phosphor Beta"]
         }
     }
 
