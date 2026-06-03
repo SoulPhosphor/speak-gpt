@@ -97,6 +97,10 @@ android {
             applicationIdSuffix ".beta"
             versionNameSuffix "-beta"
             manifestPlaceholders = [appLabel: "Phosphor Beta"]
+            // The :teslasoft-id library module only defines debug/release variants,
+            // so a 'beta' app build has no matching variant to consume. Fall back to
+            // its debug variant (then release) for this build type.
+            matchingFallbacks = ['debug', 'release']
         }
     }
 
