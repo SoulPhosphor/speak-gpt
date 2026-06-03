@@ -20,30 +20,46 @@ import android.content.ContentValues
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
+import org.teslasoft.assistant.preferences.dto.LoreBook
 import org.teslasoft.assistant.preferences.dto.LoreBookEntry
 import java.util.UUID
 
 /**
- * SQLite-backed storage for lorebook memories (Phase 1 of the memory system).
+ * SQLite-backed storage for lorebooks and their memories (Phase 1 of the memory
+ * system).
  *
  * The rest of the app stores its data in SharedPreferences, but the memory
  * system is intentionally built on a real database from the start: later phases
  * (full-text search, conversation summaries, vector embeddings, sync metadata)
  * all need relational rows and queries that key-value preferences can't provide.
  *
- * Two tables:
- *  - memory_entries: one row per memory (id, label, content, source text, state, timestamps)
+ * Three tables:
+ *  - lorebooks: one row per lorebook (a named collection of memories)
+ *  - memory_entries: one row per memory, scoped to a lorebook via lorebook_id
  *  - memory_triggers: trigger words/phrases, many per memory
+ *
+ * A chat injects only from the single lorebook selected as active for that chat.
  */
 class LoreBookStore private constructor(context: Context) :
     SQLiteOpenHelper(context.applicationContext, DATABASE_NAME, null, DATABASE_VERSION) {
 
     companion object {
         private const val DATABASE_NAME = "lorebook.db"
-        private const val DATABASE_VERSION = 1
+
+        // v1: single flat memory pool.
+        // v2: introduced lorebooks; memories scoped by lorebook_id.
+        private const val DATABASE_VERSION = 2
+
+        private const val TABLE_BOOKS = "lorebooks"
+        private const val COL_BOOK_ID = "id"
+        private const val COL_BOOK_NAME = "name"
+        private const val COL_BOOK_DESCRIPTION = "description"
+        private const val COL_BOOK_CREATED_AT = "created_at"
+        private const val COL_BOOK_UPDATED_AT = "updated_at"
 
         private const val TABLE_ENTRIES = "memory_entries"
         private const val COL_ID = "id"
+        private const val COL_LOREBOOK_ID = "lorebook_id"
         private const val COL_LABEL = "label"
         private const val COL_CONTENT = "content"
         private const val COL_SOURCE_TEXT = "source_text"
@@ -67,9 +83,54 @@ class LoreBookStore private constructor(context: Context) :
     }
 
     override fun onCreate(db: SQLiteDatabase) {
+        createBooksTable(db)
+        createEntriesTable(db)
+        createTriggersTable(db)
+
+        // Fresh installs start with one empty lorebook so the UI and the active-book
+        // selector always have something to point at.
+        insertBook(db, UUID.randomUUID().toString(), DEFAULT_BOOK_NAME, "")
+    }
+
+    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        // v1 -> v2: add the lorebooks table and a lorebook_id on every memory, then
+        // move any pre-existing (single-pool) memories into a "Default" lorebook so
+        // nothing the user already created disappears.
+        if (oldVersion < 2) {
+            createBooksTable(db)
+            db.execSQL("ALTER TABLE $TABLE_ENTRIES ADD COLUMN $COL_LOREBOOK_ID TEXT NOT NULL DEFAULT ''")
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_entries_book ON $TABLE_ENTRIES($COL_LOREBOOK_ID)")
+
+            val defaultBookId = UUID.randomUUID().toString()
+            insertBook(db, defaultBookId, DEFAULT_BOOK_NAME, "")
+
+            val values = ContentValues().apply { put(COL_LOREBOOK_ID, defaultBookId) }
+            db.update(TABLE_ENTRIES, values, "$COL_LOREBOOK_ID = ? OR $COL_LOREBOOK_ID IS NULL", arrayOf(""))
+        }
+    }
+
+    override fun onConfigure(db: SQLiteDatabase) {
+        super.onConfigure(db)
+        db.setForeignKeyConstraintsEnabled(true)
+    }
+
+    private fun createBooksTable(db: SQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS $TABLE_BOOKS (" +
+                "$COL_BOOK_ID TEXT PRIMARY KEY, " +
+                "$COL_BOOK_NAME TEXT NOT NULL DEFAULT '', " +
+                "$COL_BOOK_DESCRIPTION TEXT NOT NULL DEFAULT '', " +
+                "$COL_BOOK_CREATED_AT INTEGER NOT NULL DEFAULT 0, " +
+                "$COL_BOOK_UPDATED_AT INTEGER NOT NULL DEFAULT 0" +
+                ")"
+        )
+    }
+
+    private fun createEntriesTable(db: SQLiteDatabase) {
         db.execSQL(
             "CREATE TABLE $TABLE_ENTRIES (" +
                 "$COL_ID TEXT PRIMARY KEY, " +
+                "$COL_LOREBOOK_ID TEXT NOT NULL DEFAULT '', " +
                 "$COL_LABEL TEXT NOT NULL DEFAULT '', " +
                 "$COL_CONTENT TEXT NOT NULL DEFAULT '', " +
                 "$COL_SOURCE_TEXT TEXT NOT NULL DEFAULT '', " +
@@ -78,7 +139,10 @@ class LoreBookStore private constructor(context: Context) :
                 "$COL_UPDATED_AT INTEGER NOT NULL DEFAULT 0" +
                 ")"
         )
+        db.execSQL("CREATE INDEX idx_entries_book ON $TABLE_ENTRIES($COL_LOREBOOK_ID)")
+    }
 
+    private fun createTriggersTable(db: SQLiteDatabase) {
         db.execSQL(
             "CREATE TABLE $TABLE_TRIGGERS (" +
                 "$COL_TRIGGER_ROW_ID INTEGER PRIMARY KEY AUTOINCREMENT, " +
@@ -87,19 +151,103 @@ class LoreBookStore private constructor(context: Context) :
                 "FOREIGN KEY($COL_TRIGGER_MEMORY_ID) REFERENCES $TABLE_ENTRIES($COL_ID) ON DELETE CASCADE" +
                 ")"
         )
-
         db.execSQL("CREATE INDEX idx_triggers_memory ON $TABLE_TRIGGERS($COL_TRIGGER_MEMORY_ID)")
     }
 
-    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        // Phase 1 ships at version 1. Later phases add migrations here instead of
-        // dropping data; the schema is meant to grow, not be recreated.
+    private fun insertBook(db: SQLiteDatabase, id: String, name: String, description: String) {
+        val now = System.currentTimeMillis()
+        val values = ContentValues().apply {
+            put(COL_BOOK_ID, id)
+            put(COL_BOOK_NAME, name)
+            put(COL_BOOK_DESCRIPTION, description)
+            put(COL_BOOK_CREATED_AT, now)
+            put(COL_BOOK_UPDATED_AT, now)
+        }
+        db.insertWithOnConflict(TABLE_BOOKS, null, values, SQLiteDatabase.CONFLICT_IGNORE)
     }
 
-    override fun onConfigure(db: SQLiteDatabase) {
-        super.onConfigure(db)
-        db.setForeignKeyConstraintsEnabled(true)
+    /* ---------------------------------------------------------------------- */
+    /* Lorebooks                                                              */
+    /* ---------------------------------------------------------------------- */
+
+    fun saveBook(book: LoreBook): LoreBook {
+        val now = System.currentTimeMillis()
+        val isNew = book.id.isBlank()
+        val saved = book.copy(
+            id = if (isNew) UUID.randomUUID().toString() else book.id,
+            createdAt = if (isNew || book.createdAt == 0L) now else book.createdAt,
+            updatedAt = now
+        )
+
+        val values = ContentValues().apply {
+            put(COL_BOOK_ID, saved.id)
+            put(COL_BOOK_NAME, saved.name)
+            put(COL_BOOK_DESCRIPTION, saved.description)
+            put(COL_BOOK_CREATED_AT, saved.createdAt)
+            put(COL_BOOK_UPDATED_AT, saved.updatedAt)
+        }
+        writableDatabase.insertWithOnConflict(TABLE_BOOKS, null, values, SQLiteDatabase.CONFLICT_REPLACE)
+        return saved
     }
+
+    fun deleteBook(id: String) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            // Remove the book's memories (and their triggers via cascade) first, then
+            // the book row itself.
+            for (entry in getEntries(id)) {
+                db.delete(TABLE_ENTRIES, "$COL_ID = ?", arrayOf(entry.id))
+            }
+            db.delete(TABLE_BOOKS, "$COL_BOOK_ID = ?", arrayOf(id))
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    fun getBook(id: String): LoreBook? {
+        val cursor = readableDatabase.query(
+            TABLE_BOOKS, null, "$COL_BOOK_ID = ?", arrayOf(id), null, null, null
+        )
+        cursor.use {
+            if (it.moveToFirst()) return readBook(it)
+        }
+        return null
+    }
+
+    fun getAllBooks(): ArrayList<LoreBook> {
+        val books = ArrayList<LoreBook>()
+        val cursor = readableDatabase.query(
+            TABLE_BOOKS, null, null, null, null, null, "$COL_BOOK_CREATED_AT ASC"
+        )
+        cursor.use {
+            while (it.moveToNext()) books.add(readBook(it))
+        }
+        return books
+    }
+
+    /** Number of enabled/total memories in a book, for list subtitles. */
+    fun getEntryCount(lorebookId: String): Int {
+        val cursor = readableDatabase.query(
+            TABLE_ENTRIES, arrayOf(COL_ID), "$COL_LOREBOOK_ID = ?", arrayOf(lorebookId), null, null, null
+        )
+        cursor.use { return it.count }
+    }
+
+    private fun readBook(c: android.database.Cursor): LoreBook {
+        return LoreBook(
+            id = c.getString(c.getColumnIndexOrThrow(COL_BOOK_ID)),
+            name = c.getString(c.getColumnIndexOrThrow(COL_BOOK_NAME)) ?: "",
+            description = c.getString(c.getColumnIndexOrThrow(COL_BOOK_DESCRIPTION)) ?: "",
+            createdAt = c.getLong(c.getColumnIndexOrThrow(COL_BOOK_CREATED_AT)),
+            updatedAt = c.getLong(c.getColumnIndexOrThrow(COL_BOOK_UPDATED_AT))
+        )
+    }
+
+    /* ---------------------------------------------------------------------- */
+    /* Memories                                                               */
+    /* ---------------------------------------------------------------------- */
 
     /**
      * Insert a new memory or update an existing one (matched by id). Triggers are
@@ -121,6 +269,7 @@ class LoreBookStore private constructor(context: Context) :
         try {
             val values = ContentValues().apply {
                 put(COL_ID, saved.id)
+                put(COL_LOREBOOK_ID, saved.lorebookId)
                 put(COL_LABEL, saved.label)
                 put(COL_CONTENT, saved.content)
                 put(COL_SOURCE_TEXT, saved.sourceText)
@@ -161,26 +310,26 @@ class LoreBookStore private constructor(context: Context) :
     }
 
     fun getEntry(id: String): LoreBookEntry? {
-        val all = queryEntries("$COL_ID = ?", arrayOf(id))
-        return all.firstOrNull()
+        return queryEntries("$COL_ID = ?", arrayOf(id)).firstOrNull()
     }
 
-    fun getAllEntries(): ArrayList<LoreBookEntry> {
-        return queryEntries(null, null)
+    /** All memories in a single lorebook. */
+    fun getEntries(lorebookId: String): ArrayList<LoreBookEntry> {
+        return queryEntries("$COL_LOREBOOK_ID = ?", arrayOf(lorebookId))
     }
 
     /**
-     * Find every enabled memory whose any trigger appears (case insensitive,
-     * substring) in [message]. This is the Phase 1 matching engine — deliberately
-     * simple. Stronger trigger modes (exact phrase, all-required, word boundary)
-     * arrive in Phase 3.
+     * Find every enabled memory in [lorebookId] whose any trigger appears (case
+     * insensitive, substring) in [message]. This is the Phase 1 matching engine —
+     * deliberately simple. Stronger trigger modes (exact phrase, all-required, word
+     * boundary) arrive in Phase 3.
      */
-    fun findMatches(message: String): ArrayList<LoreBookMatch> {
+    fun findMatches(message: String, lorebookId: String): ArrayList<LoreBookMatch> {
         val result = ArrayList<LoreBookMatch>()
-        if (message.isBlank()) return result
+        if (message.isBlank() || lorebookId.isBlank()) return result
 
         val haystack = message.lowercase()
-        for (entry in queryEntries("$COL_ENABLED = 1", null)) {
+        for (entry in queryEntries("$COL_LOREBOOK_ID = ? AND $COL_ENABLED = 1", arrayOf(lorebookId))) {
             for (trigger in entry.triggers) {
                 val needle = trigger.trim().lowercase()
                 if (needle.isNotEmpty() && haystack.contains(needle)) {
@@ -208,6 +357,7 @@ class LoreBookStore private constructor(context: Context) :
 
         cursor.use {
             val idIdx = it.getColumnIndexOrThrow(COL_ID)
+            val bookIdx = it.getColumnIndexOrThrow(COL_LOREBOOK_ID)
             val labelIdx = it.getColumnIndexOrThrow(COL_LABEL)
             val contentIdx = it.getColumnIndexOrThrow(COL_CONTENT)
             val sourceIdx = it.getColumnIndexOrThrow(COL_SOURCE_TEXT)
@@ -220,6 +370,7 @@ class LoreBookStore private constructor(context: Context) :
                 entries.add(
                     LoreBookEntry(
                         id = id,
+                        lorebookId = it.getString(bookIdx) ?: "",
                         label = it.getString(labelIdx) ?: "",
                         content = it.getString(contentIdx) ?: "",
                         sourceText = it.getString(sourceIdx) ?: "",
@@ -255,3 +406,5 @@ class LoreBookStore private constructor(context: Context) :
         return triggers
     }
 }
+
+private const val DEFAULT_BOOK_NAME = "Default"

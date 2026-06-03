@@ -204,7 +204,26 @@
     <!-- Lorebook / memory system (Phase 1) -->
     <string name="label_lorebook">Lorebook</string>
     <string name="title_lorebook">Lorebook</string>
-    <string name="lorebook_subtitle">Manage memories</string>
+    <string name="title_lorebooks">Lorebooks</string>
+    <string name="lorebook_subtitle">Select active lorebook</string>
+    <string name="label_lorebook_none">None</string>
+    <string name="tile_lorebooks_title">Lorebooks</string>
+    <string name="tile_lorebooks_desc">Manage memory collections for role-play and context</string>
+    <string name="btn_new_lorebook">Add lorebook</string>
+    <string name="label_add_lorebook">Add lorebook</string>
+    <string name="label_edit_lorebook">Edit lorebook</string>
+    <string name="label_delete_lorebook">Delete lorebook</string>
+    <string name="message_delete_lorebook">Delete this lorebook and all of its memories? This cannot be undone.</string>
+    <string name="lorebook_name_hint">Name</string>
+    <string name="lorebook_name_help">A name for this collection, e.g. a campaign or project.</string>
+    <string name="lorebook_description_hint">Description (optional)</string>
+    <string name="lorebook_description_help">What this lorebook is for.</string>
+    <string name="label_error_lorebook_empty">Lorebook name cannot be empty.</string>
+    <string name="lorebook_memory_count_zero">No memories</string>
+    <plurals name="lorebook_memory_count">
+        <item quantity="one">%d memory</item>
+        <item quantity="other">%d memories</item>
+    </plurals>
     <string name="btn_new_memory">Add memory</string>
     <string name="label_add_memory">Add memory</string>
     <string name="label_edit_memory">Edit memory</string>

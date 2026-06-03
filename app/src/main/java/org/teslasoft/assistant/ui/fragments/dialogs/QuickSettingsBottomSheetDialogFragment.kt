@@ -43,11 +43,12 @@ import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
 import org.teslasoft.assistant.preferences.LogitBiasConfigPreferences
 import org.teslasoft.assistant.preferences.PersonaPreferences
 import org.teslasoft.assistant.preferences.Preferences
+import org.teslasoft.assistant.preferences.lorebook.LoreBookStore
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.ui.activities.ActivationPromptsListActivity
 import org.teslasoft.assistant.ui.activities.ApiEndpointsListActivity
 import org.teslasoft.assistant.ui.activities.LogitBiasConfigListActivity
-import org.teslasoft.assistant.ui.activities.LoreBookListActivity
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import org.teslasoft.assistant.ui.activities.PersonasListActivity
 import org.teslasoft.core.api.network.RequestNetwork
 
@@ -89,6 +90,8 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
 
     private var activationPromptPreferences: ActivationPromptPreferences? = null
     private var textActivation: TextView? = null
+
+    private var textLoreBook: TextView? = null
 
     private var temperatureSeekbar: com.google.android.material.slider.Slider? = null
     private var topPSeekbar: com.google.android.material.slider.Slider? = null
@@ -258,6 +261,38 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         }
     }
 
+    private fun updateLoreBookLabel(lorebookId: String) {
+        textLoreBook?.text = if (lorebookId != "") {
+            val name = LoreBookStore.getInstance(requireContext()).getBook(lorebookId)?.name ?: ""
+            if (name != "") name else getString(R.string.label_lorebook_none)
+        } else {
+            getString(R.string.label_lorebook_none)
+        }
+    }
+
+    private fun showLoreBookChooser() {
+        val books = LoreBookStore.getInstance(requireContext()).getAllBooks()
+        val ids = arrayListOf("")
+        val labels = arrayListOf(getString(R.string.label_lorebook_none))
+        for (book in books) {
+            ids.add(book.id)
+            labels.add(book.name)
+        }
+
+        val current = ids.indexOf(preferences?.getLoreBookId() ?: "").coerceAtLeast(0)
+
+        MaterialAlertDialogBuilder(requireContext(), R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.label_lorebook)
+            .setSingleChoiceItems(labels.toTypedArray(), current) { dialog, which ->
+                val selectedId = ids[which]
+                preferences?.setLoreBookId(selectedId)
+                updateLoreBookLabel(selectedId)
+                dialog.dismiss()
+            }
+            .setNegativeButton(R.string.btn_cancel) { _, _ -> }
+            .show()
+    }
+
     private var systemChangedListener: SystemMessageDialogFragment.StateChangesListener =
         SystemMessageDialogFragment.StateChangesListener { prompt ->
             preferences?.setSystemMessage(prompt)
@@ -375,6 +410,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         btnSelectActivation = view.findViewById(R.id.btn_select_activation)
         textActivation = view.findViewById(R.id.text_activation)
         btnSelectLoreBook = view.findViewById(R.id.btn_select_lorebook)
+        textLoreBook = view.findViewById(R.id.text_lorebook)
         bgTemperature = view.findViewById(R.id.bg_temperature)
         bgTopP = view.findViewById(R.id.bg_top_p)
         bgFrequencyPenalty = view.findViewById(R.id.bg_frequency_penalty)
@@ -412,6 +448,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         textHost?.text = if (apiEndpoint?.label != "") apiEndpoint?.label ?: getString(R.string.label_tap_to_set) else getString(R.string.label_tap_to_set)
         updatePersonaLabel(preferences?.getPersonaId() ?: "")
         updateActivationLabel(preferences?.getActivationPromptId() ?: "")
+        updateLoreBookLabel(preferences?.getLoreBookId() ?: "")
         textLogitBiasesConfig?.text = if (preferences?.getLogitBiasesConfigId() != "") {
             logitBiasConfigPreferences?.getConfigById(preferences?.getLogitBiasesConfigId()!!)?.get("label") ?: getString(R.string.label_tap_to_set)
         } else {
@@ -530,7 +567,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         }
 
         btnSelectLoreBook?.setOnClickListener {
-            startActivity(Intent(requireContext(), LoreBookListActivity::class.java))
+            showLoreBookChooser()
         }
 
         btnSaveToProfile?.setOnClickListener {

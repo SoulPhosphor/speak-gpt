@@ -42,7 +42,11 @@ import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.adapters.LoreBookItemAdapter
 import org.teslasoft.assistant.ui.fragments.dialogs.EditLoreBookEntryDialogFragment
 
-class LoreBookListActivity : FragmentActivity() {
+/**
+ * Lists the memories inside a single lorebook. The lorebook is passed in via the
+ * "lorebookId" / "lorebookName" intent extras.
+ */
+class LoreBookEntriesActivity : FragmentActivity() {
 
     private var btnAdd: ExtendedFloatingActionButton? = null
     private var btnBack: ImageButton? = null
@@ -56,8 +60,11 @@ class LoreBookListActivity : FragmentActivity() {
 
     private var store: LoreBookStore? = null
 
+    private var lorebookId: String = ""
+    private var lorebookName: String = ""
+
     private fun openEditDialog(position: Int) {
-        val entry = if (position == -1) LoreBookEntry() else list[position]
+        val entry = if (position == -1) LoreBookEntry(lorebookId = lorebookId) else list[position]
         val dialog = EditLoreBookEntryDialogFragment.newInstance(entry, position)
         dialog.setListener(editDialogListener)
         dialog.setCancelable(false)
@@ -87,7 +94,7 @@ class LoreBookListActivity : FragmentActivity() {
         }
 
         override fun onError(message: String, position: Int) {
-            Toast.makeText(this@LoreBookListActivity, message, Toast.LENGTH_SHORT).show()
+            Toast.makeText(this@LoreBookEntriesActivity, message, Toast.LENGTH_SHORT).show()
             openEditDialog(position)
         }
     }
@@ -96,7 +103,10 @@ class LoreBookListActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        setContentView(R.layout.activity_lorebook_list)
+        setContentView(R.layout.activity_lorebook_entries)
+
+        lorebookId = intent.getStringExtra("lorebookId") ?: ""
+        lorebookName = intent.getStringExtra("lorebookName") ?: ""
 
         btnAdd = findViewById(R.id.btn_add)
         btnBack = findViewById(R.id.btn_back)
@@ -104,6 +114,8 @@ class LoreBookListActivity : FragmentActivity() {
         activityTitle = findViewById(R.id.activity_title)
         listView = findViewById(R.id.list_view)
         actionBar = findViewById(R.id.action_bar)
+
+        if (lorebookName.isNotEmpty()) activityTitle?.text = lorebookName
 
         val preferences = Preferences.getPreferences(this, "")
 
@@ -142,7 +154,7 @@ class LoreBookListActivity : FragmentActivity() {
 
     private fun reloadList() {
         list.clear()
-        list.addAll(store!!.getAllEntries())
+        list.addAll(store!!.getEntries(lorebookId))
 
         runOnUiThread {
             adapter = LoreBookItemAdapter(list, this)

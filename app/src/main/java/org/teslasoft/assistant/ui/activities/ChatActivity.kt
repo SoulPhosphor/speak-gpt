@@ -247,8 +247,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     private var adapter: ChatAdapter? = null
     private var chatMessages: ArrayList<ChatMessage> = arrayListOf()
 
-    // Raw text the user last typed/dictated (without the prefix/suffix wrapping).
-    // Used by the lorebook to match triggers against what the user actually said.
+    // The user's most recent outgoing message (captured in generateResponse, which
+    // every input path flows through). Used by the lorebook to match triggers.
     private var lastUserMessageForLore = ""
 
     private var chatId = ""
@@ -2617,10 +2617,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
             val m = prefix + message + endSeparator
 
-            // Remember the user's plain message so the lorebook can match triggers
-            // against it when the prompt is assembled.
-            lastUserMessageForLore = message
-
             if (imageIsSelected) {
                 val bytes = Base64.decode(baseImageString!!.split(",")[1], Base64.DEFAULT)
                 writeImageToCache(bytes, selectedImageType!!)
@@ -2909,6 +2905,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     @Suppress("deprecation")
     private suspend fun generateResponse(request: String, shouldPronounce: Boolean) {
         disableAutoScroll = false
+
+        // Capture the user's message here, the single point every input method flows
+        // through (typing, voice recognition, and Whisper transcription), so the
+        // lorebook matches triggers regardless of how the message was entered.
+        lastUserMessageForLore = request
+
         try {
             var response = ""
 
@@ -3450,10 +3452,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             )
         }
 
-        // Lorebook (memory system, Phase 1): find memories whose triggers appear in
-        // the user's latest message and inject them as their own System message,
-        // placed after the base prompt so prefix caching of the stable prompt holds.
-        val loreMatches = LoreBookStore.getInstance(this).findMatches(lastUserMessageForLore)
+        // Lorebook (memory system, Phase 1): from the chat's active lorebook, find
+        // memories whose triggers appear in the user's latest message and inject them
+        // as their own System message, placed after the base prompt so prefix caching
+        // of the stable prompt holds.
+        val activeLoreBookId = preferences?.getLoreBookId() ?: ""
+        val loreMatches = LoreBookStore.getInstance(this).findMatches(lastUserMessageForLore, activeLoreBookId)
         if (loreMatches.isNotEmpty()) {
             val loreText = StringBuilder(getString(R.string.lorebook_injection_header))
             for (match in loreMatches) {
