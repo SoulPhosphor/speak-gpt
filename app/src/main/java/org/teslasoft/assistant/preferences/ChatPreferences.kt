@@ -250,6 +250,12 @@ class ChatPreferences private constructor() {
     fun editMessage(context: Context, chatId: String, position: Int, newMessage: String) {
         val list = getChatById(context, chatId)
 
+        // The position comes from the in-memory adapter list, which can briefly
+        // be longer than the persisted list (e.g. a pending turn added in memory
+        // before the next save, or after a failed generation). Indexing blindly
+        // crashed the whole app with IndexOutOfBoundsException; bail out instead.
+        if (position < 0 || position >= list.size) return
+
         list[position]["message"] = newMessage
 
         val json: String = Gson().toJson(list)
@@ -260,6 +266,11 @@ class ChatPreferences private constructor() {
 
     fun deleteMessage(context: Context, chatId: String, position: Int) {
         val list = getChatById(context, chatId)
+
+        // Same desync guard as editMessage: removeAt(position) on a stale/shorter
+        // persisted list threw IndexOutOfBoundsException (Index N out of bounds
+        // for length N) and crashed the app while editing/deleting a message.
+        if (position < 0 || position >= list.size) return
 
         list.removeAt(position)
 

@@ -1102,6 +1102,60 @@ class Preferences private constructor(private var preferences: SharedPreferences
     }
 
     /**
+     * The persona last applied in any chat (global, not per-chat). A brand-new
+     * chat seeds its per-chat persona from this once, so a fresh chat continues
+     * with the persona you were last using instead of resetting to none.
+     *
+     * @return Persona ID, or an empty String when the last selection was none.
+     * */
+    fun getLastUsedPersonaId() : String {
+        return getGlobalString("last_used_persona_id", "")
+    }
+
+    /**
+     * Record the persona just applied so future new chats default to it.
+     *
+     * @param id Persona ID, or an empty String for none.
+     * */
+    fun setLastUsedPersonaId(id: String) {
+        putGlobalString("last_used_persona_id", id)
+    }
+
+    /**
+     * The activation prompt last applied in any chat (global, not per-chat),
+     * seeded into new chats the same way as [getLastUsedPersonaId].
+     *
+     * @return Activation prompt ID, or an empty String when the last selection
+     *         was none (or none was ever set).
+     * */
+    fun getLastUsedActivationPromptId() : String {
+        return getGlobalString("last_used_activation_prompt_id", "")
+    }
+
+    /**
+     * Record the activation prompt just applied so future new chats default to
+     * it.
+     *
+     * @param id Activation prompt ID, or an empty String for none.
+     * */
+    fun setLastUsedActivationPromptId(id: String) {
+        putGlobalString("last_used_activation_prompt_id", id)
+    }
+
+    /**
+     * One-shot guard (per chat) so a new chat seeds its persona/activation from
+     * the last-used global defaults exactly once. After that the chat's own
+     * selection always wins — including an explicit "none" the user picks later.
+     * */
+    fun isPersonaActivationSeeded() : Boolean {
+        return getBoolean("persona_activation_seeded", false)
+    }
+
+    fun setPersonaActivationSeeded(seeded: Boolean) {
+        putBoolean("persona_activation_seeded", seeded)
+    }
+
+    /**
      * Get logit biases config ID
      *
      * @return logit biases config ID

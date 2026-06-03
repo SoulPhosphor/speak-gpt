@@ -131,7 +131,17 @@ Java_org_teslasoft_assistant_stt_LocalWhisperNative_transcribeNative(
     }
     env->ReleaseShortArrayElements(jpcm, pcm, JNI_ABORT);
 
-    struct whisper_full_params wparams = whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
+    // Beam search instead of greedy decoding. Greedy takes the single most
+    // likely token at each step; beam search keeps several candidate
+    // continuations alive and commits to the best-scoring whole sequence.
+    // That global view produces cleaner sentence structure and noticeably
+    // more consistent punctuation/capitalization — the main reason we use it
+    // here. It costs more compute per clip, but on-device clips are short and
+    // the quality gain is worth it. beam_size = 5 is whisper.cpp's own default
+    // for this strategy; set explicitly so the value is visible at the call
+    // site rather than buried in the library defaults.
+    struct whisper_full_params wparams = whisper_full_default_params(WHISPER_SAMPLING_BEAM_SEARCH);
+    wparams.beam_search.beam_size = 5;
     wparams.print_realtime   = false;
     wparams.print_progress   = false;
     wparams.print_timestamps = false;

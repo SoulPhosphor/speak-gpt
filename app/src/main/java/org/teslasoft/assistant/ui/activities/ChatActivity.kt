@@ -164,6 +164,7 @@ import kotlinx.serialization.json.putJsonObject
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.PersonaPreferences
+import org.teslasoft.assistant.preferences.ActivationPromptPreferences
 import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.LogitBiasPreferences
@@ -2261,11 +2262,51 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         reloadAmoled()
     }
 
+    /**
+     * Carry the persona/activation you were last using into a brand-new chat.
+     * A fresh chat starts with no selection, which previously always showed
+     * "none"; instead seed it once from the global last-used defaults so a new
+     * chat continues with the same persona/activation. The per-chat one-shot
+     * flag means this only happens on the chat's first setup — if you later set
+     * the chat to "none", it stays none. Only runs for an empty chat (called
+     * from [setup] inside its messages.isEmpty() guard), so existing
+     * conversations are never retroactively changed. A last-used id whose
+     * persona/activation has since been deleted is skipped (falls back to none).
+     */
+    private fun seedPersonaAndActivationDefaults() {
+        if (preferences?.isPersonaActivationSeeded() == true) return
+        preferences?.setPersonaActivationSeeded(true)
+
+        if (preferences?.getPersonaId().isNullOrEmpty()) {
+            val lastPersona = preferences?.getLastUsedPersonaId().orEmpty()
+            if (lastPersona.isNotEmpty() &&
+                PersonaPreferences.getPersonaPreferences(this).getPersona(lastPersona).label.isNotEmpty()) {
+                preferences?.setPersonaId(lastPersona)
+            }
+        }
+
+        if (preferences?.getActivationPromptId().isNullOrEmpty()) {
+            val lastActivation = preferences?.getLastUsedActivationPromptId().orEmpty()
+            if (lastActivation.isNotEmpty()) {
+                val activation = ActivationPromptPreferences
+                    .getActivationPromptPreferences(this)
+                    .getActivationPrompt(lastActivation)
+                if (activation.label.isNotEmpty()) {
+                    preferences?.setActivationPromptId(lastActivation)
+                    // Mirror the QuickSettings selection flow: the prompt text is
+                    // what setup() reads and sends as the first message.
+                    preferences?.setPrompt(activation.prompt)
+                }
+            }
+        }
+    }
+
     /*
     * Setup SpeakGPT with activation prompt.
     * */
     private fun setup() {
         if (messages.isEmpty()) {
+            seedPersonaAndActivationDefaults()
             val prompt: String = preferences!!.getPrompt()
 
             if (prompt.toString() != "" && prompt.toString() != "null" && prompt != "") {
@@ -2915,12 +2956,22 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 e.stackTraceToString().contains("404") || e.stackTraceToString().contains("Not Found") -> {
                     "Endpoint not found (HTTP 404).\n\nProfile: ${apiEndpointObject?.label}\nBase URL: ${apiEndpointObject?.host}\n\nThe server returned 404 for this address. Check that this profile's Base URL includes the full path, and that this chat is set to the intended profile."
                 }
+                // Streaming was requested (Accept: text/event-stream) but the
+                // server answered with a non-streaming body — almost always an
+                // error response (e.g. HTTP 400) that the Ktor client then
+                // couldn't deserialize as a stream, surfacing the opaque
+                // NoTransformationFoundException. Explain it in plain terms
+                // instead of dumping the Ktor stack trace.
+                e.stackTraceToString().contains("NoTransformationFoundException") ||
+                e.stackTraceToString().contains("Expected response body of the type") -> {
+                    "Profile: ${apiEndpointObject?.label}\nBase URL: ${apiEndpointObject?.host}\n\nThe server rejected the request (likely HTTP 400) and returned a non-streaming response, so it couldn't be read as a stream.\n\nThis usually means the request was malformed or this endpoint/model doesn't support streaming chat completions. Check that the model is correct for this profile and try again."
+                }
                 else -> {
                     "Profile: ${apiEndpointObject?.label}\nBase URL: ${apiEndpointObject?.host}\n\n" + e.stackTraceToString() + "\n\n" + e.message
                 }
             }
 
-            if (messages[messages.size - 1]["isBot"] == false) {
+            if (messages.isEmpty() || messages[messages.size - 1]["isBot"] == false) {
                 putMessage("", true)
             }
 
@@ -3740,19 +3791,26 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         if (chatMessages == null) chatMessages = arrayListOf()
 
         for (message: HashMap<String, Any> in messages) {
-            if (!message["message"].toString().contains("data:image")) {
+            val content = message["message"].toString()
+            // Skip blank-content turns. An empty user/assistant message (e.g. an
+            // error placeholder, or a turn the user blanked out while editing)
+            // makes OpenAI-compatible servers reject the whole request with HTTP
+            // 400. With streaming on (Accept: text/event-stream) the Ktor client
+            // then can't parse the non-SSE error body and throws the opaque
+            // NoTransformationFoundException instead of a real error.
+            if (!content.contains("data:image") && content.isNotBlank()) {
                 if (message["isBot"] == true) {
                     chatMessages.add(
                         ChatMessage(
                             role = ChatRole.Assistant,
-                            content = message["message"].toString()
+                            content = content
                         )
                     )
                 } else {
                     chatMessages.add(
                         ChatMessage(
                             role = ChatRole.User,
-                            content = message["message"].toString()
+                            content = content
                         )
                     )
                 }

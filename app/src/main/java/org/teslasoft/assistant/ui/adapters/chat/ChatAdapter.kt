@@ -685,6 +685,9 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
     }
 
     override fun onEdit(prompt: String, position: Int) {
+        // Mirror onDelete's guard: a stale dialog position (the list changed
+        // while the edit dialog was open) must not index past the array.
+        if (position < 0 || position >= dataArray.size) return
         editMessage(position, prompt)
         notifyItemChanged(position)
 

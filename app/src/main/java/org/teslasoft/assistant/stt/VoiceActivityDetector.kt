@@ -130,23 +130,33 @@ class EnergyVad(
     override fun accept(frame: ShortArray, len: Int): Boolean {
         if (len <= 0) return false
         val rms = rmsOf(frame, len)
-        // Anchor the noise floor to the quietest frame seen, not the first.
-        // In hands-free, the next turn's mic opens the instant the AI stops
-        // talking, so the first frame is often the user already mid-word.
-        // Snapshotting that as "ambient" pinned the threshold above the user's
-        // own speech volume, so every following frame read as silence and the
-        // silence timer fired in the middle of a sentence. The running min
-        // recalibrates the moment a natural gap between words slips through.
-        if (!floorInit || rms < noiseFloor) {
+        // Snapshot the opening frame as the ambient floor, then let it drift on
+        // quiet frames. This is the original behaviour that worked well in the
+        // field. A later change made this a running-minimum (re-anchoring to the
+        // quietest frame ever seen) while chasing the WebRTC fan-noise problem;
+        // that destabilised the Energy detector it was sharing code with, so the
+        // running-min is gone and the snapshot is back.
+        if (!floorInit) {
             noiseFloor = rms
             floorInit = true
         }
+        // Cap the adaptive threshold just below the quietest real speech. If the
+        // opening frame is loud — the hands-free user talking the instant the
+        // mic re-opens between turns, or a TTS tail bleeding in — the snapshot
+        // floor pins high and floor*2.5 would otherwise climb above the user's
+        // own voice, so every frame reads as silence, speechStarted never fires
+        // and the turn dies on the no-speech timeout (the broken back-and-forth,
+        // and the old "mid-speech cutoff"). Real voice sits at 1500+ RMS and
+        // fan/AC noise at <=1200, so clamping the bar below SPEECH_RMS_CEILING
+        // keeps noise rejected while guaranteeing speech is always heard.
         val threshold = maxOf(noiseFloor * floorFactor, minSpeechRms)
+            .coerceAtMost(SPEECH_RMS_CEILING)
         return if (rms >= threshold) {
             true
         } else {
-            // Below threshold = ambient — let the floor drift up so a noisier
-            // room (fan turned on mid-recording) raises the bar over time.
+            // Below threshold = ambient — let the floor drift toward the room
+            // level so a noisier room (fan turned on mid-recording) adapts over
+            // a few hundred ms.
             noiseFloor = noiseFloor * 0.97 + rms * 0.03
             false
         }
@@ -167,6 +177,11 @@ class EnergyVad(
         // These are the numbers most likely to need on-device tuning.
         const val MIN_SPEECH_RMS = 600.0
         const val SPEECH_FLOOR_FACTOR = 2.5
+        // Upper bound on the adaptive threshold. Sits between the loudest
+        // steady noise (~1200) and the quietest real speech (~1500) so the
+        // floor can adapt to a noisy room without ever rising past the user's
+        // own voice. See accept() for why this matters for hands-free turns.
+        const val SPEECH_RMS_CEILING = 1400.0
     }
 }
 
@@ -244,7 +259,12 @@ class WebRtcVad private constructor(
                     noiseFloor = rms
                     floorInit = true
                 }
+                // Clamp below the quietest real speech for the same reason as
+                // EnergyVad: a loud opening frame (user mid-word as the mic
+                // re-arms, or TTS tail) must not pin the energy gate above the
+                // user's own voice and silence the libfvad vote forever.
                 val energyThreshold = maxOf(noiseFloor * ENERGY_FLOOR_FACTOR, MIN_ENERGY_RMS)
+                    .coerceAtMost(MAX_ENERGY_RMS)
                 val aboveEnergy = rms >= energyThreshold
 
                 val r = try {
@@ -291,6 +311,9 @@ class WebRtcVad private constructor(
         // (or the 600 absolute) cleanly separates them once the floor adapts.
         private const val ENERGY_FLOOR_FACTOR = 2.5
         private const val MIN_ENERGY_RMS = 600.0
+        // Upper bound on the energy gate; between max steady noise (~1200) and
+        // min real speech (~1500). Mirrors EnergyVad.SPEECH_RMS_CEILING.
+        private const val MAX_ENERGY_RMS = 1400.0
 
         /** @param mode libfvad aggressiveness 0..3. Returns null if unavailable. */
         fun create(mode: Int, sampleRate: Int): WebRtcVad? {
