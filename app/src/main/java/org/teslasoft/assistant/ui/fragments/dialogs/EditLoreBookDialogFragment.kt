@@ -21,30 +21,24 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.CheckBox
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.DialogFragment
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.textfield.TextInputEditText
 import org.teslasoft.assistant.R
-import org.teslasoft.assistant.preferences.dto.LoreBookEntry
+import org.teslasoft.assistant.preferences.dto.LoreBook
 
-class EditLoreBookEntryDialogFragment : DialogFragment() {
+class EditLoreBookDialogFragment : DialogFragment() {
     companion object {
-        fun newInstance(entry: LoreBookEntry, position: Int): EditLoreBookEntryDialogFragment {
-            val fragment = EditLoreBookEntryDialogFragment()
+        fun newInstance(book: LoreBook, position: Int): EditLoreBookDialogFragment {
+            val fragment = EditLoreBookDialogFragment()
 
             val args = Bundle()
-            args.putString("id", entry.id)
-            args.putString("lorebookId", entry.lorebookId)
-            args.putString("label", entry.label)
-            args.putString("content", entry.content)
-            // Triggers are edited one-per-line.
-            args.putString("triggers", entry.triggers.joinToString("\n"))
-            args.putString("source", entry.sourceText)
-            args.putBoolean("enabled", entry.enabled)
-            args.putLong("createdAt", entry.createdAt)
+            args.putString("id", book.id)
+            args.putString("name", book.name)
+            args.putString("description", book.description)
+            args.putLong("createdAt", book.createdAt)
             args.putInt("position", position)
 
             fragment.arguments = args
@@ -54,40 +48,31 @@ class EditLoreBookEntryDialogFragment : DialogFragment() {
     }
 
     private var textDialogTitle: TextView? = null
-    private var fieldLabel: TextInputEditText? = null
-    private var fieldContent: TextInputEditText? = null
-    private var fieldTriggers: TextInputEditText? = null
-    private var fieldSource: TextInputEditText? = null
-    private var fieldEnabled: CheckBox? = null
+    private var fieldName: TextInputEditText? = null
+    private var fieldDescription: TextInputEditText? = null
 
     private var builder: AlertDialog.Builder? = null
 
     private var listener: StateChangesListener? = null
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
-        return inflater.inflate(R.layout.fragment_edit_lorebook_entry, container, false)
+        return inflater.inflate(R.layout.fragment_edit_lorebook, container, false)
     }
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         builder = MaterialAlertDialogBuilder(this.requireContext(), R.style.App_MaterialAlertDialog)
 
-        val view: View = this.layoutInflater.inflate(R.layout.fragment_edit_lorebook_entry, null)
+        val view: View = this.layoutInflater.inflate(R.layout.fragment_edit_lorebook, null)
 
         textDialogTitle = view.findViewById(R.id.text_dialog_title)
-        fieldLabel = view.findViewById(R.id.field_label)
-        fieldContent = view.findViewById(R.id.field_content)
-        fieldTriggers = view.findViewById(R.id.field_triggers)
-        fieldSource = view.findViewById(R.id.field_source)
-        fieldEnabled = view.findViewById(R.id.field_enabled)
+        fieldName = view.findViewById(R.id.field_name)
+        fieldDescription = view.findViewById(R.id.field_description)
 
-        fieldLabel?.setText(requireArguments().getString("label"))
-        fieldContent?.setText(requireArguments().getString("content"))
-        fieldTriggers?.setText(requireArguments().getString("triggers"))
-        fieldSource?.setText(requireArguments().getString("source"))
-        fieldEnabled?.isChecked = requireArguments().getBoolean("enabled", true)
+        fieldName?.setText(requireArguments().getString("name"))
+        fieldDescription?.setText(requireArguments().getString("description"))
 
         if (requireArguments().getInt("position") == -1) {
-            textDialogTitle?.text = getString(R.string.label_add_memory)
+            textDialogTitle?.text = getString(R.string.label_add_lorebook)
         }
 
         builder!!.setView(view)
@@ -98,8 +83,8 @@ class EditLoreBookEntryDialogFragment : DialogFragment() {
         if (requireArguments().getInt("position") != -1) {
             builder!!.setNeutralButton(R.string.btn_delete) { _, _ ->
                 MaterialAlertDialogBuilder(this.requireContext(), R.style.App_MaterialAlertDialog)
-                    .setTitle(R.string.label_delete_memory)
-                    .setMessage(R.string.message_delete_memory)
+                    .setTitle(R.string.label_delete_lorebook)
+                    .setMessage(R.string.message_delete_lorebook)
                     .setPositiveButton(R.string.yes) { _, _ ->
                         listener?.onDelete(
                             requireArguments().getInt("position"),
@@ -116,38 +101,26 @@ class EditLoreBookEntryDialogFragment : DialogFragment() {
         return builder!!.create()
     }
 
-    private fun parseTriggers(raw: String): ArrayList<String> {
-        return ArrayList(
-            raw.split("\n")
-                .map { it.trim() }
-                .filter { it.isNotEmpty() }
-        )
-    }
-
-    private fun buildEntry(): LoreBookEntry {
-        return LoreBookEntry(
+    private fun buildBook(): LoreBook {
+        return LoreBook(
             id = requireArguments().getString("id") ?: "",
-            lorebookId = requireArguments().getString("lorebookId") ?: "",
-            label = fieldLabel?.text.toString().trim(),
-            content = fieldContent?.text.toString().trim(),
-            sourceText = fieldSource?.text.toString().trim(),
-            triggers = parseTriggers(fieldTriggers?.text.toString()),
-            enabled = fieldEnabled?.isChecked ?: true,
+            name = fieldName?.text.toString().trim(),
+            description = fieldDescription?.text.toString().trim(),
             createdAt = requireArguments().getLong("createdAt")
         )
     }
 
     private fun validateForm() {
-        if (fieldLabel?.text.toString().isBlank() || fieldContent?.text.toString().isBlank()) {
-            listener?.onError(getString(R.string.label_error_memory_empty), requireArguments().getInt("position"))
+        if (fieldName?.text.toString().isBlank()) {
+            listener?.onError(getString(R.string.label_error_lorebook_empty), requireArguments().getInt("position"))
             return
         }
 
         val position = requireArguments().getInt("position")
         if (position == -1) {
-            listener?.onAdd(buildEntry())
+            listener?.onAdd(buildBook())
         } else {
-            listener?.onEdit(buildEntry(), position)
+            listener?.onEdit(buildBook(), position)
         }
     }
 
@@ -156,8 +129,8 @@ class EditLoreBookEntryDialogFragment : DialogFragment() {
     }
 
     interface StateChangesListener {
-        fun onAdd(entry: LoreBookEntry) { /* default */ }
-        fun onEdit(entry: LoreBookEntry, position: Int) { /* default */ }
+        fun onAdd(book: LoreBook) { /* default */ }
+        fun onEdit(book: LoreBook, position: Int) { /* default */ }
         fun onDelete(position: Int, id: String) { /* default */ }
         fun onError(message: String, position: Int) { /* default */ }
         fun onCancel(position: Int) { /* default */ }

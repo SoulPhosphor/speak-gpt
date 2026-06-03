@@ -49,6 +49,7 @@ class CharactersActivity : FragmentActivity() {
     private var tilePersonas: TileFragment? = null
     private var tileActivationPrompts: TileFragment? = null
     private var tileSystemMessage: TileFragment? = null
+    private var tileLoreBooks: TileFragment? = null
 
     private var personasActivityResultLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
@@ -164,10 +165,25 @@ class CharactersActivity : FragmentActivity() {
             transitionName = null
         )
 
+        tileLoreBooks = TileFragment.newInstance(
+            checked = false,
+            checkable = false,
+            enabledText = getString(R.string.tile_lorebooks_title),
+            disabledText = null,
+            enabledDesc = getString(R.string.tile_lorebooks_desc),
+            disabledDesc = null,
+            icon = R.drawable.ic_book,
+            disabled = false,
+            chatId = chatId,
+            functionDesc = getString(R.string.tile_lorebooks_desc),
+            transitionName = null
+        )
+
         supportFragmentManager.beginTransaction()
             .replace(R.id.tile_personas_entry, tilePersonas!!)
             .replace(R.id.tile_activation_prompts_entry, tileActivationPrompts!!)
             .replace(R.id.tile_system_message_entry, tileSystemMessage!!)
+            .replace(R.id.tile_lorebooks_entry, tileLoreBooks!!)
             .commit()
 
         tilePersonas?.setOnTileClickListener {
@@ -184,6 +200,10 @@ class CharactersActivity : FragmentActivity() {
             val dialog = SystemMessageDialogFragment.newInstance(preferences?.getSystemMessage() ?: "")
             dialog.setStateChangedListener(systemChangedListener)
             dialog.show(supportFragmentManager, "SystemMessageDialogFragment")
+        }
+
+        tileLoreBooks?.setOnTileClickListener {
+            startActivity(Intent(this, LoreBooksListActivity::class.java))
         }
     }
 

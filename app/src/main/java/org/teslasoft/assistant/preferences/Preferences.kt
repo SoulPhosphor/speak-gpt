@@ -1083,6 +1083,25 @@ class Preferences private constructor(private var preferences: SharedPreferences
     }
 
     /**
+     * Get the lorebook that is active for this chat. Only memories from this
+     * lorebook are matched against messages and injected into the prompt.
+     *
+     * @return Lorebook ID, or an empty String when none is selected
+     * */
+    fun getLoreBookId() : String {
+        return getString("lorebook_id", "")
+    }
+
+    /**
+     * Set the active lorebook for this chat.
+     *
+     * @param id Lorebook ID, or an empty String to use no lorebook
+     * */
+    fun setLoreBookId(id: String) {
+        putString("lorebook_id", id)
+    }
+
+    /**
      * Get logit biases config ID
      *
      * @return logit biases config ID

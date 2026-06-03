@@ -29,6 +29,10 @@ data class LoreBookEntry(
      * future sync can reference the same memory across devices. */
     var id: String = "",
 
+    /* Id of the lorebook this memory belongs to. Memories are always scoped to a
+     * single lorebook; matching only considers the chat's active lorebook. */
+    var lorebookId: String = "",
+
     /* Friendly name shown in the management list. */
     var label: String = "",
 
