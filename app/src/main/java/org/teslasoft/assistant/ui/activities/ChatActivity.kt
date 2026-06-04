@@ -527,6 +527,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     }
 
     private fun submitRecognizedText(recognizedText: String) {
+        playTranscriptionDoneSignal()
         putMessage(prefix + recognizedText + endSeparator, false)
 
         chatMessages.add(
@@ -1802,6 +1803,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 progress?.visibility = View.GONE
                 micIdle()
             } else {
+                playTranscriptionDoneSignal()
                 if (preferences?.autoSend() == true) {
                     putMessage(prefix + transcription + endSeparator, false)
 
@@ -2089,6 +2091,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             }
             return
         }
+        playTranscriptionDoneSignal()
         if (preferences?.autoSend() == true) {
             putMessage(prefix + transcription + endSeparator, false)
             chatMessages.add(
@@ -3057,6 +3060,77 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         }.start()
     }
 
+    /**
+     * Plays a short ascending three-note tone once the user's speech has been
+     * transcribed, so they know dictation finished without looking at the screen.
+     * Deliberately the mirror image of [playErrorSignal]: same alarm-stream
+     * routing (so it stays audible when the ringer is silent/vibrate), opposite
+     * cadence — a rising D4 -> F4 -> A4 "ready" chime instead of the falling
+     * "disappointed" one. Off unless the user opts in via the voice settings.
+     */
+    private fun playTranscriptionDoneSignal() {
+        if (preferences?.getTranscriptionDoneSound() != true) return
+
+        Thread {
+            var track: AudioTrack? = null
+            try {
+                val sampleRate = 44100
+                // D4 -> F4 -> A4: the reverse of the error tone — a gentle, rising
+                // cadence that reads as "done / go ahead".
+                val notes = floatArrayOf(293.66f, 349.23f, 440.0f)
+                val noteMs = 160
+                val gapMs = 40
+                val samplesPerNote = sampleRate * noteMs / 1000
+                val samplesPerGap = sampleRate * gapMs / 1000
+                val totalSamples = (samplesPerNote + samplesPerGap) * notes.size
+                val buffer = ShortArray(totalSamples)
+
+                var idx = 0
+                for (freq in notes) {
+                    for (i in 0 until samplesPerNote) {
+                        val t = i.toDouble() / sampleRate
+                        // Linear fade in/out to avoid clicks at note boundaries.
+                        val envelope = when {
+                            i < samplesPerNote * 0.1 -> i / (samplesPerNote * 0.1)
+                            i > samplesPerNote * 0.8 -> (samplesPerNote - i) / (samplesPerNote * 0.2)
+                            else -> 1.0
+                        }
+                        val sample = Math.sin(2.0 * Math.PI * freq * t) * envelope * 0.4 * Short.MAX_VALUE
+                        buffer[idx++] = sample.toInt().toShort()
+                    }
+                    idx += samplesPerGap // leave silence (buffer is zero-initialized)
+                }
+
+                val attributes = AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_ALARM)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build()
+                val format = AudioFormat.Builder()
+                    .setSampleRate(sampleRate)
+                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                    .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                    .build()
+
+                track = AudioTrack(
+                    attributes,
+                    format,
+                    totalSamples * 2,
+                    AudioTrack.MODE_STATIC,
+                    AudioManager.AUDIO_SESSION_ID_GENERATE
+                )
+                track.write(buffer, 0, totalSamples)
+                track.play()
+
+                Thread.sleep(((noteMs + gapMs) * notes.size + 150).toLong())
+                track.stop()
+            } catch (_: Exception) {
+                // A missing confirmation chime must never break dictation.
+            } finally {
+                try { track?.release() } catch (_: Exception) { /* ignore */ }
+            }
+        }.start()
+    }
+
     private val availableFunctions = mapOf("generateImage" to ::generateImage, "searchAtInternet" to ::searchAtInternet)
 
     private fun ToolCall.Function.execute() {
@@ -3211,8 +3285,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     )
                 )
 
+                // Auto-naming used to be hardcoded to "gpt-4o". On any account or
+                // custom API endpoint where that exact id isn't served, the request
+                // threw and the (silent) catch below left every chat stuck on its
+                // "_autoname_" placeholder — so titles were never set. Use the chat's
+                // own configured model instead, which the endpoint is known to serve.
+                val titleModel = model.ifBlank { preferences?.getModel() ?: "gpt-4o" }
                 val chatCompletionRequest2 = ChatCompletionRequest(
-                    model = ModelId("gpt-4o"),
+                    model = ModelId(titleModel),
                     maxTokens = 10,
                     messages = m
                 )

@@ -296,6 +296,13 @@
         </activity>
 
         <activity
+            android:name=".ui.activities.VoiceSettingsActivity"
+            android:exported="false"
+            android:label="@string/voice_settings_title"
+            android:launchMode="singleTask">
+        </activity>
+
+        <activity
             android:name=".ui.activities.LocalWhisperManageActivity"
             android:exported="false"
             android:label="@string/title_manage_downloaded_models"
