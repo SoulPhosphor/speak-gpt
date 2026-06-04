@@ -27,12 +27,9 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.transition.TransitionInflater
-import android.util.TypedValue
-import android.view.Gravity
 import android.view.View
 import android.widget.ImageButton
 import android.widget.LinearLayout
-import android.widget.RadioButton
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
@@ -40,7 +37,6 @@ import android.window.OnBackInvokedDispatcher
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.content.ContextCompat
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.DrawableCompat
 import androidx.fragment.app.FragmentActivity
@@ -61,11 +57,9 @@ import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.ui.fragments.TileFragment
 import org.teslasoft.assistant.ui.fragments.dialogs.ActivationPromptDialogFragment
 import org.teslasoft.assistant.ui.fragments.dialogs.CustomizeAssistantDialog
-import org.teslasoft.assistant.ui.fragments.dialogs.LanguageSelectorDialogFragment
 import org.teslasoft.assistant.ui.fragments.dialogs.SelectImageModelFragment
 import org.teslasoft.assistant.ui.fragments.dialogs.SelectResolutionFragment
 import org.teslasoft.assistant.ui.fragments.dialogs.SystemMessageDialogFragment
-import org.teslasoft.assistant.ui.fragments.dialogs.VoiceSelectorDialogFragment
 import org.teslasoft.assistant.util.WindowInsetsUtil
 import org.teslasoft.core.auth.AccountSyncListener
 import org.teslasoft.core.auth.client.SettingsListener
@@ -73,7 +67,6 @@ import org.teslasoft.core.auth.client.SyncListener
 import org.teslasoft.core.auth.client.TeslasoftIDClient
 import org.teslasoft.core.auth.widget.TeslasoftIDCircledButton
 import java.util.EnumSet
-import java.util.Locale
 import kotlin.math.roundToInt
 import androidx.core.content.edit
 import androidx.core.view.WindowCompat
@@ -83,21 +76,11 @@ class SettingsActivity : FragmentActivity() {
     private var tileAccountFragment: TileFragment? = null
     private var tileCharacters: TileFragment? = null
     private var tileAssistant: TileFragment? = null
-    private var tileAutoSend: TileFragment? = null
-    private var tileVoice: TileFragment? = null
-    private var tileVoiceLanguage: TileFragment? = null
+    private var tileVoiceSettings: TileFragment? = null
     private var tileImageModel: TileFragment? = null
     private var tileImageResolution: TileFragment? = null
-    private var tileTTS: TileFragment? = null
-    private var tileSTT: TileFragment? = null
-    private var tileSilentMode: TileFragment? = null
-    private var tileAlwaysSpeak: TileFragment? = null
-    private var tileHandsFree: TileFragment? = null
-    private var tileHandsFreeTiming: TileFragment? = null
-    private var tileVadMethod: TileFragment? = null
     private var tileActivationMessage: TileFragment? = null
     private var tileSystemMessage: TileFragment? = null
-    private var tileLangDetect: TileFragment? = null
     private var tileChatLayout: TileFragment? = null
     private var tileFunctionCalling: TileFragment? = null
     private var tileSlashCommands: TileFragment? = null
@@ -133,31 +116,13 @@ class SettingsActivity : FragmentActivity() {
     private var preferences: Preferences? = null
     private var activationPrompt = ""
     private var systemMessage = ""
-    private var language = "en"
     private var resolution = ""
     private var imageModel = ""
-    private var voice = ""
     private var host = ""
-    private var ttsEngine = "google"
     private var apiEndpoint: ApiEndpointObject? = null
 
     private var teslasoftIDClient: TeslasoftIDClient? = null
     private var apiEndpointPreferences: ApiEndpointPreferences? = null
-
-    private var languageChangedListener: LanguageSelectorDialogFragment.StateChangesListener = object : LanguageSelectorDialogFragment.StateChangesListener {
-        override fun onSelected(name: String) {
-            preferences?.setLanguage(name)
-            language = name
-            tileVoiceLanguage?.updateSubtitle(Locale.forLanguageTag(name).displayLanguage)
-        }
-
-        override fun onFormError(name: String) {
-            Toast.makeText(this@SettingsActivity, getString(R.string.language_error_empty), Toast.LENGTH_SHORT).show()
-            val languageSelectorDialogFragment: LanguageSelectorDialogFragment = LanguageSelectorDialogFragment.newInstance(name, chatId)
-            languageSelectorDialogFragment.setStateChangedListener(this)
-            languageSelectorDialogFragment.show(supportFragmentManager.beginTransaction(), "LanguageSelectorDialog")
-        }
-    }
 
     private var resolutionChangedListener: SelectResolutionFragment.StateChangesListener = object : SelectResolutionFragment.StateChangesListener {
         override fun onSelected(name: String) {
@@ -199,13 +164,6 @@ class SettingsActivity : FragmentActivity() {
         SystemMessageDialogFragment.StateChangesListener { prompt ->
             systemMessage = prompt
             preferences?.setSystemMessage(prompt)
-        }
-
-    private var voiceSelectorListener: VoiceSelectorDialogFragment.OnVoiceSelectedListener =
-        VoiceSelectorDialogFragment.OnVoiceSelectedListener { voice ->
-            this@SettingsActivity.voice = voice
-
-            tileVoice?.updateSubtitle(voice)
         }
 
     private var customizeAssistantDialogListener: CustomizeAssistantDialog.CustomizeAssistantDialogListener = object : CustomizeAssistantDialog.CustomizeAssistantDialogListener {
@@ -447,13 +405,10 @@ class SettingsActivity : FragmentActivity() {
 
         activationPrompt = preferences?.getPrompt() ?: ""
         systemMessage = preferences?.getSystemMessage() ?: ""
-        language = preferences?.getLanguage() ?: "en"
         resolution = preferences?.getResolution() ?: "256x256"
         imageModel = preferences?.getImageModel() ?: "dall-e-3"
-        voice = if (preferences?.getTtsEngine() == "google") preferences?.getVoice() ?: "" else preferences?.getOpenAIVoice() ?: ""
 
         host = apiEndpoint?.host ?: ""
-        ttsEngine = preferences?.getTtsEngine() ?: "google"
 
         initTeslasoftID()
 
@@ -558,30 +513,17 @@ class SettingsActivity : FragmentActivity() {
                 getString(R.string.tile_assistant_desc)
             )
 
-            tileAutoSend = TileFragment.newInstance(
-                preferences?.autoSend()!!,
-                true,
-                getString(R.string.tile_autosend_title),
-                null,
-                getString(R.string.on),
-                getString(R.string.off),
-                R.drawable.ic_send,
-                false,
-                chatId,
-                getString(R.string.tile_autosend_desc)
-            )
-
-            tileVoice = TileFragment.newInstance(
+            tileVoiceSettings = TileFragment.newInstance(
                 checked = false,
                 checkable = false,
-                enabledText = getString(R.string.tile_tts_voice_title),
+                enabledText = getString(R.string.tile_voice_settings_title),
                 disabledText = null,
-                enabledDesc = voice,
+                enabledDesc = getString(R.string.tile_voice_settings_subtitle),
                 disabledDesc = null,
                 icon = R.drawable.ic_voice,
                 disabled = false,
                 chatId = chatId,
-                functionDesc = getString(R.string.tile_tts_voice_desc)
+                functionDesc = getString(R.string.tile_voice_settings_desc)
             )
         }
 
@@ -591,19 +533,6 @@ class SettingsActivity : FragmentActivity() {
 
     private fun createFragments2() {
         val t2 = Thread {
-            tileVoiceLanguage = TileFragment.newInstance(
-                checked = false,
-                checkable = false,
-                enabledText = getString(R.string.tile_voice_lang_title),
-                disabledText = null,
-                enabledDesc = Locale.forLanguageTag(preferences?.getLanguage()!!).displayLanguage,
-                disabledDesc = null,
-                icon = R.drawable.ic_language,
-                disabled = false,
-                chatId = chatId,
-                functionDesc = getString(R.string.tile_voice_lang_desc)
-            )
-
             tileImageModel = TileFragment.newInstance(
                 checked = false,
                 checkable = false,
@@ -630,32 +559,6 @@ class SettingsActivity : FragmentActivity() {
                 functionDesc = getString(R.string.tile_image_resolution_desc),
                 transitionName = "expand_resolution"
             )
-
-            tileTTS = TileFragment.newInstance(
-                preferences?.getTtsEngine() == "openai",
-                true,
-                getString(R.string.tile_openai_tts),
-                null,
-                getString(R.string.on),
-                getString(R.string.tile_google_tts),
-                R.drawable.ic_tts,
-                false,
-                chatId,
-                getString(R.string.tile_tts_desc)
-            )
-
-            tileSTT = TileFragment.newInstance(
-                checked = false,
-                checkable = false,
-                enabledText = getString(R.string.tile_voice_input_title),
-                disabledText = null,
-                enabledDesc = voiceInputSubtitle(),
-                disabledDesc = null,
-                icon = R.drawable.ic_microphone,
-                disabled = false,
-                chatId = chatId,
-                functionDesc = getString(R.string.tile_voice_input_desc)
-            )
         }
 
         t2.start()
@@ -664,75 +567,6 @@ class SettingsActivity : FragmentActivity() {
 
     private fun createFragments3() {
         val t3 = Thread {
-            tileSilentMode = TileFragment.newInstance(
-                preferences?.getSilence() == true,
-                true,
-                getString(R.string.tile_silent_mode_title),
-                null,
-                getString(R.string.on),
-                getString(R.string.off),
-                R.drawable.ic_mute,
-                preferences?.getNotSilence() == true,
-                chatId,
-                getString(R.string.tile_silent_mode_desc)
-            )
-
-            tileAlwaysSpeak = TileFragment.newInstance(
-                preferences?.getNotSilence() == true,
-                true,
-                getString(R.string.tile_always_speak_title),
-                null,
-                getString(R.string.on),
-                getString(R.string.off),
-                R.drawable.ic_volume_up,
-                preferences?.getSilence() == true,
-                chatId,
-                getString(R.string.tile_always_speak_desc)
-            )
-
-            tileHandsFree = TileFragment.newInstance(
-                preferences?.getHandsFreeMode() == true,
-                true,
-                getString(R.string.tile_hands_free_title),
-                null,
-                getString(R.string.on),
-                getString(R.string.off),
-                R.drawable.ic_microphone,
-                false,
-                chatId,
-                getString(R.string.tile_hands_free_desc)
-            )
-
-            tileHandsFreeTiming = TileFragment.newInstance(
-                checked = false,
-                checkable = false,
-                enabledText = getString(R.string.tile_hands_free_timing_title),
-                disabledText = null,
-                enabledDesc = getString(
-                    R.string.tile_hands_free_timing_value,
-                    preferences?.getHandsFreeSilenceSeconds() ?: 5,
-                    preferences?.getHandsFreeNoSpeechSeconds() ?: 10
-                ),
-                disabledDesc = null,
-                icon = R.drawable.ic_play,
-                disabled = false,
-                chatId = chatId,
-                functionDesc = getString(R.string.tile_hands_free_timing_desc)
-            )
-
-            tileVadMethod = TileFragment.newInstance(
-                checked = false,
-                checkable = false,
-                enabledText = getString(R.string.tile_vad_method_title),
-                disabledText = null,
-                enabledDesc = vadMethodSubtitle(),
-                disabledDesc = null,
-                icon = R.drawable.ic_microphone,
-                disabled = false,
-                chatId = chatId,
-                functionDesc = getString(R.string.tile_vad_method_desc)
-            )
-
             tileActivationMessage = TileFragment.newInstance(
                 checked = false,
                 checkable = false,
@@ -768,19 +602,6 @@ class SettingsActivity : FragmentActivity() {
 
     private fun createFragments4() {
         val t4 = Thread {
-            tileLangDetect = TileFragment.newInstance(
-                preferences?.getAutoLangDetect() == true,
-                true,
-                getString(R.string.tile_ale_title),
-                null,
-                getString(R.string.on),
-                getString(R.string.off),
-                R.drawable.ic_language,
-                false,
-                chatId,
-                getString(R.string.tile_ale_desc)
-            )
-
             tileChatLayout = TileFragment.newInstance(
                 preferences?.getLayout() == "classic",
                 true,
@@ -1088,304 +909,15 @@ class SettingsActivity : FragmentActivity() {
         t7.join()
     }
 
-    private fun showHandsFreeTimingDialog() {
-        val density = resources.displayMetrics.density
-        val pad = (20 * density).toInt()
-
-        val container = android.widget.LinearLayout(this)
-        container.orientation = android.widget.LinearLayout.VERTICAL
-        container.setPadding(pad, pad, pad, 0)
-
-        val silenceLabel = android.widget.TextView(this)
-        silenceLabel.text = getString(R.string.tile_hands_free_silence_title)
-        val silenceInput = android.widget.EditText(this)
-        silenceInput.inputType = android.text.InputType.TYPE_CLASS_NUMBER
-        silenceInput.setText((preferences?.getHandsFreeSilenceSeconds() ?: 5).toString())
-
-        val noSpeechLabel = android.widget.TextView(this)
-        noSpeechLabel.text = getString(R.string.tile_hands_free_no_speech_title)
-        val noSpeechInput = android.widget.EditText(this)
-        noSpeechInput.inputType = android.text.InputType.TYPE_CLASS_NUMBER
-        noSpeechInput.setText((preferences?.getHandsFreeNoSpeechSeconds() ?: 10).toString())
-
-        val labelParams = android.widget.LinearLayout.LayoutParams(
-            android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
-            android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
-        )
-        labelParams.topMargin = (12 * density).toInt()
-
-        container.addView(silenceLabel)
-        container.addView(silenceInput)
-        noSpeechLabel.layoutParams = labelParams
-        container.addView(noSpeechLabel)
-        container.addView(noSpeechInput)
-
-        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.tile_hands_free_timing_title)
-            .setView(container)
-            .setPositiveButton(android.R.string.ok) { _, _ ->
-                silenceInput.text.toString().toIntOrNull()?.coerceIn(1, 120)?.let {
-                    preferences?.setHandsFreeSilenceSeconds(it)
-                }
-                noSpeechInput.text.toString().toIntOrNull()?.coerceIn(1, 120)?.let {
-                    preferences?.setHandsFreeNoSpeechSeconds(it)
-                }
-                tileHandsFreeTiming?.updateSubtitle(
-                    getString(
-                        R.string.tile_hands_free_timing_value,
-                        preferences?.getHandsFreeSilenceSeconds() ?: 5,
-                        preferences?.getHandsFreeNoSpeechSeconds() ?: 10
-                    )
-                )
-            }
-            .setNegativeButton(android.R.string.cancel) { _, _ -> }
-            .show()
-    }
-
-    private fun voiceInputSubtitle(): String {
-        val engine = preferences?.getAudioModel() ?: "google"
-        return when (engine) {
-            "whisper" -> getString(R.string.voice_engine_whisper_cloud)
-            "whisper-local" -> {
-                val model = preferences?.getActiveLocalWhisperModel() ?: ""
-                if (model.isNotEmpty()) {
-                    getString(R.string.voice_engine_whisper_local) + " · " + model
-                } else {
-                    getString(R.string.voice_engine_whisper_local)
-                }
-            }
-            else -> getString(R.string.voice_engine_google)
-        }
-    }
-
-    // Voice-activity-detection method picker. Only applies to on-device
-    // Whisper hands-free (the Google path uses the platform recognizer's own
-    // end-of-speech detection). Silero is not in the list yet — it's planned
-    // as a third option once the neural model is bundled.
-    // A selectable VAD method plus, optionally, an action to open that
-    // method's own options. [openOptions] == null means the method has no
-    // tunables (so no cog is shown). New methods — e.g. Silero — drop in here
-    // with their own options lambda; the picker scales without further wiring.
-    private data class VadMethodEntry(
-        val id: String,
-        val label: String,
-        val openOptions: (() -> Unit)?
-    )
-
-    // Custom picker: a radio per method, plus a settings cog on any method that
-    // has options (mirrors how Android's own input-method picker lets you
-    // configure each entry). A plain single-choice dialog can't host per-row
-    // buttons, so the rows are built by hand.
-    private fun vadMethodSelector() {
-        val entries = listOf(
-            VadMethodEntry("webrtc", getString(R.string.vad_method_webrtc)) { showWebRtcSensitivityDialog() },
-            VadMethodEntry("energy", getString(R.string.vad_method_energy), null)
-            // VadMethodEntry("silero", getString(R.string.vad_method_silero)) { showSileroOptionsDialog() } // TODO
-        )
-
-        val density = resources.displayMetrics.density
-        fun dp(v: Int) = (v * density).toInt()
-
-        var selectedId = preferences?.getVadMethod() ?: "energy"
-        val radios = ArrayList<RadioButton>()
-
-        val container = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(4), dp(8), dp(4))
-        }
-
-        for (entry in entries) {
-            val row = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                isClickable = true
-                isFocusable = true
-            }
-
-            val radio = RadioButton(this).apply {
-                text = entry.label
-                isChecked = entry.id == selectedId
-                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-                setPadding(dp(8), dp(10), 0, dp(10))
-                // Explicit tint: under the custom dialog theme the default
-                // control tint can resolve to an (near-)invisible color, so the
-                // selected dot didn't show and users couldn't tell what was
-                // picked. Force the accent so checked state is always visible.
-                buttonTintList = ColorStateList.valueOf(
-                    ContextCompat.getColor(this@SettingsActivity, R.color.accent_900)
-                )
-            }
-            radios.add(radio)
-
-            val select = {
-                selectedId = entry.id
-                for (r in radios) r.isChecked = false
-                radio.isChecked = true
-            }
-            radio.setOnClickListener { select() }
-            row.setOnClickListener { select() }
-            row.addView(radio)
-
-            entry.openOptions?.let { open ->
-                val cog = ImageButton(this).apply {
-                    setImageResource(R.drawable.ic_settings)
-                    contentDescription = getString(R.string.vad_method_options_cd)
-                    layoutParams = LinearLayout.LayoutParams(dp(48), dp(48))
-                    val bg = TypedValue()
-                    if (theme.resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, bg, true)) {
-                        setBackgroundResource(bg.resourceId)
-                    }
-                    val tint = TypedValue()
-                    if (theme.resolveAttribute(android.R.attr.colorControlNormal, tint, true)) {
-                        val color = if (tint.resourceId != 0)
-                            ContextCompat.getColor(this@SettingsActivity, tint.resourceId) else tint.data
-                        imageTintList = ColorStateList.valueOf(color)
-                    }
-                    setOnClickListener { open() }
-                }
-                row.addView(cog)
-            }
-
-            container.addView(row)
-        }
-
-        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.tile_vad_method_title)
-            .setView(container)
-            .setPositiveButton(android.R.string.ok) { _, _ ->
-                preferences?.setVadMethod(selectedId)
-                tileVadMethod?.updateSubtitle(vadMethodSubtitle())
-                // WebRTC needs a native lib that isn't present on every device.
-                // It used to fall back to energy silently, so "I picked WebRTC
-                // and nothing changed" was indistinguishable from a bug. Tell
-                // the user up front so they know it isn't actually active.
-                if (selectedId == "webrtc" && !org.teslasoft.assistant.stt.WebRtcVadNative.ensureLoaded()) {
-                    Toast.makeText(this, R.string.vad_webrtc_unavailable, Toast.LENGTH_LONG).show()
-                }
-            }
-            .setNegativeButton(android.R.string.cancel) { _, _ -> }
-            .show()
-    }
-
-    // WebRTC aggressiveness, as a user-facing "sensitivity" (inverse of
-    // libfvad's mode: index 0 = mode 0 = most sensitive). Persisted immediately
-    // so the cog works whether or not the method is currently selected.
-    private fun showWebRtcSensitivityDialog() {
-        val labels = arrayOf(
-            getString(R.string.vad_sensitivity_high),        // mode 0
-            getString(R.string.vad_sensitivity_medium_high), // mode 1
-            getString(R.string.vad_sensitivity_medium_low),  // mode 2
-            getString(R.string.vad_sensitivity_low)          // mode 3
-        )
-        var selected = (preferences?.getVadWebRtcMode() ?: 0).coerceIn(0, 3)
-
-        val density = resources.displayMetrics.density
-        fun dp(v: Int) = (v * density).toInt()
-
-        // Built by hand with explicitly-tinted radios for the same reason as the
-        // method picker: a plain setSingleChoiceItems under the custom dialog
-        // theme didn't visibly highlight the chosen level, so the user couldn't
-        // tell which sensitivity was selected.
-        val radios = ArrayList<RadioButton>()
-        val container = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(4), dp(8), dp(4))
-        }
-        for (i in labels.indices) {
-            val radio = RadioButton(this).apply {
-                text = labels[i]
-                isChecked = i == selected
-                layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
-                )
-                setPadding(dp(8), dp(10), 0, dp(10))
-                buttonTintList = ColorStateList.valueOf(
-                    ContextCompat.getColor(this@SettingsActivity, R.color.accent_900)
-                )
-            }
-            radio.setOnClickListener {
-                selected = i
-                for (r in radios) r.isChecked = false
-                radio.isChecked = true
-            }
-            radios.add(radio)
-            container.addView(radio)
-        }
-
-        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.vad_sensitivity_title)
-            .setView(container)
-            .setPositiveButton(android.R.string.ok) { _, _ ->
-                preferences?.setVadWebRtcMode(selected)
-                tileVadMethod?.updateSubtitle(vadMethodSubtitle())
-            }
-            .setNegativeButton(android.R.string.cancel) { _, _ -> }
-            .show()
-    }
-
-    private fun webRtcSensitivityShortLabel(): String {
-        return when ((preferences?.getVadWebRtcMode() ?: 0).coerceIn(0, 3)) {
-            1 -> getString(R.string.vad_sensitivity_short_medium_high)
-            2 -> getString(R.string.vad_sensitivity_short_medium_low)
-            3 -> getString(R.string.vad_sensitivity_short_low)
-            else -> getString(R.string.vad_sensitivity_short_high)
-        }
-    }
-
-    private fun vadMethodSubtitle(): String {
-        return when (preferences?.getVadMethod() ?: "energy") {
-            "energy" -> getString(R.string.vad_method_energy)
-            else -> getString(
-                R.string.vad_method_subtitle_webrtc,
-                getString(R.string.vad_method_webrtc),
-                webRtcSensitivityShortLabel()
-            )
-        }
-    }
-
-    private fun showVoiceInputEnginePicker() {
-        val engines = arrayOf("google", "whisper", "whisper-local")
-        val labels = arrayOf(
-            getString(R.string.voice_engine_google),
-            getString(R.string.voice_engine_whisper_cloud),
-            getString(R.string.voice_engine_whisper_local)
-        )
-        val current = engines.indexOf(preferences?.getAudioModel() ?: "google").coerceAtLeast(0)
-
-        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.voice_engine_picker_title)
-            .setSingleChoiceItems(labels, current) { dialog, which ->
-                val picked = engines[which]
-                preferences?.setAudioModel(picked)
-                tileSTT?.updateSubtitle(voiceInputSubtitle())
-                dialog.dismiss()
-                if (picked == "whisper-local") {
-                    startActivity(Intent(this, LocalWhisperModelsActivity::class.java))
-                }
-            }
-            .setNegativeButton(android.R.string.cancel) { _, _ -> }
-            .show()
-    }
-
     private fun placeFragments() : FragmentTransaction {
         val operation = supportFragmentManager.beginTransaction().replace(R.id.tile_account, tileAccountFragment!!)
             .replace(R.id.tile_characters, tileCharacters!!)
             .replace(R.id.tile_assistant, tileAssistant!!)
-            .replace(R.id.tile_autosend, tileAutoSend!!)
-            .replace(R.id.tile_voice, tileVoice!!)
-            .replace(R.id.tile_voice_language, tileVoiceLanguage!!)
+            .replace(R.id.tile_voice_settings, tileVoiceSettings!!)
             .replace(R.id.tile_image_model, tileImageModel!!)
             .replace(R.id.tile_image_resolution, tileImageResolution!!)
-            .replace(R.id.tile_tts, tileTTS!!)
-            .replace(R.id.tile_stt, tileSTT!!)
-            .replace(R.id.tile_silent_mode, tileSilentMode!!)
-            .replace(R.id.tile_always_speak, tileAlwaysSpeak!!)
-            .replace(R.id.tile_hands_free, tileHandsFree!!)
-            .replace(R.id.tile_hands_free_timing, tileHandsFreeTiming!!)
-            .replace(R.id.tile_vad_method, tileVadMethod!!)
             .replace(R.id.tile_activation_prompt, tileActivationMessage!!)
             .replace(R.id.tile_system_message, tileSystemMessage!!)
-            .replace(R.id.tile_auto_language_detection, tileLangDetect!!)
             .replace(R.id.tile_chat_layout, tileChatLayout!!)
             .replace(R.id.tile_function_calling, tileFunctionCalling!!)
             .replace(R.id.tile_slash_commands, tileSlashCommands!!)
@@ -1443,30 +975,14 @@ class SettingsActivity : FragmentActivity() {
             startActivity(Intent(this, CharactersActivity::class.java).putExtra("chatId", chatId))
         }
 
-        tileAutoSend?.setOnCheckedChangeListener { isChecked -> run {
-            if (isChecked) {
-                preferences?.setAutoSend(true)
-            } else {
-                preferences?.setAutoSend(false)
-            }
-        }}
-
         tileAssistant?.setOnTileClickListener {
             val intent = Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS)
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             startActivity(intent)
         }
 
-        tileVoice?.setOnTileClickListener {
-            val voiceSelectorDialogFragment: VoiceSelectorDialogFragment = VoiceSelectorDialogFragment.newInstance(if (ttsEngine == "google") preferences?.getVoice() ?: "" else preferences?.getOpenAIVoice() ?: "", chatId, ttsEngine)
-            voiceSelectorDialogFragment.setVoiceSelectedListener(voiceSelectorListener)
-            voiceSelectorDialogFragment.show(supportFragmentManager.beginTransaction(), "VoiceSelectorDialogFragment")
-        }
-
-        tileVoiceLanguage?.setOnTileClickListener {
-            val languageSelectorDialogFragment: LanguageSelectorDialogFragment = LanguageSelectorDialogFragment.newInstance(language, chatId)
-            languageSelectorDialogFragment.setStateChangedListener(languageChangedListener)
-            languageSelectorDialogFragment.show(supportFragmentManager.beginTransaction(), "LanguageSelectorDialog")
+        tileVoiceSettings?.setOnTileClickListener {
+            startActivity(Intent(this, VoiceSettingsActivity::class.java).putExtra("chatId", chatId))
         }
 
         tileImageModel?.setOnTileClickListener {
@@ -1481,67 +997,6 @@ class SettingsActivity : FragmentActivity() {
             resolutionSelectorDialogFragment.show(supportFragmentManager.beginTransaction(), "ResolutionSelectorDialog")
         }
 
-        tileTTS?.setOnCheckedChangeListener { isChecked -> run {
-            if (isChecked) {
-                preferences?.setTtsEngine("openai")
-                ttsEngine = "openai"
-            } else {
-                preferences?.setTtsEngine("google")
-                ttsEngine = "google"
-            }
-
-            voice = if (!isChecked) preferences?.getVoice() ?: "" else preferences?.getOpenAIVoice() ?: ""
-            tileVoice?.updateSubtitle(voice)
-        }}
-
-        tileSTT?.setOnTileClickListener {
-            showVoiceInputEnginePicker()
-        }
-
-        tileSilentMode?.setOnCheckedChangeListener { isChecked -> run {
-            if (isChecked) {
-                preferences?.setSilence(true)
-                preferences?.setNotSilence(false)
-                tileAlwaysSpeak?.setChecked(false)
-                tileAlwaysSpeak?.setEnabled(false)
-            } else {
-                preferences?.setSilence(false)
-                tileAlwaysSpeak?.setEnabled(true)
-            }
-        }}
-
-        tileAlwaysSpeak?.setOnCheckedChangeListener { isChecked -> run {
-            if (isChecked) {
-                preferences?.setNotSilence(true)
-                preferences?.setSilence(false)
-                tileSilentMode?.setChecked(false)
-                tileSilentMode?.setEnabled(false)
-            } else {
-                preferences?.setNotSilence(false)
-                tileSilentMode?.setEnabled(true)
-            }
-        }}
-
-        tileHandsFree?.setOnCheckedChangeListener { isChecked -> run {
-            preferences?.setHandsFreeMode(isChecked)
-            if (isChecked) {
-                // Hands-free can't work without auto-send: the conversation
-                // loop relies on each transcript being sent automatically
-                // rather than parked in the input box. Force it on and mirror
-                // that in the auto-send tile so the dependency is visible.
-                preferences?.setAutoSend(true)
-                tileAutoSend?.setChecked(true)
-            }
-        }}
-
-        tileHandsFreeTiming?.setOnTileClickListener {
-            showHandsFreeTimingDialog()
-        }
-
-        tileVadMethod?.setOnTileClickListener {
-            vadMethodSelector()
-        }
-
         tileActivationMessage?.setOnTileClickListener {
             val promptDialog: ActivationPromptDialogFragment = ActivationPromptDialogFragment.newInstance(activationPrompt)
             promptDialog.setStateChangedListener(promptChangedListener)
@@ -1553,14 +1008,6 @@ class SettingsActivity : FragmentActivity() {
             promptDialog.setStateChangedListener(systemChangedListener)
             promptDialog.show(supportFragmentManager.beginTransaction(), "SystemMessageDialog")
         }
-
-        tileLangDetect?.setOnCheckedChangeListener { isChecked -> run {
-            if (isChecked) {
-                preferences?.setAutoLangDetect(true)
-            } else {
-                preferences?.setAutoLangDetect(false)
-            }
-        }}
 
         tileChatLayout?.setOnCheckedChangeListener { isChecked -> run {
             if (isChecked) {
@@ -1828,7 +1275,6 @@ class SettingsActivity : FragmentActivity() {
 
         if (areFragmentsInitialized) {
             tileAssistant?.setChecked(isDefaultAssistantApp(this))
-            tileSTT?.updateSubtitle(voiceInputSubtitle())
         }
 
         // Reset preferences singleton

@@ -180,6 +180,28 @@ class Preferences private constructor(private var preferences: SharedPreferences
     }
 
     /**
+     * Whether to play a short, pleasant ascending tone once the user's speech has
+     * been transcribed, so they know dictation finished (and a reply is on the
+     * way) without watching the screen. The counterpart to [getErrorSound]: same
+     * alarm-stream routing so it stays audible on silent, opposite cadence (rising
+     * instead of falling). Off by default — it's an opt-in convenience.
+     *
+     * @return whether the transcription-complete tone is enabled
+     * */
+    fun getTranscriptionDoneSound() : Boolean {
+        return getGlobalBoolean("transcription_done_sound", false)
+    }
+
+    /**
+     * Enable or disable the tone played once speech has been transcribed.
+     *
+     * @param state whether the transcription-complete tone is enabled
+     * */
+    fun setTranscriptionDoneSound(state: Boolean) {
+        putGlobalBoolean("transcription_done_sound", state, false)
+    }
+
+    /**
      * Retrieves the model name from the shared preferences.
      *
      * @return The model name or "gpt-4o" if not found. GPT4-o is now much more capable than gpt 3.5 and 15x cheaper.
