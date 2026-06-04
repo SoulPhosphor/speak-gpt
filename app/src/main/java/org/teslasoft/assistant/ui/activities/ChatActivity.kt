@@ -3212,7 +3212,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 )
 
                 val chatCompletionRequest2 = ChatCompletionRequest(
-                    model = ModelId("gpt-4o"),
+                    model = ModelId(preferences?.getModel() ?: "gpt-4o"),
                     maxTokens = 10,
                     messages = m
                 )
