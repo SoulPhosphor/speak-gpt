@@ -241,11 +241,25 @@ class LocalWhisperEngine private constructor() {
         val cfg = vadConfig
         val detector = cfg?.let { VadFactory.create(it.method, SAMPLE_RATE, it.webRtcMode) }
         detector?.reset()
+        // Silence and no-speech windows are measured in *audio* time — the
+        // number of samples actually captured — not wall-clock time. The
+        // capture loop can stall (CPU contention while the Whisper model
+        // cold-loads on the first turn, GC, the device under load, etc.). With
+        // a wall-clock timer that stall keeps "elapsing" even though no audio
+        // was read, so the instant the loop resumed it saw more than the
+        // silence window had passed and fired end-of-turn — cutting the user
+        // off mid-sentence ("dropped like a hot potato", worst on the first
+        // turn). Counting samples makes the timers immune to that: a stall just
+        // pauses the audio clock. AudioRecord may drop samples on overflow
+        // during a stall, so this can only ever under-count — it never invents
+        // phantom silence — which is exactly the safe direction.
+        val silenceSampleTarget = (cfg?.silenceMs ?: 0L) * SAMPLE_RATE / 1000
+        val noSpeechSampleTarget = (cfg?.noSpeechMs ?: 0L) * SAMPLE_RATE / 1000
         captureJob = CoroutineScope(Dispatchers.IO).launch {
             val readBuffer = ShortArray(readSize)
-            val startedAt = SystemClock.elapsedRealtime()
             var speechStarted = false
-            var lastVoiceAt = startedAt
+            var silenceSamples = 0L      // consecutive silent samples after speech began
+            var preSpeechSamples = 0L    // samples seen before any speech started
             var vadFired = false
             try {
                 while (isActive && isCapturing) {
@@ -274,15 +288,18 @@ class LocalWhisperEngine private constructor() {
                             // current voiced/total/peak counters to surface,
                             // not just a no-speech timeout.
                             lastVadDiagnostics = detector.diagnostics()
-                            val now = SystemClock.elapsedRealtime()
                             if (isSpeech) {
                                 speechStarted = true
-                                lastVoiceAt = now
+                                silenceSamples = 0L
+                            } else if (speechStarted) {
+                                silenceSamples += read
+                            } else {
+                                preSpeechSamples += read
                             }
-                            if (speechStarted && now - lastVoiceAt >= cfg.silenceMs) {
+                            if (speechStarted && silenceSamples >= silenceSampleTarget) {
                                 vadFired = true
                                 onVadEndOfTurn?.invoke()
-                            } else if (!speechStarted && now - startedAt >= cfg.noSpeechMs) {
+                            } else if (!speechStarted && preSpeechSamples >= noSpeechSampleTarget) {
                                 vadFired = true
                                 onVadNoSpeech?.invoke()
                             }
