@@ -3470,9 +3470,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             // user can end the loop mid-readback (a tap becomes a full cancel via
             // btnMicro's touch listener). Arm the watchdog that re-opens the mic
             // once playback finishes, so the loop never depends solely on a TTS
-            // completion callback firing.
+            // completion callback firing.  The watchdog is armed inside speak()
+            // after playback actually starts, so language-detection and network
+            // latency don't eat into the timeout window.
             runOnUiThread { micHandsFreeStop() }
-            beginHandsFreeReadbackWatch()
         } else if (handsFree) {
             // Silence mode (or this turn isn't spoken): there's no readback to
             // wait on, so continue straight to the next listening turn instead
@@ -3533,6 +3534,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     Log.w("TTS", "speak() returned ERROR; re-initialising engine and queueing message")
                     pendingSpeak = message
                     reinitTTS()
+                } else {
+                    beginHandsFreeReadbackWatch()
                 }
             }
             if (Looper.myLooper() == Looper.getMainLooper()) {
@@ -3588,6 +3591,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                                     false
                                 }
                                 mediaPlayer?.start()
+                                beginHandsFreeReadbackWatch()
                             } catch (ex: IOException) {
                                 MaterialAlertDialogBuilder(this@ChatActivity, R.style.App_MaterialAlertDialog)
                                     .setTitle(R.string.label_audio_error)
