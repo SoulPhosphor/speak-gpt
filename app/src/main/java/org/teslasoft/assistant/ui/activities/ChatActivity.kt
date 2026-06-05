@@ -886,7 +886,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         val auto = preferences?.autoSend() == true
         if (handsFree && sttSupported && auto && !cancelState && !handsFreeStopped && !isRecording) {
             Handler(Looper.getMainLooper()).post {
-                if (!isFinishing && !isDestroyed) {
+                if (!isFinishing && !isDestroyed && !cancelState && !handsFreeStopped) {
                     if (effModel == "whisper-local") {
                         // Re-arm an on-device Whisper turn; the service and
                         // loop are already running so this is not a fresh turn.
