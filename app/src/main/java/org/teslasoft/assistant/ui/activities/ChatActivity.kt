@@ -491,6 +491,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 if (recognizedText.isNotEmpty()) {
                     handsFreeBuffer = if (handsFreeBuffer.isEmpty()) recognizedText
                                       else "$handsFreeBuffer $recognizedText"
+                }
+                // Always (re)schedule submission when the buffer has content.
+                // onBeginningOfSpeech cancels the pending submit when the user
+                // starts talking again, but if the recognizer then returns
+                // empty text (cough, hiccup) the submit was never rescheduled
+                // and the buffered text was orphaned.
+                if (handsFreeBuffer.isNotEmpty()) {
                     scheduleHandsFreeSubmit()
                 }
                 if (!isFinishing && !isDestroyed && !cancelState) {
@@ -879,7 +886,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         val auto = preferences?.autoSend() == true
         if (handsFree && sttSupported && auto && !cancelState && !handsFreeStopped && !isRecording) {
             Handler(Looper.getMainLooper()).post {
-                if (!isFinishing && !isDestroyed) {
+                if (!isFinishing && !isDestroyed && !cancelState && !handsFreeStopped) {
                     if (effModel == "whisper-local") {
                         // Re-arm an on-device Whisper turn; the service and
                         // loop are already running so this is not a fresh turn.
@@ -2133,9 +2140,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 }
                 tts!!.stop()
             } catch (_: java.lang.Exception) {/* unused */}
-            micIdle()
-            recognizer?.stopListening()
-            isRecording = false
+            if (preferences?.getHandsFreeMode() == true) {
+                stopHandsFreeLoop()
+            } else {
+                micIdle()
+                recognizer?.stopListening()
+                isRecording = false
+            }
         } else {
             try {
                 if (mediaPlayer!!.isPlaying) {
@@ -2488,6 +2499,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             if (freshTurn) {
                 handsFreeUserSpoke = false
                 handsFreeStopped = false
+                cancelState = false
                 handsFreeListenDeadline = System.currentTimeMillis() +
                         preferences!!.getHandsFreeNoSpeechSeconds().coerceAtLeast(1) * 1000L
                 handsFreeBuffer = ""
@@ -3075,11 +3087,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             var track: AudioTrack? = null
             try {
                 val sampleRate = 44100
-                // D4 -> F4 -> A4: the reverse of the error tone — a gentle, rising
-                // cadence that reads as "done / go ahead".
-                val notes = floatArrayOf(293.66f, 349.23f, 440.0f)
-                val noteMs = 160
-                val gapMs = 40
+                // Quick bright two-note chime (E5 → B5, an ascending fifth).
+                // Completely different register, interval, and duration from the
+                // slow descending error tone so the two can't be confused.
+                val notes = floatArrayOf(659.26f, 987.77f)
+                val noteMs = 90
+                val gapMs = 25
                 val samplesPerNote = sampleRate * noteMs / 1000
                 val samplesPerGap = sampleRate * gapMs / 1000
                 val totalSamples = (samplesPerNote + samplesPerGap) * notes.size
@@ -3089,16 +3102,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 for (freq in notes) {
                     for (i in 0 until samplesPerNote) {
                         val t = i.toDouble() / sampleRate
-                        // Linear fade in/out to avoid clicks at note boundaries.
                         val envelope = when {
-                            i < samplesPerNote * 0.1 -> i / (samplesPerNote * 0.1)
-                            i > samplesPerNote * 0.8 -> (samplesPerNote - i) / (samplesPerNote * 0.2)
+                            i < samplesPerNote * 0.05 -> i / (samplesPerNote * 0.05)
+                            i > samplesPerNote * 0.6 -> (samplesPerNote - i) / (samplesPerNote * 0.4)
                             else -> 1.0
                         }
-                        val sample = Math.sin(2.0 * Math.PI * freq * t) * envelope * 0.4 * Short.MAX_VALUE
+                        val sample = Math.sin(2.0 * Math.PI * freq * t) * envelope * 0.35 * Short.MAX_VALUE
                         buffer[idx++] = sample.toInt().toShort()
                     }
-                    idx += samplesPerGap // leave silence (buffer is zero-initialized)
+                    idx += samplesPerGap
                 }
 
                 val attributes = AudioAttributes.Builder()
@@ -3331,6 +3343,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     val avatarType = preferences.getAvatarType()
                     val avatarId = preferences.getAvatarId()
                     val assistantName = preferences.getAssistantName()
+                    val personaId = preferences.getPersonaId()
+                    val activationPromptId = preferences.getActivationPromptId()
+                    val personaActivationSeeded = preferences.isPersonaActivationSeeded()
 
                     preferences.setPreferences(Hash.hash(newChatName.toString()), this)
                     preferences.setResolution(resolution)
@@ -3356,6 +3371,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     preferences.setAvatarType(avatarType)
                     preferences.setAvatarId(avatarId)
                     preferences.setAssistantName(assistantName)
+                    preferences.setPersonaId(personaId)
+                    preferences.setActivationPromptId(activationPromptId)
+                    preferences.setPersonaActivationSeeded(personaActivationSeeded)
 
                     activityTitle?.text = newChatName.toString()
 
