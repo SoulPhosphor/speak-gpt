@@ -3331,6 +3331,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     val avatarType = preferences.getAvatarType()
                     val avatarId = preferences.getAvatarId()
                     val assistantName = preferences.getAssistantName()
+                    val personaId = preferences.getPersonaId()
+                    val activationPromptId = preferences.getActivationPromptId()
+                    val personaActivationSeeded = preferences.isPersonaActivationSeeded()
 
                     preferences.setPreferences(Hash.hash(newChatName.toString()), this)
                     preferences.setResolution(resolution)
@@ -3356,6 +3359,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     preferences.setAvatarType(avatarType)
                     preferences.setAvatarId(avatarId)
                     preferences.setAssistantName(assistantName)
+                    preferences.setPersonaId(personaId)
+                    preferences.setActivationPromptId(activationPromptId)
+                    preferences.setPersonaActivationSeeded(personaActivationSeeded)
 
                     activityTitle?.text = newChatName.toString()
 

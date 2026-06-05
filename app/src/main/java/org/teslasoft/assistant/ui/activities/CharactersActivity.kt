@@ -55,6 +55,7 @@ class CharactersActivity : FragmentActivity() {
             val personaId = result.data?.getStringExtra("personaId")
             if (personaId != null) {
                 preferences?.setPersonaId(personaId)
+                preferences?.setLastUsedPersonaId(personaId)
                 tilePersonas?.updateSubtitle(getActivePersonaLabel())
             }
         }
