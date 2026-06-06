@@ -299,6 +299,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     private var handsFreeBuffer: String = ""
     private var handsFreeSubmitRunnable: Runnable? = null
 
+    // Insurance fallback if TTS onDone never fires (some Android TTS engines
+    // silently drop the callback). Scheduled when TTS starts playing; cancelled
+    // when maybeRestartHandsFreeAfterReadback() actually fires and restarts.
+    private var handsFreeRestartFallback: Runnable? = null
+    private val HANDS_FREE_FALLBACK_MS = 30_000L
+
     // Media player for OpenAI TTS
     private var mediaPlayer: MediaPlayer? = null
 
@@ -326,6 +332,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         generateGptImageJob = null
         handsFreeStopped = true
         handsFreeHandler.removeCallbacksAndMessages(null)
+        handsFreeRestartFallback = null
         handsFreeSubmitRunnable = null
         handsFreeBuffer = ""
     }
@@ -882,11 +889,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
      * to make this diagnosable from logcat.
      */
     private fun maybeRestartHandsFreeAfterReadback() {
+        handsFreeRestartFallback?.let { handsFreeHandler.removeCallbacks(it) }
+        handsFreeRestartFallback = null
         val handsFree = preferences?.getHandsFreeMode() == true
         val effModel = preferences?.getEffectiveAudioModel()
         val sttSupported = effModel == "google" || effModel == "whisper-local"
         val auto = preferences?.autoSend() == true
         if (handsFree && sttSupported && auto && !cancelState && !handsFreeStopped && !isRecording) {
+            Log.i("HandsFree", "maybeRestart: restarting hands-free loop (effModel=$effModel)")
             Handler(Looper.getMainLooper()).post {
                 if (!isFinishing && !isDestroyed) {
                     if (effModel == "whisper-local") {
@@ -1959,6 +1969,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
      * being the local transcription step.
      */
     private fun startLocalWhisperHandsFreeTurn(freshTurn: Boolean) {
+        Log.i("HandsFree", "startLocalWhisperHandsFreeTurn: freshTurn=$freshTurn " +
+                "isRecording=$isRecording handsFreeStopped=$handsFreeStopped cancelState=$cancelState")
         if (freshTurn) {
             handsFreeStopped = false
             cancelState = false
@@ -1989,6 +2001,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
     /** VAD said the user finished speaking — transcribe + submit this turn. */
     private fun onHandsFreeWhisperEndOfTurn() {
+        Log.i("HandsFree", "onHandsFreeWhisperEndOfTurn: isRecording=$isRecording " +
+                "handsFreeStopped=$handsFreeStopped cancelState=$cancelState")
         if (!isRecording || handsFreeStopped || cancelState) return
         isRecording = false
         // stopLocalWhisper() transcribes the buffered audio and routes through
@@ -2523,6 +2537,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     private fun stopHandsFreeLoop() {
         handsFreeStopped = true
         handsFreeHandler.removeCallbacksAndMessages(null)
+        handsFreeRestartFallback = null
         handsFreeSubmitRunnable = null
         handsFreeBuffer = ""
         try { recognizer?.stopListening() } catch (_: Exception) { /* ignore */ }
@@ -2557,6 +2572,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         cancelState = true
         handsFreeStopped = true
         handsFreeHandler.removeCallbacksAndMessages(null)
+        handsFreeRestartFallback = null
         handsFreeSubmitRunnable = null
         handsFreeBuffer = ""
         try {
@@ -3398,6 +3414,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
         if (handsFree && willReadAloud) {
             runOnUiThread { micHandsFreeStop() }
+            // Schedule a fallback in case onDone never fires
+            handsFreeRestartFallback?.let { handsFreeHandler.removeCallbacks(it) }
+            val fallback = Runnable {
+                Log.w("HandsFree", "TTS fallback fired — onDone never came after ${HANDS_FREE_FALLBACK_MS}ms")
+                handsFreeRestartFallback = null
+                maybeRestartHandsFreeAfterReadback()
+            }
+            handsFreeRestartFallback = fallback
+            handsFreeHandler.postDelayed(fallback, HANDS_FREE_FALLBACK_MS)
         } else if (handsFree) {
             maybeRestartHandsFreeAfterReadback()
         }

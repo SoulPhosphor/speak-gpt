@@ -54,6 +54,9 @@ interface VoiceActivityDetector {
      * logcat. Empty by default; detectors that can explain themselves override it.
      */
     fun diagnostics(): String = ""
+
+    /** Current adaptive noise floor for diagnostic logging. */
+    fun currentNoiseFloor(): Double = 0.0
 }
 
 /** Stable ids persisted in preferences and shown in the settings picker. */
@@ -161,6 +164,8 @@ class EnergyVad(
             false
         }
     }
+
+    override fun currentNoiseFloor(): Double = noiseFloor
 
     override fun close() { /* no native resources */ }
 
@@ -288,6 +293,8 @@ class WebRtcVad private constructor(
         }
         return speech
     }
+
+    override fun currentNoiseFloor(): Double = noiseFloor
 
     override fun diagnostics(): String {
         val base = "WebRTC frame=$frameSamples: voiced $voicedFrames/$totalFrames " +
