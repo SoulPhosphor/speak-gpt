@@ -312,6 +312,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     // to wait for speech to start before assuming the utterance was lost.
     private val HANDS_FREE_READBACK_POLL_MS = 250L
     private val HANDS_FREE_READBACK_START_TIMEOUT_MS = 6000L
+    private val HANDS_FREE_HARD_FALLBACK_MS = 20_000L
 
     // Media player for OpenAI TTS
     private var mediaPlayer: MediaPlayer? = null
@@ -946,7 +947,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
      * faster of the two paths win; the others no-op. Re-armed for every
      * hands-free readback from [pronounce].
      */
-    private fun beginHandsFreeReadbackWatch() {
+    private fun beginHandsFreeReadbackWatch(
+        startTimeoutMs: Long = HANDS_FREE_READBACK_START_TIMEOUT_MS
+    ) {
         if (preferences?.getHandsFreeMode() != true) return
         val token = ++handsFreeReadbackToken
         val startedAt = System.currentTimeMillis()
@@ -965,7 +968,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 everPlaying && !playing -> onHandsFreeReadbackFinished()
                 // Speech never started in time; assume the utterance was lost
                 // and re-arm so the conversation doesn't dead-end.
-                !everPlaying && elapsed > HANDS_FREE_READBACK_START_TIMEOUT_MS -> onHandsFreeReadbackFinished()
+                !everPlaying && elapsed > startTimeoutMs -> onHandsFreeReadbackFinished()
                 else -> handsFreeHandler.postDelayed(poll, HANDS_FREE_READBACK_POLL_MS)
             }
         }
@@ -2039,8 +2042,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
         val silenceMs = preferences!!.getHandsFreeSilenceSeconds().coerceAtLeast(1) * 1000L
         val noSpeechMs = preferences!!.getHandsFreeNoSpeechSeconds().coerceAtLeast(1) * 1000L
+        val graceMs = if (freshTurn) 0L else 500L
         val ok = LocalWhisperEngine.get().startRecording(
-            vad = LocalWhisperEngine.VadConfig(silenceMs, noSpeechMs, preferences!!.getVadMethod(), preferences!!.getVadWebRtcMode()),
+            vad = LocalWhisperEngine.VadConfig(silenceMs, noSpeechMs, preferences!!.getVadMethod(), preferences!!.getVadWebRtcMode(), graceMs),
             onEndOfTurn = { runOnUiThread { onHandsFreeWhisperEndOfTurn() } },
             onNoSpeechTimeout = { runOnUiThread { onHandsFreeWhisperNoSpeech() } }
         )
@@ -3468,12 +3472,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         if (handsFree && willReadAloud) {
             // The reply is about to be read back; show a red ✕ on the mic so the
             // user can end the loop mid-readback (a tap becomes a full cancel via
-            // btnMicro's touch listener). Arm the watchdog that re-opens the mic
-            // once playback finishes, so the loop never depends solely on a TTS
-            // completion callback firing.  The watchdog is armed inside speak()
-            // after playback actually starts, so language-detection and network
-            // latency don't eat into the timeout window.
+            // btnMicro's touch listener).
             runOnUiThread { micHandsFreeStop() }
+            // Hard fallback: if speak() silently fails (TTS not initialized,
+            // language detection stalls, etc.), this long-timeout watchdog
+            // ensures the loop eventually re-arms. speak() arms its own
+            // short-timeout watchdog when playback actually starts, which
+            // bumps the token and invalidates this one.
+            beginHandsFreeReadbackWatch(startTimeoutMs = HANDS_FREE_HARD_FALLBACK_MS)
         } else if (handsFree) {
             // Silence mode (or this turn isn't spoken): there's no readback to
             // wait on, so continue straight to the next listening turn instead

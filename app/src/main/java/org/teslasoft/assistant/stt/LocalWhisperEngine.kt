@@ -146,7 +146,8 @@ class LocalWhisperEngine private constructor() {
         val silenceMs: Long,
         val noSpeechMs: Long,
         val method: String = VadMethods.DEFAULT,
-        val webRtcMode: Int = VadMethods.WEBRTC_DEFAULT_MODE
+        val webRtcMode: Int = VadMethods.WEBRTC_DEFAULT_MODE,
+        val graceMs: Long = 0L
     )
 
     /** True iff the context for [activeModelId] is already resident in RAM. */
@@ -255,11 +256,14 @@ class LocalWhisperEngine private constructor() {
         // phantom silence — which is exactly the safe direction.
         val silenceSampleTarget = (cfg?.silenceMs ?: 0L) * SAMPLE_RATE / 1000
         val noSpeechSampleTarget = (cfg?.noSpeechMs ?: 0L) * SAMPLE_RATE / 1000
+        val graceSampleTarget = (cfg?.graceMs ?: 0L) * SAMPLE_RATE / 1000
         captureJob = CoroutineScope(Dispatchers.IO).launch {
             val readBuffer = ShortArray(readSize)
             var speechStarted = false
             var silenceSamples = 0L      // consecutive silent samples after speech began
             var preSpeechSamples = 0L    // samples seen before any speech started
+            var graceSamples = 0L        // samples seen during the grace period
+            var graceComplete = graceSampleTarget <= 0
             var vadFired = false
             try {
                 while (isActive && isCapturing) {
@@ -282,26 +286,39 @@ class LocalWhisperEngine private constructor() {
                         // end-of-turn; if they never start within the no-speech
                         // window, fire that instead. Each fires once.
                         if (detector != null && !vadFired) {
-                            val isSpeech = detector.accept(readBuffer, read)
-                            // Refresh diagnostics every frame so a manual stop
-                            // (mic-tap while "listens forever") still has the
-                            // current voiced/total/peak counters to surface,
-                            // not just a no-speech timeout.
-                            lastVadDiagnostics = detector.diagnostics()
-                            if (isSpeech) {
-                                speechStarted = true
-                                silenceSamples = 0L
-                            } else if (speechStarted) {
-                                silenceSamples += read
-                            } else {
+                            if (!graceComplete) {
+                                // Grace period: feed frames to keep the
+                                // detector warm but ignore results so TTS
+                                // audio bleeding through the speaker can't
+                                // trigger speechStarted. Once the grace
+                                // window passes, reset the detector so its
+                                // noise floor calibrates from the actual
+                                // ambient level, not the TTS tail.
+                                detector.accept(readBuffer, read)
+                                graceSamples += read
                                 preSpeechSamples += read
-                            }
-                            if (speechStarted && silenceSamples >= silenceSampleTarget) {
-                                vadFired = true
-                                onVadEndOfTurn?.invoke()
-                            } else if (!speechStarted && preSpeechSamples >= noSpeechSampleTarget) {
-                                vadFired = true
-                                onVadNoSpeech?.invoke()
+                                if (graceSamples >= graceSampleTarget) {
+                                    graceComplete = true
+                                    detector.reset()
+                                }
+                            } else {
+                                val isSpeech = detector.accept(readBuffer, read)
+                                lastVadDiagnostics = detector.diagnostics()
+                                if (isSpeech) {
+                                    speechStarted = true
+                                    silenceSamples = 0L
+                                } else if (speechStarted) {
+                                    silenceSamples += read
+                                } else {
+                                    preSpeechSamples += read
+                                }
+                                if (speechStarted && silenceSamples >= silenceSampleTarget) {
+                                    vadFired = true
+                                    onVadEndOfTurn?.invoke()
+                                } else if (!speechStarted && preSpeechSamples >= noSpeechSampleTarget) {
+                                    vadFired = true
+                                    onVadNoSpeech?.invoke()
+                                }
                             }
                         }
                     }
