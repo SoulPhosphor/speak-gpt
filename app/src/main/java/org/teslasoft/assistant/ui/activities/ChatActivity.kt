@@ -299,20 +299,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     private var handsFreeBuffer: String = ""
     private var handsFreeSubmitRunnable: Runnable? = null
 
-    // Monotonic token guarding the readback→listen handoff. The mic can be
-    // re-armed by either the TTS completion callback or the playback-state
-    // watchdog (whichever notices the reply finished first); bumping this token
-    // invalidates the other so the next turn is never started twice, and so a
-    // stale watchdog from a previous reply can't fire after the loop moved on.
-    // Volatile: written from the TTS completion callback (a binder thread) and
-    // read by the watchdog poll on the main thread.
-    @Volatile private var handsFreeReadbackToken = 0L
-
-    // Readback watchdog cadence: how often to poll playback state, and how long
-    // to wait for speech to start before assuming the utterance was lost.
-    private val HANDS_FREE_READBACK_POLL_MS = 250L
-    private val HANDS_FREE_READBACK_START_TIMEOUT_MS = 6000L
-    private val HANDS_FREE_HARD_FALLBACK_MS = 20_000L
+    // Insurance fallback if TTS onDone never fires (some Android TTS engines
+    // silently drop the callback). Scheduled when TTS starts playing; cancelled
+    // when maybeRestartHandsFreeAfterReadback() actually fires and restarts.
+    private var handsFreeRestartFallback: Runnable? = null
+    private val HANDS_FREE_FALLBACK_MS = 30_000L
 
     // Media player for OpenAI TTS
     private var mediaPlayer: MediaPlayer? = null
@@ -341,6 +332,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         generateGptImageJob = null
         handsFreeStopped = true
         handsFreeHandler.removeCallbacksAndMessages(null)
+        handsFreeRestartFallback = null
         handsFreeSubmitRunnable = null
         handsFreeBuffer = ""
     }
@@ -873,20 +865,18 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     private val ttsProgressListener = object : UtteranceProgressListener() {
         override fun onStart(utteranceId: String?) { /* no-op */ }
         override fun onDone(utteranceId: String?) {
-            onHandsFreeReadbackFinished()
+            maybeRestartHandsFreeAfterReadback()
         }
         @Suppress("OverridingDeprecatedMember")
         override fun onError(utteranceId: String?) {
             Log.w("TTS", "TTS utterance error: $utteranceId; re-initialising engine")
             Handler(Looper.getMainLooper()).post { reinitTTS() }
-            // A failed utterance must not strand the hands-free loop — re-arm
-            // the mic as if the readback had finished normally.
-            onHandsFreeReadbackFinished()
+            maybeRestartHandsFreeAfterReadback()
         }
         override fun onError(utteranceId: String?, errorCode: Int) {
             Log.w("TTS", "TTS utterance error code $errorCode: $utteranceId; re-initialising engine")
             Handler(Looper.getMainLooper()).post { reinitTTS() }
-            onHandsFreeReadbackFinished()
+            maybeRestartHandsFreeAfterReadback()
         }
     }
 
@@ -899,16 +889,17 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
      * to make this diagnosable from logcat.
      */
     private fun maybeRestartHandsFreeAfterReadback() {
+        handsFreeRestartFallback?.let { handsFreeHandler.removeCallbacks(it) }
+        handsFreeRestartFallback = null
         val handsFree = preferences?.getHandsFreeMode() == true
         val effModel = preferences?.getEffectiveAudioModel()
         val sttSupported = effModel == "google" || effModel == "whisper-local"
         val auto = preferences?.autoSend() == true
         if (handsFree && sttSupported && auto && !cancelState && !handsFreeStopped && !isRecording) {
+            Log.i("HandsFree", "maybeRestart: restarting hands-free loop (effModel=$effModel)")
             Handler(Looper.getMainLooper()).post {
-                if (!isFinishing && !isDestroyed && !cancelState && !handsFreeStopped && !isRecording) {
+                if (!isFinishing && !isDestroyed) {
                     if (effModel == "whisper-local") {
-                        // Re-arm an on-device Whisper turn; the service and
-                        // loop are already running so this is not a fresh turn.
                         startLocalWhisperHandsFreeTurn(freshTurn = false)
                     } else {
                         isRecording = true
@@ -921,58 +912,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             Log.i("HandsFree", "No restart after readback: effModel=$effModel auto=$auto " +
                     "cancelState=$cancelState handsFreeStopped=$handsFreeStopped isRecording=$isRecording")
         }
-    }
-
-    /**
-     * Single funnel for "the reply finished, open the mic for the next turn".
-     * Both the TTS completion callback and the playback watchdog call this;
-     * bumping the token means whichever arrives first wins and the other
-     * becomes a no-op, so the next turn is started exactly once.
-     */
-    private fun onHandsFreeReadbackFinished() {
-        handsFreeReadbackToken++
-        maybeRestartHandsFreeAfterReadback()
-    }
-
-    /**
-     * Safety net for the readback→listen handoff. The loop's primary trigger is
-     * the TTS completion callback (device [ttsProgressListener] onDone or the
-     * OpenAI MediaPlayer onCompletion), but those callbacks are not reliable
-     * across the many TTS engines — a dropped one silently strands the mic,
-     * which is the long-standing "hands-free never reopens the mic" bug. This
-     * poller instead watches the real playback state: once it has seen audio
-     * actually start and then stop, it re-arms the next turn. If speech never
-     * starts within a hard timeout (engine swallowed the utterance entirely),
-     * it re-arms anyway so the conversation can't dead-end. The token makes the
-     * faster of the two paths win; the others no-op. Re-armed for every
-     * hands-free readback from [pronounce].
-     */
-    private fun beginHandsFreeReadbackWatch(
-        startTimeoutMs: Long = HANDS_FREE_READBACK_START_TIMEOUT_MS
-    ) {
-        if (preferences?.getHandsFreeMode() != true) return
-        val token = ++handsFreeReadbackToken
-        val startedAt = System.currentTimeMillis()
-        var everPlaying = false
-        lateinit var poll: Runnable
-        poll = Runnable {
-            // Superseded by a faster completion path, or the loop ended.
-            if (token != handsFreeReadbackToken) return@Runnable
-            if (isFinishing || isDestroyed || cancelState || handsFreeStopped || isRecording) return@Runnable
-            val playing = (try { tts?.isSpeaking == true } catch (_: Exception) { false }) ||
-                          (try { mediaPlayer?.isPlaying == true } catch (_: Exception) { false })
-            if (playing) everPlaying = true
-            val elapsed = System.currentTimeMillis() - startedAt
-            when {
-                // Readback was heard and has now finished — continue the loop.
-                everPlaying && !playing -> onHandsFreeReadbackFinished()
-                // Speech never started in time; assume the utterance was lost
-                // and re-arm so the conversation doesn't dead-end.
-                !everPlaying && elapsed > startTimeoutMs -> onHandsFreeReadbackFinished()
-                else -> handsFreeHandler.postDelayed(poll, HANDS_FREE_READBACK_POLL_MS)
-            }
-        }
-        handsFreeHandler.postDelayed(poll, HANDS_FREE_READBACK_POLL_MS)
     }
 
     private fun reinitTTS() {
@@ -2030,6 +1969,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
      * being the local transcription step.
      */
     private fun startLocalWhisperHandsFreeTurn(freshTurn: Boolean) {
+        Log.i("HandsFree", "startLocalWhisperHandsFreeTurn: freshTurn=$freshTurn " +
+                "isRecording=$isRecording handsFreeStopped=$handsFreeStopped cancelState=$cancelState")
         if (freshTurn) {
             handsFreeStopped = false
             cancelState = false
@@ -2060,6 +2001,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
     /** VAD said the user finished speaking — transcribe + submit this turn. */
     private fun onHandsFreeWhisperEndOfTurn() {
+        Log.i("HandsFree", "onHandsFreeWhisperEndOfTurn: isRecording=$isRecording " +
+                "handsFreeStopped=$handsFreeStopped cancelState=$cancelState")
         if (!isRecording || handsFreeStopped || cancelState) return
         isRecording = false
         // stopLocalWhisper() transcribes the buffered audio and routes through
@@ -2593,8 +2536,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
     private fun stopHandsFreeLoop() {
         handsFreeStopped = true
-        handsFreeReadbackToken++ // invalidate any in-flight readback watchdog
         handsFreeHandler.removeCallbacksAndMessages(null)
+        handsFreeRestartFallback = null
         handsFreeSubmitRunnable = null
         handsFreeBuffer = ""
         try { recognizer?.stopListening() } catch (_: Exception) { /* ignore */ }
@@ -2628,8 +2571,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     private fun cancelAllAiActivity() {
         cancelState = true
         handsFreeStopped = true
-        handsFreeReadbackToken++ // invalidate any in-flight readback watchdog
         handsFreeHandler.removeCallbacksAndMessages(null)
+        handsFreeRestartFallback = null
         handsFreeSubmitRunnable = null
         handsFreeBuffer = ""
         try {
@@ -3470,21 +3413,18 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         val willReadAloud = (st && !silenceMode) || preferences!!.getNotSilence()
 
         if (handsFree && willReadAloud) {
-            // The reply is about to be read back; show a red ✕ on the mic so the
-            // user can end the loop mid-readback (a tap becomes a full cancel via
-            // btnMicro's touch listener).
             runOnUiThread { micHandsFreeStop() }
-            // Hard fallback: if speak() silently fails (TTS not initialized,
-            // language detection stalls, etc.), this long-timeout watchdog
-            // ensures the loop eventually re-arms. speak() arms its own
-            // short-timeout watchdog when playback actually starts, which
-            // bumps the token and invalidates this one.
-            beginHandsFreeReadbackWatch(startTimeoutMs = HANDS_FREE_HARD_FALLBACK_MS)
+            // Schedule a fallback in case onDone never fires
+            handsFreeRestartFallback?.let { handsFreeHandler.removeCallbacks(it) }
+            val fallback = Runnable {
+                Log.w("HandsFree", "TTS fallback fired — onDone never came after ${HANDS_FREE_FALLBACK_MS}ms")
+                handsFreeRestartFallback = null
+                maybeRestartHandsFreeAfterReadback()
+            }
+            handsFreeRestartFallback = fallback
+            handsFreeHandler.postDelayed(fallback, HANDS_FREE_FALLBACK_MS)
         } else if (handsFree) {
-            // Silence mode (or this turn isn't spoken): there's no readback to
-            // wait on, so continue straight to the next listening turn instead
-            // of stranding the mic waiting for a callback that never comes.
-            onHandsFreeReadbackFinished()
+            maybeRestartHandsFreeAfterReadback()
         }
 
         if (willReadAloud) {
@@ -3540,8 +3480,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     Log.w("TTS", "speak() returned ERROR; re-initialising engine and queueing message")
                     pendingSpeak = message
                     reinitTTS()
-                } else {
-                    beginHandsFreeReadbackWatch()
                 }
             }
             if (Looper.myLooper() == Looper.getMainLooper()) {
@@ -3586,18 +3524,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                                 mediaPlayer?.setDataSource(fis.fd)
                                 mediaPlayer?.prepare()
                                 mediaPlayer?.setOnCompletionListener {
-                                    // Mirror the device-TTS onDone path so a
-                                    // cloud voice also keeps hands-free looping.
-                                    onHandsFreeReadbackFinished()
+                                    maybeRestartHandsFreeAfterReadback()
                                 }
                                 mediaPlayer?.setOnErrorListener { _, _, _ ->
-                                    // A playback error must not strand the loop
-                                    // either — re-arm as if readback finished.
-                                    onHandsFreeReadbackFinished()
+                                    maybeRestartHandsFreeAfterReadback()
                                     false
                                 }
                                 mediaPlayer?.start()
-                                beginHandsFreeReadbackWatch()
                             } catch (ex: IOException) {
                                 MaterialAlertDialogBuilder(this@ChatActivity, R.style.App_MaterialAlertDialog)
                                     .setTitle(R.string.label_audio_error)

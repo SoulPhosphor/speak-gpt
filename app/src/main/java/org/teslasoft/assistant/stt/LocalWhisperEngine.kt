@@ -85,6 +85,13 @@ class LocalWhisperEngine private constructor() {
             return filtered.replace(Regex("\\s+"), " ").trim()
         }
 
+        private fun rmsOfShort(buf: ShortArray, len: Int): Double {
+            if (len <= 0) return 0.0
+            var sum = 0.0
+            for (i in 0 until len) { val s = buf[i].toDouble(); sum += s * s }
+            return kotlin.math.sqrt(sum / len)
+        }
+
         @Volatile private var instance: LocalWhisperEngine? = null
         fun get(): LocalWhisperEngine {
             instance?.let { return it }
@@ -122,6 +129,7 @@ class LocalWhisperEngine private constructor() {
     @Volatile private var vadConfig: VadConfig? = null
     private var onVadEndOfTurn: (() -> Unit)? = null
     private var onVadNoSpeech: (() -> Unit)? = null
+    @Volatile private var turnNumber = 0
 
     // Snapshot of the detector's stats taken when a no-speech timeout fires, so
     // the UI can show the user why WebRTC heard nothing. Read on the main thread.
@@ -184,7 +192,11 @@ class LocalWhisperEngine private constructor() {
         onEndOfTurn: (() -> Unit)? = null,
         onNoSpeechTimeout: (() -> Unit)? = null
     ): Boolean {
-        if (isCapturing) return true
+        if (isCapturing) {
+            Log.w(TAG, "[Turn ${turnNumber}] startRecording called while isCapturing=true — returning early WITHOUT resetting state!")
+            return true
+        }
+        turnNumber++
         synchronized(chunkLock) {
             capturedChunks.clear()
             capturedCount = 0
@@ -193,6 +205,8 @@ class LocalWhisperEngine private constructor() {
         vadConfig = vad
         onVadEndOfTurn = onEndOfTurn
         onVadNoSpeech = onNoSpeechTimeout
+        Log.i(TAG, "[Turn $turnNumber] START: silenceMs=${vad?.silenceMs} noSpeechMs=${vad?.noSpeechMs} " +
+                "graceMs=${vad?.graceMs} method=${vad?.method} webRtcMode=${vad?.webRtcMode}")
 
         val minBuf = AudioRecord.getMinBufferSize(
             SAMPLE_RATE,
@@ -257,6 +271,7 @@ class LocalWhisperEngine private constructor() {
         val silenceSampleTarget = (cfg?.silenceMs ?: 0L) * SAMPLE_RATE / 1000
         val noSpeechSampleTarget = (cfg?.noSpeechMs ?: 0L) * SAMPLE_RATE / 1000
         val graceSampleTarget = (cfg?.graceMs ?: 0L) * SAMPLE_RATE / 1000
+        val tn = turnNumber
         captureJob = CoroutineScope(Dispatchers.IO).launch {
             val readBuffer = ShortArray(readSize)
             var speechStarted = false
@@ -265,6 +280,9 @@ class LocalWhisperEngine private constructor() {
             var graceSamples = 0L        // samples seen during the grace period
             var graceComplete = graceSampleTarget <= 0
             var vadFired = false
+            var totalSamplesRead = 0L
+            var lastHeartbeatSamples = 0L
+            val heartbeatIntervalSamples = SAMPLE_RATE * 2L
             try {
                 while (isActive && isCapturing) {
                     val read = try {
@@ -279,32 +297,32 @@ class LocalWhisperEngine private constructor() {
                             capturedChunks.add(copy)
                             capturedCount += read
                         }
+                        totalSamplesRead += read
 
-                        // Hands-free turn detection. Whisper has no end-of-speech
-                        // signal, so we derive one: once the user has spoken and
-                        // then stayed silent for the silence window, fire
-                        // end-of-turn; if they never start within the no-speech
-                        // window, fire that instead. Each fires once.
                         if (detector != null && !vadFired) {
+                            val frameRms = rmsOfShort(readBuffer, read)
                             if (!graceComplete) {
-                                // Grace period: feed frames to keep the
-                                // detector warm but ignore results so TTS
-                                // audio bleeding through the speaker can't
-                                // trigger speechStarted. Once the grace
-                                // window passes, reset the detector so its
-                                // noise floor calibrates from the actual
-                                // ambient level, not the TTS tail.
                                 detector.accept(readBuffer, read)
                                 graceSamples += read
                                 preSpeechSamples += read
                                 if (graceSamples >= graceSampleTarget) {
                                     graceComplete = true
                                     detector.reset()
+                                    Log.i(TAG, "[Turn $tn] GRACE_DONE: graceMs=${graceSamples * 1000 / SAMPLE_RATE} " +
+                                            "lastFrameRms=${frameRms.toInt()} — detector reset, calibrating from ambient")
                                 }
                             } else {
+                                val wasSpeech = speechStarted
                                 val isSpeech = detector.accept(readBuffer, read)
                                 lastVadDiagnostics = detector.diagnostics()
+                                val floor = detector.currentNoiseFloor()
+                                val threshold = maxOf(floor * 2.5, 600.0).coerceAtMost(1400.0)
                                 if (isSpeech) {
+                                    if (!wasSpeech) {
+                                        Log.i(TAG, "[Turn $tn] SPEECH_START: rms=${frameRms.toInt()} floor=${floor.toInt()} " +
+                                                "threshold=${threshold.toInt()} preSpeechMs=${preSpeechSamples * 1000 / SAMPLE_RATE} " +
+                                                "totalMs=${totalSamplesRead * 1000 / SAMPLE_RATE}")
+                                    }
                                     speechStarted = true
                                     silenceSamples = 0L
                                 } else if (speechStarted) {
@@ -313,11 +331,31 @@ class LocalWhisperEngine private constructor() {
                                     preSpeechSamples += read
                                 }
                                 if (speechStarted && silenceSamples >= silenceSampleTarget) {
+                                    Log.w(TAG, "[Turn $tn] FINALIZE END_OF_TURN: rms=${frameRms.toInt()} " +
+                                            "floor=${floor.toInt()} threshold=${threshold.toInt()} " +
+                                            "speechStarted=$speechStarted silenceMs=${silenceSamples * 1000 / SAMPLE_RATE} " +
+                                            "targetSilenceMs=${silenceSampleTarget * 1000 / SAMPLE_RATE} " +
+                                            "totalAudioMs=${totalSamplesRead * 1000 / SAMPLE_RATE} " +
+                                            "graceMs=${graceSamples * 1000 / SAMPLE_RATE} " +
+                                            "diag=${detector.diagnostics()}")
                                     vadFired = true
                                     onVadEndOfTurn?.invoke()
                                 } else if (!speechStarted && preSpeechSamples >= noSpeechSampleTarget) {
+                                    Log.w(TAG, "[Turn $tn] FINALIZE NO_SPEECH: rms=${frameRms.toInt()} " +
+                                            "floor=${floor.toInt()} threshold=${threshold.toInt()} " +
+                                            "preSpeechMs=${preSpeechSamples * 1000 / SAMPLE_RATE} " +
+                                            "targetNoSpeechMs=${noSpeechSampleTarget * 1000 / SAMPLE_RATE} " +
+                                            "totalAudioMs=${totalSamplesRead * 1000 / SAMPLE_RATE} " +
+                                            "diag=${detector.diagnostics()}")
                                     vadFired = true
                                     onVadNoSpeech?.invoke()
+                                }
+                                if (totalSamplesRead - lastHeartbeatSamples >= heartbeatIntervalSamples) {
+                                    lastHeartbeatSamples = totalSamplesRead
+                                    Log.d(TAG, "[Turn $tn] HEARTBEAT: rms=${frameRms.toInt()} floor=${floor.toInt()} " +
+                                            "threshold=${threshold.toInt()} speechStarted=$speechStarted " +
+                                            "silenceMs=${silenceSamples * 1000 / SAMPLE_RATE} " +
+                                            "totalMs=${totalSamplesRead * 1000 / SAMPLE_RATE}")
                                 }
                             }
                         }
