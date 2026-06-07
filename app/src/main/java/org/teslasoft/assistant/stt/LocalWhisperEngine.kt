@@ -155,7 +155,8 @@ class LocalWhisperEngine private constructor() {
         val noSpeechMs: Long,
         val method: String = VadMethods.DEFAULT,
         val webRtcMode: Int = VadMethods.WEBRTC_DEFAULT_MODE,
-        val graceMs: Long = 0L
+        val graceMs: Long = 0L,
+        val logging: Boolean = false
     )
 
     /** True iff the context for [activeModelId] is already resident in RAM. */
@@ -192,8 +193,9 @@ class LocalWhisperEngine private constructor() {
         onEndOfTurn: (() -> Unit)? = null,
         onNoSpeechTimeout: (() -> Unit)? = null
     ): Boolean {
+        val vadLog = vad?.logging == true
         if (isCapturing) {
-            Log.w(TAG, "[Turn ${turnNumber}] startRecording called while isCapturing=true — returning early WITHOUT resetting state!")
+            if (vadLog) Log.w(TAG, "[Turn ${turnNumber}] startRecording called while isCapturing=true — returning early WITHOUT resetting state!")
             return true
         }
         turnNumber++
@@ -205,7 +207,7 @@ class LocalWhisperEngine private constructor() {
         vadConfig = vad
         onVadEndOfTurn = onEndOfTurn
         onVadNoSpeech = onNoSpeechTimeout
-        Log.i(TAG, "[Turn $turnNumber] START: silenceMs=${vad?.silenceMs} noSpeechMs=${vad?.noSpeechMs} " +
+        if (vadLog) Log.i(TAG, "[Turn $turnNumber] START: silenceMs=${vad?.silenceMs} noSpeechMs=${vad?.noSpeechMs} " +
                 "graceMs=${vad?.graceMs} method=${vad?.method} webRtcMode=${vad?.webRtcMode}")
 
         val minBuf = AudioRecord.getMinBufferSize(
@@ -275,9 +277,9 @@ class LocalWhisperEngine private constructor() {
         captureJob = CoroutineScope(Dispatchers.IO).launch {
             val readBuffer = ShortArray(readSize)
             var speechStarted = false
-            var silenceSamples = 0L      // consecutive silent samples after speech began
-            var preSpeechSamples = 0L    // samples seen before any speech started
-            var graceSamples = 0L        // samples seen during the grace period
+            var silenceSamples = 0L
+            var preSpeechSamples = 0L
+            var graceSamples = 0L
             var graceComplete = graceSampleTarget <= 0
             var vadFired = false
             var totalSamplesRead = 0L
@@ -300,7 +302,7 @@ class LocalWhisperEngine private constructor() {
                         totalSamplesRead += read
 
                         if (detector != null && !vadFired) {
-                            val frameRms = rmsOfShort(readBuffer, read)
+                            val frameRms = if (vadLog) rmsOfShort(readBuffer, read) else 0.0
                             if (!graceComplete) {
                                 detector.accept(readBuffer, read)
                                 graceSamples += read
@@ -308,17 +310,17 @@ class LocalWhisperEngine private constructor() {
                                 if (graceSamples >= graceSampleTarget) {
                                     graceComplete = true
                                     detector.reset()
-                                    Log.i(TAG, "[Turn $tn] GRACE_DONE: graceMs=${graceSamples * 1000 / SAMPLE_RATE} " +
+                                    if (vadLog) Log.i(TAG, "[Turn $tn] GRACE_DONE: graceMs=${graceSamples * 1000 / SAMPLE_RATE} " +
                                             "lastFrameRms=${frameRms.toInt()} — detector reset, calibrating from ambient")
                                 }
                             } else {
                                 val wasSpeech = speechStarted
                                 val isSpeech = detector.accept(readBuffer, read)
                                 lastVadDiagnostics = detector.diagnostics()
-                                val floor = detector.currentNoiseFloor()
-                                val threshold = maxOf(floor * 2.5, 600.0).coerceAtMost(1400.0)
                                 if (isSpeech) {
-                                    if (!wasSpeech) {
+                                    if (vadLog && !wasSpeech) {
+                                        val floor = detector.currentNoiseFloor()
+                                        val threshold = maxOf(floor * 2.5, 600.0).coerceAtMost(1400.0)
                                         Log.i(TAG, "[Turn $tn] SPEECH_START: rms=${frameRms.toInt()} floor=${floor.toInt()} " +
                                                 "threshold=${threshold.toInt()} preSpeechMs=${preSpeechSamples * 1000 / SAMPLE_RATE} " +
                                                 "totalMs=${totalSamplesRead * 1000 / SAMPLE_RATE}")
@@ -331,27 +333,37 @@ class LocalWhisperEngine private constructor() {
                                     preSpeechSamples += read
                                 }
                                 if (speechStarted && silenceSamples >= silenceSampleTarget) {
-                                    Log.w(TAG, "[Turn $tn] FINALIZE END_OF_TURN: rms=${frameRms.toInt()} " +
-                                            "floor=${floor.toInt()} threshold=${threshold.toInt()} " +
-                                            "speechStarted=$speechStarted silenceMs=${silenceSamples * 1000 / SAMPLE_RATE} " +
-                                            "targetSilenceMs=${silenceSampleTarget * 1000 / SAMPLE_RATE} " +
-                                            "totalAudioMs=${totalSamplesRead * 1000 / SAMPLE_RATE} " +
-                                            "graceMs=${graceSamples * 1000 / SAMPLE_RATE} " +
-                                            "diag=${detector.diagnostics()}")
+                                    if (vadLog) {
+                                        val floor = detector.currentNoiseFloor()
+                                        val threshold = maxOf(floor * 2.5, 600.0).coerceAtMost(1400.0)
+                                        Log.w(TAG, "[Turn $tn] FINALIZE END_OF_TURN: rms=${frameRms.toInt()} " +
+                                                "floor=${floor.toInt()} threshold=${threshold.toInt()} " +
+                                                "speechStarted=$speechStarted silenceMs=${silenceSamples * 1000 / SAMPLE_RATE} " +
+                                                "targetSilenceMs=${silenceSampleTarget * 1000 / SAMPLE_RATE} " +
+                                                "totalAudioMs=${totalSamplesRead * 1000 / SAMPLE_RATE} " +
+                                                "graceMs=${graceSamples * 1000 / SAMPLE_RATE} " +
+                                                "diag=${detector.diagnostics()}")
+                                    }
                                     vadFired = true
                                     onVadEndOfTurn?.invoke()
                                 } else if (!speechStarted && preSpeechSamples >= noSpeechSampleTarget) {
-                                    Log.w(TAG, "[Turn $tn] FINALIZE NO_SPEECH: rms=${frameRms.toInt()} " +
-                                            "floor=${floor.toInt()} threshold=${threshold.toInt()} " +
-                                            "preSpeechMs=${preSpeechSamples * 1000 / SAMPLE_RATE} " +
-                                            "targetNoSpeechMs=${noSpeechSampleTarget * 1000 / SAMPLE_RATE} " +
-                                            "totalAudioMs=${totalSamplesRead * 1000 / SAMPLE_RATE} " +
-                                            "diag=${detector.diagnostics()}")
+                                    if (vadLog) {
+                                        val floor = detector.currentNoiseFloor()
+                                        val threshold = maxOf(floor * 2.5, 600.0).coerceAtMost(1400.0)
+                                        Log.w(TAG, "[Turn $tn] FINALIZE NO_SPEECH: rms=${frameRms.toInt()} " +
+                                                "floor=${floor.toInt()} threshold=${threshold.toInt()} " +
+                                                "preSpeechMs=${preSpeechSamples * 1000 / SAMPLE_RATE} " +
+                                                "targetNoSpeechMs=${noSpeechSampleTarget * 1000 / SAMPLE_RATE} " +
+                                                "totalAudioMs=${totalSamplesRead * 1000 / SAMPLE_RATE} " +
+                                                "diag=${detector.diagnostics()}")
+                                    }
                                     vadFired = true
                                     onVadNoSpeech?.invoke()
                                 }
-                                if (totalSamplesRead - lastHeartbeatSamples >= heartbeatIntervalSamples) {
+                                if (vadLog && totalSamplesRead - lastHeartbeatSamples >= heartbeatIntervalSamples) {
                                     lastHeartbeatSamples = totalSamplesRead
+                                    val floor = detector.currentNoiseFloor()
+                                    val threshold = maxOf(floor * 2.5, 600.0).coerceAtMost(1400.0)
                                     Log.d(TAG, "[Turn $tn] HEARTBEAT: rms=${frameRms.toInt()} floor=${floor.toInt()} " +
                                             "threshold=${threshold.toInt()} speechStarted=$speechStarted " +
                                             "silenceMs=${silenceSamples * 1000 / SAMPLE_RATE} " +

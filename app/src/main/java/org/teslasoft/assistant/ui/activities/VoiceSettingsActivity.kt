@@ -73,6 +73,8 @@ class VoiceSettingsActivity : FragmentActivity() {
     private var tileHandsFreeTiming: TileFragment? = null
     private var tileVadMethod: TileFragment? = null
     private var tileTranscriptionSound: TileFragment? = null
+    private var tileVadLogEnergy: TileFragment? = null
+    private var tileVadLogWebrtc: TileFragment? = null
 
     private var btnBack: ImageButton? = null
 
@@ -307,6 +309,32 @@ class VoiceSettingsActivity : FragmentActivity() {
             chatId,
             getString(R.string.tile_transcription_sound_desc)
         )
+
+        tileVadLogEnergy = TileFragment.newInstance(
+            preferences?.getVadLoggingEnergy() == true,
+            true,
+            getString(R.string.tile_vad_log_energy_title),
+            null,
+            getString(R.string.on),
+            getString(R.string.off),
+            R.drawable.ic_terminal,
+            false,
+            chatId,
+            getString(R.string.tile_vad_log_energy_desc)
+        )
+
+        tileVadLogWebrtc = TileFragment.newInstance(
+            preferences?.getVadLoggingWebrtc() == true,
+            true,
+            getString(R.string.tile_vad_log_webrtc_title),
+            null,
+            getString(R.string.on),
+            getString(R.string.off),
+            R.drawable.ic_terminal,
+            false,
+            chatId,
+            getString(R.string.tile_vad_log_webrtc_desc)
+        )
     }
 
     private fun placeTiles() {
@@ -323,6 +351,8 @@ class VoiceSettingsActivity : FragmentActivity() {
             .replace(R.id.tile_hands_free_timing, tileHandsFreeTiming!!)
             .replace(R.id.tile_vad_method, tileVadMethod!!)
             .replace(R.id.tile_transcription_sound, tileTranscriptionSound!!)
+            .replace(R.id.tile_vad_log_energy, tileVadLogEnergy!!)
+            .replace(R.id.tile_vad_log_webrtc, tileVadLogWebrtc!!)
             .commitNow()
     }
 
@@ -417,6 +447,14 @@ class VoiceSettingsActivity : FragmentActivity() {
 
         tileTranscriptionSound?.setOnCheckedChangeListener { isChecked ->
             preferences?.setTranscriptionDoneSound(isChecked)
+        }
+
+        tileVadLogEnergy?.setOnCheckedChangeListener { isChecked ->
+            preferences?.setVadLoggingEnergy(isChecked)
+        }
+
+        tileVadLogWebrtc?.setOnCheckedChangeListener { isChecked ->
+            preferences?.setVadLoggingWebrtc(isChecked)
         }
     }
 
