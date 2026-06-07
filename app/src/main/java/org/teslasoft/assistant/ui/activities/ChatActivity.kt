@@ -1984,8 +1984,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         val silenceMs = preferences!!.getHandsFreeSilenceSeconds().coerceAtLeast(1) * 1000L
         val noSpeechMs = preferences!!.getHandsFreeNoSpeechSeconds().coerceAtLeast(1) * 1000L
         val graceMs = if (freshTurn) 0L else 500L
+        val vadMethod = preferences!!.getVadMethod()
+        val vadLog = if (vadMethod == "webrtc") preferences!!.getVadLoggingWebrtc() else preferences!!.getVadLoggingEnergy()
         val ok = LocalWhisperEngine.get().startRecording(
-            vad = LocalWhisperEngine.VadConfig(silenceMs, noSpeechMs, preferences!!.getVadMethod(), preferences!!.getVadWebRtcMode(), graceMs),
+            vad = LocalWhisperEngine.VadConfig(silenceMs, noSpeechMs, vadMethod, preferences!!.getVadWebRtcMode(), graceMs, vadLog),
             onEndOfTurn = { runOnUiThread { onHandsFreeWhisperEndOfTurn() } },
             onNoSpeechTimeout = { runOnUiThread { onHandsFreeWhisperNoSpeech() } }
         )

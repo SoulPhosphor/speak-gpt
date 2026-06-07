@@ -1024,6 +1024,22 @@ class Preferences private constructor(private var preferences: SharedPreferences
         putGlobalString("vad_webrtc_mode", mode.coerceIn(0, 3).toString(), "0")
     }
 
+    fun getVadLoggingEnergy() : Boolean {
+        return getGlobalBoolean("vad_logging_energy", false)
+    }
+
+    fun setVadLoggingEnergy(state: Boolean) {
+        putGlobalBoolean("vad_logging_energy", state, false)
+    }
+
+    fun getVadLoggingWebrtc() : Boolean {
+        return getGlobalBoolean("vad_logging_webrtc", false)
+    }
+
+    fun setVadLoggingWebrtc(state: Boolean) {
+        putGlobalBoolean("vad_logging_webrtc", state, false)
+    }
+
     /**
      * Retrieves the encrypted API key from the shared preferences.
      *
