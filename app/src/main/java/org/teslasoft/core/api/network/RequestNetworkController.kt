@@ -24,14 +24,8 @@ import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody.Companion.toRequestBody
 import okio.IOException
 import java.lang.String.valueOf
-import java.security.KeyStore
-import java.security.SecureRandom
 import java.util.*
 import java.util.concurrent.TimeUnit
-import javax.net.ssl.SSLContext
-import javax.net.ssl.SSLSocketFactory
-import javax.net.ssl.TrustManagerFactory
-import javax.net.ssl.X509TrustManager
 
 open class RequestNetworkController {
     companion object {
@@ -56,30 +50,15 @@ open class RequestNetworkController {
 
     private fun getClient(): OkHttpClient {
         if (client == null) {
-            val builder: OkHttpClient.Builder = OkHttpClient.Builder()
-
-            try {
-                val trustManagerFactory =
-                    TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm())
-                trustManagerFactory.init(null as KeyStore?)
-                val trustManagers = trustManagerFactory.trustManagers
-                check(!(trustManagers.size != 1 || trustManagers[0] !is X509TrustManager)) {
-                    "Unexpected default trust managers:" + trustManagers.contentToString()
-                }
-                val trustManager = trustManagers[0] as X509TrustManager
-
-                val sslContext: SSLContext = SSLContext.getInstance("TLSv1.3")
-                sslContext.init(null, null, SecureRandom())
-                val sslSocketFactory: SSLSocketFactory = sslContext.socketFactory
-
-                builder.sslSocketFactory(sslSocketFactory, trustManager)
-                builder.connectTimeout(SOCKET_TIMEOUT, TimeUnit.MILLISECONDS)
-                builder.readTimeout(READ_TIMEOUT, TimeUnit.MILLISECONDS)
-                builder.writeTimeout(READ_TIMEOUT, TimeUnit.MILLISECONDS)
-                builder.hostnameVerifier { _, _ -> true }
-            } catch (_: java.lang.Exception) { /* unused */ }
-
-            client = builder.build()
+            // Default OkHttp TLS: system trust store, full certificate and
+            // hostname verification. The previous custom SSL setup disabled
+            // hostname verification entirely, which allowed any valid
+            // certificate for any domain to impersonate the API host.
+            client = OkHttpClient.Builder()
+                .connectTimeout(SOCKET_TIMEOUT, TimeUnit.MILLISECONDS)
+                .readTimeout(READ_TIMEOUT, TimeUnit.MILLISECONDS)
+                .writeTimeout(READ_TIMEOUT, TimeUnit.MILLISECONDS)
+                .build()
         }
 
         return client as OkHttpClient
