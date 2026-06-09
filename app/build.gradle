@@ -65,6 +65,21 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
+
+        // Release signing comes from a private keystore supplied via
+        // environment variables (CI secrets or a local shell). The keystore
+        // itself must never be committed. Without these variables,
+        // assembleRelease produces an unsigned APK, which cannot be
+        // installed or published by mistake.
+        release {
+            def ksPath = System.getenv("RELEASE_KEYSTORE_PATH")
+            if (ksPath != null) {
+                storeFile file(ksPath)
+                storePassword System.getenv("RELEASE_KEYSTORE_PASSWORD")
+                keyAlias System.getenv("RELEASE_KEY_ALIAS")
+                keyPassword System.getenv("RELEASE_KEY_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
@@ -74,6 +89,10 @@ android {
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             multiDexEnabled true
+
+            if (System.getenv("RELEASE_KEYSTORE_PATH") != null) {
+                signingConfig signingConfigs.release
+            }
         }
 
         debug {
