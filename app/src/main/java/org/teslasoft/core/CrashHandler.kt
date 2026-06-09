@@ -36,7 +36,6 @@ import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.DeviceInfoProvider
 import org.teslasoft.assistant.preferences.Logger
 import org.teslasoft.assistant.ui.activities.MainActivity
-import org.teslasoft.core.auth.SystemInfo
 import java.time.Instant
 import java.time.format.DateTimeFormatter
 
@@ -109,7 +108,7 @@ class CrashHandlerActivity : FragmentActivity() {
             btnCopy = findViewById(R.id.btn_copy)
 
             textError!!.setTextIsSelectable(true)
-            textError!!.text = "\nApp has been crashed and needs to be restarted.\n\n===== BEGIN SYSTEM INFO =====\nAndroid version: ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT} ${Build.VERSION.CODENAME})\nROM version: ${Build.VERSION.INCREMENTAL}\nApp version: $appVersion ($versionCode)\nDevice model: ${Build.MODEL}\nAndroid device ID: ${Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)}\nInstallation ID: ${iID}\nTeslasoft ID version: ${SystemInfo.VERSION} (${SystemInfo.VERSION_CODE})\nEffective time: ${
+            textError!!.text = "\nApp has been crashed and needs to be restarted.\n\n===== BEGIN SYSTEM INFO =====\nAndroid version: ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT} ${Build.VERSION.CODENAME})\nROM version: ${Build.VERSION.INCREMENTAL}\nApp version: $appVersion ($versionCode)\nDevice model: ${Build.MODEL}\nAndroid device ID: ${Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)}\nInstallation ID: ${iID}\nEffective time: ${
                 DateTimeFormatter.ISO_INSTANT.format(
                     Instant.now())}\n===== END SYSTEM INFO =====\n\n===== BEGIN OF CRASH =====\n$error\n===== END OF CRASH =====\n"
 

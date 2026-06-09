@@ -148,6 +148,4 @@ dependencies {
     implementation ('io.noties:prism4j:2.0.0') {
         exclude group: 'org.jetbrains', module: 'annotations'
     }
-
-    implementation project(path: ':teslasoft-id')
 }

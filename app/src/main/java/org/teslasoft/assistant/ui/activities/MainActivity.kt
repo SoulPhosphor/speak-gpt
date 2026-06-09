@@ -17,11 +17,8 @@
 package org.teslasoft.assistant.ui.activities
 
 import android.annotation.SuppressLint
-import android.content.ComponentName
-import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
-import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.drawable.Drawable
@@ -59,19 +56,13 @@ import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.DeviceInfoProvider
 import org.teslasoft.assistant.preferences.GlobalPreferences
-import org.teslasoft.assistant.preferences.Logger
 import org.teslasoft.assistant.preferences.Preferences
-import org.teslasoft.assistant.pwa.PWAActivity
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.fragments.tabs.ChatsListFragment
-import org.teslasoft.assistant.ui.fragments.tabs.ExploreFragment
 import org.teslasoft.assistant.ui.fragments.tabs.PlaygroundFragment
-import org.teslasoft.assistant.ui.fragments.tabs.PromptsFragment
 import org.teslasoft.assistant.ui.fragments.tabs.ToolsFragment
 import org.teslasoft.assistant.ui.onboarding.WelcomeActivity
 import org.teslasoft.assistant.util.WindowInsetsUtil
-import org.teslasoft.core.auth.SystemInfo
-import org.teslasoft.core.auth.internal.ApplicationSignature
 import java.util.EnumSet
 import androidx.core.graphics.drawable.toDrawable
 import eightbitlab.com.blurview.BlurView
@@ -84,15 +75,11 @@ class MainActivity : FragmentActivity() {
     private var debuggerWindow: ConstraintLayout? = null
     private var btnCloseDebugger: ImageButton? = null
     private var btnInitiateCrash: MaterialButton? = null
-    private var btnLaunchPWA: MaterialButton? = null
-    private var btnTogglePWA: MaterialButton? = null
     private var threadLoader: LinearLayout? = null
     private var devIds: TextView? = null
     private var frameChats: Fragment? = null
     private var framePlayground: Fragment? = null
     private var frameTools: Fragment? = null
-    private var framePrompts: Fragment? = null
-    private var frameExplore: Fragment? = null
     private var root: ConstraintLayout? = null
     private var preferences: Preferences? = null
     private var btnDebugActivity: MaterialButton? = null
@@ -148,8 +135,6 @@ class MainActivity : FragmentActivity() {
         btnCloseDebugger = findViewById(R.id.btn_close_debugger)
         btnInitiateCrash = findViewById(R.id.btn_initiate_crash)
         btnDebugActivity = findViewById(R.id.btn_debug_activity)
-        btnLaunchPWA = findViewById(R.id.btn_launch_pwa)
-        btnTogglePWA = findViewById(R.id.btn_toggle_pwa)
         devIds = findViewById(R.id.dev_ids)
         threadLoader = findViewById(R.id.thread_loader)
         debugBlurView = findViewById(R.id.debug_blur)
@@ -205,31 +190,6 @@ class MainActivity : FragmentActivity() {
             })
         }
 
-        if (isPWAActivityEnabled(this)) {
-            btnTogglePWA?.text = "Disable PWA"
-        } else {
-            btnTogglePWA?.text = "Enable PWA"
-        }
-
-        btnTogglePWA?.setOnClickListener {
-            val pm = packageManager
-            if (isPWAActivityEnabled(this)) {
-                btnTogglePWA?.text = "Enable PWA"
-                pm.setComponentEnabledSetting(
-                    ComponentName(this, "org.teslasoft.assistant.pwa.PWAActivity"),
-                    PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP
-                )
-                Logger.log(this, "event", "ComponentManager", "info", "Component disabled: org.teslasoft.assistant.pwa.PWAActivity")
-            } else {
-                btnTogglePWA?.text = "Disable PWA"
-                pm.setComponentEnabledSetting(
-                    ComponentName(this, "org.teslasoft.assistant.pwa.PWAActivity"),
-                    PackageManager.COMPONENT_ENABLED_STATE_ENABLED, PackageManager.DONT_KILL_APP
-                )
-                Logger.log(this, "event", "ComponentManager", "info", "Component enabled: org.teslasoft.assistant.pwa.PWAActivity")
-            }
-        }
-
         Thread {
             DeviceInfoProvider.assignInstallationId(this)
 
@@ -246,14 +206,6 @@ class MainActivity : FragmentActivity() {
                         }
                         R.id.menu_tools -> {
                             menuTools()
-                            return@OnItemSelectedListener true
-                        }
-                        R.id.menu_prompts -> {
-                            menuPrompts()
-                            return@OnItemSelectedListener true
-                        }
-                        R.id.menu_tips -> {
-                            menuExplore()
                             return@OnItemSelectedListener true
                         }
                     }
@@ -282,17 +234,6 @@ class MainActivity : FragmentActivity() {
                         startActivity(Intent(this, DebugMaterial::class.java))
                     }
 
-                    btnLaunchPWA?.setOnClickListener {
-                        if (isPWAActivityEnabled(this)) {
-                            startActivity(Intent(this, PWAActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                        } else {
-                            MaterialAlertDialogBuilder(this)
-                                .setMessage("This component is disabled by the component manager.")
-                                .setPositiveButton(R.string.btn_close) { _, _ -> }
-                                .show()
-                        }
-                    }
-
                     var androidVersion = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) Build.VERSION.RELEASE_OR_PREVIEW_DISPLAY else Build.VERSION.RELEASE
 
                     if (androidVersion.lowercase() == "baklava") {
@@ -302,13 +243,8 @@ class MainActivity : FragmentActivity() {
                     val pm = packageManager
                     val pi = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) { pm.getInstallSourceInfo(packageName).installingPackageName } else { "<Current OS version is not supported>" }
 
-                    val signature = ApplicationSignature(this)
-                    val sha1 = signature.getCertificateFingerprint("SHA1")
-                    val sha256 = signature.getCertificateFingerprint("SHA256")
-
                     devIds?.text = "${devIds?.text}\n\nInstallation ID: $installationId\nAndroid ID: $androidId"
                     devIds?.text = "${devIds?.text}\nApp Version: ${packageManager.getPackageInfo(packageName, 0).versionName} (${packageManager.getPackageInfo(packageName, 0).versionCode})"
-                    devIds?.text = "${devIds?.text}\nTeslasoft ID version: ${SystemInfo.NAME} ${SystemInfo.VERSION} (${SystemInfo.VERSION_CODE})"
                     devIds?.text = "${devIds?.text}\nKotlin language version: ${KotlinVersion.CURRENT}"
                     devIds?.text = "${devIds?.text}\nJava language version: 21 (LTS)"
                     devIds?.text = "${devIds?.text}\nRuntime version: ${System.getProperty("java.runtime.name")} version ${System.getProperty("java.runtime.version")}"
@@ -320,8 +256,6 @@ class MainActivity : FragmentActivity() {
                     devIds?.text = "${devIds?.text}\nProduct: ${Build.PRODUCT}"
                     devIds?.text = "${devIds?.text}\nBrand: ${Build.BRAND}"
                     devIds?.text = "${devIds?.text}\nInstall Source: $pi"
-                    devIds?.text = "${devIds?.text}\nPackage Certificate SHA1: $sha1"
-                    devIds?.text = "${devIds?.text}\nPackage Certificate SHA256: $sha256"
                 }
 
                 preInit()
@@ -382,23 +316,10 @@ class MainActivity : FragmentActivity() {
         frameChats = ChatsListFragment()
         framePlayground = PlaygroundFragment()
         frameTools = ToolsFragment()
-        framePrompts = PromptsFragment()
-        frameExplore = ExploreFragment()
 
         loadFragment(frameChats, 1, 1)
         reloadAmoled()
         splashScreen?.setKeepOnScreenCondition { false }
-    }
-
-    private fun isPWAActivityEnabled(context: Context): Boolean {
-        try {
-            val manager = context.packageManager
-            val componentName = ComponentName(context, "org.teslasoft.assistant.pwa.PWAActivity")
-            manager.getActivityInfo(componentName, PackageManager.GET_META_DATA)
-            return true
-        } catch (_: Exception) { /* unused */ }
-
-        return false
     }
 
     private fun restartActivity() {
@@ -449,7 +370,6 @@ class MainActivity : FragmentActivity() {
         }
 
         (frameChats as ChatsListFragment).reloadAmoled(this)
-        (framePrompts as PromptsFragment).reloadAmoled(this)
     }
 
     @Suppress("DEPRECATION")
@@ -516,18 +436,6 @@ class MainActivity : FragmentActivity() {
         loadFragment(frameTools, st, selectedTab)
     }
 
-    private fun menuPrompts() {
-        val st = selectedTab
-        selectedTab = 4
-        loadFragment(framePrompts, st, selectedTab)
-    }
-
-    private fun menuExplore() {
-        val st = selectedTab
-        selectedTab = 5
-        loadFragment(frameExplore, st, selectedTab)
-    }
-
     private fun onRestoredState(savedInstanceState: Bundle?) {
         selectedTab = savedInstanceState!!.getInt("tab")
 
@@ -544,13 +452,11 @@ class MainActivity : FragmentActivity() {
                 navigationBar?.selectedItemId = R.id.menu_tools
                 loadFragment(frameTools, 1, 1)
             }
-            4 -> {
-                navigationBar?.selectedItemId = R.id.menu_prompts
-                loadFragment(framePrompts, 1, 1)
-            }
-            5 -> {
-                navigationBar?.selectedItemId = R.id.menu_tips
-                loadFragment(frameExplore, 1, 1)
+            // Tabs 4/5 (Prompts marketplace, Explore) were removed with the
+            // upstream Teslasoft services; fall back to the chats tab.
+            else -> {
+                navigationBar?.selectedItemId = R.id.menu_chat
+                loadFragment(frameChats, 1, 1)
             }
         }
     }
