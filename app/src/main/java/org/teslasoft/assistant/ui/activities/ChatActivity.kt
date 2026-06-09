@@ -1148,7 +1148,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     @Suppress("unchecked")
     private fun initSettings() {
         key = apiEndpointObject?.apiKey!!
-        openAIKey = apiEndpointPreferences?.findOpenAIKeyIfAvailable(this)
+        // The auxiliary client (cloud Whisper, TTS, image generation,
+        // function calling) must follow the active chat's endpoint. It used
+        // to grab a key from any saved api.openai.com endpoint, which leaked
+        // audio and message content to OpenAI while chatting with a
+        // local/custom endpoint.
+        openAIKey = apiEndpointObject?.apiKey
 
         endSeparator = preferences!!.getEndSeparator()
         prefix = preferences!!.getPrefix()
@@ -2312,13 +2317,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             )
 
             ai = OpenAI(config)
+            // Auxiliary client for audio/image/function endpoints. Bound to
+            // the active chat's endpoint (base host, same auth mode) so no
+            // content is silently routed to api.openai.com.
             val configOpenAI = OpenAIConfig(
-                token = openAIKey.toString(),
+                token = if (isBearerAuth) openAIKey.toString() else "",
                 logging = LoggingConfig(LogLevel.None, Logger.Simple),
                 timeout = Timeout(socket = 30.seconds),
                 organization = null,
-                headers = emptyMap(),
-                host = OpenAIHost("https://api.openai.com/v1/"),
+                headers = extraHeaders,
+                host = OpenAIHost(apiEndpointObject?.host!!),
                 proxy = null,
                 retry = RetryStrategy()
             )

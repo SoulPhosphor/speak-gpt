@@ -156,16 +156,6 @@ class ApiEndpointPreferences private constructor(private var preferences: Shared
         return null
     }
 
-    fun findOpenAIKeyIfAvailable(context: Context): String? {
-        val list = getApiEndpointsList(context)
-        for (endpoint in list) {
-            if (endpoint.host == "https://api.openai.com/v1/") {
-                return endpoint.apiKey
-            }
-        }
-        return null
-    }
-
     fun interface OnApiEndpointChangeListener {
         fun onApiEndpointChange()
     }
