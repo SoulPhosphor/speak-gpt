@@ -605,6 +605,11 @@
     <string name="label_delete_api_endpoint">Delete API endpoint</string>
     <string name="message_delete_api_endpoint">Are you sure you want to delete this API endpoint?</string>
     <string name="label_error_api_endpoint_empty">Label cannot be empty</string>
+    <string name="label_error_api_endpoint_invalid_url">API endpoint must be a valid http:// or https:// URL</string>
+    <string name="warning_http_endpoint_inline">http:// — traffic to this endpoint is not encrypted</string>
+    <string name="title_http_endpoint_warning">Unencrypted endpoint</string>
+    <string name="message_http_endpoint_warning">This endpoint uses plain http://. Your API key and every message you send (including voice transcripts) will travel unencrypted and can be read or altered by anyone on the same network.\n\nOnly continue if this is a local or trusted LAN server.</string>
+    <string name="btn_http_endpoint_accept">I understand, use http://</string>
     <string name="label_delete_logit_bias_config">Delete config</string>
     <string name="msg_delete_logit_bias_config">Are you sure you want to delete this config?</string>
     <string name="label_error_logit_bias_config_name_empty">Label be empty</string>

@@ -24,6 +24,7 @@ import android.widget.Toast
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.fragment.app.FragmentActivity
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import org.teslasoft.assistant.ui.activities.MainActivity
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
@@ -68,22 +69,49 @@ class ActivationActivity : FragmentActivity() {
         }
 
         btnNext?.setOnClickListener {
+            val host = hostInput?.text.toString().trim()
+
             if (keyInput?.text.toString().trim() == "") {
                 Toast.makeText(this, "Please enter an API key", Toast.LENGTH_SHORT).show()
-            } else if (hostInput?.text.toString().trim() == "") {
+            } else if (host == "") {
                 Toast.makeText(this, "Please enter API endpoint", Toast.LENGTH_SHORT).show()
+            } else if (!isValidEndpointUrl(host)) {
+                Toast.makeText(this, getString(R.string.label_error_api_endpoint_invalid_url), Toast.LENGTH_SHORT).show()
+            } else if (host.startsWith("http://")) {
+                // Plain-http endpoints send the API key and all chat content
+                // unencrypted; require explicit confirmation (local/LAN
+                // servers are a legitimate use).
+                MaterialAlertDialogBuilder(this)
+                    .setTitle(R.string.title_http_endpoint_warning)
+                    .setMessage(R.string.message_http_endpoint_warning)
+                    .setPositiveButton(R.string.btn_http_endpoint_accept) { _, _ -> completeSetup(host) }
+                    .setNegativeButton(R.string.btn_cancel) { _, _ -> }
+                    .show()
             } else {
-                val apiEndpointObject = ApiEndpointObject("Default", hostInput?.text.toString(), keyInput?.text.toString())
-                val apiEndpointPreferences = ApiEndpointPreferences.getApiEndpointPreferences(this)
-                apiEndpointPreferences.setApiEndpoint(this, apiEndpointObject)
-                val gPreferences = Preferences.getPreferences(this, "")
-                gPreferences.setApiEndpointId(Hash.hash("Default"))
-                getSharedPreferences("setup", MODE_PRIVATE).edit { putBoolean("setup", true) }
-                gPreferences.setApiKey(keyInput?.text.toString(), this)
-                gPreferences.setCustomHost(hostInput?.text.toString())
-                startActivity(Intent(this, MainActivity::class.java).setAction(Intent.ACTION_VIEW))
-                finish()
+                completeSetup(host)
             }
         }
+    }
+
+    private fun isValidEndpointUrl(url: String): Boolean {
+        return try {
+            val uri = java.net.URI(url)
+            (uri.scheme == "http" || uri.scheme == "https") && !uri.host.isNullOrBlank()
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun completeSetup(host: String) {
+        val apiEndpointObject = ApiEndpointObject("Default", host, keyInput?.text.toString())
+        val apiEndpointPreferences = ApiEndpointPreferences.getApiEndpointPreferences(this)
+        apiEndpointPreferences.setApiEndpoint(this, apiEndpointObject)
+        val gPreferences = Preferences.getPreferences(this, "")
+        gPreferences.setApiEndpointId(Hash.hash("Default"))
+        getSharedPreferences("setup", MODE_PRIVATE).edit { putBoolean("setup", true) }
+        gPreferences.setApiKey(keyInput?.text.toString(), this)
+        gPreferences.setCustomHost(host)
+        startActivity(Intent(this, MainActivity::class.java).setAction(Intent.ACTION_VIEW))
+        finish()
     }
 }
