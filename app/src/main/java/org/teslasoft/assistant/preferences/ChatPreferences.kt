@@ -18,6 +18,9 @@ package org.teslasoft.assistant.preferences
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.os.Handler
+import android.os.Looper
+import android.widget.Toast
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import org.teslasoft.assistant.util.Hash
@@ -33,6 +36,44 @@ class ChatPreferences private constructor() {
             if (preferences == null) preferences = ChatPreferences()
             return preferences!!
         }
+    }
+
+    /**
+     * Called when a stored JSON blob fails to parse. Copies the raw payload
+     * into a timestamped backup preferences file (committed synchronously)
+     * and resets the original slot, so the next save can no longer overwrite
+     * the only remaining copy of the data. Previously a parse failure was
+     * silently turned into an empty list and the corrupt-but-recoverable
+     * data was destroyed by the next save.
+     *
+     * @return true if a backup was made (i.e. there was real data to save).
+     */
+    private fun preserveCorruptData(context: Context, prefsName: String, key: String, raw: String?, what: String): Boolean {
+        if (raw.isNullOrBlank() || raw == "[]" || raw == "null") return false
+
+        val backupName = "${prefsName}_corrupt_${System.currentTimeMillis()}"
+        context.getSharedPreferences(backupName, Context.MODE_PRIVATE)
+            .edit(commit = true) { putString(key, raw) }
+        // Reset only after the backup is committed.
+        context.getSharedPreferences(prefsName, Context.MODE_PRIVATE)
+            .edit(commit = true) { putString(key, "[]") }
+
+        Logger.log(
+            context, "error", "ChatPreferences", "error",
+            "Stored $what failed to parse. The raw data was preserved in shared_prefs/$backupName.xml and the broken entry was reset."
+        )
+
+        Handler(Looper.getMainLooper()).post {
+            try {
+                Toast.makeText(
+                    context.applicationContext,
+                    "Stored $what was corrupted. A backup copy was kept on the device (see event log).",
+                    Toast.LENGTH_LONG
+                ).show()
+            } catch (_: Exception) { /* notification is best-effort */ }
+        }
+
+        return true
     }
 
     /**
@@ -86,6 +127,7 @@ class ChatPreferences private constructor() {
         var list: ArrayList<HashMap<String, String>> = try {
             gson.fromJson<Any>(json, type) as ArrayList<HashMap<String, String>>
         } catch (e: Exception) {
+            preserveCorruptData(context, "chat_list", "data", json, "chat list")
             arrayListOf()
         }
 
@@ -171,7 +213,12 @@ class ChatPreferences private constructor() {
             val json = chat.getString("chat", "[]")
             val type: Type = TypeToken.getParameterized(ArrayList::class.java, HashMap::class.java).type
 
-            gson.fromJson<Any>(json, type) as ArrayList<HashMap<String, Any>>
+            try {
+                gson.fromJson<Any>(json, type) as ArrayList<HashMap<String, Any>>
+            } catch (e: Exception) {
+                preserveCorruptData(context, "chat_$chatId", "chat", json, "chat history")
+                arrayListOf()
+            }
         } catch (e: Exception) {
             arrayListOf()
         }
