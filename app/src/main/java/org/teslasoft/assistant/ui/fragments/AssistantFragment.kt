@@ -3030,9 +3030,11 @@ class AssistantFragment : BottomSheetDialogFragment(), ChatAdapter.OnUpdateListe
         }
     }
 
-    override fun onSpeakClick(message: String) {
+    override fun onSpeakClick(message: String, position: Int) {
         // Manual re-read of a single message via the existing TTS path. Stop any
-        // current playback first so taps don't pile up.
+        // current playback first so taps don't pile up. (No speaking indicator
+        // here: the assistant's plain TTS path has no completion callback to
+        // clear it, and a tint that never clears is worse than none.)
         try { tts?.stop() } catch (_: Exception) { /* ignore */ }
         try { if (mediaPlayer?.isPlaying == true) { mediaPlayer?.stop(); mediaPlayer?.reset() } } catch (_: Exception) { /* ignore */ }
         speak(message)

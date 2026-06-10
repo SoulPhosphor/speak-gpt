@@ -91,6 +91,13 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
     private var listener: OnUpdateListener? = null
     private var bulkActionMode = false
 
+    // Adapter position of the message currently being read aloud via its
+    // speak button, or -1. Set the moment the press is registered (before the
+    // audio is even prepared) and cleared by the host when playback finishes,
+    // so the button visibly acknowledges the tap during the multi-second gap
+    // before any sound comes out.
+    private var speakingPosition = -1
+
     companion object {
         private const val TYPE_USER = 0
         private const val TYPE_BOT = 1
@@ -129,6 +136,18 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
 
     fun setOnUpdateListener(listener: OnUpdateListener) {
         this.listener = listener
+    }
+
+    fun setSpeakingPosition(position: Int) {
+        if (position == speakingPosition) return
+        val old = speakingPosition
+        speakingPosition = position
+        if (old != -1) notifyItemChanged(old)
+        if (position != -1) notifyItemChanged(position)
+    }
+
+    fun clearSpeakingPosition() {
+        setSpeakingPosition(-1)
     }
 
     private fun editMessage(position: Int, message: String) {
@@ -207,7 +226,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             updateRetryButton(chatMessage, position)
             updateReportButton(chatMessage)
             updateShareButton(chatMessage)
-            updateSpeakButton(chatMessage)
+            updateSpeakButton(chatMessage, position)
 
             if (selectorProjection[position]["selected"].toString() == "true") {
                 ui.setBackgroundColor(getSurface3Color(context))
@@ -333,7 +352,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             }
         }
 
-        private fun updateSpeakButton(chatMessage: HashMap<String, Any>) {
+        private fun updateSpeakButton(chatMessage: HashMap<String, Any>, position: Int) {
             // Re-read only makes sense for assistant text replies. Hide it for
             // user messages and for image/file messages (nothing to speak).
             val msg = chatMessage["message"].toString()
@@ -341,8 +360,18 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                     !msg.contains("data:image") && !msg.contains("~file:")
             if (speakable) {
                 btnSpeak.visibility = View.VISIBLE
+                if (position == speakingPosition) {
+                    btnSpeak.setColorFilter(
+                        ResourcesCompat.getColor(context.resources, R.color.mic_listening_green, context.theme)
+                    )
+                } else {
+                    btnSpeak.clearColorFilter()
+                }
                 btnSpeak.setOnClickListener {
-                    if (!bulkActionMode) listener?.onSpeakClick(msg)
+                    if (!bulkActionMode) {
+                        val pos = bindingAdapterPosition
+                        listener?.onSpeakClick(msg, if (pos != RecyclerView.NO_POSITION) pos else position)
+                    }
                 }
             } else {
                 btnSpeak.visibility = View.GONE
@@ -713,6 +742,6 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         fun onMessageDeleted()
         fun onBulkSelectionChanged(position: Int, selected: Boolean)
         fun onChangeBulkActionMode(mode: Boolean)
-        fun onSpeakClick(message: String)
+        fun onSpeakClick(message: String, position: Int)
     }
 }
