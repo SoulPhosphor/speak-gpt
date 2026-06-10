@@ -175,6 +175,7 @@ import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.stt.LocalWhisperEngine
 import org.teslasoft.assistant.stt.LocalWhisperModels
 import org.teslasoft.assistant.stt.LocalWhisperStorage
+import org.teslasoft.assistant.service.GenerationForegroundService
 import org.teslasoft.assistant.service.HandsFreeService
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.adapters.chat.ChatAdapter
@@ -2911,6 +2912,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         // lorebook matches triggers regardless of how the message was entered.
         lastUserMessageForLore = request
 
+        // Keep the app at foreground importance for the whole generation so the
+        // stream survives the screen turning off or the user switching apps
+        // (otherwise the OS freezes the process / lets Wi-Fi power-save drop the
+        // socket, and the request dies with "Software caused connection abort").
+        GenerationForegroundService.begin(this, chatId, chatName)
+
         try {
             var response = ""
 
@@ -3234,6 +3241,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 messageInput?.requestFocus()
             }
         } finally {
+            GenerationForegroundService.end(this)
             calculateCost()
             runOnUiThread {
                 restoreUIState()

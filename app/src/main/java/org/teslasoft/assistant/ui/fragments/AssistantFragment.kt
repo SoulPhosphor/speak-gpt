@@ -141,6 +141,7 @@ import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.LogitBiasPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
+import org.teslasoft.assistant.service.GenerationForegroundService
 import org.teslasoft.assistant.stt.LocalWhisperEngine
 import org.teslasoft.assistant.stt.LocalWhisperModels
 import org.teslasoft.assistant.stt.LocalWhisperStorage
@@ -1604,6 +1605,13 @@ class AssistantFragment : BottomSheetDialogFragment(), ChatAdapter.OnUpdateListe
 
         disableAutoScroll = false
 
+        // Keep the app at foreground importance while generating so the stream
+        // survives the screen turning off or the user switching apps. Captured
+        // as the application context so the matching end() in the finally block
+        // still runs if the fragment detaches mid-generation.
+        val keepAliveContext = mContext?.applicationContext
+        keepAliveContext?.let { GenerationForegroundService.begin(it, null, null) }
+
         try {
             var response = ""
 
@@ -1913,6 +1921,7 @@ class AssistantFragment : BottomSheetDialogFragment(), ChatAdapter.OnUpdateListe
             assistantLoading?.visibility = View.GONE
             isProcessing = false
         } finally {
+            keepAliveContext?.let { GenerationForegroundService.end(it) }
             (mContext as Activity?)?.runOnUiThread {
                 restoreUIState()
             }
