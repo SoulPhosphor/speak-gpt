@@ -156,6 +156,7 @@ import org.teslasoft.assistant.ui.permission.MicrophonePermissionActivity
 import org.teslasoft.assistant.util.DefaultPromptsParser
 import org.teslasoft.assistant.util.Hash
 import org.teslasoft.assistant.util.LocaleParser
+import org.teslasoft.assistant.util.connectionAbortMessage
 import java.io.BufferedReader
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -1882,7 +1883,7 @@ class AssistantFragment : BottomSheetDialogFragment(), ChatAdapter.OnUpdateListe
                     getString(R.string.prompt_no_model)
                 }
                 e.stackTraceToString().contains("Software caused connection abort") -> {
-                    getString(R.string.prompt_error_unknown)
+                    connectionAbortMessage(apiEndpointObject?.label, apiEndpointObject?.host, model, e.message)
                 }
                 e.stackTraceToString().contains("You exceeded your current quota") -> {
                     getString(R.string.prompt_quota_reached)
@@ -2324,7 +2325,7 @@ class AssistantFragment : BottomSheetDialogFragment(), ChatAdapter.OnUpdateListe
                     }
 
                     e.stackTraceToString().contains("Software caused connection abort") -> {
-                        putMessage(getString(R.string.prompt_error_unknown), true)
+                        putMessage(connectionAbortMessage(apiEndpointObject?.label, apiEndpointObject?.host, model, e.message), true)
                     }
 
                     e.stackTraceToString().contains("You exceeded your current quota") -> {
