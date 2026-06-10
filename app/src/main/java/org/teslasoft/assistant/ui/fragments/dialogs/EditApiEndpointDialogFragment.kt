@@ -23,6 +23,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
+import androidx.core.widget.doAfterTextChanged
 import androidx.fragment.app.DialogFragment
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.slider.Slider
@@ -83,6 +84,7 @@ class EditApiEndpointDialogFragment : DialogFragment() {
     private var textDialogTitle: TextView? = null
     private var fieldLabel: TextInputEditText? = null
     private var fieldHost: TextInputEditText? = null
+    private var hostInputLayout: TextInputLayout? = null
     private var fieldChatEndpoint: TextInputEditText? = null
     private var fieldApiKey: TextInputEditText? = null
     private var fieldAuthType: TextInputEditText? = null
@@ -174,6 +176,13 @@ class EditApiEndpointDialogFragment : DialogFragment() {
         fieldEndSeparator?.setText(requireArguments().getString("endSeparator", ""))
         fieldPrefix?.setText(requireArguments().getString("prefix", ""))
 
+        // Persistent inline warning while the host field contains a plain
+        // http:// address — the save flow additionally asks for explicit
+        // confirmation before accepting an unencrypted endpoint.
+        hostInputLayout = view.findViewById(R.id.textInputLayout11)
+        updateHostWarning()
+        fieldHost?.doAfterTextChanged { updateHostWarning() }
+
         fieldAuthType?.setOnClickListener { showAuthTypeChooser() }
         view.findViewById<TextInputLayout>(R.id.textInputLayoutAuth)?.setOnClickListener { showAuthTypeChooser() }
 
@@ -250,14 +259,39 @@ class EditApiEndpointDialogFragment : DialogFragment() {
         )
     }
 
+    private fun updateHostWarning() {
+        val host = fieldHost?.text.toString().trim()
+        hostInputLayout?.error = if (host.startsWith("http://")) {
+            getString(R.string.warning_http_endpoint_inline)
+        } else {
+            null
+        }
+    }
+
+    private fun isValidEndpointUrl(url: String): Boolean {
+        return try {
+            val uri = java.net.URI(url)
+            (uri.scheme == "http" || uri.scheme == "https") && !uri.host.isNullOrBlank()
+        } catch (_: Exception) {
+            false
+        }
+    }
+
     private fun validateForm() {
         if (fieldLabel?.text.toString().isEmpty()) {
             listener!!.onError(getString(R.string.label_error_api_endpoint_empty), requireArguments().getInt("position"))
             return
         }
 
-        if (fieldHost?.text.toString().isEmpty()) {
+        val host = fieldHost?.text.toString().trim()
+
+        if (host.isEmpty()) {
             listener!!.onError(getString(R.string.label_error_api_endpoint_empty), requireArguments().getInt("position"))
+            return
+        }
+
+        if (!isValidEndpointUrl(host)) {
+            listener!!.onError(getString(R.string.label_error_api_endpoint_invalid_url), requireArguments().getInt("position"))
             return
         }
 
@@ -265,6 +299,23 @@ class EditApiEndpointDialogFragment : DialogFragment() {
             fieldApiKey?.setText(requireArguments().getString("apiKey"))
         }
 
+        // Plain-http endpoints send the API key and all chat content
+        // unencrypted. Allowed (local/LAN servers are a legitimate use),
+        // but only after the user explicitly accepts the risk.
+        if (host.startsWith("http://")) {
+            MaterialAlertDialogBuilder(this.requireContext(), R.style.App_MaterialAlertDialog)
+                .setTitle(R.string.title_http_endpoint_warning)
+                .setMessage(R.string.message_http_endpoint_warning)
+                .setPositiveButton(R.string.btn_http_endpoint_accept) { _, _ -> commitForm() }
+                .setNegativeButton(R.string.btn_cancel) { _, _ -> listener!!.onCancel(requireArguments().getInt("position")) }
+                .show()
+            return
+        }
+
+        commitForm()
+    }
+
+    private fun commitForm() {
         if (requireArguments().getInt("position") == -1) {
             listener!!.onAdd(buildEndpointObject())
         } else {

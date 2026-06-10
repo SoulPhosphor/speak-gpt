@@ -156,6 +156,7 @@ import org.teslasoft.assistant.ui.permission.MicrophonePermissionActivity
 import org.teslasoft.assistant.util.DefaultPromptsParser
 import org.teslasoft.assistant.util.Hash
 import org.teslasoft.assistant.util.LocaleParser
+import org.teslasoft.assistant.util.connectionAbortMessage
 import java.io.BufferedReader
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -655,7 +656,12 @@ class AssistantFragment : BottomSheetDialogFragment(), ChatAdapter.OnUpdateListe
     @Suppress("unchecked")
     private fun initSettings() {
         key = apiEndpointObject?.apiKey
-        openAIKey = apiEndpointPreferences?.findOpenAIKeyIfAvailable(mContext ?: return)
+        // The auxiliary client (cloud Whisper, TTS, image generation,
+        // function calling) must follow the active chat's endpoint. It used
+        // to grab a key from any saved api.openai.com endpoint, which leaked
+        // audio and message content to OpenAI while chatting with a
+        // local/custom endpoint.
+        openAIKey = apiEndpointObject?.apiKey
 
         endSeparator = preferences!!.getEndSeparator()
         prefix = preferences!!.getPrefix()
@@ -1203,13 +1209,16 @@ class AssistantFragment : BottomSheetDialogFragment(), ChatAdapter.OnUpdateListe
 
             ai = OpenAI(config)
 
+            // Auxiliary client for audio/image/function endpoints. Bound to
+            // the active chat's endpoint (base host, same auth mode) so no
+            // content is silently routed to api.openai.com.
             val configOpenAI = OpenAIConfig(
-                token = openAIKey.toString(),
+                token = if (isBearerAuth) openAIKey.toString() else "",
                 logging = LoggingConfig(LogLevel.None, Logger.Simple),
                 timeout = Timeout(socket = 30.seconds),
                 organization = null,
-                headers = emptyMap(),
-                host = OpenAIHost("https://api.openai.com/v1/"),
+                headers = extraHeaders,
+                host = OpenAIHost(apiEndpointObject?.host!!),
                 proxy = null,
                 retry = RetryStrategy()
             )
@@ -1874,7 +1883,7 @@ class AssistantFragment : BottomSheetDialogFragment(), ChatAdapter.OnUpdateListe
                     getString(R.string.prompt_no_model)
                 }
                 e.stackTraceToString().contains("Software caused connection abort") -> {
-                    getString(R.string.prompt_error_unknown)
+                    connectionAbortMessage(apiEndpointObject?.label, apiEndpointObject?.host, model, e.message)
                 }
                 e.stackTraceToString().contains("You exceeded your current quota") -> {
                     getString(R.string.prompt_quota_reached)
@@ -2316,7 +2325,7 @@ class AssistantFragment : BottomSheetDialogFragment(), ChatAdapter.OnUpdateListe
                     }
 
                     e.stackTraceToString().contains("Software caused connection abort") -> {
-                        putMessage(getString(R.string.prompt_error_unknown), true)
+                        putMessage(connectionAbortMessage(apiEndpointObject?.label, apiEndpointObject?.host, model, e.message), true)
                     }
 
                     e.stackTraceToString().contains("You exceeded your current quota") -> {

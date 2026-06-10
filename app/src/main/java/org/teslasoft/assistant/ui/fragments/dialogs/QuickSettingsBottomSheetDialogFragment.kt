@@ -36,7 +36,6 @@ import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.textfield.TextInputEditText
-import org.teslasoft.assistant.Config
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.ActivationPromptPreferences
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
@@ -415,10 +414,9 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
             getString(R.string.label_tap_to_set)
         }
 
-        btnCostInfo?.setOnClickListener {
-            val webViewDialog = WebViewDialog.newInstance("https://${Config.API_SERVER_NAME}/costInfo", "Cost Info")
-            webViewDialog.show(parentFragmentManager, "WebViewDialog@CostInfo")
-        }
+        // The cost-info page was hosted by the upstream Teslasoft service and
+        // is gone in this independent fork.
+        btnCostInfo?.visibility = View.GONE
 
         usageIn = requireArguments().getInt("usageIn")
         usageOut = requireArguments().getInt("usageOut")

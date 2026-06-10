@@ -17,7 +17,6 @@
 package org.teslasoft.assistant.ui.activities
 
 import android.annotation.SuppressLint
-import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
@@ -25,6 +24,7 @@ import android.graphics.Color
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageButton
 import android.widget.ImageView
@@ -36,11 +36,9 @@ import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.fragment.app.FragmentActivity
 import com.google.android.material.button.MaterialButton
 import org.teslasoft.assistant.BuildConfig
-import org.teslasoft.assistant.Config
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.util.WindowInsetsUtil
-import org.teslasoft.core.auth.SystemInfo
 import java.util.EnumSet
 import androidx.core.net.toUri
 import eightbitlab.com.blurview.BlurView
@@ -53,7 +51,6 @@ class AboutActivity : FragmentActivity() {
     private var btnPrivacy: MaterialButton? = null
     private var btnFeedback: MaterialButton? = null
     private var appVer: TextView? = null
-    private var tidVer: TextView? = null
     private var btnDonate: MaterialButton? = null
     private var btnGithub: MaterialButton? = null
 
@@ -121,21 +118,11 @@ class AboutActivity : FragmentActivity() {
 
             if (activateEasterEggCounter == 4) {
                 activateEasterEggCounter = 0
-
-                try {
-                    val intent = Intent(Intent.ACTION_MAIN)
-                    intent.setComponent(ComponentName("com.teslasoft.libraries.support", "org.teslasoft.core.easter.JarvisPlatLogo"))
-                    startActivity(intent)
-                } catch (_: Exception) {
-                    /* TODO: Open easter egg */
-                    Toast.makeText(this, "Easter egg found!", Toast.LENGTH_SHORT).show()
-                }
+                Toast.makeText(this, "Easter egg found!", Toast.LENGTH_SHORT).show()
             }
 
             activateEasterEggCounter++
         }
-
-        tidVer?.text = "${getString(R.string.teslasoft_id_version)} ${SystemInfo.VERSION} (${SystemInfo.VERSION_CODE})"
 
         // Build stamp lines: git SHA + date prove which commit shipped, and
         // the note says what that build changed (handy for verifying that an
@@ -164,19 +151,11 @@ class AboutActivity : FragmentActivity() {
             startActivity(i)
         }
 
-        btnTerms?.setOnClickListener {
-            val i = Intent()
-            i.data = "https://${Config.API_SERVER_NAME}/terms".toUri()
-            i.action = Intent.ACTION_VIEW
-            startActivity(i)
-        }
-
-        btnPrivacy?.setOnClickListener {
-            val i = Intent()
-            i.data = "https://${Config.API_SERVER_NAME}/privacy".toUri()
-            i.action = Intent.ACTION_VIEW
-            startActivity(i)
-        }
+        // The terms/privacy pages were hosted by the upstream Teslasoft
+        // service and don't apply to this independent fork, so the buttons
+        // are hidden instead of pointing users at someone else's policies.
+        btnTerms?.visibility = View.GONE
+        btnPrivacy?.visibility = View.GONE
 
         btnFeedback?.setOnClickListener {
             val i = Intent()

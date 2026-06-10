@@ -18,13 +18,13 @@ package org.teslasoft.assistant.ui.onboarding
 
 import android.content.Intent
 import android.os.Bundle
+import android.view.View
 import android.view.ViewGroup
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.fragment.app.FragmentActivity
 import com.google.android.material.button.MaterialButton
 import eightbitlab.com.blurview.BlurView
 import org.teslasoft.assistant.R
-import androidx.core.net.toUri
 
 class TermsActivity : FragmentActivity() {
 
@@ -59,11 +59,8 @@ class TermsActivity : FragmentActivity() {
             finish()
         }
 
-        btnViewPrivacy?.setOnClickListener {
-            val intent = Intent()
-            intent.action = Intent.ACTION_VIEW
-            intent.data = "https://assistant.teslasoft.org/privacy".toUri()
-            startActivity(intent)
-        }
+        // The privacy policy page was hosted by the upstream Teslasoft
+        // service and doesn't apply to this independent fork.
+        btnViewPrivacy?.visibility = View.GONE
     }
 }

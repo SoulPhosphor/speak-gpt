@@ -19,11 +19,7 @@ dependencyResolutionManagement {
         google()
         mavenCentral()
         maven { url 'https://jitpack.io' }
-        maven {
-            url 'https://maven.teslasoft.org/maven/'
-        }
     }
 }
 rootProject.name = "SpeakGPT"
 include ':app'
-include ':teslasoft-id'

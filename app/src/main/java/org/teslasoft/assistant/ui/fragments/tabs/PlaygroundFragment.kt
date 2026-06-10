@@ -69,6 +69,7 @@ import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.ui.fragments.dialogs.QuickSettingsBottomSheetDialogFragment
 import org.teslasoft.assistant.ui.fragments.dialogs.ReportAIContentBottomSheet
 import org.teslasoft.assistant.util.WindowInsetsUtil
+import org.teslasoft.assistant.util.connectionAbortMessage
 import java.util.EnumSet
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Duration.Companion.seconds
@@ -371,7 +372,7 @@ class PlaygroundFragment : Fragment() {
                     getString(R.string.prompt_no_model)
                 }
                 e.stackTraceToString().contains("Software caused connection abort") -> {
-                    getString(R.string.prompt_error_unknown)
+                    connectionAbortMessage(apiEndpoint?.label, apiEndpoint?.host, model, e.message)
                 }
                 e.stackTraceToString().contains("You exceeded your current quota") -> {
                     getString(R.string.prompt_quota_reached)

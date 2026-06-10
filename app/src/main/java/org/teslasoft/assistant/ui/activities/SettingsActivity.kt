@@ -61,11 +61,6 @@ import org.teslasoft.assistant.ui.fragments.dialogs.SelectImageModelFragment
 import org.teslasoft.assistant.ui.fragments.dialogs.SelectResolutionFragment
 import org.teslasoft.assistant.ui.fragments.dialogs.SystemMessageDialogFragment
 import org.teslasoft.assistant.util.WindowInsetsUtil
-import org.teslasoft.core.auth.AccountSyncListener
-import org.teslasoft.core.auth.client.SettingsListener
-import org.teslasoft.core.auth.client.SyncListener
-import org.teslasoft.core.auth.client.TeslasoftIDClient
-import org.teslasoft.core.auth.widget.TeslasoftIDCircledButton
 import java.util.EnumSet
 import kotlin.math.roundToInt
 import androidx.core.content.edit
@@ -107,7 +102,6 @@ class SettingsActivity : FragmentActivity() {
     private var root: ScrollView? = null
     private var textGlobal: TextView? = null
     private var btnBack: ImageButton? = null
-    private var teslasoftIDCircledButton: TeslasoftIDCircledButton? = null
 
     private var installationId = ""
     private var androidId = ""
@@ -121,7 +115,6 @@ class SettingsActivity : FragmentActivity() {
     private var host = ""
     private var apiEndpoint: ApiEndpointObject? = null
 
-    private var teslasoftIDClient: TeslasoftIDClient? = null
     private var apiEndpointPreferences: ApiEndpointPreferences? = null
 
     private var resolutionChangedListener: SelectResolutionFragment.StateChangesListener = object : SelectResolutionFragment.StateChangesListener {
@@ -179,38 +172,6 @@ class SettingsActivity : FragmentActivity() {
         }
 
         override fun onCancel() { /* unused */ }
-    }
-
-    private var settingsListener: SettingsListener = object : SettingsListener { /* default */ }
-
-    private var syncListener: SyncListener = object : SyncListener { /* default */ }
-
-    private var accountSyncListener: AccountSyncListener = object : AccountSyncListener {
-        override fun onAuthFinished(name: String, email: String, isDev: Boolean, token: String) {
-            Thread {
-                Thread.sleep(500)
-                runOnUiThread {
-                    if (isDev) {
-                        preferences?.setDebugMode(true)
-                    } else {
-                        preferences?.setDebugMode(false)
-                    }
-                }
-            }.start()
-        }
-
-        override fun onAuthFailed(state: String, message: String) {
-            runOnUiThread {
-                preferences?.setDebugMode(false)
-            }
-        }
-
-        override fun onSignedOut() {
-            runOnUiThread {
-                preferences?.setDebugMode(false)
-                restartActivity()
-            }
-        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -287,7 +248,6 @@ class SettingsActivity : FragmentActivity() {
         transition.excludeTarget(R.id.tile_error_sound, true)
         transition.excludeTarget(R.id.tile_hide_model_names, true)
         transition.excludeTarget(R.id.tile_monochrome_background_for_chat_list, true)
-        transition.excludeTarget(R.id.teslasoft_id_btn, true)
 
         val transition2 = TransitionInflater.from(this).inflateTransition(android.R.transition.move).apply {
             interpolator = FastOutLinearInInterpolator()
@@ -351,7 +311,6 @@ class SettingsActivity : FragmentActivity() {
         transition2.excludeTarget(R.id.tile_error_sound, true)
         transition2.excludeTarget(R.id.tile_hide_model_names, true)
         transition2.excludeTarget(R.id.tile_monochrome_background_for_chat_list, true)
-        transition2.excludeTarget(R.id.teslasoft_id_btn, true)
 
         // Set the transition as the shared element enter transition
         window.sharedElementEnterTransition = transition
@@ -410,11 +369,7 @@ class SettingsActivity : FragmentActivity() {
 
         host = apiEndpoint?.host ?: ""
 
-        initTeslasoftID()
-
         reloadAmoled()
-
-        teslasoftIDClient = TeslasoftIDClient(this, "B7:9F:CB:D0:5C:69:1D:C7:DD:5C:36:50:64:1E:9B:32:00:CA:11:41:47:ED:F1:D9:64:86:2A:CA:49:CD:65:25", "d07985975904997990790c2e5088372a", "org.teslasoft.assistant", settingsListener, syncListener)
 
         val t1 = Thread {
             androidId = DeviceInfoProvider.getAndroidId(this@SettingsActivity)
@@ -941,11 +896,6 @@ class SettingsActivity : FragmentActivity() {
             .replace(R.id.tile_monochrome_background_for_chat_list, tileMonochromeBackgroundForChatList!!)
 
         return operation
-    }
-
-    private fun initTeslasoftID() {
-        teslasoftIDCircledButton = supportFragmentManager.findFragmentById(R.id.teslasoft_id_btn) as TeslasoftIDCircledButton
-        teslasoftIDCircledButton?.setAccountSyncListener(accountSyncListener)
     }
 
     private var apiEndpointActivityResultLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->

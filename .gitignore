@@ -19,3 +19,8 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Private release signing material must never be committed
+*.jks
+release.keystore
+keystore.properties
