@@ -63,6 +63,11 @@
     <color name="disabled">#DD666666</color>
     <color name="green">#FF00FF00</color>
     <color name="light_red">#E83A3A</color>
+    <!-- Mic button background while a hands-free conversation is live. A deep,
+         unmistakable red that says "tap to end; the mic won't reopen on its
+         own." Distinct from light_red (transient warnings) and the green
+         listening tint. -->
+    <color name="hands_free_active_red">#8B1A1A</color>
     <color name="light_green">#AADC79</color>
     <color name="mic_listening_green">#4CBB17</color>
     <color name="tip1">#333b2f</color>

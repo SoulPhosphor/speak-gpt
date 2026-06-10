@@ -389,6 +389,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         btnMicro?.apply {
             setImageResource(R.drawable.ic_microphone)
             clearColorFilter()
+            backgroundTintList = null
         }
         messageInput?.hint = getString(R.string.hint_message)
     }
@@ -397,15 +398,33 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         btnMicro?.apply {
             setImageResource(R.drawable.ic_stop_recording)
             setColorFilter(ResourcesCompat.getColor(resources, R.color.mic_listening_green, theme))
+            backgroundTintList = null
         }
         messageInput?.hint = getString(R.string.hint_listening)
     }
 
-    private fun micHandsFreeStop() {
+    /**
+     * Mic button while a hands-free conversation is live. A deep-red background
+     * (not just an icon tint) is the always-on signal that the loop is running
+     * and a tap ends it — the mic will not reopen on its own afterwards. Held
+     * for the whole session, both while listening for the user and while the
+     * reply is being read back, so the cue never flickers between turns (and so
+     * the user can stop the loop at any point, including mid-readback, where the
+     * touch listener turns the tap into a full cancel).
+     *
+     * @param listening true while the mic is actually open for the user; false
+     *   while the assistant's reply is being read back (no barge-in: the
+     *   recognizer is closed, so user speech can't interrupt the readback).
+     */
+    private fun micHandsFreeActive(listening: Boolean) {
         btnMicro?.apply {
-            setImageResource(R.drawable.ic_close)
-            setColorFilter(ResourcesCompat.getColor(resources, R.color.light_red, theme))
+            setImageResource(R.drawable.ic_stop_recording)
+            setColorFilter(ResourcesCompat.getColor(resources, R.color.white, theme))
+            backgroundTintList = ColorStateList.valueOf(
+                ResourcesCompat.getColor(resources, R.color.hands_free_active_red, theme)
+            )
         }
+        messageInput?.hint = getString(if (listening) R.string.hint_listening else R.string.hint_message)
     }
 
     private suspend fun tokenizeArray() {
@@ -536,6 +555,18 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 progress?.visibility = View.GONE
                 isRecording = false
                 micIdle()
+                return
+            }
+
+            // No barge-in: in hands-free mode, ignore any recognizer result that
+            // lands while we're not actively listening — the reply is being read
+            // back (handsFreeReadbackExpected), the loop has stopped, or this is
+            // a late callback after cancel(). Acting on it would either
+            // double-submit the turn or transcribe the assistant's own voice and
+            // tear down the dark-red mic state mid-readback.
+            if (preferences?.getHandsFreeMode() == true &&
+                (handsFreeStopped || handsFreeReadbackExpected || !isRecording)
+            ) {
                 return
             }
 
@@ -971,7 +1002,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 startLocalWhisperHandsFreeTurn(freshTurn = false)
             } else {
                 isRecording = true
-                micRecording()
+                micHandsFreeActive(listening = true)
                 startRecognition(true)
             }
         } else if (handsFree) {
@@ -2129,7 +2160,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         }
         if (handsFreeStopped) return
 
-        micRecording()
+        micHandsFreeActive(listening = true)
         isRecording = true
 
         val silenceMs = preferences!!.getHandsFreeSilenceSeconds().coerceAtLeast(1) * 1000L
@@ -2339,7 +2370,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 }
                 tts!!.stop()
             } catch (_: java.lang.Exception) {/* unused */}
-            micRecording()
+            if (preferences?.getHandsFreeMode() == true) micHandsFreeActive(listening = true)
+            else micRecording()
             if (ContextCompat.checkSelfPermission(
                     this, Manifest.permission.RECORD_AUDIO
                 ) == PackageManager.PERMISSION_GRANTED
@@ -3593,10 +3625,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             // (Manual speaker-button re-reads never set this flag, so they
             // never reopen the mic.)
             handsFreeReadbackExpected = true
-            // The reply is about to be read back; show a red ✕ on the mic so the
-            // user can end the loop mid-readback (a tap becomes a full cancel via
-            // btnMicro's touch listener).
-            runOnUiThread { micHandsFreeStop() }
+            // The reply is about to be read back; keep the deep-red hands-free
+            // background so the user can end the loop mid-readback (a tap becomes
+            // a full cancel via btnMicro's touch listener). listening=false: the
+            // recognizer is closed during readback, so the user's voice can't
+            // barge in and stop the assistant.
+            runOnUiThread { micHandsFreeActive(listening = false) }
             // Hard fallback: if speak() silently fails (TTS not initialized,
             // language detection stalls, etc.), this long-timeout watchdog
             // ensures the loop eventually re-arms. speak() arms its own
