@@ -20,12 +20,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Debug-signed APKs must never be published as releases: the debug
-      # keystore and its password are public in this repo, so anyone could
-      # build an APK that installs over a user's copy. Releases are built
-      # with assembleRelease and signed with a private key supplied via
-      # repository secrets. Until those secrets are configured, this
-      # workflow stops here instead of publishing.
+      # Proper releases are built with assembleRelease and signed with a
+      # private key supplied via repository secrets (the checked-in debug
+      # keystore is public, so anyone could forge an update with it).
+      # Until those secrets are configured, the workflow instead publishes
+      # a debug-signed build clearly marked as a TEST PRERELEASE. This
+      # keeps the same signature as locally installed debug builds (so it
+      # installs over them without losing app data) but must not be
+      # treated as a distributable release.
       - name: Check release signing secrets
         id: signing
         env:
@@ -36,13 +38,12 @@ jobs:
         run: |
           if [ -z "$KS" ] || [ -z "$KS_PASS" ] || [ -z "$KEY_ALIAS" ] || [ -z "$KEY_PASS" ]; then
             echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::Release publishing is disabled: signing secrets are not configured. Set RELEASE_KEYSTORE_BASE64 (base64 of a private keystore), RELEASE_KEYSTORE_PASSWORD, RELEASE_KEY_ALIAS and RELEASE_KEY_PASSWORD in the repository secrets to enable signed releases. Debug-signed APKs are intentionally no longer published."
+            echo "::warning::Release signing secrets are not configured — publishing a DEBUG-SIGNED TEST PRERELEASE instead of a signed release. Set RELEASE_KEYSTORE_BASE64, RELEASE_KEYSTORE_PASSWORD, RELEASE_KEY_ALIAS and RELEASE_KEY_PASSWORD to enable properly signed releases."
           else
             echo "configured=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Set up Java 21 (Temurin)
-        if: steps.signing.outputs.configured == 'true'
         uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -50,11 +51,9 @@ jobs:
           cache: gradle
 
       - name: Set up Android SDK
-        if: steps.signing.outputs.configured == 'true'
         uses: android-actions/setup-android@v3
 
       - name: Install Android NDK r26d + CMake 3.22
-        if: steps.signing.outputs.configured == 'true'
         run: |
           set -e
           sdkmanager --install "ndk;26.3.11579264" "cmake;3.22.1"
@@ -62,7 +61,6 @@ jobs:
           echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/26.3.11579264" >> "$GITHUB_ENV"
 
       - name: Make Gradle wrapper executable
-        if: steps.signing.outputs.configured == 'true'
         run: chmod +x ./gradlew
 
       - name: Decode release keystore
@@ -74,19 +72,22 @@ jobs:
           echo "RELEASE_KEYSTORE_PATH=$RUNNER_TEMP/release.keystore" >> "$GITHUB_ENV"
 
       - name: Build signed release APK
+        if: steps.signing.outputs.configured == 'true'
         env:
           RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
           RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
-        if: steps.signing.outputs.configured == 'true'
-        run: ./gradlew --no-daemon assembleRelease
+        run: |
+          ./gradlew --no-daemon assembleRelease
+          cp app/build/outputs/apk/release/app-release.apk phosphor-shines.apk
 
-      - name: Rename APK
-        if: steps.signing.outputs.configured == 'true'
-        run: cp app/build/outputs/apk/release/app-release.apk phosphor-shines.apk
+      - name: Build debug-signed test APK
+        if: steps.signing.outputs.configured != 'true'
+        run: |
+          ./gradlew --no-daemon assembleDebug
+          cp app/build/outputs/apk/debug/app-debug.apk phosphor-shines.apk
 
       - name: Write release notes
-        if: steps.signing.outputs.configured == 'true'
         run: |
           cat > notes.md << 'NOTES'
           ## How to install Phosphor Shines on your Android phone
@@ -96,9 +97,17 @@ jobs:
           3. Tap the downloaded file to install it
           4. If your phone asks about installing from unknown sources, tap Allow
           NOTES
+          if [ "${{ steps.signing.outputs.configured }}" != "true" ]; then
+            cat >> notes.md << 'NOTES'
+
+          > **Note:** This is a debug-signed TEST build (release signing secrets
+          > are not configured for this repository). It installs over previous
+          > debug builds without losing data, but do not distribute it: the
+          > debug signing key is public.
+          NOTES
+          fi
 
       - name: Delete existing latest release
-        if: steps.signing.outputs.configured == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -106,11 +115,17 @@ jobs:
           git push origin :refs/tags/latest 2>/dev/null || true
 
       - name: Publish release
-        if: steps.signing.outputs.configured == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create latest phosphor-shines.apk \
-            --title "Phosphor Shines (Latest Build)" \
-            --notes-file notes.md \
-            --latest
+          if [ "${{ steps.signing.outputs.configured }}" = "true" ]; then
+            gh release create latest phosphor-shines.apk \
+              --title "Phosphor Shines (Latest Build)" \
+              --notes-file notes.md \
+              --latest
+          else
+            gh release create latest phosphor-shines.apk \
+              --title "Phosphor Shines (Debug-signed test build)" \
+              --notes-file notes.md \
+              --prerelease
+          fi
