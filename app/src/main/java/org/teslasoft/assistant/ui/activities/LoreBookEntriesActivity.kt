@@ -21,6 +21,7 @@ import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
+import android.view.View
 import android.view.WindowInsets
 import android.widget.ImageButton
 import android.widget.ListView
@@ -35,11 +36,14 @@ import androidx.fragment.app.FragmentActivity
 import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.preferences.PersonaPreferences
 import org.teslasoft.assistant.preferences.Preferences
+import org.teslasoft.assistant.preferences.dto.LoreBook
 import org.teslasoft.assistant.preferences.dto.LoreBookEntry
 import org.teslasoft.assistant.preferences.lorebook.LoreBookStore
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.adapters.LoreBookItemAdapter
+import org.teslasoft.assistant.ui.fragments.dialogs.EditLoreBookDialogFragment
 import org.teslasoft.assistant.ui.fragments.dialogs.EditLoreBookEntryDialogFragment
 
 /**
@@ -51,7 +55,9 @@ class LoreBookEntriesActivity : FragmentActivity() {
     private var btnAdd: ExtendedFloatingActionButton? = null
     private var btnBack: ImageButton? = null
     private var btnDebug: ImageButton? = null
+    private var btnEditBook: ImageButton? = null
     private var activityTitle: TextView? = null
+    private var bookDescription: TextView? = null
     private var listView: ListView? = null
     private var actionBar: ConstraintLayout? = null
 
@@ -99,6 +105,55 @@ class LoreBookEntriesActivity : FragmentActivity() {
         }
     }
 
+    private fun openBookEditDialog() {
+        val book = store?.getBook(lorebookId) ?: return
+        // Position 0 (not -1) so the dialog behaves as "edit existing": Save
+        // routes to onEdit and the Delete button is offered.
+        val dialog = EditLoreBookDialogFragment.newInstance(book, 0)
+        dialog.setListener(bookEditListener)
+        dialog.setCancelable(false)
+        dialog.show(supportFragmentManager, "EditLoreBookDialogFragment")
+    }
+
+    private var bookEditListener: EditLoreBookDialogFragment.StateChangesListener = object : EditLoreBookDialogFragment.StateChangesListener {
+        override fun onEdit(book: LoreBook, position: Int) {
+            store!!.saveBook(book)
+            refreshBookHeader()
+        }
+
+        override fun onDelete(position: Int, id: String) {
+            if (id.isNotEmpty()) {
+                store!!.deleteBook(id)
+                // No persona may keep referencing a book that no longer exists.
+                PersonaPreferences.getPersonaPreferences(this@LoreBookEntriesActivity).removeLoreBookFromAllPersonas(id)
+            }
+            finish()
+        }
+
+        override fun onError(message: String, position: Int) {
+            Toast.makeText(this@LoreBookEntriesActivity, message, Toast.LENGTH_SHORT).show()
+            openBookEditDialog()
+        }
+    }
+
+    /** Title + tag/description line reflect the stored book, so edits made in
+     *  the dialog (or elsewhere) show up as soon as we render. */
+    private fun refreshBookHeader() {
+        val book = store?.getBook(lorebookId)
+        if (book != null && book.name.isNotEmpty()) lorebookName = book.name
+        if (lorebookName.isNotEmpty()) activityTitle?.text = lorebookName
+
+        val summary = listOf(book?.tag.orEmpty(), book?.description.orEmpty())
+            .filter { it.isNotBlank() }
+            .joinToString(" · ")
+        if (summary.isBlank()) {
+            bookDescription?.visibility = View.GONE
+        } else {
+            bookDescription?.visibility = View.VISIBLE
+            bookDescription?.text = summary
+        }
+    }
+
     @Suppress("DEPRECATION")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -111,7 +166,9 @@ class LoreBookEntriesActivity : FragmentActivity() {
         btnAdd = findViewById(R.id.btn_add)
         btnBack = findViewById(R.id.btn_back)
         btnDebug = findViewById(R.id.btn_debug)
+        btnEditBook = findViewById(R.id.btn_edit_book)
         activityTitle = findViewById(R.id.activity_title)
+        bookDescription = findViewById(R.id.book_description)
         listView = findViewById(R.id.list_view)
         actionBar = findViewById(R.id.action_bar)
 
@@ -132,6 +189,7 @@ class LoreBookEntriesActivity : FragmentActivity() {
             actionBar?.setBackgroundColor(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
             btnBack?.backgroundTintList = ColorStateList.valueOf(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
             btnDebug?.backgroundTintList = ColorStateList.valueOf(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
+            btnEditBook?.backgroundTintList = ColorStateList.valueOf(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
         } else {
             val colorDrawable = SurfaceColors.SURFACE_0.getColor(this).toDrawable()
             window.setBackgroundDrawable(colorDrawable)
@@ -144,6 +202,7 @@ class LoreBookEntriesActivity : FragmentActivity() {
             actionBar?.setBackgroundColor(SurfaceColors.SURFACE_4.getColor(this))
             btnBack?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(this))
             btnDebug?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(this))
+            btnEditBook?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(this))
         }
 
         listView?.divider = null
@@ -175,6 +234,7 @@ class LoreBookEntriesActivity : FragmentActivity() {
     }
 
     private fun initialize() {
+        refreshBookHeader()
         reloadList()
 
         btnBack!!.setOnClickListener {
@@ -183,6 +243,10 @@ class LoreBookEntriesActivity : FragmentActivity() {
 
         btnDebug!!.setOnClickListener {
             startActivity(Intent(this, LoreBookDebugActivity::class.java))
+        }
+
+        btnEditBook!!.setOnClickListener {
+            openBookEditDialog()
         }
 
         btnAdd!!.setOnClickListener {

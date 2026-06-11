@@ -111,7 +111,9 @@ Everything is on-device. No cloud sync, no accounts.
 - Voice: hands-free loop (VAD listen → Whisper/Google STT → generate → TTS
   readback → re-arm), manual mic button, per-message speak button, audible
   error/done chimes, screen-off operation via foreground services.
-- Lorebook memory system: multiple books (title/description/type-tag),
+- Lorebook memory system: multiple books (title/description/type-tag,
+  editable in place via the cog in the book's entries screen; tag/description
+  shown under that screen's header and wherever books are listed),
   memories with trigger phrases (case-insensitive substring match against the
   latest user message), persona-owned core book (always active) + linked
   additional books checked per chat in Quick Settings, injection as a separate

@@ -2165,6 +2165,20 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             handsFreeStopped = false
             cancelState = false
             handsFreeTurnRetries = 0
+            // Same readback-interrupt reset as startRecognition(): a mic press
+            // mid-readback must kill the readback's completion gate/watchdog and
+            // silence the playback itself before the mic opens, or the VAD
+            // listens to the assistant's own voice and stale loop state strands
+            // the new turn (open mic that never registers anything).
+            handsFreeReadbackExpected = false
+            handsFreeReadbackToken++
+            try {
+                if (mediaPlayer?.isPlaying == true) {
+                    mediaPlayer?.stop()
+                    mediaPlayer?.reset()
+                }
+            } catch (_: Exception) { /* ignore */ }
+            try { tts?.stop() } catch (_: Exception) { /* ignore */ }
             startHandsFreeService()
         }
         if (handsFreeStopped) return
@@ -2756,6 +2770,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 handsFreeStopped = false
                 cancelState = false
                 handsFreeTurnRetries = 0
+                // A fresh turn can start mid-readback (mic press interrupting
+                // the assistant). The interrupted readback's completion gate and
+                // watchdog must die here: left set, the no-barge-in gate in
+                // onResults() silently drops every transcript of the new turn —
+                // mic visibly open, nothing ever registered — and the watchdog
+                // can never clear the flag because it bails out while
+                // isRecording is true.
+                handsFreeReadbackExpected = false
+                handsFreeReadbackToken++
                 handsFreeListenDeadline = System.currentTimeMillis() +
                         preferences!!.getHandsFreeNoSpeechSeconds().coerceAtLeast(1) * 1000L
                 handsFreeBuffer = ""
@@ -2827,6 +2850,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         } catch (_: Exception) { /* ignore */ }
         try { tts?.stop() } catch (_: Exception) { /* ignore */ }
         try { recognizer?.stopListening() } catch (_: Exception) { /* ignore */ }
+        // A whisper-local capture holds the device mic (and the OS privacy
+        // indicator) independently of the Google recognizer — a stop tap must
+        // release that too, or the mic stays open with nothing consuming it.
+        try { LocalWhisperEngine.get().cancel() } catch (_: Exception) { /* ignore */ }
         try { speakScope?.coroutineContext?.cancel(CancellationException("Cancelled by user")) } catch (_: Exception) { /* ignore */ }
         isRecording = false
         micIdle()

@@ -20,6 +20,7 @@ import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
+import android.view.WindowInsets
 import android.widget.ImageButton
 import android.widget.TextView
 import androidx.constraintlayout.widget.ConstraintLayout
@@ -94,6 +95,42 @@ class LoreBookDebugActivity : FragmentActivity() {
         }
 
         render()
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        adjustPaddings()
+    }
+
+    /**
+     * Edge-to-edge (SDK 35+) draws this activity under the status and gesture
+     * bars; without these insets the back button hides behind the system
+     * status area and the clear button behind the navigation bar. Mirrors
+     * adjustPaddings() in the sibling lorebook activities.
+     */
+    private fun adjustPaddings() {
+        if (Build.VERSION.SDK_INT < 35) return
+        try {
+            actionBar?.setPadding(
+                0,
+                window.decorView.rootWindowInsets.getInsets(WindowInsets.Type.statusBars()).top,
+                0,
+                0
+            )
+
+            val clearButton = findViewById<MaterialButton>(R.id.btn_clear)
+            val params = clearButton?.layoutParams as? ConstraintLayout.LayoutParams
+            if (params != null) {
+                params.bottomMargin = window.decorView.rootWindowInsets
+                    .getInsets(WindowInsets.Type.navigationBars()).bottom + pxToDp(24)
+                clearButton.layoutParams = params
+            }
+        } catch (_: Exception) { /* unused */ }
+    }
+
+    private fun pxToDp(px: Int): Int {
+        val density = resources.displayMetrics.density
+        return (px * density).toInt()
     }
 
     private fun render() {
