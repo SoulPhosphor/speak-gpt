@@ -350,20 +350,18 @@ class LoreBookStore private constructor(context: Context) :
     }
 
     /**
-     * Find every enabled memory in [lorebookId] whose any trigger appears (case
-     * insensitive, substring) in [message]. This is the Phase 1 matching engine —
-     * deliberately simple. Stronger trigger modes (exact phrase, all-required, word
-     * boundary) arrive in Phase 3.
+     * Find every enabled memory in [lorebookId] with a trigger that fires on
+     * [message]. Matching is delegated to [LoreBookTriggerMatcher]: whole-word,
+     * case-insensitive, with light suffix folding (dragon ↔ dragons), and
+     * triggers wrapped in double quotes demand that exact text instead.
      */
     fun findMatches(message: String, lorebookId: String): ArrayList<LoreBookMatch> {
         val result = ArrayList<LoreBookMatch>()
         if (message.isBlank() || lorebookId.isBlank()) return result
 
-        val haystack = message.lowercase()
         for (entry in queryEntries("$COL_LOREBOOK_ID = ? AND $COL_ENABLED = 1", arrayOf(lorebookId))) {
             for (trigger in entry.triggers) {
-                val needle = trigger.trim().lowercase()
-                if (needle.isNotEmpty() && haystack.contains(needle)) {
+                if (LoreBookTriggerMatcher.matches(message, trigger)) {
                     result.add(LoreBookMatch(entry, trigger.trim()))
                     break // one match per memory is enough to inject it once
                 }

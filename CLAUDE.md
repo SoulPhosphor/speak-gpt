@@ -114,8 +114,10 @@ Everything is on-device. No cloud sync, no accounts.
 - Lorebook memory system: multiple books (title/description/type-tag,
   editable in place via the cog in the book's entries screen; tag/description
   shown under that screen's header and wherever books are listed),
-  memories with trigger phrases (case-insensitive substring match against the
-  latest user message), persona-owned core book (always active) + linked
+  memories with trigger phrases matched against the latest user message
+  (whole-word, case-insensitive, light suffix folding via
+  `LoreBookTriggerMatcher` — unit-tested in `app/src/test`; a trigger wrapped
+  in double quotes demands that exact text instead), persona-owned core book (always active) + linked
   additional books checked per chat in Quick Settings, injection as a separate
   system message after the stable base prompt (preserves prefix caching),
   injection budget 20 entries / 6000 chars, debug view of injections.

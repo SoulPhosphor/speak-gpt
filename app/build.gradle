@@ -167,4 +167,7 @@ dependencies {
     implementation ('io.noties:prism4j:2.0.0') {
         exclude group: 'org.jetbrains', module: 'annotations'
     }
+
+    // JVM unit tests (app/src/test); run in CI via "gradlew test".
+    testImplementation 'junit:junit:4.13.2'
 }
