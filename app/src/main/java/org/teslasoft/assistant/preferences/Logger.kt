@@ -78,34 +78,48 @@ class Logger {
          * @param message - log message
          * */
         fun log(context: Context, type: String, tag: String, level: String, message: String) {
-            val installationId = DeviceInfoProvider.getInstallationId(context)
-
-            // If installation ID is zero it means user revoked authorization to collect user data
-            // All logs will be skipped
-            if (installationId != "00000000-0000-0000-0000-000000000000") {
-                if (level == "info" || level == "error" || level == "warning" || level == "debug" || level == "verbose") {
-                    val timestamp = DateTimeFormatter.ISO_INSTANT.format(Instant.now()).toString()
-                    val logString =
-                        "[$timestamp] [$installationId] [$tag] [${level.uppercase()}] $message\n"
-                    when (type) {
-                        "crash" -> {
-                            val log = "${getCrashLog(context)}$logString"
-                            setCrashLog(context, log)
-                        }
-
-                        "event" -> {
-                            val log = "${getEventLog(context)}$logString"
-                            setEventLog(context, log)
-                        }
-
-                        else -> {
-                            error("Invalid log type")
-                        }
+            // These logs never leave the device in this fork (the upstream
+            // TeslaSoft telemetry was removed); they exist solely so the user
+            // can read them in Settings -> Event log. The old guard skipped
+            // logging entirely when the installation id was zeroed (telemetry
+            // consent revoked), which silently ate the user's own diagnostics
+            // — the "I turned logging on and the event log stayed empty" bug.
+            if (level == "info" || level == "error" || level == "warning" || level == "debug" || level == "verbose") {
+                val timestamp = DateTimeFormatter.ISO_INSTANT.format(Instant.now()).toString()
+                val logString =
+                    "[$timestamp] [$tag] [${level.uppercase()}] $message\n"
+                when (type) {
+                    "crash" -> {
+                        val log = trimLog("${getCrashLog(context)}$logString")
+                        setCrashLog(context, log)
                     }
-                } else {
-                    error("Invalid log level")
+
+                    "event" -> {
+                        val log = trimLog("${getEventLog(context)}$logString")
+                        setEventLog(context, log)
+                    }
+
+                    else -> {
+                        error("Invalid log type")
+                    }
                 }
+            } else {
+                error("Invalid log level")
             }
+        }
+
+        // Logs are stored as one string in encrypted prefs, re-read and
+        // re-written on every append — an unbounded log would slow every
+        // append and bloat the prefs file. Cap it by dropping the oldest
+        // lines once it grows past the limit.
+        private const val MAX_LOG_CHARS = 200_000
+        private const val TRIMMED_LOG_CHARS = 150_000
+
+        private fun trimLog(log: String): String {
+            if (log.length <= MAX_LOG_CHARS) return log
+            val cut = log.length - TRIMMED_LOG_CHARS
+            val newline = log.indexOf('\n', cut)
+            return if (newline in 0 until log.length - 1) log.substring(newline + 1) else log.takeLast(TRIMMED_LOG_CHARS)
         }
 
         /**

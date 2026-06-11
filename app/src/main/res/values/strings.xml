@@ -735,7 +735,7 @@
     <string name="tile_transcription_sound_desc">Play a short, pleasant ascending tone once your speech has been transcribed, so you know dictation finished and a reply is on the way without watching the screen. Uses the alarm volume, so it stays audible even when the phone is on silent.</string>
     <string name="voice_section_debug">Debug logging</string>
     <string name="tile_vad_log_energy_title">Energy VAD logging</string>
-    <string name="tile_vad_log_energy_desc">Log Energy VAD state (RMS, noise floor, threshold, speech/silence timing) to logcat on every hands-free turn. Turn off when not debugging.</string>
+    <string name="tile_vad_log_energy_desc">Record voice diagnostics: every hands-free decision (mic opened/closed and why, readback, failures) goes to the Event log in Settings, plus detailed Energy VAD state (RMS, noise floor, timing) to logcat. Turn off when not debugging.</string>
     <string name="tile_vad_log_webrtc_title">WebRTC VAD logging</string>
-    <string name="tile_vad_log_webrtc_desc">Log WebRTC VAD state (RMS, noise floor, threshold, voiced frames, speech/silence timing) to logcat on every hands-free turn. Turn off when not debugging.</string>
+    <string name="tile_vad_log_webrtc_desc">Record voice diagnostics: every hands-free decision (mic opened/closed and why, readback, failures) goes to the Event log in Settings, plus detailed WebRTC VAD state (RMS, voiced frames, timing) to logcat. Turn off when not debugging.</string>
 </resources>

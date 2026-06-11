@@ -105,12 +105,19 @@ Everything is on-device. No cloud sync, no accounts.
   auto-naming of new chats (which **changes the chat id** and copies every
   per-chat preference — if you add a per-chat setting, add it to the copy block
   in `ChatActivity` after auto-naming, or it silently vanishes on rename).
+  Auto-naming adopts the new id **in place** — it must never relaunch
+  ChatActivity, because onDestroy kills the readback and hands-free loop.
 - Any OpenAI-compatible endpoint; multiple endpoint profiles; streaming via
   `com.aallam.openai` (Ktor 2.3.12 — pinned, do not upgrade); secondary
   official `openai-java` client for function calling.
 - Voice: hands-free loop (VAD listen → Whisper/Google STT → generate → TTS
   readback → re-arm), manual mic button, per-message speak button, audible
   error/done chimes, screen-off operation via foreground services.
+  Voice diagnostics: with either VAD-logging toggle on, every loop decision
+  (mic open/close + why, readback, failures, loop stop reasons) is written to
+  the persistent Event log via `ChatActivity.logVoiceEvent` — when adding a
+  new loop exit path, log it there or failures become undiagnosable. `Logger`
+  is local-only (no telemetry); it must not be gated on the installation id.
 - Lorebook memory system: multiple books (title/description/type-tag,
   editable in place via the cog in the book's entries screen; tag/description
   shown under that screen's header and wherever books are listed),
