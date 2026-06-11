@@ -61,12 +61,7 @@ class PersonasListActivity : FragmentActivity() {
     private var currentPersonaId: String = ""
 
     private fun newEditDialog(persona: PersonaObject, position: Int): EditPersonaDialogFragment {
-        return EditPersonaDialogFragment.newInstance(
-            persona.label,
-            persona.prompt,
-            persona.activationPromptId,
-            position
-        )
+        return EditPersonaDialogFragment.newInstance(persona, position)
     }
 
     private fun newEmptyPersona(): PersonaObject {

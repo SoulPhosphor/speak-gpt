@@ -26,15 +26,21 @@ import android.widget.ImageButton
 import android.widget.ListView
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.addCallback
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
 import androidx.core.view.marginBottom
 import androidx.core.view.marginRight
+import androidx.core.widget.doAfterTextChanged
 import androidx.fragment.app.FragmentActivity
+import com.google.android.material.button.MaterialButton
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
+import com.google.android.material.textfield.TextInputEditText
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.preferences.PersonaPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.dto.LoreBook
 import org.teslasoft.assistant.preferences.lorebook.LoreBookStore
@@ -43,10 +49,20 @@ import org.teslasoft.assistant.ui.adapters.LoreBookAdapter
 import org.teslasoft.assistant.ui.fragments.dialogs.EditLoreBookDialogFragment
 
 /**
- * Lists all lorebooks. Tapping a lorebook opens its memories; the cog (or a long
- * press) edits the lorebook itself. Reached from the Lorebook tile in Characters.
+ * Lists all lorebooks, searchable by keyword and filterable by type tag.
+ * Tapping a lorebook opens its memories; the cog (or a long press) edits the
+ * lorebook itself. Reached from the Lorebook tile in Characters.
+ *
+ * Pick mode (launched for result with "pickMode"): rows show checkboxes instead,
+ * for linking books to a persona. Both the back arrow and the "Save and close"
+ * button return the checked ids, so picks are never lost.
  */
 class LoreBooksListActivity : FragmentActivity() {
+
+    companion object {
+        const val EXTRA_PICK_MODE = "pickMode"
+        const val EXTRA_SELECTED_IDS = "selectedLoreBookIds"
+    }
 
     private var btnAdd: ExtendedFloatingActionButton? = null
     private var btnBack: ImageButton? = null
@@ -54,10 +70,19 @@ class LoreBooksListActivity : FragmentActivity() {
     private var activityTitle: TextView? = null
     private var listView: ListView? = null
     private var actionBar: ConstraintLayout? = null
+    private var fieldSearch: TextInputEditText? = null
+    private var btnFilterTag: MaterialButton? = null
 
+    private var allBooks: ArrayList<LoreBook> = arrayListOf()
     private var list: ArrayList<LoreBook> = arrayListOf()
     private var counts: HashMap<String, Int> = hashMapOf()
     private var adapter: LoreBookAdapter? = null
+
+    private var searchQuery: String = ""
+    private var tagFilter: String = ""
+
+    private var pickMode: Boolean = false
+    private var selectedIds: HashSet<String> = hashSetOf()
 
     private var store: LoreBookStore? = null
 
@@ -89,7 +114,10 @@ class LoreBooksListActivity : FragmentActivity() {
 
     private var editDialogListener: EditLoreBookDialogFragment.StateChangesListener = object : EditLoreBookDialogFragment.StateChangesListener {
         override fun onAdd(book: LoreBook) {
-            store!!.saveBook(book)
+            val saved = store!!.saveBook(book)
+            // In pick mode a book created on the spot is what the user came to
+            // link, so it starts checked.
+            if (pickMode) selectedIds.add(saved.id)
             reloadList()
         }
 
@@ -99,7 +127,12 @@ class LoreBooksListActivity : FragmentActivity() {
         }
 
         override fun onDelete(position: Int, id: String) {
-            if (id.isNotEmpty()) store!!.deleteBook(id)
+            if (id.isNotEmpty()) {
+                store!!.deleteBook(id)
+                // No persona may keep referencing a book that no longer exists.
+                PersonaPreferences.getPersonaPreferences(this@LoreBooksListActivity).removeLoreBookFromAllPersonas(id)
+                selectedIds.remove(id)
+            }
             reloadList()
         }
 
@@ -121,6 +154,24 @@ class LoreBooksListActivity : FragmentActivity() {
         activityTitle = findViewById(R.id.activity_title)
         listView = findViewById(R.id.list_view)
         actionBar = findViewById(R.id.action_bar)
+        fieldSearch = findViewById(R.id.field_search)
+        btnFilterTag = findViewById(R.id.btn_filter_tag)
+
+        pickMode = intent.getBooleanExtra(EXTRA_PICK_MODE, false)
+        if (pickMode) {
+            selectedIds = HashSet(intent.getStringArrayListExtra(EXTRA_SELECTED_IDS) ?: arrayListOf())
+            // The system back gesture also saves: leaving the picker by any
+            // route returns the current selection.
+            onBackPressedDispatcher.addCallback(this) { finishWithSelection() }
+            activityTitle?.text = getString(R.string.title_add_lorebooks)
+            btnAdd?.text = getString(R.string.btn_save_and_close)
+            btnAdd?.setIconResource(R.drawable.ic_done)
+            // The debug button doubles as "new book" in pick mode so books can
+            // still be created mid-pick.
+            btnDebug?.setImageResource(R.drawable.ic_add)
+            btnDebug?.contentDescription = getString(R.string.btn_new_lorebook)
+            btnDebug?.tooltipText = getString(R.string.btn_new_lorebook)
+        }
 
         val preferences = Preferences.getPreferences(this, "")
 
@@ -157,21 +208,58 @@ class LoreBooksListActivity : FragmentActivity() {
         initialize()
     }
 
+    private fun finishWithSelection() {
+        val resultIntent = Intent()
+        resultIntent.putStringArrayListExtra(EXTRA_SELECTED_IDS, ArrayList(selectedIds))
+        setResult(RESULT_OK, resultIntent)
+        finish()
+    }
+
+    private fun matchesFilters(book: LoreBook): Boolean {
+        if (tagFilter.isNotEmpty() && !book.tag.equals(tagFilter, ignoreCase = true)) return false
+        if (searchQuery.isBlank()) return true
+        val q = searchQuery.trim().lowercase()
+        return book.name.lowercase().contains(q) ||
+                book.description.lowercase().contains(q) ||
+                book.tag.lowercase().contains(q)
+    }
+
     private fun reloadList() {
-        list.clear()
+        allBooks = store!!.getAllBooks()
         counts.clear()
-        val books = store!!.getAllBooks()
-        for (book in books) {
+        for (book in allBooks) {
             counts[book.id] = store!!.getEntryCount(book.id)
         }
-        list.addAll(books)
+        applyFilters()
+    }
+
+    private fun applyFilters() {
+        list = ArrayList(allBooks.filter { matchesFilters(it) })
 
         runOnUiThread {
-            adapter = LoreBookAdapter(list, counts, this)
+            adapter = LoreBookAdapter(list, counts, this, pickMode, selectedIds)
             adapter!!.setOnSelectListener(onSelectListener)
             listView!!.adapter = adapter
             adapter!!.notifyDataSetChanged()
         }
+    }
+
+    private fun showTagFilterChooser() {
+        val tags = store!!.getAllTags()
+        val labels = arrayListOf(getString(R.string.lorebook_filter_all_types))
+        labels.addAll(tags)
+        val current = (tags.indexOfFirst { it.equals(tagFilter, ignoreCase = true) } + 1)
+
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.lorebook_filter_by_type)
+            .setSingleChoiceItems(labels.toTypedArray(), current) { dialog, which ->
+                tagFilter = if (which == 0) "" else tags[which - 1]
+                btnFilterTag?.text = if (tagFilter.isEmpty()) getString(R.string.lorebook_filter_all_types) else tagFilter
+                applyFilters()
+                dialog.dismiss()
+            }
+            .setNegativeButton(R.string.btn_cancel) { _, _ -> }
+            .show()
     }
 
     private fun isDarkThemeEnabled(): Boolean {
@@ -188,15 +276,37 @@ class LoreBooksListActivity : FragmentActivity() {
         reloadList()
 
         btnBack!!.setOnClickListener {
-            finish()
+            if (pickMode) {
+                // "Save and go back": leaving the picker never discards picks.
+                finishWithSelection()
+            } else {
+                finish()
+            }
         }
 
         btnDebug!!.setOnClickListener {
-            startActivity(Intent(this, LoreBookDebugActivity::class.java))
+            if (pickMode) {
+                openEditDialog(-1)
+            } else {
+                startActivity(Intent(this, LoreBookDebugActivity::class.java))
+            }
         }
 
         btnAdd!!.setOnClickListener {
-            openEditDialog(-1)
+            if (pickMode) {
+                finishWithSelection()
+            } else {
+                openEditDialog(-1)
+            }
+        }
+
+        fieldSearch?.doAfterTextChanged { text ->
+            searchQuery = text?.toString() ?: ""
+            applyFilters()
+        }
+
+        btnFilterTag?.setOnClickListener {
+            showTagFilterChooser()
         }
     }
 

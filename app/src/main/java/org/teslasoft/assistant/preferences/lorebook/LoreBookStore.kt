@@ -48,12 +48,14 @@ class LoreBookStore private constructor(context: Context) :
 
         // v1: single flat memory pool.
         // v2: introduced lorebooks; memories scoped by lorebook_id.
-        private const val DATABASE_VERSION = 2
+        // v3: lorebooks gained a single "tag" (type) column for filtering.
+        private const val DATABASE_VERSION = 3
 
         private const val TABLE_BOOKS = "lorebooks"
         private const val COL_BOOK_ID = "id"
         private const val COL_BOOK_NAME = "name"
         private const val COL_BOOK_DESCRIPTION = "description"
+        private const val COL_BOOK_TAG = "tag"
         private const val COL_BOOK_CREATED_AT = "created_at"
         private const val COL_BOOK_UPDATED_AT = "updated_at"
 
@@ -71,6 +73,12 @@ class LoreBookStore private constructor(context: Context) :
         private const val COL_TRIGGER_ROW_ID = "_id"
         private const val COL_TRIGGER_MEMORY_ID = "memory_id"
         private const val COL_TRIGGER_TEXT = "trigger_text"
+
+        // Injection safety budget: if many memories trigger at once, only this
+        // many entries / characters are injected per request (core book first),
+        // so a trigger-storm can't flood the model's context or the user's bill.
+        const val MAX_INJECTED_ENTRIES = 20
+        const val MAX_INJECTED_CHARS = 6000
 
         @Volatile
         private var instance: LoreBookStore? = null
@@ -107,6 +115,11 @@ class LoreBookStore private constructor(context: Context) :
             val values = ContentValues().apply { put(COL_LOREBOOK_ID, defaultBookId) }
             db.update(TABLE_ENTRIES, values, "$COL_LOREBOOK_ID = ? OR $COL_LOREBOOK_ID IS NULL", arrayOf(""))
         }
+
+        // v2 -> v3: lorebooks gain a single tag for type filtering.
+        if (oldVersion in 2 until 3) {
+            db.execSQL("ALTER TABLE $TABLE_BOOKS ADD COLUMN $COL_BOOK_TAG TEXT NOT NULL DEFAULT ''")
+        }
     }
 
     override fun onConfigure(db: SQLiteDatabase) {
@@ -120,6 +133,7 @@ class LoreBookStore private constructor(context: Context) :
                 "$COL_BOOK_ID TEXT PRIMARY KEY, " +
                 "$COL_BOOK_NAME TEXT NOT NULL DEFAULT '', " +
                 "$COL_BOOK_DESCRIPTION TEXT NOT NULL DEFAULT '', " +
+                "$COL_BOOK_TAG TEXT NOT NULL DEFAULT '', " +
                 "$COL_BOOK_CREATED_AT INTEGER NOT NULL DEFAULT 0, " +
                 "$COL_BOOK_UPDATED_AT INTEGER NOT NULL DEFAULT 0" +
                 ")"
@@ -183,6 +197,7 @@ class LoreBookStore private constructor(context: Context) :
             put(COL_BOOK_ID, saved.id)
             put(COL_BOOK_NAME, saved.name)
             put(COL_BOOK_DESCRIPTION, saved.description)
+            put(COL_BOOK_TAG, saved.tag.trim())
             put(COL_BOOK_CREATED_AT, saved.createdAt)
             put(COL_BOOK_UPDATED_AT, saved.updatedAt)
         }
@@ -227,6 +242,21 @@ class LoreBookStore private constructor(context: Context) :
         return books
     }
 
+    /** Distinct non-empty tags across all books, for the type filter. */
+    fun getAllTags(): ArrayList<String> {
+        val tags = ArrayList<String>()
+        val cursor = readableDatabase.query(
+            true, TABLE_BOOKS, arrayOf(COL_BOOK_TAG), "$COL_BOOK_TAG != ''", null, null, null, "$COL_BOOK_TAG ASC", null
+        )
+        cursor.use {
+            while (it.moveToNext()) {
+                val t = it.getString(0)
+                if (!t.isNullOrBlank()) tags.add(t)
+            }
+        }
+        return tags
+    }
+
     /** Number of enabled/total memories in a book, for list subtitles. */
     fun getEntryCount(lorebookId: String): Int {
         val cursor = readableDatabase.query(
@@ -240,6 +270,7 @@ class LoreBookStore private constructor(context: Context) :
             id = c.getString(c.getColumnIndexOrThrow(COL_BOOK_ID)),
             name = c.getString(c.getColumnIndexOrThrow(COL_BOOK_NAME)) ?: "",
             description = c.getString(c.getColumnIndexOrThrow(COL_BOOK_DESCRIPTION)) ?: "",
+            tag = c.getString(c.getColumnIndexOrThrow(COL_BOOK_TAG)) ?: "",
             createdAt = c.getLong(c.getColumnIndexOrThrow(COL_BOOK_CREATED_AT)),
             updatedAt = c.getLong(c.getColumnIndexOrThrow(COL_BOOK_UPDATED_AT))
         )

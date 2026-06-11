@@ -38,6 +38,7 @@ class EditLoreBookDialogFragment : DialogFragment() {
             args.putString("id", book.id)
             args.putString("name", book.name)
             args.putString("description", book.description)
+            args.putString("tag", book.tag)
             args.putLong("createdAt", book.createdAt)
             args.putInt("position", position)
 
@@ -50,6 +51,7 @@ class EditLoreBookDialogFragment : DialogFragment() {
     private var textDialogTitle: TextView? = null
     private var fieldName: TextInputEditText? = null
     private var fieldDescription: TextInputEditText? = null
+    private var fieldTag: TextInputEditText? = null
 
     private var builder: AlertDialog.Builder? = null
 
@@ -67,9 +69,11 @@ class EditLoreBookDialogFragment : DialogFragment() {
         textDialogTitle = view.findViewById(R.id.text_dialog_title)
         fieldName = view.findViewById(R.id.field_name)
         fieldDescription = view.findViewById(R.id.field_description)
+        fieldTag = view.findViewById(R.id.field_tag)
 
         fieldName?.setText(requireArguments().getString("name"))
         fieldDescription?.setText(requireArguments().getString("description"))
+        fieldTag?.setText(requireArguments().getString("tag"))
 
         if (requireArguments().getInt("position") == -1) {
             textDialogTitle?.text = getString(R.string.label_add_lorebook)
@@ -106,6 +110,7 @@ class EditLoreBookDialogFragment : DialogFragment() {
             id = requireArguments().getString("id") ?: "",
             name = fieldName?.text.toString().trim(),
             description = fieldDescription?.text.toString().trim(),
+            tag = fieldTag?.text.toString().trim(),
             createdAt = requireArguments().getLong("createdAt")
         )
     }

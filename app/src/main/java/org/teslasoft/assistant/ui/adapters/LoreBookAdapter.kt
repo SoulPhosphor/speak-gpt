@@ -25,17 +25,23 @@ import android.widget.BaseAdapter
 import android.widget.ImageButton
 import android.widget.TextView
 import androidx.constraintlayout.widget.ConstraintLayout
+import com.google.android.material.checkbox.MaterialCheckBox
 import com.google.android.material.elevation.SurfaceColors
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.dto.LoreBook
 
 /**
  * Lists lorebooks. Tapping a row opens its memories; the cog edits the book itself.
+ *
+ * In pick mode (adding books to a persona) each row instead shows a checkbox and
+ * tapping toggles whether the book is selected; [selectedIds] carries the state.
  */
 class LoreBookAdapter(
     private val dataArray: ArrayList<LoreBook>,
     private val counts: HashMap<String, Int>,
-    private var mContext: Context
+    private var mContext: Context,
+    private val pickMode: Boolean = false,
+    private val selectedIds: HashSet<String> = hashSetOf()
 ) : BaseAdapter() {
     override fun getCount(): Int {
         return dataArray.size
@@ -69,13 +75,18 @@ class LoreBookAdapter(
         val bookCount: TextView? = mView?.findViewById(R.id.book_count)
         val bookDescription: TextView? = mView?.findViewById(R.id.book_description)
         val btnEdit: ImageButton? = mView?.findViewById(R.id.btn_edit_book)
+        val checkPick: MaterialCheckBox? = mView?.findViewById(R.id.check_pick)
 
         val item = dataArray[position]
 
         bookName?.text = item.name
 
         val count = counts[item.id] ?: 0
-        bookCount?.text = mContext.resources.getQuantityString(R.plurals.lorebook_memory_count, count, count)
+        var subtitle = mContext.resources.getQuantityString(R.plurals.lorebook_memory_count, count, count)
+        if (item.tag.isNotBlank()) {
+            subtitle = "$subtitle · ${item.tag}"
+        }
+        bookCount?.text = subtitle
 
         if (item.description.isBlank()) {
             bookDescription?.visibility = View.GONE
@@ -84,10 +95,23 @@ class LoreBookAdapter(
             bookDescription?.text = item.description
         }
 
+        if (pickMode) {
+            checkPick?.visibility = View.VISIBLE
+            checkPick?.isChecked = selectedIds.contains(item.id)
+        } else {
+            checkPick?.visibility = View.GONE
+        }
+
         ui?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_2.getColor(mContext))
 
         ui?.setOnClickListener {
-            listener?.onClick(position)
+            if (pickMode) {
+                if (!selectedIds.remove(item.id)) selectedIds.add(item.id)
+                checkPick?.isChecked = selectedIds.contains(item.id)
+                listener?.onSelectionChanged()
+            } else {
+                listener?.onClick(position)
+            }
         }
 
         ui?.setOnLongClickListener {
@@ -105,5 +129,6 @@ class LoreBookAdapter(
     interface OnSelectListener {
         fun onClick(position: Int)
         fun onSettingsClick(position: Int)
+        fun onSelectionChanged() { /* pick mode only */ }
     }
 }

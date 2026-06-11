@@ -170,6 +170,7 @@ import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.LogitBiasPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.lorebook.LoreBookInjectionLog
+import org.teslasoft.assistant.preferences.lorebook.LoreBookMatch
 import org.teslasoft.assistant.preferences.lorebook.LoreBookStore
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.stt.LocalWhisperEngine
@@ -2535,12 +2536,39 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         }
     }
 
+    /**
+     * Seed a brand-new chat's checked additional lorebooks from the persona's
+     * last-used set — but only when the persona has opted in via its
+     * "auto-enable last-used lorebooks" toggle. One-shot per chat (same pattern
+     * as [seedPersonaAndActivationDefaults]); afterwards the chat's own Quick
+     * Settings selection always wins. Books that have since been deleted or
+     * unlinked from the persona are skipped.
+     */
+    private fun seedLoreBooksForNewChat() {
+        if (preferences?.isLoreBooksSeeded() == true) return
+        preferences?.setLoreBooksSeeded(true)
+
+        val personaId = preferences?.getPersonaId().orEmpty()
+        if (personaId.isEmpty()) return
+
+        val persona = PersonaPreferences.getPersonaPreferences(this).getPersona(personaId)
+        if (!persona.autoLoadLastLoreBooks) return
+
+        val linked = persona.additionalLoreBookIdList()
+        val store = LoreBookStore.getInstance(this)
+        val ids = persona.lastUsedLoreBookIdList().filter { linked.contains(it) && store.getBook(it) != null }
+        if (ids.isNotEmpty()) {
+            preferences?.setActiveLoreBookIds(ids)
+        }
+    }
+
     /*
     * Setup SpeakGPT with activation prompt.
     * */
     private fun setup() {
         if (messages.isEmpty()) {
             seedPersonaAndActivationDefaults()
+            seedLoreBooksForNewChat()
             val prompt: String = preferences!!.getPrompt()
 
             if (prompt.toString() != "" && prompt.toString() != "null" && prompt != "") {
@@ -3460,13 +3488,44 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             )
         }
 
-        // Lorebook (memory system, Phase 1): from the chat's active lorebook, find
-        // memories whose triggers appear in the user's latest message and inject them
-        // as their own System message, placed after the base prompt so prefix caching
-        // of the stable prompt holds.
-        val activeLoreBookId = preferences?.getLoreBookId() ?: ""
-        val loreMatches = LoreBookStore.getInstance(this).findMatches(lastUserMessageForLore, activeLoreBookId)
-        if (loreMatches.isNotEmpty()) {
+        // Lorebook (memory system): match the user's latest message against the
+        // persona's core lorebook (always active when the persona is used) plus
+        // whichever additional lorebooks are checked for this chat, and inject the
+        // matched memories as their own System message, placed after the base
+        // prompt so prefix caching of the stable prompt holds.
+        val loreStore = LoreBookStore.getInstance(this)
+        val activeBookIds = LinkedHashSet<String>()
+        val checkedIds = preferences?.getActiveLoreBookIds() ?: arrayListOf()
+        if (personaId != "") {
+            val loreBookPersona = PersonaPreferences.getPersonaPreferences(this).getPersona(personaId)
+            // Core book first: when the injection budget truncates, core memories win.
+            if (loreBookPersona.coreLoreBookId != "") activeBookIds.add(loreBookPersona.coreLoreBookId)
+            // Only books still linked to the persona count; a stale checked id
+            // left over from before an unlink must not keep injecting.
+            val linked = loreBookPersona.additionalLoreBookIdList()
+            activeBookIds.addAll(checkedIds.filter { linked.contains(it) })
+        } else {
+            activeBookIds.addAll(checkedIds)
+        }
+
+        val allLoreMatches = ArrayList<LoreBookMatch>()
+        for (bookId in activeBookIds) {
+            allLoreMatches.addAll(loreStore.findMatches(lastUserMessageForLore, bookId))
+        }
+
+        if (allLoreMatches.isNotEmpty()) {
+            // Safety budget: a message that trips many triggers at once must not
+            // flood the context. Inject at most MAX_INJECTED_ENTRIES memories /
+            // MAX_INJECTED_CHARS characters, in book order (core book first).
+            val loreMatches = ArrayList<LoreBookMatch>()
+            var loreChars = 0
+            for (match in allLoreMatches) {
+                if (loreMatches.size >= LoreBookStore.MAX_INJECTED_ENTRIES) break
+                if (loreMatches.isNotEmpty() && loreChars + match.entry.content.length > LoreBookStore.MAX_INJECTED_CHARS) break
+                loreChars += match.entry.content.length
+                loreMatches.add(match)
+            }
+
             val loreText = StringBuilder(getString(R.string.lorebook_injection_header))
             for (match in loreMatches) {
                 loreText.append("\n- ").append(match.entry.content)
@@ -3616,6 +3675,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     val personaId = preferences.getPersonaId()
                     val activationPromptId = preferences.getActivationPromptId()
                     val personaActivationSeeded = preferences.isPersonaActivationSeeded()
+                    val activeLoreBookIds = preferences.getActiveLoreBookIds()
+                    val loreBooksSeeded = preferences.isLoreBooksSeeded()
 
                     preferences.setPreferences(Hash.hash(newChatName.toString()), this)
                     preferences.setResolution(resolution)
@@ -3644,6 +3705,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     preferences.setPersonaId(personaId)
                     preferences.setActivationPromptId(activationPromptId)
                     preferences.setPersonaActivationSeeded(personaActivationSeeded)
+                    preferences.setActiveLoreBookIds(activeLoreBookIds)
+                    preferences.setLoreBooksSeeded(loreBooksSeeded)
 
                     activityTitle?.text = newChatName.toString()
 

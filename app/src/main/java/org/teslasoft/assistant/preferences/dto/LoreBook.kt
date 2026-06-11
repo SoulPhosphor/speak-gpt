@@ -31,6 +31,10 @@ data class LoreBook(
     /* Optional longer description of what this lorebook is for. */
     var description: String = "",
 
+    /* Optional single tag categorizing the book (e.g. "Characters", "World").
+     * Used by the lorebook list to filter by type. */
+    var tag: String = "",
+
     /* Epoch millis. */
     var createdAt: Long = 0L,
     var updatedAt: Long = 0L

@@ -27,6 +27,8 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageButton
+import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.constraintlayout.widget.ConstraintLayout
@@ -35,6 +37,7 @@ import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.elevation.SurfaceColors
+import com.google.android.material.checkbox.MaterialCheckBox
 import com.google.android.material.textfield.TextInputEditText
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.ActivationPromptPreferences
@@ -43,11 +46,13 @@ import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
 import org.teslasoft.assistant.preferences.LogitBiasConfigPreferences
 import org.teslasoft.assistant.preferences.PersonaPreferences
 import org.teslasoft.assistant.preferences.Preferences
-import org.teslasoft.assistant.preferences.lorebook.LoreBookStore
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
+import org.teslasoft.assistant.preferences.dto.PersonaObject
+import org.teslasoft.assistant.preferences.lorebook.LoreBookStore
 import org.teslasoft.assistant.ui.activities.ActivationPromptsListActivity
 import org.teslasoft.assistant.ui.activities.ApiEndpointsListActivity
 import org.teslasoft.assistant.ui.activities.LogitBiasConfigListActivity
+import org.teslasoft.assistant.ui.activities.LoreBookEntriesActivity
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import org.teslasoft.assistant.ui.activities.PersonasListActivity
 import org.teslasoft.core.api.network.RequestNetwork
@@ -92,6 +97,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     private var textActivation: TextView? = null
 
     private var textLoreBook: TextView? = null
+    private var lorebookCheckList: LinearLayout? = null
 
     private var temperatureSeekbar: com.google.android.material.slider.Slider? = null
     private var topPSeekbar: com.google.android.material.slider.Slider? = null
@@ -212,6 +218,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
                 // "none" (empty), so the latest choice always wins.
                 preferences?.setLastUsedPersonaId(personaId)
                 updatePersonaLabel(personaId)
+                renderLoreBookList()
                 shouldForceUpdate = true
             }
         }
@@ -261,36 +268,91 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         }
     }
 
-    private fun updateLoreBookLabel(lorebookId: String) {
-        textLoreBook?.text = if (lorebookId != "") {
-            val name = LoreBookStore.getInstance(requireContext()).getBook(lorebookId)?.name ?: ""
-            if (name != "") name else getString(R.string.label_lorebook_none)
+    /**
+     * Rebuild the lorebook checklist for this chat. With a persona selected the
+     * list offers the persona's linked additional lorebooks (the core book is
+     * never listed — it is always active — but is named in the subtitle).
+     * Without a persona the whole collection is offered. Checking/unchecking
+     * persists immediately, so the selection can vary mid-conversation, and is
+     * also recorded on the persona as its "last used" set for auto-load.
+     */
+    private fun renderLoreBookList() {
+        val container = lorebookCheckList ?: return
+        container.removeAllViews()
+
+        val store = LoreBookStore.getInstance(requireContext())
+        val personaId = preferences?.getPersonaId() ?: ""
+        val persona = if (personaId != "") personaPreferences?.getPersona(personaId) else null
+
+        val coreBookName = persona?.coreLoreBookId?.takeIf { it.isNotEmpty() }?.let { store.getBook(it)?.name }
+        textLoreBook?.text = if (coreBookName != null) {
+            getString(R.string.lorebook_core_always_active, coreBookName)
         } else {
-            getString(R.string.label_lorebook_none)
-        }
-    }
-
-    private fun showLoreBookChooser() {
-        val books = LoreBookStore.getInstance(requireContext()).getAllBooks()
-        val ids = arrayListOf("")
-        val labels = arrayListOf(getString(R.string.label_lorebook_none))
-        for (book in books) {
-            ids.add(book.id)
-            labels.add(book.name)
+            getString(R.string.lorebook_subtitle)
         }
 
-        val current = ids.indexOf(preferences?.getLoreBookId() ?: "").coerceAtLeast(0)
+        val offeredBooks = if (persona != null) {
+            // The core book is always active, so it never appears as a checkbox —
+            // even if it was also linked as an additional book.
+            persona.additionalLoreBookIdList()
+                .filter { it != persona.coreLoreBookId }
+                .mapNotNull { store.getBook(it) }
+        } else {
+            store.getAllBooks()
+        }
 
-        MaterialAlertDialogBuilder(requireContext(), R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.label_lorebook)
-            .setSingleChoiceItems(labels.toTypedArray(), current) { dialog, which ->
-                val selectedId = ids[which]
-                preferences?.setLoreBookId(selectedId)
-                updateLoreBookLabel(selectedId)
-                dialog.dismiss()
+        // Prune checked ids that are no longer offered (book deleted/unlinked).
+        val offeredIds = offeredBooks.map { it.id }
+        val activeIds = LinkedHashSet((preferences?.getActiveLoreBookIds() ?: arrayListOf()).filter { offeredIds.contains(it) })
+
+        if (offeredBooks.isEmpty()) {
+            val empty = TextView(requireContext())
+            empty.text = getString(
+                if (persona != null) R.string.lorebook_none_linked else R.string.lorebook_none_yet
+            )
+            empty.setTextColor(resources.getColor(R.color.text_subtitle, requireContext().theme))
+            empty.textSize = 13f
+            empty.setPadding(24, 8, 24, 16)
+            container.addView(empty)
+            return
+        }
+
+        for (book in offeredBooks) {
+            val row = layoutInflater.inflate(R.layout.view_lorebook_check_row, container, false)
+
+            row.findViewById<TextView>(R.id.row_name)?.text = book.name
+
+            val description = row.findViewById<TextView>(R.id.row_description)
+            if (book.description.isBlank()) {
+                description?.visibility = View.GONE
+            } else {
+                description?.visibility = View.VISIBLE
+                description?.text = book.description
             }
-            .setNegativeButton(R.string.btn_cancel) { _, _ -> }
-            .show()
+
+            val check = row.findViewById<MaterialCheckBox>(R.id.row_check)
+            check?.isChecked = activeIds.contains(book.id)
+            check?.setOnCheckedChangeListener { _, isChecked ->
+                if (isChecked) activeIds.add(book.id) else activeIds.remove(book.id)
+                preferences?.setActiveLoreBookIds(activeIds.toList())
+                if (persona != null) {
+                    // Remember for "auto-enable last-used lorebooks" on new chats.
+                    personaPreferences?.setLastUsedLoreBookIds(personaId, PersonaObject.joinIds(activeIds.toList()))
+                }
+            }
+            // Tapping anywhere on the row toggles, not just the small box.
+            row.setOnClickListener { check?.isChecked = check?.isChecked != true }
+
+            row.findViewById<ImageButton>(R.id.row_btn_edit)?.setOnClickListener {
+                // Checks persist as they are made, so nothing is lost by leaving.
+                val intent = Intent(requireContext(), LoreBookEntriesActivity::class.java)
+                intent.putExtra("lorebookId", book.id)
+                intent.putExtra("lorebookName", book.name)
+                startActivity(intent)
+            }
+
+            container.addView(row)
+        }
     }
 
     private var systemChangedListener: SystemMessageDialogFragment.StateChangesListener =
@@ -384,6 +446,13 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         updateListener = listener
     }
 
+    override fun onResume() {
+        super.onResume()
+        // Coming back from the gear (entries editor) or the persona screen may
+        // have changed books, links, or names — rebuild the checklist.
+        if (lorebookCheckList != null) renderLoreBookList()
+    }
+
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
         return inflater.inflate(R.layout.fragment_quick_settings, container, false)
     }
@@ -411,6 +480,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         textActivation = view.findViewById(R.id.text_activation)
         btnSelectLoreBook = view.findViewById(R.id.btn_select_lorebook)
         textLoreBook = view.findViewById(R.id.text_lorebook)
+        lorebookCheckList = view.findViewById(R.id.lorebook_check_list)
         bgTemperature = view.findViewById(R.id.bg_temperature)
         bgTopP = view.findViewById(R.id.bg_top_p)
         bgFrequencyPenalty = view.findViewById(R.id.bg_frequency_penalty)
@@ -448,7 +518,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         textHost?.text = if (apiEndpoint?.label != "") apiEndpoint?.label ?: getString(R.string.label_tap_to_set) else getString(R.string.label_tap_to_set)
         updatePersonaLabel(preferences?.getPersonaId() ?: "")
         updateActivationLabel(preferences?.getActivationPromptId() ?: "")
-        updateLoreBookLabel(preferences?.getLoreBookId() ?: "")
+        renderLoreBookList()
         textLogitBiasesConfig?.text = if (preferences?.getLogitBiasesConfigId() != "") {
             logitBiasConfigPreferences?.getConfigById(preferences?.getLogitBiasesConfigId()!!)?.get("label") ?: getString(R.string.label_tap_to_set)
         } else {
@@ -564,10 +634,6 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
             intent.putExtra("pickMode", true)
             intent.putExtra("currentActivationId", preferences?.getActivationPromptId() ?: "")
             activationActivityResultLauncher.launch(intent)
-        }
-
-        btnSelectLoreBook?.setOnClickListener {
-            showLoreBookChooser()
         }
 
         btnSaveToProfile?.setOnClickListener {

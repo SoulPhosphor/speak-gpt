@@ -74,7 +74,6 @@
             android:layout_marginStart="24dp"
             android:layout_marginTop="12dp"
             android:layout_marginEnd="24dp"
-            android:layout_marginBottom="24dp"
             android:textColorHint="@color/text_hint"
             app:boxStrokeColor="@drawable/box_stroke_color"
             app:boxCornerRadiusBottomEnd="16dp"
@@ -95,6 +94,35 @@
                 android:hint="@string/lorebook_description_hint"
                 android:inputType="textMultiLine|textCapSentences"
                 android:minLines="2"
+                android:textColorHint="@color/text_hint" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/textInputLayoutTag"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="24dp"
+            android:layout_marginTop="12dp"
+            android:layout_marginEnd="24dp"
+            android:layout_marginBottom="24dp"
+            android:textColorHint="@color/text_hint"
+            app:boxStrokeColor="@drawable/box_stroke_color"
+            app:boxCornerRadiusBottomEnd="16dp"
+            app:boxCornerRadiusBottomStart="16dp"
+            app:boxCornerRadiusTopEnd="16dp"
+            app:boxCornerRadiusTopStart="16dp"
+            app:helperTextEnabled="true"
+            app:helperText="@string/lorebook_tag_help"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/textInputLayoutDescription">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/field_tag"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/lorebook_tag_hint"
+                android:singleLine="true"
                 android:textColorHint="@color/text_hint" />
         </com.google.android.material.textfield.TextInputLayout>
     </androidx.constraintlayout.widget.ConstraintLayout>
