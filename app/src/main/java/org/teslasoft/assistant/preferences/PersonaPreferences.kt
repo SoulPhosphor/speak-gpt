@@ -53,7 +53,14 @@ class PersonaPreferences private constructor(private var preferences: SharedPref
         val label = getString(id + "_label", "")
         val prompt = getString(id + "_prompt", "")
         val activationPromptId = getString(id + "_activation_prompt_id", "")
-        return PersonaObject(label, prompt, activationPromptId)
+        val coreLoreBookId = getString(id + "_core_lorebook_id", "")
+        val additionalLoreBookIds = getString(id + "_additional_lorebook_ids", "")
+        val autoLoadLastLoreBooks = getString(id + "_autoload_last_lorebooks", "false") == "true"
+        val lastUsedLoreBookIds = getString(id + "_last_used_lorebook_ids", "")
+        return PersonaObject(
+            label, prompt, activationPromptId,
+            coreLoreBookId, additionalLoreBookIds, autoLoadLastLoreBooks, lastUsedLoreBookIds
+        )
     }
 
     fun setPersona(persona: PersonaObject) {
@@ -61,9 +68,48 @@ class PersonaPreferences private constructor(private var preferences: SharedPref
         putString(id + "_label", persona.label)
         putString(id + "_prompt", persona.prompt)
         putString(id + "_activation_prompt_id", persona.activationPromptId)
+        putString(id + "_core_lorebook_id", persona.coreLoreBookId)
+        putString(id + "_additional_lorebook_ids", persona.additionalLoreBookIds)
+        putString(id + "_autoload_last_lorebooks", if (persona.autoLoadLastLoreBooks) "true" else "false")
+        putString(id + "_last_used_lorebook_ids", persona.lastUsedLoreBookIds)
 
         for (listener in listeners) {
             listener.onPersonaChange()
+        }
+    }
+
+    /**
+     * Record which additional lorebooks a chat last had checked for this
+     * persona, so autoLoadLastLoreBooks can restore them in a new chat.
+     * Touches only the bookkeeping key, never the persona's own fields.
+     */
+    fun setLastUsedLoreBookIds(personaId: String, joinedIds: String) {
+        putString(personaId + "_last_used_lorebook_ids", joinedIds)
+    }
+
+    /**
+     * Drop a deleted lorebook from every persona that references it, so no
+     * persona keeps pointing at a book that no longer exists.
+     */
+    fun removeLoreBookFromAllPersonas(lorebookId: String) {
+        if (lorebookId.isEmpty()) return
+        for (persona in getPersonasList()) {
+            var changed = false
+            if (persona.coreLoreBookId == lorebookId) {
+                persona.coreLoreBookId = ""
+                changed = true
+            }
+            val additional = persona.additionalLoreBookIdList()
+            if (additional.remove(lorebookId)) {
+                persona.additionalLoreBookIds = PersonaObject.joinIds(additional)
+                changed = true
+            }
+            val lastUsed = persona.lastUsedLoreBookIdList()
+            if (lastUsed.remove(lorebookId)) {
+                persona.lastUsedLoreBookIds = PersonaObject.joinIds(lastUsed)
+                changed = true
+            }
+            if (changed) setPersona(persona)
         }
     }
 
@@ -71,6 +117,10 @@ class PersonaPreferences private constructor(private var preferences: SharedPref
         preferences.edit { remove(id + "_label") }
         preferences.edit { remove(id + "_prompt") }
         preferences.edit { remove(id + "_activation_prompt_id") }
+        preferences.edit { remove(id + "_core_lorebook_id") }
+        preferences.edit { remove(id + "_additional_lorebook_ids") }
+        preferences.edit { remove(id + "_autoload_last_lorebooks") }
+        preferences.edit { remove(id + "_last_used_lorebook_ids") }
 
         for (listener in listeners) {
             listener.onPersonaChange()

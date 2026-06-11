@@ -35,99 +35,67 @@ import androidx.fragment.app.FragmentActivity
 import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
 import org.teslasoft.assistant.R
-import org.teslasoft.assistant.preferences.PersonaPreferences
 import org.teslasoft.assistant.preferences.Preferences
-import org.teslasoft.assistant.preferences.dto.PersonaObject
+import org.teslasoft.assistant.preferences.dto.LoreBookEntry
+import org.teslasoft.assistant.preferences.lorebook.LoreBookStore
 import org.teslasoft.assistant.theme.ThemeManager
-import org.teslasoft.assistant.ui.adapters.PersonaListItemAdapter
-import org.teslasoft.assistant.ui.fragments.dialogs.EditPersonaDialogFragment
-import org.teslasoft.assistant.util.Hash
+import org.teslasoft.assistant.ui.adapters.LoreBookItemAdapter
+import org.teslasoft.assistant.ui.fragments.dialogs.EditLoreBookEntryDialogFragment
 
-class PersonasListActivity : FragmentActivity() {
+/**
+ * Lists the memories inside a single lorebook. The lorebook is passed in via the
+ * "lorebookId" / "lorebookName" intent extras.
+ */
+class LoreBookEntriesActivity : FragmentActivity() {
 
     private var btnAdd: ExtendedFloatingActionButton? = null
     private var btnBack: ImageButton? = null
+    private var btnDebug: ImageButton? = null
     private var activityTitle: TextView? = null
     private var listView: ListView? = null
-
-    private var list: ArrayList<HashMap<String, String>> = arrayListOf()
-    private var adapter: PersonaListItemAdapter? = null
-
-    private var personaPreferences: PersonaPreferences? = null
-
     private var actionBar: ConstraintLayout? = null
 
-    // The persona currently active for the chat, so the list can highlight it.
-    private var currentPersonaId: String = ""
+    private var list: ArrayList<LoreBookEntry> = arrayListOf()
+    private var adapter: LoreBookItemAdapter? = null
 
-    private fun newEditDialog(persona: PersonaObject, position: Int): EditPersonaDialogFragment {
-        return EditPersonaDialogFragment.newInstance(persona, position)
-    }
+    private var store: LoreBookStore? = null
 
-    private fun newEmptyPersona(): PersonaObject {
-        return PersonaObject("", "")
-    }
+    private var lorebookId: String = ""
+    private var lorebookName: String = ""
 
     private fun openEditDialog(position: Int) {
-        val label = list[position]["label"] ?: return
-        val persona = personaPreferences!!.getPersona(Hash.hash(label))
-        val dialog = newEditDialog(persona, position)
+        val entry = if (position == -1) LoreBookEntry(lorebookId = lorebookId) else list[position]
+        val dialog = EditLoreBookEntryDialogFragment.newInstance(entry, position)
         dialog.setListener(editDialogListener)
         dialog.setCancelable(false)
-        dialog.show(supportFragmentManager, "EditPersonaDialogFragment")
+        dialog.show(supportFragmentManager, "EditLoreBookEntryDialogFragment")
     }
 
-    private fun finishWithActive(label: String) {
-        val resultIntent = Intent()
-        resultIntent.putExtra("personaId", Hash.hash(label))
-        setResult(RESULT_OK, resultIntent)
-        finish()
-    }
-
-    private var onSelectListener: PersonaListItemAdapter.OnSelectListener = object : PersonaListItemAdapter.OnSelectListener {
-        // Tapping the pill body selects the persona for the chat (the cog edits).
+    private var onSelectListener: LoreBookItemAdapter.OnSelectListener = object : LoreBookItemAdapter.OnSelectListener {
         override fun onClick(position: Int) {
-            val label = list[position]["label"] ?: return
-            finishWithActive(label)
-        }
-
-        override fun onLongClick(position: Int) {
-            openEditDialog(position)
-        }
-
-        override fun onSettingsClick(position: Int) {
             openEditDialog(position)
         }
     }
 
-    private var editDialogListener: EditPersonaDialogFragment.StateChangesListener = object : EditPersonaDialogFragment.StateChangesListener {
-        override fun onAdd(persona: PersonaObject) {
-            personaPreferences!!.setPersona(persona)
-            finishWithActive(persona.label)
+    private var editDialogListener: EditLoreBookEntryDialogFragment.StateChangesListener = object : EditLoreBookEntryDialogFragment.StateChangesListener {
+        override fun onAdd(entry: LoreBookEntry) {
+            store!!.saveEntry(entry)
+            reloadList()
         }
 
-        override fun onEdit(oldLabel: String, persona: PersonaObject, position: Int) {
-            personaPreferences!!.editPersona(list[position]["label"] ?: return, persona)
-            finishWithActive(persona.label)
+        override fun onEdit(entry: LoreBookEntry, position: Int) {
+            store!!.saveEntry(entry)
+            reloadList()
         }
 
         override fun onDelete(position: Int, id: String) {
-            personaPreferences!!.deletePersona(id)
+            if (id.isNotEmpty()) store!!.deleteEntry(id)
             reloadList()
         }
 
         override fun onError(message: String, position: Int) {
-            Toast.makeText(this@PersonasListActivity, message, Toast.LENGTH_SHORT).show()
-            val persona = if (position == -1) {
-                newEmptyPersona()
-            } else {
-                val label = list[position]["label"] ?: return
-                personaPreferences!!.getPersona(Hash.hash(label))
-            }
-            val dialog = newEditDialog(persona, position)
-            dialog.setListener(this)
-            dialog.setCancelable(false)
-            dialog.show(supportFragmentManager, "EditPersonaDialogFragment")
+            Toast.makeText(this@LoreBookEntriesActivity, message, Toast.LENGTH_SHORT).show()
+            openEditDialog(position)
         }
     }
 
@@ -135,13 +103,19 @@ class PersonasListActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        setContentView(R.layout.activity_persona_list)
+        setContentView(R.layout.activity_lorebook_entries)
+
+        lorebookId = intent.getStringExtra("lorebookId") ?: ""
+        lorebookName = intent.getStringExtra("lorebookName") ?: ""
 
         btnAdd = findViewById(R.id.btn_add)
         btnBack = findViewById(R.id.btn_back)
+        btnDebug = findViewById(R.id.btn_debug)
         activityTitle = findViewById(R.id.activity_title)
         listView = findViewById(R.id.list_view)
         actionBar = findViewById(R.id.action_bar)
+
+        if (lorebookName.isNotEmpty()) activityTitle?.text = lorebookName
 
         val preferences = Preferences.getPreferences(this, "")
 
@@ -157,6 +131,7 @@ class PersonasListActivity : FragmentActivity() {
 
             actionBar?.setBackgroundColor(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
             btnBack?.backgroundTintList = ColorStateList.valueOf(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
+            btnDebug?.backgroundTintList = ColorStateList.valueOf(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
         } else {
             val colorDrawable = SurfaceColors.SURFACE_0.getColor(this).toDrawable()
             window.setBackgroundDrawable(colorDrawable)
@@ -168,36 +143,22 @@ class PersonasListActivity : FragmentActivity() {
 
             actionBar?.setBackgroundColor(SurfaceColors.SURFACE_4.getColor(this))
             btnBack?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(this))
+            btnDebug?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(this))
         }
 
         listView?.divider = null
 
-        currentPersonaId = intent.getStringExtra("currentPersonaId") ?: ""
-
-        personaPreferences = PersonaPreferences.getPersonaPreferences(this)
+        store = LoreBookStore.getInstance(this)
         initialize()
     }
 
     private fun reloadList() {
-        if (list == null) list = arrayListOf()
-
         list.clear()
-        val personasList = personaPreferences!!.getPersonasList()
-
-        for (i in personasList) {
-            val map = HashMap<String, String>()
-            map["label"] = i.label
-            map["prompt"] = i.prompt
-            list.add(map)
-        }
-
-        // R8 bug fix
-        if (list == null) list = arrayListOf()
+        list.addAll(store!!.getEntries(lorebookId))
 
         runOnUiThread {
-            adapter = PersonaListItemAdapter(list, this)
+            adapter = LoreBookItemAdapter(list, this)
             adapter!!.setOnSelectListener(onSelectListener)
-            adapter!!.setSelectedId(currentPersonaId)
             listView!!.adapter = adapter
             adapter!!.notifyDataSetChanged()
         }
@@ -217,15 +178,15 @@ class PersonasListActivity : FragmentActivity() {
         reloadList()
 
         btnBack!!.setOnClickListener {
-            setResult(RESULT_CANCELED)
             finish()
         }
 
+        btnDebug!!.setOnClickListener {
+            startActivity(Intent(this, LoreBookDebugActivity::class.java))
+        }
+
         btnAdd!!.setOnClickListener {
-            val dialog = newEditDialog(newEmptyPersona(), -1)
-            dialog.setListener(editDialogListener)
-            dialog.setCancelable(false)
-            dialog.show(supportFragmentManager, "EditPersonaDialogFragment")
+            openEditDialog(-1)
         }
     }
 

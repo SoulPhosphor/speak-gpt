@@ -9,6 +9,8 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <uses-feature
@@ -71,6 +73,25 @@
             android:name=".ui.activities.PersonasListActivity"
             android:exported="false"
             android:label="@string/title_personas">
+        </activity>
+
+        <activity
+            android:name=".ui.activities.LoreBooksListActivity"
+            android:exported="false"
+            android:label="@string/title_lorebooks">
+        </activity>
+
+        <activity
+            android:name=".ui.activities.LoreBookEntriesActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize"
+            android:label="@string/title_lorebook">
+        </activity>
+
+        <activity
+            android:name=".ui.activities.LoreBookDebugActivity"
+            android:exported="false"
+            android:label="@string/title_lorebook_debug">
         </activity>
 
         <activity
@@ -332,5 +353,10 @@
             android:name=".service.HandsFreeService"
             android:exported="false"
             android:foregroundServiceType="microphone" />
+
+        <service
+            android:name=".service.GenerationForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
     </application>
 </manifest>

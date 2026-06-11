@@ -17,35 +17,44 @@
 package org.teslasoft.assistant.ui.fragments.dialogs
 
 import android.app.Dialog
+import android.content.Intent
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageButton
+import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.DialogFragment
+import com.google.android.material.button.MaterialButton
+import com.google.android.material.checkbox.MaterialCheckBox
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.ActivationPromptPreferences
+import org.teslasoft.assistant.preferences.PersonaPreferences
 import org.teslasoft.assistant.preferences.dto.PersonaObject
+import org.teslasoft.assistant.preferences.lorebook.LoreBookStore
+import org.teslasoft.assistant.ui.activities.LoreBookEntriesActivity
+import org.teslasoft.assistant.ui.activities.LoreBooksListActivity
 import org.teslasoft.assistant.util.Hash
 
 class EditPersonaDialogFragment : DialogFragment() {
     companion object {
-        fun newInstance(
-            label: String,
-            prompt: String,
-            activationPromptId: String,
-            position: Int
-        ): EditPersonaDialogFragment {
+        fun newInstance(persona: PersonaObject, position: Int): EditPersonaDialogFragment {
             val editPersonaDialogFragment = EditPersonaDialogFragment()
 
             val args = Bundle()
-            args.putString("label", label)
-            args.putString("prompt", prompt)
-            args.putString("activationPromptId", activationPromptId)
+            args.putString("label", persona.label)
+            args.putString("prompt", persona.prompt)
+            args.putString("activationPromptId", persona.activationPromptId)
+            args.putString("coreLoreBookId", persona.coreLoreBookId)
+            args.putString("additionalLoreBookIds", persona.additionalLoreBookIds)
+            args.putBoolean("autoLoadLastLoreBooks", persona.autoLoadLastLoreBooks)
+            args.putString("lastUsedLoreBookIds", persona.lastUsedLoreBookIds)
             args.putInt("position", position)
 
             editPersonaDialogFragment.arguments = args
@@ -58,12 +67,31 @@ class EditPersonaDialogFragment : DialogFragment() {
     private var fieldLabel: TextInputEditText? = null
     private var fieldPrompt: TextInputEditText? = null
     private var fieldActivationPrompt: TextInputEditText? = null
+    private var fieldCoreLoreBook: TextInputEditText? = null
+    private var additionalLoreBooksList: LinearLayout? = null
+    private var btnAddLoreBooks: MaterialButton? = null
+    private var checkboxAutoload: MaterialCheckBox? = null
 
     private var selectedActivationPromptId: String = ""
+    private var selectedCoreLoreBookId: String = ""
+    private var additionalLoreBookIds: ArrayList<String> = arrayListOf()
 
     private var builder: AlertDialog.Builder? = null
 
     private var listener: StateChangesListener? = null
+
+    private val pickLoreBooksLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            val ids = result.data?.getStringArrayListExtra(LoreBooksListActivity.EXTRA_SELECTED_IDS)
+            if (ids != null) {
+                additionalLoreBookIds = ArrayList(ids.distinct())
+                renderAdditionalLoreBooks()
+            }
+        }
+        // Books may have been renamed/deleted inside the picker either way.
+        updateCoreLoreBookLabel()
+        renderAdditionalLoreBooks()
+    }
 
     private fun activationPromptLabel(id: String): String {
         if (id == "") return getString(R.string.label_activation_none)
@@ -93,6 +121,108 @@ class EditPersonaDialogFragment : DialogFragment() {
             .show()
     }
 
+    private fun coreLoreBookLabel(id: String): String {
+        if (id == "") return getString(R.string.label_lorebook_none)
+        val name = LoreBookStore.getInstance(requireContext()).getBook(id)?.name ?: ""
+        return if (name != "") name else getString(R.string.label_lorebook_none)
+    }
+
+    private fun updateCoreLoreBookLabel() {
+        // A book deleted elsewhere must not linger as a stale selection.
+        if (selectedCoreLoreBookId != "" && LoreBookStore.getInstance(requireContext()).getBook(selectedCoreLoreBookId) == null) {
+            selectedCoreLoreBookId = ""
+        }
+        fieldCoreLoreBook?.setText(coreLoreBookLabel(selectedCoreLoreBookId))
+    }
+
+    private fun showCoreLoreBookChooser() {
+        val books = LoreBookStore.getInstance(requireContext()).getAllBooks()
+        val ids = arrayListOf("")
+        val labels = arrayListOf(getString(R.string.label_lorebook_none))
+        for (book in books) {
+            ids.add(book.id)
+            labels.add(book.name)
+        }
+
+        val current = ids.indexOf(selectedCoreLoreBookId).coerceAtLeast(0)
+
+        MaterialAlertDialogBuilder(requireContext(), R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.persona_core_lorebook_hint)
+            .setSingleChoiceItems(labels.toTypedArray(), current) { dialog, which ->
+                selectedCoreLoreBookId = ids[which]
+                fieldCoreLoreBook?.setText(coreLoreBookLabel(selectedCoreLoreBookId))
+                dialog.dismiss()
+            }
+            .setNegativeButton(R.string.btn_cancel) { _, _ -> }
+            .show()
+    }
+
+    private fun renderAdditionalLoreBooks() {
+        val container = additionalLoreBooksList ?: return
+        container.removeAllViews()
+
+        val store = LoreBookStore.getInstance(requireContext())
+        // Drop links to books that no longer exist.
+        additionalLoreBookIds = ArrayList(additionalLoreBookIds.filter { store.getBook(it) != null })
+
+        if (additionalLoreBookIds.isEmpty()) {
+            val empty = TextView(requireContext())
+            empty.text = getString(R.string.persona_no_additional_lorebooks)
+            empty.setTextColor(resources.getColor(R.color.text_subtitle, requireContext().theme))
+            empty.textSize = 14f
+            empty.setPadding(0, 0, 0, 16)
+            container.addView(empty)
+            return
+        }
+
+        for (id in additionalLoreBookIds) {
+            val book = store.getBook(id) ?: continue
+            val row = layoutInflater.inflate(R.layout.view_persona_lorebook_row, container, false)
+
+            row.findViewById<TextView>(R.id.row_book_name)?.text = book.name
+
+            val count = store.getEntryCount(book.id)
+            var subtitle = resources.getQuantityString(R.plurals.lorebook_memory_count, count, count)
+            if (book.tag.isNotBlank()) subtitle = "$subtitle · ${book.tag}"
+            if (book.description.isNotBlank()) subtitle = "$subtitle\n${book.description}"
+            row.findViewById<TextView>(R.id.row_book_subtitle)?.text = subtitle
+
+            row.findViewById<ImageButton>(R.id.row_btn_edit)?.setOnClickListener {
+                val intent = Intent(requireContext(), LoreBookEntriesActivity::class.java)
+                intent.putExtra("lorebookId", book.id)
+                intent.putExtra("lorebookName", book.name)
+                startActivity(intent)
+            }
+
+            row.findViewById<ImageButton>(R.id.row_btn_unlink)?.setOnClickListener {
+                // Unlink only detaches the book from this persona; the book and
+                // all its memories stay in the collection.
+                additionalLoreBookIds.remove(book.id)
+                renderAdditionalLoreBooks()
+            }
+
+            row.findViewById<ImageButton>(R.id.row_btn_delete)?.setOnClickListener {
+                MaterialAlertDialogBuilder(requireContext(), R.style.App_MaterialAlertDialog)
+                    .setTitle(R.string.label_delete_lorebook)
+                    .setMessage(R.string.message_delete_lorebook)
+                    .setPositiveButton(R.string.yes) { _, _ ->
+                        LoreBookStore.getInstance(requireContext()).deleteBook(book.id)
+                        PersonaPreferences.getPersonaPreferences(requireContext()).removeLoreBookFromAllPersonas(book.id)
+                        additionalLoreBookIds.remove(book.id)
+                        if (selectedCoreLoreBookId == book.id) {
+                            selectedCoreLoreBookId = ""
+                            updateCoreLoreBookLabel()
+                        }
+                        renderAdditionalLoreBooks()
+                    }
+                    .setNegativeButton(R.string.no) { _, _ -> }
+                    .show()
+            }
+
+            container.addView(row)
+        }
+    }
+
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
         return inflater.inflate(R.layout.fragment_edit_persona, container, false)
     }
@@ -106,6 +236,10 @@ class EditPersonaDialogFragment : DialogFragment() {
         fieldLabel = view.findViewById(R.id.field_label)
         fieldPrompt = view.findViewById(R.id.field_prompt)
         fieldActivationPrompt = view.findViewById(R.id.field_activation_prompt)
+        fieldCoreLoreBook = view.findViewById(R.id.field_core_lorebook)
+        additionalLoreBooksList = view.findViewById(R.id.additional_lorebooks_list)
+        btnAddLoreBooks = view.findViewById(R.id.btn_add_lorebooks)
+        checkboxAutoload = view.findViewById(R.id.checkbox_autoload_lorebooks)
 
         fieldLabel?.setText(requireArguments().getString("label"))
         fieldPrompt?.setText(requireArguments().getString("prompt"))
@@ -113,8 +247,25 @@ class EditPersonaDialogFragment : DialogFragment() {
         selectedActivationPromptId = requireArguments().getString("activationPromptId") ?: ""
         fieldActivationPrompt?.setText(activationPromptLabel(selectedActivationPromptId))
 
+        selectedCoreLoreBookId = requireArguments().getString("coreLoreBookId") ?: ""
+        additionalLoreBookIds = PersonaObject.splitIds(requireArguments().getString("additionalLoreBookIds") ?: "")
+        checkboxAutoload?.isChecked = requireArguments().getBoolean("autoLoadLastLoreBooks", false)
+
+        updateCoreLoreBookLabel()
+        renderAdditionalLoreBooks()
+
         fieldActivationPrompt?.setOnClickListener { showActivationPromptChooser() }
         view.findViewById<TextInputLayout>(R.id.textInputLayoutActivation)?.setOnClickListener { showActivationPromptChooser() }
+
+        fieldCoreLoreBook?.setOnClickListener { showCoreLoreBookChooser() }
+        view.findViewById<TextInputLayout>(R.id.textInputLayoutCoreLoreBook)?.setOnClickListener { showCoreLoreBookChooser() }
+
+        btnAddLoreBooks?.setOnClickListener {
+            val intent = Intent(requireContext(), LoreBooksListActivity::class.java)
+            intent.putExtra(LoreBooksListActivity.EXTRA_PICK_MODE, true)
+            intent.putStringArrayListExtra(LoreBooksListActivity.EXTRA_SELECTED_IDS, ArrayList(additionalLoreBookIds))
+            pickLoreBooksLauncher.launch(intent)
+        }
 
         if (requireArguments().getInt("position") == -1) {
             textDialogTitle?.text = getString(R.string.label_add_persona)
@@ -139,11 +290,27 @@ class EditPersonaDialogFragment : DialogFragment() {
         return builder!!.create()
     }
 
+    override fun onResume() {
+        super.onResume()
+        // Returning from the entries editor (gear) may have changed counts or
+        // names, and books may have been deleted from elsewhere.
+        updateCoreLoreBookLabel()
+        renderAdditionalLoreBooks()
+    }
+
     private fun buildPersonaObject(): PersonaObject {
+        // Last-used bookkeeping survives the edit, pruned to the books that are
+        // still linked.
+        val lastUsed = PersonaObject.splitIds(requireArguments().getString("lastUsedLoreBookIds") ?: "")
+            .filter { additionalLoreBookIds.contains(it) }
         return PersonaObject(
             label = fieldLabel?.text.toString(),
             prompt = fieldPrompt?.text.toString(),
-            activationPromptId = selectedActivationPromptId
+            activationPromptId = selectedActivationPromptId,
+            coreLoreBookId = selectedCoreLoreBookId,
+            additionalLoreBookIds = PersonaObject.joinIds(additionalLoreBookIds),
+            autoLoadLastLoreBooks = checkboxAutoload?.isChecked == true,
+            lastUsedLoreBookIds = PersonaObject.joinIds(lastUsed)
         )
     }
 

@@ -37,6 +37,7 @@ import android.os.Handler
 import android.os.Looper
 import android.text.SpannableStringBuilder
 import android.text.Spanned
+import android.text.method.LinkMovementMethod
 import android.text.style.LineHeightSpan
 import android.util.DisplayMetrics
 import android.view.LayoutInflater
@@ -250,11 +251,11 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 reportBottomSheet.show(context.supportFragmentManager, "ReportAIContentBottomSheet")
             }
 
-            message.setOnLongClickListener {
-                switchBulkActionState(position)
-                return@setOnLongClickListener true
-            }
-
+            // Deliberately no long-click listener on the message text itself:
+            // long-pressing the text starts native text selection (so parts of
+            // a message can be highlighted and copied). Bulk message selection
+            // is still reachable by long-pressing the row/bubble around the
+            // text or the avatar.
             message.setOnClickListener {
                 if (bulkActionMode) {
                     switchBulkActionState(position)
@@ -523,6 +524,21 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             } else {
                 message.text = chatMessage["message"].toString()
             }
+            enableTextSelection()
+        }
+
+        private fun enableTextSelection() {
+            // Toggle off/on on every (re)bind: recycled views can carry stale
+            // selection state into a new message, which crashes when the new
+            // text is shorter than the old selection bounds.
+            message.setTextIsSelectable(false)
+            message.setTextIsSelectable(true)
+            // setTextIsSelectable() replaces the movement method with one that
+            // ignores ClickableSpans, which would leave markdown links dead.
+            // LinkMovementMethod keeps links tappable while long-press
+            // selection (handled by the TextView editor, not the movement
+            // method) continues to work.
+            message.movementMethod = LinkMovementMethod.getInstance()
         }
 
         private fun trimLineByLine(str: String) : String {

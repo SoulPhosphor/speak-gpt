@@ -31,7 +31,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="24dp"
-            android:text="@string/label_edit_persona"
+            android:text="@string/label_edit_memory"
             android:textColor="@color/text_title"
             android:textSize="24sp"
             android:textStyle="bold"
@@ -52,6 +52,8 @@
             app:boxCornerRadiusBottomStart="16dp"
             app:boxCornerRadiusTopEnd="16dp"
             app:boxCornerRadiusTopStart="16dp"
+            app:helperTextEnabled="true"
+            app:helperText="@string/memory_label_help"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@+id/text_dialog_title">
@@ -60,19 +62,18 @@
                 android:id="@+id/field_label"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:hint="@string/persona_friendly_name"
+                android:hint="@string/memory_label_hint"
                 android:singleLine="true"
                 android:textColorHint="@color/text_hint" />
         </com.google.android.material.textfield.TextInputLayout>
 
         <com.google.android.material.textfield.TextInputLayout
-            android:id="@+id/textInputLayoutPrompt"
+            android:id="@+id/textInputLayoutContent"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginStart="24dp"
             android:layout_marginTop="12dp"
             android:layout_marginEnd="24dp"
-            android:layout_marginBottom="24dp"
             android:textColorHint="@color/text_hint"
             app:boxStrokeColor="@drawable/box_stroke_color"
             app:boxCornerRadiusBottomEnd="16dp"
@@ -80,55 +81,24 @@
             app:boxCornerRadiusTopEnd="16dp"
             app:boxCornerRadiusTopStart="16dp"
             app:helperTextEnabled="true"
-            app:helperText="@string/persona_prompt_help"
+            app:helperText="@string/memory_content_help"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@+id/textInputLayoutLabel">
 
             <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/field_prompt"
+                android:id="@+id/field_content"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:gravity="top|start"
-                android:hint="@string/persona_prompt_hint"
+                android:hint="@string/memory_content_hint"
                 android:inputType="textMultiLine|textCapSentences"
-                android:minLines="5"
+                android:minLines="4"
                 android:textColorHint="@color/text_hint" />
         </com.google.android.material.textfield.TextInputLayout>
 
         <com.google.android.material.textfield.TextInputLayout
-            android:id="@+id/textInputLayoutActivation"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="24dp"
-            android:layout_marginEnd="24dp"
-            android:textColorHint="@color/text_hint"
-            app:boxStrokeColor="@drawable/box_stroke_color"
-            app:boxCornerRadiusBottomEnd="16dp"
-            app:boxCornerRadiusBottomStart="16dp"
-            app:boxCornerRadiusTopEnd="16dp"
-            app:boxCornerRadiusTopStart="16dp"
-            app:helperTextEnabled="true"
-            app:helperText="@string/persona_activation_help"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@+id/textInputLayoutPrompt">
-
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/field_activation_prompt"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:clickable="true"
-                android:cursorVisible="false"
-                android:focusable="false"
-                android:focusableInTouchMode="false"
-                android:hint="@string/persona_activation_hint"
-                android:singleLine="true"
-                android:textColorHint="@color/text_hint" />
-        </com.google.android.material.textfield.TextInputLayout>
-
-        <com.google.android.material.textfield.TextInputLayout
-            android:id="@+id/textInputLayoutCoreLoreBook"
+            android:id="@+id/textInputLayoutTriggers"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginStart="24dp"
@@ -141,78 +111,65 @@
             app:boxCornerRadiusTopEnd="16dp"
             app:boxCornerRadiusTopStart="16dp"
             app:helperTextEnabled="true"
-            app:helperText="@string/persona_core_lorebook_help"
+            app:helperText="@string/memory_triggers_help"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@+id/textInputLayoutActivation">
+            app:layout_constraintTop_toBottomOf="@+id/textInputLayoutContent">
 
             <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/field_core_lorebook"
+                android:id="@+id/field_triggers"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:clickable="true"
-                android:cursorVisible="false"
-                android:focusable="false"
-                android:focusableInTouchMode="false"
-                android:hint="@string/persona_core_lorebook_hint"
-                android:singleLine="true"
+                android:gravity="top|start"
+                android:hint="@string/memory_triggers_hint"
+                android:inputType="textMultiLine"
+                android:minLines="2"
                 android:textColorHint="@color/text_hint" />
         </com.google.android.material.textfield.TextInputLayout>
 
-        <TextView
-            android:id="@+id/text_additional_lorebooks"
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/textInputLayoutSource"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginStart="24dp"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="12dp"
             android:layout_marginEnd="24dp"
-            android:text="@string/persona_additional_lorebooks"
-            android:textColor="@color/text_title"
-            android:textSize="16sp"
-            android:textStyle="bold"
+            android:textColorHint="@color/text_hint"
+            app:boxStrokeColor="@drawable/box_stroke_color"
+            app:boxCornerRadiusBottomEnd="16dp"
+            app:boxCornerRadiusBottomStart="16dp"
+            app:boxCornerRadiusTopEnd="16dp"
+            app:boxCornerRadiusTopStart="16dp"
+            app:helperTextEnabled="true"
+            app:helperText="@string/memory_source_help"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@+id/textInputLayoutCoreLoreBook" />
+            app:layout_constraintTop_toBottomOf="@+id/textInputLayoutTriggers">
 
-        <LinearLayout
-            android:id="@+id/additional_lorebooks_list"
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/field_source"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="top|start"
+                android:hint="@string/memory_source_hint"
+                android:inputType="textMultiLine"
+                android:minLines="2"
+                android:textColorHint="@color/text_hint" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <CheckBox
+            android:id="@+id/field_enabled"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginStart="24dp"
+            android:layout_marginEnd="24dp"
             android:layout_marginTop="8dp"
-            android:layout_marginEnd="24dp"
-            android:orientation="vertical"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@+id/text_additional_lorebooks" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btn_add_lorebooks"
-            style="@style/Widget.Material3.Button.TonalButton"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="24dp"
-            android:layout_marginEnd="24dp"
-            android:text="@string/btn_add_lorebooks"
-            app:icon="@drawable/ic_add"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@+id/additional_lorebooks_list" />
-
-        <com.google.android.material.checkbox.MaterialCheckBox
-            android:id="@+id/checkbox_autoload_lorebooks"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="20dp"
-            android:layout_marginTop="4dp"
-            android:layout_marginEnd="24dp"
             android:layout_marginBottom="24dp"
-            android:text="@string/persona_autoload_lorebooks"
-            android:textColor="@color/text_subtitle"
-            android:textSize="14sp"
-            app:layout_constraintBottom_toBottomOf="parent"
+            android:checked="true"
+            android:text="@string/memory_enabled"
+            android:textColor="@color/text"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@+id/btn_add_lorebooks" />
+            app:layout_constraintTop_toBottomOf="@+id/textInputLayoutSource" />
     </androidx.constraintlayout.widget.ConstraintLayout>
 </ScrollView>

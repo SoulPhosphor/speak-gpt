@@ -169,10 +169,14 @@ import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.LogitBiasPreferences
 import org.teslasoft.assistant.preferences.Preferences
+import org.teslasoft.assistant.preferences.lorebook.LoreBookInjectionLog
+import org.teslasoft.assistant.preferences.lorebook.LoreBookMatch
+import org.teslasoft.assistant.preferences.lorebook.LoreBookStore
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.stt.LocalWhisperEngine
 import org.teslasoft.assistant.stt.LocalWhisperModels
 import org.teslasoft.assistant.stt.LocalWhisperStorage
+import org.teslasoft.assistant.service.GenerationForegroundService
 import org.teslasoft.assistant.service.HandsFreeService
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.adapters.chat.ChatAdapter
@@ -244,6 +248,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     private var messagesUsageProjection: ArrayList<HashMap<String, Any>> = arrayListOf()
     private var adapter: ChatAdapter? = null
     private var chatMessages: ArrayList<ChatMessage> = arrayListOf()
+
+    // The user's most recent outgoing message (captured in generateResponse, which
+    // every input path flows through). Used by the lorebook to match triggers.
+    private var lastUserMessageForLore = ""
+
     private var chatId = ""
     private var chatName = ""
     private var languageIdentifier: LanguageIdentifier? = null
@@ -2527,12 +2536,39 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         }
     }
 
+    /**
+     * Seed a brand-new chat's checked additional lorebooks from the persona's
+     * last-used set — but only when the persona has opted in via its
+     * "auto-enable last-used lorebooks" toggle. One-shot per chat (same pattern
+     * as [seedPersonaAndActivationDefaults]); afterwards the chat's own Quick
+     * Settings selection always wins. Books that have since been deleted or
+     * unlinked from the persona are skipped.
+     */
+    private fun seedLoreBooksForNewChat() {
+        if (preferences?.isLoreBooksSeeded() == true) return
+        preferences?.setLoreBooksSeeded(true)
+
+        val personaId = preferences?.getPersonaId().orEmpty()
+        if (personaId.isEmpty()) return
+
+        val persona = PersonaPreferences.getPersonaPreferences(this).getPersona(personaId)
+        if (!persona.autoLoadLastLoreBooks) return
+
+        val linked = persona.additionalLoreBookIdList()
+        val store = LoreBookStore.getInstance(this)
+        val ids = persona.lastUsedLoreBookIdList().filter { linked.contains(it) && store.getBook(it) != null }
+        if (ids.isNotEmpty()) {
+            preferences?.setActiveLoreBookIds(ids)
+        }
+    }
+
     /*
     * Setup SpeakGPT with activation prompt.
     * */
     private fun setup() {
         if (messages.isEmpty()) {
             seedPersonaAndActivationDefaults()
+            seedLoreBooksForNewChat()
             val prompt: String = preferences!!.getPrompt()
 
             if (prompt.toString() != "" && prompt.toString() != "null" && prompt != "") {
@@ -2898,6 +2934,18 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     @Suppress("deprecation")
     private suspend fun generateResponse(request: String, shouldPronounce: Boolean) {
         disableAutoScroll = false
+
+        // Capture the user's message here, the single point every input method flows
+        // through (typing, voice recognition, and Whisper transcription), so the
+        // lorebook matches triggers regardless of how the message was entered.
+        lastUserMessageForLore = request
+
+        // Keep the app at foreground importance for the whole generation so the
+        // stream survives the screen turning off or the user switching apps
+        // (otherwise the OS freezes the process / lets Wi-Fi power-save drop the
+        // socket, and the request dies with "Software caused connection abort").
+        GenerationForegroundService.begin(this, chatId, chatName)
+
         try {
             var response = ""
 
@@ -3221,6 +3269,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 messageInput?.requestFocus()
             }
         } finally {
+            GenerationForegroundService.end(this)
             calculateCost()
             runOnUiThread {
                 restoreUIState()
@@ -3439,6 +3488,57 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             )
         }
 
+        // Lorebook (memory system): match the user's latest message against the
+        // persona's core lorebook (always active when the persona is used) plus
+        // whichever additional lorebooks are checked for this chat, and inject the
+        // matched memories as their own System message, placed after the base
+        // prompt so prefix caching of the stable prompt holds.
+        val loreStore = LoreBookStore.getInstance(this)
+        val activeBookIds = LinkedHashSet<String>()
+        val checkedIds = preferences?.getActiveLoreBookIds() ?: arrayListOf()
+        if (personaId != "") {
+            val loreBookPersona = PersonaPreferences.getPersonaPreferences(this).getPersona(personaId)
+            // Core book first: when the injection budget truncates, core memories win.
+            if (loreBookPersona.coreLoreBookId != "") activeBookIds.add(loreBookPersona.coreLoreBookId)
+            // Only books still linked to the persona count; a stale checked id
+            // left over from before an unlink must not keep injecting.
+            val linked = loreBookPersona.additionalLoreBookIdList()
+            activeBookIds.addAll(checkedIds.filter { linked.contains(it) })
+        } else {
+            activeBookIds.addAll(checkedIds)
+        }
+
+        val allLoreMatches = ArrayList<LoreBookMatch>()
+        for (bookId in activeBookIds) {
+            allLoreMatches.addAll(loreStore.findMatches(lastUserMessageForLore, bookId))
+        }
+
+        if (allLoreMatches.isNotEmpty()) {
+            // Safety budget: a message that trips many triggers at once must not
+            // flood the context. Inject at most MAX_INJECTED_ENTRIES memories /
+            // MAX_INJECTED_CHARS characters, in book order (core book first).
+            val loreMatches = ArrayList<LoreBookMatch>()
+            var loreChars = 0
+            for (match in allLoreMatches) {
+                if (loreMatches.size >= LoreBookStore.MAX_INJECTED_ENTRIES) break
+                if (loreMatches.isNotEmpty() && loreChars + match.entry.content.length > LoreBookStore.MAX_INJECTED_CHARS) break
+                loreChars += match.entry.content.length
+                loreMatches.add(match)
+            }
+
+            val loreText = StringBuilder(getString(R.string.lorebook_injection_header))
+            for (match in loreMatches) {
+                loreText.append("\n- ").append(match.entry.content)
+            }
+            msgs.add(
+                ChatMessage(
+                    role = ChatRole.System,
+                    content = loreText.toString()
+                )
+            )
+            LoreBookInjectionLog.record(lastUserMessageForLore, loreMatches)
+        }
+
         msgs.addAll(chatMessages)
 
         val chatCompletionRequest = if (preferences?.getLogitBiasesConfigId() == null || preferences?.getLogitBiasesConfigId() == "null" || preferences?.getLogitBiasesConfigId() == "") {
@@ -3575,6 +3675,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     val personaId = preferences.getPersonaId()
                     val activationPromptId = preferences.getActivationPromptId()
                     val personaActivationSeeded = preferences.isPersonaActivationSeeded()
+                    val activeLoreBookIds = preferences.getActiveLoreBookIds()
+                    val loreBooksSeeded = preferences.isLoreBooksSeeded()
 
                     preferences.setPreferences(Hash.hash(newChatName.toString()), this)
                     preferences.setResolution(resolution)
@@ -3603,6 +3705,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     preferences.setPersonaId(personaId)
                     preferences.setActivationPromptId(activationPromptId)
                     preferences.setPersonaActivationSeeded(personaActivationSeeded)
+                    preferences.setActiveLoreBookIds(activeLoreBookIds)
+                    preferences.setLoreBooksSeeded(loreBooksSeeded)
 
                     activityTitle?.text = newChatName.toString()
 

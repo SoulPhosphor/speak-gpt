@@ -1175,6 +1175,50 @@ class Preferences private constructor(private var preferences: SharedPreferences
     }
 
     /**
+     * The additional lorebooks currently checked for this chat. Memories from
+     * these books (plus the persona's always-on core book) are matched against
+     * messages and injected into the prompt. Stored comma-separated.
+     *
+     * Falls back to the legacy single-book "lorebook_id" key from the beta so
+     * a chat that had one active book before the multi-select keeps it.
+     *
+     * @return List of lorebook IDs (possibly empty)
+     * */
+    fun getActiveLoreBookIds() : ArrayList<String> {
+        val joined = getString("active_lorebook_ids", "")
+        if (joined.isNotEmpty()) {
+            return ArrayList(joined.split(",").map { it.trim() }.filter { it.isNotEmpty() })
+        }
+        val legacy = getString("lorebook_id", "")
+        return if (legacy != "") arrayListOf(legacy) else arrayListOf()
+    }
+
+    /**
+     * Set the additional lorebooks checked for this chat.
+     *
+     * @param ids Lorebook IDs; an empty list means no additional lorebooks
+     * */
+    fun setActiveLoreBookIds(ids: List<String>) {
+        putString("active_lorebook_ids", ids.map { it.trim() }.filter { it.isNotEmpty() }.distinct().joinToString(","))
+        // The legacy key must not resurrect an old selection once the
+        // multi-select has been written (including writing an empty list).
+        putString("lorebook_id", "")
+    }
+
+    /**
+     * One-shot guard (per chat) so a new chat seeds its checked lorebooks from
+     * the persona's last-used set exactly once (when the persona opts in via
+     * autoLoadLastLoreBooks). After that the chat's own selection always wins.
+     * */
+    fun isLoreBooksSeeded() : Boolean {
+        return getBoolean("lorebooks_seeded", false)
+    }
+
+    fun setLoreBooksSeeded(seeded: Boolean) {
+        putBoolean("lorebooks_seeded", seeded)
+    }
+
+    /**
      * Get logit biases config ID
      *
      * @return logit biases config ID
