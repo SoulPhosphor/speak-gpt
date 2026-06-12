@@ -17,7 +17,7 @@
 package org.teslasoft.assistant.preferences
 
 import android.content.Context
-import java.time.Instant
+import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
 class Logger {
@@ -85,7 +85,11 @@ class Logger {
             // consent revoked), which silently ate the user's own diagnostics
             // — the "I turned logging on and the event log stayed empty" bug.
             if (level == "info" || level == "error" || level == "warning" || level == "debug" || level == "verbose") {
-                val timestamp = DateTimeFormatter.ISO_INSTANT.format(Instant.now()).toString()
+                // Local time, second precision. The ISO/UTC instant this used
+                // to print ("2026-06-12T19:03:31.903759Z") was unreadable on a
+                // phone and in the wrong timezone, which made correlating a
+                // log line with "the turn that just failed" impossible.
+                val timestamp = LocalDateTime.now().format(LOG_TIME_FORMAT)
                 val logString =
                     "[$timestamp] [$tag] [${level.uppercase()}] $message\n"
                 when (type) {
@@ -107,6 +111,9 @@ class Logger {
                 error("Invalid log level")
             }
         }
+
+        private val LOG_TIME_FORMAT: DateTimeFormatter =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
 
         // Logs are stored as one string in encrypted prefs, re-read and
         // re-written on every append — an unbounded log would slow every

@@ -248,7 +248,8 @@ class EnergyVad(
     override fun diagnostics(): String {
         val threshold = maxOf(noiseFloor * tuning.floorFactor, tuning.minSpeechRms)
             .coerceAtMost(tuning.energyCeiling)
-        var s = "Energy: speech $speechFrames/$totalFrames frames, " +
+        val audioTenths = totalSamples * 10 / sampleRate
+        var s = "Energy ${audioTenths / 10}.${audioTenths % 10}s: speech $speechFrames/$totalFrames frames, " +
                 "peakRms ${peakRms.toInt()}, floor ${noiseFloor.toInt()}, gate ${threshold.toInt()}"
         s += if (tuning.hysteresisEnabled) {
             ", hyst exit ${(threshold * tuning.hysteresisExitRatio).toInt()} (held $hysteresisHeldFrames)"
@@ -429,7 +430,8 @@ class WebRtcVad private constructor(
         val gate = maxOf(noiseFloor * tuning.floorFactor, tuning.minSpeechRms)
             .coerceAtMost(tuning.energyCeiling)
         val voiceRms = if (voicedFrames > 0) (voicedRmsSum / voicedFrames).toInt() else 0
-        var s = "WebRTC frame=$frameSamples: voiced $voicedFrames/$totalFrames " +
+        val audioTenths = totalFrames.toLong() * frameSamples * 10 / sampleRate
+        var s = "WebRTC ${audioTenths / 10}.${audioTenths % 10}s: voiced $voicedFrames/$totalFrames " +
                 "(gated $gatedVoicedFrames), voiceRms~$voiceRms, peak $peakAbs/32767, " +
                 "floor ${noiseFloor.toInt()}, gate ${if (tuning.gateEnabled) gate.toInt().toString() else "off"}"
         s += if (tuning.hysteresisEnabled && tuning.gateEnabled) {
@@ -439,11 +441,18 @@ class WebRtcVad private constructor(
         }
         if (tuning.hangoverMs > 0) s += ", hold ${tuning.hangoverMs}ms (held $hangoverHeldFrames)"
         if (errorFrames > 0) s += ", errors $errorFrames"
-        // The exact failure that burned a real session: libfvad heard the
-        // voice, the energy gate vetoed every frame. Say so in plain words —
-        // this line is what the user pastes when reporting a voice bug.
+        // Plain-words hints — these lines are what the user pastes when
+        // reporting a voice bug, so they must explain themselves. Two field
+        // failures shaped them: the gate vetoing ALL heard speech (quiet
+        // voice), and a loud room driving the adaptive gate (floor × factor)
+        // above the user's average voice level so most of it was vetoed.
         if (tuning.gateEnabled && voicedFrames > 0 && gatedVoicedFrames == 0) {
             s += " — speech was heard but stayed below the energy gate; lower min speech energy or disable the gate in advanced voice settings"
+        } else if (tuning.gateEnabled && voicedFrames > 0 &&
+            gatedVoicedFrames < voicedFrames / 2 && voiceRms < gate
+        ) {
+            s += " — most of your voice sat below the gate ($voiceRms < ${gate.toInt()}); " +
+                    "lower the energy gate ceiling to just under your voiceRms, or lower the noise floor multiplier"
         }
         return s
     }

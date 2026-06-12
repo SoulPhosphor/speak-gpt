@@ -383,6 +383,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             micIdle()
             cancelState = false
             adapter?.clearSpeakingPosition()
+            // The top action bar can get stuck INVISIBLE when a shared-element
+            // transition is interrupted (see onResume). The onResume heal only
+            // runs when the screen comes back to the foreground — a bar lost
+            // mid-session (e.g. around a regenerate) stayed gone until the user
+            // left and returned. Re-assert it at the end of every generation
+            // too; it's an idempotent no-op when the bar is fine.
+            restoreTopBarVisibility()
         }
     }
 
