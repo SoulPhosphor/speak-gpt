@@ -758,6 +758,12 @@
     <string name="adv_ceiling_desc">Upper limit of the adaptive gate, so a loud first moment can’t raise the bar above your own voice. Default 1400.</string>
     <string name="adv_min_speech_title">Minimum speech duration</string>
     <string name="adv_min_speech_desc">Detected speech must last this long before a turn starts. 0 ms = the first speech sound opens the turn. Raise it so a cough or door slam doesn’t start one.</string>
+    <string name="adv_hysteresis_title">Hysteresis (two-level gate)</string>
+    <string name="adv_hysteresis_desc">Speech must cross the full gate to start, but then only has to stay above the exit level below — so the quieter words of your sentence still count as speech instead of silence. Built for rooms whose loudness keeps changing; the usual fix for being cut off mid-sentence. Default on.</string>
+    <string name="adv_hyst_exit_title">Hysteresis exit level</string>
+    <string name="adv_hyst_exit_desc">While you are speaking, audio only needs to stay above this percentage of the gate. Lower it if you still get cut off mid-sentence; raise it if background noise keeps turns alive after you stop. Default 50%.</string>
+    <string name="adv_hangover_title">Speech hold time</string>
+    <string name="adv_hangover_desc">After speech, dips up to this long still count as speech — bridges breaths and soft syllables entirely below the gate. Note it effectively adds to the pause time before your turn ends. 0 ms = off.</string>
     <string name="adv_reset_vad">Reset detection to defaults</string>
 
     <string name="adv_section_whisper">Whisper decoding — on-device only</string>

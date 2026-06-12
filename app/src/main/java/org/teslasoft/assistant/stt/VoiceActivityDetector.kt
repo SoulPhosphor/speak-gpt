@@ -95,12 +95,24 @@ object VadMethods {
  * [gateEnabled] only affects the WebRTC detector (it gates the GMM's vote);
  * the Energy detector IS an energy threshold, so the gate can't be turned off
  * there — only tuned.
+ *
+ * Hysteresis (two-level gate): speech must cross the full gate to *start*,
+ * but once started it only has to stay above gate × [hysteresisExitRatio].
+ * Without it, a single threshold flaps at the boundary in rooms whose
+ * loudness keeps changing — the quieter words of a sentence read as silence,
+ * fill the silence window, and cut the speaker off mid-sentence.
+ * [hangoverMs] additionally holds the speech state through brief dips after
+ * the last qualifying frame (0 = off; it effectively adds to the pause time
+ * before a turn ends, so it is opt-in).
  */
 data class VadTuning(
     val gateEnabled: Boolean = true,
     val minSpeechRms: Double = 600.0,
     val floorFactor: Double = 2.5,
-    val energyCeiling: Double = 1400.0
+    val energyCeiling: Double = 1400.0,
+    val hysteresisEnabled: Boolean = true,
+    val hysteresisExitRatio: Double = 0.5,
+    val hangoverMs: Long = 0L
 )
 
 /** Builds the detector for the selected method, falling back to energy. */
@@ -121,11 +133,11 @@ object VadFactory {
                 val mode = webRtcMode.coerceIn(VadMethods.WEBRTC_MIN_MODE, VadMethods.WEBRTC_MAX_MODE)
                 WebRtcVad.create(mode = mode, sampleRate = sampleRate, tuning = tuning) ?: run {
                     Log.w(TAG, "WebRTC VAD unavailable, falling back to energy")
-                    EnergyVad(tuning)
+                    EnergyVad(tuning, sampleRate)
                 }
             }
             // VadMethods.SILERO -> SileroVad.create(...) ?: EnergyVad()   // TODO
-            else -> EnergyVad(tuning)
+            else -> EnergyVad(tuning, sampleRate)
         }
     }
 }
@@ -137,29 +149,46 @@ object VadFactory {
  * the trade-off is that any sufficiently loud sound reads as "speech".
  */
 class EnergyVad(
-    private val tuning: VadTuning = VadTuning()
+    private val tuning: VadTuning = VadTuning(),
+    private val sampleRate: Int = 16_000
 ) : VoiceActivityDetector {
 
     private var noiseFloor = 0.0
     private var floorInit = false
 
+    // Hysteresis state: true while the Schmitt trigger considers us inside
+    // speech (entered at the full gate, left below gate × exit ratio).
+    private var inSpeech = false
+    // Speech-hold (hangover) bookkeeping, measured in audio samples so it is
+    // immune to capture-loop stalls, like the engine's own timers.
+    private var totalSamples = 0L
+    private var lastSpeechAtSamples = -1L
+
     // Per-recording stats so an Energy timeout can be diagnosed like WebRTC.
     private var totalFrames = 0
     private var speechFrames = 0
     private var peakRms = 0.0
+    private var hysteresisHeldFrames = 0
+    private var hangoverHeldFrames = 0
 
     override fun reset() {
         noiseFloor = 0.0
         floorInit = false
+        inSpeech = false
+        totalSamples = 0L
+        lastSpeechAtSamples = -1L
         totalFrames = 0
         speechFrames = 0
         peakRms = 0.0
+        hysteresisHeldFrames = 0
+        hangoverHeldFrames = 0
     }
 
     override fun accept(frame: ShortArray, len: Int): Boolean {
         if (len <= 0) return false
         val rms = rmsOf(frame, len)
         totalFrames++
+        totalSamples += len
         if (rms > peakRms) peakRms = rms
         // Snapshot the opening frame as the ambient floor, then let it drift on
         // quiet frames. This is the original behaviour that worked well in the
@@ -181,9 +210,28 @@ class EnergyVad(
         // loudest steady noise (~1200) and quiet real speech (~1500); all three
         // numbers are user-tunable in advanced voice settings because real
         // voices/mics land at very different levels.
-        val threshold = maxOf(noiseFloor * tuning.floorFactor, tuning.minSpeechRms)
+        val enter = maxOf(noiseFloor * tuning.floorFactor, tuning.minSpeechRms)
             .coerceAtMost(tuning.energyCeiling)
-        return if (rms >= threshold) {
+        // Hysteresis: inside speech the bar drops to the exit level, so the
+        // quieter words of the same sentence don't read as silence and fill
+        // the silence window (the "cut off mid-sentence" failure in rooms
+        // whose loudness keeps changing).
+        val exit = if (tuning.hysteresisEnabled) enter * tuning.hysteresisExitRatio else enter
+        val raw = rms >= (if (inSpeech) exit else enter)
+        if (raw && inSpeech && rms < enter) hysteresisHeldFrames++
+        inSpeech = raw
+        if (raw) lastSpeechAtSamples = totalSamples
+
+        var isSpeech = raw
+        if (!raw && tuning.hangoverMs > 0 && lastSpeechAtSamples >= 0 &&
+            (totalSamples - lastSpeechAtSamples) * 1000 <= tuning.hangoverMs * sampleRate
+        ) {
+            // Speech-hold: a brief dip right after speech still counts.
+            isSpeech = true
+            hangoverHeldFrames++
+        }
+
+        return if (isSpeech) {
             speechFrames++
             true
         } else {
@@ -202,6 +250,12 @@ class EnergyVad(
             .coerceAtMost(tuning.energyCeiling)
         var s = "Energy: speech $speechFrames/$totalFrames frames, " +
                 "peakRms ${peakRms.toInt()}, floor ${noiseFloor.toInt()}, gate ${threshold.toInt()}"
+        s += if (tuning.hysteresisEnabled) {
+            ", hyst exit ${(threshold * tuning.hysteresisExitRatio).toInt()} (held $hysteresisHeldFrames)"
+        } else {
+            ", hyst off"
+        }
+        if (tuning.hangoverMs > 0) s += ", hold ${tuning.hangoverMs}ms (held $hangoverHeldFrames)"
         if (speechFrames == 0 && totalFrames > 0 && peakRms < threshold) {
             s += " — loudest audio stayed below the gate; lower min speech energy"
         }
@@ -247,6 +301,15 @@ class WebRtcVad private constructor(
     // Average RMS of the frames libfvad called voice — the number to compare
     // against the gate when "voiced N, gated 0" needs explaining.
     private var voicedRmsSum = 0.0
+    private var hysteresisHeldFrames = 0
+    private var hangoverHeldFrames = 0
+
+    // Hysteresis state: true while the last frame counted as speech, which
+    // drops the energy gate to its exit level for the next frame.
+    private var inSpeech = false
+    // Speech-hold bookkeeping, in frame units; -1 = no speech heard yet (the
+    // hold must never fire before the first real speech frame).
+    private var framesSinceSpeech = -1L
 
     // Adaptive energy floor that gates libfvad's vote. The GMM still tags
     // continuous fan/AC rumble as voice on some devices (seen on Pixel 8 +
@@ -267,6 +330,10 @@ class WebRtcVad private constructor(
         errorFrames = 0
         peakAbs = 0
         voicedRmsSum = 0.0
+        hysteresisHeldFrames = 0
+        hangoverHeldFrames = 0
+        inSpeech = false
+        framesSinceSpeech = -1L
         noiseFloor = 0.0
         floorInit = false
         if (handle != 0L) {
@@ -305,8 +372,13 @@ class WebRtcVad private constructor(
                 // user's own voice and silence the libfvad vote forever.
                 // gateEnabled=false trusts the libfvad vote alone — the escape
                 // hatch for voices/mics quieter than any workable gate.
-                val energyThreshold = maxOf(noiseFloor * tuning.floorFactor, tuning.minSpeechRms)
+                val enter = maxOf(noiseFloor * tuning.floorFactor, tuning.minSpeechRms)
                     .coerceAtMost(tuning.energyCeiling)
+                // Hysteresis: inside speech the gate drops to its exit level,
+                // so the quieter words of a sentence keep passing instead of
+                // reading as silence in a room whose loudness keeps changing.
+                val exit = if (tuning.hysteresisEnabled) enter * tuning.hysteresisExitRatio else enter
+                val energyThreshold = if (inSpeech) exit else enter
                 val aboveEnergy = !tuning.gateEnabled || rms >= energyThreshold
 
                 val r = try {
@@ -317,13 +389,30 @@ class WebRtcVad private constructor(
                     voicedFrames++
                     voicedRmsSum += rms
                 }
+                var frameIsSpeech = false
                 if (r == 1 && aboveEnergy) {
-                    speech = true
+                    frameIsSpeech = true
                     gatedVoicedFrames++
+                    if (tuning.gateEnabled && inSpeech && rms < enter) hysteresisHeldFrames++
                 } else if (r < 0) {
                     errorFrames++
                 }
-                if (!aboveEnergy) {
+                if (frameIsSpeech) {
+                    framesSinceSpeech = 0
+                } else if (framesSinceSpeech >= 0) {
+                    framesSinceSpeech++
+                    // Speech-hold: a brief dip (or a momentary libfvad "not
+                    // voice" vote) right after speech still counts as speech.
+                    if (tuning.hangoverMs > 0 &&
+                        framesSinceSpeech * frameSamples * 1000 <= tuning.hangoverMs * sampleRate
+                    ) {
+                        frameIsSpeech = true
+                        hangoverHeldFrames++
+                    }
+                }
+                inSpeech = frameIsSpeech
+                if (frameIsSpeech) speech = true
+                if (!aboveEnergy && !frameIsSpeech) {
                     // Drift floor up toward steady ambient so the gate adapts
                     // to a fan turning on mid-recording.
                     noiseFloor = noiseFloor * 0.97 + rms * 0.03
@@ -343,6 +432,12 @@ class WebRtcVad private constructor(
         var s = "WebRTC frame=$frameSamples: voiced $voicedFrames/$totalFrames " +
                 "(gated $gatedVoicedFrames), voiceRms~$voiceRms, peak $peakAbs/32767, " +
                 "floor ${noiseFloor.toInt()}, gate ${if (tuning.gateEnabled) gate.toInt().toString() else "off"}"
+        s += if (tuning.hysteresisEnabled && tuning.gateEnabled) {
+            ", hyst exit ${(gate * tuning.hysteresisExitRatio).toInt()} (held $hysteresisHeldFrames)"
+        } else {
+            ", hyst off"
+        }
+        if (tuning.hangoverMs > 0) s += ", hold ${tuning.hangoverMs}ms (held $hangoverHeldFrames)"
         if (errorFrames > 0) s += ", errors $errorFrames"
         // The exact failure that burned a real session: libfvad heard the
         // voice, the energy gate vetoed every frame. Say so in plain words —

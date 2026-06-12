@@ -70,6 +70,11 @@ class VoiceAdvancedSettingsActivity : FragmentActivity() {
     private var sliderFloorFactor: Slider? = null
     private var sliderCeiling: Slider? = null
     private var sliderMinSpeech: Slider? = null
+    private var switchHysteresis: MaterialSwitch? = null
+    private var labelHystExit: TextView? = null
+    private var sliderHystExit: Slider? = null
+    private var labelHangover: TextView? = null
+    private var sliderHangover: Slider? = null
     private var btnResetVad: MaterialButton? = null
 
     private var radioDecoderBeam: RadioButton? = null
@@ -126,6 +131,11 @@ class VoiceAdvancedSettingsActivity : FragmentActivity() {
         sliderFloorFactor = findViewById(R.id.slider_floor_factor)
         sliderCeiling = findViewById(R.id.slider_ceiling)
         sliderMinSpeech = findViewById(R.id.slider_min_speech)
+        switchHysteresis = findViewById(R.id.switch_hysteresis)
+        labelHystExit = findViewById(R.id.label_hyst_exit)
+        sliderHystExit = findViewById(R.id.slider_hyst_exit)
+        labelHangover = findViewById(R.id.label_hangover)
+        sliderHangover = findViewById(R.id.slider_hangover)
         btnResetVad = findViewById(R.id.btn_reset_vad)
 
         radioDecoderBeam = findViewById(R.id.radio_decoder_beam)
@@ -185,6 +195,10 @@ class VoiceAdvancedSettingsActivity : FragmentActivity() {
         sliderFloorFactor?.let { it.value = snap(p.getVadFloorFactor(), it) }
         sliderCeiling?.let { it.value = snap(p.getVadEnergyCeiling().toFloat(), it) }
         sliderMinSpeech?.let { it.value = snap(p.getVadMinSpeechMs().toFloat(), it) }
+        switchHysteresis?.isChecked = p.getVadHysteresisEnabled()
+        sliderHystExit?.let { it.value = snap(p.getVadHysteresisExitPercent().toFloat(), it) }
+        sliderHystExit?.isEnabled = p.getVadHysteresisEnabled()
+        sliderHangover?.let { it.value = snap(p.getVadHangoverMs().toFloat(), it) }
 
         val beam = p.getWhisperDecoder() != "greedy"
         radioDecoderBeam?.isChecked = beam
@@ -214,6 +228,8 @@ class VoiceAdvancedSettingsActivity : FragmentActivity() {
         labelFloorFactor?.text = "${getString(R.string.adv_floor_factor_title)}: ${"%.1f".format(sliderFloorFactor?.value ?: 0f)}"
         labelCeiling?.text = "${getString(R.string.adv_ceiling_title)}: ${sliderCeiling?.value?.toInt() ?: 0}"
         labelMinSpeech?.text = "${getString(R.string.adv_min_speech_title)}: ${sliderMinSpeech?.value?.toInt() ?: 0} ms"
+        labelHystExit?.text = "${getString(R.string.adv_hyst_exit_title)}: ${sliderHystExit?.value?.toInt() ?: 0}%"
+        labelHangover?.text = "${getString(R.string.adv_hangover_title)}: ${sliderHangover?.value?.toInt() ?: 0} ms"
         labelBeamSize?.text = "${getString(R.string.adv_beam_size_title)}: ${sliderBeamSize?.value?.toInt() ?: 0}"
         labelTemperature?.text = "${getString(R.string.adv_temperature_title)}: ${"%.2f".format(sliderTemperature?.value ?: 0f)}"
         labelTtsRate?.text = "${getString(R.string.adv_tts_rate_title)}: ${"%.1f".format(sliderTtsRate?.value ?: 1f)}x"
@@ -242,12 +258,27 @@ class VoiceAdvancedSettingsActivity : FragmentActivity() {
             if (fromUser) p.setVadMinSpeechMs(value.toInt())
             refreshLabels()
         }
+        switchHysteresis?.setOnCheckedChangeListener { _, checked ->
+            p.setVadHysteresisEnabled(checked)
+            sliderHystExit?.isEnabled = checked
+        }
+        sliderHystExit?.addOnChangeListener { _, value, fromUser ->
+            if (fromUser) p.setVadHysteresisExitPercent(value.toInt())
+            refreshLabels()
+        }
+        sliderHangover?.addOnChangeListener { _, value, fromUser ->
+            if (fromUser) p.setVadHangoverMs(value.toInt())
+            refreshLabels()
+        }
         btnResetVad?.setOnClickListener {
             p.setVadEnergyGateEnabled(true)
             p.setVadMinSpeechRms(600)
             p.setVadFloorFactor(2.5f)
             p.setVadEnergyCeiling(1400)
             p.setVadMinSpeechMs(0)
+            p.setVadHysteresisEnabled(true)
+            p.setVadHysteresisExitPercent(50)
+            p.setVadHangoverMs(0)
             loadValues()
         }
 

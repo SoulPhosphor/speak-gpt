@@ -121,8 +121,12 @@ Everything is on-device. No cloud sync, no accounts.
   Advanced voice & debugging screen (`VoiceAdvancedSettingsActivity`, plain
   rows not tiles, reached from a full-width tile in Voice settings): VAD
   energy-gate tuning (`VadTuning` — gate on/off, min RMS, floor factor,
-  ceiling, min speech duration; defaults preserve old behaviour, all global
-  prefs), on-device Whisper decode params (greedy/beam, beam size,
+  ceiling, min speech duration, plus hysteresis: a two-level gate where
+  speech enters at the full gate but only has to stay above gate×exit-ratio,
+  default ON at 50%, with an optional speech-hold/hangover defaulting to 0 —
+  built for changing-loudness rooms; the Energy detector's hysteresis is
+  unit-tested in `app/src/test`; all global prefs), on-device Whisper
+  decode params (greedy/beam, beam size,
   temperature, suppress-blank, single-segment, initial prompt, prev-context,
   cleanup toggle — plumbed Kotlin→JNI→whisper_full, defaults match the old
   hardcoded values), device-TTS rate/pitch (set in both ttsPostInit funnels),

@@ -2112,7 +2112,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             if (handsFree) {
                 // A tap during a hands-free listening turn ends the whole loop,
                 // matching how a tap ends the Google hands-free conversation.
-                logWebRtcVadDiagnostics("manual-stop")
+                logVadDiagnostics("manual-stop")
                 stopHandsFreeLoop("mic button tapped while listening (whisper)")
                 LocalWhisperEngine.get().cancel()
             } else {
@@ -2224,7 +2224,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             gateEnabled = preferences!!.getVadEnergyGateEnabled(),
             minSpeechRms = preferences!!.getVadMinSpeechRms().toDouble(),
             floorFactor = preferences!!.getVadFloorFactor().toDouble(),
-            energyCeiling = preferences!!.getVadEnergyCeiling().toDouble()
+            energyCeiling = preferences!!.getVadEnergyCeiling().toDouble(),
+            hysteresisEnabled = preferences!!.getVadHysteresisEnabled(),
+            hysteresisExitRatio = preferences!!.getVadHysteresisExitPercent() / 100.0,
+            hangoverMs = preferences!!.getVadHangoverMs().toLong()
         )
         val ok = LocalWhisperEngine.get().startRecording(
             vad = LocalWhisperEngine.VadConfig(
@@ -2272,7 +2275,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         if (!isRecording || handsFreeStopped || cancelState) return
         isRecording = false
         logVoiceEvent("end of turn detected; transcribing")
-        logWebRtcVadDiagnostics("end-of-turn", showToast = false)
+        logVadDiagnostics("end-of-turn", showToast = false)
         // stopLocalWhisper() transcribes the buffered audio and routes through
         // processLocalWhisperTranscript → generateResponse → speak; the
         // readback completion re-arms the next turn.
@@ -2282,26 +2285,26 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     /** VAD saw no speech within the window — end the loop like Google does. */
     private fun onHandsFreeWhisperNoSpeech() {
         if (handsFreeStopped) return
-        logWebRtcVadDiagnostics("no-speech-timeout")
+        logVadDiagnostics("no-speech-timeout")
         stopHandsFreeLoop("no speech within the no-speech window")
         LocalWhisperEngine.get().cancel()
     }
 
-    /** Surface the WebRTC detector's per-recording counters when a hands-free
-     *  turn ends. Toast for live feedback; Event log (Settings -> Event log) so
-     *  the user can read it after the fact when "mic listens forever" is the
-     *  symptom (Toasts disappear before they can be grabbed). WebRTC-only:
-     *  Energy mode doesn't expose meaningful counters.
+    /** Surface the active detector's per-recording counters when a hands-free
+     *  turn ends — WebRTC and Energy both explain themselves now (frames,
+     *  peak/voice RMS, gate, hysteresis holds). Toast for live feedback; Event
+     *  log (Settings -> Event log) so the user can read it after the fact when
+     *  "mic listens forever" / "never heard me" is the symptom (Toasts
+     *  disappear before they can be grabbed).
      *
      *  [showToast] false for routine endings (every normal end-of-turn would
      *  otherwise toast over the conversation); the event log gets it either way. */
-    private fun logWebRtcVadDiagnostics(reason: String, showToast: Boolean = true) {
-        if (preferences?.getVadMethod() != org.teslasoft.assistant.stt.VadMethods.WEBRTC) return
+    private fun logVadDiagnostics(reason: String, showToast: Boolean = true) {
         val diag = LocalWhisperEngine.get().lastVadDiagnostics()
         if (diag.isEmpty()) return
         if (showToast) Toast.makeText(this, diag, Toast.LENGTH_LONG).show()
         try {
-            org.teslasoft.assistant.preferences.Logger.log(this, "event", "WebRtcVad", "debug", "$reason: $diag")
+            org.teslasoft.assistant.preferences.Logger.log(this, "event", "VadDiag", "debug", "$reason: $diag")
         } catch (_: Throwable) { /* never let diagnostics crash the loop */ }
     }
 

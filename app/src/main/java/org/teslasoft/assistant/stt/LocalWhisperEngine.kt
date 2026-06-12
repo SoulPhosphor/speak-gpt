@@ -282,11 +282,17 @@ class LocalWhisperEngine private constructor() {
         captureJob = CoroutineScope(Dispatchers.IO).launch {
             // The effective speech gate for log lines — mirrors the detectors'
             // own computation so the logs show the user's tuned values, not
-            // stale hardcoded defaults.
-            fun gateOf(floor: Double): Int =
-                if (!tuning.gateEnabled) 0
-                else maxOf(floor * tuning.floorFactor, tuning.minSpeechRms)
-                    .coerceAtMost(tuning.energyCeiling).toInt()
+            // stale hardcoded defaults. "enter/exit" when hysteresis is on.
+            fun gateOf(floor: Double): String {
+                if (!tuning.gateEnabled) return "off"
+                val enter = maxOf(floor * tuning.floorFactor, tuning.minSpeechRms)
+                    .coerceAtMost(tuning.energyCeiling)
+                return if (tuning.hysteresisEnabled) {
+                    "${enter.toInt()}/${(enter * tuning.hysteresisExitRatio).toInt()}"
+                } else {
+                    "${enter.toInt()}"
+                }
+            }
             val readBuffer = ShortArray(readSize)
             var speechStarted = false
             var silenceSamples = 0L

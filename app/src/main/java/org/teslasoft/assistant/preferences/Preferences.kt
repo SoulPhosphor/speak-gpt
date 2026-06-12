@@ -1099,6 +1099,40 @@ class Preferences private constructor(private var preferences: SharedPreferences
         putGlobalString("vad_min_speech_ms", value.coerceIn(0, 2000).toString(), "0")
     }
 
+    /** Hysteresis (two-level gate): once speech starts, the gate drops to
+     *  [getVadHysteresisExitPercent] of itself so the quieter words of the
+     *  same sentence keep counting as speech. Default on — built for rooms
+     *  whose loudness keeps changing. */
+    fun getVadHysteresisEnabled() : Boolean {
+        return getGlobalBoolean("vad_hysteresis", true)
+    }
+
+    fun setVadHysteresisEnabled(state: Boolean) {
+        putGlobalBoolean("vad_hysteresis", state, true)
+    }
+
+    /** Exit level of the hysteresis gate, as a percentage of the entry gate
+     *  (default 50). Lower = harder to be cut off mid-sentence, but steady
+     *  noise can keep a turn alive longer once one has started. */
+    fun getVadHysteresisExitPercent() : Int {
+        return (getGlobalString("vad_hysteresis_exit", "50").toIntOrNull() ?: 50).coerceIn(20, 95)
+    }
+
+    fun setVadHysteresisExitPercent(value: Int) {
+        putGlobalString("vad_hysteresis_exit", value.coerceIn(20, 95).toString(), "50")
+    }
+
+    /** Speech-hold (hangover): after speech, dips up to this long still count
+     *  as speech (default 0 = off). Effectively adds to the pause time before
+     *  a turn ends. */
+    fun getVadHangoverMs() : Int {
+        return (getGlobalString("vad_hangover_ms", "0").toIntOrNull() ?: 0).coerceIn(0, 2000)
+    }
+
+    fun setVadHangoverMs(value: Int) {
+        putGlobalString("vad_hangover_ms", value.coerceIn(0, 2000).toString(), "0")
+    }
+
     // ---- Advanced on-device Whisper decoding -------------------------------
     // Mapped 1:1 onto whisper.cpp's whisper_full_params; defaults match what
     // the JNI layer always hardcoded, so leaving these alone changes nothing.
