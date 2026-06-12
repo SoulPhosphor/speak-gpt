@@ -1040,6 +1040,169 @@ class Preferences private constructor(private var preferences: SharedPreferences
         putGlobalBoolean("vad_logging_webrtc", state, false)
     }
 
+    // ---- Advanced VAD tuning (on-device Whisper hands-free only) ----------
+    // These exist because the field showed the one-size-fits-all energy gate
+    // failing real users: the gate (min 600 RMS) was tuned against a desk fan
+    // on one device, but a quiet voice / distant mic never clears it — WebRTC
+    // hears the speech and the gate throws it away ("voiced N, gated 0").
+    // Defaults preserve the long-standing behaviour; the advanced settings
+    // screen explains how to read the diagnostics and adjust.
+
+    /** Energy gate over the WebRTC vote: on (default) rejects steady noise
+     *  (fan/AC) the GMM mislabels as voice; off trusts the WebRTC vote alone.
+     *  Ignored by the Energy method (energy IS its detector). */
+    fun getVadEnergyGateEnabled() : Boolean {
+        return getGlobalBoolean("vad_energy_gate", true)
+    }
+
+    fun setVadEnergyGateEnabled(state: Boolean) {
+        putGlobalBoolean("vad_energy_gate", state, true)
+    }
+
+    /** Absolute minimum frame RMS to count as speech (default 600). Lower it
+     *  when diagnostics show "speech heard but below the energy gate". */
+    fun getVadMinSpeechRms() : Int {
+        return (getGlobalString("vad_min_speech_rms", "600").toIntOrNull() ?: 600).coerceIn(50, 5000)
+    }
+
+    fun setVadMinSpeechRms(value: Int) {
+        putGlobalString("vad_min_speech_rms", value.coerceIn(50, 5000).toString(), "600")
+    }
+
+    /** Multiplier over the adaptive noise floor (default 2.5). */
+    fun getVadFloorFactor() : Float {
+        return (getGlobalString("vad_floor_factor", "2.5").toFloatOrNull() ?: 2.5f).coerceIn(1.0f, 8.0f)
+    }
+
+    fun setVadFloorFactor(value: Float) {
+        putGlobalString("vad_floor_factor", value.coerceIn(1.0f, 8.0f).toString(), "2.5")
+    }
+
+    /** Cap on the adaptive speech threshold so a loud opening frame can't pin
+     *  the gate above the user's own voice (default 1400). */
+    fun getVadEnergyCeiling() : Int {
+        return (getGlobalString("vad_energy_ceiling", "1400").toIntOrNull() ?: 1400).coerceIn(200, 8000)
+    }
+
+    fun setVadEnergyCeiling(value: Int) {
+        putGlobalString("vad_energy_ceiling", value.coerceIn(200, 8000).toString(), "1400")
+    }
+
+    /** Milliseconds of detected speech required before a turn counts as
+     *  started (default 0 = first speech frame starts the turn). Raising it
+     *  stops a door slam / cough from starting a turn. */
+    fun getVadMinSpeechMs() : Int {
+        return (getGlobalString("vad_min_speech_ms", "0").toIntOrNull() ?: 0).coerceIn(0, 2000)
+    }
+
+    fun setVadMinSpeechMs(value: Int) {
+        putGlobalString("vad_min_speech_ms", value.coerceIn(0, 2000).toString(), "0")
+    }
+
+    // ---- Advanced on-device Whisper decoding -------------------------------
+    // Mapped 1:1 onto whisper.cpp's whisper_full_params; defaults match what
+    // the JNI layer always hardcoded, so leaving these alone changes nothing.
+
+    /** "beam" (default, better punctuation/structure) or "greedy" (faster). */
+    fun getWhisperDecoder() : String {
+        return getGlobalString("whisper_decoder", "beam")
+    }
+
+    fun setWhisperDecoder(value: String) {
+        putGlobalString("whisper_decoder", if (value == "greedy") "greedy" else "beam", "beam")
+    }
+
+    fun getWhisperBeamSize() : Int {
+        return (getGlobalString("whisper_beam_size", "5").toIntOrNull() ?: 5).coerceIn(1, 8)
+    }
+
+    fun setWhisperBeamSize(value: Int) {
+        putGlobalString("whisper_beam_size", value.coerceIn(1, 8).toString(), "5")
+    }
+
+    /** Sampling temperature; 0 = deterministic (whisper.cpp default). */
+    fun getWhisperTemperature() : Float {
+        return (getGlobalString("whisper_temperature", "0").toFloatOrNull() ?: 0f).coerceIn(0f, 1f)
+    }
+
+    fun setWhisperTemperature(value: Float) {
+        putGlobalString("whisper_temperature", value.coerceIn(0f, 1f).toString(), "0")
+    }
+
+    fun getWhisperSuppressBlank() : Boolean {
+        return getGlobalBoolean("whisper_suppress_blank", true)
+    }
+
+    fun setWhisperSuppressBlank(state: Boolean) {
+        putGlobalBoolean("whisper_suppress_blank", state, true)
+    }
+
+    fun getWhisperSingleSegment() : Boolean {
+        return getGlobalBoolean("whisper_single_segment", false)
+    }
+
+    fun setWhisperSingleSegment(state: Boolean) {
+        putGlobalBoolean("whisper_single_segment", state, false)
+    }
+
+    /** Optional text whispered to the decoder as context/style priming. */
+    fun getWhisperInitialPrompt() : String {
+        return getGlobalString("whisper_initial_prompt", "")
+    }
+
+    fun setWhisperInitialPrompt(value: String) {
+        putGlobalString("whisper_initial_prompt", value, "")
+    }
+
+    /** false (default) = no_context: each clip decoded fresh. true lets the
+     *  decoder condition on text from earlier clips in the same session. */
+    fun getWhisperUsePrevContext() : Boolean {
+        return getGlobalBoolean("whisper_use_prev_context", false)
+    }
+
+    fun setWhisperUsePrevContext(state: Boolean) {
+        putGlobalBoolean("whisper_use_prev_context", state, false)
+    }
+
+    /** Strip "[Music]"/"(applause)"-style non-speech annotations (default on). */
+    fun getWhisperCleanupTranscript() : Boolean {
+        return getGlobalBoolean("whisper_cleanup_transcript", true)
+    }
+
+    fun setWhisperCleanupTranscript(state: Boolean) {
+        putGlobalBoolean("whisper_cleanup_transcript", state, true)
+    }
+
+    /** Log the exact decode parameters + timing of every transcription to the
+     *  Event log, for tuning sessions. */
+    fun getWhisperDebugParams() : Boolean {
+        return getGlobalBoolean("whisper_debug_params", false)
+    }
+
+    fun setWhisperDebugParams(state: Boolean) {
+        putGlobalBoolean("whisper_debug_params", state, false)
+    }
+
+    // ---- Device TTS delivery -------------------------------------------------
+
+    /** Speech rate for the device (Google) TTS engine; 1.0 = normal. */
+    fun getTtsSpeechRate() : Float {
+        return (getGlobalString("tts_speech_rate", "1.0").toFloatOrNull() ?: 1.0f).coerceIn(0.5f, 2.5f)
+    }
+
+    fun setTtsSpeechRate(value: Float) {
+        putGlobalString("tts_speech_rate", value.coerceIn(0.5f, 2.5f).toString(), "1.0")
+    }
+
+    /** Voice pitch for the device (Google) TTS engine; 1.0 = normal. */
+    fun getTtsPitch() : Float {
+        return (getGlobalString("tts_pitch", "1.0").toFloatOrNull() ?: 1.0f).coerceIn(0.5f, 2.0f)
+    }
+
+    fun setTtsPitch(value: Float) {
+        putGlobalString("tts_pitch", value.coerceIn(0.5f, 2.0f).toString(), "1.0")
+    }
+
     /**
      * Retrieves the encrypted API key from the shared preferences.
      *

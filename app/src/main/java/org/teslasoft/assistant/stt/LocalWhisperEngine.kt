@@ -32,6 +32,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import org.teslasoft.assistant.preferences.Logger
+import org.teslasoft.assistant.preferences.Preferences
 
 /**
  * Owns the audio-capture + whisper.cpp transcription path for "on-device
@@ -56,13 +58,9 @@ class LocalWhisperEngine private constructor() {
         const val SAMPLE_RATE = 16_000
         private const val TAG = "LocalWhisperEngine"
 
-        // Energy-based voice-activity-detection tuning. A 16-bit PCM frame's
-        // RMS runs 0..32767. Speech is "clearly above the adaptive noise
-        // floor" — MIN_SPEECH_RMS is an absolute floor so dead-quiet rooms
-        // (tiny noise floor) don't trip on faint fluctuations. These are the
-        // numbers most likely to need on-device tuning.
-        private const val MIN_SPEECH_RMS = 600.0
-        private const val SPEECH_FLOOR_FACTOR = 2.5
+        // Energy-based voice-activity-detection tuning lives in VadTuning
+        // (user-editable in advanced voice settings); the engine only carries
+        // it through to the detector and the diagnostics log lines.
 
         // On-device Whisper output filter. Whisper emits non-speech annotations
         // for ambient sound — "[Music]", "(applause)", "[wind blowing]",
@@ -156,7 +154,12 @@ class LocalWhisperEngine private constructor() {
         val method: String = VadMethods.DEFAULT,
         val webRtcMode: Int = VadMethods.WEBRTC_DEFAULT_MODE,
         val graceMs: Long = 0L,
-        val logging: Boolean = false
+        val logging: Boolean = false,
+        /** Energy gate / threshold tuning, user-editable in advanced settings. */
+        val tuning: VadTuning = VadTuning(),
+        /** Detected speech must accumulate this long before the turn counts as
+         *  started; 0 = first speech frame starts it (historic behaviour). */
+        val minSpeechMs: Long = 0L
     )
 
     /** True iff the context for [activeModelId] is already resident in RAM. */
@@ -256,7 +259,7 @@ class LocalWhisperEngine private constructor() {
         // configured timings behave identically no matter which detector is
         // chosen); the detector only answers "is this frame speech?".
         val cfg = vadConfig
-        val detector = cfg?.let { VadFactory.create(it.method, SAMPLE_RATE, it.webRtcMode) }
+        val detector = cfg?.let { VadFactory.create(it.method, SAMPLE_RATE, it.webRtcMode, it.tuning) }
         detector?.reset()
         // Silence and no-speech windows are measured in *audio* time — the
         // number of samples actually captured — not wall-clock time. The
@@ -273,12 +276,25 @@ class LocalWhisperEngine private constructor() {
         val silenceSampleTarget = (cfg?.silenceMs ?: 0L) * SAMPLE_RATE / 1000
         val noSpeechSampleTarget = (cfg?.noSpeechMs ?: 0L) * SAMPLE_RATE / 1000
         val graceSampleTarget = (cfg?.graceMs ?: 0L) * SAMPLE_RATE / 1000
+        val minSpeechSampleTarget = (cfg?.minSpeechMs ?: 0L) * SAMPLE_RATE / 1000
+        val tuning = cfg?.tuning ?: VadTuning()
         val tn = turnNumber
         captureJob = CoroutineScope(Dispatchers.IO).launch {
+            // The effective speech gate for log lines — mirrors the detectors'
+            // own computation so the logs show the user's tuned values, not
+            // stale hardcoded defaults.
+            fun gateOf(floor: Double): Int =
+                if (!tuning.gateEnabled) 0
+                else maxOf(floor * tuning.floorFactor, tuning.minSpeechRms)
+                    .coerceAtMost(tuning.energyCeiling).toInt()
             val readBuffer = ShortArray(readSize)
             var speechStarted = false
             var silenceSamples = 0L
             var preSpeechSamples = 0L
+            // Contiguous run of speech frames; a turn only "starts" once this
+            // reaches minSpeechSampleTarget, so a door slam / cough can't open
+            // a turn when the user has raised the minimum speech duration.
+            var speechRunSamples = 0L
             var graceSamples = 0L
             var graceComplete = graceSampleTarget <= 0
             var vadFired = false
@@ -318,26 +334,32 @@ class LocalWhisperEngine private constructor() {
                                 val isSpeech = detector.accept(readBuffer, read)
                                 lastVadDiagnostics = detector.diagnostics()
                                 if (isSpeech) {
-                                    if (vadLog && !wasSpeech) {
-                                        val floor = detector.currentNoiseFloor()
-                                        val threshold = maxOf(floor * 2.5, 600.0).coerceAtMost(1400.0)
-                                        Log.i(TAG, "[Turn $tn] SPEECH_START: rms=${frameRms.toInt()} floor=${floor.toInt()} " +
-                                                "threshold=${threshold.toInt()} preSpeechMs=${preSpeechSamples * 1000 / SAMPLE_RATE} " +
-                                                "totalMs=${totalSamplesRead * 1000 / SAMPLE_RATE}")
+                                    speechRunSamples += read
+                                    if (speechStarted || speechRunSamples >= minSpeechSampleTarget) {
+                                        if (vadLog && !wasSpeech) {
+                                            val floor = detector.currentNoiseFloor()
+                                            Log.i(TAG, "[Turn $tn] SPEECH_START: rms=${frameRms.toInt()} floor=${floor.toInt()} " +
+                                                    "threshold=${gateOf(floor)} preSpeechMs=${preSpeechSamples * 1000 / SAMPLE_RATE} " +
+                                                    "totalMs=${totalSamplesRead * 1000 / SAMPLE_RATE}")
+                                        }
+                                        speechStarted = true
+                                        silenceSamples = 0L
+                                    } else {
+                                        // Speech heard but not yet long enough to
+                                        // open the turn — still pre-speech time.
+                                        preSpeechSamples += read
                                     }
-                                    speechStarted = true
-                                    silenceSamples = 0L
                                 } else if (speechStarted) {
                                     silenceSamples += read
                                 } else {
+                                    speechRunSamples = 0L
                                     preSpeechSamples += read
                                 }
                                 if (speechStarted && silenceSamples >= silenceSampleTarget) {
                                     if (vadLog) {
                                         val floor = detector.currentNoiseFloor()
-                                        val threshold = maxOf(floor * 2.5, 600.0).coerceAtMost(1400.0)
                                         Log.w(TAG, "[Turn $tn] FINALIZE END_OF_TURN: rms=${frameRms.toInt()} " +
-                                                "floor=${floor.toInt()} threshold=${threshold.toInt()} " +
+                                                "floor=${floor.toInt()} threshold=${gateOf(floor)} " +
                                                 "speechStarted=$speechStarted silenceMs=${silenceSamples * 1000 / SAMPLE_RATE} " +
                                                 "targetSilenceMs=${silenceSampleTarget * 1000 / SAMPLE_RATE} " +
                                                 "totalAudioMs=${totalSamplesRead * 1000 / SAMPLE_RATE} " +
@@ -349,9 +371,8 @@ class LocalWhisperEngine private constructor() {
                                 } else if (!speechStarted && preSpeechSamples >= noSpeechSampleTarget) {
                                     if (vadLog) {
                                         val floor = detector.currentNoiseFloor()
-                                        val threshold = maxOf(floor * 2.5, 600.0).coerceAtMost(1400.0)
                                         Log.w(TAG, "[Turn $tn] FINALIZE NO_SPEECH: rms=${frameRms.toInt()} " +
-                                                "floor=${floor.toInt()} threshold=${threshold.toInt()} " +
+                                                "floor=${floor.toInt()} threshold=${gateOf(floor)} " +
                                                 "preSpeechMs=${preSpeechSamples * 1000 / SAMPLE_RATE} " +
                                                 "targetNoSpeechMs=${noSpeechSampleTarget * 1000 / SAMPLE_RATE} " +
                                                 "totalAudioMs=${totalSamplesRead * 1000 / SAMPLE_RATE} " +
@@ -363,9 +384,8 @@ class LocalWhisperEngine private constructor() {
                                 if (vadLog && totalSamplesRead - lastHeartbeatSamples >= heartbeatIntervalSamples) {
                                     lastHeartbeatSamples = totalSamplesRead
                                     val floor = detector.currentNoiseFloor()
-                                    val threshold = maxOf(floor * 2.5, 600.0).coerceAtMost(1400.0)
                                     Log.d(TAG, "[Turn $tn] HEARTBEAT: rms=${frameRms.toInt()} floor=${floor.toInt()} " +
-                                            "threshold=${threshold.toInt()} speechStarted=$speechStarted " +
+                                            "threshold=${gateOf(floor)} speechStarted=$speechStarted " +
                                             "silenceMs=${silenceSamples * 1000 / SAMPLE_RATE} " +
                                             "totalMs=${totalSamplesRead * 1000 / SAMPLE_RATE}")
                                 }
@@ -420,6 +440,21 @@ class LocalWhisperEngine private constructor() {
 
         onPhase?.invoke(Phase.TRANSCRIBING)
 
+        // Decode parameters come straight from the (global) advanced voice
+        // settings. Read here, in the single funnel every transcription flows
+        // through, so the chat, the assistant overlay and any future caller
+        // all honour them without per-call-site plumbing.
+        val prefs = Preferences.getPreferences(context.applicationContext, "")
+        val useBeam = prefs.getWhisperDecoder() != "greedy"
+        val beamSize = prefs.getWhisperBeamSize()
+        val temperature = prefs.getWhisperTemperature()
+        val suppressBlank = prefs.getWhisperSuppressBlank()
+        val singleSegment = prefs.getWhisperSingleSegment()
+        val noContext = !prefs.getWhisperUsePrevContext()
+        val initialPrompt = prefs.getWhisperInitialPrompt()
+        val cleanup = prefs.getWhisperCleanupTranscript()
+        val debugParams = prefs.getWhisperDebugParams()
+
         return withContext(Dispatchers.IO) {
             // Ask any still-running transcription to bail. If a previous run
             // is hung (the model is slow and the user gave up), this lets us
@@ -434,15 +469,29 @@ class LocalWhisperEngine private constructor() {
                 try {
                     val audioMs = samples.size * 1000L / SAMPLE_RATE
                     val startedAt = SystemClock.elapsedRealtime()
-                    val text = LocalWhisperNative.transcribeNative(handle, samples, SAMPLE_RATE, language)
+                    val text = LocalWhisperNative.transcribeNative(
+                        handle, samples, SAMPLE_RATE, language,
+                        useBeam, beamSize, temperature,
+                        suppressBlank, singleSegment, noContext, initialPrompt
+                    )
                     val elapsed = SystemClock.elapsedRealtime() - startedAt
-                    Log.i(TAG, "Transcribed ${audioMs}ms of audio in ${elapsed}ms")
-                    val filtered = filterNonSpeechMarkers(text)
+                    val summary = "model=$activeModelId audio=${audioMs}ms decode=${elapsed}ms " +
+                            "decoder=${if (useBeam) "beam($beamSize)" else "greedy"} temp=$temperature " +
+                            "suppressBlank=$suppressBlank singleSegment=$singleSegment noContext=$noContext " +
+                            "prompt=${if (initialPrompt.isBlank()) "none" else "${initialPrompt.length} chars"} " +
+                            "cleanup=$cleanup"
+                    Log.i(TAG, "Transcribed: $summary")
+                    if (debugParams) {
+                        try {
+                            Logger.log(context.applicationContext, "event", "WhisperParams", "debug", summary)
+                        } catch (_: Throwable) { /* diagnostics must never break STT */ }
+                    }
                     // After stripping non-speech markers, Whisper-generated
                     // punctuation around them ("[Music].", "♪♪♪…") can leave
                     // a content-less remainder like "." or "…". Treat that as
                     // empty so hands-free re-arms the mic instead of submitting
                     // bare punctuation as a "real" transcript.
+                    val filtered = if (cleanup) filterNonSpeechMarkers(text) else text.trim()
                     if (filtered.any { it.isLetterOrDigit() }) filtered else null
                 } catch (t: Throwable) {
                     Log.w(TAG, "transcribeNative threw", t)

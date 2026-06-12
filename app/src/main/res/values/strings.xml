@@ -733,9 +733,64 @@
     <string name="voice_section_feedback">Audio feedback</string>
     <string name="tile_transcription_sound_title">Transcription tone</string>
     <string name="tile_transcription_sound_desc">Play a short, pleasant ascending tone once your speech has been transcribed, so you know dictation finished and a reply is on the way without watching the screen. Uses the alarm volume, so it stays audible even when the phone is on silent.</string>
-    <string name="voice_section_debug">Debug logging</string>
+    <string name="voice_section_debug">Advanced &amp; debugging</string>
     <string name="tile_vad_log_energy_title">Energy VAD logging</string>
     <string name="tile_vad_log_energy_desc">Record voice diagnostics: every hands-free decision (mic opened/closed and why, readback, failures) goes to the Event log in Settings, plus detailed Energy VAD state (RMS, noise floor, timing) to logcat. Turn off when not debugging.</string>
     <string name="tile_vad_log_webrtc_title">WebRTC VAD logging</string>
     <string name="tile_vad_log_webrtc_desc">Record voice diagnostics: every hands-free decision (mic opened/closed and why, readback, failures) goes to the Event log in Settings, plus detailed WebRTC VAD state (RMS, voiced frames, timing) to logcat. Turn off when not debugging.</string>
+
+    <!-- Advanced voice & debugging screen -->
+    <string name="title_voice_advanced">Advanced voice &amp; debugging</string>
+    <string name="tile_voice_advanced_title">Advanced &amp; debugging</string>
+    <string name="tile_voice_advanced_subtitle">Detection tuning, Whisper decoding, delivery, logs</string>
+    <string name="tile_voice_advanced_desc">Tune how speech is detected, how on-device Whisper decodes it, how replies are spoken, and what gets logged. Includes plain-language hints for fixing “it never hears me” and “it cuts me off mid-sentence”.</string>
+    <string name="adv_intro">Defaults match the app’s long-standing behaviour — you only need this screen when voice misbehaves on your device. Changes apply from the next turn. Settings marked on-device only do not affect Google voice input or cloud Whisper.</string>
+
+    <string name="adv_section_vad">Voice detection — on-device hands-free only</string>
+    <string name="adv_section_vad_caption">How the app decides you are speaking when using on-device Whisper hands-free. Rule of thumb: “it never hears me” or “it cuts me off mid-sentence” → lower the minimum speech energy or turn the energy gate off; “noise keeps starting turns” → raise it, or raise the minimum speech duration.</string>
+    <string name="adv_energy_gate_title">Energy gate</string>
+    <string name="adv_energy_gate_desc">Speech must also be louder than the gate, which blocks fans/AC that the WebRTC detector mistakes for voice. If the Event log says “speech was heard but stayed below the energy gate”, turn this off or lower the minimum below. (Applies to the WebRTC method; the Energy method is itself a gate.)</string>
+    <string name="adv_min_rms_title">Minimum speech energy</string>
+    <string name="adv_min_rms_desc">Loudness (RMS) a moment of audio needs to count as speech. Default 600. A quiet voice or distant mic can sit at 200–400 — check voiceRms in the Event log and set this below it.</string>
+    <string name="adv_floor_factor_title">Noise floor multiplier</string>
+    <string name="adv_floor_factor_desc">How many times louder than the room’s background noise speech must be. Default 2.5.</string>
+    <string name="adv_ceiling_title">Energy gate ceiling</string>
+    <string name="adv_ceiling_desc">Upper limit of the adaptive gate, so a loud first moment can’t raise the bar above your own voice. Default 1400.</string>
+    <string name="adv_min_speech_title">Minimum speech duration</string>
+    <string name="adv_min_speech_desc">Detected speech must last this long before a turn starts. 0 ms = the first speech sound opens the turn. Raise it so a cough or door slam doesn’t start one.</string>
+    <string name="adv_reset_vad">Reset detection to defaults</string>
+
+    <string name="adv_section_whisper">Whisper decoding — on-device only</string>
+    <string name="adv_section_whisper_caption">How the on-device Whisper model turns your recorded audio into text.</string>
+    <string name="adv_decoder_title">Decoder</string>
+    <string name="adv_decoder_beam">Beam search (better quality)</string>
+    <string name="adv_decoder_greedy">Greedy (faster)</string>
+    <string name="adv_beam_size_title">Beam size</string>
+    <string name="adv_beam_size_desc">Candidate sentences kept alive during beam search. Higher = slightly better, slower. Default 5.</string>
+    <string name="adv_temperature_title">Temperature</string>
+    <string name="adv_temperature_desc">0 = deterministic (recommended). Raise slightly only if transcripts get stuck repeating a phrase.</string>
+    <string name="adv_suppress_blank_title">Suppress blank output</string>
+    <string name="adv_suppress_blank_desc">Discourages empty transcriptions at the start of decoding. Default on.</string>
+    <string name="adv_single_segment_title">Single segment</string>
+    <string name="adv_single_segment_desc">Force the whole clip into one segment. Can help short commands; leave off for normal speech.</string>
+    <string name="adv_initial_prompt_title">Initial prompt</string>
+    <string name="adv_initial_prompt_desc">Optional text that primes the decoder with names, jargon and spellings you want recognised correctly (e.g. “Phosphor, lorebook, Silero”).</string>
+    <string name="adv_initial_prompt_hint">Words and names to recognise</string>
+    <string name="adv_prev_context_title">Use previous context</string>
+    <string name="adv_prev_context_desc">Let each clip’s decoding see the text of earlier clips. Can improve continuity across turns; can also propagate a mistake. Default off.</string>
+    <string name="adv_cleanup_title">Transcript cleanup</string>
+    <string name="adv_cleanup_desc">Remove non-speech annotations like [Music] and (applause) before the text is used. Default on.</string>
+    <string name="adv_whisper_debug_title">Log decode parameters</string>
+    <string name="adv_whisper_debug_desc">Write every transcription’s exact parameters and timing to the Event log.</string>
+
+    <string name="adv_section_tts">Text-to-speech delivery</string>
+    <string name="adv_section_tts_caption">Device (Google) text-to-speech only — the OpenAI voice is generated by the server and ignores these.</string>
+    <string name="adv_tts_rate_title">Speech rate</string>
+    <string name="adv_tts_rate_desc">1.0 = normal speed.</string>
+    <string name="adv_tts_pitch_title">Pitch</string>
+    <string name="adv_tts_pitch_desc">1.0 = the voice’s natural pitch.</string>
+
+    <string name="adv_section_diag">Diagnostics</string>
+    <string name="adv_section_diag_caption">With either toggle on, every hands-free decision (mic opened/closed and why, readback, failures, stop reasons) is written to the Event log, plus detailed per-frame detector state to logcat. This is what to turn on before reporting a voice bug.</string>
+    <string name="adv_open_event_log">Open Event log</string>
 </resources>

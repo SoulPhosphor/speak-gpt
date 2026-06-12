@@ -48,11 +48,25 @@ object LocalWhisperNative {
 
     @JvmStatic external fun initContextNative(modelPath: String): Long
     @JvmStatic external fun releaseContextNative(handle: Long)
+
+    /**
+     * Runs whisper_full with user-tunable decode parameters (advanced voice
+     * settings). The defaults that match the previously hardcoded behaviour:
+     * useBeam=true, beamSize=5, temperature=0, suppressBlank=true,
+     * singleSegment=false, noContext=true, initialPrompt="".
+     */
     @JvmStatic external fun transcribeNative(
         handle: Long,
         pcm16: ShortArray,
         sampleRate: Int,
-        language: String
+        language: String,
+        useBeam: Boolean,
+        beamSize: Int,
+        temperature: Float,
+        suppressBlank: Boolean,
+        singleSegment: Boolean,
+        noContext: Boolean,
+        initialPrompt: String
     ): String
 
     // Cooperative abort for an in-flight transcribeNative call. whisper_full

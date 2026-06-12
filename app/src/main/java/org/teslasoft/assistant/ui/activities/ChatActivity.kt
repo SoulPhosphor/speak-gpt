@@ -1117,6 +1117,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     }
 
     private fun ttsPostInit() {
+        // Delivery tuning (advanced voice settings). Device-TTS only; the
+        // OpenAI voice renders server-side and ignores these.
+        try {
+            tts?.setSpeechRate(preferences?.getTtsSpeechRate() ?: 1.0f)
+            tts?.setPitch(preferences?.getTtsPitch() ?: 1.0f)
+        } catch (_: Exception) { /* engine may not support it; defaults apply */ }
         if (!autoLangDetect) {
             val result = tts!!.setLanguage(
                 LocaleParser.parse(
@@ -2211,8 +2217,21 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         val graceMs = if (freshTurn) 0L else 500L
         val vadMethod = preferences!!.getVadMethod()
         val vadLog = if (vadMethod == "webrtc") preferences!!.getVadLoggingWebrtc() else preferences!!.getVadLoggingEnergy()
+        // User-tuned energy gate (advanced voice settings): the field showed
+        // the fixed gate discarding a quiet voice entirely, so the numbers are
+        // theirs to adjust per device/mic.
+        val tuning = org.teslasoft.assistant.stt.VadTuning(
+            gateEnabled = preferences!!.getVadEnergyGateEnabled(),
+            minSpeechRms = preferences!!.getVadMinSpeechRms().toDouble(),
+            floorFactor = preferences!!.getVadFloorFactor().toDouble(),
+            energyCeiling = preferences!!.getVadEnergyCeiling().toDouble()
+        )
         val ok = LocalWhisperEngine.get().startRecording(
-            vad = LocalWhisperEngine.VadConfig(silenceMs, noSpeechMs, vadMethod, preferences!!.getVadWebRtcMode(), graceMs, vadLog),
+            vad = LocalWhisperEngine.VadConfig(
+                silenceMs, noSpeechMs, vadMethod, preferences!!.getVadWebRtcMode(), graceMs, vadLog,
+                tuning = tuning,
+                minSpeechMs = preferences!!.getVadMinSpeechMs().toLong()
+            ),
             onEndOfTurn = { runOnUiThread { onHandsFreeWhisperEndOfTurn() } },
             onNoSpeechTimeout = { runOnUiThread { onHandsFreeWhisperNoSpeech() } }
         )
@@ -3293,7 +3312,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     String.format(getString(R.string.prompt_model_not_available), model)
                 }
                 e.stackTraceToString().contains("Connect timeout has expired") || e.stackTraceToString().contains("SocketTimeoutException") -> {
-                    getString(R.string.prompt_timed_out)
+                    // Vague timeout text was a long-standing complaint: name the
+                    // endpoint/model so the user can tell "my server is down"
+                    // from "wrong profile selected" without guesswork.
+                    getString(R.string.prompt_timed_out) +
+                            "\n\nProfile: ${apiEndpointObject?.label}\nBase URL: ${apiEndpointObject?.host}\nModel: $model" +
+                            (e.message?.let { "\nDetail: $it" } ?: "")
                 }
                 e.stackTraceToString().contains("This model's maximum") -> {
                     getString(R.string.prompt_max_tokens_error)

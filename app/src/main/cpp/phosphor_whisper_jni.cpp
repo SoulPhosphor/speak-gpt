@@ -109,7 +109,10 @@ Java_org_teslasoft_assistant_stt_LocalWhisperNative_releaseContextNative(
 extern "C" JNIEXPORT jstring JNICALL
 Java_org_teslasoft_assistant_stt_LocalWhisperNative_transcribeNative(
         JNIEnv *env, jclass /*clazz*/,
-        jlong handle, jshortArray jpcm, jint /*sampleRate*/, jstring jlang) {
+        jlong handle, jshortArray jpcm, jint /*sampleRate*/, jstring jlang,
+        jboolean useBeam, jint beamSize, jfloat temperature,
+        jboolean suppressBlank, jboolean singleSegment, jboolean noContext,
+        jstring jinitialPrompt) {
     if (handle == 0L || jpcm == nullptr) {
         return env->NewStringUTF("");
     }
@@ -131,25 +134,39 @@ Java_org_teslasoft_assistant_stt_LocalWhisperNative_transcribeNative(
     }
     env->ReleaseShortArrayElements(jpcm, pcm, JNI_ABORT);
 
-    // Beam search instead of greedy decoding. Greedy takes the single most
-    // likely token at each step; beam search keeps several candidate
-    // continuations alive and commits to the best-scoring whole sequence.
-    // That global view produces cleaner sentence structure and noticeably
-    // more consistent punctuation/capitalization — the main reason we use it
-    // here. It costs more compute per clip, but on-device clips are short and
-    // the quality gain is worth it. beam_size = 5 is whisper.cpp's own default
-    // for this strategy; set explicitly so the value is visible at the call
-    // site rather than buried in the library defaults.
-    struct whisper_full_params wparams = whisper_full_default_params(WHISPER_SAMPLING_BEAM_SEARCH);
-    wparams.beam_search.beam_size = 5;
+    // Decode strategy is user-selectable (advanced voice settings). Beam
+    // search keeps several candidate continuations alive and commits to the
+    // best-scoring whole sequence — cleaner sentence structure and more
+    // consistent punctuation, at more compute per clip. Greedy takes the
+    // single most likely token each step — faster, useful on slower devices.
+    // Defaults passed from Kotlin reproduce the long-standing behaviour
+    // (beam, size 5, temperature 0, suppress blank, multi-segment, no
+    // cross-clip context, no prompt).
+    int clampedBeam = beamSize < 1 ? 1 : (beamSize > 8 ? 8 : beamSize);
+    struct whisper_full_params wparams = whisper_full_default_params(
+        useBeam ? WHISPER_SAMPLING_BEAM_SEARCH : WHISPER_SAMPLING_GREEDY);
+    if (useBeam) {
+        wparams.beam_search.beam_size = clampedBeam;
+    }
+    wparams.temperature      = temperature < 0.0f ? 0.0f : (temperature > 1.0f ? 1.0f : temperature);
     wparams.print_realtime   = false;
     wparams.print_progress   = false;
     wparams.print_timestamps = false;
     wparams.print_special    = false;
     wparams.translate        = false;
-    wparams.single_segment   = false;
-    wparams.no_context       = true;
-    wparams.suppress_blank   = true;
+    wparams.single_segment   = (singleSegment == JNI_TRUE);
+    wparams.no_context       = (noContext == JNI_TRUE);
+    wparams.suppress_blank   = (suppressBlank == JNI_TRUE);
+
+    // Optional decoder priming text. Held for the duration of whisper_full —
+    // wparams.initial_prompt is a borrowed pointer.
+    const char *initialPrompt = nullptr;
+    if (jinitialPrompt != nullptr) {
+        initialPrompt = env->GetStringUTFChars(jinitialPrompt, nullptr);
+    }
+    if (initialPrompt != nullptr && initialPrompt[0] != '\0') {
+        wparams.initial_prompt = initialPrompt;
+    }
 
     // Let the user abort a long-running transcription. The flag is cleared
     // by the caller (under the transcribe lock) immediately before this
@@ -175,6 +192,9 @@ Java_org_teslasoft_assistant_stt_LocalWhisperNative_transcribeNative(
 
     if (lang != nullptr) {
         env->ReleaseStringUTFChars(jlang, lang);
+    }
+    if (initialPrompt != nullptr) {
+        env->ReleaseStringUTFChars(jinitialPrompt, initialPrompt);
     }
 
     if (result != 0) {

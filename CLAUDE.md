@@ -118,6 +118,17 @@ Everything is on-device. No cloud sync, no accounts.
   the persistent Event log via `ChatActivity.logVoiceEvent` — when adding a
   new loop exit path, log it there or failures become undiagnosable. `Logger`
   is local-only (no telemetry); it must not be gated on the installation id.
+  Advanced voice & debugging screen (`VoiceAdvancedSettingsActivity`, plain
+  rows not tiles, reached from a full-width tile in Voice settings): VAD
+  energy-gate tuning (`VadTuning` — gate on/off, min RMS, floor factor,
+  ceiling, min speech duration; defaults preserve old behaviour, all global
+  prefs), on-device Whisper decode params (greedy/beam, beam size,
+  temperature, suppress-blank, single-segment, initial prompt, prev-context,
+  cleanup toggle — plumbed Kotlin→JNI→whisper_full, defaults match the old
+  hardcoded values), device-TTS rate/pitch (set in both ttsPostInit funnels),
+  and the diagnostics toggles. The VAD energy gate exists because WebRTC
+  mislabels fan noise as voice, but a fixed gate also silently discarded a
+  quiet voice ("voiced N, gated 0" in diagnostics) — that's why it's tunable.
 - Lorebook memory system: multiple books (title/description/type-tag,
   editable in place via the cog in the book's entries screen; tag/description
   shown under that screen's header and wherever books are listed),

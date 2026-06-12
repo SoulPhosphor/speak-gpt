@@ -73,8 +73,7 @@ class VoiceSettingsActivity : FragmentActivity() {
     private var tileHandsFreeTiming: TileFragment? = null
     private var tileVadMethod: TileFragment? = null
     private var tileTranscriptionSound: TileFragment? = null
-    private var tileVadLogEnergy: TileFragment? = null
-    private var tileVadLogWebrtc: TileFragment? = null
+    private var tileVoiceAdvanced: TileFragment? = null
 
     private var btnBack: ImageButton? = null
 
@@ -310,30 +309,21 @@ class VoiceSettingsActivity : FragmentActivity() {
             getString(R.string.tile_transcription_sound_desc)
         )
 
-        tileVadLogEnergy = TileFragment.newInstance(
-            preferences?.getVadLoggingEnergy() == true,
-            true,
-            getString(R.string.tile_vad_log_energy_title),
-            null,
-            getString(R.string.on),
-            getString(R.string.off),
-            R.drawable.ic_terminal,
-            false,
-            chatId,
-            getString(R.string.tile_vad_log_energy_desc)
-        )
-
-        tileVadLogWebrtc = TileFragment.newInstance(
-            preferences?.getVadLoggingWebrtc() == true,
-            true,
-            getString(R.string.tile_vad_log_webrtc_title),
-            null,
-            getString(R.string.on),
-            getString(R.string.off),
-            R.drawable.ic_terminal,
-            false,
-            chatId,
-            getString(R.string.tile_vad_log_webrtc_desc)
+        // One full-width entry point: the dense, explanation-heavy advanced
+        // controls (VAD tuning, Whisper decoding, TTS delivery, diagnostics
+        // logging) live on their own screen with readable rows instead of
+        // being crammed into half-width tiles.
+        tileVoiceAdvanced = TileFragment.newInstance(
+            checked = false,
+            checkable = false,
+            enabledText = getString(R.string.tile_voice_advanced_title),
+            disabledText = null,
+            enabledDesc = getString(R.string.tile_voice_advanced_subtitle),
+            disabledDesc = null,
+            icon = R.drawable.ic_terminal,
+            disabled = false,
+            chatId = chatId,
+            functionDesc = getString(R.string.tile_voice_advanced_desc)
         )
     }
 
@@ -351,8 +341,7 @@ class VoiceSettingsActivity : FragmentActivity() {
             .replace(R.id.tile_hands_free_timing, tileHandsFreeTiming!!)
             .replace(R.id.tile_vad_method, tileVadMethod!!)
             .replace(R.id.tile_transcription_sound, tileTranscriptionSound!!)
-            .replace(R.id.tile_vad_log_energy, tileVadLogEnergy!!)
-            .replace(R.id.tile_vad_log_webrtc, tileVadLogWebrtc!!)
+            .replace(R.id.tile_voice_advanced, tileVoiceAdvanced!!)
             .commitNow()
     }
 
@@ -449,12 +438,8 @@ class VoiceSettingsActivity : FragmentActivity() {
             preferences?.setTranscriptionDoneSound(isChecked)
         }
 
-        tileVadLogEnergy?.setOnCheckedChangeListener { isChecked ->
-            preferences?.setVadLoggingEnergy(isChecked)
-        }
-
-        tileVadLogWebrtc?.setOnCheckedChangeListener { isChecked ->
-            preferences?.setVadLoggingWebrtc(isChecked)
+        tileVoiceAdvanced?.setOnTileClickListener {
+            startActivity(Intent(this, VoiceAdvancedSettingsActivity::class.java))
         }
     }
 

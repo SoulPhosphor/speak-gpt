@@ -85,6 +85,24 @@ object VadMethods {
     const val WEBRTC_DEFAULT_MODE = 0
 }
 
+/**
+ * User-tunable energy parameters shared by the detectors. Defaults are the
+ * long-standing hardcoded values; the advanced voice settings screen edits
+ * them because the field proved one set of numbers can't fit every voice/mic:
+ * the 600-RMS absolute gate (tuned against a desk fan) silently discarded a
+ * quiet speaker's entire turn ("voiced 136/304, gated 0, peak 1118").
+ *
+ * [gateEnabled] only affects the WebRTC detector (it gates the GMM's vote);
+ * the Energy detector IS an energy threshold, so the gate can't be turned off
+ * there — only tuned.
+ */
+data class VadTuning(
+    val gateEnabled: Boolean = true,
+    val minSpeechRms: Double = 600.0,
+    val floorFactor: Double = 2.5,
+    val energyCeiling: Double = 1400.0
+)
+
 /** Builds the detector for the selected method, falling back to energy. */
 object VadFactory {
     private const val TAG = "VadFactory"
@@ -92,7 +110,8 @@ object VadFactory {
     fun create(
         method: String,
         sampleRate: Int,
-        webRtcMode: Int = VadMethods.WEBRTC_DEFAULT_MODE
+        webRtcMode: Int = VadMethods.WEBRTC_DEFAULT_MODE,
+        tuning: VadTuning = VadTuning()
     ): VoiceActivityDetector {
         return when (method) {
             VadMethods.WEBRTC -> {
@@ -100,13 +119,13 @@ object VadFactory {
                 // the native lib is missing or init fails, transparently use
                 // energy so hands-free still works.
                 val mode = webRtcMode.coerceIn(VadMethods.WEBRTC_MIN_MODE, VadMethods.WEBRTC_MAX_MODE)
-                WebRtcVad.create(mode = mode, sampleRate = sampleRate) ?: run {
+                WebRtcVad.create(mode = mode, sampleRate = sampleRate, tuning = tuning) ?: run {
                     Log.w(TAG, "WebRTC VAD unavailable, falling back to energy")
-                    EnergyVad()
+                    EnergyVad(tuning)
                 }
             }
             // VadMethods.SILERO -> SileroVad.create(...) ?: EnergyVad()   // TODO
-            else -> EnergyVad()
+            else -> EnergyVad(tuning)
         }
     }
 }
@@ -118,21 +137,30 @@ object VadFactory {
  * the trade-off is that any sufficiently loud sound reads as "speech".
  */
 class EnergyVad(
-    private val minSpeechRms: Double = MIN_SPEECH_RMS,
-    private val floorFactor: Double = SPEECH_FLOOR_FACTOR
+    private val tuning: VadTuning = VadTuning()
 ) : VoiceActivityDetector {
 
     private var noiseFloor = 0.0
     private var floorInit = false
 
+    // Per-recording stats so an Energy timeout can be diagnosed like WebRTC.
+    private var totalFrames = 0
+    private var speechFrames = 0
+    private var peakRms = 0.0
+
     override fun reset() {
         noiseFloor = 0.0
         floorInit = false
+        totalFrames = 0
+        speechFrames = 0
+        peakRms = 0.0
     }
 
     override fun accept(frame: ShortArray, len: Int): Boolean {
         if (len <= 0) return false
         val rms = rmsOf(frame, len)
+        totalFrames++
+        if (rms > peakRms) peakRms = rms
         // Snapshot the opening frame as the ambient floor, then let it drift on
         // quiet frames. This is the original behaviour that worked well in the
         // field. A later change made this a running-minimum (re-anchoring to the
@@ -146,15 +174,17 @@ class EnergyVad(
         // Cap the adaptive threshold just below the quietest real speech. If the
         // opening frame is loud — the hands-free user talking the instant the
         // mic re-opens between turns, or a TTS tail bleeding in — the snapshot
-        // floor pins high and floor*2.5 would otherwise climb above the user's
+        // floor pins high and floor*factor would otherwise climb above the user's
         // own voice, so every frame reads as silence, speechStarted never fires
         // and the turn dies on the no-speech timeout (the broken back-and-forth,
-        // and the old "mid-speech cutoff"). Real voice sits at 1500+ RMS and
-        // fan/AC noise at <=1200, so clamping the bar below SPEECH_RMS_CEILING
-        // keeps noise rejected while guaranteeing speech is always heard.
-        val threshold = maxOf(noiseFloor * floorFactor, minSpeechRms)
-            .coerceAtMost(SPEECH_RMS_CEILING)
+        // and the old "mid-speech cutoff"). The default ceiling sits between the
+        // loudest steady noise (~1200) and quiet real speech (~1500); all three
+        // numbers are user-tunable in advanced voice settings because real
+        // voices/mics land at very different levels.
+        val threshold = maxOf(noiseFloor * tuning.floorFactor, tuning.minSpeechRms)
+            .coerceAtMost(tuning.energyCeiling)
         return if (rms >= threshold) {
+            speechFrames++
             true
         } else {
             // Below threshold = ambient — let the floor drift toward the room
@@ -167,6 +197,17 @@ class EnergyVad(
 
     override fun currentNoiseFloor(): Double = noiseFloor
 
+    override fun diagnostics(): String {
+        val threshold = maxOf(noiseFloor * tuning.floorFactor, tuning.minSpeechRms)
+            .coerceAtMost(tuning.energyCeiling)
+        var s = "Energy: speech $speechFrames/$totalFrames frames, " +
+                "peakRms ${peakRms.toInt()}, floor ${noiseFloor.toInt()}, gate ${threshold.toInt()}"
+        if (speechFrames == 0 && totalFrames > 0 && peakRms < threshold) {
+            s += " — loudest audio stayed below the gate; lower min speech energy"
+        }
+        return s
+    }
+
     override fun close() { /* no native resources */ }
 
     private fun rmsOf(buf: ShortArray, len: Int): Double {
@@ -176,17 +217,6 @@ class EnergyVad(
             sum += s * s
         }
         return kotlin.math.sqrt(sum / len)
-    }
-
-    companion object {
-        // These are the numbers most likely to need on-device tuning.
-        const val MIN_SPEECH_RMS = 600.0
-        const val SPEECH_FLOOR_FACTOR = 2.5
-        // Upper bound on the adaptive threshold. Sits between the loudest
-        // steady noise (~1200) and the quietest real speech (~1500) so the
-        // floor can adapt to a noisy room without ever rising past the user's
-        // own voice. See accept() for why this matters for hands-free turns.
-        const val SPEECH_RMS_CEILING = 1400.0
     }
 }
 
@@ -200,7 +230,8 @@ class WebRtcVad private constructor(
     private var handle: Long,
     private val frameSamples: Int,
     private val mode: Int,
-    private val sampleRate: Int
+    private val sampleRate: Int,
+    private val tuning: VadTuning
 ) : VoiceActivityDetector {
 
     private val pending = ShortArray(frameSamples)
@@ -213,6 +244,9 @@ class WebRtcVad private constructor(
     private var gatedVoicedFrames = 0  // libfvad vote AND above the energy floor
     private var errorFrames = 0
     private var peakAbs = 0
+    // Average RMS of the frames libfvad called voice — the number to compare
+    // against the gate when "voiced N, gated 0" needs explaining.
+    private var voicedRmsSum = 0.0
 
     // Adaptive energy floor that gates libfvad's vote. The GMM still tags
     // continuous fan/AC rumble as voice on some devices (seen on Pixel 8 +
@@ -232,6 +266,7 @@ class WebRtcVad private constructor(
         gatedVoicedFrames = 0
         errorFrames = 0
         peakAbs = 0
+        voicedRmsSum = 0.0
         noiseFloor = 0.0
         floorInit = false
         if (handle != 0L) {
@@ -268,15 +303,20 @@ class WebRtcVad private constructor(
                 // EnergyVad: a loud opening frame (user mid-word as the mic
                 // re-arms, or TTS tail) must not pin the energy gate above the
                 // user's own voice and silence the libfvad vote forever.
-                val energyThreshold = maxOf(noiseFloor * ENERGY_FLOOR_FACTOR, MIN_ENERGY_RMS)
-                    .coerceAtMost(MAX_ENERGY_RMS)
-                val aboveEnergy = rms >= energyThreshold
+                // gateEnabled=false trusts the libfvad vote alone — the escape
+                // hatch for voices/mics quieter than any workable gate.
+                val energyThreshold = maxOf(noiseFloor * tuning.floorFactor, tuning.minSpeechRms)
+                    .coerceAtMost(tuning.energyCeiling)
+                val aboveEnergy = !tuning.gateEnabled || rms >= energyThreshold
 
                 val r = try {
                     WebRtcVadNative.nativeProcess(handle, pending, frameSamples)
                 } catch (_: Throwable) { -1 }
                 totalFrames++
-                if (r == 1) voicedFrames++
+                if (r == 1) {
+                    voicedFrames++
+                    voicedRmsSum += rms
+                }
                 if (r == 1 && aboveEnergy) {
                     speech = true
                     gatedVoicedFrames++
@@ -297,9 +337,20 @@ class WebRtcVad private constructor(
     override fun currentNoiseFloor(): Double = noiseFloor
 
     override fun diagnostics(): String {
-        val base = "WebRTC frame=$frameSamples: voiced $voicedFrames/$totalFrames " +
-                "(gated $gatedVoicedFrames), peak $peakAbs/32767, floor ${noiseFloor.toInt()}"
-        return if (errorFrames > 0) "$base, errors $errorFrames" else base
+        val gate = maxOf(noiseFloor * tuning.floorFactor, tuning.minSpeechRms)
+            .coerceAtMost(tuning.energyCeiling)
+        val voiceRms = if (voicedFrames > 0) (voicedRmsSum / voicedFrames).toInt() else 0
+        var s = "WebRTC frame=$frameSamples: voiced $voicedFrames/$totalFrames " +
+                "(gated $gatedVoicedFrames), voiceRms~$voiceRms, peak $peakAbs/32767, " +
+                "floor ${noiseFloor.toInt()}, gate ${if (tuning.gateEnabled) gate.toInt().toString() else "off"}"
+        if (errorFrames > 0) s += ", errors $errorFrames"
+        // The exact failure that burned a real session: libfvad heard the
+        // voice, the energy gate vetoed every frame. Say so in plain words —
+        // this line is what the user pastes when reporting a voice bug.
+        if (tuning.gateEnabled && voicedFrames > 0 && gatedVoicedFrames == 0) {
+            s += " — speech was heard but stayed below the energy gate; lower min speech energy or disable the gate in advanced voice settings"
+        }
+        return s
     }
 
     override fun close() {
@@ -312,18 +363,14 @@ class WebRtcVad private constructor(
     companion object {
         private const val TAG = "WebRtcVad"
 
-        // Energy-gate tuning: same constants as EnergyVad so behaviour is
-        // consistent between methods. A normal voice 30 cm from a phone mic
-        // runs RMS 1500-6000; fan/AC rumble runs 200-1200 — so floor*2.5
-        // (or the 600 absolute) cleanly separates them once the floor adapts.
-        private const val ENERGY_FLOOR_FACTOR = 2.5
-        private const val MIN_ENERGY_RMS = 600.0
-        // Upper bound on the energy gate; between max steady noise (~1200) and
-        // min real speech (~1500). Mirrors EnergyVad.SPEECH_RMS_CEILING.
-        private const val MAX_ENERGY_RMS = 1400.0
+        // Energy-gate defaults live in VadTuning (shared with EnergyVad so
+        // behaviour stays consistent between methods, and user-tunable since
+        // real voices/mics don't fit one set of numbers). Reference points: a
+        // normal voice 30 cm from a phone mic runs RMS 1500-6000, fan/AC
+        // rumble 200-1200, a quiet voice at arm's length can sit under 400.
 
         /** @param mode libfvad aggressiveness 0..3. Returns null if unavailable. */
-        fun create(mode: Int, sampleRate: Int): WebRtcVad? {
+        fun create(mode: Int, sampleRate: Int, tuning: VadTuning = VadTuning()): WebRtcVad? {
             if (!WebRtcVadNative.ensureLoaded()) return null
             val handle = try {
                 WebRtcVadNative.nativeNew(mode, sampleRate)
@@ -361,7 +408,7 @@ class WebRtcVad private constructor(
                 return null
             }
             Log.i(TAG, "WebRTC VAD ready: rate=$sampleRate frame=$frameSamples")
-            return WebRtcVad(handle, frameSamples, mode, sampleRate)
+            return WebRtcVad(handle, frameSamples, mode, sampleRate, tuning)
         }
     }
 }
