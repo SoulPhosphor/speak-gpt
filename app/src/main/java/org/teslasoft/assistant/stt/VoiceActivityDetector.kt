@@ -30,9 +30,11 @@ import android.util.Log
  *   - [EnergyVad]  pure-Kotlin RMS-vs-adaptive-noise-floor. Zero deps, but
  *     treats any loud sound as speech.
  *   - [WebRtcVad]  the WebRTC GMM voice detector (via libfvad in native
- *     code). Much better at rejecting non-voice noise; default.
- *   - Silero (neural) is planned as a third option; [VadFactory] is the
- *     single place a new implementation gets wired in.
+ *     code). Much better at rejecting non-voice noise.
+ *   - [SileroVad]  neural speech detector (ONNX Runtime + bundled model).
+ *     Needs no energy gate or per-room tuning; falls back to energy when
+ *     the runtime can't load. [VadFactory] is the single place any new
+ *     implementation gets wired in.
  */
 interface VoiceActivityDetector {
     /** Reset internal state at the start of a new recording. */
@@ -63,7 +65,7 @@ interface VoiceActivityDetector {
 object VadMethods {
     const val ENERGY = "energy"
     const val WEBRTC = "webrtc"
-    const val SILERO = "silero" // reserved; not yet implemented
+    const val SILERO = "silero" // neural detector (assets/silero_vad.onnx via ONNX Runtime)
     // Energy is the default: dependency-free and works on every device. WebRTC
     // needs a native lib that isn't always present (and silently falls back to
     // energy when it isn't), so it's opt-in rather than the default.
@@ -112,7 +114,11 @@ data class VadTuning(
     val energyCeiling: Double = 1400.0,
     val hysteresisEnabled: Boolean = true,
     val hysteresisExitRatio: Double = 0.5,
-    val hangoverMs: Long = 0L
+    val hangoverMs: Long = 0L,
+    /** Silero-only: speech probability required to enter speech (the energy
+     *  gate fields above don't apply to the neural detector). Hysteresis exit
+     *  is threshold − 0.15, Silero's own recommended pairing. */
+    val sileroThreshold: Double = 0.5
 )
 
 /** Builds the detector for the selected method, falling back to energy. */
@@ -136,7 +142,16 @@ object VadFactory {
                     EnergyVad(tuning, sampleRate)
                 }
             }
-            // VadMethods.SILERO -> SileroVad.create(...) ?: EnergyVad()   // TODO
+            VadMethods.SILERO -> {
+                // The runtime is loaded earlier (needs a Context for assets);
+                // if it isn't available, hands-free must still work — Energy
+                // is the universal fallback, and the diagnostics say which
+                // detector actually ran.
+                SileroVad.createIfLoaded(tuning, sampleRate) ?: run {
+                    Log.w(TAG, "Silero VAD unavailable, falling back to energy")
+                    EnergyVad(tuning, sampleRate)
+                }
+            }
             else -> EnergyVad(tuning, sampleRate)
         }
     }

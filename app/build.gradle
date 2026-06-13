@@ -168,6 +168,11 @@ dependencies {
         exclude group: 'org.jetbrains', module: 'annotations'
     }
 
+    // ONNX Runtime for the Silero neural VAD (assets/silero_vad.onnx). The
+    // model is ~2 MB and the arm64 runtime ~12 MB — the price of voice
+    // detection that doesn't need per-room energy-gate tuning.
+    implementation 'com.microsoft.onnxruntime:onnxruntime-android:1.20.0'
+
     // JVM unit tests (app/src/test); run in CI via "gradlew test".
     testImplementation 'junit:junit:4.13.2'
 }

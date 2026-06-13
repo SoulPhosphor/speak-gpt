@@ -318,6 +318,30 @@
                 android:textColor="@color/text_subtitle"
                 android:textSize="13sp" />
 
+            <TextView
+                android:id="@+id/label_silero_threshold"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="20dp"
+                android:text="@string/adv_silero_threshold_title"
+                android:textColor="@color/text"
+                android:textSize="16sp" />
+
+            <com.google.android.material.slider.Slider
+                android:id="@+id/slider_silero_threshold"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:stepSize="5"
+                android:valueFrom="5"
+                android:valueTo="95" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/adv_silero_threshold_desc"
+                android:textColor="@color/text_subtitle"
+                android:textSize="13sp" />
+
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_reset_vad"
                 style="@style/Widget.Material3.Button.TonalButton"

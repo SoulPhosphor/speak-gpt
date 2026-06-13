@@ -145,6 +145,14 @@ class VoiceSettingsActivity : FragmentActivity() {
         createTiles()
         placeTiles()
         initLogic()
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        // Insets must be applied here, not in onCreate: on S+ the util reads
+        // window.decorView.rootWindowInsets, which is null before the window
+        // attaches — the call silently no-oped and this screen rendered under
+        // the status bar with its last tile cut off behind the gesture area.
         adjustPaddings()
     }
 
@@ -532,6 +540,9 @@ class VoiceSettingsActivity : FragmentActivity() {
     // buttons, so the rows are built by hand.
     private fun vadMethodSelector() {
         val entries = listOf(
+            // Silero's one tunable (the speech threshold) lives in Advanced &
+            // debugging with the rest of the detection knobs, so no cog here.
+            VadMethodEntry("silero", getString(R.string.vad_method_silero), null),
             VadMethodEntry("webrtc", getString(R.string.vad_method_webrtc)) { showWebRtcSensitivityDialog() },
             VadMethodEntry("energy", getString(R.string.vad_method_energy), null)
         )
@@ -607,6 +618,11 @@ class VoiceSettingsActivity : FragmentActivity() {
                 if (selectedId == "webrtc" && !org.teslasoft.assistant.stt.WebRtcVadNative.ensureLoaded()) {
                     Toast.makeText(this, R.string.vad_webrtc_unavailable, Toast.LENGTH_LONG).show()
                 }
+                if (selectedId == "silero" &&
+                    !org.teslasoft.assistant.stt.SileroVadRuntime.ensureLoaded(applicationContext)
+                ) {
+                    Toast.makeText(this, R.string.vad_silero_unavailable, Toast.LENGTH_LONG).show()
+                }
             }
             .setNegativeButton(android.R.string.cancel) { _, _ -> }
             .show()
@@ -676,6 +692,7 @@ class VoiceSettingsActivity : FragmentActivity() {
     private fun vadMethodSubtitle(): String {
         return when (preferences?.getVadMethod() ?: "energy") {
             "energy" -> getString(R.string.vad_method_energy)
+            "silero" -> getString(R.string.vad_method_silero)
             else -> getString(
                 R.string.vad_method_subtitle_webrtc,
                 getString(R.string.vad_method_webrtc),

@@ -75,6 +75,8 @@ class VoiceAdvancedSettingsActivity : FragmentActivity() {
     private var sliderHystExit: Slider? = null
     private var labelHangover: TextView? = null
     private var sliderHangover: Slider? = null
+    private var labelSileroThreshold: TextView? = null
+    private var sliderSileroThreshold: Slider? = null
     private var btnResetVad: MaterialButton? = null
 
     private var radioDecoderBeam: RadioButton? = null
@@ -136,6 +138,8 @@ class VoiceAdvancedSettingsActivity : FragmentActivity() {
         sliderHystExit = findViewById(R.id.slider_hyst_exit)
         labelHangover = findViewById(R.id.label_hangover)
         sliderHangover = findViewById(R.id.slider_hangover)
+        labelSileroThreshold = findViewById(R.id.label_silero_threshold)
+        sliderSileroThreshold = findViewById(R.id.slider_silero_threshold)
         btnResetVad = findViewById(R.id.btn_reset_vad)
 
         radioDecoderBeam = findViewById(R.id.radio_decoder_beam)
@@ -199,6 +203,7 @@ class VoiceAdvancedSettingsActivity : FragmentActivity() {
         sliderHystExit?.let { it.value = snap(p.getVadHysteresisExitPercent().toFloat(), it) }
         sliderHystExit?.isEnabled = p.getVadHysteresisEnabled()
         sliderHangover?.let { it.value = snap(p.getVadHangoverMs().toFloat(), it) }
+        sliderSileroThreshold?.let { it.value = snap(p.getVadSileroThreshold().toFloat(), it) }
 
         val beam = p.getWhisperDecoder() != "greedy"
         radioDecoderBeam?.isChecked = beam
@@ -230,6 +235,7 @@ class VoiceAdvancedSettingsActivity : FragmentActivity() {
         labelMinSpeech?.text = "${getString(R.string.adv_min_speech_title)}: ${sliderMinSpeech?.value?.toInt() ?: 0} ms"
         labelHystExit?.text = "${getString(R.string.adv_hyst_exit_title)}: ${sliderHystExit?.value?.toInt() ?: 0}%"
         labelHangover?.text = "${getString(R.string.adv_hangover_title)}: ${sliderHangover?.value?.toInt() ?: 0} ms"
+        labelSileroThreshold?.text = "${getString(R.string.adv_silero_threshold_title)}: ${sliderSileroThreshold?.value?.toInt() ?: 0}%"
         labelBeamSize?.text = "${getString(R.string.adv_beam_size_title)}: ${sliderBeamSize?.value?.toInt() ?: 0}"
         labelTemperature?.text = "${getString(R.string.adv_temperature_title)}: ${"%.2f".format(sliderTemperature?.value ?: 0f)}"
         labelTtsRate?.text = "${getString(R.string.adv_tts_rate_title)}: ${"%.1f".format(sliderTtsRate?.value ?: 1f)}x"
@@ -270,6 +276,10 @@ class VoiceAdvancedSettingsActivity : FragmentActivity() {
             if (fromUser) p.setVadHangoverMs(value.toInt())
             refreshLabels()
         }
+        sliderSileroThreshold?.addOnChangeListener { _, value, fromUser ->
+            if (fromUser) p.setVadSileroThreshold(value.toInt())
+            refreshLabels()
+        }
         btnResetVad?.setOnClickListener {
             p.setVadEnergyGateEnabled(true)
             p.setVadMinSpeechRms(600)
@@ -279,6 +289,7 @@ class VoiceAdvancedSettingsActivity : FragmentActivity() {
             p.setVadHysteresisEnabled(true)
             p.setVadHysteresisExitPercent(50)
             p.setVadHangoverMs(0)
+            p.setVadSileroThreshold(50)
             loadValues()
         }
 

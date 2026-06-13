@@ -147,3 +147,7 @@ org.apache.hc.core5.**
 # Please add these rules to your existing keep rules in order to suppress warnings.
 # This is generated automatically by the Android Gradle plugin.
 -dontwarn org.slf4j.impl.StaticLoggerBinder
+
+# ONNX Runtime (Silero VAD): the native layer resolves Java classes and
+# callbacks reflectively; stripping/renaming them breaks session creation.
+-keep class ai.onnxruntime.** { *; }

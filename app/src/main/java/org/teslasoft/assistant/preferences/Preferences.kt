@@ -1133,6 +1133,17 @@ class Preferences private constructor(private var preferences: SharedPreferences
         putGlobalString("vad_hangover_ms", value.coerceIn(0, 2000).toString(), "0")
     }
 
+    /** Silero-only: speech probability (percent) required to call a moment
+     *  speech (default 50). The energy-gate settings don't apply to the
+     *  neural detector. */
+    fun getVadSileroThreshold() : Int {
+        return (getGlobalString("vad_silero_threshold", "50").toIntOrNull() ?: 50).coerceIn(5, 95)
+    }
+
+    fun setVadSileroThreshold(value: Int) {
+        putGlobalString("vad_silero_threshold", value.coerceIn(5, 95).toString(), "50")
+    }
+
     // ---- Advanced on-device Whisper decoding -------------------------------
     // Mapped 1:1 onto whisper.cpp's whisper_full_params; defaults match what
     // the JNI layer always hardcoded, so leaving these alone changes nothing.

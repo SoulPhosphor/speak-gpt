@@ -764,6 +764,8 @@
     <string name="adv_hyst_exit_desc">While you are speaking, audio only needs to stay above this percentage of the gate. Lower it if you still get cut off mid-sentence; raise it if background noise keeps turns alive after you stop. Default 50%.</string>
     <string name="adv_hangover_title">Speech hold time</string>
     <string name="adv_hangover_desc">After speech, dips up to this long still count as speech — bridges breaths and soft syllables entirely below the gate. Note it effectively adds to the pause time before your turn ends. 0 ms = off.</string>
+    <string name="adv_silero_threshold_title">Silero speech threshold</string>
+    <string name="adv_silero_threshold_desc">Silero method only: how confident the neural detector must be that a moment is speech. Lower it to catch quiet or distant speech; raise it if the TV or other voices keep starting turns. The energy-gate settings above don’t apply to Silero — it tells speech from noise by itself, which is the point. Default 50%.</string>
     <string name="adv_reset_vad">Reset detection to defaults</string>
 
     <string name="adv_section_whisper">Whisper decoding — on-device only</string>
@@ -795,6 +797,9 @@
     <string name="adv_tts_rate_desc">1.0 = normal speed.</string>
     <string name="adv_tts_pitch_title">Pitch</string>
     <string name="adv_tts_pitch_desc">1.0 = the voice’s natural pitch.</string>
+
+    <string name="vad_method_silero">Silero (neural, recommended)</string>
+    <string name="vad_silero_unavailable">The Silero detector couldn’t load on this device. Energy detection will be used instead.</string>
 
     <string name="adv_section_diag">Diagnostics</string>
     <string name="adv_section_diag_caption">With either toggle on, every hands-free decision (mic opened/closed and why, readback, failures, stop reasons) is written to the Event log, plus detailed per-frame detector state to logcat. This is what to turn on before reporting a voice bug.</string>

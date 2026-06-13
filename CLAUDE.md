@@ -125,7 +125,13 @@ Everything is on-device. No cloud sync, no accounts.
   speech enters at the full gate but only has to stay above gate×exit-ratio,
   default ON at 50%, with an optional speech-hold/hangover defaulting to 0 —
   built for changing-loudness rooms; the Energy detector's hysteresis is
-  unit-tested in `app/src/test`; all global prefs), on-device Whisper
+  unit-tested in `app/src/test`; all global prefs). Three VAD methods:
+  Energy, WebRTC (libfvad), and Silero — a neural detector running the
+  bundled `assets/silero_vad.onnx` (pinned silero-vad v5.1.2, MIT) through
+  ONNX Runtime (`onnxruntime-android` dep + proguard keep rule); Silero
+  ignores the energy-gate knobs (only its probability threshold applies,
+  plus shared hysteresis/speech-hold) and falls back to Energy with an
+  event-log line if the runtime can't load. On-device Whisper
   decode params (greedy/beam, beam size,
   temperature, suppress-blank, single-segment, initial prompt, prev-context,
   cleanup toggle — plumbed Kotlin→JNI→whisper_full, defaults match the old

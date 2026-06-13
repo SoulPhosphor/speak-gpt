@@ -2223,7 +2223,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         val noSpeechMs = preferences!!.getHandsFreeNoSpeechSeconds().coerceAtLeast(1) * 1000L
         val graceMs = if (freshTurn) 0L else 500L
         val vadMethod = preferences!!.getVadMethod()
-        val vadLog = if (vadMethod == "webrtc") preferences!!.getVadLoggingWebrtc() else preferences!!.getVadLoggingEnergy()
+        val vadLog = if (vadMethod == "energy") preferences!!.getVadLoggingEnergy() else preferences!!.getVadLoggingWebrtc()
+        // The Silero session loads from assets and needs a Context; the
+        // detector factory runs deeper down without one, so make sure the
+        // runtime is resident before the turn starts. On failure the factory
+        // falls back to Energy — say so, or the user tunes the wrong knobs.
+        if (vadMethod == org.teslasoft.assistant.stt.VadMethods.SILERO &&
+            !org.teslasoft.assistant.stt.SileroVadRuntime.ensureLoaded(applicationContext)
+        ) {
+            logVoiceEvent("Silero detector failed to load; this turn will use Energy detection")
+        }
         // User-tuned energy gate (advanced voice settings): the field showed
         // the fixed gate discarding a quiet voice entirely, so the numbers are
         // theirs to adjust per device/mic.
@@ -2234,7 +2243,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             energyCeiling = preferences!!.getVadEnergyCeiling().toDouble(),
             hysteresisEnabled = preferences!!.getVadHysteresisEnabled(),
             hysteresisExitRatio = preferences!!.getVadHysteresisExitPercent() / 100.0,
-            hangoverMs = preferences!!.getVadHangoverMs().toLong()
+            hangoverMs = preferences!!.getVadHangoverMs().toLong(),
+            sileroThreshold = preferences!!.getVadSileroThreshold() / 100.0
         )
         val ok = LocalWhisperEngine.get().startRecording(
             vad = LocalWhisperEngine.VadConfig(
