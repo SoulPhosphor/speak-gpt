@@ -37,4 +37,23 @@ class GlobalPreferences private constructor(private var gp: SharedPreferences) {
     fun getAmoledPitchBlack() : Boolean {
         return gp.getBoolean("amoled_pitch_black", false)
     }
+
+    /**
+     * Get UI color palette (see ui-redesign-plan.md). Global, not per-chat.
+     *
+     * @return palette key, default "violet" (the app's original look)
+     * */
+    fun getUiPalette() : String {
+        return gp.getString("ui_palette", "violet") ?: "violet"
+    }
+
+    /**
+     * Set UI color palette. Activities apply it on their next onCreate;
+     * the theme picker must call recreate() for an immediate change.
+     *
+     * @param palette palette key
+     * */
+    fun setUiPalette(palette: String) {
+        gp.edit().putString("ui_palette", palette).apply()
+    }
 }

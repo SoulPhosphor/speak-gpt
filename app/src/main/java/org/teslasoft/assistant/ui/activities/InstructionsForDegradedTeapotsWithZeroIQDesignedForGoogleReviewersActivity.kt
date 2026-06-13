@@ -24,10 +24,12 @@ import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.util.WindowInsetsUtil
 import java.util.EnumSet
+import org.teslasoft.assistant.theme.ThemeManager
 
 class InstructionsForDegradedTeapotsWithZeroIQDesignedForGoogleReviewersActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        ThemeManager.getThemeManager().applyPalette(this)
         enableEdgeToEdge()
         setContentView(R.layout.instructions_for_degraded_teapots_with_zero_iq_designed_for_google_reviewers)
         reloadAmoled()

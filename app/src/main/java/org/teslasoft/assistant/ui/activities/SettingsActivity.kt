@@ -65,6 +65,7 @@ import java.util.EnumSet
 import kotlin.math.roundToInt
 import androidx.core.content.edit
 import androidx.core.view.WindowCompat
+import org.teslasoft.assistant.theme.ThemeManager
 
 class SettingsActivity : FragmentActivity() {
 
@@ -317,6 +318,7 @@ class SettingsActivity : FragmentActivity() {
         window.sharedElementExitTransition = transition2
 
         super.onCreate(savedInstanceState)
+        ThemeManager.getThemeManager().applyPalette(this)
         setContentView(R.layout.activity_settings)
 
         if (Build.VERSION.SDK_INT >= 33) {

@@ -128,7 +128,11 @@ dependencies {
     implementation 'com.github.Dimezis:BlurView:version-2.0.6'
     implementation 'androidx.activity:activity-ktx:1.13.0'
     implementation 'androidx.appcompat:appcompat:1.7.1'
-    implementation 'com.google.android.material:material:1.14.0-beta01'
+    // Final stable MDC-Android release (library is in maintenance mode; there is
+    // nothing newer to upgrade to). Pinned per ui-redesign-plan.md.
+    implementation 'com.google.android.material:material:1.14.0'
+    // Declared explicitly (was only transitive) for the navigation drawer work.
+    implementation 'androidx.drawerlayout:drawerlayout:1.2.0'
     implementation 'com.google.code.gson:gson:2.13.2'
     implementation 'com.aallam.openai:openai-client:3.8.2'
     implementation 'io.ktor:ktor-client-android:2.3.12' // Do not update, incompatible with OpenAI API

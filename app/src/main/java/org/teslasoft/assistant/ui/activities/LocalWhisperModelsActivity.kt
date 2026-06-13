@@ -42,6 +42,7 @@ import org.teslasoft.assistant.stt.LocalWhisperDownloader
 import org.teslasoft.assistant.stt.LocalWhisperEngine
 import org.teslasoft.assistant.stt.LocalWhisperModels
 import org.teslasoft.assistant.stt.LocalWhisperStorage
+import org.teslasoft.assistant.theme.ThemeManager
 
 /**
  * Pick which on-device Whisper model is active, and trigger downloads for
@@ -80,6 +81,7 @@ class LocalWhisperModelsActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        ThemeManager.getThemeManager().applyPalette(this)
         setContentView(R.layout.activity_local_whisper_models)
 
         preferences = Preferences.getPreferences(this, "")

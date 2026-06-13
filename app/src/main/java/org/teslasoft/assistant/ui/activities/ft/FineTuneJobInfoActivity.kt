@@ -19,10 +19,12 @@ package org.teslasoft.assistant.ui.activities.ft
 import android.os.Bundle
 import androidx.fragment.app.FragmentActivity
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.theme.ThemeManager
 
 class FineTuneJobInfoActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        ThemeManager.getThemeManager().applyPalette(this)
 
         setContentView(R.layout.activity_fine_tune_job_info)
     }

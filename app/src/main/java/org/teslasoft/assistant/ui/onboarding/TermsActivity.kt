@@ -25,6 +25,7 @@ import androidx.fragment.app.FragmentActivity
 import com.google.android.material.button.MaterialButton
 import eightbitlab.com.blurview.BlurView
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.theme.ThemeManager
 
 class TermsActivity : FragmentActivity() {
 
@@ -34,6 +35,7 @@ class TermsActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        ThemeManager.getThemeManager().applyPalette(this)
         setContentView(R.layout.activity_terms)
 
         btnNext = findViewById(R.id.btn_next)

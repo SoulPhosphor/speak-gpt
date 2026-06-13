@@ -31,6 +31,7 @@ import com.google.android.material.elevation.SurfaceColors
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Logger
 import org.teslasoft.assistant.preferences.Preferences
+import org.teslasoft.assistant.theme.ThemeManager
 
 class LogsActivity : FragmentActivity() {
 
@@ -44,6 +45,7 @@ class LogsActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        ThemeManager.getThemeManager().applyPalette(this)
 
         setContentView(R.layout.activity_logs)
 

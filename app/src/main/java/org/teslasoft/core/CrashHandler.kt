@@ -38,6 +38,7 @@ import org.teslasoft.assistant.preferences.Logger
 import org.teslasoft.assistant.ui.activities.MainActivity
 import java.time.Instant
 import java.time.format.DateTimeFormatter
+import org.teslasoft.assistant.theme.ThemeManager
 
 /** This activity will be opened if app os crashed. */
 @Suppress("DEPRECATION")
@@ -52,6 +53,7 @@ class CrashHandlerActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        ThemeManager.getThemeManager().applyPalette(this)
 
         if (Build.VERSION.SDK_INT < 30) {
             window.statusBarColor = getColor(R.color.amoled_window_background)

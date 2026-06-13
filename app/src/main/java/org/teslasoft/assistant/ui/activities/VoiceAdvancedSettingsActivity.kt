@@ -103,6 +103,7 @@ class VoiceAdvancedSettingsActivity : FragmentActivity() {
     @Suppress("DEPRECATION")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        ThemeManager.getThemeManager().applyPalette(this)
         setContentView(R.layout.activity_voice_advanced)
 
         // These settings are global (one voice pipeline per device), so no

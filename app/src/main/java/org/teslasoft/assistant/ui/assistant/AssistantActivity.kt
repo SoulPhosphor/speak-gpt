@@ -25,6 +25,7 @@ import androidx.fragment.app.FragmentActivity
 import com.google.android.material.elevation.SurfaceColors
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.ui.fragments.AssistantFragment
+import org.teslasoft.assistant.theme.ThemeManager
 
 class AssistantActivity : FragmentActivity() {
 
@@ -41,6 +42,7 @@ class AssistantActivity : FragmentActivity() {
 
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        ThemeManager.getThemeManager().applyPalette(this)
 
         val policy = StrictMode.ThreadPolicy.Builder().permitAll().build()
         StrictMode.setThreadPolicy(policy)

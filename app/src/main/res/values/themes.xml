@@ -154,4 +154,14 @@
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
     </style>
+
+    <!-- Preset color palettes (ui-redesign-plan.md, Phase 0). Each palette is a
+         ThemeOverlay applied on top of the activity theme by
+         ThemeManager.applyPalette before setContentView. Violet is the app's
+         original look and stays EMPTY on purpose: until the Phase 1
+         theme-attribute migration lands, colors are still defined by Theme.App
+         and hard-coded @color references, so a non-empty overlay here would
+         have no visible effect anyway. New palettes get their own overlay
+         redefining the Material color roles, never edits to Theme.App. -->
+    <style name="ThemeOverlay.Phosphor.Violet" parent=""/>
 </resources>

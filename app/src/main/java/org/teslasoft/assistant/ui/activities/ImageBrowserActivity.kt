@@ -45,6 +45,7 @@ import java.io.IOException
 import java.util.Base64
 import androidx.core.net.toUri
 import org.teslasoft.assistant.util.ShareUtil.Companion.shareBase64Image
+import org.teslasoft.assistant.theme.ThemeManager
 
 class ImageBrowserActivity : FragmentActivity() {
 
@@ -59,6 +60,7 @@ class ImageBrowserActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        ThemeManager.getThemeManager().applyPalette(this)
 
         setContentView(R.layout.activity_imageview)
 

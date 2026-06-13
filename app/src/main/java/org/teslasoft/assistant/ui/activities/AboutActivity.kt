@@ -42,6 +42,7 @@ import org.teslasoft.assistant.util.WindowInsetsUtil
 import java.util.EnumSet
 import androidx.core.net.toUri
 import eightbitlab.com.blurview.BlurView
+import org.teslasoft.assistant.theme.ThemeManager
 
 class AboutActivity : FragmentActivity() {
 
@@ -70,6 +71,7 @@ class AboutActivity : FragmentActivity() {
         )
 
         super.onCreate(savedInstanceState)
+        ThemeManager.getThemeManager().applyPalette(this)
 
         setContentView(R.layout.activity_about_new)
 

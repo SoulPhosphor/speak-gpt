@@ -35,6 +35,7 @@ import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.stt.LocalWhisperModels
 import org.teslasoft.assistant.stt.LocalWhisperStorage
+import org.teslasoft.assistant.theme.ThemeManager
 
 /**
  * Lists installed on-device Whisper models with a Delete button per row.
@@ -53,6 +54,7 @@ class LocalWhisperManageActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        ThemeManager.getThemeManager().applyPalette(this)
         setContentView(R.layout.activity_local_whisper_manage)
 
         preferences = Preferences.getPreferences(this, "")

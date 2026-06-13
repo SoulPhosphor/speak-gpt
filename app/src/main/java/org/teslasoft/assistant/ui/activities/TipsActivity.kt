@@ -34,6 +34,7 @@ import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.util.WindowInsetsUtil
 import java.util.EnumSet
 import androidx.core.graphics.drawable.toDrawable
+import org.teslasoft.assistant.theme.ThemeManager
 
 class TipsActivity : FragmentActivity() {
 
@@ -50,6 +51,7 @@ class TipsActivity : FragmentActivity() {
         }
 
         super.onCreate(savedInstanceState)
+        ThemeManager.getThemeManager().applyPalette(this)
 
         setContentView(R.layout.activity_tips)
 

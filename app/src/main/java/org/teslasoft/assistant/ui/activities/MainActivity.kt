@@ -105,6 +105,7 @@ class MainActivity : FragmentActivity() {
         }
 
         super.onCreate(savedInstanceState)
+        ThemeManager.getThemeManager().applyPalette(this)
 
         splashScreen = installSplashScreen()
         splashScreen?.setKeepOnScreenCondition { true }

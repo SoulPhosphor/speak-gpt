@@ -16,12 +16,14 @@
 
 package org.teslasoft.assistant.theme
 
+import android.app.Activity
 import android.content.Context
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.DrawableCompat
 import com.google.android.material.elevation.SurfaceColors
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.preferences.GlobalPreferences
 
 class ThemeManager {
     companion object {
@@ -32,6 +34,21 @@ class ThemeManager {
             if (themeManager == null) themeManager = ThemeManager()
             return themeManager!!
         }
+    }
+
+    /**
+     * Applies the user's preset color palette as a theme overlay
+     * (ui-redesign-plan.md). Every activity must call this in onCreate
+     * BEFORE setContentView, otherwise inflated views resolve color roles
+     * from the base theme and the palette silently doesn't apply.
+     */
+    fun applyPalette(activity: Activity) {
+        val overlay = when (GlobalPreferences.getPreferences(activity.applicationContext).getUiPalette()) {
+            // Unknown keys fall back to violet so a stale/renamed preference
+            // value can never crash or blank-theme the app.
+            else -> R.style.ThemeOverlay_Phosphor_Violet
+        }
+        activity.theme.applyStyle(overlay, true)
     }
 
     fun applyTheme(context: Context, isAmoled: Boolean) {

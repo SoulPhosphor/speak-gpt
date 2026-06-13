@@ -37,6 +37,7 @@ import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.LogitBiasPreferences
 import org.teslasoft.assistant.preferences.dto.LogitBiasObject
 import org.teslasoft.assistant.ui.adapters.LogitBiasItemAdapter
+import org.teslasoft.assistant.theme.ThemeManager
 
 class LogitBiasConfigActivity : FragmentActivity() {
 
@@ -77,6 +78,7 @@ class LogitBiasConfigActivity : FragmentActivity() {
     @SuppressLint("SetTextI18n")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        ThemeManager.getThemeManager().applyPalette(this)
 
         setContentView(R.layout.activity_logit_bias_list)
 

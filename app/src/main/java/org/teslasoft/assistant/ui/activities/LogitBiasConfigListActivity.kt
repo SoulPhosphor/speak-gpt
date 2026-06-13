@@ -38,6 +38,7 @@ import org.teslasoft.assistant.ui.adapters.LogitBiasConfigItemAdapter
 import org.teslasoft.assistant.ui.fragments.dialogs.EditLogitBiasConfigDialogFragment
 import org.teslasoft.assistant.util.Hash
 import androidx.core.graphics.drawable.toDrawable
+import org.teslasoft.assistant.theme.ThemeManager
 
 class LogitBiasConfigListActivity : FragmentActivity() {
 
@@ -122,6 +123,7 @@ class LogitBiasConfigListActivity : FragmentActivity() {
     @Suppress("DEPRECATION")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        ThemeManager.getThemeManager().applyPalette(this)
 
         setContentView(R.layout.activity_logit_bias_config_list)
 

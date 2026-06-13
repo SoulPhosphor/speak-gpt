@@ -1205,6 +1205,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         window.sharedElementExitTransition = transition2
 
         super.onCreate(savedInstanceState)
+        ThemeManager.getThemeManager().applyPalette(this)
 
         if (Build.VERSION.SDK_INT >= 33) {
             onBackInvokedDispatcher.registerOnBackInvokedCallback(

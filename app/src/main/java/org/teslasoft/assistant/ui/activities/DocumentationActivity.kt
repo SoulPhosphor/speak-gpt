@@ -28,6 +28,7 @@ import androidx.fragment.app.FragmentActivity
 import com.google.android.material.elevation.SurfaceColors
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
+import org.teslasoft.assistant.theme.ThemeManager
 
 class DocumentationActivity : FragmentActivity() {
 
@@ -38,6 +39,7 @@ class DocumentationActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        ThemeManager.getThemeManager().applyPalette(this)
         setContentView(R.layout.activity_documentation)
 
         btnBack = findViewById(R.id.btn_back)

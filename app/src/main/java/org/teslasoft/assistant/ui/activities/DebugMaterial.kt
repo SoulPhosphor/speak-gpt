@@ -29,6 +29,7 @@ import com.google.android.material.carousel.CarouselSnapHelper
 import com.google.android.material.carousel.FullScreenCarouselStrategy
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.ui.adapters.MaterialAdapter
+import org.teslasoft.assistant.theme.ThemeManager
 
 class DebugMaterial : FragmentActivity() {
     private var carousel: RecyclerView? = null
@@ -41,6 +42,7 @@ class DebugMaterial : FragmentActivity() {
     @SuppressLint("NotifyDataSetChanged")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        ThemeManager.getThemeManager().applyPalette(this)
         setContentView(R.layout.activity_material)
 
         sampleData.add(ContextCompat.getColor(this, R.color.tint_cat_music))

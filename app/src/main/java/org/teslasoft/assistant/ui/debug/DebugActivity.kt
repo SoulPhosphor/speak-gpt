@@ -18,10 +18,12 @@ package org.teslasoft.assistant.ui.debug
 
 import android.os.Bundle
 import androidx.fragment.app.FragmentActivity
+import org.teslasoft.assistant.theme.ThemeManager
 
 class DebugActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        ThemeManager.getThemeManager().applyPalette(this)
         finish()
     }
 

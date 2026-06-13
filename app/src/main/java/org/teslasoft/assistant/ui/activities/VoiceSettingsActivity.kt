@@ -46,6 +46,7 @@ import org.teslasoft.assistant.util.WindowInsetsUtil
 import java.util.EnumSet
 import java.util.Locale
 import kotlin.math.roundToInt
+import org.teslasoft.assistant.theme.ThemeManager
 
 /**
  * One screen that owns every speech-related setting. Reached from the single
@@ -115,6 +116,7 @@ class VoiceSettingsActivity : FragmentActivity() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
         super.onCreate(savedInstanceState)
+        ThemeManager.getThemeManager().applyPalette(this)
         setContentView(R.layout.activity_voice_settings)
 
         if (Build.VERSION.SDK_INT >= 33) {

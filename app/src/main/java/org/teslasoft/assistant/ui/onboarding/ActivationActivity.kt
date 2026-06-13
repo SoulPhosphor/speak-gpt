@@ -33,6 +33,7 @@ import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.util.Hash
 import androidx.core.content.edit
 import eightbitlab.com.blurview.BlurView
+import org.teslasoft.assistant.theme.ThemeManager
 
 class ActivationActivity : FragmentActivity() {
 
@@ -44,6 +45,7 @@ class ActivationActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        ThemeManager.getThemeManager().applyPalette(this)
         setContentView(R.layout.activity_activation)
 
         btnNext = findViewById(R.id.btn_next)
