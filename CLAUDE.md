@@ -68,7 +68,8 @@ a foreground service that keeps generation alive in the background.
   prompts, System message, Lorebooks.
 - Root docs: `Memory System Plans June 1 2026` (the lorebook/memory roadmap,
   phased; Phase 1 + multi-book are built), `whisper-local-plan.md`,
-  `voice-chat-build-guide(1).md`.
+  `voice-chat-build-guide(1).md`, `ui-redesign-plan.md` (the approved UI
+  overhaul spec — read it before ANY UI work).
 
 ## Storage / database choices
 
@@ -209,9 +210,13 @@ Everything is on-device. No cloud sync, no accounts.
 
 ## Roadmap context (plan around this)
 
-- **A UI overhaul is planned.** Don't over-invest in pixel-perfect tweaks to
-  current layouts, and keep feature logic out of layout/adapter code where
-  practical so the UI can be swapped without rewriting behavior.
+- **A UI overhaul is planned and specified in `ui-redesign-plan.md`** (owner
+  approved June 2026: stay on Views/XML + Material 3, left chat-list drawer,
+  preset color palettes). Any UI task must follow that plan — it contains the
+  phase order, verified view-ID contracts, and the pitfall list. Don't
+  over-invest in pixel-perfect tweaks to current layouts, and keep feature
+  logic out of layout/adapter code where practical so the UI can be swapped
+  without rewriting behavior.
 - **Vector memory is planned** (see `Memory System Plans June 1 2026`,
   Phases 2+: search, summaries, embeddings, ReAct-style retrieval). The
   lorebook SQLite schema is the intended foundation — extend `lorebook.db`
