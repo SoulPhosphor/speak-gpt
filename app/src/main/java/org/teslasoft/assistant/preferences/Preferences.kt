@@ -1040,6 +1040,14 @@ class Preferences private constructor(private var preferences: SharedPreferences
         putGlobalBoolean("vad_logging_webrtc", state, false)
     }
 
+    fun getVadLoggingSilero() : Boolean {
+        return getGlobalBoolean("vad_logging_silero", false)
+    }
+
+    fun setVadLoggingSilero(state: Boolean) {
+        putGlobalBoolean("vad_logging_silero", state, false)
+    }
+
     // ---- Advanced VAD tuning (on-device Whisper hands-free only) ----------
     // These exist because the field showed the one-size-fits-all energy gate
     // failing real users: the gate (min 600 RMS) was tuned against a desk fan

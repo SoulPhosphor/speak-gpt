@@ -61,6 +61,13 @@ class AlertDebugMenuActivity : FragmentActivity() {
     private var rowCrashLog: LinearLayout? = null
     private var rowEventLog: LinearLayout? = null
 
+    // Voice diagnostics logging toggles (moved here from Advanced voice &
+    // debugging). One per detector; Silero gained its own so its logs are no
+    // longer tied to the WebRTC toggle.
+    private var switchLogEnergy: MaterialSwitch? = null
+    private var switchLogWebrtc: MaterialSwitch? = null
+    private var switchLogSilero: MaterialSwitch? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         ThemeManager.getThemeManager().applyPalette(this)
@@ -83,6 +90,10 @@ class AlertDebugMenuActivity : FragmentActivity() {
         switchErrorSound = findViewById(R.id.switch_error_sound)
         rowCrashLog = findViewById(R.id.row_crash_log)
         rowEventLog = findViewById(R.id.row_event_log)
+
+        switchLogEnergy = findViewById(R.id.switch_log_energy)
+        switchLogWebrtc = findViewById(R.id.switch_log_webrtc)
+        switchLogSilero = findViewById(R.id.switch_log_silero)
     }
 
     @Suppress("DEPRECATION")
@@ -112,6 +123,9 @@ class AlertDebugMenuActivity : FragmentActivity() {
         val p = preferences ?: return
         switchShowChatErrors?.isChecked = p.showChatErrors()
         switchErrorSound?.isChecked = p.getErrorSound()
+        switchLogEnergy?.isChecked = p.getVadLoggingEnergy()
+        switchLogWebrtc?.isChecked = p.getVadLoggingWebrtc()
+        switchLogSilero?.isChecked = p.getVadLoggingSilero()
     }
 
     private fun initLogic() {
@@ -121,6 +135,10 @@ class AlertDebugMenuActivity : FragmentActivity() {
 
         switchShowChatErrors?.setOnCheckedChangeListener { _, checked -> p.setShowChatErrors(checked) }
         switchErrorSound?.setOnCheckedChangeListener { _, checked -> p.setErrorSound(checked) }
+
+        switchLogEnergy?.setOnCheckedChangeListener { _, checked -> p.setVadLoggingEnergy(checked) }
+        switchLogWebrtc?.setOnCheckedChangeListener { _, checked -> p.setVadLoggingWebrtc(checked) }
+        switchLogSilero?.setOnCheckedChangeListener { _, checked -> p.setVadLoggingSilero(checked) }
 
         rowCrashLog?.setOnClickListener {
             startActivity(Intent(this, LogsActivity::class.java).putExtra("type", "crash").putExtra("chatId", chatId))

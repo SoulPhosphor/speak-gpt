@@ -114,11 +114,15 @@ Everything is on-device. No cloud sync, no accounts.
 - Voice: hands-free loop (VAD listen → Whisper/Google STT → generate → TTS
   readback → re-arm), manual mic button, per-message speak button, audible
   error/done chimes, screen-off operation via foreground services.
-  Voice diagnostics: with either VAD-logging toggle on, every loop decision
-  (mic open/close + why, readback, failures, loop stop reasons) is written to
-  the persistent Event log via `ChatActivity.logVoiceEvent` — when adding a
-  new loop exit path, log it there or failures become undiagnosable. `Logger`
-  is local-only (no telemetry); it must not be gated on the installation id.
+  Voice diagnostics: with any VAD-logging toggle on (Energy, WebRTC or Silero
+  — each detector has its own toggle, now in the Alert & Debug menu), every
+  loop decision (mic open/close + why, readback, failures, loop stop reasons)
+  is written to the persistent Event log via `ChatActivity.logVoiceEvent` —
+  when adding a new loop exit path, log it there or failures become
+  undiagnosable. The per-turn VAD diagnostics line (`logVadDiagnostics`)
+  follows the same toggles (`voiceDiagnosticsEnabled()`), so logging off means
+  no VadDiag spam. `Logger` is local-only (no telemetry); it must not be gated
+  on the installation id.
   Advanced voice & debugging screen (`VoiceAdvancedSettingsActivity`, plain
   rows not tiles, reached from a full-width tile in Voice settings): VAD
   energy-gate tuning (`VadTuning` — gate on/off, min RMS, floor factor,
@@ -136,8 +140,9 @@ Everything is on-device. No cloud sync, no accounts.
   decode params (greedy/beam, beam size,
   temperature, suppress-blank, single-segment, initial prompt, prev-context,
   cleanup toggle — plumbed Kotlin→JNI→whisper_full, defaults match the old
-  hardcoded values), device-TTS rate/pitch (set in both ttsPostInit funnels),
-  and the diagnostics toggles. The VAD energy gate exists because WebRTC
+  hardcoded values), and device-TTS rate/pitch (set in both ttsPostInit
+  funnels). (The voice-diagnostics logging toggles that used to live here moved
+  to the Alert & Debug menu.) The VAD energy gate exists because WebRTC
   mislabels fan noise as voice, but a fixed gate also silently discarded a
   quiet voice ("voiced N, gated 0" in diagnostics) — that's why it's tunable.
 - Lorebook memory system: multiple books (title/description/type-tag,
@@ -157,11 +162,15 @@ Everything is on-device. No cloud sync, no accounts.
   translator, playground, logit bias editor, AMOLED theme, onboarding flow.
 - Settings → Debug is a single full-width "Alert and Debug Menu" tile opening
   `AlertDebugMenuActivity` (plain rows, mirrors `VoiceAdvancedSettingsActivity`).
-  It holds the **Show chat errors** and **Sound alert for model errors** (was
-  "Error sound") switches, then **Crash log** / **Event log** as "label ›" rows
-  that open `LogsActivity`. The two error toggles are global prefs; the logs are
-  local-only and intentionally always reachable (not gated on the installation
-  id) — don't reintroduce that gate when restyling.
+  It holds, top to bottom: **Show chat errors** and **Sound alert for model
+  errors** (was "Error sound") switches; a **Voice Diagnostics** section with
+  the **Energy / WebRTC / Silero** VAD-logging switches (moved here from the
+  Advanced voice screen — each detector has its own toggle now, so Silero's
+  logs are no longer tied to WebRTC's); then **Crash log** / **Event log** as
+  "label ›" rows that open `LogsActivity`. The error and VAD-logging toggles
+  are all global prefs; the logs are local-only and intentionally always
+  reachable (not gated on the installation id) — don't reintroduce that gate
+  when restyling.
 
 ## Coding rules
 

@@ -2224,7 +2224,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         val noSpeechMs = preferences!!.getHandsFreeNoSpeechSeconds().coerceAtLeast(1) * 1000L
         val graceMs = if (freshTurn) 0L else 500L
         val vadMethod = preferences!!.getVadMethod()
-        val vadLog = if (vadMethod == "energy") preferences!!.getVadLoggingEnergy() else preferences!!.getVadLoggingWebrtc()
+        // Each detector has its own diagnostics toggle (Alert & Debug menu).
+        // Silero used to piggyback on the WebRTC toggle, so its per-frame logs
+        // couldn't be turned off independently of WebRTC.
+        val vadLog = when (vadMethod) {
+            org.teslasoft.assistant.stt.VadMethods.SILERO -> preferences!!.getVadLoggingSilero()
+            org.teslasoft.assistant.stt.VadMethods.ENERGY -> preferences!!.getVadLoggingEnergy()
+            else -> preferences!!.getVadLoggingWebrtc()
+        }
         // The Silero session loads from assets and needs a Context; the
         // detector factory runs deeper down without one, so make sure the
         // runtime is resident before the turn starts. On failure the factory
@@ -2321,15 +2328,22 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         val diag = LocalWhisperEngine.get().lastVadDiagnostics()
         if (diag.isEmpty()) return
         if (showToast) Toast.makeText(this, diag, Toast.LENGTH_LONG).show()
+        // The persistent per-turn write follows the diagnostics toggles, so a
+        // user who hasn't turned voice logging on (for any detector, Silero
+        // included) doesn't accumulate VadDiag lines in the Event log. The
+        // live toast above is kept regardless as immediate feedback.
+        if (!voiceDiagnosticsEnabled()) return
         try {
             org.teslasoft.assistant.preferences.Logger.log(this, "event", "VadDiag", "debug", "$reason: $diag")
         } catch (_: Throwable) { /* never let diagnostics crash the loop */ }
     }
 
-    /** True when the user has switched on either VAD logging toggle — treated
-     *  as "voice diagnostics mode". */
+    /** True when the user has switched on any VAD logging toggle (Energy,
+     *  WebRTC or Silero) — treated as "voice diagnostics mode". */
     private fun voiceDiagnosticsEnabled(): Boolean {
-        return preferences?.getVadLoggingWebrtc() == true || preferences?.getVadLoggingEnergy() == true
+        return preferences?.getVadLoggingWebrtc() == true ||
+                preferences?.getVadLoggingEnergy() == true ||
+                preferences?.getVadLoggingSilero() == true
     }
 
     /**

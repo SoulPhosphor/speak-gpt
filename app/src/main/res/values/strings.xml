@@ -750,6 +750,7 @@
     <string name="tile_vad_log_energy_desc">Record voice diagnostics: every hands-free decision (mic opened/closed and why, readback, failures) goes to the Event log in Settings, plus detailed Energy VAD state (RMS, noise floor, timing) to logcat. Turn off when not debugging.</string>
     <string name="tile_vad_log_webrtc_title">WebRTC VAD logging</string>
     <string name="tile_vad_log_webrtc_desc">Record voice diagnostics: every hands-free decision (mic opened/closed and why, readback, failures) goes to the Event log in Settings, plus detailed WebRTC VAD state (RMS, voiced frames, timing) to logcat. Turn off when not debugging.</string>
+    <string name="tile_vad_log_silero_title">Silero VAD logging</string>
 
     <!-- Advanced voice & debugging screen -->
     <string name="title_voice_advanced">Advanced voice &amp; debugging</string>
@@ -813,7 +814,7 @@
     <string name="vad_method_silero">Silero (neural, recommended)</string>
     <string name="vad_silero_unavailable">The Silero detector couldn’t load on this device. Energy detection will be used instead.</string>
 
-    <string name="adv_section_diag">Diagnostics</string>
-    <string name="adv_section_diag_caption">With either toggle on, every hands-free decision (mic opened/closed and why, readback, failures, stop reasons) is written to the Event log, plus detailed per-frame detector state to logcat. This is what to turn on before reporting a voice bug.</string>
+    <string name="adv_section_diag">Voice Diagnostics</string>
+    <string name="adv_section_diag_caption">With any of these on, every hands-free decision (mic opened/closed and why, readback, failures, stop reasons) is written to the Event log, plus detailed per-frame detector state to logcat. This is what to turn on before reporting a voice bug.</string>
     <string name="adv_open_event_log">Open Event log</string>
 </resources>

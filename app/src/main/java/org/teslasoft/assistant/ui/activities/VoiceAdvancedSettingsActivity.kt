@@ -16,7 +16,6 @@
 
 package org.teslasoft.assistant.ui.activities
 
-import android.content.Intent
 import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.os.Build
@@ -93,10 +92,6 @@ class VoiceAdvancedSettingsActivity : FragmentActivity() {
     private var sliderTtsRate: Slider? = null
     private var sliderTtsPitch: Slider? = null
 
-    private var switchLogEnergy: MaterialSwitch? = null
-    private var switchLogWebrtc: MaterialSwitch? = null
-    private var btnOpenEventLog: MaterialButton? = null
-
     private var actionBar: ConstraintLayout? = null
     private var btnBack: ImageButton? = null
 
@@ -156,10 +151,6 @@ class VoiceAdvancedSettingsActivity : FragmentActivity() {
 
         sliderTtsRate = findViewById(R.id.slider_tts_rate)
         sliderTtsPitch = findViewById(R.id.slider_tts_pitch)
-
-        switchLogEnergy = findViewById(R.id.switch_log_energy)
-        switchLogWebrtc = findViewById(R.id.switch_log_webrtc)
-        btnOpenEventLog = findViewById(R.id.btn_open_event_log)
     }
 
     private fun applyTheme() {
@@ -221,9 +212,6 @@ class VoiceAdvancedSettingsActivity : FragmentActivity() {
 
         sliderTtsRate?.let { it.value = snap(p.getTtsSpeechRate(), it) }
         sliderTtsPitch?.let { it.value = snap(p.getTtsPitch(), it) }
-
-        switchLogEnergy?.isChecked = p.getVadLoggingEnergy()
-        switchLogWebrtc?.isChecked = p.getVadLoggingWebrtc()
 
         refreshLabels()
     }
@@ -328,14 +316,6 @@ class VoiceAdvancedSettingsActivity : FragmentActivity() {
         sliderTtsPitch?.addOnChangeListener { _, value, fromUser ->
             if (fromUser) p.setTtsPitch(value)
             refreshLabels()
-        }
-
-        switchLogEnergy?.setOnCheckedChangeListener { _, checked -> p.setVadLoggingEnergy(checked) }
-        switchLogWebrtc?.setOnCheckedChangeListener { _, checked -> p.setVadLoggingWebrtc(checked) }
-        btnOpenEventLog?.setOnClickListener {
-            val intent = Intent(this, LogsActivity::class.java)
-            intent.putExtra("type", "event")
-            startActivity(intent)
         }
     }
 
