@@ -593,9 +593,21 @@
     <string name="tile_autosave_title">Auto-save chats</string>
     <string name="tile_autosave_desc">This feature allows you to enable auto-save chats in assistant window. When auto-save chats is enabled, SpeakGPT will save all chats to the device storage.</string>
     <string name="tile_show_chat_errors_title">Show chat errors</string>
-    <string name="tile_show_chat_errors_desc">This feature allows you to enable chat errors. When chat errors is enabled, SpeakGPT will show errors in chat of occurred.</string>
-    <string name="tile_error_sound_title">Error sound</string>
+    <string name="tile_show_chat_errors_desc">Show error messages directly in the chat when a request fails, instead of failing silently.</string>
+    <string name="tile_error_sound_title">Sound alert for model errors</string>
     <string name="tile_error_sound_desc">Play a short descending tone when a response fails (for example when the model is overloaded or the connection drops), so you know a reply is not coming even when you are not looking at the screen. Uses the alarm volume, so it is still audible when the phone is on silent.</string>
+
+    <!-- Alert and Debug menu: a single full-width entry under the Debug header in
+         Settings that opens its own screen. The two error toggles became inline
+         switch rows and the crash/event logs became plain "label >" rows there,
+         so the dense debug grid is no longer crammed into half-width tiles. -->
+    <string name="title_alert_debug_menu">Alert &amp; Debug</string>
+    <string name="tile_alert_debug_menu_title">Alert and Debug Menu</string>
+    <string name="tile_alert_debug_menu_subtitle">Chat errors, alert sound, and logs</string>
+    <string name="tile_alert_debug_menu_desc">Open the Alert and Debug menu to choose how errors are surfaced in chat, toggle the error alert sound, and open the crash and event logs.</string>
+    <string name="alert_debug_intro">Choose how problems are surfaced, and open the diagnostic logs.</string>
+    <string name="alert_debug_section_alerts">Alerts</string>
+    <string name="alert_debug_section_logs">Logs</string>
     <string name="on">On</string>
     <string name="off">Off</string>
     <string name="tile_about_app_subtitle">About SpeakGPT</string>

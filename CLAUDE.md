@@ -155,6 +155,13 @@ Everything is on-device. No cloud sync, no accounts.
 - Markdown/LaTeX rendering, partial text selection, message edit/delete/copy/
   share, bulk select, image attach + DALL·E-style generation, in-app
   translator, playground, logit bias editor, AMOLED theme, onboarding flow.
+- Settings → Debug is a single full-width "Alert and Debug Menu" tile opening
+  `AlertDebugMenuActivity` (plain rows, mirrors `VoiceAdvancedSettingsActivity`).
+  It holds the **Show chat errors** and **Sound alert for model errors** (was
+  "Error sound") switches, then **Crash log** / **Event log** as "label ›" rows
+  that open `LogsActivity`. The two error toggles are global prefs; the logs are
+  local-only and intentionally always reachable (not gated on the installation
+  id) — don't reintroduce that gate when restyling.
 
 ## Coding rules
 

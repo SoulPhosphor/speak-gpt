@@ -258,6 +258,13 @@
         </activity>
 
         <activity
+            android:name=".ui.activities.AlertDebugMenuActivity"
+            android:exported="false"
+            android:label="@string/title_alert_debug_menu"
+            android:launchMode="singleTask">
+        </activity>
+
+        <activity
             android:name=".ui.activities.LocalWhisperManageActivity"
             android:exported="false"
             android:label="@string/title_manage_downloaded_models"

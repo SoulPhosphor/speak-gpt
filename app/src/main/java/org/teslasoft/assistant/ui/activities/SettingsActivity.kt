@@ -91,11 +91,8 @@ class SettingsActivity : FragmentActivity() {
     private var tileSendDiagnosticData: TileFragment? = null
     private var tileRevokeAuthorization: TileFragment? = null
     private var tileGetNewInstallationId: TileFragment? = null
-    private var tileCrashLog: TileFragment? = null
-    private var tileEventLog: TileFragment? = null
     private var tileChatsAutoSave: TileFragment? = null
-    private var tileShowChatErrors: TileFragment? = null
-    private var tileErrorSound: TileFragment? = null
+    private var tileAlertDebugMenu: TileFragment? = null
     private var tileHideModelNames: TileFragment? = null
     private var tileMonochromeBackgroundForChatList: TileFragment? = null
     // private var threadLoading: LinearLayout? = null
@@ -242,11 +239,8 @@ class SettingsActivity : FragmentActivity() {
         transition.excludeTarget(R.id.tile_send_diagnostic_data, true)
         transition.excludeTarget(R.id.tile_revoke_authorization, true)
         transition.excludeTarget(R.id.tile_assign_new_id, true)
-        transition.excludeTarget(R.id.tile_crash_log, true)
-        transition.excludeTarget(R.id.tile_event_log, true)
         transition.excludeTarget(R.id.tile_chats_autosave, true)
-        transition.excludeTarget(R.id.tile_show_chat_errors, true)
-        transition.excludeTarget(R.id.tile_error_sound, true)
+        transition.excludeTarget(R.id.tile_alert_debug_menu, true)
         transition.excludeTarget(R.id.tile_hide_model_names, true)
         transition.excludeTarget(R.id.tile_monochrome_background_for_chat_list, true)
 
@@ -305,11 +299,8 @@ class SettingsActivity : FragmentActivity() {
         transition2.excludeTarget(R.id.tile_send_diagnostic_data, true)
         transition2.excludeTarget(R.id.tile_revoke_authorization, true)
         transition2.excludeTarget(R.id.tile_assign_new_id, true)
-        transition2.excludeTarget(R.id.tile_crash_log, true)
-        transition2.excludeTarget(R.id.tile_event_log, true)
         transition2.excludeTarget(R.id.tile_chats_autosave, true)
-        transition2.excludeTarget(R.id.tile_show_chat_errors, true)
-        transition2.excludeTarget(R.id.tile_error_sound, true)
+        transition2.excludeTarget(R.id.tile_alert_debug_menu, true)
         transition2.excludeTarget(R.id.tile_hide_model_names, true)
         transition2.excludeTarget(R.id.tile_monochrome_background_for_chat_list, true)
 
@@ -794,34 +785,6 @@ class SettingsActivity : FragmentActivity() {
 
     private fun createFragments7() {
         val t7 = Thread {
-            val logView = if (installationId == "00000000-0000-0000-0000-000000000000" || installationId == "") "Authorization revoked" else "Tap to view"
-
-            tileCrashLog = TileFragment.newInstance(
-                checked = false,
-                checkable = false,
-                enabledText = getString(R.string.tile_crash_log_title),
-                disabledText = null,
-                enabledDesc = logView,
-                disabledDesc = null,
-                icon = R.drawable.ic_bug,
-                disabled = installationId == "00000000-0000-0000-0000-000000000000" || installationId == "",
-                chatId = chatId,
-                functionDesc = getString(R.string.tile_crash_log_desc)
-            )
-
-            tileEventLog = TileFragment.newInstance(
-                checked = false,
-                checkable = false,
-                enabledText = getString(R.string.tile_events_log_title),
-                disabledText = null,
-                enabledDesc = logView,
-                disabledDesc = null,
-                icon = R.drawable.ic_bug,
-                disabled = installationId == "00000000-0000-0000-0000-000000000000" || installationId == "",
-                chatId = chatId,
-                functionDesc = getString(R.string.tile_events_log_desc)
-            )
-
             tileChatsAutoSave = TileFragment.newInstance(
                 preferences?.getChatsAutosave() == true,
                 true,
@@ -835,30 +798,21 @@ class SettingsActivity : FragmentActivity() {
                 getString(R.string.tile_autosave_desc)
             )
 
-            tileShowChatErrors = TileFragment.newInstance(
-                preferences?.showChatErrors() == true,
-                true,
-                getString(R.string.tile_show_chat_errors_title),
-                null,
-                getString(R.string.on),
-                getString(R.string.off),
-                R.drawable.ic_experiment,
-                false,
-                chatId,
-                getString(R.string.tile_show_chat_errors_desc)
-            )
-
-            tileErrorSound = TileFragment.newInstance(
-                preferences?.getErrorSound() == true,
-                true,
-                getString(R.string.tile_error_sound_title),
-                null,
-                getString(R.string.on),
-                getString(R.string.off),
-                R.drawable.ic_experiment,
-                false,
-                chatId,
-                getString(R.string.tile_error_sound_desc)
+            // Single full-width entry under the Debug header. The two error
+            // toggles (show chat errors, error alert sound) and the crash/event
+            // logs moved into AlertDebugMenuActivity, where they read as switch
+            // rows and "label >" rows instead of a cramped tile grid.
+            tileAlertDebugMenu = TileFragment.newInstance(
+                checked = false,
+                checkable = false,
+                enabledText = getString(R.string.tile_alert_debug_menu_title),
+                disabledText = null,
+                enabledDesc = getString(R.string.tile_alert_debug_menu_subtitle),
+                disabledDesc = null,
+                icon = R.drawable.ic_bug,
+                disabled = false,
+                chatId = chatId,
+                functionDesc = getString(R.string.tile_alert_debug_menu_desc)
             )
         }
 
@@ -890,10 +844,7 @@ class SettingsActivity : FragmentActivity() {
             .replace(R.id.tile_send_diagnostic_data, tileSendDiagnosticData!!)
             .replace(R.id.tile_revoke_authorization, tileRevokeAuthorization!!)
             .replace(R.id.tile_assign_new_id, tileGetNewInstallationId!!)
-            .replace(R.id.tile_crash_log, tileCrashLog!!)
-            .replace(R.id.tile_event_log, tileEventLog!!)
-            .replace(R.id.tile_show_chat_errors, tileShowChatErrors!!)
-            .replace(R.id.tile_error_sound, tileErrorSound!!)
+            .replace(R.id.tile_alert_debug_menu, tileAlertDebugMenu!!)
             .replace(R.id.tile_hide_model_names, tileHideModelNames!!)
             .replace(R.id.tile_monochrome_background_for_chat_list, tileMonochromeBackgroundForChatList!!)
 
@@ -1132,28 +1083,8 @@ class SettingsActivity : FragmentActivity() {
                 .show()
         }
 
-        tileCrashLog?.setOnTileClickListener {
-            startActivity(Intent(this, LogsActivity::class.java).putExtra("type", "crash").putExtra("chatId", chatId))
-        }
-
-        tileEventLog?.setOnTileClickListener {
-            startActivity(Intent(this, LogsActivity::class.java).putExtra("type", "event").putExtra("chatId", chatId))
-        }
-
-        tileShowChatErrors?.setOnCheckedChangeListener { isChecked ->
-            if (isChecked) {
-                preferences?.setShowChatErrors(true)
-            } else {
-                preferences?.setShowChatErrors(false)
-            }
-        }
-
-        tileErrorSound?.setOnCheckedChangeListener { isChecked ->
-            if (isChecked) {
-                preferences?.setErrorSound(true)
-            } else {
-                preferences?.setErrorSound(false)
-            }
+        tileAlertDebugMenu?.setOnTileClickListener {
+            startActivity(Intent(this, AlertDebugMenuActivity::class.java).putExtra("chatId", chatId))
         }
 
         tileCustomize?.setOnTileClickListener { _ ->
