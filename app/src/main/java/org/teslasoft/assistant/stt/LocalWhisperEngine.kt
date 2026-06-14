@@ -757,48 +757,46 @@ private class AudioHealthMonitor(private val record: AudioRecord) {
         // "Healthy" = real, audible audio arrived and most frames carried signal.
         val inputHealthy = frames > 0 && peakMax > QUIET_PEAK && nearZeroFrames * 2 < frames
 
-        // Hints, grouped by likely culprit and tagged so the log says whether
-        // it's the hardware/OS, the settings, or the input level — not always
-        // "the user". Worst/most-actionable first.
+        // Hints are written for a non-technical reader: plain words, the real
+        // on-screen setting names and where to find them, an explicit "this
+        // isn't you" when it's the phone or the settings, and one concrete
+        // thing to do. The raw numbers above are for bug reports; these lines
+        // are the part a person acts on. Most likely/severe first.
         val hints = ArrayList<String>()
 
-        // --- Device / OS / hardware (not the user, not the settings) ---
         if (frames == 0L) {
-            hints.add("[device/OS] no audio reached the app at all — the recorder didn't start or was interrupted (a call, another app holding the mic, or the screen-off route); not anything you did")
+            hints.add("No sound reached the app at all. This is the phone or another app, not you: usually the microphone permission is off, or a call/another recording app grabbed the mic. What to do: in Android Settings > Apps > SpeakGPT > Permissions make sure Microphone is allowed, close other apps that record audio, then try again.")
         } else if (nearSilent) {
-            hints.add("[device/OS] the mic delivered (near-)silence — it isn't receiving audio. Check the microphone permission and whether another app is using the mic; this is a permission/hardware/route problem, not how loudly you spoke")
+            hints.add("The microphone was on but picked up almost nothing the whole time — so this is the phone, not how loudly you spoke. What to do: check SpeakGPT has microphone permission, make sure nothing is covering the mic, and close other apps that might be using it. On a Bluetooth headset, try the phone's own mic.")
         }
-        if (rate != LocalWhisperEngine.SAMPLE_RATE) {
-            hints.add("[device/OS] the mic ran at $rate Hz, not the expected ${LocalWhisperEngine.SAMPLE_RATE} Hz — a device/OS audio problem that will hurt recognition")
+        if (frames > 0 && rate != LocalWhisperEngine.SAMPLE_RATE) {
+            hints.add("The mic recorded at the wrong speed ($rate Hz, not the ${LocalWhisperEngine.SAMPLE_RATE / 1000} kHz the app needs) — an Android/phone audio problem, not a setting you changed. What to do: restart the app, and the phone if it keeps happening.")
         }
-        if (ch != 1) {
-            hints.add("[device/OS] capture was $ch-channel, not mono — unexpected for this pipeline; a device/OS audio quirk")
+        if (!vadHeardSpeech && inputHealthy && clippedFrames == 0L) {
+            hints.add("Your mic worked fine and clearly picked up sound, but the app decided none of it was speech and stopped listening. This is a settings problem, not you or your mic — voice detection is set too strict. Easiest fix: Settings > Voice & speech > Voice detection method > Silero (it's best at telling speech from background noise). Or, in Settings > Voice & speech > Advanced & debugging, turn down 'Minimum speech energy' (if you use the Energy method) or 'Silero speech threshold' (if you use Silero).")
+        }
+        if (clippedFrames > 0) {
+            hints.add("The sound was so loud it distorted (it 'clipped'). What to do: hold the phone a little farther from your mouth — you don't need to speak right onto the mic.")
+        } else if (!nearSilent && peakMax in (NEAR_ZERO_PEAK + 1)..QUIET_PEAK) {
+            hints.add("The sound coming in was quite quiet (but not silent) — could be the mic, the distance, or a quiet room, not necessarily you. What to do: move the phone a bit closer; or if you're often far away, turn down 'Minimum speech energy' in Settings > Voice & speech > Advanced & debugging so quiet speech still counts.")
         }
         if (routeChanged) {
-            hints.add("[device/OS] the input device switched mid-turn (e.g. a Bluetooth headset connected or dropped) — that can cut or corrupt the audio")
+            hints.add("The audio switched to a different microphone partway through (for example a Bluetooth headset connecting or dropping), which can chop the recording in half. What to do: connect or disconnect headsets before you start talking, not while you speak.")
         } else if (bluetoothSeen) {
-            hints.add("[device/OS] input came over Bluetooth (SCO), which is low quality and drops easily — the built-in mic is more reliable")
+            hints.add("You're recording through a Bluetooth headset (SCO), which is low quality and drops out easily. What to do: if recognition is poor, turn the headset off and use the phone's own microphone.")
         }
-
-        // --- Settings / detection (not the user, not the mic) ---
-        if (!vadHeardSpeech && inputHealthy && clippedFrames == 0L) {
-            hints.add("[settings] the mic captured a healthy, audible signal but voice detection still found no speech — most likely the detection settings are too strict, not the mic or you; try raising sensitivity (lower the Energy gate / min RMS, or lower the Silero threshold) in Advanced voice settings")
-        }
-
-        // --- Input level (genuinely about level, stated neutrally) ---
-        if (clippedFrames > 0) {
-            hints.add("[level] the audio was clipping (peaks hit maximum) — input is too hot; lower mic gain or don't speak right on top of the mic")
-        } else if (!nearSilent && peakMax in (NEAR_ZERO_PEAK + 1)..QUIET_PEAK) {
-            hints.add("[level] the input level was low — could be mic gain, placement, distance, or a quiet room")
+        if (ch != 1) {
+            hints.add("The mic gave $ch-channel audio when the app expects mono — an unusual Android quirk. It may still work; if recognition is poor, it's worth reporting.")
         }
 
         // Nothing wrong worth flagging: say so, so a healthy turn doesn't read
         // as a non-answer.
         if (hints.isEmpty() && frames > 0) {
-            hints.add("the microphone input looks healthy")
+            hints.add("The microphone input looks healthy — no problem with the audio itself.")
         }
 
-        if (hints.isNotEmpty()) s += " — " + hints.joinToString("; ")
+        // One hint per line so several plain-language tips stay readable.
+        if (hints.isNotEmpty()) s += "\n  - " + hints.joinToString("\n  - ")
         return s
     }
 
