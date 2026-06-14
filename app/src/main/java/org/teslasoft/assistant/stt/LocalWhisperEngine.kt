@@ -397,7 +397,7 @@ class LocalWhisperEngine private constructor() {
                                                 "graceMs=${graceSamples * 1000 / SAMPLE_RATE} " +
                                                 "diag=${detector.diagnostics()}")
                                     }
-                                    if (audioHealthMonitor != null) lastAudioHealthDiagnostics = audioHealthMonitor.summarize()
+                                    if (audioHealthMonitor != null) lastAudioHealthDiagnostics = audioHealthMonitor.summarize(vadHeardSpeech = true)
                                     vadFired = true
                                     onVadEndOfTurn?.invoke()
                                 } else if (!speechStarted && preSpeechSamples >= noSpeechSampleTarget) {
@@ -410,7 +410,7 @@ class LocalWhisperEngine private constructor() {
                                                 "totalAudioMs=${totalSamplesRead * 1000 / SAMPLE_RATE} " +
                                                 "diag=${detector.diagnostics()}")
                                     }
-                                    if (audioHealthMonitor != null) lastAudioHealthDiagnostics = audioHealthMonitor.summarize()
+                                    if (audioHealthMonitor != null) lastAudioHealthDiagnostics = audioHealthMonitor.summarize(vadHeardSpeech = false)
                                     vadFired = true
                                     onVadNoSpeech?.invoke()
                                 }
@@ -724,8 +724,16 @@ private class AudioHealthMonitor(private val record: AudioRecord) {
         }
     }
 
-    /** One-line summary + hints, parallel in shape to the detectors' diagnostics(). */
-    fun summarize(): String {
+    /**
+     * One-line summary + hints, parallel in shape to the detectors' diagnostics().
+     *
+     * Hints are deliberately attributed to a *cause* — device/OS, settings, or
+     * input level — instead of always telling the user to speak louder. The
+     * key signal is the cross-check with [vadHeardSpeech]: if the mic delivered
+     * a healthy, audible signal but the detector still found no speech, that is
+     * a detection-settings problem, not the mic and not how the user spoke.
+     */
+    fun summarize(vadHeardSpeech: Boolean): String {
         val rate = record.sampleRate
         val tenths = if (rate > 0) samples * 10 / rate else 0L
         val avgRms = if (frames > 0) (rmsSum / frames).toInt() else 0
@@ -745,22 +753,51 @@ private class AudioHealthMonitor(private val record: AudioRecord) {
                 "near-zero $nearZeroFrames, clipped $clippedFrames, " +
                 "$rate Hz, $ch ch ($chLabel), route $routeText"
 
-        // Plain-words hints, same philosophy as the detectors: each names a
-        // likely problem and what to do about it. Worst-first.
+        val nearSilent = frames > 0 && nearZeroFrames * 2 >= frames && peakMax <= NEAR_ZERO_PEAK * 4
+        // "Healthy" = real, audible audio arrived and most frames carried signal.
+        val inputHealthy = frames > 0 && peakMax > QUIET_PEAK && nearZeroFrames * 2 < frames
+
+        // Hints, grouped by likely culprit and tagged so the log says whether
+        // it's the hardware/OS, the settings, or the input level — not always
+        // "the user". Worst/most-actionable first.
         val hints = ArrayList<String>()
-        if (frames > 0 && nearZeroFrames * 2 >= frames && peakMax <= NEAR_ZERO_PEAK * 4) {
-            hints.add("the mic delivered (near-)silence for most of the turn — it may be muted, covered, or held by another app; check microphone permission and that nothing else is recording")
-        } else if (peakMax in (NEAR_ZERO_PEAK + 1)..QUIET_PEAK) {
-            hints.add("input level was very low — speak louder or move closer to the mic")
+
+        // --- Device / OS / hardware (not the user, not the settings) ---
+        if (frames == 0L) {
+            hints.add("[device/OS] no audio reached the app at all — the recorder didn't start or was interrupted (a call, another app holding the mic, or the screen-off route); not anything you did")
+        } else if (nearSilent) {
+            hints.add("[device/OS] the mic delivered (near-)silence — it isn't receiving audio. Check the microphone permission and whether another app is using the mic; this is a permission/hardware/route problem, not how loudly you spoke")
         }
-        if (clippedFrames > 0) {
-            hints.add("audio was clipping (input too loud or too close) — move back from the mic or lower input gain")
+        if (rate != LocalWhisperEngine.SAMPLE_RATE) {
+            hints.add("[device/OS] the mic ran at $rate Hz, not the expected ${LocalWhisperEngine.SAMPLE_RATE} Hz — a device/OS audio problem that will hurt recognition")
+        }
+        if (ch != 1) {
+            hints.add("[device/OS] capture was $ch-channel, not mono — unexpected for this pipeline; a device/OS audio quirk")
         }
         if (routeChanged) {
-            hints.add("the input device changed mid-capture — a Bluetooth headset connecting or dropping can cut audio; keep the same mic for the whole turn")
+            hints.add("[device/OS] the input device switched mid-turn (e.g. a Bluetooth headset connected or dropped) — that can cut or corrupt the audio")
         } else if (bluetoothSeen) {
-            hints.add("Bluetooth SCO was the input — SCO audio is low quality and can drop; try the phone mic if recognition is poor")
+            hints.add("[device/OS] input came over Bluetooth (SCO), which is low quality and drops easily — the built-in mic is more reliable")
         }
+
+        // --- Settings / detection (not the user, not the mic) ---
+        if (!vadHeardSpeech && inputHealthy && clippedFrames == 0L) {
+            hints.add("[settings] the mic captured a healthy, audible signal but voice detection still found no speech — most likely the detection settings are too strict, not the mic or you; try raising sensitivity (lower the Energy gate / min RMS, or lower the Silero threshold) in Advanced voice settings")
+        }
+
+        // --- Input level (genuinely about level, stated neutrally) ---
+        if (clippedFrames > 0) {
+            hints.add("[level] the audio was clipping (peaks hit maximum) — input is too hot; lower mic gain or don't speak right on top of the mic")
+        } else if (!nearSilent && peakMax in (NEAR_ZERO_PEAK + 1)..QUIET_PEAK) {
+            hints.add("[level] the input level was low — could be mic gain, placement, distance, or a quiet room")
+        }
+
+        // Nothing wrong worth flagging: say so, so a healthy turn doesn't read
+        // as a non-answer.
+        if (hints.isEmpty() && frames > 0) {
+            hints.add("the microphone input looks healthy")
+        }
+
         if (hints.isNotEmpty()) s += " — " + hints.joinToString("; ")
         return s
     }
