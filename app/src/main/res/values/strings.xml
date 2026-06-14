@@ -751,6 +751,8 @@
     <string name="tile_vad_log_webrtc_title">WebRTC VAD logging</string>
     <string name="tile_vad_log_webrtc_desc">Record voice diagnostics: every hands-free decision (mic opened/closed and why, readback, failures) goes to the Event log in Settings, plus detailed WebRTC VAD state (RMS, voiced frames, timing) to logcat. Turn off when not debugging.</string>
     <string name="tile_vad_log_silero_title">Silero VAD logging</string>
+    <string name="audio_health_title">Audio Health</string>
+    <string name="audio_health_desc">When on, records microphone input health for each hands-free turn: frames received, average/max RMS and peak levels, near-silent and clipped frame counts, sample rate, channel count, and the input device — flagging if the mic was (near-)silent, clipping, or the input route changed (e.g. Bluetooth) mid-capture. Writes to the Event log alongside any VAD diagnostics. Turn off when not debugging.</string>
 
     <!-- Advanced voice & debugging screen -->
     <string name="title_voice_advanced">Advanced voice &amp; debugging</string>

@@ -1048,6 +1048,18 @@ class Preferences private constructor(private var preferences: SharedPreferences
         putGlobalBoolean("vad_logging_silero", state, false)
     }
 
+    // Audio Health is a separate diagnostic from the VAD logging toggles above:
+    // it answers "did the microphone deliver usable audio?" (dead/muted mic,
+    // clipping, route changes) rather than "was there speech?". Independent
+    // toggle so it can be turned on without the per-frame VAD spam.
+    fun getAudioHealthLogging() : Boolean {
+        return getGlobalBoolean("audio_health_logging", false)
+    }
+
+    fun setAudioHealthLogging(state: Boolean) {
+        putGlobalBoolean("audio_health_logging", state, false)
+    }
+
     // ---- Advanced VAD tuning (on-device Whisper hands-free only) ----------
     // These exist because the field showed the one-size-fits-all energy gate
     // failing real users: the gate (min 600 RMS) was tuned against a desk fan

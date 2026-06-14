@@ -2258,7 +2258,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             vad = LocalWhisperEngine.VadConfig(
                 silenceMs, noSpeechMs, vadMethod, preferences!!.getVadWebRtcMode(), graceMs, vadLog,
                 tuning = tuning,
-                minSpeechMs = preferences!!.getVadMinSpeechMs().toLong()
+                minSpeechMs = preferences!!.getVadMinSpeechMs().toLong(),
+                audioHealth = preferences!!.getAudioHealthLogging()
             ),
             onEndOfTurn = { runOnUiThread { onHandsFreeWhisperEndOfTurn() } },
             onNoSpeechTimeout = { runOnUiThread { onHandsFreeWhisperNoSpeech() } }
@@ -2315,26 +2316,38 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         LocalWhisperEngine.get().cancel()
     }
 
-    /** Surface the active detector's per-recording counters when a hands-free
-     *  turn ends — WebRTC and Energy both explain themselves now (frames,
-     *  peak/voice RMS, gate, hysteresis holds). Toast for live feedback; Event
-     *  log (Settings -> Event log) so the user can read it after the fact when
-     *  "mic listens forever" / "never heard me" is the symptom (Toasts
-     *  disappear before they can be grabbed).
+    /** Surface the per-recording diagnostics when a hands-free turn ends. Two
+     *  independent sources, each behind its own toggle: the active VAD detector
+     *  ("was there speech?" — frames, RMS, gate, hysteresis) and Audio Health
+     *  ("did the mic deliver usable audio?" — levels, clipping, route). When both
+     *  are on they're written as two clearly-labelled lines in one entry so they
+     *  read cleanly together. Toast for live feedback; Event log so the user can
+     *  read it after the fact ("mic listens forever" / "never heard me").
      *
      *  [showToast] false for routine endings (every normal end-of-turn would
      *  otherwise toast over the conversation); the event log gets it either way. */
     private fun logVadDiagnostics(reason: String, showToast: Boolean = true) {
-        val diag = LocalWhisperEngine.get().lastVadDiagnostics()
-        if (diag.isEmpty()) return
-        if (showToast) Toast.makeText(this, diag, Toast.LENGTH_LONG).show()
-        // The persistent per-turn write follows the diagnostics toggles, so a
-        // user who hasn't turned voice logging on (for any detector, Silero
-        // included) doesn't accumulate VadDiag lines in the Event log. The
-        // live toast above is kept regardless as immediate feedback.
-        if (!voiceDiagnosticsEnabled()) return
+        val engine = LocalWhisperEngine.get()
+        val vadDiag = engine.lastVadDiagnostics()
+        val audioHealthOn = preferences?.getAudioHealthLogging() == true
+        val audioDiag = if (audioHealthOn) engine.lastAudioHealthDiagnostics() else ""
+
+        // Toast = live feedback. The VAD line shows on the no-speech toast as
+        // before (so "I heard nothing, here's why" works without diagnostics
+        // mode); Audio Health adds its line only when the user enabled it.
+        if (showToast) {
+            val toastMsg = listOf(vadDiag, audioDiag).filter { it.isNotEmpty() }.joinToString("\n\n")
+            if (toastMsg.isNotEmpty()) Toast.makeText(this, toastMsg, Toast.LENGTH_LONG).show()
+        }
+
+        // Persistent write: each source follows its own toggle, so turning all
+        // of them off means no diagnostics spam in the Event log.
+        val parts = ArrayList<String>()
+        if (voiceDiagnosticsEnabled() && vadDiag.isNotEmpty()) parts.add("VAD: $vadDiag")
+        if (audioHealthOn && audioDiag.isNotEmpty()) parts.add(audioDiag)
+        if (parts.isEmpty()) return
         try {
-            org.teslasoft.assistant.preferences.Logger.log(this, "event", "VadDiag", "debug", "$reason: $diag")
+            org.teslasoft.assistant.preferences.Logger.log(this, "event", "VoiceDiag", "debug", "$reason\n${parts.joinToString("\n")}")
         } catch (_: Throwable) { /* never let diagnostics crash the loop */ }
     }
 

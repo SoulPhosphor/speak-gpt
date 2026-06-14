@@ -68,6 +68,9 @@ class AlertDebugMenuActivity : FragmentActivity() {
     private var switchLogWebrtc: MaterialSwitch? = null
     private var switchLogSilero: MaterialSwitch? = null
 
+    // Audio Health: separate from VAD logging — microphone input-health stats.
+    private var switchAudioHealth: MaterialSwitch? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         ThemeManager.getThemeManager().applyPalette(this)
@@ -94,6 +97,7 @@ class AlertDebugMenuActivity : FragmentActivity() {
         switchLogEnergy = findViewById(R.id.switch_log_energy)
         switchLogWebrtc = findViewById(R.id.switch_log_webrtc)
         switchLogSilero = findViewById(R.id.switch_log_silero)
+        switchAudioHealth = findViewById(R.id.switch_audio_health)
     }
 
     @Suppress("DEPRECATION")
@@ -126,6 +130,7 @@ class AlertDebugMenuActivity : FragmentActivity() {
         switchLogEnergy?.isChecked = p.getVadLoggingEnergy()
         switchLogWebrtc?.isChecked = p.getVadLoggingWebrtc()
         switchLogSilero?.isChecked = p.getVadLoggingSilero()
+        switchAudioHealth?.isChecked = p.getAudioHealthLogging()
     }
 
     private fun initLogic() {
@@ -139,6 +144,7 @@ class AlertDebugMenuActivity : FragmentActivity() {
         switchLogEnergy?.setOnCheckedChangeListener { _, checked -> p.setVadLoggingEnergy(checked) }
         switchLogWebrtc?.setOnCheckedChangeListener { _, checked -> p.setVadLoggingWebrtc(checked) }
         switchLogSilero?.setOnCheckedChangeListener { _, checked -> p.setVadLoggingSilero(checked) }
+        switchAudioHealth?.setOnCheckedChangeListener { _, checked -> p.setAudioHealthLogging(checked) }
 
         rowCrashLog?.setOnClickListener {
             startActivity(Intent(this, LogsActivity::class.java).putExtra("type", "crash").putExtra("chatId", chatId))

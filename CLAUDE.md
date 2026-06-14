@@ -166,11 +166,17 @@ Everything is on-device. No cloud sync, no accounts.
   errors** (was "Error sound") switches; a **Voice Diagnostics** section with
   the **Energy / WebRTC / Silero** VAD-logging switches (moved here from the
   Advanced voice screen — each detector has its own toggle now, so Silero's
-  logs are no longer tied to WebRTC's); then **Crash log** / **Event log** as
-  "label ›" rows that open `LogsActivity`. The error and VAD-logging toggles
-  are all global prefs; the logs are local-only and intentionally always
-  reachable (not gated on the installation id) — don't reintroduce that gate
-  when restyling.
+  logs are no longer tied to WebRTC's) plus an **Audio Health** switch; then
+  **Crash log** / **Event log** as "label ›" rows that open `LogsActivity`. The
+  error and VAD-logging toggles are all global prefs; the logs are local-only
+  and intentionally always reachable (not gated on the installation id) — don't
+  reintroduce that gate when restyling. **Audio Health** is a separate
+  hands-free diagnostic from VAD logging (`getAudioHealthLogging`): per-turn
+  microphone input-health stats (frames, RMS/peak levels, near-silent/clipped
+  counts, sample rate, channels, input route + mid-capture route changes) with
+  plain-words hints, collected in `LocalWhisperEngine`'s capture loop
+  (`AudioHealthMonitor`) and written to the Event log alongside any VAD line via
+  `ChatActivity.logVadDiagnostics` (one combined entry when both are on).
 
 ## Coding rules
 

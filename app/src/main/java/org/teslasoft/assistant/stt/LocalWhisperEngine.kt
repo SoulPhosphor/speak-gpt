@@ -18,6 +18,7 @@ package org.teslasoft.assistant.stt
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.media.AudioDeviceInfo
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
@@ -136,6 +137,14 @@ class LocalWhisperEngine private constructor() {
     /** Detector stats from the most recent no-speech timeout (may be empty). */
     fun lastVadDiagnostics(): String = lastVadDiagnostics
 
+    // Snapshot of microphone input-health stats taken when a turn ends (the
+    // optional "Audio Health" diagnostic). Independent of the VAD snapshot so
+    // the two can be reported together or separately. Read on the main thread.
+    @Volatile private var lastAudioHealthDiagnostics: String = ""
+
+    /** Audio-input health stats from the most recent turn end (may be empty). */
+    fun lastAudioHealthDiagnostics(): String = lastAudioHealthDiagnostics
+
     /**
      * Voice-activity-detection config for hands-free capture. Recreates the
      * end-of-speech behaviour the platform SpeechRecognizer gives Google STT
@@ -159,7 +168,10 @@ class LocalWhisperEngine private constructor() {
         val tuning: VadTuning = VadTuning(),
         /** Detected speech must accumulate this long before the turn counts as
          *  started; 0 = first speech frame starts it (historic behaviour). */
-        val minSpeechMs: Long = 0L
+        val minSpeechMs: Long = 0L,
+        /** When true, collect per-turn microphone input-health stats (the
+         *  "Audio Health" diagnostic). Independent of [logging]. */
+        val audioHealth: Boolean = false
     )
 
     /** True iff the context for [activeModelId] is already resident in RAM. */
@@ -197,6 +209,7 @@ class LocalWhisperEngine private constructor() {
         onNoSpeechTimeout: (() -> Unit)? = null
     ): Boolean {
         val vadLog = vad?.logging == true
+        val audioHealth = vad?.audioHealth == true
         if (isCapturing) {
             if (vadLog) Log.w(TAG, "[Turn ${turnNumber}] startRecording called while isCapturing=true — returning early WITHOUT resetting state!")
             return true
@@ -207,6 +220,7 @@ class LocalWhisperEngine private constructor() {
             capturedCount = 0
         }
         lastVadDiagnostics = ""
+        lastAudioHealthDiagnostics = ""
         vadConfig = vad
         onVadEndOfTurn = onEndOfTurn
         onVadNoSpeech = onNoSpeechTimeout
@@ -294,6 +308,12 @@ class LocalWhisperEngine private constructor() {
                 }
             }
             val readBuffer = ShortArray(readSize)
+            // Optional microphone input-health monitor for this turn (the "Audio
+            // Health" diagnostic). Only built when the user turned it on, so
+            // there's zero per-frame cost otherwise. Tracks every received frame
+            // — independent of the VAD detector — so it still reports when the
+            // detector heard nothing.
+            val audioHealthMonitor = if (audioHealth) AudioHealthMonitor(record) else null
             var speechStarted = false
             var silenceSamples = 0L
             var preSpeechSamples = 0L
@@ -322,6 +342,11 @@ class LocalWhisperEngine private constructor() {
                             capturedCount += read
                         }
                         totalSamplesRead += read
+
+                        // Audio Health tracks all received frames, regardless of
+                        // VAD state, so it can report a dead/clipping mic even on
+                        // a turn where the detector never fired.
+                        audioHealthMonitor?.accept(readBuffer, read, totalSamplesRead)
 
                         if (detector != null && !vadFired) {
                             val frameRms = if (vadLog) rmsOfShort(readBuffer, read) else 0.0
@@ -372,6 +397,7 @@ class LocalWhisperEngine private constructor() {
                                                 "graceMs=${graceSamples * 1000 / SAMPLE_RATE} " +
                                                 "diag=${detector.diagnostics()}")
                                     }
+                                    if (audioHealthMonitor != null) lastAudioHealthDiagnostics = audioHealthMonitor.summarize()
                                     vadFired = true
                                     onVadEndOfTurn?.invoke()
                                 } else if (!speechStarted && preSpeechSamples >= noSpeechSampleTarget) {
@@ -384,6 +410,7 @@ class LocalWhisperEngine private constructor() {
                                                 "totalAudioMs=${totalSamplesRead * 1000 / SAMPLE_RATE} " +
                                                 "diag=${detector.diagnostics()}")
                                     }
+                                    if (audioHealthMonitor != null) lastAudioHealthDiagnostics = audioHealthMonitor.summarize()
                                     vadFired = true
                                     onVadNoSpeech?.invoke()
                                 }
@@ -615,4 +642,150 @@ class LocalWhisperEngine private constructor() {
                 true
             }
         }
+}
+
+/**
+ * Per-recording microphone input-health monitor for the optional "Audio Health"
+ * diagnostic. Where the VAD detectors answer "was there speech?", this answers
+ * "did the microphone deliver usable audio?" — a muted/dead mic shows up as
+ * near-silent frames, input that's too hot shows up as clipped frames, and an
+ * input-route change mid-capture (e.g. a Bluetooth/SCO headset connecting or
+ * dropping) is flagged. Built only when the user enables Audio Health, so it
+ * costs nothing otherwise; one cheap pass over each captured frame.
+ *
+ * The summary line is shaped to sit cleanly next to a VAD line — it carries its
+ * own "Audio Health" label — and, like the detectors, ends with plain-words
+ * hints that name the likely problem and what to try.
+ */
+private class AudioHealthMonitor(private val record: AudioRecord) {
+    private var frames = 0L
+    private var samples = 0L
+    private var rmsSum = 0.0
+    private var rmsMax = 0.0
+    private var peakMax = 0
+    private var nearZeroFrames = 0L
+    private var clippedFrames = 0L
+
+    private var routeKnown = false
+    private var initialRouteId = -1
+    private var initialRouteLabel = "unavailable"
+    private var currentRouteLabel = "unavailable"
+    private var routeChanged = false
+    private var bluetoothSeen = false
+    private var lastRouteCheckSamples = 0L
+
+    init {
+        // Capture the route at the start of the turn (called right after
+        // startRecording, so the input route has settled).
+        checkRoute()
+    }
+
+    /** Fold one captured frame into the running stats. [totalSamplesRead] is the
+     *  turn's running sample count, used only to pace the (cheap) route checks. */
+    fun accept(buf: ShortArray, len: Int, totalSamplesRead: Long) {
+        if (len <= 0) return
+        frames++
+        samples += len
+        var peak = 0
+        var sumSq = 0.0
+        for (i in 0 until len) {
+            val s = buf[i].toInt()
+            val a = if (s < 0) -s else s
+            if (a > peak) peak = a
+            sumSq += s.toDouble() * s.toDouble()
+        }
+        val rms = kotlin.math.sqrt(sumSq / len)
+        rmsSum += rms
+        if (rms > rmsMax) rmsMax = rms
+        if (peak > peakMax) peakMax = peak
+        if (peak <= NEAR_ZERO_PEAK) nearZeroFrames++
+        if (peak >= CLIP_PEAK) clippedFrames++
+        // Re-check the input route ~once a second: cheap, and enough to catch a
+        // headset (dis)connecting mid-turn without querying every frame.
+        if (totalSamplesRead - lastRouteCheckSamples >= record.sampleRate.toLong()) {
+            lastRouteCheckSamples = totalSamplesRead
+            checkRoute()
+        }
+    }
+
+    private fun checkRoute() {
+        val dev = try { record.routedDevice } catch (_: Throwable) { null }
+        val id = dev?.id ?: -1
+        val label = deviceLabel(dev)
+        if (dev?.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO) bluetoothSeen = true
+        if (!routeKnown) {
+            routeKnown = true
+            initialRouteId = id
+            initialRouteLabel = label
+            currentRouteLabel = label
+        } else if (id != initialRouteId) {
+            routeChanged = true
+            currentRouteLabel = label
+        }
+    }
+
+    /** One-line summary + hints, parallel in shape to the detectors' diagnostics(). */
+    fun summarize(): String {
+        val rate = record.sampleRate
+        val tenths = if (rate > 0) samples * 10 / rate else 0L
+        val avgRms = if (frames > 0) (rmsSum / frames).toInt() else 0
+        val ch = record.channelCount
+        val chLabel = when (ch) {
+            1 -> "mono"
+            2 -> "stereo"
+            else -> "$ch-channel"
+        }
+        val routeText = if (routeChanged) {
+            "$initialRouteLabel → $currentRouteLabel (changed mid-capture)"
+        } else {
+            initialRouteLabel
+        }
+        var s = "Audio Health ${tenths / 10}.${tenths % 10}s: $frames frames received, " +
+                "RMS avg $avgRms/max ${rmsMax.toInt()}, peak max $peakMax, " +
+                "near-zero $nearZeroFrames, clipped $clippedFrames, " +
+                "$rate Hz, $ch ch ($chLabel), route $routeText"
+
+        // Plain-words hints, same philosophy as the detectors: each names a
+        // likely problem and what to do about it. Worst-first.
+        val hints = ArrayList<String>()
+        if (frames > 0 && nearZeroFrames * 2 >= frames && peakMax <= NEAR_ZERO_PEAK * 4) {
+            hints.add("the mic delivered (near-)silence for most of the turn — it may be muted, covered, or held by another app; check microphone permission and that nothing else is recording")
+        } else if (peakMax in (NEAR_ZERO_PEAK + 1)..QUIET_PEAK) {
+            hints.add("input level was very low — speak louder or move closer to the mic")
+        }
+        if (clippedFrames > 0) {
+            hints.add("audio was clipping (input too loud or too close) — move back from the mic or lower input gain")
+        }
+        if (routeChanged) {
+            hints.add("the input device changed mid-capture — a Bluetooth headset connecting or dropping can cut audio; keep the same mic for the whole turn")
+        } else if (bluetoothSeen) {
+            hints.add("Bluetooth SCO was the input — SCO audio is low quality and can drop; try the phone mic if recognition is poor")
+        }
+        if (hints.isNotEmpty()) s += " — " + hints.joinToString("; ")
+        return s
+    }
+
+    private fun deviceLabel(dev: AudioDeviceInfo?): String {
+        if (dev == null) return "unavailable"
+        return when (dev.type) {
+            AudioDeviceInfo.TYPE_BUILTIN_MIC -> "built-in mic"
+            AudioDeviceInfo.TYPE_BLUETOOTH_SCO -> "Bluetooth SCO"
+            AudioDeviceInfo.TYPE_WIRED_HEADSET -> "wired headset"
+            AudioDeviceInfo.TYPE_USB_DEVICE -> "USB device"
+            AudioDeviceInfo.TYPE_USB_HEADSET -> "USB headset"
+            AudioDeviceInfo.TYPE_TELEPHONY -> "telephony"
+            AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> "built-in speaker"
+            else -> "type ${dev.type}"
+        }
+    }
+
+    private companion object {
+        // Peak amplitude at/below this (out of 32767) is treated as digital
+        // silence — a frame that carried essentially nothing.
+        const val NEAR_ZERO_PEAK = 4
+        // A frame touching the 16-bit rail is clipping (range -32768..32767).
+        const val CLIP_PEAK = 32767
+        // Peak below this is "very quiet" (~ -36 dBFS) but not silent.
+        const val QUIET_PEAK = 500
+    }
 }
