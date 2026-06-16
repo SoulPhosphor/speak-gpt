@@ -55,11 +55,9 @@ import org.teslasoft.assistant.preferences.Logger
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.ui.fragments.TileFragment
-import org.teslasoft.assistant.ui.fragments.dialogs.ActivationPromptDialogFragment
 import org.teslasoft.assistant.ui.fragments.dialogs.CustomizeAssistantDialog
 import org.teslasoft.assistant.ui.fragments.dialogs.SelectImageModelFragment
 import org.teslasoft.assistant.ui.fragments.dialogs.SelectResolutionFragment
-import org.teslasoft.assistant.ui.fragments.dialogs.SystemMessageDialogFragment
 import org.teslasoft.assistant.util.WindowInsetsUtil
 import java.util.EnumSet
 import kotlin.math.roundToInt
@@ -75,8 +73,6 @@ class SettingsActivity : FragmentActivity() {
     private var tileVoiceSettings: TileFragment? = null
     private var tileImageModel: TileFragment? = null
     private var tileImageResolution: TileFragment? = null
-    private var tileActivationMessage: TileFragment? = null
-    private var tileSystemMessage: TileFragment? = null
     private var tileChatLayout: TileFragment? = null
     private var tileFunctionCalling: TileFragment? = null
     private var tileSlashCommands: TileFragment? = null
@@ -106,8 +102,6 @@ class SettingsActivity : FragmentActivity() {
     private var areFragmentsInitialized = false
     private var chatId = ""
     private var preferences: Preferences? = null
-    private var activationPrompt = ""
-    private var systemMessage = ""
     private var resolution = ""
     private var imageModel = ""
     private var host = ""
@@ -145,18 +139,6 @@ class SettingsActivity : FragmentActivity() {
         }
     }
 
-    private var promptChangedListener: ActivationPromptDialogFragment.StateChangesListener =
-        ActivationPromptDialogFragment.StateChangesListener { prompt ->
-            activationPrompt = prompt
-            preferences?.setPrompt(prompt)
-        }
-
-    private var systemChangedListener: SystemMessageDialogFragment.StateChangesListener =
-        SystemMessageDialogFragment.StateChangesListener { prompt ->
-            systemMessage = prompt
-            preferences?.setSystemMessage(prompt)
-        }
-
     private var customizeAssistantDialogListener: CustomizeAssistantDialog.CustomizeAssistantDialogListener = object : CustomizeAssistantDialog.CustomizeAssistantDialogListener {
         override fun onEdit(assistantName: String, avatarType: String, avatarId: String) {
             preferences?.setAssistantName(assistantName)
@@ -192,7 +174,6 @@ class SettingsActivity : FragmentActivity() {
         transition.excludeTarget(R.id.textView30, true)
         transition.excludeTarget(R.id.textView31, true)
         transition.excludeTarget(R.id.textView32, true)
-        transition.excludeTarget(R.id.textView33, true)
         transition.excludeTarget(R.id.textView34, true)
         transition.excludeTarget(R.id.textView35, true)
         transition.excludeTarget(R.id.textView36, true)
@@ -201,7 +182,6 @@ class SettingsActivity : FragmentActivity() {
         transition.excludeTarget(R.id.constraintLayout8, true)
         transition.excludeTarget(R.id.constraintLayout9, true)
         transition.excludeTarget(R.id.constraintLayout10, true)
-        transition.excludeTarget(R.id.constraintLayout11, true)
         transition.excludeTarget(R.id.constraintLayout12, true)
         transition.excludeTarget(R.id.constraintLayout13, true)
         transition.excludeTarget(R.id.constraintLayout14, true)
@@ -222,8 +202,6 @@ class SettingsActivity : FragmentActivity() {
         transition.excludeTarget(R.id.tile_stt, true)
         transition.excludeTarget(R.id.tile_silent_mode, true)
         transition.excludeTarget(R.id.tile_always_speak, true)
-        transition.excludeTarget(R.id.tile_activation_prompt, true)
-        transition.excludeTarget(R.id.tile_system_message, true)
         transition.excludeTarget(R.id.tile_auto_language_detection, true)
         transition.excludeTarget(R.id.tile_chat_layout, true)
         transition.excludeTarget(R.id.tile_function_calling, true)
@@ -254,7 +232,6 @@ class SettingsActivity : FragmentActivity() {
         transition2.excludeTarget(R.id.textView30, true)
         transition2.excludeTarget(R.id.textView31, true)
         transition2.excludeTarget(R.id.textView32, true)
-        transition2.excludeTarget(R.id.textView33, true)
         transition2.excludeTarget(R.id.textView34, true)
         transition2.excludeTarget(R.id.textView35, true)
         transition2.excludeTarget(R.id.textView36, true)
@@ -263,7 +240,6 @@ class SettingsActivity : FragmentActivity() {
         transition2.excludeTarget(R.id.constraintLayout8, true)
         transition2.excludeTarget(R.id.constraintLayout9, true)
         transition2.excludeTarget(R.id.constraintLayout10, true)
-        transition2.excludeTarget(R.id.constraintLayout11, true)
         transition2.excludeTarget(R.id.constraintLayout12, true)
         transition2.excludeTarget(R.id.constraintLayout13, true)
         transition2.excludeTarget(R.id.constraintLayout14, true)
@@ -282,8 +258,6 @@ class SettingsActivity : FragmentActivity() {
         transition2.excludeTarget(R.id.tile_stt, true)
         transition2.excludeTarget(R.id.tile_silent_mode, true)
         transition2.excludeTarget(R.id.tile_always_speak, true)
-        transition2.excludeTarget(R.id.tile_activation_prompt, true)
-        transition2.excludeTarget(R.id.tile_system_message, true)
         transition2.excludeTarget(R.id.tile_auto_language_detection, true)
         transition2.excludeTarget(R.id.tile_chat_layout, true)
         transition2.excludeTarget(R.id.tile_function_calling, true)
@@ -355,8 +329,6 @@ class SettingsActivity : FragmentActivity() {
         apiEndpointPreferences = ApiEndpointPreferences.getApiEndpointPreferences(this)
         apiEndpoint = apiEndpointPreferences?.getApiEndpoint(this, preferences?.getApiEndpointId()!!)
 
-        activationPrompt = preferences?.getPrompt() ?: ""
-        systemMessage = preferences?.getSystemMessage() ?: ""
         resolution = preferences?.getResolution() ?: "256x256"
         imageModel = preferences?.getImageModel() ?: "dall-e-3"
 
@@ -368,7 +340,6 @@ class SettingsActivity : FragmentActivity() {
             androidId = DeviceInfoProvider.getAndroidId(this@SettingsActivity)
             createFragments1()
             createFragments2()
-            createFragments3()
             createFragments4()
             createFragments5()
         }
@@ -511,41 +482,6 @@ class SettingsActivity : FragmentActivity() {
 
         t2.start()
         t2.join()
-    }
-
-    private fun createFragments3() {
-        val t3 = Thread {
-            tileActivationMessage = TileFragment.newInstance(
-                checked = false,
-                checkable = false,
-                enabledText = getString(R.string.tile_activation_prompt_title),
-                disabledText = null,
-                enabledDesc = getString(R.string.label_tap_to_set),
-                disabledDesc = null,
-                icon = R.drawable.ic_play,
-                disabled = false,
-                chatId = chatId,
-                functionDesc = getString(R.string.tile_activation_prompt_desc),
-                transitionName = "expand_activation_prompt"
-            )
-
-            tileSystemMessage = TileFragment.newInstance(
-                checked = false,
-                checkable = false,
-                enabledText = getString(R.string.tile_system_message_title),
-                disabledText = null,
-                enabledDesc = getString(R.string.label_tap_to_set),
-                disabledDesc = null,
-                icon = R.drawable.ic_play,
-                disabled = false,
-                chatId = chatId,
-                functionDesc = getString(R.string.tile_system_message_desc),
-                transitionName = "expand_system_prompt"
-            )
-        }
-
-        t3.start()
-        t3.join()
     }
 
     private fun createFragments4() {
@@ -827,8 +763,6 @@ class SettingsActivity : FragmentActivity() {
             .replace(R.id.tile_voice_settings, tileVoiceSettings!!)
             .replace(R.id.tile_image_model, tileImageModel!!)
             .replace(R.id.tile_image_resolution, tileImageResolution!!)
-            .replace(R.id.tile_activation_prompt, tileActivationMessage!!)
-            .replace(R.id.tile_system_message, tileSystemMessage!!)
             .replace(R.id.tile_chat_layout, tileChatLayout!!)
             .replace(R.id.tile_function_calling, tileFunctionCalling!!)
             .replace(R.id.tile_slash_commands, tileSlashCommands!!)
@@ -898,18 +832,6 @@ class SettingsActivity : FragmentActivity() {
             val resolutionSelectorDialogFragment: SelectResolutionFragment = SelectResolutionFragment.newInstance(resolution, chatId)
             resolutionSelectorDialogFragment.setStateChangedListener(resolutionChangedListener)
             resolutionSelectorDialogFragment.show(supportFragmentManager.beginTransaction(), "ResolutionSelectorDialog")
-        }
-
-        tileActivationMessage?.setOnTileClickListener {
-            val promptDialog: ActivationPromptDialogFragment = ActivationPromptDialogFragment.newInstance(activationPrompt)
-            promptDialog.setStateChangedListener(promptChangedListener)
-            promptDialog.show(supportFragmentManager.beginTransaction(), "PromptDialog")
-        }
-
-        tileSystemMessage?.setOnTileClickListener {
-            val promptDialog: SystemMessageDialogFragment = SystemMessageDialogFragment.newInstance(systemMessage)
-            promptDialog.setStateChangedListener(systemChangedListener)
-            promptDialog.show(supportFragmentManager.beginTransaction(), "SystemMessageDialog")
         }
 
         tileChatLayout?.setOnCheckedChangeListener { isChecked -> run {
