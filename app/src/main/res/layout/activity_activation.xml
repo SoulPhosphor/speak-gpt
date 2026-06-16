@@ -263,7 +263,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginStart="24dp"
                     android:text="Activating debug features..."
-                    android:textColor="@color/accent_900"
+                    android:textColor="?attr/colorPrimary"
                     app:layout_constraintBottom_toBottomOf="parent"
                     app:layout_constraintStart_toEndOf="@+id/circularProgressIndicator"
                     app:layout_constraintTop_toTopOf="parent" />

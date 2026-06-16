@@ -1,7 +1,7 @@
 # Phosphor Shines — UI Redesign Master Plan
 
 **Date:** June 13, 2026
-**Status:** Approved plan, no implementation started. This document is the
+**Status:** Phase 1 implemented locally; Phase 0 completed previously. This document is the
 specification for the "UI overhaul" referenced in CLAUDE.md's roadmap.
 **Audience:** AI agents implementing the redesign. Read `CLAUDE.md` in full
 before this document — every rule there still applies. This plan was written
@@ -438,11 +438,7 @@ Leave untouched unless asked: `DebugMaterial`, the Teapots activity,
   `ThemeManager.applyPalette()` with only the `violet` overlay defined as an
   empty/no-op overlay and wire the call into every activity `onCreate`
   (zero visual change — this PR proves the wiring compiles everywhere).
-- **Phase 1 — Theme-attribute migration**: 3–5 PRs grouped by screen family
-  (core chat surfaces last). No intended visual change per PR. Includes the
-  shared drawables and the icon-tint convention. Done when
-  `grep -rl '@color/accent' app/src/main/res/layout/` returns only
-  deliberate exceptions (document them here).
+- **Phase 1 — Theme-attribute migration** ✅ (commit 1a2b8ae): migrated layout, drawable, menu, and color-state XML from hard-coded `@color/accent_*` / `@color/window_background` references to Material theme attributes; updated the vector icon tint convention. `rg '@color/(accent|window_background)' app/src/main/res/layout app/src/main/res/drawable app/src/main/res/drawable-v24 app/src/main/res/color app/src/main/res/menu` now returns no matches. Kotlin runtime color lookups remain for a later, narrower pass because many are AMOLED/state-machine-specific and need screen-by-screen behavioral verification.
 - **Phase 2 — Palettes shipped**: define the 5 overlays (light+dark role
   sets), the `ui_palette` preference, the Appearance picker UI with swatches,
   `recreate()` flow. Verify AMOLED still correct on every screen family.

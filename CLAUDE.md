@@ -184,7 +184,7 @@ Everything is on-device. No cloud sync, no accounts.
   `DialogFragment.newInstance(Bundle)` pattern, listener interfaces with
   default no-op methods, copyright header on every file, strings ONLY in
   `res/values/strings.xml` (other locales fall back; don't translate unless
-  asked), icons as vector drawables tinted `@color/accent_900`.
+  asked), icons as vector drawables tinted `?attr/colorPrimary`.
 - Comments explain *constraints and why*, not what the next line does. This
   codebase's comments are load-bearing documentation for future agents —
   preserve and extend that.

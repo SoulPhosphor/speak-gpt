@@ -9,5 +9,5 @@
 		android:bottomLeftRadius="36dp"/>
 
 	<solid
-		android:color="@color/accent_100"/>
+		android:color="?attr/colorSurfaceContainerHigh"/>
 </shape>

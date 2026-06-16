@@ -4,7 +4,7 @@
     <item>
         <shape >
             <corners android:topLeftRadius="4dp" android:topRightRadius="4dp" android:bottomRightRadius="4dp" android:bottomLeftRadius="4dp"/>
-            <gradient android:type="linear" android:angle="315" android:startColor="@color/accent_900" android:centerColor="@color/accent_900" android:endColor="@color/accent_900" android:useLevel="true"/>
+            <gradient android:type="linear" android:angle="315" android:startColor="?attr/colorPrimary" android:centerColor="?attr/colorPrimary" android:endColor="?attr/colorPrimary" android:useLevel="true"/>
         </shape>
     </item>
 </ripple>
