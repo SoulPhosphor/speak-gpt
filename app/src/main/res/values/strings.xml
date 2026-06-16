@@ -404,6 +404,8 @@
     <string name="title_crash_log">Crash log</string>
     <string name="title_ads_log">Ads log</string>
     <string name="title_event_log">Event log</string>
+    <string name="btn_open_event_log">Open event log</string>
+    <string name="btn_open_voice_advanced">Advanced voice &amp; debugging</string>
     <string name="label_clear_log">Clear log</string>
     <string name="msg_clear_log_confirm">Are you sure you want to clear this log?</string>
     <string name="yes">Yes</string>

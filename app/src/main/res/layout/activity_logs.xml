@@ -90,4 +90,22 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
         app:srcCompat="@drawable/ic_back" />
+
+    <!-- One-tap jump to the advanced voice & debugging screen, shown only on the
+         Event log (set in LogsActivity) so the user can read what's wrong and
+         then go straight to the knobs that fix it. Same icon as that tile. -->
+    <ImageButton
+        android:id="@+id/btn_voice_advanced"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_marginTop="16dp"
+        android:layout_marginEnd="24dp"
+        android:background="@drawable/btn_accent_icon_large"
+        android:contentDescription="@string/btn_open_voice_advanced"
+        android:src="@drawable/ic_terminal"
+        android:tooltipText="@string/btn_open_voice_advanced"
+        android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:srcCompat="@drawable/ic_terminal" />
 </androidx.constraintlayout.widget.ConstraintLayout>

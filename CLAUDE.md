@@ -177,6 +177,14 @@ Everything is on-device. No cloud sync, no accounts.
   plain-words hints, collected in `LocalWhisperEngine`'s capture loop
   (`AudioHealthMonitor`) and written to the Event log alongside any VAD line via
   `ChatActivity.logVadDiagnostics` (one combined entry when both are on).
+  Two shortcuts make this loop fast to act on: the chat's top action bar shows a
+  **bug icon** (`btn_debug_log`) whenever any of those diagnostics is on
+  (`ChatActivity.updateDebugLogButtonVisibility`, re-checked in `onResume`) that
+  opens the Event log directly; and the Event log itself (`LogsActivity`, only
+  for `type == "event"`) shows a **terminal icon** (`btn_voice_advanced`, the
+  same icon as the Advanced voice tile) that jumps to
+  `VoiceAdvancedSettingsActivity` — see what's wrong, then go straight to the
+  knobs that fix it, without walking back through Settings.
 - **Microphone routing is Bluetooth-first** (`stt/MicRouteSelector.kt`): opening
   an `AudioRecord` with `AudioSource.MIC` does NOT capture from a Bluetooth
   headset on its own — Android only routes capture to a BT SCO mic when the app

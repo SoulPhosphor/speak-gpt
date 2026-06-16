@@ -16,6 +16,7 @@
 
 package org.teslasoft.assistant.ui.activities
 
+import android.content.Intent
 import android.content.res.Configuration
 import android.graphics.drawable.Drawable
 import android.os.Bundle
@@ -37,6 +38,7 @@ class LogsActivity : FragmentActivity() {
 
     private var btnClearLog: MaterialButton? = null
     private var btnBack: ImageButton? = null
+    private var btnVoiceAdvanced: ImageButton? = null
     private var activityLogsTitle: TextView? = null
     private var textLog: TextView? = null
     private var logType = ""
@@ -51,6 +53,7 @@ class LogsActivity : FragmentActivity() {
 
         btnClearLog = findViewById(R.id.btn_clear_log)
         btnBack = findViewById(R.id.btn_back)
+        btnVoiceAdvanced = findViewById(R.id.btn_voice_advanced)
         activityLogsTitle = findViewById(R.id.activity_logs_title)
         textLog = findViewById(R.id.text_log)
         root = findViewById(R.id.root)
@@ -86,6 +89,12 @@ class LogsActivity : FragmentActivity() {
                             activityLogsTitle?.text = getString(R.string.title_event_log)
                             this.title = getString(R.string.title_event_log)
                             textLog?.text = Logger.getEventLog(this)
+                            // The voice pipeline writes its diagnostics here, so
+                            // offer a direct hop to the screen that tunes it.
+                            btnVoiceAdvanced?.visibility = android.view.View.VISIBLE
+                            btnVoiceAdvanced?.setOnClickListener {
+                                startActivity(Intent(this, VoiceAdvancedSettingsActivity::class.java))
+                            }
                         }
 
                         else -> finish()
@@ -135,10 +144,12 @@ class LogsActivity : FragmentActivity() {
                 window.setBackgroundDrawableResource(R.color.amoled_window_background)
                 root?.setBackgroundColor(ResourcesCompat.getColor(resources, R.color.amoled_window_background, theme))
                 btnBack?.setBackgroundResource(R.drawable.btn_accent_icon_large_amoled)
+                btnVoiceAdvanced?.setBackgroundResource(R.drawable.btn_accent_icon_large_amoled)
             } else {
                 window.setBackgroundDrawableResource(R.color.window_background)
                 root?.setBackgroundColor(SurfaceColors.SURFACE_0.getColor(this))
                 btnBack?.background = getDisabledDrawable(ResourcesCompat.getDrawable(resources, R.drawable.btn_accent_icon_large, theme)!!)
+                btnVoiceAdvanced?.background = getDisabledDrawable(ResourcesCompat.getDrawable(resources, R.drawable.btn_accent_icon_large, theme)!!)
             }
         } catch (_: Exception) {
             window.setBackgroundDrawableResource(R.color.window_background)

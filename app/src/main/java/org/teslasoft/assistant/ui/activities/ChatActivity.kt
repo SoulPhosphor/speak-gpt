@@ -222,6 +222,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     private var fileContents: ByteArray? = null
     private var actionBar: ConstraintLayout? = null
     private var btnBack: ImageButton? = null
+    private var btnDebugLog: ImageButton? = null
     private var keyboardFrame: ConstraintLayout? = null
     private var root: ConstraintLayout? = null
     private var threadLoader: LinearLayout? = null
@@ -688,6 +689,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             logitBiasPreferences = LogitBiasPreferences(this, preferences?.getLogitBiasesConfigId()!!)
             apiEndpointObject = apiEndpointPreferences?.getApiEndpoint(this, preferences?.getApiEndpointId()!!)
         }
+
+        // Diagnostics may have been toggled in Settings while we were away.
+        updateDebugLogButtonVisibility()
 
         // Safety net for the top action bar. The settings cog is a shared-element
         // scene-transition target, so Android hides it (and can leave the bar in a
@@ -1378,6 +1382,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         btnExport = findViewById(R.id.btn_export)
         actionBar = findViewById(R.id.action_bar)
         btnBack = findViewById(R.id.btn_back)
+        btnDebugLog = findViewById(R.id.btn_debug_log)
         keyboardFrame = findViewById(R.id.keyboard_frame)
         root = findViewById(R.id.root)
         btnAttachFile = findViewById(R.id.btn_attach)
@@ -1886,6 +1891,25 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             }
             fileSaveIntentLauncher.launch(intent)
         }
+
+        btnDebugLog?.setOnClickListener {
+            startActivity(
+                Intent(this, LogsActivity::class.java)
+                    .putExtra("type", "event")
+                    .putExtra("chatId", chatId)
+            )
+        }
+        updateDebugLogButtonVisibility()
+    }
+
+    /** The bug shortcut in the chat's top bar is a quick jump to the Event log,
+     *  shown only while there's something worth reading there — i.e. when any
+     *  voice diagnostics (the Energy/WebRTC/Silero VAD logging toggles) or Audio
+     *  Health logging is on. Re-checked in onResume so toggling a switch in
+     *  Settings and coming back updates it without reopening the chat. */
+    private fun updateDebugLogButtonVisibility() {
+        val on = voiceDiagnosticsEnabled() || preferences?.getAudioHealthLogging() == true
+        btnDebugLog?.visibility = if (on) View.VISIBLE else View.GONE
     }
 
     private fun isHardKB(): Boolean {

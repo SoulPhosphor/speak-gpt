@@ -292,6 +292,25 @@
                 app:layout_constraintTop_toTopOf="parent"
                 app:srcCompat="@drawable/ic_upload" />
 
+            <!-- Shown only while audio/VAD diagnostics are on (see
+                 ChatActivity.updateDebugLogButtonVisibility); a one-tap jump
+                 from the chat to the Event log so the user can see what the
+                 voice pipeline is logging without digging through Settings. -->
+            <ImageButton
+                android:id="@+id/btn_debug_log"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_marginEnd="8dp"
+                android:background="@drawable/btn_accent_tonal_v4"
+                android:contentDescription="@string/btn_open_event_log"
+                android:tooltipText="@string/btn_open_event_log"
+                android:visibility="gone"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toStartOf="@+id/btn_export"
+                app:layout_constraintTop_toTopOf="parent"
+                app:srcCompat="@drawable/ic_bug"
+                tools:visibility="visible" />
+
             <ImageButton
                 android:id="@+id/btn_back"
                 android:layout_width="48dp"
@@ -319,7 +338,7 @@
                 android:textSize="20sp"
                 android:textStyle="bold"
                 app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintEnd_toStartOf="@+id/btn_export"
+                app:layout_constraintEnd_toStartOf="@+id/btn_debug_log"
                 app:layout_constraintStart_toEndOf="@+id/btn_back"
                 app:layout_constraintTop_toTopOf="parent" />
         </androidx.constraintlayout.widget.ConstraintLayout>
