@@ -987,7 +987,10 @@ class AssistantFragment : BottomSheetDialogFragment(), ChatAdapter.OnUpdateListe
 
     private fun startLocalWhisper() {
         val ctx = mContext ?: return
-        val ok = LocalWhisperEngine.get().startRecording()
+        // applicationContext lets the engine route capture to a Bluetooth
+        // headset when one is connected (else the built-in mic). Routing is
+        // released by the engine's cancel() when this recording stops.
+        val ok = LocalWhisperEngine.get().startRecording(context = ctx.applicationContext)
         if (!ok) {
             isRecording = false
             animation?.stop()

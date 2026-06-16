@@ -2173,7 +2173,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     private fun startLocalWhisper() {
         micRecording()
         isRecording = true
-        val ok = LocalWhisperEngine.get().startRecording()
+        // applicationContext lets the engine route capture to a Bluetooth
+        // headset when one is connected (else the built-in mic).
+        val ok = LocalWhisperEngine.get().startRecording(context = applicationContext)
         if (!ok) {
             isRecording = false
             micIdle()
@@ -2255,6 +2257,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             sileroThreshold = preferences!!.getVadSileroThreshold() / 100.0
         )
         val ok = LocalWhisperEngine.get().startRecording(
+            // applicationContext lets the engine route capture to a Bluetooth
+            // headset when one is connected (else the built-in mic), re-checked
+            // every turn so a headset connecting mid-conversation is picked up.
+            context = applicationContext,
             vad = LocalWhisperEngine.VadConfig(
                 silenceMs, noSpeechMs, vadMethod, preferences!!.getVadWebRtcMode(), graceMs, vadLog,
                 tuning = tuning,
@@ -2291,6 +2297,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         }
         handsFreeTurnRetries = 0
         logVoiceEvent(if (freshTurn) "listening turn started (mic button)" else "listening turn started (auto re-arm)")
+        logMicRoute()
         preloadActiveLocalWhisperModel()
     }
 
@@ -2348,6 +2355,23 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         if (parts.isEmpty()) return
         try {
             org.teslasoft.assistant.preferences.Logger.log(this, "event", "VoiceDiag", "debug", "$reason\n${parts.joinToString("\n")}")
+        } catch (_: Throwable) { /* never let diagnostics crash the loop */ }
+    }
+
+    /** Write the microphone route chosen for this turn to the Event log: the
+     *  requested device plus the actual active input before and after the mic
+     *  opened. This is what lets the user confirm which mic is really in use —
+     *  e.g. that a connected Bluetooth headset is being captured from, not the
+     *  built-in mic. Always logged to logcat; written to the persistent Event
+     *  log when Audio Health or any VAD logging is on, so it doesn't spam normal
+     *  use but is there the moment the user turns diagnostics on to investigate. */
+    private fun logMicRoute() {
+        val diag = LocalWhisperEngine.get().lastMicRouteDiagnostics()
+        if (diag.isEmpty()) return
+        Log.i("VoiceLoop", "mic route: $diag")
+        if (preferences?.getAudioHealthLogging() != true && !voiceDiagnosticsEnabled()) return
+        try {
+            org.teslasoft.assistant.preferences.Logger.log(this, "event", "MicRoute", "info", diag)
         } catch (_: Throwable) { /* never let diagnostics crash the loop */ }
     }
 
@@ -2930,6 +2954,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         handsFreeSubmitRunnable = null
         handsFreeBuffer = ""
         try { recognizer?.stopListening() } catch (_: Exception) { /* ignore */ }
+        // Release any Bluetooth SCO routing the Whisper engine took for capture
+        // so the headset isn't left in call mode after the loop ends (no-op for
+        // the Google STT path, which never routed). End-of-turn keeps the route
+        // up between turns; only a real loop stop tears it down.
+        try { LocalWhisperEngine.get().clearMicRouting() } catch (_: Exception) { /* ignore */ }
         isRecording = false
         micIdle()
         stopHandsFreeService()

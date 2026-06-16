@@ -145,6 +145,24 @@ class LocalWhisperEngine private constructor() {
     /** Audio-input health stats from the most recent turn end (may be empty). */
     fun lastAudioHealthDiagnostics(): String = lastAudioHealthDiagnostics
 
+    // Application context retained only while a mic-routing override is active,
+    // so we can release Bluetooth SCO when capture ends. Application context
+    // ONLY — never an Activity — because the engine is a process-wide singleton
+    // and would otherwise leak the chat screen.
+    @Volatile private var routeAppContext: Context? = null
+
+    // Plain-words description of the input device chosen for the most recent
+    // startRecording: the requested route plus the actual active device before
+    // and after the mic opened. The UI reads this after startRecording returns
+    // and writes it to the event log, so the user can confirm which mic is
+    // really in use (e.g. that a connected Bluetooth headset is being captured
+    // from, not the built-in mic). Read on the main thread.
+    @Volatile private var lastMicRouteDiagnostics: String = ""
+
+    /** Input-device routing summary from the most recent startRecording (may be
+     *  empty when no Context was supplied to choose/route the input). */
+    fun lastMicRouteDiagnostics(): String = lastMicRouteDiagnostics
+
     /**
      * Voice-activity-detection config for hands-free capture. Recreates the
      * end-of-speech behaviour the platform SpeechRecognizer gives Google STT
@@ -201,9 +219,17 @@ class LocalWhisperEngine private constructor() {
      * Starts mic capture. Returns false if AudioRecord couldn't be
      * initialized (e.g. mic permission missing, mic in use). Caller must
      * have already verified RECORD_AUDIO permission.
+     *
+     * [context] enables Bluetooth-first input routing: when supplied, a
+     * connected Bluetooth headset is selected as the capture device (else the
+     * built-in mic), re-evaluated on every call so a headset connecting or
+     * dropping between turns is honoured. It also lets us record which input is
+     * actually live before/after the mic opens (see [lastMicRouteDiagnostics]).
+     * Null keeps the legacy behaviour (whatever the OS routes by default).
      */
     @SuppressLint("MissingPermission")
     fun startRecording(
+        context: Context? = null,
         vad: VadConfig? = null,
         onEndOfTurn: (() -> Unit)? = null,
         onNoSpeechTimeout: (() -> Unit)? = null
@@ -221,11 +247,21 @@ class LocalWhisperEngine private constructor() {
         }
         lastVadDiagnostics = ""
         lastAudioHealthDiagnostics = ""
+        lastMicRouteDiagnostics = ""
         vadConfig = vad
         onVadEndOfTurn = onEndOfTurn
         onVadNoSpeech = onNoSpeechTimeout
         if (vadLog) Log.i(TAG, "[Turn $turnNumber] START: silenceMs=${vad?.silenceMs} noSpeechMs=${vad?.noSpeechMs} " +
                 "graceMs=${vad?.graceMs} method=${vad?.method} webRtcMode=${vad?.webRtcMode}")
+
+        // Bluetooth-first input routing. Re-run every turn (cheap, idempotent
+        // when the device is already selected) so a headset that connects or
+        // drops between turns is honoured without restarting the loop. Done
+        // before the AudioRecord opens so capture lands on the chosen device.
+        val micRoute = context?.let {
+            routeAppContext = it.applicationContext
+            MicRouteSelector.selectPreferredInput(it)
+        }
 
         val minBuf = AudioRecord.getMinBufferSize(
             SAMPLE_RATE,
@@ -256,6 +292,12 @@ class LocalWhisperEngine private constructor() {
             return false
         }
 
+        // Point this specific recorder at the chosen device too. The
+        // communication device selected above starts/owns the Bluetooth SCO
+        // link; this nudges the AudioRecord onto it (best-effort — null/unset
+        // just leaves OS default routing).
+        micRoute?.requested?.let { try { record.setPreferredDevice(it) } catch (_: Throwable) {} }
+
         audioRecord = record
         try {
             record.startRecording()
@@ -267,6 +309,21 @@ class LocalWhisperEngine private constructor() {
         }
 
         isCapturing = true
+
+        // Record which input is actually live the instant the mic opened. With
+        // Bluetooth this may still read "built-in mic" for a beat while SCO
+        // connects — the AudioHealthMonitor's periodic re-check logs the switch
+        // when it lands — but capturing the requested route plus the before/
+        // after device here makes "which mic" explicit in the event log, which
+        // is the whole point of this line.
+        if (micRoute != null) {
+            val after = MicRouteSelector.label(record.routedDevice)
+            lastMicRouteDiagnostics =
+                "requested ${micRoute.requestedLabel} " +
+                "(Bluetooth headset ${if (micRoute.bluetoothAvailable) "connected" else "not connected"}); " +
+                "active input before open ${micRoute.beforeLabel}, after open $after"
+        }
+
         val readSize = bufferBytes / 2 // shorts per read
         // Build the detector once per recording, off the main thread. The
         // capture loop owns the silence/no-speech timers (so the user's
@@ -550,6 +607,23 @@ class LocalWhisperEngine private constructor() {
             capturedChunks.clear()
             capturedCount = 0
         }
+        // Capture is over (abort / no-speech / user stop). Release any Bluetooth
+        // SCO routing so a headset isn't left in call mode. Normal end-of-turn
+        // goes through stopAndTranscribe instead, which keeps the route up so a
+        // continuous hands-free loop doesn't re-negotiate SCO every turn.
+        clearMicRouting()
+    }
+
+    /**
+     * Releases any Bluetooth SCO / communication-device routing taken for
+     * capture, returning input to the OS default (built-in). Safe to call when
+     * nothing was routed. Exposed so the hands-free loop can tear routing down
+     * when it stops without going through [cancel].
+     */
+    fun clearMicRouting() {
+        val ctx = routeAppContext ?: return
+        routeAppContext = null
+        try { MicRouteSelector.clear(ctx) } catch (_: Throwable) {}
     }
 
     /** Drops VAD config + callbacks so no stale turn callback can fire. */
@@ -800,19 +874,9 @@ private class AudioHealthMonitor(private val record: AudioRecord) {
         return s
     }
 
-    private fun deviceLabel(dev: AudioDeviceInfo?): String {
-        if (dev == null) return "unavailable"
-        return when (dev.type) {
-            AudioDeviceInfo.TYPE_BUILTIN_MIC -> "built-in mic"
-            AudioDeviceInfo.TYPE_BLUETOOTH_SCO -> "Bluetooth SCO"
-            AudioDeviceInfo.TYPE_WIRED_HEADSET -> "wired headset"
-            AudioDeviceInfo.TYPE_USB_DEVICE -> "USB device"
-            AudioDeviceInfo.TYPE_USB_HEADSET -> "USB headset"
-            AudioDeviceInfo.TYPE_TELEPHONY -> "telephony"
-            AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> "built-in speaker"
-            else -> "type ${dev.type}"
-        }
-    }
+    // Shared with the mic-open route line so both always name a device the
+    // same way (and pick up the headset's product name when available).
+    private fun deviceLabel(dev: AudioDeviceInfo?): String = MicRouteSelector.label(dev)
 
     private companion object {
         // Peak amplitude at/below this (out of 32767) is treated as digital

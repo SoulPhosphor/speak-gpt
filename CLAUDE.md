@@ -177,6 +177,23 @@ Everything is on-device. No cloud sync, no accounts.
   plain-words hints, collected in `LocalWhisperEngine`'s capture loop
   (`AudioHealthMonitor`) and written to the Event log alongside any VAD line via
   `ChatActivity.logVadDiagnostics` (one combined entry when both are on).
+- **Microphone routing is Bluetooth-first** (`stt/MicRouteSelector.kt`): opening
+  an `AudioRecord` with `AudioSource.MIC` does NOT capture from a Bluetooth
+  headset on its own — Android only routes capture to a BT SCO mic when the app
+  selects it as the communication device. So `LocalWhisperEngine.startRecording`
+  now takes a `Context` and, when one is passed (both the push-to-talk and
+  hands-free Whisper call sites do), picks a connected BT headset over the
+  built-in mic via `AudioManager.setCommunicationDevice` (Android 12+/API 31;
+  below that it leaves the OS default). Re-evaluated every turn, so a headset
+  that connects or drops mid-conversation is honoured on the next turn; the
+  routing is released (`clearMicRouting`) on capture abort/no-speech, on
+  `stopHandsFreeLoop`, and on `release`, so the headset isn't left in call mode.
+  `lastMicRouteDiagnostics` records the requested device plus the actual active
+  input before/after the mic opens; `ChatActivity.logMicRoute` writes it to the
+  Event log under the Audio Health / VAD-logging toggles. Device labels (with
+  product name) come from the shared `MicRouteSelector.label`, used by both the
+  mic-route line and `AudioHealthMonitor`. (Note: `AssistantFragment`'s
+  `MediaRecorder` paths are unrelated audio-message capture and are NOT routed.)
 
 ## Coding rules
 
