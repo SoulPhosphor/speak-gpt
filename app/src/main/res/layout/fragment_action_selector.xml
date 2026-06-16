@@ -47,7 +47,7 @@
         android:elevation="0dp"
         android:text="@string/option_us_as_a_prompt"
         android:textAllCaps="false"
-        android:textColor="@color/window_background"
+        android:textColor="?attr/colorSurface"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/textView24" />
@@ -63,7 +63,7 @@
         android:elevation="0dp"
         android:text="@string/option_explain_meaning"
         android:textAllCaps="false"
-        android:textColor="@color/window_background"
+        android:textColor="?attr/colorSurface"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/btnPrompt" />
@@ -79,7 +79,7 @@
         android:elevation="0dp"
         android:text="@string/option_summarize"
         android:textAllCaps="false"
-        android:textColor="@color/window_background"
+        android:textColor="?attr/colorSurface"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/btnImage" />
@@ -95,7 +95,7 @@
         android:elevation="0dp"
         android:text="@string/option_generate_an_image"
         android:textAllCaps="false"
-        android:textColor="@color/window_background"
+        android:textColor="?attr/colorSurface"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/btnExplain" />
@@ -112,7 +112,7 @@
         android:elevation="0dp"
         android:text="@string/option_cancel"
         android:textAllCaps="false"
-        android:textColor="@color/window_background"
+        android:textColor="?attr/colorSurface"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"

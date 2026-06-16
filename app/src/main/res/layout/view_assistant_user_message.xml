@@ -51,7 +51,7 @@
                 android:layout_height="wrap_content"
                 android:paddingBottom="4dp"
                 android:text="@string/user"
-                android:textColor="@color/accent_900"
+                android:textColor="?attr/colorPrimary"
                 android:textSize="18sp"
                 android:textStyle="bold"
                 android:visibility="gone"
@@ -74,7 +74,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 android:paddingHorizontal="12dp"
-                android:textColor="@color/window_background"
+                android:textColor="?attr/colorSurface"
                 android:textSize="16sp"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintTop_toTopOf="parent" />

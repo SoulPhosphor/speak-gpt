@@ -44,7 +44,7 @@
             android:ellipsize="end"
             android:lines="1"
             android:text="Token: word"
-            android:textColor="@color/accent_900"
+            android:textColor="?attr/colorPrimary"
             android:textSize="16sp"
             android:textStyle="bold"
             app:layout_constraintEnd_toStartOf="@+id/btn_delete_logit_bias"

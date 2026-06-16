@@ -26,7 +26,7 @@
         android:id="@+id/action_bar"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:background="@color/accent_100"
+        android:background="?attr/colorSurfaceContainerHigh"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent">
@@ -92,7 +92,7 @@
                 android:layout_height="wrap_content"
                 android:paddingTop="24dp"
                 android:text="@string/adv_section_vad"
-                android:textColor="@color/accent_900"
+                android:textColor="?attr/colorPrimary"
                 android:textSize="18sp"
                 android:textStyle="bold" />
 
@@ -356,7 +356,7 @@
                 android:layout_height="wrap_content"
                 android:paddingTop="28dp"
                 android:text="@string/adv_section_whisper"
-                android:textColor="@color/accent_900"
+                android:textColor="?attr/colorPrimary"
                 android:textSize="18sp"
                 android:textStyle="bold" />
 
@@ -666,7 +666,7 @@
                 android:layout_height="wrap_content"
                 android:paddingTop="28dp"
                 android:text="@string/adv_section_tts"
-                android:textColor="@color/accent_900"
+                android:textColor="?attr/colorPrimary"
                 android:textSize="18sp"
                 android:textStyle="bold" />
 
