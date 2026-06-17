@@ -444,6 +444,67 @@ activities, crash handler. Restyle freely; same palette/inset rules.
 Leave untouched unless asked: `DebugMaterial`, the Teapots activity,
 `Theme.PWA`, `activity_data_sources*.xml` (orphaned).
 
+### 7.4 Known chat-screen bug to fix as part of Phase 4 (reported June 17, 2026)
+
+There is a **standing, intermittent layout bug on the chat screen** that the
+owner has been hitting. Phase 4 restyles the very layout responsible
+(`activity_chat.xml` + the ChatActivity top bar / message rows / input bar /
+insets), so **do not open a separate fix PR for it** — fold the fix into the
+Phase 4 chat restyle and treat "this bug no longer reproduces" as a Phase 4
+acceptance criterion.
+
+**Symptoms (owner-observed, intermittent, in long conversations):**
+
+- The top chat bar/header (`action_bar` — chat title + back/export/settings/
+  bug icons) **sometimes disappears**, and can reappear later on its own.
+- Message rows / per-message action buttons sometimes render incomplete.
+- The bottom input area can look cramped or mis-laid-out.
+- Closing and reopening the chat does **not** reliably reset the state.
+- Because the header comes back later, the view is **not** being deleted —
+  this reads as a **state / layout / scroll / insets** problem, not a missing
+  view.
+
+**Strong lead (verified in code):** an existing safety net,
+`restoreTopBarVisibility()` (`ChatActivity.kt:709`), already exists precisely
+because the `action_bar` can get **stuck `INVISIBLE`** when the settings-cog
+**shared-element scene transition is interrupted** (app backgrounded / screen
+killed mid-animation). It force-sets `actionBar`, `btn_back`,
+`chat_activity_title`, `btn_export`, `btn_settings` back to
+`VISIBLE`/`alpha=1`, and is called from `restoreUIState()` and ~500ms into
+`onResume`. The owner's bug looks like a **case this heal does not catch**
+(e.g. it fires too early/late, doesn't run on the path that hid the bar, or
+the bar is being *covered/pushed* rather than set invisible). Two concrete
+gaps worth checking during Phase 4:
+
+1. `restoreTopBarVisibility()`'s list **omits `btn_debug_log`** (the bug
+   shortcut, see 9.1) and the input-bar/message controls — so even when it
+   fires it only heals five of the views the owner reports as missing.
+2. The heal is reactive (transition-interruption focused). The "long
+   conversation" angle suggests also auditing **scroll + IME/status-bar inset
+   handling** around `keyboard_frame` / `action_bar` (Section 6.6) — a layout
+   that lets the RecyclerView or keyboard frame overlap/push the top bar would
+   produce the same "header gone, then back" symptom without any visibility
+   flag being toggled.
+
+**What the redesigned chat screen must guarantee (Phase 4 acceptance):**
+
+1. A **stable top bar/header** that does not vanish during long conversations
+   or after generation/backgrounding (don't *remove* the existing heal — make
+   it sufficient, or make the new layout not need it; if the hand-rolled
+   `action_bar` is kept per 6.4, extend the heal to every top-bar view incl.
+   `btn_debug_log`).
+2. Message action buttons consistently present/laid out as designed (honor the
+   adapter contract 9.2 — hide via `gone`, never delete).
+3. Long conversations never push or cover the header (scroll/inset behavior).
+4. Correct keyboard / nav-bar / status-bar inset handling (6.6; do not add a
+   competing inset listener — extend the existing `keyboard_frame` one, 9.5.4).
+5. Bottom input bar properly spaced, not cramped (the pill bar, 6.1).
+6. Scope discipline: this fix is **layout/visibility/insets only**. It must
+   **not** touch mic capture, Bluetooth routing, VAD, Whisper, TTS, the
+   Characters/Activation/System-message/API screens, or assistant-removal
+   work, unless one of those is unavoidably the root cause (if so, stop and
+   ask the owner before widening scope — per CLAUDE.md and Section 0 rule 3).
+
 ---
 
 ## 8. Phase plan (each box = one or more small PRs)
@@ -462,6 +523,8 @@ Leave untouched unless asked: `DebugMaterial`, the Teapots activity,
   (launch into last chat), then Step C (retire bottom nav) — three PRs.
 - **Phase 4 — Chat restyle**: input pill, bubbles, top bar (preserving the
   `btn_debug_log` shortcut). Single UI now — no `AssistantFragment` to mirror.
+  **Must also resolve the standing intermittent top-bar/header-vanishing bug —
+  see Section 7.4 (it is a Phase 4 acceptance criterion, not a separate PR).**
 - **Phase 5 — Settings & Characters restyle** (tiles → rows/cards).
 - **Phase 6 — List screens & item layouts.**
 - **Phase 7 — Dialogs & bottom sheets.**
@@ -556,7 +619,10 @@ errors here are silent or crash at the worst moment (mid-conversation).
    `finally`), and `GenerationForegroundService` ref-counting must stay in
    the `try/finally`. The top-bar heal exists because an interrupted
    shared-element transition leaves `action_bar` invisible — keep the heal
-   if you restyle the top bar.
+   if you restyle the top bar. **Note: this heal is the prime suspect for the
+   standing header-vanishing bug in Section 7.4 — Phase 4 must make it
+   sufficient (it currently omits `btn_debug_log` and the input/message
+   controls), not merely preserve it.**
 3. **Auto-naming copy block**: any *new per-chat preference* (e.g. nothing
    in this plan should need one, but if one appears) must be added to the
    preference-copy block in ChatActivity, and auto-naming must never
