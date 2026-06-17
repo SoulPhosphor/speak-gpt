@@ -279,7 +279,8 @@ Everything is on-device. No cloud sync, no accounts.
 1. `git status` clean of stray files; commit message says why.
 2. All new `R.string/R.id/R.drawable/R.layout` references exist; new ids match
    the layout actually inflated.
-3. Both generation funnels updated if the change is cross-cutting.
+3. Cross-cutting request changes go through the single generation funnel
+   (`generateResponse` → `regularGPTResponse`); there is no second path.
 4. New per-chat preference added to the auto-naming copy block.
 5. DB change → version bump + additive migration + fresh-install path.
 6. Push, then confirm the `Android Checks` workflow run for your commit is green.
