@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<!--
+  Phosphor Shines — Palette Designer (design tool, NOT app code)
+
+  A standalone, offline, self-contained page for designing color themes by eye.
+  It renders the app's real surfaces (top bar, drawer item, message cards,
+  input bar, buttons, states) and lets you pick every color, in light and dark,
+  in a "calm" or "vibrant" treatment, then save/export the result.
+
+  Nothing here ships in the app. It exists so the owner (an artist, not a coder)
+  can choose colors visually and hand the exact hex values + a name back to the
+  agent, who then translates an APPROVED palette into the app's theme overlays.
+
+  Open it by double-clicking the file, or via your browser's File > Open.
+  No internet, no build step, no dependencies.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Phosphor Shines — Palette Designer</title>
+<style>
+  :root {
+    --ui-bg: #15161a;
+    --ui-panel: #1d1f25;
+    --ui-panel-2: #24262e;
+    --ui-line: #33353f;
+    --ui-text: #e7e8ec;
+    --ui-text-dim: #a9abb5;
+    --ui-accent: #6ea8fe;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: var(--ui-bg);
+    color: var(--ui-text);
+    line-height: 1.45;
+  }
+  a { color: var(--ui-accent); }
+
+  header.app {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--ui-line);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 18px;
+    align-items: baseline;
+  }
+  header.app h1 { font-size: 18px; margin: 0; font-weight: 650; }
+  header.app .sub { color: var(--ui-text-dim); font-size: 13px; }
+
+  details.help {
+    margin: 14px 20px;
+    background: var(--ui-panel);
+    border: 1px solid var(--ui-line);
+    border-radius: 12px;
+    padding: 10px 14px;
+  }
+  details.help summary { cursor: pointer; font-weight: 600; }
+  details.help ul { margin: 8px 0 2px; padding-left: 20px; color: var(--ui-text-dim); }
+  details.help li { margin: 4px 0; }
+
+  .layout {
+    display: grid;
+    grid-template-columns: minmax(320px, 420px) 1fr;
+    gap: 20px;
+    padding: 4px 20px 40px;
+    align-items: start;
+  }
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; }
+    .preview-col { order: -1; }
+  }
+
+  /* ---- Controls ---- */
+  .controls { min-width: 0; }
+  .toolbar {
+    position: sticky; top: 0; z-index: 5;
+    background: var(--ui-bg);
+    padding: 12px 0;
+    display: flex; flex-wrap: wrap; gap: 8px;
+    border-bottom: 1px solid var(--ui-line);
+  }
+  .seg { display: inline-flex; border: 1px solid var(--ui-line); border-radius: 10px; overflow: hidden; }
+  .seg button {
+    background: var(--ui-panel); color: var(--ui-text);
+    border: 0; padding: 7px 12px; cursor: pointer; font-size: 13px;
+  }
+  .seg button.active { background: var(--ui-accent); color: #07101f; font-weight: 650; }
+  .toolbar label.chk {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--ui-panel); border: 1px solid var(--ui-line);
+    border-radius: 10px; padding: 6px 10px; font-size: 13px; cursor: pointer;
+  }
+
+  .group { margin-top: 16px; }
+  .group > h3 {
+    font-size: 13px; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--ui-text-dim); margin: 0 0 6px; font-weight: 700;
+  }
+  .zone {
+    display: grid;
+    grid-template-columns: 34px 1fr 96px;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 8px;
+    border: 1px solid var(--ui-line);
+    border-radius: 10px;
+    background: var(--ui-panel);
+    margin-bottom: 7px;
+  }
+  .zone .swatch {
+    width: 34px; height: 34px; border-radius: 8px;
+    border: 1px solid rgba(255,255,255,.18);
+    padding: 0; cursor: pointer; background: transparent;
+  }
+  .zone .meta { min-width: 0; }
+  .zone .meta .name { font-size: 13.5px; font-weight: 600; }
+  .zone .meta .hint { font-size: 11.5px; color: var(--ui-text-dim); }
+  .zone input.hex {
+    width: 96px; font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 13px; text-transform: uppercase;
+    background: var(--ui-panel-2); color: var(--ui-text);
+    border: 1px solid var(--ui-line); border-radius: 8px; padding: 6px 8px;
+  }
+  .zone input.hex:focus { outline: 2px solid var(--ui-accent); }
+  .zone.locked { opacity: .96; }
+
+  /* ---- Save / export ---- */
+  .savebar { margin-top: 22px; background: var(--ui-panel); border: 1px solid var(--ui-line); border-radius: 12px; padding: 14px; }
+  .savebar h3 { margin: 0 0 10px; font-size: 14px; }
+  .savebar .row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; align-items: center; }
+  .savebar input[type=text], .savebar select {
+    background: var(--ui-panel-2); color: var(--ui-text);
+    border: 1px solid var(--ui-line); border-radius: 8px; padding: 8px 10px; font-size: 13px;
+  }
+  .savebar input[type=text] { flex: 1; min-width: 150px; }
+  .btn {
+    background: var(--ui-accent); color: #07101f; border: 0; font-weight: 650;
+    padding: 8px 13px; border-radius: 8px; cursor: pointer; font-size: 13px;
+  }
+  .btn.ghost { background: var(--ui-panel-2); color: var(--ui-text); border: 1px solid var(--ui-line); font-weight: 550; }
+  textarea.export {
+    width: 100%; height: 150px; resize: vertical;
+    background: #0c0d10; color: #d6e2ff; border: 1px solid var(--ui-line);
+    border-radius: 8px; padding: 10px; font-family: ui-monospace, Menlo, monospace; font-size: 12px;
+  }
+  .note { font-size: 12px; color: var(--ui-text-dim); margin: 6px 0; }
+
+  /* ============ PREVIEW (the app mockup) ============ */
+  .preview-col { position: sticky; top: 12px; }
+  .phone {
+    width: 100%; max-width: 390px; margin: 0 auto;
+    border-radius: 30px; padding: 12px;
+    background: #000; border: 1px solid #2a2c33;
+    box-shadow: 0 20px 60px rgba(0,0,0,.5);
+  }
+  /* The themed area. All app colors are CSS vars set from the active palette. */
+  .app {
+    --edge-stroke: var(--edge1);
+    border-radius: 22px; overflow: hidden;
+    background: var(--pageBg);
+    color: var(--readText);
+    display: flex; flex-direction: column;
+    height: 720px;
+    transition: background .25s, color .25s;
+  }
+  .app.calm { --glow-strength: 0; }
+  .app.vibrant { --glow-strength: 1; }
+  .app.reduce * { animation: none !important; transition: none !important; }
+
+  /* gradient (vibrant) vs solid (calm) edge helper */
+  .edge {
+    background: var(--edge1);
+  }
+  .app.vibrant .edge {
+    background: linear-gradient(135deg, var(--edge1), var(--edge2) 55%, var(--edge3));
+  }
+
+  .topbar {
+    display: flex; align-items: center; gap: 10px;
+    padding: 14px 14px 12px;
+    background: var(--topbarBg);
+    color: var(--topbarText);
+    border-bottom: 1px solid var(--divider);
+  }
+  .topbar .icon { width: 22px; height: 22px; color: var(--topbarText); opacity: .92; flex: none; cursor: default; }
+  .topbar .title { display: flex; flex-direction: column; line-height: 1.15; }
+  .topbar .title b { font-size: 16px; font-weight: 650; }
+  .topbar .title span { font-size: 11.5px; opacity: .7; }
+  .topbar .spacer { flex: 1; }
+  .bug { color: var(--accent) !important; }
+
+  .body { flex: 1; display: flex; min-height: 0; }
+  .drawer {
+    width: 132px; flex: none; padding: 12px 8px;
+    background: var(--drawerBg); color: var(--drawerText);
+    border-right: 1px solid var(--divider);
+    font-size: 12.5px;
+  }
+  .drawer .ditem { padding: 9px 10px; border-radius: 10px; margin-bottom: 6px; opacity: .85; }
+  .drawer .ditem.sel {
+    background: var(--drawerSelectedBg); opacity: 1; font-weight: 600;
+    position: relative;
+  }
+  .drawer .dlabel { font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; opacity: .5; margin: 10px 4px 4px; }
+
+  .messages { flex: 1; padding: 14px; overflow: hidden; display: flex; flex-direction: column; gap: 14px; }
+
+  .bubble-wrap {
+    padding: 1.6px; border-radius: 20px; max-width: 86%;
+    box-shadow: 0 0 0 rgba(0,0,0,0);
+  }
+  .app.vibrant .bubble-wrap {
+    box-shadow: 0 0 18px -2px var(--glow);
+  }
+  .bubble {
+    border-radius: 18.5px; padding: 11px 13px; font-size: 13.5px;
+  }
+  .bubble.bot { background: var(--botBg); color: var(--botText); border-bottom-left-radius: 7px; }
+  .bubble.user { background: var(--userBg); color: var(--userText); border-bottom-right-radius: 7px; }
+  .row.user { display: flex; justify-content: flex-end; }
+  .actions { display: flex; gap: 14px; margin-top: 9px; opacity: .8; }
+  .actions .icon { width: 17px; height: 17px; color: var(--accent); }
+
+  .inputbar { padding: 12px 12px 16px; border-top: 1px solid var(--divider); display: flex; align-items: center; gap: 10px; background: var(--pageBg); }
+  .circle { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; flex: none; }
+  .circle.plus { background: var(--secondaryBtnBg); color: var(--secondaryBtnText); border: 1px solid var(--divider); }
+  .pill {
+    flex: 1; border-radius: 22px; padding: 11px 16px; font-size: 13px;
+    background: var(--readSurface); color: var(--readText); opacity: .92;
+    border: 1px solid var(--divider);
+  }
+  .circle.send { background: var(--accent); color: var(--pageBg); }
+  .app.vibrant .circle.send { box-shadow: 0 0 16px -1px var(--glow); }
+  .circle .icon { width: 20px; height: 20px; }
+
+  .btnsrow { display: flex; gap: 10px; padding: 0 14px 14px; }
+  .ui-btn { padding: 10px 16px; border-radius: 22px; font-size: 13px; font-weight: 600; }
+  .ui-btn.primary { background: var(--primaryBtnBg); color: var(--primaryBtnText); }
+  .app.vibrant .ui-btn.primary { box-shadow: 0 0 14px -3px var(--glow); }
+  .ui-btn.secondary { background: var(--secondaryBtnBg); color: var(--secondaryBtnText); border: 1.4px solid; border-image: none; }
+  .app.calm .ui-btn.secondary { border-color: var(--edge1); }
+  .app.vibrant .ui-btn.secondary {
+    border: 1.6px solid transparent;
+    background:
+      linear-gradient(var(--secondaryBtnBg), var(--secondaryBtnBg)) padding-box,
+      linear-gradient(135deg, var(--edge1), var(--edge2) 55%, var(--edge3)) border-box;
+  }
+  .alertsrow { display: flex; gap: 10px; padding: 0 14px 16px; }
+  .chip { padding: 7px 12px; border-radius: 10px; font-size: 12px; font-weight: 600; }
+  .chip.error { background: var(--error); color: #fff; }
+  .chip.warning { background: var(--warning); color: #1a1205; }
+
+  /* gradient border for vibrant bubbles, respecting rounded corners */
+  .app.vibrant .bubble-wrap { background: linear-gradient(135deg, var(--edge1), var(--edge2) 55%, var(--edge3)); }
+  .app.calm .bubble-wrap { background: var(--edge1); }
+  .divider-demo { height: 1px; background: var(--divider); margin: 0 14px 14px; }
+</style>
+</head>
+<body>
+<header class="app">
+  <h1>Phosphor Shines — Palette Designer</h1>
+  <span class="sub">Design a theme by eye, then save it and hand the colors to Claude. Nothing here changes the app.</span>
+</header>
+
+<details class="help">
+  <summary>How to use this (click)</summary>
+  <ul>
+    <li><b>Dark / Light:</b> you're designing two versions of each theme. Switch with the toggle — the pickers and preview follow the mode you're editing.</li>
+    <li><b>Calm / Vibrant:</b> same colors, two treatments. Calm = solid single-color edges, no glow. Vibrant = multicolored gradient outlines + glow. Use it to design a sensory-safe version and a lively version of the same palette.</li>
+    <li><b>Reading surfaces are kept readable</b> — message cards default to charcoal (dark) or off-white (light). Color lives in the edges, glow, accents and buttons. You can still change them, but that's the safe default.</li>
+    <li><b>Pick a color:</b> click a swatch for the full-spectrum picker, or type/paste an exact hex.</li>
+    <li><b>Save it:</b> name your theme and hit Save. It's stored in this browser. Use <b>Copy for Claude</b> to get a clean list to paste back.</li>
+    <li><b>Reduce motion</b> previews the still version (no animation), for overstimulation-sensitive users.</li>
+    <li><b>Load "Legacy (current app)"</b> only if you want to see the colors you're replacing. It is never the default.</li>
+  </ul>
+</details>
+
+<div class="layout">
+  <!-- ============ CONTROLS ============ -->
+  <div class="controls">
+    <div class="toolbar">
+      <div class="seg" id="modeSeg">
+        <button data-mode="dark" class="active">Dark</button>
+        <button data-mode="light">Light</button>
+      </div>
+      <div class="seg" id="styleSeg">
+        <button data-style="vibrant" class="active">Vibrant</button>
+        <button data-style="calm">Calm</button>
+      </div>
+      <label class="chk"><input type="checkbox" id="reduceMotion" /> Reduce motion</label>
+    </div>
+    <div id="zones"></div>
+
+    <div class="savebar">
+      <h3>Save &amp; export</h3>
+      <div class="row">
+        <input type="text" id="themeName" placeholder="Theme name (e.g. Midnight Ember)" />
+        <button class="btn" id="saveBtn">Save</button>
+      </div>
+      <div class="row">
+        <select id="savedList"><option value="">— saved themes —</option></select>
+        <button class="btn ghost" id="loadBtn">Load</button>
+        <button class="btn ghost" id="deleteBtn">Delete</button>
+      </div>
+      <div class="row">
+        <button class="btn ghost" id="loadLegacy">Load “Legacy (current app)”</button>
+        <button class="btn ghost" id="loadNeutral">Reset to neutral starter</button>
+      </div>
+      <div class="note">Export the current theme (both light &amp; dark). Paste this back to Claude, or keep it.</div>
+      <div class="row">
+        <button class="btn" id="copyClaude">Copy for Claude</button>
+        <button class="btn ghost" id="copyJson">Copy JSON</button>
+        <button class="btn ghost" id="importBtn">Import JSON from box</button>
+      </div>
+      <textarea class="export" id="exportBox" spellcheck="false" placeholder="Export / import text appears here"></textarea>
+    </div>
+  </div>
+
+  <!-- ============ PREVIEW ============ -->
+  <div class="preview-col">
+    <div class="phone">
+      <div class="app vibrant" id="app">
+        <!-- top bar: hamburger + title, then new-chat, gear (quick settings), bug (debug), overflow -->
+        <div class="topbar">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          <div class="title"><b>Aurora</b><span>Companion mode</span></div>
+          <div class="spacer"></div>
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.2A1.6 1.6 0 0 0 6.6 19l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 4 13.4H4a2 2 0 1 1 0-4h.2A1.6 1.6 0 0 0 5.4 6.6l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H10a1.6 1.6 0 0 0 1-1.5V2a2 2 0 1 1 4 0v.2a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V8a1.6 1.6 0 0 0 1.5 1H22a2 2 0 1 1 0 4h-.2a1.6 1.6 0 0 0-1.4 1z"/></svg>
+          <svg class="icon bug" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="6" width="8" height="12" rx="4"/><path d="M19 8l-3 2M5 8l3 2M19 16l-3-2M5 16l3-2M12 6V3M9 4l1.5 2M15 4l-1.5 2"/></svg>
+          <svg class="icon" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></svg>
+        </div>
+
+        <div class="body">
+          <div class="drawer">
+            <div class="dlabel">Chats</div>
+            <div class="ditem sel">Aurora</div>
+            <div class="ditem">Work notes</div>
+            <div class="ditem">Recipes</div>
+            <div class="dlabel">Go to</div>
+            <div class="ditem">Characters</div>
+            <div class="ditem">Settings</div>
+          </div>
+
+          <div class="messages">
+            <div class="bubble-wrap"><div class="bubble bot">Hey — this is roughly how an assistant message will look. The card stays easy to read; the <i>edge</i> carries the color.</div></div>
+            <div class="actions">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/></svg>
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 9V5a3 3 0 0 0-6 0v4H5l1 11h12l1-11z"/></svg>
+            </div>
+            <div class="row user"><div class="bubble-wrap"><div class="bubble user">And this is your message. Selected, accents, and buttons pull from the palette too.</div></div></div>
+          </div>
+        </div>
+
+        <div class="divider-demo"></div>
+        <div class="btnsrow">
+          <div class="ui-btn primary">Primary</div>
+          <div class="ui-btn secondary">Secondary</div>
+        </div>
+        <div class="alertsrow">
+          <div class="chip error">Error</div>
+          <div class="chip warning">Warning</div>
+        </div>
+
+        <div class="inputbar">
+          <div class="circle plus"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></div>
+          <div class="pill">Message Aurora…</div>
+          <svg class="icon" style="width:22px;height:22px;color:var(--accent)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+          <div class="circle send"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ------------------------------------------------------------------ *
+ * Zone definitions. Plain-language names map to CSS vars on .app.
+ * To add a new recolorable area later: add one entry here (key + label)
+ * and use var(--key) in the CSS above. That's the whole extension path.
+ * ------------------------------------------------------------------ */
+const GROUPS = [
+  { title: "Backgrounds & reading", zones: [
+    { key: "pageBg",      name: "Page background",     hint: "behind everything" },
+    { key: "readSurface", name: "Reading surface",     hint: "input pill / read areas" },
+    { key: "readText",    name: "Reading text",        hint: "main body text" },
+  ]},
+  { title: "Top bar", zones: [
+    { key: "topbarBg",   name: "Top bar background" },
+    { key: "topbarText", name: "Top bar text & icons" },
+  ]},
+  { title: "Drawer (side menu)", zones: [
+    { key: "drawerBg",          name: "Drawer background" },
+    { key: "drawerText",        name: "Drawer text" },
+    { key: "drawerSelectedBg",  name: "Selected chat", hint: "highlighted row" },
+  ]},
+  { title: "Messages", zones: [
+    { key: "userBg",   name: "Your bubble fill",       hint: "keep readable" },
+    { key: "userText", name: "Your bubble text" },
+    { key: "botBg",    name: "Assistant bubble fill",  hint: "keep readable" },
+    { key: "botText",  name: "Assistant bubble text" },
+  ]},
+  { title: "Outlines & glow (the lively part)", zones: [
+    { key: "edge1", name: "Outline color 1", hint: "calm uses this one solid" },
+    { key: "edge2", name: "Outline color 2", hint: "vibrant gradient" },
+    { key: "edge3", name: "Outline color 3", hint: "vibrant gradient" },
+    { key: "glow",  name: "Glow color",      hint: "vibrant only" },
+    { key: "divider", name: "Divider / lines", hint: "subtle separators" },
+  ]},
+  { title: "Buttons & accents", zones: [
+    { key: "primaryBtnBg",    name: "Primary button" },
+    { key: "primaryBtnText",  name: "Primary button text" },
+    { key: "secondaryBtnBg",  name: "Secondary button" },
+    { key: "secondaryBtnText",name: "Secondary button text" },
+    { key: "accent",          name: "Accent", hint: "icons, send, active" },
+    { key: "selected",        name: "Selected state" },
+  ]},
+  { title: "Alerts", zones: [
+    { key: "error",   name: "Error" },
+    { key: "warning", name: "Warning" },
+  ]},
+];
+
+/* Neutral, calm starter — NOT the app's purple. Charcoal dark, off-white light. */
+const NEUTRAL = {
+  dark: {
+    pageBg:"#0E0F12", readSurface:"#191B1F", readText:"#E8E9EC",
+    topbarBg:"#0E0F12", topbarText:"#E8E9EC",
+    drawerBg:"#141519", drawerText:"#E8E9EC", drawerSelectedBg:"#232529",
+    userBg:"#1B1D22", userText:"#E8E9EC", botBg:"#191B1F", botText:"#E8E9EC",
+    edge1:"#454751", edge2:"#54565F", edge3:"#3C3E47", glow:"#3A3C44", divider:"#26282E",
+    primaryBtnBg:"#2C2E34", primaryBtnText:"#E8E9EC", secondaryBtnBg:"#16181C", secondaryBtnText:"#E8E9EC",
+    accent:"#8A8C95", selected:"#232529", error:"#E5484D", warning:"#E0A23C",
+  },
+  light: {
+    pageBg:"#F3F3F1", readSurface:"#FBFBF9", readText:"#1B1B1D",
+    topbarBg:"#F3F3F1", topbarText:"#1B1B1D",
+    drawerBg:"#EDEDEB", drawerText:"#1B1B1D", drawerSelectedBg:"#E2E2DF",
+    userBg:"#FBFBF9", userText:"#1B1B1D", botBg:"#FBFBF9", botText:"#1B1B1D",
+    edge1:"#C8C9CC", edge2:"#BCBDC1", edge3:"#D2D3D6", glow:"#DADBDE", divider:"#E1E1DF",
+    primaryBtnBg:"#E5E5E2", primaryBtnText:"#1B1B1D", secondaryBtnBg:"#FBFBF9", secondaryBtnText:"#1B1B1D",
+    accent:"#6B6D74", selected:"#E2E2DF", error:"#C62A2F", warning:"#9A6A12",
+  }
+};
+
+/* The current app's colors — shown only on demand so you can see what you dislike. */
+const LEGACY = {
+  dark: {
+    pageBg:"#1b1b1e", readSurface:"#2d2b36", readText:"#ECECEC",
+    topbarBg:"#1b1b1e", topbarText:"#d7d0f2",
+    drawerBg:"#26262A", drawerText:"#ECECEC", drawerSelectedBg:"#424250",
+    userBg:"#2d2b36", userText:"#ECECEC", botBg:"#26262A", botText:"#ECECEC",
+    edge1:"#424250", edge2:"#a895e9", edge3:"#424250", glow:"#a895e9", divider:"#3A3A42",
+    primaryBtnBg:"#a895e9", primaryBtnText:"#1b1b1e", secondaryBtnBg:"#26262A", secondaryBtnText:"#d7d0f2",
+    accent:"#a895e9", selected:"#424250", error:"#FF6060", warning:"#E0A23C",
+  },
+  light: {
+    pageBg:"#fdfbff", readSurface:"#FFF4FE", readText:"#221F28",
+    topbarBg:"#fdfbff", topbarText:"#27222D",
+    drawerBg:"#FFF4FE", drawerText:"#221F28", drawerSelectedBg:"#dfdded",
+    userBg:"#FFF4FE", userText:"#221F28", botBg:"#dfdded", botText:"#221F28",
+    edge1:"#dfdded", edge2:"#302936", edge3:"#dfdded", glow:"#cac1de", divider:"#D9D9D6",
+    primaryBtnBg:"#302936", primaryBtnText:"#FFFFFF", secondaryBtnBg:"#dfdded", secondaryBtnText:"#27222D",
+    accent:"#27222D", selected:"#dfdded", error:"#4F1E1A", warning:"#9A6A12",
+  }
+};
+
+const LS_WORK = "phosphor.palette.work";
+const LS_SAVED = "phosphor.palette.saved";
+
+let state = {
+  mode: "dark",
+  style: "vibrant",
+  reduceMotion: false,
+  theme: structuredClone(NEUTRAL),
+};
+
+/* ---------- build the picker controls ---------- */
+const zonesEl = document.getElementById("zones");
+function buildZones() {
+  zonesEl.innerHTML = "";
+  for (const g of GROUPS) {
+    const gb = document.createElement("div");
+    gb.className = "group";
+    gb.innerHTML = `<h3>${g.title}</h3>`;
+    for (const z of g.zones) {
+      const wrap = document.createElement("div");
+      wrap.className = "zone";
+      wrap.innerHTML = `
+        <input class="swatch" type="color" data-key="${z.key}" aria-label="${z.name}" />
+        <div class="meta"><div class="name">${z.name}</div>${z.hint ? `<div class="hint">${z.hint}</div>` : ""}</div>
+        <input class="hex" type="text" data-key="${z.key}" maxlength="7" spellcheck="false" />
+      `;
+      gb.appendChild(wrap);
+    }
+    zonesEl.appendChild(gb);
+  }
+  zonesEl.querySelectorAll("input.swatch").forEach(inp => {
+    inp.addEventListener("input", e => setColor(e.target.dataset.key, e.target.value));
+  });
+  zonesEl.querySelectorAll("input.hex").forEach(inp => {
+    inp.addEventListener("input", e => {
+      let v = e.target.value.trim();
+      if (/^#?[0-9a-fA-F]{6}$/.test(v)) { if (v[0] !== "#") v = "#" + v; setColor(e.target.dataset.key, v); }
+    });
+  });
+}
+
+function setColor(key, val) {
+  state.theme[state.mode][key] = val.toUpperCase();
+  syncControls();
+  applyPreview();
+  saveWork();
+}
+
+function syncControls() {
+  const t = state.theme[state.mode];
+  zonesEl.querySelectorAll("input.swatch").forEach(inp => inp.value = t[inp.dataset.key] || "#000000");
+  zonesEl.querySelectorAll("input.hex").forEach(inp => inp.value = (t[inp.dataset.key] || "").toUpperCase());
+}
+
+function applyPreview() {
+  const app = document.getElementById("app");
+  const t = state.theme[state.mode];
+  for (const k in t) app.style.setProperty("--" + k, t[k]);
+  app.classList.toggle("vibrant", state.style === "vibrant");
+  app.classList.toggle("calm", state.style === "calm");
+  app.classList.toggle("reduce", state.reduceMotion);
+}
+
+/* ---------- toolbar ---------- */
+document.querySelectorAll("#modeSeg button").forEach(b => b.addEventListener("click", () => {
+  document.querySelectorAll("#modeSeg button").forEach(x => x.classList.remove("active"));
+  b.classList.add("active"); state.mode = b.dataset.mode; syncControls(); applyPreview(); saveWork();
+}));
+document.querySelectorAll("#styleSeg button").forEach(b => b.addEventListener("click", () => {
+  document.querySelectorAll("#styleSeg button").forEach(x => x.classList.remove("active"));
+  b.classList.add("active"); state.style = b.dataset.style; applyPreview(); saveWork();
+}));
+document.getElementById("reduceMotion").addEventListener("change", e => { state.reduceMotion = e.target.checked; applyPreview(); });
+
+/* ---------- save / load / export ---------- */
+function getSaved() { try { return JSON.parse(localStorage.getItem(LS_SAVED)) || {}; } catch { return {}; } }
+function putSaved(o) { localStorage.setItem(LS_SAVED, JSON.stringify(o)); }
+function refreshSavedList() {
+  const sel = document.getElementById("savedList");
+  const saved = getSaved();
+  sel.innerHTML = '<option value="">— saved themes —</option>';
+  Object.keys(saved).forEach(n => { const o = document.createElement("option"); o.value = n; o.textContent = n; sel.appendChild(o); });
+}
+function saveWork() { localStorage.setItem(LS_WORK, JSON.stringify(state)); }
+function loadWork() { try { const w = JSON.parse(localStorage.getItem(LS_WORK)); if (w && w.theme) state = Object.assign(state, w); } catch {} }
+
+document.getElementById("saveBtn").addEventListener("click", () => {
+  const name = document.getElementById("themeName").value.trim();
+  if (!name) { alert("Give the theme a name first."); return; }
+  const saved = getSaved();
+  saved[name] = { theme: structuredClone(state.theme), style: state.style };
+  putSaved(saved); refreshSavedList();
+  document.getElementById("savedList").value = name;
+});
+document.getElementById("loadBtn").addEventListener("click", () => {
+  const name = document.getElementById("savedList").value; if (!name) return;
+  const saved = getSaved()[name]; if (!saved) return;
+  state.theme = structuredClone(saved.theme);
+  if (saved.style) { state.style = saved.style; document.querySelectorAll("#styleSeg button").forEach(x => x.classList.toggle("active", x.dataset.style === state.style)); }
+  document.getElementById("themeName").value = name;
+  syncControls(); applyPreview(); saveWork();
+});
+document.getElementById("deleteBtn").addEventListener("click", () => {
+  const name = document.getElementById("savedList").value; if (!name) return;
+  if (!confirm(`Delete saved theme “${name}”?`)) return;
+  const saved = getSaved(); delete saved[name]; putSaved(saved); refreshSavedList();
+});
+document.getElementById("loadLegacy").addEventListener("click", () => { state.theme = structuredClone(LEGACY); document.getElementById("themeName").value = "Legacy (current app)"; syncControls(); applyPreview(); saveWork(); });
+document.getElementById("loadNeutral").addEventListener("click", () => { if (!confirm("Reset all colors to the neutral starter?")) return; state.theme = structuredClone(NEUTRAL); syncControls(); applyPreview(); saveWork(); });
+
+function readableExport() {
+  const name = document.getElementById("themeName").value.trim() || "(unnamed)";
+  let out = `Palette: ${name}\nTreatment: ${state.style}\n`;
+  for (const mode of ["dark","light"]) {
+    out += `\n${mode.toUpperCase()}\n`;
+    for (const g of GROUPS) for (const z of g.zones)
+      out += `  ${z.name.padEnd(22)} ${(state.theme[mode][z.key]||"").toUpperCase()}\n`;
+  }
+  return out;
+}
+document.getElementById("copyClaude").addEventListener("click", async () => {
+  const txt = readableExport();
+  document.getElementById("exportBox").value = txt;
+  try { await navigator.clipboard.writeText(txt); } catch {}
+});
+document.getElementById("copyJson").addEventListener("click", async () => {
+  const txt = JSON.stringify({ name: document.getElementById("themeName").value.trim(), style: state.style, theme: state.theme }, null, 2);
+  document.getElementById("exportBox").value = txt;
+  try { await navigator.clipboard.writeText(txt); } catch {}
+});
+document.getElementById("importBtn").addEventListener("click", () => {
+  try {
+    const data = JSON.parse(document.getElementById("exportBox").value);
+    if (data.theme) { state.theme = data.theme; if (data.style) state.style = data.style; if (data.name) document.getElementById("themeName").value = data.name; syncControls(); applyPreview(); saveWork(); }
+    else alert("That JSON has no \"theme\" field.");
+  } catch { alert("Could not parse JSON."); }
+});
+
+/* ---------- init ---------- */
+buildZones();
+loadWork();
+document.querySelectorAll("#modeSeg button").forEach(x => x.classList.toggle("active", x.dataset.mode === state.mode));
+document.querySelectorAll("#styleSeg button").forEach(x => x.classList.toggle("active", x.dataset.style === state.style));
+document.getElementById("reduceMotion").checked = state.reduceMotion;
+refreshSavedList();
+syncControls();
+applyPreview();
+</script>
+</body>
+</html>
