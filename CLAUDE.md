@@ -46,16 +46,20 @@ a foreground service that keeps generation alive in the background.
   Single funnel for outgoing requests: `generateResponse()` →
   `regularGPTResponse()` (every input path — typed, Google STT, local Whisper —
   flows through `generateResponse`, so cross-cutting hooks go there).
-- `ui/fragments/AssistantFragment.kt` — the floating "assistant" overlay; has
-  its own parallel `generateResponse()`. **Cross-cutting changes to generation
-  must be applied in both places.**
+- The floating phone-assistant overlay (`AssistantActivity` + `AssistantFragment`)
+  was **removed**, along with its OS entry points (the device assistant role, the
+  share sheet, and the text-selection `PROCESS_TEXT` action) and its orphaned
+  resources/prefs. `ChatActivity` is now the **only** generation path — there is
+  no longer a second `generateResponse()` to keep in sync. (`ChatAdapter`'s
+  `view_assistant_*_message` layouts are core chat message rendering and are
+  unrelated to that deleted overlay — do not assume the name means assistant-only.)
 - `ui/adapters/chat/ChatAdapter.kt` — message rendering (Markwon markdown,
   selectable text, copy/edit/speak buttons, bulk select).
 - `service/HandsFreeService.kt` — microphone-typed foreground service for
   screen-off hands-free conversation (wake lock + notification).
 - `service/GenerationForegroundService.kt` — dataSync-typed foreground service
   held only while a response streams; ref-counted via `begin()`/`end()` in the
-  `try`/`finally` of both generateResponse funnels.
+  `try`/`finally` of the `generateResponse` funnel.
 - `stt/` — on-device speech: `LocalWhisperEngine/Native` (whisper.cpp JNI),
   `WebRtcVadNative` + `VoiceActivityDetector` (energy VAD + libfvad), model
   download/storage. Native sources in `app/src/main/cpp/`.
@@ -200,8 +204,7 @@ Everything is on-device. No cloud sync, no accounts.
   input before/after the mic opens; `ChatActivity.logMicRoute` writes it to the
   Event log under the Audio Health / VAD-logging toggles. Device labels (with
   product name) come from the shared `MicRouteSelector.label`, used by both the
-  mic-route line and `AudioHealthMonitor`. (Note: `AssistantFragment`'s
-  `MediaRecorder` paths are unrelated audio-message capture and are NOT routed.)
+  mic-route line and `AudioHealthMonitor`.
 
 ## Coding rules
 
