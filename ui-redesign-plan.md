@@ -464,6 +464,26 @@ acceptance criterion.
   this reads as a **state / layout / scroll / insets** problem, not a missing
   view.
 
+**Owner follow-up observations (June 17, 2026 — tentative, needs more
+testing):**
+
+- It seems to happen **after the AI response completes**, and **more often in
+  long conversations** (owner ~"fairly positive" but not yet confirmed).
+- **Usually only the top bar goes blank** in normal use.
+- One occurrence coincided with the owner **tilting the phone "funny"** —
+  which moved the *chat/input bar up* and left the top blank. That points at a
+  **configuration change (orientation/fold/multi-window) or an insets re-pass**
+  as a distinct trigger from the after-response one: a tilt that re-lays-out
+  the window should never have moved the input bar or blanked the top if
+  insets and the action-bar constraints were handled correctly. Check
+  `ChatActivity`'s `android:configChanges` / rotation handling and the
+  `keyboard_frame` / `action_bar` inset listener under a rotation, not just a
+  steady-state long chat.
+
+So there are likely **two paths** to the same visible symptom: (a) the
+after-response one (see the heal lead below), and (b) a config-change/inset
+re-layout one (the tilt). Phase 4 should reproduce and close *both*.
+
 **Strong lead (verified in code):** an existing safety net,
 `restoreTopBarVisibility()` (`ChatActivity.kt:709`), already exists precisely
 because the `action_bar` can get **stuck `INVISIBLE`** when the settings-cog
