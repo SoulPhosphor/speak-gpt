@@ -1,8 +1,22 @@
 # Phosphor Shines — UI Redesign Master Plan
 
-**Date:** June 13, 2026
+**Date:** June 13, 2026 (revised June 17, 2026)
 **Status:** Phase 1 implemented locally; Phase 0 completed previously. This document is the
 specification for the "UI overhaul" referenced in CLAUDE.md's roadmap.
+
+> **June 17, 2026 revision:** This plan was originally written while the
+> floating phone-assistant overlay (`AssistantActivity` + `AssistantFragment`)
+> still existed. **That overlay has since been removed entirely**, along with
+> its OS entry points (device-assistant role, share sheet, `PROCESS_TEXT`
+> text-selection action) and its orphaned resources/prefs. `ChatActivity` is
+> now the **only** generation path and the **only** chat/voice UI. Every
+> "mirror the change in `AssistantFragment`" / "two generation funnels"
+> instruction below is therefore **obsolete** — there is exactly one of
+> everything now. References to the assistant are kept struck-through or noted
+> only so an agent reading an old commit isn't confused; do not try to restore
+> it. Also recorded in this revision: the chat top bar now has a **bug-icon
+> shortcut to the Event log** (`btn_debug_log`) that is a real feature to
+> preserve — see Sections 7.1 and 9.1.
 **Audience:** AI agents implementing the redesign. Read `CLAUDE.md` in full
 before this document — every rule there still applies. This plan was written
 after a complete inventory of all 30 activities, 20+ dialog fragments, and
@@ -35,9 +49,11 @@ the per-chat preference system while restyling things.
 4. **Never rename a view ID, widget type, drawable, or color that code
    references** without updating every reference — Section 9 lists the
    verified contracts. When in doubt, `grep` before touching.
-5. **Every change to chat input/messages UI must be mirrored** in both
+5. ~~**Every change to chat input/messages UI must be mirrored** in both
    `ChatActivity` and `AssistantFragment` (the floating assistant). They are
-   parallel implementations.
+   parallel implementations.~~ **Obsolete (June 2026):** the floating
+   assistant was removed; `ChatActivity` is the only chat UI. There is no
+   second implementation to mirror.
 6. **If reality disagrees with this document** (the code moved on, an ID
    changed), trust the code, re-verify with grep, and update this document
    in the same PR.
@@ -143,8 +159,10 @@ The phases in Section 8 are ordered deliberately:
 - `Theme.App` (parent `Theme.Material3.DayNight.NoActionBar`) in
   `res/values/themes.xml`, with a `values-night` variant. Per-activity
   overrides: `Theme.Transparent` (ChatActivity, SettingsActivity, permission
-  activities), `Theme.Assistant` (floating assistant), `UI.Fade`/`UI.Material`
-  (animation variants of Theme.App), `Theme.PWA`.
+  activities), `UI.Fade`/`UI.Material` (animation variants of Theme.App),
+  `Theme.PWA`. (`Theme.Assistant` belonged to the now-removed floating
+  assistant; if it still lingers in `themes.xml` it is dead and may be dropped
+  during a cleanup PR.)
 - Colors are a tier system `accent_50 … accent_900` plus
   `window_background`, defined in `values/colors.xml` and `values-night/colors.xml`.
 - **36 layout files reference `@color/accent_*` directly; zero layouts use
@@ -196,9 +214,8 @@ full M3 role set in light + dark):
   activity's theme (including applied overlays). **Verify this per screen**
   during the palette phase — `QuickSettingsBottomSheetDialogFragment` is the
   canary because it overrides `ThemeOverlay.App.BottomSheetDialog`.
-- `Theme.Transparent` (ChatActivity!) and `Theme.Assistant` activities also
-  need `applyPalette` — they inherit Material3 color roles even though
-  their window backgrounds are transparent.
+- `Theme.Transparent` (ChatActivity!) also needs `applyPalette` — it inherits
+  Material3 color roles even though its window background is transparent.
 
 ### 4.3 The migration (Phase 1) — mechanical but wide
 
@@ -236,8 +253,8 @@ For each screen (layout XML + its Kotlin file):
 
 - `mic_listening_green` and `hands_free_active_red` — these are *semantic
   voice-state* colors (recording / hands-free active). Users learn them;
-  they must look identical in every palette. Used in `ChatActivity`,
-  `AssistantFragment`, `ChatAdapter`, defined in `colors.xml`.
+  they must look identical in every palette. Used in `ChatActivity` and
+  `ChatAdapter`, defined in `colors.xml`.
 - Error/destructive reds in confirm dialogs (use `?attr/colorError` where
   it is already Material-managed, but don't map them to palette accents).
 
@@ -322,8 +339,6 @@ Ship A, then B, then C — never as one PR.
   `onDrawerOpened`), not cache ids from activity start.
 - Opening/closing the drawer must not touch mic state, keyboard insets
   handling (`keyboard_frame`), or `restoreUIState()` logic.
-- `AssistantFragment` (the floating overlay) gets **no drawer** — it is a
-  bottom-sheet experience and stays one.
 - Drawer pane must apply status-bar insets (edge-to-edge: content starts
   below the status bar; the pane itself may draw behind it).
 - Back handling: drawer open → back closes the drawer; otherwise current
@@ -404,8 +419,8 @@ attributes (Phase 1), then visual restyle (its listed phase).
 
 | Screen | Files | What changes | Risk / watch-outs |
 |---|---|---|---|
-| Chat | `ChatActivity.kt`, `activity_chat.xml`, `view_assistant_bot_message.xml`, `view_assistant_user_message.xml`, `view_message.xml`, `ChatAdapter.kt` | Drawer (5.2), pill input bar, restyled bubbles, top bar polish, bulk-select bar restyle | **Highest.** Honor the ID contract (9.1, 9.2). Don't touch mic/keyboard/streaming logic. `Theme.Transparent` + `adjustPan` stay. |
-| Floating assistant | `AssistantFragment.kt`, `fragment_assistant.xml` | Mirror chat input/bubble restyle only — no drawer | High. Own ID contract (9.3). Bottom-sheet behavior untouched. |
+| Chat | `ChatActivity.kt`, `activity_chat.xml`, `view_assistant_bot_message.xml`, `view_assistant_user_message.xml`, `view_message.xml`, `ChatAdapter.kt` | Drawer (5.2), pill input bar, restyled bubbles, top bar polish, bulk-select bar restyle | **Highest.** Honor the ID contract (9.1, 9.2). Don't touch mic/keyboard/streaming logic. **Keep the `btn_debug_log` bug shortcut** in the top bar (toggled by diagnostics — see 9.1). `Theme.Transparent` + `adjustPan` stay. |
+| ~~Floating assistant~~ | ~~`AssistantFragment.kt`, `fragment_assistant.xml`~~ | **Removed (June 2026)** — the floating assistant overlay no longer exists. No work here. | — |
 | Chats list (until Step C retires it) | `ChatsListFragment.kt`, `fragment_chats_list.xml`, `view_chat_name(_min).xml`, `ChatListAdapter.kt` | Restyle rows/FABs; row design is reused by the drawer | Medium. Avatar/initials logic in adapter. |
 | Quick Settings sheet | `QuickSettingsBottomSheetDialogFragment.kt`, `fragment_quick_settings.xml` | M3 list rows, slider restyle, lorebook checklist polish | Medium-high: ~1k lines wiring `btnSelect*` ConstraintLayout ids — keep all ids/types. Canary for palette inheritance in sheets. |
 | Main/home | `MainActivity.kt`, `activity_main.xml`, `bottom_menu.xml` | Step B forwarding; Step C removes bottom nav | Medium. Debug overlay (BlurView) must keep working until removed deliberately. |
@@ -445,8 +460,8 @@ Leave untouched unless asked: `DebugMaterial`, the Teapots activity,
 - **Phase 2.5 (optional) — AMOLED-as-overlay cleanup**, screen-by-screen.
 - **Phase 3 — Drawer**: Step A (drawer in ChatActivity), then Step B
   (launch into last chat), then Step C (retire bottom nav) — three PRs.
-- **Phase 4 — Chat restyle**: input pill, bubbles, top bar; mirrored
-  `AssistantFragment` changes in the same PR (or back-to-back PRs).
+- **Phase 4 — Chat restyle**: input pill, bubbles, top bar (preserving the
+  `btn_debug_log` shortcut). Single UI now — no `AssistantFragment` to mirror.
 - **Phase 5 — Settings & Characters restyle** (tiles → rows/cards).
 - **Phase 6 — List screens & item layouts.**
 - **Phase 7 — Dialogs & bottom sheets.**
@@ -469,7 +484,8 @@ casts them; renaming or retyping = crash or silent breakage):
 (RecyclerView), `message_input` (EditText), `btn_send` (ImageButton),
 `progress` (CircularProgressIndicator), `chat_activity_title` (TextView),
 `btn_export` (ImageButton), `action_bar` (ConstraintLayout), `btn_back`
-(ImageButton), `keyboard_frame` (ConstraintLayout), `root`
+(ImageButton), `btn_debug_log` (ImageButton — the bug-icon Event-log
+shortcut; see note below), `keyboard_frame` (ConstraintLayout), `root`
 (ConstraintLayout), `thread_loader` (LinearLayout), `keyboard_input`
 (LinearLayout), `btn_attach` (ImageButton), `attachedImage` (LinearLayout),
 `selectedImage` (ImageView), `btnRemoveImage` (ImageButton),
@@ -479,6 +495,20 @@ casts them; renaming or retyping = crash or silent breakage):
 `btn_share_selected` (ImageButtons), `text_selected_count` (TextView),
 `expandable_window_root` (CoordinatorLayout, keeps
 `transitionName="chat_expand"`), `attach_bg` (BlurView).
+
+**`btn_debug_log` is a real feature, not decoration — do not drop it when
+restyling the top bar.** It is a bug-icon `ImageButton` in the chat action bar
+that jumps straight to the Event log (`LogsActivity`, `type=event`). It is
+shown/hidden at runtime by `ChatActivity.updateDebugLogButtonVisibility()`
+(re-checked in `onResume`): visible only when any voice diagnostic
+(`voiceDiagnosticsEnabled()` — the Energy/WebRTC/Silero VAD logging toggles)
+or Audio Health logging is on, `GONE` otherwise. So in normal use it is
+invisible; a restyle that deletes the view, hard-codes its visibility, or
+removes the `updateDebugLogButtonVisibility` calls breaks the diagnostics
+shortcut. Keep the id, the click handler, and both visibility-refresh call
+sites. (This is the chat-side half of a two-way debug loop: the Event log's
+own `btn_voice_advanced` terminal icon jumps back to
+`VoiceAdvancedSettingsActivity` — see CLAUDE.md.)
 
 ### 9.2 ChatAdapter item-layout contract (verified at `ChatAdapter.kt:210-221`)
 
@@ -492,23 +522,18 @@ The adapter does **no null checks** on the rest — a missing id crashes on
 first bind. If the redesign hides a button, hide it via
 `visibility="gone"`, never by deleting the view.
 
-### 9.3 AssistantFragment contract (verified at `AssistantFragment.kt:2566-2596`)
+### 9.3 ~~AssistantFragment contract~~ — REMOVED (June 2026)
 
-`fragment_assistant.xml` requires: `btn_assistant_voice`,
-`assistant_voice_clickable`, `btn_assistant_settings`,
-`btn_assistant_show_keyboard`, `btn_assistant_hide_keyboard`,
-`btn_assistant_send`, `btn_save`, `btn_exit`, `btn_clear_conversation`,
-`assistant_message`, `input_layout`, `assistant_actions`,
-`assistant_conversation`, `assistant_loading`, `assistant_title`, `ui`,
-`window`, `btn_assistant_attach`, plus the same attach/vision/bulk ids as
-ChatActivity (`attachedImage`, `selectedImage`, `btnRemoveImage`,
-`vision_action_selector`, `action_camera`, `action_gallery`,
-`bulk_container`, `btn_*_selected`, `text_selected_count`).
+The floating phone-assistant overlay (`AssistantActivity` +
+`AssistantFragment` + `fragment_assistant.xml`) **no longer exists**, so there
+is no second view-ID contract to honor. This section is retained only as a
+marker: if an old branch or commit reintroduces `fragment_assistant.xml`, that
+is a mistake — `ChatActivity` (Sections 9.1/9.2) is the single chat/voice UI.
 
 ### 9.4 The voice state machine is drawn by hand
 
-`micIdle()` / `micRecording()` / `micHandsFreeActive()` in ChatActivity (and
-their AssistantFragment counterparts) directly call `setImageResource` /
+`micIdle()` / `micRecording()` / `micHandsFreeActive()` in ChatActivity
+directly call `setImageResource` /
 `setColorFilter` / `backgroundTintList` on `btn_micro` using:
 - drawables `ic_microphone`, `ic_stop_recording`
 - colors `mic_listening_green`, `hands_free_active_red` (palette-fixed, see 4.3)
@@ -521,9 +546,11 @@ errors here are silent or crash at the worst moment (mid-conversation).
 
 ### 9.5 Other binding rules (mostly from CLAUDE.md — they all still apply)
 
-1. **Two generation funnels** (`ChatActivity.generateResponse` /
-   `AssistantFragment`'s parallel one). UI affordances around generation
-   (progress, cancel, restore) exist in both; change both.
+1. ~~**Two generation funnels**~~ **One generation funnel** (June 2026): the
+   `AssistantFragment` parallel path is gone, so `ChatActivity.generateResponse`
+   → `regularGPTResponse` is the single funnel. UI affordances around
+   generation (progress, cancel, restore) live in one place now — there is no
+   second copy to keep in sync.
 2. **`restoreUIState()` / `restoreTopBarVisibility()`**: any new UI element
    whose state changes during generation must be reset there (in a
    `finally`), and `GenerationForegroundService` ref-counting must stay in
@@ -567,9 +594,11 @@ errors here are silent or crash at the worst moment (mid-conversation).
     drawable; keep the theme's translucency flags.
 13. **Voice diagnostics**: if a UI change adds/removes a voice-loop exit
     path or mic affordance, log it via `ChatActivity.logVoiceEvent` (CLAUDE.md).
-14. **Exported activities** (`AssistantActivity` intent filters,
-    `WelcomeActivity`) and the onboarding chain must keep their manifest
-    entries and flow.
+14. **Exported activities**: the onboarding chain (`WelcomeActivity` →
+    Purpose → Activation → Terms) must keep its manifest entries and flow.
+    (The old `AssistantActivity` intent filters — device-assistant role, share
+    sheet, `PROCESS_TEXT` — were removed with the assistant overlay; do not
+    reintroduce them.)
 
 ### 9.6 Process pitfalls
 
@@ -587,8 +616,8 @@ errors here are silent or crash at the worst moment (mid-conversation).
 
 ## 10. Per-PR verification checklist (extends CLAUDE.md's)
 
-1. CLAUDE.md checklist items 1–6 (clean status, R.* resolve, both funnels,
-   copy block, DB rules, CI green).
+1. CLAUDE.md checklist items 1–6 (clean status, R.* resolve, the single
+   generation funnel, copy block, DB rules, CI green).
 2. Every id in Sections 9.1–9.3 still present with the same widget type, if
    the PR touched those layouts.
 3. `grep amoled` reconciliation done for every Kotlin file whose layout
