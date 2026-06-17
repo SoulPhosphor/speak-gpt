@@ -280,7 +280,6 @@
     <string name="btn_delete_logit_bias">Видалити зміщення логіту</string>
     <string name="title_thank_you_for_your_support">Дякуємо за вашу підтримку!</string>
     <string name="title_welcome_to_speakgpt">Ласкаво просимо до SpeakGPT</string>
-    <string name="title_speakgpt_mobile_assistant">Мобільний помічник SpeakGPT</string>
     <string name="title_about_app">Про додаток</string>
     <string name="title_terms_of_service">Умови надання послуг</string>
     <string name="title_setup_api_endpoint">Налаштування кінцевої точки API</string>
@@ -313,8 +312,6 @@
     <string name="tile_account_title">Акаунт OpenAI</string>
     <string name="tile_account_subtitle">Керування акаунтом OpenAI</string>
     <string name="tile_account_desc">Ця функція дозволяє вам керувати вашим акаунтом OpenAI.</string>
-    <string name="tile_assistant_title">Стандартний помічник</string>
-    <string name="tile_assistant_desc">Ця функція дозволяє встановити SpeakGPT як вашого стандартного помічника.</string>
     <string name="tile_api_endpoint_title">API endpoint</string>
     <string name="tile_api_endpoint_desc">Ця функція дозволяє встановити ваш API endpoint.</string>
     <string name="tile_autosend_title">Автовідправлення</string>
@@ -363,8 +360,6 @@
     <string name="tile_documentation_subtitle">Відкрити документацію</string>
     <string name="tile_documentation_desc">Ця функція дозволяє відкрити документацію SpeakGPT.</string>
     <string name="tile_amoled_mode_title">AMOLED режим</string><string name="tile_amoled_mode_desc">Ця функція дозволяє ввімкнути режим AMOLED для підтримуваних дисплеїв. Це може значно заощадити заряд батареї. Режим AMOLED доступний лише в темній темі.</string>
-    <string name="tile_las_title">Блокування вікна помічника</string>
-    <string name="tile_las_desc">Ця функція дозволяє заблокувати вікно помічника. Коли вікно помічника заблоковано, його не можна закрити натисканням кнопки "назад" або свайпом вниз. Але можна використовувати кнопку \'вихід\'. Ця функція може запобігти випадковому закриттю вікна помічника та втраті незбережених розмов.</string>
     <string name="tile_assistant_customize_title">Настроювання помічника</string>
     <string name="tile_assistant_customize_desc">Ця функція дозволяє змінювати ім\'я та аватар помічника для окремого чату або глобально.</string>
     <string name="tile_delete_data_title">Видалити дані</string>

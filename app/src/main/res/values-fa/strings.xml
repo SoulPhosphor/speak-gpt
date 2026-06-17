@@ -280,7 +280,6 @@
     <string name="btn_delete_logit_bias">حذف سوگیری لوجیت</string>
     <string name="title_thank_you_for_your_support">از حمایت شما سپاسگزاریم!</string>
     <string name="title_welcome_to_speakgpt">به SpeakGPT خوش آمدید</string>
-    <string name="title_speakgpt_mobile_assistant">دستیار موبایل SpeakGPT</string>
     <string name="title_about_app">درباره برنامه</string>
     <string name="title_terms_of_service">شرایط خدمات</string>
     <string name="title_setup_api_endpoint">راه‌اندازی نشانی API</string>
@@ -313,8 +312,6 @@
     <string name="tile_account_title">حساب OpenAI</string>
     <string name="tile_account_subtitle">مدیریت حساب OpenAI</string>
     <string name="tile_account_desc">این ویژگی به شما امکان مدیریت حساب OpenAI خود را می‌دهد.</string>
-    <string name="tile_assistant_title">دستیار پیش‌فرض</string>
-    <string name="tile_assistant_desc">این ویژگی به شما امکان تنظیم SpeakGPT به‌عنوان دستیار پیش‌فرض را می‌دهد.</string>
     <string name="tile_api_endpoint_title">نشانی API</string>
     <string name="tile_api_endpoint_desc">این ویژگی به شما امکان تنظیم نشانی API را می‌دهد.</string>
     <string name="tile_autosend_title">ارسال خودکار</string>
@@ -364,8 +361,6 @@
     <string name="tile_documentation_desc">این ویژگی به شما امکان باز کردن مستندات SpeakGPT را می‌دهد.</string>
     <string name="tile_amoled_mode_title">حالت AMOLED</string>
     <string name="tile_amoled_mode_desc">این ویژگی به شما امکان فعال کردن حالت AMOLED برای نمایشگرهای پشتیبانی‌شده را می‌دهد. این می‌تواند به‌طور قابل‌توجهی در مصرف باتری صرفه‌جویی کند. حالت AMOLED فقط در پوسته تیره در دسترس است.</string>
-    <string name="tile_las_title">قفل پنجره دستیار</string>
-    <string name="tile_las_desc">این ویژگی به شما امکان قفل کردن پنجره دستیار را می‌دهد. وقتی پنجره دستیار قفل باشد، نمی‌توان آن را با فشار دادن دکمه بازگشت یا کشیدن پنجره به پایین بست. اما می‌توانید از دکمه «خروج» استفاده کنید. این ویژگی می‌تواند از بسته شدن تصادفی پنجره دستیار و از دست رفتن گفتگوی ذخیره‌نشده جلوگیری کند.</string>
     <string name="tile_assistant_customize_title">سفارشی‌سازی دستیار</string>
     <string name="tile_assistant_customize_desc">این ویژگی به شما امکان تغییر نام و آواتار دستیار را برای گفتگوی فردی یا به‌صورت عمومی می‌دهد.</string>
     <string name="tile_delete_data_title">حذف داده‌ها</string>

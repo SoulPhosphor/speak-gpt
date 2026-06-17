@@ -280,7 +280,6 @@
     <string name="btn_delete_logit_bias">Logit-Bias löschen</string>
     <string name="title_thank_you_for_your_support">Danke für Ihre Unterstützung!</string>
     <string name="title_welcome_to_speakgpt">Willkommen bei SpeakGPT</string>
-    <string name="title_speakgpt_mobile_assistant">SpeakGPT Mobile Assistant</string>
     <string name="title_about_app">Über die App</string>
     <string name="title_terms_of_service">Nutzungsbedingungen</string>
     <string name="title_setup_api_endpoint">API-Endpunkt einrichten</string>
@@ -313,8 +312,6 @@
     <string name="tile_account_title">Konto OpenAI</string>
     <string name="tile_account_subtitle">OpenAI-Konto verwalten</string>
     <string name="tile_account_desc">Diese Funktion ermöglicht es Ihnen, Ihr OpenAI-Konto zu verwalten.</string>
-    <string name="tile_assistant_title">Standardassistent</string>
-    <string name="tile_assistant_desc">Diese Funktion ermöglicht es Ihnen, SpeakGPT als Ihren Standardassistenten festzulegen.</string>
     <string name="tile_api_endpoint_title">API-Endpunkt</string>
     <string name="tile_api_endpoint_desc">Diese Funktion ermöglicht es Ihnen, Ihren API-Endpunkt festzulegen.</string>
     <string name="tile_autosend_title">Automatisches Senden</string>
@@ -364,8 +361,6 @@
     <string name="tile_documentation_desc">Diese Funktion ermöglicht es Ihnen, die Dokumentation von SpeakGPT zu öffnen.</string>
     <string name="tile_amoled_mode_title">AMOLED-Modus</string>
     <string name="tile_amoled_mode_desc">Diese Funktion ermöglicht Ihnen die Aktivierung des AMOLED-Modus für unterstützte Displays. Dies kann die Akkulaufzeit erheblich verlängern. Der AMOLED-Modus ist nur im Dunkelmodus verfügbar.</string>
-    <string name="tile_las_title">Assistentenfenster sperren</string>
-    <string name="tile_las_desc">Diese Funktion ermöglicht es Ihnen, das Assistentenfenster zu sperren. Wenn das Assistentenfenster gesperrt ist, kann es nicht durch Drücken der Zurück-Taste oder durch Herunterwischen des Fensters geschlossen werden. Sie können jedoch die \'exit\' Taste verwenden. Diese Funktion kann das versehentliche Schließen des Assistentenfensters und den Verlust nicht gespeicherter Gespräche verhindern.</string>
     <string name="tile_assistant_customize_title">Assistent anpassen</string>
     <string name="tile_assistant_customize_desc">Diese Funktion ermöglicht es Ihnen, den Namen und das Avatar des Assistenten für einzelne Chats oder global zu ändern.</string>
     <string name="tile_delete_data_title">Daten löschen</string>

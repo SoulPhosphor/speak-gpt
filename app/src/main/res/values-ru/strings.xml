@@ -281,7 +281,6 @@
     <string name="btn_delete_logit_bias">Удалить логит-смещение</string>
     <string name="title_thank_you_for_your_support">Спасибо за вашу поддержку!</string>
     <string name="title_welcome_to_speakgpt">Добро пожаловать в SpeakGPT</string>
-    <string name="title_speakgpt_mobile_assistant">Мобильный помощник SpeakGPT</string>
     <string name="title_about_app">О приложении</string>
     <string name="title_terms_of_service">Условия обслуживания</string>
     <string name="title_setup_api_endpoint">Настройка конечной точки API</string>
@@ -314,8 +313,6 @@
     <string name="tile_account_title">Аккаунт OpenAI</string>
     <string name="tile_account_subtitle">Управление аккаунтом OpenAI</string>
     <string name="tile_account_desc">Эта функция позволяет управлять вашим аккаунтом OpenAI.</string>
-    <string name="tile_assistant_title">Основной помощник</string>
-    <string name="tile_assistant_desc">Эта функция позволяет установить SpeakGPT в качестве вашего основного помощника.</string>
     <string name="tile_api_endpoint_title">API endpoint</string>
     <string name="tile_api_endpoint_desc">Эта функция позволяет установить ваш API endpoint.</string>
     <string name="tile_autosend_title">Автоотправка</string>
@@ -364,8 +361,6 @@
     <string name="tile_documentation_subtitle">Открыть документацию</string>
     <string name="tile_documentation_desc">Эта функция позволяет открыть документацию SpeakGPT.</string>
     <string name="tile_amoled_mode_title">Режим AMOLED</string><string name="tile_amoled_mode_desc">Эта функция позволяет включить режим AMOLED для поддерживаемых дисплеев. Это может значительно сэкономить заряд батареи. Режим AMOLED доступен только в темной теме.</string>
-    <string name="tile_las_title">Блокировка окна помощника</string>
-    <string name="tile_las_desc">Эта функция позволяет заблокировать окно помощника. Когда окно помощника заблокировано, его нельзя закрыть, нажав кнопку назад или проведя пальцем вниз. Но вы можете использовать кнопку \'выход\'. Эта функция может предотвратить случайное закрытие окна помощника и потерю несохраненной беседы.</string>
     <string name="tile_assistant_customize_title">Настройка помощника</string>
     <string name="tile_assistant_customize_desc">Эта функция позволяет изменить имя и аватар помощника для отдельного чата или глобально.</string>
     <string name="tile_delete_data_title">Удаление данных</string>

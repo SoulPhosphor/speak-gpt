@@ -280,7 +280,6 @@
     <string name="btn_delete_logit_bias">Delete logit bias</string>
     <string name="title_thank_you_for_your_support">Thank you for your support!</string>
     <string name="title_welcome_to_speakgpt">Welcome to SpeakGPT</string>
-    <string name="title_speakgpt_mobile_assistant">SpeakGPT Mobile Assistant</string>
     <string name="title_about_app">About app</string>
     <string name="title_terms_of_service">Terms of Service</string>
     <string name="title_setup_api_endpoint">Setup API Endpoint</string>
@@ -313,8 +312,6 @@
     <string name="tile_account_title">OpenAI Account</string>
     <string name="tile_account_subtitle">Manage OpenAI account</string>
     <string name="tile_account_desc">This feature allows you to manage your OpenAI account.</string>
-    <string name="tile_assistant_title">Default assistant</string>
-    <string name="tile_assistant_desc">This feature allows you to set SpeakGPT as your default assistant.</string>
     <string name="tile_api_endpoint_title">API endpoint</string>
     <string name="tile_api_endpoint_desc">This feature allows you to set your API endpoint.</string>
     <string name="tile_autosend_title">Auto send</string>
@@ -364,8 +361,6 @@
     <string name="tile_documentation_desc">This feature allows you to open SpeakGPT documentation.</string>
     <string name="tile_amoled_mode_title">AMOLED mode</string>
     <string name="tile_amoled_mode_desc">This feature allows you to enable AMOLED mode for supported displays. It can significantly save battery. AMOLED mode is only available in dark theme.</string>
-    <string name="tile_las_title">Lock assistant window</string>
-    <string name="tile_las_desc">This feature allows you to lock assistant window. When assistant window is locked, it cannot be closed by pressing back button or swiping window down. But you can use \'exit\' button. This feature can prevent accidental closing of assistant window and losing unsaved conversation.</string>
     <string name="tile_assistant_customize_title">Customize Assistant</string>
     <string name="tile_assistant_customize_desc">This feature allows you change assistant\'s name and avatar for individual chat or globally.</string>
     <string name="tile_delete_data_title">Delete data</string>

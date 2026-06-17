@@ -285,20 +285,6 @@ class Preferences private constructor(private var preferences: SharedPreferences
     }
 
     /**
-     * Set lock assistant window
-     * */
-    fun setLockAssistantWindow(value: Boolean) {
-        putGlobalBoolean("lock_assistant_window", value)
-    }
-
-    /**
-     * Get lock assistant window
-     * */
-    fun getLockAssistantWindow() : Boolean {
-        return getGlobalBoolean("lock_assistant_window", false)
-    }
-
-    /**
      * Retrieves the silence mode status from the shared preferences.
      *
      * @return The silence mode status, true if enabled or false otherwise.

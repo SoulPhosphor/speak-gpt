@@ -279,7 +279,6 @@
     <string name="btn_delete_logit_bias">Usuń logit bias</string>
     <string name="title_thank_you_for_your_support">Dziękujemy za wsparcie!</string>
     <string name="title_welcome_to_speakgpt">Witaj w SpeakGPT</string>
-    <string name="title_speakgpt_mobile_assistant">Asystent mobilny SpeakGPT</string>
     <string name="title_about_app">O aplikacji</string>
     <string name="title_terms_of_service">Warunki korzystania z usługi</string>
     <string name="title_setup_api_endpoint">Skonfiguruj punkt końcowy API</string>
@@ -311,8 +310,6 @@
     <string name="tile_account_title">Konto OpenAI</string>
     <string name="tile_account_subtitle">Zarządzaj kontem OpenAI</string>
     <string name="tile_account_desc">Ta funkcja pozwala zarządzać Twoim kontem OpenAI.</string>
-    <string name="tile_assistant_title">Domyślny asystent</string>
-    <string name="tile_assistant_desc">Ta funkcja pozwala ustawić SpeakGPT jako domyślnego asystenta.</string>
     <string name="tile_api_endpoint_title">Punkt końcowy API</string>
     <string name="tile_api_endpoint_desc">Ta funkcja pozwala ustawić swój punkt końcowy API.</string>
     <string name="tile_autosend_title">Automatyczne wysyłanie</string>
@@ -362,8 +359,6 @@
     <string name="tile_documentation_desc">Ta funkcja pozwala otworzyć dokumentację SpeakGPT.</string>
     <string name="tile_amoled_mode_title">Tryb AMOLED</string>
     <string name="tile_amoled_mode_desc">Ta funkcja pozwala na włączenie trybu AMOLED dla obsługiwanych ekranów. Może to znacząco oszczędzić baterię. Tryb AMOLED jest dostępny tylko w ciemnym motywie.</string>
-    <string name="tile_las_title">Zablokuj okno asystenta</string>
-    <string name="tile_las_desc">Ta funkcja pozwala na zablokowanie okna asystenta. Gdy okno asystenta jest zablokowane, nie można go zamknąć naciskając przycisk powrotu ani przesuwając okno w dół. Możesz jednak użyć przycisku \'wyjście\'. Ta funkcja może zapobiegać przypadkowemu zamknięciu okna asystenta i utracie niezapisanej rozmowy.</string>
     <string name="tile_assistant_customize_title">Dostosuj Asystenta</string>
     <string name="tile_assistant_customize_desc">Ta funkcja pozwala zmienić nazwę i awatar asystenta dla indywidualnej rozmowy lub globalnie.</string>
     <string name="tile_delete_data_title">Usuń dane</string>
