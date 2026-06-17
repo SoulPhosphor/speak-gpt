@@ -16,8 +16,6 @@
 
 package org.teslasoft.assistant.ui.activities
 
-import android.app.role.RoleManager
-import android.content.Context
 import android.content.Intent
 import android.content.res.ColorStateList
 import android.content.res.Configuration
@@ -25,7 +23,6 @@ import android.graphics.Color
 import android.graphics.drawable.Drawable
 import android.os.Build
 import android.os.Bundle
-import android.provider.Settings
 import android.transition.TransitionInflater
 import android.view.View
 import android.widget.ImageButton
@@ -69,7 +66,6 @@ class SettingsActivity : FragmentActivity() {
 
     private var tileAccountFragment: TileFragment? = null
     private var tileCharacters: TileFragment? = null
-    private var tileAssistant: TileFragment? = null
     private var tileVoiceSettings: TileFragment? = null
     private var tileImageModel: TileFragment? = null
     private var tileImageResolution: TileFragment? = null
@@ -81,7 +77,6 @@ class SettingsActivity : FragmentActivity() {
     private var tileClearChat: TileFragment? = null
     private var tileDocumentation: TileFragment? = null
     private var tileAmoledMode: TileFragment? = null
-    private var tileLockAssistantWindow: TileFragment? = null
     private var tileCustomize: TileFragment? = null
     private var tileDeleteData: TileFragment? = null
     private var tileSendDiagnosticData: TileFragment? = null
@@ -192,7 +187,6 @@ class SettingsActivity : FragmentActivity() {
         transition.excludeTarget(R.id.btn_back, true)
         transition.excludeTarget(R.id.tile_account, true)
         transition.excludeTarget(R.id.tile_characters, true)
-        transition.excludeTarget(R.id.tile_assistant, true)
         transition.excludeTarget(R.id.tile_autosend, true)
         transition.excludeTarget(R.id.tile_voice, true)
         transition.excludeTarget(R.id.tile_voice_language, true)
@@ -211,7 +205,6 @@ class SettingsActivity : FragmentActivity() {
         transition.excludeTarget(R.id.tile_clear_chat, true)
         transition.excludeTarget(R.id.tile_documentation, true)
         transition.excludeTarget(R.id.tile_amoled_mode, true)
-        transition.excludeTarget(R.id.tile_lock_assistant, true)
         transition.excludeTarget(R.id.tile_customize, true)
         transition.excludeTarget(R.id.tile_delete_data, true)
         transition.excludeTarget(R.id.tile_send_diagnostic_data, true)
@@ -248,7 +241,6 @@ class SettingsActivity : FragmentActivity() {
         transition2.excludeTarget(R.id.constraintLayout167, true)
         transition2.excludeTarget(R.id.tile_account, true)
         transition2.excludeTarget(R.id.tile_characters, true)
-        transition2.excludeTarget(R.id.tile_assistant, true)
         transition2.excludeTarget(R.id.tile_autosend, true)
         transition2.excludeTarget(R.id.tile_voice, true)
         transition2.excludeTarget(R.id.tile_voice_language, true)
@@ -267,7 +259,6 @@ class SettingsActivity : FragmentActivity() {
         transition2.excludeTarget(R.id.tile_clear_chat, true)
         transition2.excludeTarget(R.id.tile_documentation, true)
         transition2.excludeTarget(R.id.tile_amoled_mode, true)
-        transition2.excludeTarget(R.id.tile_lock_assistant, true)
         transition2.excludeTarget(R.id.tile_customize, true)
         transition2.excludeTarget(R.id.tile_delete_data, true)
         transition2.excludeTarget(R.id.tile_send_diagnostic_data, true)
@@ -417,19 +408,6 @@ class SettingsActivity : FragmentActivity() {
                 chatId = chatId,
                 functionDesc = getString(R.string.tile_characters_desc),
                 transitionName = "expand_characters"
-            )
-
-            tileAssistant = TileFragment.newInstance(
-                isDefaultAssistantApp(this@SettingsActivity),
-                false,
-                getString(R.string.tile_assistant_title),
-                null,
-                getString(R.string.on),
-                getString(R.string.off),
-                R.drawable.ic_assistant,
-                false,
-                chatId,
-                getString(R.string.tile_assistant_desc)
             )
 
             tileVoiceSettings = TileFragment.newInstance(
@@ -631,19 +609,6 @@ class SettingsActivity : FragmentActivity() {
 
     private fun createFragments6() {
         val t6 = Thread {
-            tileLockAssistantWindow = TileFragment.newInstance(
-                preferences?.getLockAssistantWindow() == true,
-                true,
-                getString(R.string.tile_las_title),
-                null,
-                getString(R.string.on),
-                getString(R.string.off),
-                R.drawable.ic_lock,
-                false,
-                chatId,
-                getString(R.string.tile_las_desc)
-            )
-
             tileCustomize = TileFragment.newInstance(
                 checked = false,
                 checkable = false,
@@ -759,7 +724,6 @@ class SettingsActivity : FragmentActivity() {
     private fun placeFragments() : FragmentTransaction {
         val operation = supportFragmentManager.beginTransaction().replace(R.id.tile_account, tileAccountFragment!!)
             .replace(R.id.tile_characters, tileCharacters!!)
-            .replace(R.id.tile_assistant, tileAssistant!!)
             .replace(R.id.tile_voice_settings, tileVoiceSettings!!)
             .replace(R.id.tile_image_model, tileImageModel!!)
             .replace(R.id.tile_image_resolution, tileImageResolution!!)
@@ -768,7 +732,6 @@ class SettingsActivity : FragmentActivity() {
             .replace(R.id.tile_slash_commands, tileSlashCommands!!)
             .replace(R.id.tile_desktop_mode, tileDesktopMode!!)
             .replace(R.id.tile_amoled_mode, tileAmoledMode!!)
-            .replace(R.id.tile_lock_assistant, tileLockAssistantWindow!!)
             .replace(R.id.tile_customize, tileCustomize!!)
             .replace(R.id.tile_chats_autosave, tileChatsAutoSave!!)
             .replace(R.id.tile_about_app, tileAboutApp!!)
@@ -810,12 +773,6 @@ class SettingsActivity : FragmentActivity() {
 
         tileCharacters?.setOnTileClickListener {
             startActivity(Intent(this, CharactersActivity::class.java).putExtra("chatId", chatId))
-        }
-
-        tileAssistant?.setOnTileClickListener {
-            val intent = Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS)
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            startActivity(intent)
         }
 
         tileVoiceSettings?.setOnTileClickListener {
@@ -874,14 +831,6 @@ class SettingsActivity : FragmentActivity() {
             }
 
             restartActivity()
-        }}
-
-        tileLockAssistantWindow?.setOnCheckedChangeListener { isChecked -> run {
-            if (isChecked) {
-                preferences?.setLockAssistantWindow(true)
-            } else {
-                preferences?.setLockAssistantWindow(false)
-            }
         }}
 
         tileChatsAutoSave?.setOnCheckedChangeListener { isChecked -> run {
@@ -1059,28 +1008,8 @@ class SettingsActivity : FragmentActivity() {
         }
     }
 
-    private fun isDefaultAssistantApp(context: Context): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val roleManager = context.getSystemService(ROLE_SERVICE) as RoleManager
-            roleManager.isRoleHeld(RoleManager.ROLE_ASSISTANT)
-        } else {
-            // For older versions, use the Settings API to check
-            val defaultAssistPackage = Settings.Secure.getString(
-                context.contentResolver,
-                "voice_interaction_service"
-            )
-
-            val myPackage = context.packageName
-            defaultAssistPackage.contains(myPackage)
-        }
-    }
-
     override fun onResume() {
         super.onResume()
-
-        if (areFragmentsInitialized) {
-            tileAssistant?.setChecked(isDefaultAssistantApp(this))
-        }
 
         // Reset preferences singleton
         Preferences.getPreferences(this, chatId)

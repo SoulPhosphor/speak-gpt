@@ -265,15 +265,6 @@
                         android:layout_height="match_parent"
                         android:layout_marginHorizontal="4dp"
                         android:layout_weight="1" />
-
-                    <androidx.constraintlayout.widget.ConstraintLayout
-                        android:id="@+id/tile_assistant"
-                        android:layout_width="0dp"
-                        android:layout_height="match_parent"
-                        android:layout_marginHorizontal="4dp"
-                        android:layout_weight="1">
-
-                    </androidx.constraintlayout.widget.ConstraintLayout>
                 </LinearLayout>
 
             </androidx.constraintlayout.widget.ConstraintLayout>
@@ -481,15 +472,6 @@
                         android:layout_height="match_parent"
                         android:layout_marginHorizontal="4dp"
                         android:layout_weight="1" />
-
-                    <androidx.constraintlayout.widget.ConstraintLayout
-                        android:id="@+id/tile_lock_assistant"
-                        android:layout_width="0dp"
-                        android:layout_height="match_parent"
-                        android:layout_marginHorizontal="4dp"
-                        android:layout_weight="1">
-
-                    </androidx.constraintlayout.widget.ConstraintLayout>
 
                 </LinearLayout>
 
