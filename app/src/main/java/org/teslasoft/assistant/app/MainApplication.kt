@@ -23,7 +23,6 @@ import com.google.android.material.color.DynamicColors
 import org.conscrypt.Conscrypt
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.GlobalPreferences
-import org.teslasoft.assistant.preferences.Logger
 import org.teslasoft.assistant.theme.ThemeManager
 import java.security.Security
 
@@ -48,8 +47,13 @@ class MainApplication : Application() {
             Security.insertProviderAt(Conscrypt.newProvider(), 1)
         }
 
-        // Clear event log on startup
-        Logger.clearEventLog(this)
+        // NOTE: the Event log is intentionally NOT cleared on startup. It is the
+        // user's diagnostic trail for voice failures, and the whole point is that
+        // it survives a restart so it can be read AFTER something went wrong — a
+        // hands-free session that loses readback often does so because the OS
+        // killed the process, and the very next launch would otherwise wipe the
+        // evidence. The log is already size-capped (Logger.trimLog), so there is
+        // no storage reason to clear it here.
 
         CaocConfig.Builder.create()
             .backgroundMode(CaocConfig.BACKGROUND_MODE_SHOW_CUSTOM)

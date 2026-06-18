@@ -90,8 +90,13 @@ class Logger {
                 // phone and in the wrong timezone, which made correlating a
                 // log line with "the turn that just failed" impossible.
                 val timestamp = LocalDateTime.now().format(LOG_TIME_FORMAT)
+                // Trailing blank line (\n\n) separates each entry with an empty
+                // line so the log is readable on a phone — an entry can itself be
+                // multi-line (e.g. a VoiceDiag with a VAD line and an Audio Health
+                // line), so a single newline ran entries together with no visible
+                // boundary. An entry starts at its "[timestamp]".
                 val logString =
-                    "[$timestamp] [$tag] [${level.uppercase()}] $message\n"
+                    "[$timestamp] [$tag] [${level.uppercase()}] $message\n\n"
                 when (type) {
                     "crash" -> {
                         val log = trimLog("${getCrashLog(context)}$logString")
