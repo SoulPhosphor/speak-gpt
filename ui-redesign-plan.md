@@ -484,6 +484,22 @@ So there are likely **two paths** to the same visible symptom: (a) the
 after-response one (see the heal lead below), and (b) a config-change/inset
 re-layout one (the tilt). Phase 4 should reproduce and close *both*.
 
+**Update (June 18, 2026 — partial fix on branch
+`claude/debugging-logs-not-recording-sveljw`; pushed, not yet merged or
+device-verified):** path (b) turned out to be a full activity *recreation*,
+not just an inset re-pass. `ChatActivity` had no `android:configChanges`, so
+tilting past the portrait/landscape flip destroyed and rebuilt the activity —
+which ran `onDestroy` and **cut off the TTS readback** (this is also the
+owner's separate "tilt stops the readback" report). Fixed by declaring
+`android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden"`
+so the screen survives rotation, plus an `onConfigurationChanged` that re-runs
+the existing `adjustPaddings()` (the `WindowInsetsUtil` path — **not** a
+competing inset listener, per 9.5.4) so the top bar / input bar re-seat after
+a tilt. For Phase 4 this means: **verify the tilt path no longer blanks the
+bar** (don't re-investigate it from scratch), keep the `configChanges`, and
+still close path (a) — the after-response blank, which this change does not
+touch.
+
 **Strong lead (verified in code):** an existing safety net,
 `restoreTopBarVisibility()` (`ChatActivity.kt:709`), already exists precisely
 because the `action_bar` can get **stuck `INVISIBLE`** when the settings-cog
