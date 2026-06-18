@@ -112,6 +112,11 @@ Everything is on-device. No cloud sync, no accounts.
   in `ChatActivity` after auto-naming, or it silently vanishes on rename).
   Auto-naming adopts the new id **in place** — it must never relaunch
   ChatActivity, because onDestroy kills the readback and hands-free loop.
+  For the same reason, `ChatActivity` handles rotation itself via
+  `android:configChanges` (manifest) and re-seats its insets in
+  `onConfigurationChanged` — without it, tilting the phone past the
+  portrait/landscape flip recreated the activity and cut off the readback
+  mid-sentence. Keep the configChanges; don't let rotation recreate this screen.
 - Any OpenAI-compatible endpoint; multiple endpoint profiles; streaming via
   `com.aallam.openai` (Ktor 2.3.12 — pinned, do not upgrade); secondary
   official `openai-java` client for function calling.

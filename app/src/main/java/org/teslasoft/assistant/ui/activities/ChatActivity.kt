@@ -4776,6 +4776,22 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         adjustPaddings()
     }
 
+    /**
+     * The chat screen handles rotation itself (`android:configChanges` in the
+     * manifest) instead of letting Android recreate it. Recreation ran
+     * onDestroy, which tears down the TTS readback and the hands-free mic loop —
+     * that's why tilting the phone far enough to flip portrait/landscape used to
+     * cut off the readback mid-sentence. Surviving the rotation keeps voice
+     * alive, but it also means the one-shot inset/top-bar layout done in
+     * onAttachedToWindow no longer re-runs on its own, so the top action bar
+     * could end up blank or the input bar misplaced after a tilt. Re-seat the
+     * paddings here, posted so the rotated window's insets have settled first.
+     */
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        findViewById<View>(R.id.root)?.post { adjustPaddings() }
+    }
+
     private fun adjustPaddings() {
         WindowInsetsUtil.adjustPaddings(this, R.id.action_bar, EnumSet.of(WindowInsetsUtil.Companion.Flags.STATUS_BAR))
         WindowInsetsUtil.adjustPaddings(this, R.id.bulk_container, EnumSet.of(WindowInsetsUtil.Companion.Flags.STATUS_BAR))
