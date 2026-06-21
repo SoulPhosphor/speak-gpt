@@ -12,13 +12,13 @@ Two things happen on every generation error:
 
 1. **A short, professional message appears in the chat** so the user knows what
    happened, tagged with a stable code like `[N1]`.
-2. **A fuller, structured entry is written to the Event Log** under a dedicated
-   tag, containing the technical detail a developer (or a coding bot) needs to
-   diagnose it — the parts a normal user would not know and that would only
-   clutter the chat.
+2. **A fuller, structured entry is written to the Error Log** (the renamed Crash
+   Log — see §4) under a dedicated tag, containing the technical detail a
+   developer (or a coding bot) needs to diagnose it — the parts a normal user
+   would not know and that would only clutter the chat.
 
 The **code** is the bridge between the two. The user can read `[N1]` off the
-chat message and hand it over, and it points straight at the matching Event Log
+chat message and hand it over, and it points straight at the matching Error Log
 entry and the known cause.
 
 **Design rules for the user-facing message:**
@@ -28,10 +28,10 @@ entry and the known cause.
 - No fault language, no apologies, no reassurance ("sorry", "this isn't your
   fault", "don't worry" are all banned).
 - No raw stack traces. No profile name, Base URL, or model name. No config
-  detail. All of that lives in the Event Log.
+  detail. All of that lives in the Error Log.
 - Understandable to a non-technical reader.
 
-**Design rules for the Event Log entry:**
+**Design rules for the Error Log entry:**
 
 - Include only what is genuinely useful for troubleshooting. Do not bloat it.
 - Always: the code, a one-line plain-English cause, and the request context
@@ -68,7 +68,7 @@ observed that failure (an exception type, an HTTP status, a response body). The
 `E` codes are **catalog codes**: named hypotheses for behaviors the app cannot
 yet detect at the moment of failure. The classifier never emits an `E` code —
 those failures still surface under whatever detection code describes the
-*symptom* (usually `[N1]`/`[N2]`), and the Event Log context flags (§4) are what
+*symptom* (usually `[N1]`/`[N2]`), and the Error Log context flags (§4) are what
 let the pattern be spotted later. A code that fired on a guessed root cause it
 could not prove would be worse than no code, so this line is deliberate.
 
@@ -85,11 +85,11 @@ Conditions below are the exact substrings the current code matches in
 `e.stackTraceToString()` (text/voice path at `ChatActivity.kt` ~3408, image path
 ~4317), plus the dedicated `connectionAbortMessage` helper.
 
-> In every Event Log entry, `Profile`, `Base URL`, `Model` and `Voice` are the
+> In every Error Log entry, `Profile`, `Base URL`, `Model` and `Voice` are the
 > standard context block defined in §4. To avoid repetition the table lists only
 > what is **added beyond** that standard block.
 
-| Code | Technical cause | Matching condition | User-facing message (exact) | Event Log adds beyond standard block |
+| Code | Technical cause | Matching condition | User-facing message (exact) | Error Log adds beyond standard block |
 |------|-----------------|--------------------|------------------------------|---------------------------------------|
 | `[N1]` | Socket torn down mid-request (`ECONNABORTED`) | `"Software caused connection abort"` | `[N1] The connection closed before the response finished. Try again, or switch models if this only happens with one model.` | Exception message (the raw "Software caused connection abort" detail). No stack trace. |
 | `[N2]` | Connect / read timeout | `"Connect timeout has expired"` or `"SocketTimeoutException"` | `[N2] The server did not respond in time. The connection may be slow or the model busy — try again, or switch models.` | Which timeout (connect vs socket) from the exception message. No stack trace. |
@@ -102,7 +102,7 @@ Conditions below are the exact substrings the current code matches in
 | `[S1]` | Endpoint returned HTTP 404 | `"404"` or `"Not Found"` | `[S1] The endpoint was not found (HTTP 404). Check the Base URL in this profile's settings.` | Nothing extra; the Base URL in the standard block is the thing to check. |
 | `[S2]` | Response could not be read as the expected stream (often a non-streaming error body, usually HTTP 400) | `"NoTransformationFoundException"` or `"Expected response body of the type"` | `[S2] The server returned a response the app could not read as a stream. Check whether this endpoint and model support streaming.` | **Full stack trace** plus **HTTP status if available** — this case is ambiguous and the trace is often the only place the underlying HTTP error survives. |
 | `[S3]` | Prompt rejected as inappropriate content | `"Your request was rejected"` | `[S3] The request was rejected as inappropriate content and could not be processed.` | Nothing extra. Do **not** log the prompt text. |
-| `[U0]` | Anything not matched above | `else` branch (catch-all) | `[U0] An unexpected error occurred. The technical details were saved to the Event Log.` | **Full exception class, message, and stack trace.** This is the only thing the user can hand over, so the log must carry everything. |
+| `[U0]` | Anything not matched above | `else` branch (catch-all) | `[U0] An unexpected error occurred. The technical details were saved to the Error Log.` | **Full exception class, message, and stack trace.** This is the only thing the user can hand over, so the log must carry everything. |
 
 ### Notes on specific wording
 
@@ -112,27 +112,67 @@ Conditions below are the exact substrings the current code matches in
   it is phrased as a neutral instruction, not reassurance.
 - `[M2]` deliberately does **not** print the model name into the chat (per the
   no-config-in-message rule); it directs the user to the setting instead. The
-  name is in the Event Log's Model field.
+  name is in the Error Log's Model field.
 - `[S2]` previously rendered a multi-paragraph explanation in chat. Under this
   design the chat keeps one sentence and the paragraph-level detail moves to the
-  Event Log.
+  Error Log.
 
 ---
 
-## 4. Event Log entry — structure
+## 4. Where logs go, what each keeps, and the Error Log entry
 
-All error entries are written through the existing `Logger.log(...)` under a
-dedicated tag so they are trivially separable from voice diagnostics:
+### 4.1 Rename and re-scope the two logs
+
+The app has two logs whose names no longer match what they hold. This proposal
+renames them so the name describes the contents, and splits errors from voice
+into separate logs:
+
+| Old name | New name | Holds |
+|----------|----------|-------|
+| Crash Log | **Error Log** | App crashes **and** all generation / handled errors (the `GenError` entries below) — everything **except** voice data. |
+| Event Log | **Voice Debug Log** | Voice diagnostics only (VAD, mic route, hands-free loop decisions, voice context). The **only** place voice issues are recorded. |
+
+This **replaces** the earlier "segregate by tag inside one log" idea: the two
+concerns now live in two separate logs. That is the cleanest separation and stops
+high-volume voice diagnostics from burying error entries.
+
+### 4.2 Retention (each log trims independently)
+
+| Log | Keep the most recent… | Tie-breaker |
+|-----|------------------------|-------------|
+| **Error Log** | 30 days **or** 500 entries | whichever limit is reached **first** |
+| **Voice Debug Log** | 7 days **or** 1,000 entries | whichever limit is reached **first** |
+
+Voice diagnostics are far higher volume, so the Voice Debug Log keeps more
+entries but over a shorter window. This replaces the current single
+character-count trim in `Logger` (see §7), and relies on the per-line timestamp
+`Logger` already writes.
+
+### 4.3 Controls (both logs get the same two)
+
+- **Clear** — the user can wipe either log at any time; the existing clear
+  buttons are kept, one per log.
+- **Copy / Export** — offered **before** clearing, so the contents can be handed
+  to a developer or coding bot without being lost first. Export ships exactly
+  what is stored, which already excludes the secrets listed in §4.5.
+
+### 4.4 The Error Log entry — structure
+
+Generation / handled errors are written to the **Error Log** via `Logger.log(...)`
+under a dedicated `GenError` tag (the tag still separates a handled generation
+error from a hard crash within the same log):
 
 ```
-Logger.log(context, "event", "GenError", "error", <message>)
+Logger.log(context, "error", "GenError", "error", <message>)
 ```
 
-`Logger` already prefixes every line with `[yyyy-MM-dd HH:mm:ss] [GenError] [ERROR]`,
-so **date/time, tag, and level are automatic** — they must not be duplicated
-inside the message body.
+(The internal log-type key that routes to the Error Log is an implementation
+detail in §7 — the existing "crash" channel becomes the Error Log.) `Logger`
+already prefixes every line with `[yyyy-MM-dd HH:mm:ss] [GenError] [ERROR]`, so
+**date/time, tag, and level are automatic** — they must not be duplicated inside
+the message body.
 
-**Standard context block** (present on every error entry):
+**Standard context block** (present on every Error Log entry):
 
 ```
 [N1] Connection closed before the response finished.
@@ -153,7 +193,10 @@ Power save: <on | off | unknown>                   (only if cheaply/safely avail
   already stores and prints the full base URL, so this is the existing value;
   query parameters are stripped so no secrets ride along in the URL.
 - `Voice` records whether the hands-free / voice loop was active when the error
-  occurred. When **active**, the entry appends a voice context block (§5).
+  occurred — a **single flag, not voice diagnostic data**. The detailed voice
+  context does **not** go in the Error Log; voice data lives only in the Voice
+  Debug Log (§5). The error entry and the matching voice entry are correlated by
+  timestamp and code.
 - **Context flags** (`Trigger`, `Screen`, `Network`, `Power save`) record the
   situation the failure happened in, not the failure itself. They exist so the
   environmental hypotheses in §6 become *visible as patterns* over time: the app
@@ -176,17 +219,12 @@ Power save: <on | off | unknown>                   (only if cheaply/safely avail
   it.
 - Full stack trace: appended for `[S2]` and `[U0]` only.
 
-**What must NOT be written to the Event Log:** the API key, **request headers**
-(they carry the authorization token), the user's prompt text or message content,
-or any other secret. The log is local-only and encrypted at rest, but it is
-meant to be handed to a developer, so it stays free of credentials and personal
-content.
+### 4.5 What must NOT be written to either log
 
-**Segregation from voice spam:** voice diagnostics already use their own tags
-(`VoiceDiag`, `MicRoute`, `VoiceLoop`). Errors use `GenError`. That tag is what
-lets errors be found, filtered, or later shown in a dedicated view without being
-buried under per-turn voice output. (A truly separate log channel is noted as a
-future option in §7, but is out of scope here.)
+The API key, **request headers** (they carry the authorization token), the user's
+prompt text or message content, or any other secret. Both logs are local-only and
+encrypted at rest, but they are meant to be handed to a developer, so they stay
+free of credentials and personal content.
 
 ---
 
@@ -195,10 +233,17 @@ future option in §7, but is out of scope here.)
 - Voice failures use the **same codes** as typed/image failures. A turn that
   fails mid-stream during hands-free conversation and a typed turn that fails the
   same way produce the **same code and the same chat wording**.
-- The only difference is the Event Log: when the voice loop is active at the time
-  of the error, the entry appends a **voice context block** so a voice failure
-  can be reconstructed. Proposed fields (only those already obtainable, plus a
-  small number marked *to add*):
+- **The split between the two logs is strict.** When a voice turn errors, the
+  failure itself is a generation error and its `GenError` entry goes to the
+  **Error Log** with `Voice: active` set — but it carries **no voice diagnostic
+  data**. The detailed voice context goes to the **Voice Debug Log** only, since
+  that log is the single home for voice data. The two entries share a timestamp
+  (and the error code), which is how a voice failure is reconstructed across the
+  two logs. This keeps high-volume voice output out of the Error Log while still
+  letting a voice turn's error be traced end to end.
+- The voice context block written to the **Voice Debug Log** (the existing voice
+  diagnostics already land here) carries the reconstruction fields. Proposed
+  fields (only those already obtainable, plus a small number marked *to add*):
 
   ```
   Voice context:
@@ -227,7 +272,7 @@ distinct failure at the moment they happen. They get **catalog codes** (`E`) so
 they have a shared name and a graduation path — **not** detection codes. The
 classifier never emits an `E` code. When one of these behaviors occurs, the
 failure still surfaces under whatever **detection** code matches the symptom
-(almost always `[N1]`, sometimes `[N2]`); the Event Log **context flags** (§4)
+(almost always `[N1]`, sometimes `[N2]`); the Error Log **context flags** (§4)
 are what make the underlying pattern visible after the fact.
 
 Think of it as the smoke alarm distinction: the detection code says *there is
@@ -303,10 +348,10 @@ trust the detection code for *what* happened and the context flags for *why*.
   image path's catch-all dumps a raw stack trace into chat; the text path's adds
   profile/URL). Both converge on `[U0]` with the trace going to the log instead.
 - **Catch-all (`U0`).** Any exception not matched by a known condition maps to
-  `[U0]`; the chat shows the fixed one-line message, and the Event Log gets the
+  `[U0]`; the chat shows the fixed one-line message, and the Error Log gets the
   exception class, message, and full stack trace. No raw trace ever reaches the
   chat.
-- **Event Log always written.** Today errors are only shown in chat, and only
+- **Error Log always written.** Today errors are only shown in chat, and only
   when `showChatErrors()` is on. Under this design the `GenError` entry is written
   on **every** error path regardless of the `showChatErrors()` setting, because
   the log is the diagnostic record; the toggle still controls only whether the
@@ -323,6 +368,28 @@ trust the detection code for *what* happened and the context flags for *why*.
   that is cheap and needs no extra permission; otherwise they are logged as
   `unknown`. None of these flags ever appear in the chat message.
 
+- **Log rename and split (§4.1).** "Crash Log" → **Error Log**, "Event Log" →
+  **Voice Debug Log**. Internally `Logger` already has a `crash` channel and an
+  `event` channel; the simplest mapping is `crash` → Error Log (it gains the
+  `GenError` entries) and `event` → Voice Debug Log (unchanged content, voice
+  diagnostics only). This touches the user-facing labels in
+  `res/values/strings.xml`, the rows in `AlertDebugMenuActivity`, and
+  `LogsActivity` (its title/branching keyed on log type), plus the chat
+  **bug-icon** shortcut (still opens the voice log) and the Voice-log
+  **terminal-icon** shortcut (unchanged). No new log *type* is required — it is a
+  rename plus routing generation errors to the existing `crash`/Error Log
+  channel.
+- **Retention (§4.2).** Replace `Logger`'s single character-count trim
+  (`MAX_LOG_CHARS`) with per-log limits: Error Log = 30 days **or** 500 entries,
+  Voice Debug Log = 7 days **or** 1,000 entries, whichever limit is hit first.
+  This needs entry-count and age awareness; the per-line timestamp `Logger`
+  already writes (`yyyy-MM-dd HH:mm:ss`) is the age source, and each appended
+  line is one entry for counting. Trim oldest-first on each append, per log.
+- **Clear / Export (§4.3).** Keep the existing per-log Clear buttons; add a
+  Copy/Export action offered before Clear. Export emits the stored text as-is,
+  which already excludes the §4.5 secrets — no extra scrubbing needed at export
+  time because nothing secret is ever written in the first place.
+
 - **No telemetry.** `Logger` is local-only and must stay that way; nothing here
   sends anything off device.
 
@@ -331,8 +398,8 @@ trust the detection code for *what* happened and the context flags for *why*.
 ## 8. Open questions for review
 
 1. Approve the **code set and the exact user-facing wording** in §3?
-2. Confirm: **write the `GenError` Event Log entry on every error even when
+2. Confirm: **write the `GenError` Error Log entry on every error even when
    "Show chat errors" is off** (§7)?
-3. Approve keeping voice on the **shared codes** with only an added Event Log
+3. Approve keeping voice on the **shared codes** with only an added Error Log
    context block, no `V` codes yet (§5)?
-4. Anything in the **standard Event Log block** you want added or removed (§4)?
+4. Anything in the **standard Error Log block** you want added or removed (§4)?
