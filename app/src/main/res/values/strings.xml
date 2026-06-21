@@ -648,6 +648,22 @@
     <string name="prompt_max_tokens_error">Too many tokens. It is an internal error, please report it. Also try to truncate your input. Sometimes it may help.</string>
     <string name="prompt_no_model">No valid model is set in settings. Please change the model and try again.</string>
     <string name="prompt_show_error">An error has been occurred during generation. See the error details below:</string>
+
+    <!-- Coded generation-error messages (see ERROR_CODES.md). Plain, neutral, no
+         profile/URL/model/config (that lives in the Error Log). The [code] prefix
+         is added in code from GenErrorCode, not stored here. -->
+    <string name="gen_error_n1">The connection closed before the response finished. Try again, or switch models if this only happens with one model.</string>
+    <string name="gen_error_n2">The server did not respond in time. The connection may be slow or the model busy — try again, or switch models.</string>
+    <string name="gen_error_n3">The app could not reach the server address. Check your connection or the Base URL, then try again.</string>
+    <string name="gen_error_a1">The API key was rejected. Update the key in Settings.</string>
+    <string name="gen_error_m1">No model is set for this chat. Choose a model in this chat\'s settings.</string>
+    <string name="gen_error_m2">The selected model is not available on this endpoint. Check the model name in this chat\'s settings, or choose another.</string>
+    <string name="gen_error_m3">The conversation is too long for this model\'s limit. Start a new chat or shorten the input.</string>
+    <string name="gen_error_q1">The account\'s quota or usage limit has been reached. Check the account\'s billing and usage limits.</string>
+    <string name="gen_error_s1">The endpoint was not found (HTTP 404). Check the Base URL in this profile\'s settings.</string>
+    <string name="gen_error_s2">The server returned a response the app could not read as a stream. Check whether this endpoint and model support streaming.</string>
+    <string name="gen_error_s3">The request was rejected as inappropriate content and could not be processed.</string>
+    <string name="gen_error_u0">An unexpected error occurred. The technical details were saved to the Error Log.</string>
     <string name="label_debug">Debug</string>
     <string name="label_permission_denied">Permission denied</string>
     <string name="label_use_camera">Use camera</string>

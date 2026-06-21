@@ -186,9 +186,11 @@ import org.teslasoft.assistant.ui.onboarding.WelcomeActivity
 import org.teslasoft.assistant.ui.permission.CameraPermissionActivity
 import org.teslasoft.assistant.ui.permission.MicrophonePermissionActivity
 import org.teslasoft.assistant.util.Hash
+import org.teslasoft.assistant.util.GenErrorResult
+import org.teslasoft.assistant.util.GenerationErrorClassifier
 import org.teslasoft.assistant.util.LocaleParser
 import org.teslasoft.assistant.util.WindowInsetsUtil
-import org.teslasoft.assistant.util.connectionAbortMessage
+import org.teslasoft.assistant.util.chatMessage
 import java.io.BufferedReader
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -3405,56 +3407,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         } catch (e: Exception) {
             playErrorSignal()
             stopHandsFreeOnError()
-            val response = when {
-                e.stackTraceToString().contains("invalid model") -> {
-                    getString(R.string.prompt_no_model_provided)
-                }
-                e.stackTraceToString().contains("does not exist") -> {
-                    String.format(getString(R.string.prompt_model_not_available), model)
-                }
-                e.stackTraceToString().contains("Connect timeout has expired") || e.stackTraceToString().contains("SocketTimeoutException") -> {
-                    // Vague timeout text was a long-standing complaint: name the
-                    // endpoint/model so the user can tell "my server is down"
-                    // from "wrong profile selected" without guesswork.
-                    getString(R.string.prompt_timed_out) +
-                            "\n\nProfile: ${apiEndpointObject?.label}\nBase URL: ${apiEndpointObject?.host}\nModel: $model" +
-                            (e.message?.let { "\nDetail: $it" } ?: "")
-                }
-                e.stackTraceToString().contains("This model's maximum") -> {
-                    getString(R.string.prompt_max_tokens_error)
-                }
-                e.stackTraceToString().contains("No address associated with hostname") -> {
-                    getString(R.string.prompt_offline)
-                }
-                e.stackTraceToString().contains("Incorrect API key") -> {
-                    getString(R.string.prompt_key_invalid)
-                }
-                e.stackTraceToString().contains("you must provide a model") -> {
-                    getString(R.string.prompt_no_model)
-                }
-                e.stackTraceToString().contains("Software caused connection abort") -> {
-                    connectionAbortMessage(apiEndpointObject?.label, apiEndpointObject?.host, model, e.message)
-                }
-                e.stackTraceToString().contains("You exceeded your current quota") -> {
-                    getString(R.string.prompt_quota_reached)
-                }
-                e.stackTraceToString().contains("404") || e.stackTraceToString().contains("Not Found") -> {
-                    "Endpoint not found (HTTP 404).\n\nProfile: ${apiEndpointObject?.label}\nBase URL: ${apiEndpointObject?.host}\n\nThe server returned 404 for this address. Check that this profile's Base URL includes the full path, and that this chat is set to the intended profile."
-                }
-                // Streaming was requested (Accept: text/event-stream) but the
-                // server answered with a non-streaming body — almost always an
-                // error response (e.g. HTTP 400) that the Ktor client then
-                // couldn't deserialize as a stream, surfacing the opaque
-                // NoTransformationFoundException. Explain it in plain terms
-                // instead of dumping the Ktor stack trace.
-                e.stackTraceToString().contains("NoTransformationFoundException") ||
-                e.stackTraceToString().contains("Expected response body of the type") -> {
-                    "Profile: ${apiEndpointObject?.label}\nBase URL: ${apiEndpointObject?.host}\n\nThe server rejected the request (likely HTTP 400) and returned a non-streaming response, so it couldn't be read as a stream.\n\nThis usually means the request was malformed or this endpoint/model doesn't support streaming chat completions. Check that the model is correct for this profile and try again."
-                }
-                else -> {
-                    "Profile: ${apiEndpointObject?.label}\nBase URL: ${apiEndpointObject?.host}\n\n" + e.stackTraceToString() + "\n\n" + e.message
-                }
-            }
+            // Single funnel: classify the failure to a stable code, always write
+            // the diagnostic Error Log entry, and show the user the short coded
+            // message (no profile/URL/model/trace — those live in the log). See
+            // ERROR_CODES.md.
+            val genError = GenerationErrorClassifier.classify(e)
+            logGenerationError(genError, e)
+            val response = genError.chatMessage(this)
 
             if (messages.isEmpty() || messages[messages.size - 1]["isBot"] == false) {
                 putMessage("", true)
@@ -3485,6 +3444,44 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 restoreUIState()
             }
         }
+    }
+
+    /** True when this turn is part of voice interaction (hands-free mode, an
+     *  active recording, or a pending readback). Used for the `Voice` flag on the
+     *  Error Log entry (see ERROR_CODES.md). */
+    private fun isVoiceLive(): Boolean =
+        preferences?.getHandsFreeMode() == true || isRecording || handsFreeReadbackExpected
+
+    /**
+     * Write the always-on Error Log entry for a classified generation failure
+     * (ERROR_CODES.md). Unlike the chat message, this carries the diagnostic
+     * context the chat deliberately omits — profile, Base URL, model, voice flag,
+     * HTTP status — plus the exception detail, or the full stack trace for the
+     * ambiguous/unknown codes (S2/U0). Written on every error regardless of the
+     * "Show chat errors" toggle, which controls only the chat display. Never logs
+     * the API key, headers, or prompt text.
+     *
+     * NOTE (staged work): this writes to the existing "crash" channel, which is
+     * renamed to the user-facing "Error Log" in a later slice. The environmental
+     * context flags (Trigger/Screen/Network/Power) and the compact voice snapshot
+     * described in ERROR_CODES.md are also later slices.
+     */
+    private fun logGenerationError(result: GenErrorResult, e: Throwable) {
+        try {
+            val sb = StringBuilder()
+            sb.append(result.chatMessage(this)).append('\n')
+            sb.append("Profile: ${apiEndpointObject?.label ?: "unknown"}\n")
+            sb.append("Base URL: ${apiEndpointObject?.host ?: "unknown"}\n")
+            sb.append("Model: ${model.ifBlank { "unknown" }}\n")
+            sb.append("Voice: ${if (isVoiceLive()) "active" else "inactive"}")
+            result.httpStatus?.let { sb.append("\nHTTP status: $it") }
+            if (result.code.includeStackTrace) {
+                sb.append("\n\n").append(e.stackTraceToString())
+            } else {
+                e.message?.takeIf { it.isNotBlank() }?.let { sb.append("\nDetail: $it") }
+            }
+            org.teslasoft.assistant.preferences.Logger.log(this, "crash", "GenError", "error", sb.toString())
+        } catch (_: Throwable) { /* never let diagnostics crash the error path */ }
     }
 
     /**
@@ -4312,37 +4309,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         } catch (e: Exception) {
             playErrorSignal()
             stopHandsFreeOnError()
+            // Same funnel as the text path: classify, always log, show the coded
+            // message only when the user has chat errors enabled. See ERROR_CODES.md.
+            val genError = GenerationErrorClassifier.classify(e)
+            logGenerationError(genError, e)
             if (preferences?.showChatErrors() == true) {
-                putMessage(
-                    when {
-                        e.stackTraceToString().contains("invalid model") -> {
-                            getString(R.string.prompt_no_model_provided)
-                        }
-                        e.stackTraceToString().contains("Your request was rejected") -> {
-                            getString(R.string.prompt_rejected)
-                        }
-
-                        e.stackTraceToString().contains("No address associated with hostname") -> {
-                            getString(R.string.prompt_offline)
-                        }
-
-                        e.stackTraceToString().contains("Incorrect API key") -> {
-                            getString(R.string.prompt_key_invalid)
-                        }
-
-                        e.stackTraceToString().contains("Software caused connection abort") -> {
-                            connectionAbortMessage(apiEndpointObject?.label, apiEndpointObject?.host, model, e.message)
-                        }
-
-                        e.stackTraceToString().contains("You exceeded your current quota") -> {
-                            getString(R.string.prompt_quota_reached)
-                        }
-
-                        else -> {
-                            e.stackTraceToString()
-                        }
-                    }, true
-                )
+                putMessage(genError.chatMessage(this), true)
             }
 
             saveSettings()
