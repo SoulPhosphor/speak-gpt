@@ -56,10 +56,21 @@ thing in the message, e.g. `[N1]`.
 | `Q` | Quota / usage limits |
 | `S` | Server response |
 | `U` | Unknown / uncaught |
+| `E` | Environmental / contextual — **catalog only, not auto-emitted** (see §6) |
 
 **Codes are a stable contract.** Once a code is assigned to a cause it is never
 reused for a different cause, even if the English wording is later changed. New
 causes get new numbers; retired causes leave a gap rather than being recycled.
+
+**Two kinds of code live in this document.** The `N`/`A`/`M`/`Q`/`S`/`U` codes
+are **detection codes**: the classifier emits them because the app actually
+observed that failure (an exception type, an HTTP status, a response body). The
+`E` codes are **catalog codes**: named hypotheses for behaviors the app cannot
+yet detect at the moment of failure. The classifier never emits an `E` code —
+those failures still surface under whatever detection code describes the
+*symptom* (usually `[N1]`/`[N2]`), and the Event Log context flags (§4) are what
+let the pattern be spotted later. A code that fired on a guessed root cause it
+could not prove would be worse than no code, so this line is deliberate.
 
 A `V` (voice-only) category is **reserved but currently empty**. It will only be
 introduced if a genuinely voice-only failure mode is identified that cannot be
@@ -126,9 +137,13 @@ inside the message body.
 ```
 [N1] Connection closed before the response finished.
 Profile: <profile label>
-Base URL: <host>
+Base URL: <full sanitized base URL>
 Model: <model>
 Voice: <active | inactive>
+Trigger: <first-send | regenerate | continue | image-generation>
+Screen: <on | off | unknown>
+Network: <e.g. wifi | cellular | none | unknown>   (only if cheaply/safely available)
+Power save: <on | off | unknown>                   (only if cheaply/safely available)
 ```
 
 - `Profile`, `Base URL`, `Model` come from `apiEndpointObject` and `model`, the
@@ -139,6 +154,16 @@ Voice: <active | inactive>
   query parameters are stripped so no secrets ride along in the URL.
 - `Voice` records whether the hands-free / voice loop was active when the error
   occurred. When **active**, the entry appends a voice context block (§5).
+- **Context flags** (`Trigger`, `Screen`, `Network`, `Power save`) record the
+  situation the failure happened in, not the failure itself. They exist so the
+  environmental hypotheses in §6 become *visible as patterns* over time: the app
+  cannot tell a Wi-Fi-sleep abort apart from a server abort at the moment it
+  happens (both are `[N1]`), but if every `[N1]` in the log reads `Screen: off`
+  or `Trigger: regenerate`, the cause reveals itself in hindsight. `Trigger`
+  records which generation path produced the error. `Screen`, `Network`, and
+  `Power save` are recorded only when they can be read cheaply and without extra
+  permissions; anything unavailable is logged as `unknown` rather than guessed.
+  These flags are never shown in the chat message.
 
 **Conditional additions**, per the last column of the §3 table:
 
@@ -195,24 +220,32 @@ future option in §7, but is out of scope here.)
 
 ---
 
-## 6. Known environmental / intermittent issues (not yet coded)
+## 6. Environmental / contextual catalog (`E` codes — named hypotheses, not auto-emitted)
 
-These are observations worth recording even though they do not each get a code
-today:
+These are behaviors that have been *observed* but that the app cannot detect as a
+distinct failure at the moment they happen. They get **catalog codes** (`E`) so
+they have a shared name and a graduation path — **not** detection codes. The
+classifier never emits an `E` code. When one of these behaviors occurs, the
+failure still surfaces under whatever **detection** code matches the symptom
+(almost always `[N1]`, sometimes `[N2]`); the Event Log **context flags** (§4)
+are what make the underlying pattern visible after the fact.
 
-- **Screen-off / Wi-Fi sleep mid-stream.** Turning the screen off can let Wi-Fi
-  doze and drop the streaming socket, which then surfaces as `[N1]`. The code is
-  correct (it *is* a transport abort); the root cause is power management, and a
-  potential future fix is holding a Wi-Fi lock during generation. Until then, an
-  `[N1]` that coincides with the screen turning off is most likely this.
-- **Higher failure rate on regenerate.** Regenerating an answer has been observed
-  to fail or "glitch" more often than a first generation. This is not yet
-  explained and may be a real bug rather than a wording issue. It does not get
-  its own code; if it produces a transport drop it will read as `[N1]`. Flagged
-  here so it is investigated separately.
+Think of it as the smoke alarm distinction: the detection code says *there is
+smoke* (`[N1]` — the connection died). It cannot say whether the cause was a
+kitchen fire or a tsunami cutting the power. The `E` catalog names the suspected
+causes; the context flags are the notes written beside each alarm that let the
+real cause be identified in hindsight.
 
-When the cause of an intermittent issue is pinned down and is distinct enough to
-act on, it can graduate into a real code at that time.
+| Code | Hypothesis | How it surfaces today | Context flags that would reveal it | Possible future fix / graduation |
+|------|-----------|------------------------|-------------------------------------|----------------------------------|
+| `[E1]` | **Screen-off / Wi-Fi sleep mid-stream.** Turning the screen off lets Wi-Fi doze and drops the streaming socket. | `[N1]` (a genuine transport abort — the detection code is correct). | A cluster of `[N1]` entries reading `Screen: off`. | Hold a Wi-Fi lock during generation. If a reliably-detectable signal emerges, `E1` could graduate to a detection code. |
+| `[E2]` | **Higher failure rate on regenerate.** Regenerating an answer fails/"glitches" more often than a first generation. Possibly a real bug, not just wording. | Whatever transport/server error occurs, usually `[N1]`/`[N2]`. | `[N1]`/`[N2]` entries disproportionately reading `Trigger: regenerate`. | Investigate the regenerate path once the logs confirm the pattern. |
+
+**These are hypotheses, not emitted codes.** They are listed so the behavior has
+a name you can hand over, and so the moment a cause is pinned down to a distinct,
+reliably-detectable signal it can graduate into a real detection code (in its own
+category if it is truly environmental, or an existing one if it fits). Until then,
+trust the detection code for *what* happened and the context flags for *why*.
 
 ---
 
@@ -283,6 +316,13 @@ act on, it can graduate into a real code at that time.
   rules. The code prefix (`[N1] `) can be stored as part of each string or
   prepended by the classifier from a code enum; the enum approach keeps the code
   and its string in one place and is the suggested route.
+- **Context flags.** `Trigger` is known at the call site (each generation path
+  knows whether it is a first send, regenerate, continue, or image generation),
+  so it is passed into the classifier/log call. `Screen`, `Network`, and
+  `Power save` are read at error time from the relevant system services only when
+  that is cheap and needs no extra permission; otherwise they are logged as
+  `unknown`. None of these flags ever appear in the chat message.
+
 - **No telemetry.** `Logger` is local-only and must stay that way; nothing here
   sends anything off device.
 
