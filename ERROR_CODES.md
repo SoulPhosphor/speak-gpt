@@ -250,9 +250,10 @@ free of credentials and personal content.
 > **Scope of this pass.** Voice-facing *error messages* and the *per-turn voice
 > diagnostics* (VAD, mic route, hands-free loop decisions logged every turn) are
 > **out of scope here and are not being changed**. They keep their current
-> wording and behavior; only their log is renamed to "Voice Debug Log". The one
-> voice-related addition in this pass is the compact snapshot described below,
-> which appears **only on a generation error**.
+> wording and behavior; only their log is renamed to "Voice Debug Log". The only
+> voice-related additions in this pass are the two **failure-only** snapshots
+> described below — a compact one on the Error Log entry, and a full one into the
+> Voice Debug Log — both of which fire only when a turn errors, never per turn.
 
 - Voice failures use the **same codes** as typed/image failures. A turn that
   fails mid-stream during hands-free conversation and a typed turn that fails the
@@ -281,6 +282,27 @@ free of credentials and personal content.
   — remains in the Voice Debug Log exactly as today. The two logs correlate by
   timestamp and code, so a voice failure can still be traced end to end without
   the high-volume data bloating the Error Log.
+- **Failure snapshot into the Voice Debug Log, even when per-turn logging is
+  off.** On a generation failure during voice, write the **full** last-known
+  voice information — the complete `lastMicRouteDiagnostics()`,
+  `lastVadDiagnostics()`, and (when available) `lastAudioHealthDiagnostics()`
+  the engine already holds in memory — as a single entry to the **Voice Debug
+  Log**, *regardless of whether any VAD-logging toggle is on*. This is the
+  fuller counterpart to the compact Error-Log snapshot: it leaves a real voice
+  clue sitting in the voice log for after-the-fact diagnosis, so a failure is
+  never silent there just because the running per-turn list happened to be
+  switched off. It fires **only on failure** (rare, bounded), so it adds no
+  per-turn volume.
+  - *Intentional change of meaning:* "voice logging off" used to mean the Voice
+    Debug Log stays empty; with this it means empty **except** for failure
+    snapshots. That is deliberate — clues without spam. Do not re-gate these
+    snapshots behind the diagnostics toggle in a later cleanup.
+- **Extra voice data is error-only this pass.** The compact Error-Log snapshot
+  and the Voice-Debug-Log failure snapshot are both written *only when a turn
+  fails*. Enriching **every** turn with this extra context is a possible future
+  option (behind its own toggle, since the per-turn blocks are already large),
+  but it is intentionally deferred so normal hands-free use is not buried in
+  more output.
 - This is **not** a separate voice error system. No `V` codes are introduced yet.
   A `V` code would only appear if a failure exists that is meaningless outside
   voice (for example, a microphone-capture fault with no network request at all)
