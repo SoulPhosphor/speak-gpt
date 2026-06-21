@@ -81,9 +81,17 @@ as everything else (see §5).
 
 ## 3. The codes
 
-Conditions below are the exact substrings the current code matches in
+Conditions below are the exact substrings the **current** code matches in
 `e.stackTraceToString()` (text/voice path at `ChatActivity.kt` ~3408, image path
 ~4317), plus the dedicated `connectionAbortMessage` helper.
+
+> **These substrings are the legacy clues, not the implementation target.** They
+> are listed so each code is grounded in a real failure that happens today. The
+> actual classifier must follow the **hybrid strategy in §7**: exception **type**
+> first, server **status / error body** next, and raw error **text** only as a
+> last-resort fallback. Where a typed exception or HTTP status identifies a code
+> more reliably than the substring, the typed signal wins; the substring is the
+> fallback for cases that arrive untyped (chiefly the transport drops).
 
 > In every Error Log entry, `Profile`, `Base URL`, `Model` and `Voice` are the
 > standard context block defined in §4. To avoid repetition the table lists only
@@ -145,8 +153,14 @@ high-volume voice diagnostics from burying error entries.
 
 Voice diagnostics are far higher volume, so the Voice Debug Log keeps more
 entries but over a shorter window. This replaces the current single
-character-count trim in `Logger` (see §7), and relies on the per-line timestamp
-`Logger` already writes.
+character-count trim in `Logger` (see §7).
+
+**Trim by whole entries, never by physical lines.** A single entry is often
+multiple lines (a `GenError` block, a multi-line stack trace). An "entry" is
+defined as everything from one `[yyyy-MM-dd HH:mm:ss] …` header line up to — but
+not including — the next header line. Retention counts and removes **whole
+entries**, oldest first; it must never cut a multi-line entry in half the way the
+current character-count trim can. Age is read from the entry's header timestamp.
 
 ### 4.3 Controls (both logs get the same two)
 
@@ -193,10 +207,13 @@ Power save: <on | off | unknown>                   (only if cheaply/safely avail
   already stores and prints the full base URL, so this is the existing value;
   query parameters are stripped so no secrets ride along in the URL.
 - `Voice` records whether the hands-free / voice loop was active when the error
-  occurred — a **single flag, not voice diagnostic data**. The detailed voice
-  context does **not** go in the Error Log; voice data lives only in the Voice
-  Debug Log (§5). The error entry and the matching voice entry are correlated by
-  timestamp and code.
+  occurred. When it is **active**, the entry also appends a **compact voice
+  context block** (§5) — a short snapshot of voice state at the moment of the
+  failure (loop, stage, speech engine, and a one-line mic-route / VAD summary),
+  provided purely as extra diagnostic context for *this generation error*. It is
+  written **only on errors**, never per turn. The **detailed, high-volume**
+  per-turn voice diagnostics are *not* duplicated here — they stay in the Voice
+  Debug Log (§5), and the two logs are correlated by timestamp and code.
 - **Context flags** (`Trigger`, `Screen`, `Network`, `Power save`) record the
   situation the failure happened in, not the failure itself. They exist so the
   environmental hypotheses in §6 become *visible as patterns* over time: the app
@@ -230,34 +247,40 @@ free of credentials and personal content.
 
 ## 5. Voice-specific handling
 
+> **Scope of this pass.** Voice-facing *error messages* and the *per-turn voice
+> diagnostics* (VAD, mic route, hands-free loop decisions logged every turn) are
+> **out of scope here and are not being changed**. They keep their current
+> wording and behavior; only their log is renamed to "Voice Debug Log". The one
+> voice-related addition in this pass is the compact snapshot described below,
+> which appears **only on a generation error**.
+
 - Voice failures use the **same codes** as typed/image failures. A turn that
   fails mid-stream during hands-free conversation and a typed turn that fails the
   same way produce the **same code and the same chat wording**.
-- **The split between the two logs is strict.** When a voice turn errors, the
-  failure itself is a generation error and its `GenError` entry goes to the
-  **Error Log** with `Voice: active` set — but it carries **no voice diagnostic
-  data**. The detailed voice context goes to the **Voice Debug Log** only, since
-  that log is the single home for voice data. The two entries share a timestamp
-  (and the error code), which is how a voice failure is reconstructed across the
-  two logs. This keeps high-volume voice output out of the Error Log while still
-  letting a voice turn's error be traced end to end.
-- The voice context block written to the **Voice Debug Log** (the existing voice
-  diagnostics already land here) carries the reconstruction fields. Proposed
-  fields (only those already obtainable, plus a small number marked *to add*):
+- **Compact voice snapshot on the error entry.** When a generation error happens
+  while voice is active, its `GenError` entry in the **Error Log** appends a
+  *compact* voice context block — a short snapshot of voice state at the instant
+  of failure, as extra context for *that* error. It is written **only on errors**,
+  never per turn:
 
   ```
   Voice context:
     Loop: <hands-free | push-to-talk>
     Stage: <listening | transcribing | generating | readback>   (to add: track current stage)
     STT: <local-whisper | google>
-    Last mic route: <from LocalWhisperEngine.lastMicRouteDiagnostics()>
-    Last VAD: <from LocalWhisperEngine.lastVadDiagnostics()>      (only if non-empty)
+    Mic route: <one-line summary from LocalWhisperEngine.lastMicRouteDiagnostics()>
+    VAD: <one-line summary from LocalWhisperEngine.lastVadDiagnostics()>   (only if non-empty)
   ```
 
-  `Last mic route` and `Last VAD` reuse the data the voice diagnostics functions
-  already expose, so no new capture is needed for them. `Stage` is the one field
-  that needs a small addition to track where in the loop the failure happened.
-
+  These reuse values the voice engine already exposes, so no new capture is
+  needed beyond `Stage` (a small addition to track where in the loop the failure
+  happened). The block is deliberately a **snapshot, not the firehose**.
+- **Detailed / high-volume voice diagnostics stay in the Voice Debug Log only.**
+  The compact snapshot above is the *only* voice data that reaches the Error Log,
+  and only on an error. Everything else voice — the per-turn VAD/mic/loop output
+  — remains in the Voice Debug Log exactly as today. The two logs correlate by
+  timestamp and code, so a voice failure can still be traced end to end without
+  the high-volume data bloating the Error Log.
 - This is **not** a separate voice error system. No `V` codes are introduced yet.
   A `V` code would only appear if a failure exists that is meaningless outside
   voice (for example, a microphone-capture fault with no network request at all)
@@ -382,9 +405,12 @@ trust the detection code for *what* happened and the context flags for *why*.
 - **Retention (§4.2).** Replace `Logger`'s single character-count trim
   (`MAX_LOG_CHARS`) with per-log limits: Error Log = 30 days **or** 500 entries,
   Voice Debug Log = 7 days **or** 1,000 entries, whichever limit is hit first.
-  This needs entry-count and age awareness; the per-line timestamp `Logger`
-  already writes (`yyyy-MM-dd HH:mm:ss`) is the age source, and each appended
-  line is one entry for counting. Trim oldest-first on each append, per log.
+  **Trim whole entries, not physical lines.** An entry spans from one
+  `[yyyy-MM-dd HH:mm:ss] …` header line up to the next header line, so a
+  multi-line stack trace or `GenError` block counts as **one** entry and is
+  removed or kept as a unit — never split. Split the stored log on the header
+  pattern to get entries, drop oldest-first until both the age and count limits
+  are satisfied, then rejoin. Age comes from each entry's header timestamp.
 - **Clear / Export (§4.3).** Keep the existing per-log Clear buttons; add a
   Copy/Export action offered before Clear. Export emits the stored text as-is,
   which already excludes the §4.5 secrets — no extra scrubbing needed at export
@@ -395,11 +421,17 @@ trust the detection code for *what* happened and the context flags for *why*.
 
 ---
 
-## 8. Open questions for review
+## 8. Review decisions (approved — implementation may proceed)
 
-1. Approve the **code set and the exact user-facing wording** in §3?
-2. Confirm: **write the `GenError` Error Log entry on every error even when
-   "Show chat errors" is off** (§7)?
-3. Approve keeping voice on the **shared codes** with only an added Error Log
-   context block, no `V` codes yet (§5)?
-4. Anything in the **standard Error Log block** you want added or removed (§4)?
+1. **Code set and exact user-facing wording (§3): approved.**
+2. **Always-log: approved.** The `GenError` Error Log entry is written on **every**
+   generation/handled error, even when "Show chat errors" is off. The toggle
+   controls only whether the error appears in chat, never whether it is logged.
+3. **Voice on shared codes, no `V` codes yet: approved, with the strict log split
+   (§5).** A generation error during voice goes to the **Error Log** as a
+   `GenError` entry with `Voice: active` plus a **compact** voice snapshot for
+   context. **Detailed / per-turn voice diagnostics stay only in the Voice Debug
+   Log.** Voice-facing error *wording* and the per-turn voice logging are **out of
+   scope for this pass** and are not changed.
+4. **Standard Error Log block (§4): approved** as listed — Profile, Base URL,
+   Model, Voice, Trigger, Screen, Network, Power save.
