@@ -16,12 +16,15 @@
 
 package org.teslasoft.assistant.ui.activities
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Intent
 import android.content.res.Configuration
 import android.graphics.drawable.Drawable
 import android.os.Bundle
 import android.widget.ImageButton
 import android.widget.TextView
+import android.widget.Toast
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.DrawableCompat
@@ -37,6 +40,7 @@ import org.teslasoft.assistant.theme.ThemeManager
 class LogsActivity : FragmentActivity() {
 
     private var btnClearLog: MaterialButton? = null
+    private var btnCopyLog: MaterialButton? = null
     private var btnBack: ImageButton? = null
     private var btnVoiceAdvanced: ImageButton? = null
     private var activityLogsTitle: TextView? = null
@@ -52,6 +56,7 @@ class LogsActivity : FragmentActivity() {
         setContentView(R.layout.activity_logs)
 
         btnClearLog = findViewById(R.id.btn_clear_log)
+        btnCopyLog = findViewById(R.id.btn_copy_log)
         btnBack = findViewById(R.id.btn_back)
         btnVoiceAdvanced = findViewById(R.id.btn_voice_advanced)
         activityLogsTitle = findViewById(R.id.activity_logs_title)
@@ -122,6 +127,20 @@ class LogsActivity : FragmentActivity() {
                         }
                         .setNegativeButton(R.string.no) { _, _ -> }
                         .show()
+                }
+
+                btnCopyLog?.setOnClickListener {
+                    val content = textLog?.text?.toString().orEmpty()
+                    if (content.isBlank()) {
+                        Toast.makeText(this, R.string.label_log_empty, Toast.LENGTH_SHORT).show()
+                    } else {
+                        // Copy to the clipboard so the user can paste the log to a
+                        // developer or coding bot before clearing it. Local-only —
+                        // the stored log already excludes secrets (see ERROR_CODES.md).
+                        val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
+                        clipboard.setPrimaryClip(ClipData.newPlainText(this.title ?: "log", content))
+                        Toast.makeText(this, R.string.label_log_copied, Toast.LENGTH_SHORT).show()
+                    }
                 }
 
                 btnBack?.setOnClickListener {

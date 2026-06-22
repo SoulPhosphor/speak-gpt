@@ -295,9 +295,9 @@
     <string name="logit_bias_config">Logit Bias Config</string>
     <string name="logit_bias_help">Logit Bias Config is a feature that allows you to set custom logit bias for specific tokens. Logit bias is a value that is added to the logit of the token. It can be used to increase or decrease the probability of the token in the output sequence. For example, if you set logit bias to 100, the token will be more likely to appear in the output sequence. If you set logit bias to -100, the token will be less likely to appear in the output sequence.</string>
     <string name="label_disable_this_feature">Disable this feature</string>
-    <string name="title_crash_log">Crash log</string>
+    <string name="title_crash_log">Error Log</string>
     <string name="title_ads_log">Ads log</string>
-    <string name="title_event_log">Event log</string>
+    <string name="title_event_log">Voice Debug Log</string>
     <string name="label_clear_log">Clear log</string>
     <string name="msg_clear_log_confirm">Are you sure you want to clear this log?</string>
     <string name="yes">Yes</string>
@@ -371,11 +371,11 @@
     <string name="tile_assign_iid_desc">This feature allows you to get new installation ID.</string>
     <string name="tile_revoke_authorization_title">Revoke authorization</string>
     <string name="tile_revoke_authorization_desc">This feature allows you to revoke authorization. After you revoke your authorization this app will stop collecting data and delete data from their servers. Logging will be disabled so it will be harder to find and report bugs.</string>
-    <string name="tile_crash_log_title">Crash log</string>
+    <string name="tile_crash_log_title">Error Log</string>
     <string name="tile_crash_log_desc">This feature allows you to view crash log.</string>
     <string name="tile_ads_log_title">Ads log</string>
     <string name="tile_ads_log_desc">This feature allows you to view ads log. Usually you don\'t need to use this feature.</string>
-    <string name="tile_events_log_title">Event log</string>
+    <string name="tile_events_log_title">Voice Debug Log</string>
     <string name="tile_events_log_desc">This feature allows you to view event log. We do not collect this log as it may contain sensitive information. Use this log if you want to report a bug.</string>
     <string name="tile_autosave_title">Auto-save chats</string>
     <string name="tile_autosave_desc">This feature allows you to enable auto-save chats in assistant window. When auto-save chats is enabled, SpeakGPT will save all chats to the device storage.</string>
