@@ -3412,7 +3412,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             // message (no profile/URL/model/trace — those live in the log). See
             // ERROR_CODES.md.
             val genError = GenerationErrorClassifier.classify(e)
-            logGenerationError(genError, e)
+            logGenerationError(genError, e, "message")
             val response = genError.chatMessage(this)
 
             if (messages.isEmpty() || messages[messages.size - 1]["isBot"] == false) {
@@ -3461,26 +3461,96 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
      * "Show chat errors" toggle, which controls only the chat display. Never logs
      * the API key, headers, or prompt text.
      *
-     * NOTE (staged work): this writes to the existing "crash" channel, which is
-     * renamed to the user-facing "Error Log" in a later slice. The environmental
-     * context flags (Trigger/Screen/Network/Power) and the compact voice snapshot
-     * described in ERROR_CODES.md are also later slices.
+     * The entry is written to the "crash" channel, which is the user-facing Error
+     * Log. `trigger` is which generation path failed (e.g. "message",
+     * "image-generation"); finer values (regenerate/continue) can be threaded
+     * through the funnel later. When voice is live a compact snapshot is appended,
+     * and the full last-known voice info is left in the Voice Debug Log too (see
+     * logVoiceFailureSnapshot) so a clue is there even with per-turn logging off.
      */
-    private fun logGenerationError(result: GenErrorResult, e: Throwable) {
+    private fun logGenerationError(result: GenErrorResult, e: Throwable, trigger: String) {
+        val voiceLive = isVoiceLive()
         try {
             val sb = StringBuilder()
             sb.append(result.chatMessage(this)).append('\n')
             sb.append("Profile: ${apiEndpointObject?.label ?: "unknown"}\n")
             sb.append("Base URL: ${apiEndpointObject?.host ?: "unknown"}\n")
             sb.append("Model: ${model.ifBlank { "unknown" }}\n")
-            sb.append("Voice: ${if (isVoiceLive()) "active" else "inactive"}")
+            sb.append("Voice: ${if (voiceLive) "active" else "inactive"}\n")
+            sb.append("Trigger: $trigger\n")
+            sb.append("Screen: ${screenState()}\n")
+            sb.append("Network: ${networkState()}\n")
+            sb.append("Power save: ${powerSaveState()}")
             result.httpStatus?.let { sb.append("\nHTTP status: $it") }
+            if (voiceLive) sb.append('\n').append(compactVoiceContext())
             if (result.code.includeStackTrace) {
                 sb.append("\n\n").append(e.stackTraceToString())
             } else {
                 e.message?.takeIf { it.isNotBlank() }?.let { sb.append("\nDetail: $it") }
             }
             org.teslasoft.assistant.preferences.Logger.log(this, "crash", "GenError", "error", sb.toString())
+        } catch (_: Throwable) { /* never let diagnostics crash the error path */ }
+
+        // Failure clue into the Voice Debug Log even when per-turn voice logging is
+        // off (ERROR_CODES.md section 5). No-op when voice wasn't live.
+        logVoiceFailureSnapshot(result.code.code)
+    }
+
+    /** "on"/"off"/"unknown" — whether the screen was interactive at failure time.
+     *  Key signal for the screen-off/Wi-Fi-sleep hypothesis (ERROR_CODES.md E1). */
+    private fun screenState(): String = try {
+        if ((getSystemService(POWER_SERVICE) as android.os.PowerManager).isInteractive) "on" else "off"
+    } catch (_: Throwable) { "unknown" }
+
+    /** "on"/"off"/"unknown" — battery power-save mode at failure time. */
+    private fun powerSaveState(): String = try {
+        if ((getSystemService(POWER_SERVICE) as android.os.PowerManager).isPowerSaveMode) "on" else "off"
+    } catch (_: Throwable) { "unknown" }
+
+    /** Active transport: wifi/cellular/ethernet/other/none/unknown. Best-effort;
+     *  any failure (e.g. missing permission) is reported as "unknown". */
+    private fun networkState(): String = try {
+        val cm = getSystemService(CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+        val net = cm.activeNetwork
+        if (net == null) "none" else {
+            val caps = cm.getNetworkCapabilities(net)
+            when {
+                caps == null -> "unknown"
+                caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) -> "wifi"
+                caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR) -> "cellular"
+                caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_ETHERNET) -> "ethernet"
+                else -> "other"
+            }
+        }
+    } catch (_: Throwable) { "unknown" }
+
+    /** Compact voice snapshot appended to the Error Log entry when voice is live —
+     *  a short state summary, not the per-turn firehose (ERROR_CODES.md section 5). */
+    private fun compactVoiceContext(): String {
+        val engine = try { LocalWhisperEngine.get() } catch (_: Throwable) { null }
+        val loop = if (preferences?.getHandsFreeMode() == true) "hands-free" else "push-to-talk"
+        val stt = if (preferences?.getActiveLocalWhisperModel().orEmpty().isNotEmpty()) "local-whisper" else "google"
+        val mic = engine?.lastMicRouteDiagnostics().orEmpty().lineSequence().firstOrNull().orEmpty()
+        val vad = engine?.lastVadDiagnostics().orEmpty().lineSequence().firstOrNull().orEmpty()
+        val sb = StringBuilder("Voice context:\n  Loop: $loop\n  STT: $stt")
+        if (mic.isNotEmpty()) sb.append("\n  Mic route: $mic")
+        if (vad.isNotEmpty()) sb.append("\n  VAD: $vad")
+        return sb.toString()
+    }
+
+    /** On a failure while voice was live, write the full last-known voice info to
+     *  the Voice Debug Log ("event" channel) regardless of the VAD-logging
+     *  toggles, so a failure always leaves a clue there (ERROR_CODES.md section 5). */
+    private fun logVoiceFailureSnapshot(code: String) {
+        if (!isVoiceLive()) return
+        try {
+            val engine = LocalWhisperEngine.get()
+            val parts = ArrayList<String>()
+            parts.add("Voice snapshot at failure [$code]")
+            engine.lastMicRouteDiagnostics().takeIf { it.isNotEmpty() }?.let { parts.add("Mic route: $it") }
+            engine.lastVadDiagnostics().takeIf { it.isNotEmpty() }?.let { parts.add("VAD: $it") }
+            engine.lastAudioHealthDiagnostics().takeIf { it.isNotEmpty() }?.let { parts.add("Audio: $it") }
+            org.teslasoft.assistant.preferences.Logger.log(this, "event", "GenError", "info", parts.joinToString("\n"))
         } catch (_: Throwable) { /* never let diagnostics crash the error path */ }
     }
 
@@ -4312,7 +4382,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             // Same funnel as the text path: classify, always log, show the coded
             // message only when the user has chat errors enabled. See ERROR_CODES.md.
             val genError = GenerationErrorClassifier.classify(e)
-            logGenerationError(genError, e)
+            logGenerationError(genError, e, "image-generation")
             if (preferences?.showChatErrors() == true) {
                 putMessage(genError.chatMessage(this), true)
             }
