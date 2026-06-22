@@ -93,13 +93,21 @@ class Logger {
                 val logString =
                     "[$timestamp] [$tag] [${level.uppercase()}] $message\n"
                 when (type) {
+                    // The "crash" channel is the user-facing Error Log (app crashes
+                    // plus all generation/handled GenError entries); the "event"
+                    // channel is the Voice Debug Log. Storage keys are kept as-is so
+                    // existing logs survive; only the labels and retention differ.
                     "crash" -> {
-                        val log = trimLog("${getCrashLog(context)}$logString")
+                        val log = trimByEntries(
+                            "${getCrashLog(context)}$logString", ERROR_LOG_MAX_ENTRIES, ERROR_LOG_MAX_AGE_DAYS
+                        )
                         setCrashLog(context, log)
                     }
 
                     "event" -> {
-                        val log = trimLog("${getEventLog(context)}$logString")
+                        val log = trimByEntries(
+                            "${getEventLog(context)}$logString", VOICE_LOG_MAX_ENTRIES, VOICE_LOG_MAX_AGE_DAYS
+                        )
                         setEventLog(context, log)
                     }
 
@@ -115,18 +123,61 @@ class Logger {
         private val LOG_TIME_FORMAT: DateTimeFormatter =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
 
-        // Logs are stored as one string in encrypted prefs, re-read and
-        // re-written on every append — an unbounded log would slow every
-        // append and bloat the prefs file. Cap it by dropping the oldest
-        // lines once it grows past the limit.
-        private const val MAX_LOG_CHARS = 200_000
-        private const val TRIMMED_LOG_CHARS = 150_000
+        // Per-log retention (see ERROR_CODES.md section 4.2). Voice diagnostics are
+        // far higher volume, so the Voice Debug Log keeps more entries over a
+        // shorter window. Each limit is independent; whichever is hit first wins.
+        private const val ERROR_LOG_MAX_ENTRIES = 500
+        private const val ERROR_LOG_MAX_AGE_DAYS = 30L
+        private const val VOICE_LOG_MAX_ENTRIES = 1000
+        private const val VOICE_LOG_MAX_AGE_DAYS = 7L
 
-        private fun trimLog(log: String): String {
-            if (log.length <= MAX_LOG_CHARS) return log
-            val cut = log.length - TRIMMED_LOG_CHARS
-            val newline = log.indexOf('\n', cut)
-            return if (newline in 0 until log.length - 1) log.substring(newline + 1) else log.takeLast(TRIMMED_LOG_CHARS)
+        // Safety cap used only if a log somehow contains no recognizable entry
+        // headers (it never should — every line we write starts with one).
+        private const val FALLBACK_MAX_CHARS = 200_000
+
+        // A new entry begins at a line starting with the "[yyyy-MM-dd HH:mm:ss] "
+        // header Logger writes; everything up to the next such line (e.g. a
+        // multi-line stack trace) belongs to the same entry.
+        private val ENTRY_HEADER =
+            Regex("""(?m)^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})] """)
+
+        /**
+         * Trim a stored log by **whole entries** — never by physical lines — so a
+         * multi-line stack trace or GenError block is kept or dropped as a unit and
+         * is never cut in half (the bug the old character-count trim could cause).
+         * Drops entries older than [maxAgeDays], then, if still over [maxEntries],
+         * drops the oldest until the count fits. `internal` for unit testing.
+         */
+        internal fun trimByEntries(log: String, maxEntries: Int, maxAgeDays: Long): String {
+            if (log.isEmpty()) return log
+            val headers = ENTRY_HEADER.findAll(log).toList()
+            if (headers.isEmpty()) {
+                // Unrecognizable content: fall back to a char cap so it can't grow
+                // without bound.
+                return if (log.length > FALLBACK_MAX_CHARS) log.takeLast(FALLBACK_MAX_CHARS) else log
+            }
+
+            data class Entry(val timestamp: LocalDateTime?, val text: String)
+            val entries = ArrayList<Entry>(headers.size)
+            for (i in headers.indices) {
+                val start = headers[i].range.first
+                val end = if (i + 1 < headers.size) headers[i + 1].range.first else log.length
+                val ts = try {
+                    LocalDateTime.parse(headers[i].groupValues[1], LOG_TIME_FORMAT)
+                } catch (_: Exception) {
+                    null
+                }
+                entries.add(Entry(ts, log.substring(start, end)))
+            }
+
+            val cutoff = LocalDateTime.now().minusDays(maxAgeDays)
+            // Keep entries newer than the cutoff; an unparseable timestamp is kept
+            // rather than guessed away.
+            var kept = entries.filter { it.timestamp == null || !it.timestamp.isBefore(cutoff) }
+            if (kept.size > maxEntries) {
+                kept = kept.subList(kept.size - maxEntries, kept.size)
+            }
+            return kept.joinToString("") { it.text }
         }
 
         /**
