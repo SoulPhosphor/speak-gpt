@@ -288,21 +288,24 @@ Characters hub, personas, lorebooks, and the other per-chat options are
 reached from the **Quick Settings** sheet (the per-chat gear on the chat top
 bar), **not** from the drawer. Playground is not a drawer row.
 
-1. **Header strip** carrying a **floating circular `>>` button** at the top of
-   the panel. Pressing it slides the panel away and brings the chat back — the
-   second of two ways to move between panel and chat (the chat top bar's `<<`
-   button is the first). App name / active-persona label optional later.
+1. **Header row** — left-aligned a **`>>`** button that slides the panel away
+   and brings the chat back (the second of two ways to move between panel and
+   chat; the chat top bar's `<<` is the first), and right-aligned an
+   **add-folder** icon that prompts for a name and creates a folder (§5.4).
+   Nothing between them yet. *(Revised 2026-06-24: the `>>` was previously
+   described as a floating circle — it now lives in this header row.)*
 2. **Chat list** — RecyclerView, data source `ChatPreferences`, row visual
    style from `view_chat_name_min.xml` (name + snippet; model labels stay out
    of the drawer for cleanliness). Current chat highlighted with a
    `colorSecondaryContainer` pill.
-   - **Long-press a chat row → context menu with "Rename", "Export" and
-     "Delete"** (a Material popup menu). These are the per-row actions in the
-     drawer. Rename reuses the existing rename path; **Export** exports that
-     chat's data (this is the natural new home for the old top-bar
-     `btn_export` function flagged in §5.2 Step A / §9.1); **Delete** shows a
-     Material confirm dialog (destructive-action rule) and scrubs the chat as
-     today.
+   - **Long-press a chat row → context menu**, in order: **Rename**, **Export**,
+     **Pin** (shown as **Unpin** when the chat is already pinned), **Add to
+     Folder** *(arrives with folders — Phase 3.5, §5.4)*, **Delete**. Rename
+     reuses the existing rename path; **Export** exports that chat's data (the
+     new home for the old top-bar `btn_export`, §5.2 Step A / §9.1); **Pin/
+     Unpin** toggles the existing `pinned` flag (`switchPinState`); **Delete**
+     shows a Material confirm dialog (destructive-action rule) and scrubs the
+     chat as today.
 3. **Bottom action row**, pinned to the bottom of the panel, left to right:
    - **Search field** that filters the chat list (reuse `ChatsListFragment`'s
      `search_input` filter logic).
@@ -343,7 +346,7 @@ the left. Get there in three separately-shippable steps:
   layout — its function needs a new home (**open item; confirm with owner
   before dropping the action**, and do not orphan the id without relocating
   what it does — see §9.1). The drawer opens/closes by **edge swipe** as well
-  as the `<<` button, and the panel's floating `>>` button (§5.1) closes it.
+  as the `<<` button, and the panel header's `>>` button (§5.1) closes it.
 - **Step B — launch straight into the chat screen.** The app opens directly
   into `ChatActivity` showing an **empty, ready-to-type conversation** (no
   bottom-tab home, no forced greeting yet — a greeting may be added later).
@@ -409,13 +412,20 @@ for free; folders are the genuinely new concept.
 
 **Top-level drawer order (top to bottom):**
 
-1. **Folders** — always first.
-2. **Pinned chats** — *[OPEN: the owner wrote "pinned folders"; read here as
-   pinned **chats**. Confirm before building.]*
+1. A **collapsible "Folders" row** — the section header for folders. Default
+   **collapsed**, shown as **"Folders ⌄"**. Tapping it expands the folder list
+   inline (the end icon flips to **⌃** to show it can be collapsed); tapping
+   again collapses it. This lets the user keep folders always-visible or tucked
+   away. **The expanded/collapsed state is remembered across app close** (store
+   a boolean in `GlobalPreferences`). When expanded, each folder listed here can
+   be opened — see drill-in below.
+2. **Pinned chats** *(resolved: pinned **chats**, not folders)*.
 3. **All other chats** (existing timestamp sort).
 
-The bottom action row (search · gear · new-chat, §5.1) stays pinned below all
-of this.
+The bottom action row (search · gear · new-chat, §5.1) stays pinned below all of
+this. *[Minor open detail: show the "Folders" row even when there are zero
+folders (recommended — keeps it discoverable next to the header add-folder
+icon), or hide it until the first folder exists. Defaulting to always-show.]*
 
 **Opening a folder = drill-in that replaces the drawer's content** (not a
 second sliding panel): the chat list is swapped for that folder's chats. The
@@ -430,14 +440,15 @@ a Material confirm dialog. *[OPEN: on delete, do the folder's chats move back to
 the top level (recommended — deleting a folder should never silently delete
 conversations) or get deleted with the folder behind a stern confirm? Confirm.]*
 
-**Two affordances this spec still needs (owner unspecified — proposed, confirm):**
+**Creating folders & assigning chats (owner-specified 2026-06-24):**
 
-- **Creating a folder** — proposed: a "New folder" action beside "New chat"
-  (e.g. a folder-plus icon, or long-press the new-chat button). *[OPEN]*
-- **Putting a chat into / out of a folder** — proposed: add **"Move to
-  folder…"** to the chat-row long-press menu (→ Rename / Export / Move to
-  folder / Delete), opening a small folder picker with a "None / top level"
-  choice. *[OPEN]*
+- **Creating a folder** — the **add-folder icon in the drawer header**
+  (right-aligned, §5.1) prompts for a name and creates the folder.
+- **Putting a chat into a folder** — the **"Add to Folder"** item in the chat
+  long-press menu (between Pin/Unpin and Delete, §5.1) opens a folder picker
+  (include a "None / top level" choice to pull a chat back out). *[Open detail:
+  recommend a chat lives in exactly **one** folder (the single `folder` field),
+  not several — confirm.]*
 - Inside a folder view, **search filters that folder's chats** and **new-chat
   creates the chat already inside that folder** (proposed; confirm).
 
