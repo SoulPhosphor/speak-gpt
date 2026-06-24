@@ -847,6 +847,37 @@ Modern standard this matches: OpenAI-compatible `images/generations` (DALL·E-3,
 existing `images()` call; point it at the configured image endpoint and surface
 which one it is.
 
+**Where you choose the generator — per-chat override + profile default (owner
+2026-06-24).** Expose the image-generator choice as a **dropdown in two places**,
+with the per-chat one taking priority:
+
+- In **Quick Settings** (per chat) — **the priority**. If set here, it decides.
+- In the **API endpoint profile** — the **default** for chats using that profile,
+  applied when Quick Settings is left on "use profile default".
+
+Dropdown options:
+
+- **Default** — the dedicated global **"Default image generator"** you set up in
+  its own area (endpoint + key + model + size).
+- **Alternative** — a **second** dedicated image-generator setup, kept ready so
+  you can flip between two without reconfiguring. *[Owner: confirm "Alternative"
+  means a second saved generator — vs. meaning "use the API profile's default".]*
+- **Model** — let the **current chat model** generate the image itself (for
+  multimodal models that can), with no separate provider.
+
+**Resolution order:** Quick Settings choice → API-profile default → the Default
+image generator. Rationale (owner): on a multi-model provider like OpenRouter you
+might switch from a chat model that can't make images to one that can, so the
+per-chat dropdown lets you grab the right generator on the spot, while the profile
+holds a sensible default for when you don't think about it.
+
+Implementation notes: a global **"Default image generator"** (and "Alternative")
+config area — its own `ApiEndpointPreferences`-style profile (endpoint/key/model/
+size); a per-chat **`imageGenChoice`** pref in `Preferences` (**add it to the
+auto-naming copy block** — CLAUDE.md, or it vanishes on rename); and an equivalent
+default field on the endpoint profile. `/imagine` and the `generateImage` tool
+resolve the source through the precedence above.
+
 #### 6.11.2 Vision (show the model an image) — wired correctly, but a real bug breaks it off-OpenAI
 
 The attach-image path is implemented the modern way: a picked photo is resized,
