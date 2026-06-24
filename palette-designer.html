@@ -201,7 +201,9 @@
     background: var(--pageBg);
     color: var(--readText);
     display: flex; flex-direction: column;
-    height: 720px;
+    /* Fit the viewport so the whole phone is visible without scrolling the page
+       (it used to be a fixed 720px and ran off the bottom of laptop screens). */
+    height: min(720px, calc(100vh - 96px));
     transition: background .25s, color .25s;
   }
   .app.calm { --glow-strength: 0; }
@@ -258,6 +260,9 @@
   }
   .drawer .ditem.sel {
     background: var(--drawerSelectedBg); opacity: 1; font-weight: 600;
+    /* The "Selection accent" color shows here as a bar on the open chat, so that
+       control has a visible effect instead of doing nothing. */
+    box-shadow: inset 3px 0 0 var(--selected);
   }
   .drawer .d-divider {
     height: 1px; background: var(--divider); margin: 8px 4px;
@@ -268,7 +273,7 @@
   }
   .drawer .chat-list { flex: 1; overflow: hidden; }
 
-  .messages { flex: 1; padding: 14px; overflow: hidden; display: flex; flex-direction: column; gap: 14px; }
+  .messages { flex: 1; padding: 14px; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
 
   .bubble-wrap {
     padding: 1.6px; border-radius: 20px; max-width: 86%;
@@ -318,6 +323,10 @@
   .app.vibrant .bubble-wrap { background: linear-gradient(135deg, var(--edge1), var(--edge2) 55%, var(--edge3)); }
   .app.calm .bubble-wrap { background: var(--edge1); }
   .divider-demo { height: 1px; background: var(--divider); margin: 0 14px 14px; }
+
+  /* When you hover or focus a color control, the preview element(s) it changes
+     get this dashed outline — so you can always see what a control affects. */
+  .pv-highlight { outline: 2px dashed #ffd166 !important; outline-offset: 2px; border-radius: 8px; }
 </style>
 </head>
 <body>
@@ -332,10 +341,11 @@
     <li><b>This is a design tool.</b> The side-by-side layout (controls on the left, phone on the right) is only how this tool works — the app itself will NOT look split-screened like this. The phone shape on the right is a preview of what the app will actually look like.</li>
     <li><b>Dark / Light:</b> you're designing two versions of each theme. Switch the toggle — the pickers and preview follow the mode you're editing.</li>
     <li><b>Calm / Vibrant:</b> same colors, two treatments. <b>Calm</b> = solid single-color edges, no glow (sensory-safe). <b>Vibrant</b> = multicolored gradient outlines + glow (the lively look). You design both — they share the same palette.</li>
-    <li><b>Pick a color:</b> click a color square to open the full-spectrum picker, or type/paste an exact hex code.</li>
+    <li><b>Pick a color:</b> click a color square to open the full-spectrum picker, or type/paste an exact hex code. The preview updates the instant you change a color.</li>
+    <li><b>Not sure what a color affects?</b> Hover (or tab to) any control and the exact spot it changes lights up with a dashed outline on the phone preview.</li>
     <li><b>Save a theme:</b> type a name, click Save. Your theme appears in the <b>Saved Themes</b> list below. Click any saved theme to load it back for editing. You can save as many themes as you want.</li>
     <li><b>Copy for Claude:</b> when you're happy with a theme, hit this button. It produces a readable list of all colors that you paste back in chat. That's how your chosen colors get into the app.</li>
-    <li><b>Reading surfaces</b> (message bubbles, input) default to charcoal (dark) or off-white (light) for readability. Color lives in the edges, glow, accents and buttons. You can change them, but readable defaults are there for a reason.</li>
+    <li><b>Reading surfaces</b> (message bubbles, input box) default to charcoal (dark) or off-white (light) for readability. Color lives in the edges, glow, accents and buttons. You can change them, but readable defaults are there for a reason.</li>
     <li><b>Reduce motion</b> previews the still version (no animation), for overstimulation-sensitive design.</li>
   </ul>
 </details>
@@ -462,8 +472,8 @@
 const GROUPS = [
   { title: "Backgrounds & reading", zones: [
     { key: "pageBg",      name: "Page background",     hint: "behind everything" },
-    { key: "readSurface", name: "Reading surface",     hint: "message area, text input" },
-    { key: "readText",    name: "Body text",           hint: "main readable text" },
+    { key: "readSurface", name: "Input box fill",       hint: "where you type a message" },
+    { key: "readText",    name: "Default text",         hint: "input text & anything not set below" },
   ]},
   { title: "Top bar", zones: [
     { key: "topbarBg",   name: "Top bar background" },
@@ -490,16 +500,62 @@ const GROUPS = [
   { title: "Buttons & accents", zones: [
     { key: "primaryBtnBg",    name: "Action button fill",     hint: "Save, Confirm, Send" },
     { key: "primaryBtnText",  name: "Action button text" },
-    { key: "secondaryBtnBg",  name: "Subtle button fill",     hint: "Cancel, Back, options" },
-    { key: "secondaryBtnText",name: "Subtle button text" },
+    { key: "secondaryBtnBg",  name: "Cancel button fill",     hint: "Cancel, Back, secondary actions" },
+    { key: "secondaryBtnText",name: "Cancel button text" },
     { key: "accent",          name: "Accent color",           hint: "icons, send button, active states" },
-    { key: "selected",        name: "Selected / highlighted", hint: "highlighted items" },
+    { key: "selected",        name: "Selection accent",       hint: "bar on the open chat & checked items" },
   ]},
   { title: "Alerts (these stay similar across themes)", zones: [
     { key: "error",   name: "Error",   hint: "red-ish, for mistakes" },
     { key: "warning", name: "Warning", hint: "yellow-ish, for caution" },
   ]},
 ];
+
+// For each color control, the preview element(s) it visibly changes. Hovering or
+// focusing a control outlines exactly these, so "what does this color touch?" is
+// answerable just by looking — that was the single most confusing thing here.
+const PREVIEW_TARGETS = {
+  pageBg: [".app", ".inputbar"],
+  readSurface: [".pill"],
+  readText: [".pill"],
+  topbarBg: [".topbar"],
+  topbarText: [".topbar .icon", ".topbar .title"],
+  drawerBg: [".drawer"],
+  drawerText: [".drawer-header", ".ditem", ".d-nav"],
+  drawerSelectedBg: [".ditem.sel"],
+  userBg: [".bubble.user"],
+  userText: [".bubble.user"],
+  botBg: [".bubble.bot"],
+  botText: [".bubble.bot"],
+  edge1: [".bubble-wrap", ".ui-btn.secondary"],
+  edge2: [".bubble-wrap", ".ui-btn.secondary"],
+  edge3: [".bubble-wrap", ".ui-btn.secondary"],
+  glow: [".bubble-wrap", ".circle.send"],
+  divider: [".divider-demo", ".d-divider", ".topbar", ".inputbar"],
+  primaryBtnBg: [".ui-btn.primary"],
+  primaryBtnText: [".ui-btn.primary"],
+  secondaryBtnBg: [".ui-btn.secondary"],
+  secondaryBtnText: [".ui-btn.secondary"],
+  accent: [".circle.send", ".actions .icon", ".bug"],
+  selected: [".ditem.sel"],
+  error: [".chip.error"],
+  warning: [".chip.warning"],
+};
+let pvHighlighted = [];
+function highlightPreview(key) {
+  clearPreviewHighlight();
+  const sels = PREVIEW_TARGETS[key];
+  if (!sels) return;
+  const app = document.getElementById("app");
+  sels.forEach(s => app.querySelectorAll(s).forEach(el => {
+    el.classList.add("pv-highlight");
+    pvHighlighted.push(el);
+  }));
+}
+function clearPreviewHighlight() {
+  pvHighlighted.forEach(el => el.classList.remove("pv-highlight"));
+  pvHighlighted = [];
+}
 
 const NEUTRAL = {
   dark: {
@@ -568,6 +624,10 @@ function buildZones() {
         <div class="meta"><div class="name">${z.name}</div>${z.hint ? `<div class="hint">${z.hint}</div>` : ""}</div>
         <input class="hex" type="text" data-key="${z.key}" maxlength="7" spellcheck="false" />
       `;
+      wrap.addEventListener("mouseenter", () => highlightPreview(z.key));
+      wrap.addEventListener("mouseleave", clearPreviewHighlight);
+      wrap.addEventListener("focusin", () => highlightPreview(z.key));
+      wrap.addEventListener("focusout", clearPreviewHighlight);
       gb.appendChild(wrap);
     }
     zonesEl.appendChild(gb);
