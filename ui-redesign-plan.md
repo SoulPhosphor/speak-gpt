@@ -418,14 +418,18 @@ for free; folders are the genuinely new concept.
    again collapses it. This lets the user keep folders always-visible or tucked
    away. **The expanded/collapsed state is remembered across app close** (store
    a boolean in `GlobalPreferences`). When expanded, each folder listed here can
-   be opened — see drill-in below.
+   be opened — see drill-in below. **Long-pressing the "Folders" row lets the
+   user rename that label** (e.g. to "Worlds") — a small personalisation; store
+   the custom label in `GlobalPreferences` (default "Folders"). A *quick* tap
+   still only expands/collapses.
 2. **Pinned chats** *(resolved: pinned **chats**, not folders)*.
 3. **All other chats** (existing timestamp sort).
 
 The bottom action row (search · gear · new-chat, §5.1) stays pinned below all of
-this. *[Minor open detail: show the "Folders" row even when there are zero
-folders (recommended — keeps it discoverable next to the header add-folder
-icon), or hide it until the first folder exists. Defaulting to always-show.]*
+this. **When zero folders exist the "Folders" row is hidden entirely** — no
+sense taking up vertical space for an empty section. The header add-folder icon
+is always present, so folders stay discoverable; the row appears once the first
+folder is created.
 
 **Opening a folder = drill-in that replaces the drawer's content** (not a
 second sliding panel): the chat list is swapped for that folder's chats. The
@@ -446,9 +450,9 @@ conversations) or get deleted with the folder behind a stern confirm? Confirm.]*
   (right-aligned, §5.1) prompts for a name and creates the folder.
 - **Putting a chat into a folder** — the **"Add to Folder"** item in the chat
   long-press menu (between Pin/Unpin and Delete, §5.1) opens a folder picker
-  (include a "None / top level" choice to pull a chat back out). *[Open detail:
-  recommend a chat lives in exactly **one** folder (the single `folder` field),
-  not several — confirm.]*
+  (include a "None / top level" choice to pull a chat back out). **A chat lives
+  in exactly one folder** (the single `folder` field) — confirmed, no
+  multi-folder membership.
 - Inside a folder view, **search filters that folder's chats** and **new-chat
   creates the chat already inside that folder** (proposed; confirm).
 
@@ -575,6 +579,34 @@ so the drawer PR stays purely structural.
   the existing one if needed.
 - Scrollable content uses `clipToPadding=false` + bottom padding so the last
   item clears the nav bar.
+
+### 6.7 Message action buttons & text selection (owner-confirmed 2026-06-24)
+
+Per the adapter contract (§9.2) every message layout keeps **all** button ids
+(`btn_copy`, `btn_edit`, `btn_retry`, `btn_report`, `btn_share`, `btn_speak`) —
+the adapter binds them with no null checks, so a button that shouldn't appear on
+a given message type is hidden with `visibility="gone"`, **never deleted**. The
+visible sets:
+
+- **AI / assistant message — all six:** **speak** (`btn_speak`, hear it),
+  **share** (`btn_share`), **report** (`btn_report` — the "!" icon; opens the
+  report-AI-content sheet), **regenerate** (`btn_retry`), **copy** (`btn_copy`),
+  **edit** (`btn_edit`, the pencil).
+- **User message — two:** **copy** (`btn_copy`) and **edit** (`btn_edit`, the
+  pencil), so the user's own text can be copied or changed. The other four
+  (`btn_speak`/`btn_share`/`btn_retry`/`btn_report`) are `gone`. *(This already
+  matches the adapter, which shows report/share only when `isBot == true` —
+  `ChatAdapter.kt:340`; the restyle must preserve that gating.)*
+
+The palette-designer **mockup currently draws the wrong message icons** and will
+be corrected to exactly these two sets.
+
+**Partial text selection must be preserved.** The message `TextView`s are
+selectable today (`setTextIsSelectable(true)`, `ChatAdapter.kt:535`): a user can
+long-press to select part of a message and copy it via the normal Android
+text-selection toolbar. The restyle must keep this — do not disable selection on
+the message text or let a tap/long-press handler swallow the gesture. This is
+**independent** of the per-message copy button (which copies the whole message).
 
 ---
 
