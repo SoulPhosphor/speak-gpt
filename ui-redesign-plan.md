@@ -602,6 +602,17 @@ the drawer bottom gear opens global Settings — §5.1 note.)*
   rather than introducing `AppBarLayout`/`MaterialToolbar` into ChatActivity,
   where scroll-behavior side effects could disturb the RecyclerView/keyboard
   inset choreography. New/simple screens *may* use `MaterialToolbar`.
+- **Screens replace the window — they don't float (owner 2026-06-24).** Going
+  into Settings or any sub-screen changes the **whole window** to that screen: a
+  full-screen menu, **not** a rounded card floating over a dimmed background.
+  Settings/sub-screens currently use `Theme.Transparent` +
+  `expandable_window_background*`, which reads as a floating sheet — drop that
+  look for these screens and let them fill the window (with correct insets,
+  §6.6). *(ChatActivity keeps `Theme.Transparent` for its chat-open
+  shared-element transition — §9.5.12; this is for Settings and its sub-screens,
+  not the chat.)* Back is a **top-left `<<` chevron** (the same left
+  double-chevron glyph used elsewhere); on a sub-screen it finishes the screen
+  and returns to the previous one.
 - Settings tiles (`TileFragment`) → restyled as M3 list rows or filled
   cards with leading icons; keep the `TileFragment` API so `SettingsActivity`
   / `CharactersActivity` logic is untouched.
@@ -697,6 +708,66 @@ confirm toggle vs always-on.]*
 `regularGPTResponse` funnel plus `ChatAdapter` rendering — rides with **Phase
 4.5** (after the Phase 4 chat restyle that already reworks message rows). Keep
 it in the one funnel; do not add a second path.
+
+### 6.9 Persona avatars & the default star (owner-requested 2026-06-24 — its own phase)
+
+A **feature**, not a restyle; the owner wants it as a **separate step** (Phase
+9). The good news: the **custom-avatar plumbing already exists** and is reused,
+not rebuilt.
+
+**What already exists (verified):**
+
+- `StaticAvatarParser.parse(avatarId)` maps preset ids → drawables; the
+  **default/fallback is `R.drawable.assistant`** — the big-star/little-star icon
+  the owner wants as the default everywhere (it's already the `else` branch).
+- A **custom image** avatar already works: `CustomizeAssistantDialog` copies a
+  picked image into app storage at
+  `getExternalFilesDir("images")/avatar_<avatarId>.png`
+  (`CustomizeAssistantDialog.kt:292`), and `ChatAdapter` renders it rounded into
+  the message `icon`, falling back to the preset drawable
+  (`ChatAdapter.kt:417-428`). So **chats already have the avatar "spot" and a
+  copy-to-storage mechanism** — exactly what the owner described.
+
+**The change:**
+
+1. **Default avatar = the star (`R.drawable.assistant`) for all chats and
+   personas** (mostly already the fallback; make it explicit and retire the
+   other preset AI logos as the default set).
+2. **Remove the "Customize assistant" feature** — its Settings tile, the
+   `CustomizeAssistantDialog`, and the avatar bits in `AddChatDialogFragment`.
+   Per-chat assistant avatars are replaced by per-**persona** avatars.
+3. **Per-persona photo:** add an **avatar field to `PersonaObject`** (it has none
+   today — only label/prompt/activation/lorebook fields), persist it in
+   `PersonaPreferences` flat keys, and **pass it through
+   `EditPersonaDialogFragment`** — the rename=delete+recreate invariant means
+   every field must be carried or the avatar is lost on edit (CLAUDE.md). Add an
+   **image picker at the bottom of the persona editor**; on pick, **copy the
+   image into app storage** (reuse the `CustomizeAssistantDialog` copy code,
+   writing into `getExternalFilesDir("images")`), so deleting the gallery
+   original doesn't lose it. Keep it **basic first** — drop it in the circle, no
+   max-size pipeline (a downscale-on-import can come later).
+4. **Chats render their persona's avatar**, replacing the stars, via the
+   existing `icon` path: resolve a chat's avatar from its persona (custom image →
+   show it; else → default star). Reuse the same `avatar_*.png` file + rounded
+   render already in `ChatAdapter`.
+5. **Cleanup:** replacing a persona's image overwrites/deletes the old file;
+   **deleting the persona deletes its avatar file** (extend the
+   `PersonaPreferences` delete path — same discipline as
+   `removeLoreBookFromAllPersonas`).
+
+**Gotcha — persona id changes on rename.** Persona id = `Hash.hash(label)`, so a
+rename re-keys the persona. An avatar file keyed by persona id would orphan on
+rename. **Key the avatar by a stable token** (store a generated `avatarToken` on
+the persona; file = `avatar_<token>.png`) **or move the file when the id
+changes** — same stable-id lesson as folders (§5.4) and the persona-rename trap
+in CLAUDE.md. Decide when building.
+
+**User profiles (future — own later phase).** The owner wants, eventually,
+**user profiles** that work like personas but describe **the user** to the AI
+(role-play as an elf one session, a fairy another), each with its own image. The
+app has **no user-image mechanism today**, so this builds directly on the
+persona-avatar infrastructure above (same storage, copy, cleanup, render). Park
+as **Phase 10**; persona avatars (Phase 9) lay the foundation first.
 
 ---
 
@@ -860,6 +931,15 @@ gaps worth checking during Phase 4:
 - **Phase 8 — Onboarding, About, misc + cleanup** (dead RemoveAds remnants
   with owner approval; motion polish; this doc + CLAUDE.md updated to final
   state).
+- **Phase 9 — Persona avatars** (§6.9): default star everywhere; remove the
+  Customize-assistant feature; per-persona image picker + copy-to-storage +
+  cleanup; chats render their persona's avatar. Largely independent (it extends
+  the existing avatar plumbing) but touches the persona editor and Settings —
+  best done **after** those screens' restyles (Phases 5–7) to avoid editing them
+  twice, unless deliberately pulled earlier.
+- **Phase 10 — User profiles (future)** (§6.9): persona-like profiles describing
+  the *user*, each with its own image; reuses the Phase 9 avatar infrastructure.
+  Spec further with the owner when reached.
 
 ---
 
@@ -1000,7 +1080,13 @@ errors here are silent or crash at the worst moment (mid-conversation).
 12. **`Theme.Transparent` is load-bearing** for ChatActivity/SettingsActivity
     (translucent window + shared-element transitions + the
     `expandable_window_background_24` rounded sheet look). Restyle the
-    drawable; keep the theme's translucency flags.
+    drawable; keep the theme's translucency flags. **Owner update (2026-06-24):
+    Settings and its sub-screens must NOT float as a rounded card — they become
+    full-screen menus (§6.4). That means dropping the
+    `expandable_window_background*` floating look (and likely `Theme.Transparent`)
+    *for Settings*, while KEEPING it for ChatActivity, where the chat-open
+    shared-element transition needs it. Handle the two cases separately; do not
+    strip ChatActivity's translucency.**
 13. **Voice diagnostics**: if a UI change adds/removes a voice-loop exit
     path or mic affordance, log it via `ChatActivity.logVoiceEvent` (CLAUDE.md).
 14. **Exported activities**: the onboarding chain (`WelcomeActivity` →
