@@ -398,6 +398,113 @@ Ship A, then B, then C — never as one PR.
   `OnBackPressedDispatcher` interplay if ChatActivity has custom back
   logic — grep for `onBackPressed`/`OnBackPressedCallback` first).
 
+### 5.4 Chat folders (owner-requested 2026-06-24)
+
+**Status: planned; lands AFTER the flat drawer ships — Phase 3.5 in §8.**
+Folders sit on top of the drawer's chat list; they are **not** part of the
+first drawer PR (building them together makes the drawer diff huge and risky).
+Pinning already exists end-to-end (the `"pinned"` flag, swipe-to-pin, and
+pinned-first sort in `ChatsListFragment` — verified) and the drawer inherits it
+for free; folders are the genuinely new concept.
+
+**Top-level drawer order (top to bottom):**
+
+1. **Folders** — always first.
+2. **Pinned chats** — *[OPEN: the owner wrote "pinned folders"; read here as
+   pinned **chats**. Confirm before building.]*
+3. **All other chats** (existing timestamp sort).
+
+The bottom action row (search · gear · new-chat, §5.1) stays pinned below all
+of this.
+
+**Opening a folder = drill-in that replaces the drawer's content** (not a
+second sliding panel): the chat list is swapped for that folder's chats. The
+folder view's own header is **`<<` left-aligned, then the folder's title
+immediately after it**; pressing `<<` returns to the top-level drawer (folders
++ chats). Note `<<` is **contextual**: in the chat top bar it opens the drawer
+(§5.2); inside a folder it backs out to the top-level drawer.
+
+**Folder long-press → "Rename" / "Delete"** (mirrors the chat-row menu).
+Rename changes only the folder's display name (see id note below). Delete shows
+a Material confirm dialog. *[OPEN: on delete, do the folder's chats move back to
+the top level (recommended — deleting a folder should never silently delete
+conversations) or get deleted with the folder behind a stern confirm? Confirm.]*
+
+**Two affordances this spec still needs (owner unspecified — proposed, confirm):**
+
+- **Creating a folder** — proposed: a "New folder" action beside "New chat"
+  (e.g. a folder-plus icon, or long-press the new-chat button). *[OPEN]*
+- **Putting a chat into / out of a folder** — proposed: add **"Move to
+  folder…"** to the chat-row long-press menu (→ Rename / Export / Move to
+  folder / Delete), opening a small folder picker with a "None / top level"
+  choice. *[OPEN]*
+- Inside a folder view, **search filters that folder's chats** and **new-chat
+  creates the chat already inside that folder** (proposed; confirm).
+
+**Data model (fits the existing JSON-in-prefs pattern — no SQLite needed):**
+
+- Add a **`folders`** key to the existing `chat_list` SharedPreferences: a JSON
+  array of `{ id, name, timestamp }`.
+- Give each chat map a new **`folder`** field (the folder id it belongs to;
+  empty = top level).
+- **The folder id MUST be a stable generated id (timestamp/UUID), NOT a hash of
+  the name.** Chats use `Hash.hash(name)`, so renaming a chat re-keys its
+  storage; a *folder* is referenced by many chats, so a name-hash id would force
+  rewriting every member chat's `folder` field on every rename. A stable id
+  makes folder rename a one-field edit. (Same trap as persona-rename in
+  CLAUDE.md — avoid it here by design.)
+- All additive: absent keys default to "no folders / top level", so existing
+  installs and a fresh install both just work — **no migration step**.
+- Keep every folder read/write in `ChatPreferences` (no raw
+  `getSharedPreferences` in feature code — CLAUDE.md rule).
+
+**Voice-pipeline safety:** folders are pure drawer navigation. Opening a
+folder, moving a chat, or renaming a folder must never touch mic/streaming/inset
+state. Switching INTO a chat from a folder follows §5.3 — `finish()` + start a
+new ChatActivity, never an in-place swap.
+
+### 5.5 Chat export & "Export All Chats" (owner-requested 2026-06-24)
+
+**What already exists (verified `ChatActivity.kt:1882`):** the current top-bar
+export **already** uses Android's Storage Access Framework
+(`ACTION_CREATE_DOCUMENT`) — i.e. it already **asks where to save** via the
+system file picker, writes the chat as JSON (`Gson` of the message list), and
+names the file `<chatId>.json`. Its initial location is hard-coded to
+`/SpeakGPT/`, it does **not** remember the last-used folder, and the filename is
+the raw hashed chat id.
+
+**The delta the owner wants:**
+
+1. **Per-chat Export** moves into the drawer chat-row long-press menu (§5.1) —
+   same SAF "ask where to save" flow, kept.
+2. **"Export All Chats"** — a button at the **bottom of the main Settings page**
+   that exports every chat at once.
+3. **Always ask where to put the file(s)**, defaulting to the **Download**
+   folder, then to the **last-used** location on later exports.
+
+**Implementation notes:**
+
+- **Default + last-used location:** persist the last-used export location URI in
+  `GlobalPreferences`; set the picker's `EXTRA_INITIAL_URI` to it when present,
+  else to the system **Downloads** tree. Replace the hard-coded `/SpeakGPT/`
+  initial URI. (SAF partly remembers the last place already; persisting it
+  ourselves makes "Download first, then last-used" deterministic.)
+- **Friendlier filenames:** export under the chat's display name (sanitised),
+  not the raw hash id.
+- **Export All shape** *[OPEN — confirm]*: either **(a)** pick a **folder** via
+  `ACTION_OPEN_DOCUMENT_TREE` and write one `<chatname>.json` per chat into it
+  (most useful, and exactly what a Drive/Dropbox folder sync wants), or **(b)**
+  write a **single combined file** of all chats. Recommend **(a)**; persist the
+  chosen tree as the last-used location.
+- This is also the groundwork for the earlier **"store my chats in Dropbox/
+  Drive"** wish — the SAF picker exposes those cloud providers as destinations,
+  so a folder export already reaches them.
+
+**Where it lands:** Phase 3.6 (§8). Per-chat export rides with the drawer
+(Phase 3) since the menu item is there; the location-picker upgrade and the
+Settings "Export All" button are the new behavioural work, grouped as Phase 3.6
+so the drawer PR stays purely structural.
+
 ---
 
 ## 6. Design language (the "clean, elegant, modern" spec)
@@ -591,7 +698,17 @@ gaps worth checking during Phase 4:
   `recreate()` flow. Verify AMOLED still correct on every screen family.
 - **Phase 2.5 (optional) — AMOLED-as-overlay cleanup**, screen-by-screen.
 - **Phase 3 — Drawer**: Step A (drawer in ChatActivity), then Step B
-  (launch into last chat), then Step C (retire bottom nav) — three PRs.
+  (launch into the chat screen), then Step C (retire bottom nav) — three PRs.
+  Ships the **flat** chat list (folders come later); pinning is inherited free.
+- **Phase 3.5 — Chat folders** (§5.4): `folders` index + per-chat `folder`
+  field in `ChatPreferences`; top-level drawer ordering (folders → pinned →
+  rest); folder drill-in view (`<<` + title); folder create / rename / delete;
+  "Move to folder" on chats. Ships only after the flat drawer (Phase 3) is
+  merged. **Resolve the §5.4 OPEN items with the owner before coding.**
+- **Phase 3.6 — Chat export & Export All** (§5.5): relocate per-chat export into
+  the drawer long-press menu; add the Settings "Export All Chats" button; add
+  the Download-default / last-used location picker; friendlier filenames.
+  **Resolve the §5.5 Export-All-shape OPEN item with the owner first.**
 - **Phase 4 — Chat restyle**: input pill, bubbles, top bar (preserving the
   `btn_debug_log` shortcut). Single UI now — no `AssistantFragment` to mirror.
   **Must also resolve the standing intermittent top-bar/header-vanishing bug —
