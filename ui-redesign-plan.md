@@ -440,9 +440,9 @@ immediately after it**; pressing `<<` returns to the top-level drawer (folders
 
 **Folder long-press → "Rename" / "Delete"** (mirrors the chat-row menu).
 Rename changes only the folder's display name (see id note below). Delete shows
-a Material confirm dialog. *[OPEN: on delete, do the folder's chats move back to
-the top level (recommended — deleting a folder should never silently delete
-conversations) or get deleted with the folder behind a stern confirm? Confirm.]*
+a Material confirm dialog; **on delete the folder's chats fall back to the top
+level** (the conversations are kept — only the folder grouping is removed; clear
+each member chat's `folder` field).
 
 **Creating folders & assigning chats (owner-specified 2026-06-24):**
 
@@ -519,6 +519,40 @@ the raw hashed chat id.
 (Phase 3) since the menu item is there; the location-picker upgrade and the
 Settings "Export All" button are the new behavioural work, grouped as Phase 3.6
 so the drawer PR stays purely structural.
+
+### 5.6 Bulk chat selection & delete in the drawer (owner-requested 2026-06-24)
+
+Goal: select **all** chats, or several chats, in the drawer and delete them in
+one action. This is the **chat list**, and is **distinct** from the existing
+in-*chat* bulk message select (selecting messages inside one conversation —
+`bulk_container` etc. in §9.1 — which already exists and stays as-is).
+
+**Proposed interaction (mirrors the in-chat bulk bar for consistency):**
+
+- **Enter selection mode** from a **"Select"** item added to the chat-row
+  long-press menu (→ Rename / Export / Pin·Unpin / Add to Folder / **Select** /
+  Delete). *[Open: or expose it as a select/edit icon in the drawer header
+  instead of/in addition to the menu item — confirm which.]*
+- In selection mode, rows show **checkboxes**; the drawer header becomes a
+  contextual bar with **Select all**, a **selected count**, **Delete**, and
+  (once folders exist) **Add selected to folder**. The panel's `>>`/back exits
+  selection mode.
+- **Delete** shows a Material confirm dialog ("Delete N chats?") and removes
+  each selected chat via the existing `ChatPreferences.deleteChatById`
+  teardown (same per-chat cleanup a single delete does today). Pinned chats are
+  deletable too.
+- **Scope:** selection operates within the **current view** — the top-level
+  list, or inside one folder when drilled in — not across folders in one
+  selection (keeps the model simple).
+
+**Reuse:** the in-chat message bulk bar (`btn_select_all`, `btn_deselect_all`,
+`btn_delete_selected`, `text_selected_count`, §9.1) is the visual/interaction
+template — match it so both bulk modes feel the same. But the drawer's is a
+**separate** implementation over the chat list; do **not** wire it to
+`ChatAdapter` (that adapter is for messages inside a chat).
+
+**Where it lands:** Phase 3 (drawer) for the core multi-select + delete; the
+"Add selected to folder" extension rides with Phase 3.5 (folders).
 
 ---
 
@@ -743,6 +777,8 @@ gaps worth checking during Phase 4:
 - **Phase 3 — Drawer**: Step A (drawer in ChatActivity), then Step B
   (launch into the chat screen), then Step C (retire bottom nav) — three PRs.
   Ships the **flat** chat list (folders come later); pinning is inherited free.
+  Bulk chat select + delete (§5.6) lands here (its "add selected to folder"
+  extension waits for Phase 3.5).
 - **Phase 3.5 — Chat folders** (§5.4): `folders` index + per-chat `folder`
   field in `ChatPreferences`; top-level drawer ordering (folders → pinned →
   rest); folder drill-in view (`<<` + title); folder create / rename / delete;
