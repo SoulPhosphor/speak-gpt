@@ -1199,6 +1199,97 @@ hard-coded-`gpt-4o` bug fix (6.11.2), and on-device file reading (6.11.3). This
 supersedes the earlier "audit to decide keep-or-cut" — the direction is set:
 **keep, fix, and decouple from the chat provider.**
 
+### 7.7 Quick Settings & control-style cleanup (owner-directed 2026-06-24)
+
+For the Quick Settings restyle (Phase 7) and the general settings restyle
+(Phase 5).
+
+**Token counting must be accurate, not a local guess.** Confirmed in §6.10/§6.11:
+the app currently only estimates tokens with the OpenAI CL100K tokenizer
+(`tokenizeArray`), which is wrong for non-OpenAI models and **ignores the real
+`usage` the API returns**. The fix (everywhere counts/cost appear — per-message
+Info popups *and* the Quick Settings total): **prefer the provider's actual
+`usage`**, fall back to the local estimate only when a provider doesn't return it
+(marked "~"). This is a deliberate correctness fix, not optional polish.
+
+**Strip the wall of text in Quick Settings:**
+
+- **Remove the top "you are editing global settings…" tip** (`global_settings_tip`)
+  and the big bottom blob (`note_qs_autosave`: "Usually you don't need to alter
+  temperature, top_p, …"). Users touching these already have an idea; long-press
+  and paragraph explainers aren't needed.
+- **Keep only "Changes are saved automatically"**, moved up as a **small subtitle
+  under the Quick Settings title** — not a paragraph at the bottom.
+- Under **each sampling slider**, a **single short static helper line** (not
+  hidden behind long-press, not animated). Suggested copy:
+  - **Temperature** — "Higher = more creative; lower = more focused."
+  - **Top P** — "Another way to control randomness — lower = safer word choices.
+    (Adjust this *or* temperature, not both.)"
+  - **Frequency penalty** — "Higher reduces repeated words and phrases."
+  - **Presence penalty** — "Higher nudges the model toward new topics."
+  - **Seed** — "Same seed + same input → more repeatable output."
+
+**No top_k confusion.** These params are already the **standard OpenAI names** —
+temperature, top_p, frequency_penalty, presence_penalty, seed — **none renamed**,
+and there is **no top_k** in the app (top_p ≠ top_k; the app exposes top_p, the
+official param). Keep the standard names.
+
+**No moving/expanding descriptions anywhere in settings — labels only.** Drop the
+per-tile description text (`TileFragment` `functionDesc`) that expands/animates;
+show clean labels (plus, where genuinely helpful, one short static sub-line like
+the sampling helpers above). People can learn; clutter and motion are the enemy.
+
+**Control types — "everything is a slider" isn't quite right.** Sliders are
+modern *for numeric ranges* (temperature, penalties). Use the **right** M3
+control per setting: **slider** for a number range, **switch** for on/off,
+**dropdown / segmented buttons** for pick-one (e.g. the image-generator choice,
+auth mode), **row/button** for navigation or an action. The redesign replaces
+tiles with clean M3 rows/cards carrying the appropriate control — not a slider for
+everything.
+
+### 7.8 Onboarding & legal text (owner-directed 2026-06-24)
+
+The first-run flow is currently **multiple long, scary, and frankly
+unprofessional disclaimer pages**. Verified low-lights:
+
+- `before_you_begin` is snarky and defensive — "all your questions about free
+  usage will be rejected with no answer", a "free cheese… mousetrap" lecture, and
+  a P.S. about users who complained. This reads badly; **rewrite entirely.**
+- `terms_desc3` still describes **"Teslasoft ID sync" saving chat history "on our
+  servers"** — dead (Teslasoft removed). The `ds_*` data-safety strings describe
+  analytics/marketing collection that no longer happens. **Remove.**
+
+**Legal reality (not legal advice — owner is not running a service):** disclaimers
+don't gain protection by volume. For a free, open-source, bring-your-own-API app,
+the genuinely useful points are few: (1) **no warranty / provided as-is** — already
+covered by the bundled **Apache-2.0** license; (2) **you supply your own API key
+and the provider may charge you — this app is not an AI provider**; (3) **AI output
+can be wrong.** A clear license plus a few honest sentences is more professional —
+and more effective — than walls of scary text.
+
+**Plan:**
+
+- **Collapse the disclaimer pages into ONE friendly first page.** Keep the
+  existing Welcome → (API key setup) flow, but the legal/disclaimer content
+  becomes a single, warm, plain page. Suggested tone/content:
+  > **Welcome to Phosphor Shines.** A calm, private home for your AI chats.
+  > A few honest things first:
+  > • **This app doesn't include an AI.** You connect your own — an API key from a
+  >   provider you pick (OpenAI, OpenRouter, z.ai/GLM, Groq, and more). Those
+  >   providers may charge you for usage; that's between you and them.
+  > • **Everything stays on your device.** No account, no servers, nothing
+  >   collected.
+  > • **AI can be wrong** — please don't rely on it for anything important.
+  > • **Free & open-source** (Apache-2.0), provided as-is with no warranty.
+- **Move the full Terms + the Apache-2.0 license text into About** (a "Terms &
+  License" entry) — looks professional and keeps the first run light.
+- **Shrink the cost disclaimer** (`cost_explanation`) to a one-line "estimate"
+  note next to the usage card, not a paragraph. (Even with real API `usage`,
+  per-model *prices* can be unknown, so "estimate" stays honest.)
+- Keep the **one** legitimately useful safety line ("AI may produce incorrect or
+  offensive output", from `terms_desc2`) — condensed — and the third-party-build
+  warning, trimmed.
+
 ---
 
 ## 8. Phase plan (each box = one or more small PRs)
@@ -1251,10 +1342,15 @@ supersedes the earlier "audit to decide keep-or-cut" — the direction is set:
   **Experimental-features audit** (§7.6): remove the dead Autosave toggle; decide
   `/imagine` + function calling alongside the image audit.
 - **Phase 6 — List screens & item layouts.**
-- **Phase 7 — Dialogs & bottom sheets.**
+- **Phase 7 — Dialogs & bottom sheets.** Includes the **Quick Settings cleanup**
+  (§7.7): strip the intro/advice walls of text, "changes saved automatically" as a
+  subtitle, one short static helper under each sampling slider, accurate tokens,
+  right control per setting.
 - **Phase 8 — Onboarding, About, misc + cleanup** (dead RemoveAds remnants
   with owner approval; motion polish; this doc + CLAUDE.md updated to final
-  state).
+  state). Includes the **onboarding & legal rewrite** (§7.8): collapse the scary
+  multi-page disclaimers into one friendly first page, move full Terms + Apache-2.0
+  license into About, drop the dead Teslasoft/telemetry text.
 - **Phase 9 — Persona avatars** (§6.9): default star everywhere; remove the
   Customize-assistant feature; per-persona image picker + copy-to-storage +
   cleanup; chats render their persona's avatar. Largely independent (it extends
