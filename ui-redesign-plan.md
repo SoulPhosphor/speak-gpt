@@ -887,6 +887,58 @@ gaps worth checking during Phase 4:
    work, unless one of those is unavoidably the root cause (if so, stop and
    ask the owner before widening scope — per CLAUDE.md and Section 0 rule 3).
 
+### 7.5 Settings & Appearance cleanup (owner-directed 2026-06-24)
+
+Done as part of the **Phase 5** Settings restyle (the chat-layout toggle removal
+is a **Phase 4** item since it changes message rendering). Each item is a
+deliberate removal — scrub the pref **and** the dead code, don't just hide a tile.
+
+**Privacy section — remove entirely.** The Privacy tiles (Send diagnostic data,
+Assign new installation ID, Revoke authorization, plus the Installation/Android
+ID display) drive a TeslaSoft telemetry system that **no longer has a backend**:
+`DeviceInfoProvider` has **no network code** (verified) — nothing is uploaded,
+"delete data from their servers" refers to servers that don't exist, and the copy
+misleads users into thinking data is collected. Worse, the consent/installation-id
+flag historically gated **local** logging, which CLAUDE.md already forbids. Remove
+all the tiles and the ID display; scrub the dead `consent`/installation-id code
+**without** re-coupling the local `Logger` to it. **Keep one honest static line**,
+folded into **About** (which already has a Privacy Policy link): *"Everything is
+stored on your device, encrypted. Your messages go directly to the API endpoint
+you configure — review that provider's privacy policy. This app has no servers and
+collects nothing."*
+
+**Appearance toggles:**
+
+- **"Classic chat layout" — remove (Phase 4).** `getLayout()` switches
+  `ChatAdapter` between a flat "ChatGPT-website" layout (`classic`, the default)
+  and the bubble layout (`bubbles`) — verified `ChatAdapter.kt:113/333`. The
+  redesign **commits to the bubble layout** (the mockup), so the toggle is dead:
+  drop it and the `layout` pref and make the adapter always render the redesigned
+  bubble row. (This is why toggling "does nothing obvious" today — the two paths
+  look similar and only affect re-bound rows.)
+- **"Monochrome background for chat list" — remove.** A niche per-list-background
+  toggle (`getMonochromeBackgroundForChatList`) made redundant by the palette
+  system (light/dark + themes cover it). Drop the tile and the pref.
+- **AMOLED mode — keep, but reframe.** It works (pitch-black dark). Move it out of
+  "experimental" and present it as a **dark-theme option** in the new
+  Appearance/Themes area. Backend: it's already slated to become a `ThemeOverlay`
+  applied *after* the palette overlay (§4.4, Phase 2.5), forcing surfaces to pure
+  black — so "AMOLED" becomes "dark theme, pure-black variant", not a separate
+  experimental switch. Keep `getAmoledPitchBlack()` working throughout.
+
+**Model-name display — decision needed.** Today a **"Hide model names"** toggle
+(`getHideModelNames`) controls whether the **chat list** shows each chat's current
+model under its name. It is a *per-chat* label, so it does **not** handle a chat
+that used several models — it just shows the chat's latest one (the confusion the
+owner noticed). Two facts: (a) the redesigned drawer **deliberately omits model
+labels** (§5.1), which removes this toggle's main surface; (b) if model visibility
+is wanted done *right* for mixed-model chats, the correct place is a **small
+per-AI-message model tag** (each answer labelled with the model that produced it),
+like the thinking section. Recommendation: drop the chat-list model label with the
+drawer, and **optionally** add a per-message model tag (small, toggleable) as a
+Phase 4/4.5 nicety. *[Owner: want the per-message model tag, or no model display
+at all?]*
+
 ---
 
 ## 8. Phase plan (each box = one or more small PRs)
@@ -925,12 +977,16 @@ gaps worth checking during Phase 4:
   **Must also resolve the standing intermittent top-bar/header-vanishing bug —
   see Section 7.4 (it is a Phase 4 acceptance criterion, not a separate PR).**
   Also moves **Listen to the top** of AI messages and **removes the Report
-  button** (§6.7 / §9.2).
+  button** (§6.7 / §9.2), and **removes the Classic/bubbles layout toggle**,
+  committing to the bubble layout (§7.5).
 - **Phase 4.5 — Reasoning ("thinking") display** (§6.8): read the reasoning
   field in the generation funnel; collapsible thinking section at the top of AI
   messages; global show/hide toggle. Confirm GLM's field/param and the
   toggle-vs-always-on decision first.
-- **Phase 5 — Settings & Characters restyle** (tiles → rows/cards).
+- **Phase 5 — Settings & Characters restyle** (tiles → rows/cards). Also the
+  **Settings/Appearance cleanup** (§7.5): remove the Privacy section (keep one
+  honest note in About), remove the monochrome-background toggle, and reframe
+  AMOLED as a dark-theme option rather than an "experimental" switch.
 - **Phase 6 — List screens & item layouts.**
 - **Phase 7 — Dialogs & bottom sheets.**
 - **Phase 8 — Onboarding, About, misc + cleanup** (dead RemoveAds remnants
