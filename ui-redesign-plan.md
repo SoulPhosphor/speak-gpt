@@ -755,12 +755,12 @@ not rebuilt.
    `PersonaPreferences` delete path — same discipline as
    `removeLoreBookFromAllPersonas`).
 
-**Gotcha — persona id changes on rename.** Persona id = `Hash.hash(label)`, so a
-rename re-keys the persona. An avatar file keyed by persona id would orphan on
-rename. **Key the avatar by a stable token** (store a generated `avatarToken` on
-the persona; file = `avatar_<token>.png`) **or move the file when the id
-changes** — same stable-id lesson as folders (§5.4) and the persona-rename trap
-in CLAUDE.md. Decide when building.
+**Gotcha — handled by Phase 2.6.** Persona id *used to* change on rename
+(`id = Hash.hash(label)`), which would orphan an avatar file keyed by id. The
+**Stable persona IDs** refactor (§11, Phase 2.6 — sequenced *before* this) gives
+each persona a permanent id, so `avatar_<personaId>.png` is safe and never needs
+moving. Build persona avatars on top of that stable id; if for any reason Phase
+2.6 hasn't landed first, key the avatar by a stable token instead.
 
 **User profiles (future — own later phase).** The owner wants, eventually,
 **user profiles** that work like personas but describe **the user** to the AI
@@ -901,6 +901,11 @@ gaps worth checking during Phase 4:
   sets), the `ui_palette` preference, the Appearance picker UI with swatches,
   `recreate()` flow. Verify AMOLED still correct on every screen family.
 - **Phase 2.5 (optional) — AMOLED-as-overlay cleanup**, screen-by-screen.
+- **Phase 2.6 — Stable persona IDs** (§11): give each persona a permanent id
+  decoupled from its name (the name becomes editable data); migrate by freezing
+  each existing persona's current id (no data rewrite, no orphaned chats); fix
+  every `id == Hash.hash(label)` call site. Logic-only, no UI — unblocks Phases
+  9–10 and kills a latent rename bug. **Do early.**
 - **Phase 3 — Drawer**: Step A (drawer in ChatActivity), then Step B
   (launch into the chat screen), then Step C (retire bottom nav) — three PRs.
   Ships the **flat** chat list (folders come later); pinning is inherited free.
@@ -1123,3 +1128,79 @@ errors here are silent or crash at the worst moment (mid-conversation).
    the redesigned screen.
 7. No dependency changes other than those named in this plan.
 8. This document's phase list updated if a phase completed.
+
+---
+
+## 11. Foundational fix — stable persona IDs (owner-approved 2026-06-24, do early)
+
+A small data-model refactor that removes a latent bug and unblocks the persona
+features. It is **logic-only** (no UI) and should be its own PR — never folded
+into a UI restyle (Section 0 rule 3). Scheduled as **Phase 2.6**.
+
+### 11.1 The problem (verified in code)
+
+A persona's identity is **derived from its name**:
+`PersonaPreferences.setPersona` computes `id = Hash.hash(persona.label)`
+(`PersonaPreferences.kt:67`) and stores its fields under `<id>_<field>` flat
+keys; `editPersona` is literally `deletePersona(hash(oldLabel)) +
+setPersona(...)` (`:130`). So **renaming a persona produces a brand-new id**.
+Chats reference a persona by `persona_id` (`Preferences.kt:1303`), which is that
+same hash. Consequences:
+
+- Renaming a persona **orphans every chat already linked to it** — the chat's
+  stored `persona_id` no longer resolves. This is a **latent bug today**, not
+  just a future-avatar concern.
+- Any new per-persona artifact keyed by id (the Phase 9 avatar file) would
+  orphan on rename too.
+
+The fragile "edit dialog must pass every field through" rule (CLAUDE.md) and the
+chat "auto-naming copy block" both exist only to paper over this name-as-key
+design. `PersonaObject` has **no `id` field** — the id is implicit in the prefs
+key and assumed `== Hash.hash(label)` everywhere.
+
+### 11.2 The fix: stable id, name becomes a plain field
+
+Decouple identity from name. A persona gets a **permanent id** assigned once; the
+name is just editable data. Then a rename touches **one field** and every
+reference (chats, avatar, lorebook links) keeps working unchanged.
+
+- Add an **`id` field to `PersonaObject`**.
+- `getPersona(id)` populates `persona.id = id` (the key prefix it read from).
+- `setPersona` keys by **`persona.id`**, not `Hash.hash(label)`.
+- **New persona:** assign `id = a fresh random token` (e.g. UUID), not a hash of
+  the name. (This also makes duplicate display names harmless — different ids.)
+- **Edit/rename:** update **in place** under the same id — no delete+recreate.
+  `editPersona` becomes "overwrite the same id's fields".
+- Fix **every call site that assumes `id == Hash.hash(label)`**: grep `Hash.hash`
+  near persona code, `getPersona(Hash.hash(...))`, `editPersona`, and check
+  `PersonasListActivity`, `EditPersonaDialogFragment`, `ChatActivity`'s persona
+  application, and the Quick Settings persona selector. Use the stored id.
+
+### 11.3 The migration is nearly free (why it's low-risk now)
+
+**Existing personas keep their current id as the frozen id.** Their prefs keys
+are already prefixed with `Hash.hash(currentLabel)`, and existing chats'
+`persona_id` already equals that same value. So at migration we simply **stop
+recomputing the id** and **freeze whatever prefix a persona already has**:
+
+- `getPersonasList`/`getPersona` already read the id from the key prefix — keep
+  doing that; just surface it on `PersonaObject.id`.
+- **No data rewrite, no re-pointing of existing chats, no orphaning at upgrade.**
+  Existing links stay intact; only *future* renames become safe.
+- New personas created after this change get UUID ids.
+
+Owner context: currently the only user, with essentially one persona, so even a
+worst case (an old chat falling back to "no persona → default star") would be
+harmless — but the freeze approach means even that won't happen.
+
+When this lands, **update CLAUDE.md**: the "renaming a persona changes its id /
+edit = delete + recreate" invariant is replaced by "personas have a stable id;
+rename edits the name field in place."
+
+### 11.4 Scope boundary — chats have the same flaw, but later
+
+`chatId = Hash.hash(chatName)` is the identical design, with a **much larger
+blast radius** (per-chat prefs files `settings_<chatId>`, message store
+`chat_<chatId>`, the auto-naming copy block). **Out of scope for Phase 2.6** —
+note it as a separate, bigger future decision. Do personas first; revisit chats
+once the persona fix has proven the pattern.
