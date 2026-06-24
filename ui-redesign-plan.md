@@ -855,15 +855,16 @@ with the per-chat one taking priority:
 - In the **API endpoint profile** — the **default** for chats using that profile,
   applied when Quick Settings is left on "use profile default".
 
-Dropdown options:
+Dropdown options (**two**, owner-confirmed 2026-06-24):
 
-- **Default** — the dedicated global **"Default image generator"** you set up in
-  its own area (endpoint + key + model + size).
-- **Alternative** — a **second** dedicated image-generator setup, kept ready so
-  you can flip between two without reconfiguring. *[Owner: confirm "Alternative"
-  means a second saved generator — vs. meaning "use the API profile's default".]*
+- **Default** — the one dedicated **"Default image generator"** you set up in its
+  own menu (endpoint + key + model + size). There is a **single** such generator,
+  not several.
 - **Model** — let the **current chat model** generate the image itself (for
   multimodal models that can), with no separate provider.
+
+In **Quick Settings** the choice may also be left on **"Use profile default"**, in
+which case the endpoint profile's setting applies.
 
 **Resolution order:** Quick Settings choice → API-profile default → the Default
 image generator. Rationale (owner): on a multi-model provider like OpenRouter you
@@ -871,12 +872,15 @@ might switch from a chat model that can't make images to one that can, so the
 per-chat dropdown lets you grab the right generator on the spot, while the profile
 holds a sensible default for when you don't think about it.
 
-Implementation notes: a global **"Default image generator"** (and "Alternative")
-config area — its own `ApiEndpointPreferences`-style profile (endpoint/key/model/
-size); a per-chat **`imageGenChoice`** pref in `Preferences` (**add it to the
-auto-naming copy block** — CLAUDE.md, or it vanishes on rename); and an equivalent
-default field on the endpoint profile. `/imagine` and the `generateImage` tool
-resolve the source through the precedence above.
+`/imagine` typed in a chat is **always kept** as the manual, explicit path (owner:
+someone may want to use it mid-chat) regardless of the dropdown.
+
+Implementation notes: a global **"Default image generator"** config area — its own
+`ApiEndpointPreferences`-style profile (endpoint/key/model/size); a per-chat
+**`imageGenChoice`** pref in `Preferences` (**add it to the auto-naming copy
+block** — CLAUDE.md, or it vanishes on rename); and an equivalent default field on
+the endpoint profile. `/imagine` and the `generateImage` tool resolve the source
+through the precedence above.
 
 #### 6.11.2 Vision (show the model an image) — wired correctly, but a real bug breaks it off-OpenAI
 
@@ -924,6 +928,39 @@ One **`+` attach button** (already in the chat mockup) opens a small sheet:
 **Photo** (vision), **File** (document), **Camera**. Keep it obvious which actions
 need which capability; show the configured image generator where `/imagine` lives.
 Attachment and image-gen are first-class — don't bury them.
+
+#### 6.11.5 Letting the AI itself request an image (opt-in, off by default)
+
+The owner asked: if the chat model can't draw, can we let the model **trigger**
+image generation (routing to the Default generator)? Yes — two ways, neither hard:
+
+- **Proper tools / function calling:** declare a `generate_image(prompt)` tool;
+  when the model decides to use it, it returns a structured call, the app runs the
+  configured generator and inserts the image. The app **already has this**
+  (`generateImage`, §7.6) — it just needs an endpoint that supports tool-calling.
+- **Prompt convention (any model):** instruct the model (system prompt) to emit
+  `/imagine <prompt>` on its own line when an image is wanted; the app already
+  detects `/imagine` in input and can detect it in the model's *output* too, then
+  generate. Works without tool-calling support, but is looser.
+
+**The "models go insane" risk is real, and is exactly why this must be opt-in.**
+The owner's beta experience (models drawing unprompted, or *claiming* they made an
+image they didn't) is inherent to handing an LLM a tool. Mitigations baked in:
+
+- **Off by default; a per-chat (and/or per-persona) toggle** "Let the AI create
+  images." Most chats never get the capability, so they can't misfire.
+- **Only a real generation shows an image.** If the model merely *says* "here's
+  your image" without invoking the tool/command, **no image appears** — its text
+  is just text. A clear "Generating image…" state shows when a real one happens.
+- **A tight tool description** ("only when the user explicitly asks for an image")
+  curbs unprompted drawing; quality varies by model — which is the reason the user
+  holds the switch.
+- Manual **`/imagine`** typed by the user (always on, always safe) stays the
+  primary path; AI-triggered generation is the optional extra.
+
+**Where:** rides **Phase 11** as an *optional sub-step* — manual `/imagine` + the
+configurable generator land first; the AI-triggered toggle is added on top once
+that's solid.
 
 ---
 
