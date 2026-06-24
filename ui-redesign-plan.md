@@ -554,6 +554,20 @@ template — match it so both bulk modes feel the same. But the drawer's is a
 **Where it lands:** Phase 3 (drawer) for the core multi-select + delete; the
 "Add selected to folder" extension rides with Phase 3.5 (folders).
 
+### 5.7 Quick Settings is the per-chat hub (owner-clarified 2026-06-24)
+
+Because the drawer deliberately holds *only* chats/folders (§5.1), the per-chat
+**Quick Settings** sheet is now the home for everything that used to be drawer
+"Characters/Playground" navigation. It already carries the per-chat **model,
+endpoint, persona, activation prompt, lorebook checklist, and sampling params**
+(CLAUDE.md). To fully replace the removed drawer nav, Quick Settings should also
+provide a way to **open the Characters hub** (`CharactersActivity` — manage
+personas / activation prompts / system message / lorebooks) so the *library*
+side stays reachable; Quick Settings selects *which* persona/lorebook this chat
+uses, the hub *manages* them. Restyle is Phase 7 (§7.1); this clarifies its
+**contents**, not a new screen. *(The chat top-bar gear opens Quick Settings;
+the drawer bottom gear opens global Settings — §5.1 note.)*
+
 ---
 
 ## 6. Design language (the "clean, elegant, modern" spec)
