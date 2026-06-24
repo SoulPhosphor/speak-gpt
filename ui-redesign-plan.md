@@ -70,7 +70,7 @@ These were decided explicitly by the owner. Do not re-litigate them.
 | Decision | Choice |
 |---|---|
 | UI technology | **Stay on classic Views/XML + Material 3 (MDC-Android).** No Jetpack Compose, not even for new screens. |
-| Navigation | **Left slide-out drawer** containing the chat list (new chat, search) plus quick navigation (Characters hub, Playground, Settings). The chat screen becomes the effective home screen, like the ChatGPT/Claude apps. No right-side panel. |
+| Navigation | **Left slide-out drawer** containing *only* the chat list plus a single bottom action row (search · gear→global Settings · new-chat). Characters/personas/lorebooks and the other per-chat options live in **Quick Settings**, **not** the drawer; Playground is not a drawer row either. The chat screen is the home screen, like the ChatGPT/Claude apps. No right-side panel. *(Revised 2026-06-24 by owner — see §5.1.)* |
 | Theming | **Preset hand-designed color palettes** in light and dark variants, selectable in settings. Material You / wallpaper-dynamic color was explicitly **not** chosen. The existing AMOLED pitch-black mode must keep working. |
 | Style target | Clean, elegant, modern Material 3 — rounded surfaces, proper spacing, M3 type scale. |
 
@@ -282,19 +282,40 @@ Two-stage plan:
 
 ### 5.1 What the drawer contains (top to bottom)
 
-1. **Header** — app name; optionally the active persona's avatar/name later.
-2. **"New chat" row** (replaces the chats-tab FAB; opens the existing
-   `AddChatDialogFragment`).
-3. **Search field** filtering the chat list (reuse the filter logic from
-   `ChatsListFragment`'s `search_input`).
-4. **Chat list** — RecyclerView, reusing `ChatPreferences` as the data
-   source and the visual style of `view_chat_name_min.xml` rows (name +
-   snippet; model labels stay out of the drawer for cleanliness). Current
-   chat highlighted with a `colorSecondaryContainer` pill.
-5. **Divider**, then static nav rows: **Characters** (→ `CharactersActivity`
-   hub: personas / activation prompts / system message / lorebooks),
-   **Playground** (→ the existing `PlaygroundFragment` rehosted or its own
-   activity), **Settings** (→ `SettingsActivity`).
+**Revised 2026-06-24 by owner — this list supersedes the original below.** The
+drawer is deliberately just the chat list plus one bottom action row. The
+Characters hub, personas, lorebooks, and the other per-chat options are
+reached from the **Quick Settings** sheet (the per-chat gear on the chat top
+bar), **not** from the drawer. Playground is not a drawer row.
+
+1. **Header strip** carrying a **floating circular `>>` button** at the top of
+   the panel. Pressing it slides the panel away and brings the chat back — the
+   second of two ways to move between panel and chat (the chat top bar's `<<`
+   button is the first). App name / active-persona label optional later.
+2. **Chat list** — RecyclerView, data source `ChatPreferences`, row visual
+   style from `view_chat_name_min.xml` (name + snippet; model labels stay out
+   of the drawer for cleanliness). Current chat highlighted with a
+   `colorSecondaryContainer` pill.
+   - **Long-press a chat row → context menu with "Rename" and "Delete"** (a
+     Material popup menu). These are the only per-row actions in the drawer.
+     Rename reuses the existing rename path; **Delete** shows a Material
+     confirm dialog (destructive-action rule) and scrubs the chat as today.
+3. **Bottom action row**, pinned to the bottom of the panel, left to right:
+   - **Search field** that filters the chat list (reuse `ChatsListFragment`'s
+     `search_input` filter logic).
+   - **Gear → global Settings** (`SettingsActivity`).
+   - **New-chat button** (opens the existing `AddChatDialogFragment`).
+
+> **Note for implementers:** there are now two gear icons with different
+> scopes — the **chat top-bar gear** opens per-chat **Quick Settings**, the
+> **drawer bottom gear** opens **global Settings**. They are not the same
+> screen; keep their targets straight.
+
+> *Original (2026-06-13) drawer list — obsolete, kept for history:* header /
+> "New chat" row / search field / chat list / divider / static nav rows for
+> Characters, Playground, Settings. The owner removed the Characters &
+> Playground nav rows (those live behind Quick Settings) and collapsed search +
+> settings + new-chat into the single bottom action row above.
 
 Implement as a `DrawerLayout` whose drawer pane is a **custom layout**
 (header + RecyclerView + rows). Do **not** use `NavigationView` menu items —
@@ -309,13 +330,27 @@ the left. Get there in three separately-shippable steps:
 - **Step A — drawer inside ChatActivity.** Wrap the root of
   `activity_chat.xml` in a `DrawerLayout` (the existing
   `expandable_window_root` CoordinatorLayout becomes the main pane —
-  preserve its ID and the `chat_expand` transitionName). Add a hamburger
-  button to the chat top bar. Keep `btn_back` working as today.
-- **Step B — launch into the last chat.** Record the last-opened chat id in
-  `GlobalPreferences`; `MainActivity` forwards straight into `ChatActivity`
-  for that chat when it exists (first-run/no-chats still shows the current
-  chats screen). When ChatActivity is the task root, `btn_back` shows the
-  hamburger icon and opens the drawer instead of finishing.
+  preserve its ID and the `chat_expand` transitionName).
+  **Chat top-bar layout (owner-specified 2026-06-24):** left-aligned `<<`
+  button (re-icon the existing `btn_back` ImageButton — **keep the id**) that
+  **opens the drawer**; the chat title **centered**; right-aligned the **bug**
+  shortcut (`btn_debug_log`, shown only when diagnostics are on — unchanged)
+  then the **gear** (`btn_settings`, opens the per-chat **Quick Settings**
+  sheet). The old top-bar **export** icon (`btn_export`) is **not** in this
+  layout — its function needs a new home (**open item; confirm with owner
+  before dropping the action**, and do not orphan the id without relocating
+  what it does — see §9.1). The drawer opens/closes by **edge swipe** as well
+  as the `<<` button, and the panel's floating `>>` button (§5.1) closes it.
+- **Step B — launch straight into the chat screen.** The app opens directly
+  into `ChatActivity` showing an **empty, ready-to-type conversation** (no
+  bottom-tab home, no forced greeting yet — a greeting may be added later).
+  AMOLED users see the pitch-black ready screen with the top-bar icons
+  present. `MainActivity` becomes a router that forwards into `ChatActivity`
+  (first-run/no-chats still routes through onboarding as today). When
+  ChatActivity is the task root, the `<<` button opens the drawer instead of
+  finishing. *(Reopening the **last** chat on launch instead of a fresh empty
+  one is a possible later refinement; the current owner decision is the empty
+  ready screen.)*
 - **Step C — retire the bottom tab bar.** Once the drawer covers everything
   (chats, Playground, settings), remove `BottomNavigationView` from
   `MainActivity` and slim it down to a router + first-run host. Tips/Tools
@@ -332,6 +367,18 @@ Ship A, then B, then C — never as one PR.
   **Never** implement in-place chat swapping inside a live ChatActivity in
   this redesign — the voice loop, streaming state, and per-chat preferences
   all assume one chat per activity instance.
+- **Launch lands on an empty, ready-to-type chat** (Step B) with the top-bar
+  icons visible; the drawer is reachable via the `<<` button or an edge swipe.
+  No forced greeting in v1.
+- **Two ways to toggle the panel** — the chat top-bar `<<` button opens it; a
+  **floating circular `>>` button** at the top of the panel closes it. Both
+  only open/close the same `DrawerLayout`; **neither may touch mic, streaming,
+  keyboard-inset, or `restoreUIState()` logic** (same as the rule below).
+- **Chat-row long-press → "Rename" / "Delete" menu** is the only per-row
+  action set. Rename goes through the existing rename path — remember a rename
+  **changes the chat id** and must carry every per-chat preference across
+  (CLAUDE.md auto-naming copy-block invariant). Delete shows a Material confirm
+  dialog and scrubs references as today.
 - The **auto-naming** flow renames the chat *in place* (changes the chat id
   without relaunching the activity — relaunching kills readback and the
   hands-free loop). The drawer's chat list must therefore refresh its data
@@ -578,6 +625,12 @@ shortcut; see note below), `keyboard_frame` (ConstraintLayout), `root`
 `btn_share_selected` (ImageButtons), `text_selected_count` (TextView),
 `expandable_window_root` (CoordinatorLayout, keeps
 `transitionName="chat_expand"`), `attach_bg` (BlurView).
+
+**`btn_export` relocation (2026-06-24):** the owner's revised chat top bar
+(§5.2 Step A) is `<<` · title · bug · gear and **does not include the export
+icon**. `btn_export` is still in this contract because Kotlin casts it; do not
+delete the id or its handler until its function has a confirmed new home
+(open item — ask the owner). Hide the *view* if needed, keep the *binding*.
 
 **`btn_debug_log` is a real feature, not decoration — do not drop it when
 restyling the top bar.** It is a bug-icon `ImageButton` in the chat action bar
