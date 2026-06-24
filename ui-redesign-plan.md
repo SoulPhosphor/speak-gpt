@@ -974,6 +974,45 @@ names" toggle and its label entirely (the redesigned drawer omits model labels,
 button** — model + received time on tap (§6.10) — which handles mixed-model chats
 correctly, since each answer carries its own model.
 
+### 7.6 Experimental features audit (owner-directed 2026-06-24)
+
+Findings on the three "Experimental" toggles, for the Phase 5 settings pass:
+
+**Autosave chats — remove (dead no-op).** The `chats_autosave` pref
+(`Preferences.kt:780`, default off) is **read in exactly one place — the settings
+tile that shows its own state** (`SettingsActivity.kt:690`) — and **consumed by
+nothing else** (verified: no other reader anywhere). Chats save unconditionally
+through `ChatPreferences` regardless, so the toggle does **literally nothing**.
+Remove the tile and the pref.
+
+**Slash commands = just `/imagine` — fate tied to image generation.** The "slash
+commands" toggle is the `imagine_command` pref (`getImagineCommand`); the **only**
+command is **`/imagine <prompt>`**, which fires an **image-generation** request
+(`ChatActivity.kt:2860` → `sendImageRequest`). So it lives or dies with whether
+**image generation works on the owner's endpoint** (GLM/z.ai may not support the
+DALL·E-style image API this path uses). Deferred to the **image-features audit**
+below — if image gen is dead on the endpoint, remove `/imagine` with it;
+otherwise keep it and relabel it plainly ("/imagine command", not "experimental
+slash commands").
+
+**Function calling — weak; recommend remove or rework.** The `function_calling`
+pref enables the secondary `openai-java` client to let the model call two
+built-in tools (`ChatActivity.kt:3699`, `availableFunctions`):
+- `generateImage` — same image-generation dependency as `/imagine`.
+- `searchAtInternet` — **near-useless as built**: it just opens
+  `https://www.google.com/search?q=…` in the **browser** (`ChatActivity.kt:3137`)
+  and **feeds no results back to the model** — it isn't real retrieval.
+Tool-calling also has to be supported by the endpoint at all. Recommend: **remove
+`searchAtInternet` regardless** (does nothing useful), and tie `generateImage`/the
+whole toggle to the image audit. If neither tool survives, drop the
+function-calling toggle and the secondary-client path.
+
+**Open question for the owner — the image audit.** Does **image generation
+actually work** on your endpoint right now (does `/imagine` ever produce an
+image)? That one answer decides `/imagine`, `generateImage`, and most of the
+image features you suspected were broken. Worth doing as its own small audit pass
+before we commit to keep-or-cut.
+
 ---
 
 ## 8. Phase plan (each box = one or more small PRs)
@@ -1022,7 +1061,9 @@ correctly, since each answer carries its own model.
 - **Phase 5 — Settings & Characters restyle** (tiles → rows/cards). Also the
   **Settings/Appearance cleanup** (§7.5): remove the Privacy section (keep one
   honest note in About), remove the monochrome-background toggle, and reframe
-  AMOLED as a dark-theme option rather than an "experimental" switch.
+  AMOLED as a dark-theme option rather than an "experimental" switch. Also the
+  **Experimental-features audit** (§7.6): remove the dead Autosave toggle; decide
+  `/imagine` + function calling alongside the image audit.
 - **Phase 6 — List screens & item layouts.**
 - **Phase 7 — Dialogs & bottom sheets.**
 - **Phase 8 — Onboarding, About, misc + cleanup** (dead RemoveAds remnants
