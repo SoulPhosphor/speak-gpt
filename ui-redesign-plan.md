@@ -296,10 +296,13 @@ bar), **not** from the drawer. Playground is not a drawer row.
    style from `view_chat_name_min.xml` (name + snippet; model labels stay out
    of the drawer for cleanliness). Current chat highlighted with a
    `colorSecondaryContainer` pill.
-   - **Long-press a chat row → context menu with "Rename" and "Delete"** (a
-     Material popup menu). These are the only per-row actions in the drawer.
-     Rename reuses the existing rename path; **Delete** shows a Material
-     confirm dialog (destructive-action rule) and scrubs the chat as today.
+   - **Long-press a chat row → context menu with "Rename", "Export" and
+     "Delete"** (a Material popup menu). These are the per-row actions in the
+     drawer. Rename reuses the existing rename path; **Export** exports that
+     chat's data (this is the natural new home for the old top-bar
+     `btn_export` function flagged in §5.2 Step A / §9.1); **Delete** shows a
+     Material confirm dialog (destructive-action rule) and scrubs the chat as
+     today.
 3. **Bottom action row**, pinned to the bottom of the panel, left to right:
    - **Search field** that filters the chat list (reuse `ChatsListFragment`'s
      `search_input` filter logic).
@@ -374,11 +377,12 @@ Ship A, then B, then C — never as one PR.
   **floating circular `>>` button** at the top of the panel closes it. Both
   only open/close the same `DrawerLayout`; **neither may touch mic, streaming,
   keyboard-inset, or `restoreUIState()` logic** (same as the rule below).
-- **Chat-row long-press → "Rename" / "Delete" menu** is the only per-row
+- **Chat-row long-press → "Rename" / "Export" / "Delete" menu** is the per-row
   action set. Rename goes through the existing rename path — remember a rename
   **changes the chat id** and must carry every per-chat preference across
-  (CLAUDE.md auto-naming copy-block invariant). Delete shows a Material confirm
-  dialog and scrubs references as today.
+  (CLAUDE.md auto-naming copy-block invariant). Export reuses the existing
+  chat-export action (the relocated `btn_export`). Delete shows a Material
+  confirm dialog and scrubs references as today.
 - The **auto-naming** flow renames the chat *in place* (changes the chat id
   without relaunching the activity — relaunching kills readback and the
   hands-free loop). The drawer's chat list must therefore refresh its data
