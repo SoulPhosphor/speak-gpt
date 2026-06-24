@@ -772,40 +772,65 @@ as **Phase 10**; persona avatars (Phase 9) lay the foundation first.
 ### 6.10 Per-message info: model used + time received (owner-requested 2026-06-24)
 
 The owner wants to know **which model produced each AI answer** (useful for their
-own projects, and the honest way to handle mixed-model chats) and **when it was
-received**. Delivered as an **Info button on AI messages only** — the slot the
-Report "!" is vacating becomes an **info ("i") icon**; tapping it shows a small
-popup: **Model:** ⟨model⟩ · **Received:** ⟨date & time⟩. (This is what resolves
-the §7.5 model-name question — no always-on label, no chat-list model column, the
-drawer stays clean.)
+own projects, and the honest way to handle mixed-model chats), **when it was
+received**, and **how many tokens** it used. Delivered as an **Info ("i")
+button**: on AI messages it reuses the slot the Report "!" is vacating; tapping it
+shows a small popup —
+
+- **AI message:** **Model:** ⟨model⟩ · **Received:** ⟨date & time⟩ · **Tokens:**
+  ⟨this response⟩.
+- **User message:** a matching Info button showing **Tokens:** ⟨this message⟩.
+  (The owner only wants model/time on the AI side, but token counts are useful on
+  both — and they answer "how many tokens did I send / did it use".)
+
+(This also resolves the §7.5 model-name question — no always-on label, no
+chat-list model column, the drawer stays clean. Token info lives behind the tap,
+so casual users never see numbers they don't want; API/cost-conscious users get
+them on demand.)
 
 **Storing it is easy and additive — no DB, no migration.** A chat message is a
 `HashMap<String, Any>` serialized to JSON by `ChatPreferences` (keys today:
-`message`, `isBot`, optional `image`/`imageType`). Add two keys **on AI messages
-only**:
+`message`, `isBot`, optional `image`/`imageType`). Add keys:
 
-- `model` — the exact model string the request used. Capture it in the
+- `model` (AI only) — the exact model string the request used. Capture it in the
   `generateResponse` → `regularGPTResponse` funnel at generation time; a chat can
   switch models mid-conversation, so **per-message** capture is what makes this
   correct.
-- `ts` — `System.currentTimeMillis()` at **completion** ("received"); set when the
-  response finalizes.
+- `ts` (AI only) — `System.currentTimeMillis()` at **completion** ("received");
+  set when the response finalizes.
+- `tokens` (AI **and** user) — token count for that message. **Prefer the
+  provider's real `usage`** (an AI turn returns `completion_tokens`, plus
+  `prompt_tokens` for the turn) captured from the response in the funnel. The app
+  currently **ignores the API `usage` field** and only estimates locally
+  (CL100K via ktoken, `ChatActivity.kt:449`), which is approximate for non-OpenAI
+  models — so capturing real `usage` is the accuracy upgrade. Fall back to the
+  local estimate (mark it "~") when the provider doesn't return usage. For a
+  **user** message, store the local token count of that message's text.
 
-Wire both through `putMessage` (`ChatActivity.kt:3071`) — extend it to accept
-`model`/`ts` for bot messages and write them into the map. The keys are JSON, so
-they persist automatically; **old messages simply lack them** → the popup shows
-"model not recorded". User messages get neither key (owner only wants AI-side
-info).
+Wire these through `putMessage` (`ChatActivity.kt:3071`) — extend it to accept
+`model`/`ts`/`tokens` and write them into the map. The keys are JSON, so they
+persist automatically; **old messages simply lack them** → the popup shows
+"not recorded".
 
-**UI:** reuse the AI-message button slot (former `btn_report`, now `btn_info`),
-info icon, shown only when `isBot == true` (the same gating the report button
-used). Tap → a small Material dialog/sheet with the model and a formatted **local**
-date-time. Message text selection and the other buttons are unchanged.
+**The chat-total token/cost display already exists — keep it.** Quick Settings
+already shows the chat's total in/out **tokens and estimated cost**
+(`textUsage`/`textCost`, `usageCost`, fed by `calculateCost`/`tokenizeArray` in
+ChatActivity, with per-model price parsing and a graceful "not enough data" for
+unknown endpoints — `QuickSettingsBottomSheetDialogFragment.kt`). It's a working,
+genuinely useful feature, currently the same local CL100K estimate. Keep it
+(restyled in Phase 7); the same "prefer API `usage`" accuracy upgrade applies.
 
-**Where it lands:** the **storage** half (writing `model`/`ts` in `putMessage` +
-the funnel) is tiny and can land early or with **Phase 4**; the **Info button**
-itself rides with the Phase 4 chat-message restyle (it edits the same
-message-action row). Single generation funnel only — no second path.
+**UI:** the AI-message info icon reuses the former `btn_report` slot (now
+`btn_info`). User messages get a small info icon too (user layout
+`view_assistant_user_message.xml`). Tap → a small Material dialog/sheet: model +
+formatted **local** date-time + tokens on the AI side, tokens on the user side.
+Message text selection and the other buttons are unchanged.
+
+**Where it lands:** the **storage** half (writing `model`/`ts`/`tokens` in
+`putMessage` + capturing API `usage` in the funnel) is small and can land early or
+with **Phase 4**; the **Info buttons** ride the Phase 4 chat-message restyle (they
+edit the same message-action rows). Single generation funnel only — no second
+path.
 
 ### 6.11 Images, vision & file attachments (owner-directed 2026-06-24)
 
@@ -1139,6 +1164,17 @@ tile that shows its own state** (`SettingsActivity.kt:690`) — and **consumed b
 nothing else** (verified: no other reader anywhere). Chats save unconditionally
 through `ChatPreferences` regardless, so the toggle does **literally nothing**.
 Remove the tile and the pref.
+
+**Desktop mode — keep, but rename and de-experimentalize.** Despite the name it's
+**not** a desktop UI/layout; it's a **hardware-keyboard** convenience
+(`getDesktopMode`, `Preferences.kt:402`): auto-focus the input when a chat opens,
+**Enter** to send, **Shift+Enter** for a newline, **Shift+Esc** to close — all
+gated on an actual physical keyboard (`isHardKB`, `ChatActivity.kt:1846`). It
+works, and it's genuinely useful for tablet / keyboard / DeX users (the wider
+audience the owner wants to support). **Keep it**, but **rename to something
+accurate** ("Hardware keyboard: Enter to send", or similar) and move it out of
+"experimental" — the current label misleads (the string even warns "not
+recommended on phones").
 
 **Slash commands = just `/imagine` — keep it, make image gen configurable.** The
 "slash commands" toggle is the `imagine_command` pref; the **only** command is
