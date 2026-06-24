@@ -807,6 +807,93 @@ the funnel) is tiny and can land early or with **Phase 4**; the **Info button**
 itself rides with the Phase 4 chat-message restyle (it edits the same
 message-action row). Single generation funnel only — no second path.
 
+### 6.11 Images, vision & file attachments (owner-directed 2026-06-24)
+
+The owner wants three distinct media capabilities to work across *any* endpoint
+(GLM today; OpenRouter / NanoGPT / others later; and for other users): **generate
+images**, **show the model an image**, and **give the model a file to read**.
+These are three separate features with different requirements — keep them
+separate. Owner reversed the earlier "cut image gen" lean: **keep `/imagine`**,
+and make image features provider-agnostic.
+
+#### 6.11.1 Image generation (`/imagine`) — keep it; make the generator configurable
+
+What it does today (verified): `/imagine <prompt>` (gated by `imagine_command`,
+`ChatActivity.kt:2860`) calls an OpenAI-style image endpoint —
+`openAIAI.imageURL(ImageCreation(prompt, model = getImageModel(),
+size = ImageSize(getResolution())))` (`:4315`) — and renders the result. **The
+catch:** that call uses the **same endpoint + key as chat** (`openAIAI` is the
+chat client). So on an endpoint that can't make images (e.g. GLM), `/imagine`
+fails.
+
+**The owner's instinct is the correct design** — image generation should route to
+a **different provider than chat**, since the chat model and image model are often
+different services. Plan:
+
+- Add a **dedicated "Image generation" provider setting**: its own endpoint
+  (base URL), API key, model, and size — reuse the existing multi-endpoint
+  profile system (`ApiEndpointPreferences`) so the user just picks an endpoint +
+  model for images. **Default:** fall back to the chat endpoint when unset
+  (back-compat for chat models that *do* generate images).
+- **`/imagine` (and the function-calling `generateImage` tool) route to that
+  image provider**, independent of the current chat model.
+- **The UI clearly names the active image generator** — e.g. "Images: ⟨provider⟩ ·
+  ⟨model⟩" near `/imagine` / in Quick Settings — and shows a friendly message when
+  it's unset ("No image generator configured — set one in Settings") instead of a
+  raw error.
+
+Modern standard this matches: OpenAI-compatible `images/generations` (DALL·E-3,
+`gpt-image-1`); OpenRouter and others expose image models the same way. Keep the
+existing `images()` call; point it at the configured image endpoint and surface
+which one it is.
+
+#### 6.11.2 Vision (show the model an image) — wired correctly, but a real bug breaks it off-OpenAI
+
+The attach-image path is implemented the modern way: a picked photo is resized,
+base64-encoded into a data URL (`baseImageString = "data:image/…;base64,…"`,
+`ChatActivity.kt:795`) and sent as multimodal **content parts** —
+`TextPart(prompt)` + `ImagePart(dataUrl)` (`:3167`). That is exactly the
+OpenAI-compatible `image_url` vision format, so the structure is right.
+
+**But there is a concrete bug, and it almost certainly *is* the owner's error:**
+the image-attach request **hard-codes `model = ModelId("gpt-4o")`**
+(`ChatActivity.kt:3171`) instead of using the chat's selected model. So attaching
+an image sends a request for **"gpt-4o"** to whatever endpoint you're on — and on
+GLM / OpenRouter / NanoGPT there is no `gpt-4o`, so it **errors**. This is **bad
+code, not a missing capability**. Plan:
+
+- **Fix:** use the chat's configured model (`preferences.getModel()`) for the
+  vision request, exactly like the normal text path — not a hard-coded `gpt-4o`.
+- **Keep the base64 data-URL approach** (no image hosting; works offline).
+- **Soften failures:** if the chosen model genuinely isn't vision-capable, show a
+  clear message ("This model may not support images — try a vision-capable
+  model/endpoint") instead of a raw stack trace. Optional per-endpoint
+  "supports vision" hint so the attach button can warn up front.
+
+This is a small, high-value fix — it likely turns vision from "broken" to
+"works" for the owner immediately.
+
+#### 6.11.3 Files to read (documents) — new feature
+
+**Not supported today** — attachment is image-only (no document path). The
+universal, model-agnostic approach (works with *any* text model, no special API):
+
+- Let the user attach a **text-ish file** (txt, md, code, CSV, PDF); the app
+  **extracts the text on-device** and injects it as context for that turn
+  (clearly marked: "Attached file ⟨name⟩:" + contents). PDFs need a text-extract
+  step; scanned/image PDFs fall back to vision.
+- Avoids depending on any provider "files API" (inconsistent across
+  OpenAI-compatible endpoints) — works everywhere.
+- Bigger lift → its **own phase**. Cap large files (size / token budget) with a
+  clear message.
+
+#### 6.11.4 Attach UX (intuitive, modern)
+
+One **`+` attach button** (already in the chat mockup) opens a small sheet:
+**Photo** (vision), **File** (document), **Camera**. Keep it obvious which actions
+need which capability; show the configured image generator where `/imagine` lives.
+Attachment and image-gen are first-class — don't bury them.
+
 ---
 
 ## 7. Screen-by-screen checklist
@@ -985,33 +1072,28 @@ nothing else** (verified: no other reader anywhere). Chats save unconditionally
 through `ChatPreferences` regardless, so the toggle does **literally nothing**.
 Remove the tile and the pref.
 
-**Slash commands = just `/imagine` — fate tied to image generation.** The "slash
-commands" toggle is the `imagine_command` pref (`getImagineCommand`); the **only**
-command is **`/imagine <prompt>`**, which fires an **image-generation** request
-(`ChatActivity.kt:2860` → `sendImageRequest`). So it lives or dies with whether
-**image generation works on the owner's endpoint** (GLM/z.ai may not support the
-DALL·E-style image API this path uses). Deferred to the **image-features audit**
-below — if image gen is dead on the endpoint, remove `/imagine` with it;
-otherwise keep it and relabel it plainly ("/imagine command", not "experimental
-slash commands").
+**Slash commands = just `/imagine` — keep it, make image gen configurable.** The
+"slash commands" toggle is the `imagine_command` pref; the **only** command is
+**`/imagine <prompt>`**, which fires image generation (`ChatActivity.kt:2860`).
+The owner wants to **keep** it. The fix isn't to delete it but to **decouple image
+generation into its own configurable provider** so it works regardless of the
+chat model — see **§6.11.1**. Relabel it plainly ("/imagine command"), not
+"experimental".
 
-**Function calling — weak; recommend remove or rework.** The `function_calling`
-pref enables the secondary `openai-java` client to let the model call two
-built-in tools (`ChatActivity.kt:3699`, `availableFunctions`):
-- `generateImage` — same image-generation dependency as `/imagine`.
-- `searchAtInternet` — **near-useless as built**: it just opens
-  `https://www.google.com/search?q=…` in the **browser** (`ChatActivity.kt:3137`)
-  and **feeds no results back to the model** — it isn't real retrieval.
-Tool-calling also has to be supported by the endpoint at all. Recommend: **remove
-`searchAtInternet` regardless** (does nothing useful), and tie `generateImage`/the
-whole toggle to the image audit. If neither tool survives, drop the
-function-calling toggle and the secondary-client path.
+**Function calling — trim, don't delete.** The `function_calling` pref exposes two
+tools (`ChatActivity.kt:3699`):
+- `generateImage` — **keep**, routed to the configurable image provider (§6.11.1).
+- `searchAtInternet` — **remove**: it only opens `https://www.google.com/search?q=…`
+  in the **browser** (`ChatActivity.kt:3137`) and feeds **nothing** back to the
+  model. Not real retrieval.
+Keep the function-calling toggle (now just `generateImage`), noting it needs an
+endpoint that supports tool calls.
 
-**Open question for the owner — the image audit.** Does **image generation
-actually work** on your endpoint right now (does `/imagine` ever produce an
-image)? That one answer decides `/imagine`, `generateImage`, and most of the
-image features you suspected were broken. Worth doing as its own small audit pass
-before we commit to keep-or-cut.
+**Image features overall — keep and make provider-agnostic (not cut).** Full plan
+in **§6.11**: configurable image-generation provider (6.11.1), the vision
+hard-coded-`gpt-4o` bug fix (6.11.2), and on-device file reading (6.11.3). This
+supersedes the earlier "audit to decide keep-or-cut" — the direction is set:
+**keep, fix, and decouple from the chat provider.**
 
 ---
 
@@ -1078,6 +1160,15 @@ before we commit to keep-or-cut.
 - **Phase 10 — User profiles (future)** (§6.9): persona-like profiles describing
   the *user*, each with its own image; reuses the Phase 9 avatar infrastructure.
   Spec further with the owner when reached.
+- **Phase 11 — Image generation as a configurable provider** (§6.11.1): a
+  dedicated image endpoint/model/key (separate from chat), `/imagine` +
+  `generateImage` route to it, UI names the active generator, friendly errors.
+  Keeps `/imagine`. Removes the useless `searchAtInternet` tool (§7.6).
+- **Phase 12 — File attachments** (§6.11.3): attach text-ish files (txt/md/code/
+  CSV/PDF), extract text on-device, inject as context; attach sheet gains "File".
+  (The **vision `gpt-4o` hard-code bug fix** + graceful errors, §6.11.2, is small
+  and rides Phase 4 — or can be a standalone quick fix sooner, since it likely
+  makes image-attach work immediately.)
 
 ---
 
