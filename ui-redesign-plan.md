@@ -1221,13 +1221,16 @@ Info popups *and* the Quick Settings total): **prefer the provider's actual
 - **Keep only "Changes are saved automatically"**, moved up as a **small subtitle
   under the Quick Settings title** — not a paragraph at the bottom.
 - Under **each sampling slider**, a **single short static helper line** (not
-  hidden behind long-press, not animated). Suggested copy:
-  - **Temperature** — "Higher = more creative; lower = more focused."
-  - **Top P** — "Another way to control randomness — lower = safer word choices.
-    (Adjust this *or* temperature, not both.)"
-  - **Frequency penalty** — "Higher reduces repeated words and phrases."
-  - **Presence penalty** — "Higher nudges the model toward new topics."
-  - **Seed** — "Same seed + same input → more repeatable output."
+  hidden behind long-press, not animated). The owner's own wording is the basis;
+  final text is the owner's to set. Starting from the owner's examples:
+  - **Temperature** — "Higher means more creative word choices."
+  - **Frequency penalty** — "Reduces likelihood of repeated phrases."
+  - **Presence penalty** — (owner to word) e.g. "Encourages the model to bring up
+    new topics."
+  - **Top P** — (owner to word) e.g. "Another way to control randomness. Change
+    this or temperature, not both."
+  - **Seed** — (owner to word) e.g. "The same seed with the same input gives more
+    repeatable results."
 
 **No top_k confusion.** These params are already the **standard OpenAI names** —
 temperature, top_p, frequency_penalty, presence_penalty, seed — **none renamed**,
