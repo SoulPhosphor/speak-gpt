@@ -649,14 +649,14 @@ visible sets:
 
 - **AI / assistant message:** **Listen** (`btn_speak`) sits at the **top of the
   message** — so you don't have to scroll a long answer to start playback (owner
-  pain point). Below the text: **share** (`btn_share`), **regenerate**
-  (`btn_retry`), **copy** (`btn_copy`), **edit** (`btn_edit`). **The Report
-  button (`btn_report`) is removed** — it has no moderation backend (the sheet
-  only links to external Discords / exports text — verified in
-  `ReportAIContentBottomSheet`) and the owner doesn't serve models. Removal means
-  dropping the button, its `findViewById`, its click handler, and the
-  `updateReportButton` call from `ChatAdapter`, and updating the §9.2 contract
-  (see note there) — a deliberate removal, not a dangling bind.
+  pain point). Below the text: **info** (`btn_info` — repurposed from the old
+  Report button, §6.10), **share** (`btn_share`), **regenerate** (`btn_retry`),
+  **copy** (`btn_copy`), **edit** (`btn_edit`). **The Report action is gone** (no
+  moderation backend — the sheet only links to external Discords / exports text,
+  verified in `ReportAIContentBottomSheet`); rather than delete the button,
+  **reuse its slot as an Info button** (§6.10) — swap the "!" for an info "i"
+  icon, replace the report handler with the model/time popup, and drop the
+  `ReportAIContentBottomSheet` wiring. Keep the id, renamed `btn_info`.
 - **User message — two:** **copy** (`btn_copy`) and **edit** (`btn_edit`, the
   pencil), so the user's own text can be copied or changed. The other buttons
   (`btn_speak`/`btn_share`/`btn_retry`) are `gone`. *(This already matches the
@@ -768,6 +768,44 @@ moving. Build persona avatars on top of that stable id; if for any reason Phase
 app has **no user-image mechanism today**, so this builds directly on the
 persona-avatar infrastructure above (same storage, copy, cleanup, render). Park
 as **Phase 10**; persona avatars (Phase 9) lay the foundation first.
+
+### 6.10 Per-message info: model used + time received (owner-requested 2026-06-24)
+
+The owner wants to know **which model produced each AI answer** (useful for their
+own projects, and the honest way to handle mixed-model chats) and **when it was
+received**. Delivered as an **Info button on AI messages only** — the slot the
+Report "!" is vacating becomes an **info ("i") icon**; tapping it shows a small
+popup: **Model:** ⟨model⟩ · **Received:** ⟨date & time⟩. (This is what resolves
+the §7.5 model-name question — no always-on label, no chat-list model column, the
+drawer stays clean.)
+
+**Storing it is easy and additive — no DB, no migration.** A chat message is a
+`HashMap<String, Any>` serialized to JSON by `ChatPreferences` (keys today:
+`message`, `isBot`, optional `image`/`imageType`). Add two keys **on AI messages
+only**:
+
+- `model` — the exact model string the request used. Capture it in the
+  `generateResponse` → `regularGPTResponse` funnel at generation time; a chat can
+  switch models mid-conversation, so **per-message** capture is what makes this
+  correct.
+- `ts` — `System.currentTimeMillis()` at **completion** ("received"); set when the
+  response finalizes.
+
+Wire both through `putMessage` (`ChatActivity.kt:3071`) — extend it to accept
+`model`/`ts` for bot messages and write them into the map. The keys are JSON, so
+they persist automatically; **old messages simply lack them** → the popup shows
+"model not recorded". User messages get neither key (owner only wants AI-side
+info).
+
+**UI:** reuse the AI-message button slot (former `btn_report`, now `btn_info`),
+info icon, shown only when `isBot == true` (the same gating the report button
+used). Tap → a small Material dialog/sheet with the model and a formatted **local**
+date-time. Message text selection and the other buttons are unchanged.
+
+**Where it lands:** the **storage** half (writing `model`/`ts` in `putMessage` +
+the funnel) is tiny and can land early or with **Phase 4**; the **Info button**
+itself rides with the Phase 4 chat-message restyle (it edits the same
+message-action row). Single generation funnel only — no second path.
 
 ---
 
@@ -930,14 +968,11 @@ collects nothing."*
 (`getHideModelNames`) controls whether the **chat list** shows each chat's current
 model under its name. It is a *per-chat* label, so it does **not** handle a chat
 that used several models — it just shows the chat's latest one (the confusion the
-owner noticed). Two facts: (a) the redesigned drawer **deliberately omits model
-labels** (§5.1), which removes this toggle's main surface; (b) if model visibility
-is wanted done *right* for mixed-model chats, the correct place is a **small
-per-AI-message model tag** (each answer labelled with the model that produced it),
-like the thinking section. Recommendation: drop the chat-list model label with the
-drawer, and **optionally** add a per-message model tag (small, toggleable) as a
-Phase 4/4.5 nicety. *[Owner: want the per-message model tag, or no model display
-at all?]*
+owner noticed). **Resolved (owner 2026-06-24):** drop the chat-list "Hide model
+names" toggle and its label entirely (the redesigned drawer omits model labels,
+§5.1). Model visibility is instead delivered **per AI message via the Info
+button** — model + received time on tap (§6.10) — which handles mixed-model chats
+correctly, since each answer carries its own model.
 
 ---
 
@@ -976,9 +1011,10 @@ at all?]*
   `btn_debug_log` shortcut). Single UI now — no `AssistantFragment` to mirror.
   **Must also resolve the standing intermittent top-bar/header-vanishing bug —
   see Section 7.4 (it is a Phase 4 acceptance criterion, not a separate PR).**
-  Also moves **Listen to the top** of AI messages and **removes the Report
-  button** (§6.7 / §9.2), and **removes the Classic/bubbles layout toggle**,
-  committing to the bubble layout (§7.5).
+  Also moves **Listen to the top** of AI messages, **turns the Report button
+  into an Info button** (model + received-time popup, §6.10 — incl. writing
+  `model`/`ts` per AI message in `putMessage`), and **removes the
+  Classic/bubbles layout toggle**, committing to the bubble layout (§7.5).
 - **Phase 4.5 — Reasoning ("thinking") display** (§6.8): read the reasoning
   field in the generation funnel; collapsible thinking section at the top of AI
   messages; global show/hide toggle. Confirm GLM's field/param and the
@@ -1061,13 +1097,14 @@ The adapter does **no null checks** on the rest — a missing id crashes on
 first bind. If the redesign hides a button, hide it via
 `visibility="gone"`, never by deleting the view.
 
-**Phase 4 exception — `btn_report` is being removed** (owner decision
-2026-06-24, §6.7): the report action has no backend. Its removal is the one
-sanctioned drop from this contract — delete `btn_report` from all three
-layouts **and** remove its `findViewById`/listener/`updateReportButton` in
-`ChatAdapter` in the same PR (and the now-unused `ReportAIContentBottomSheet`
-wiring), so there is no orphaned bind. Also note `btn_speak` (Listen) moves to
-the **top** of the assistant layout — still the same id, just repositioned.
+**Phase 4 change — `btn_report` becomes `btn_info`** (owner decision 2026-06-24,
+§6.7 / §6.10): the report action has no backend, so **repurpose its slot** as an
+**Info** button (info "i" icon, AI-only, shows a model + received-time popup)
+rather than deleting it. Rename `btn_report` → `btn_info` across all three
+layouts, swap the icon, replace the report handler (drop the
+`ReportAIContentBottomSheet` wiring) with the info popup, and keep the `isBot`
+gating. Also `btn_speak` (Listen) moves to the **top** of the assistant layout —
+same id, repositioned.
 
 ### 9.3 ~~AssistantFragment contract~~ — REMOVED (June 2026)
 
