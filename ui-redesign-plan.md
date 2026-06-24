@@ -636,15 +636,21 @@ the adapter binds them with no null checks, so a button that shouldn't appear on
 a given message type is hidden with `visibility="gone"`, **never deleted**. The
 visible sets:
 
-- **AI / assistant message — all six:** **speak** (`btn_speak`, hear it),
-  **share** (`btn_share`), **report** (`btn_report` — the "!" icon; opens the
-  report-AI-content sheet), **regenerate** (`btn_retry`), **copy** (`btn_copy`),
-  **edit** (`btn_edit`, the pencil).
+- **AI / assistant message:** **Listen** (`btn_speak`) sits at the **top of the
+  message** — so you don't have to scroll a long answer to start playback (owner
+  pain point). Below the text: **share** (`btn_share`), **regenerate**
+  (`btn_retry`), **copy** (`btn_copy`), **edit** (`btn_edit`). **The Report
+  button (`btn_report`) is removed** — it has no moderation backend (the sheet
+  only links to external Discords / exports text — verified in
+  `ReportAIContentBottomSheet`) and the owner doesn't serve models. Removal means
+  dropping the button, its `findViewById`, its click handler, and the
+  `updateReportButton` call from `ChatAdapter`, and updating the §9.2 contract
+  (see note there) — a deliberate removal, not a dangling bind.
 - **User message — two:** **copy** (`btn_copy`) and **edit** (`btn_edit`, the
-  pencil), so the user's own text can be copied or changed. The other four
-  (`btn_speak`/`btn_share`/`btn_retry`/`btn_report`) are `gone`. *(This already
-  matches the adapter, which shows report/share only when `isBot == true` —
-  `ChatAdapter.kt:340`; the restyle must preserve that gating.)*
+  pencil), so the user's own text can be copied or changed. The other buttons
+  (`btn_speak`/`btn_share`/`btn_retry`) are `gone`. *(This already matches the
+  adapter, which shows share only when `isBot == true` — `ChatAdapter.kt:348`;
+  the restyle must preserve that gating.)*
 
 The palette-designer **mockup currently draws the wrong message icons** and will
 be corrected to exactly these two sets.
@@ -655,6 +661,42 @@ long-press to select part of a message and copy it via the normal Android
 text-selection toolbar. The restyle must keep this — do not disable selection on
 the message text or let a tap/long-press handler swallow the gesture. This is
 **independent** of the per-message copy button (which copies the whole message).
+
+### 6.8 Reasoning ("thinking") display (owner-requested 2026-06-24)
+
+Some endpoints/models the owner uses are **reasoning models** that emit a
+separate "thinking" stream. Today the app discards it; the owner wants to
+optionally see it.
+
+**Cost facts (so the design is grounded):** the model generates the thinking
+tokens whether or not they're shown — they're billed as output either way, so
+**displaying them costs nothing extra**. Standard practice is to **not** send a
+prior turn's thinking back as history (only final answers go back), so showing
+it does **not** compound token cost on later turns. "Show thinking" is therefore
+almost entirely a parse-and-render feature, not a cost trade-off.
+
+**How it arrives:** OpenAI-compatible reasoning APIs return the thinking in a
+**separate field** (commonly `reasoning_content`; some use `reasoning`), not in
+the normal `content`. The streaming path must read that field. *(Confirm GLM's
+exact field/param when building — some providers also need a request param to
+enable or return reasoning.)*
+
+**UI:** when thinking is present, render it as a **collapsible section at the top
+of that AI message** (collapsed by default; tap to expand), visually distinct
+from the answer (dimmer / italic). It is not fed back into chat history. Add the
+thinking view to the three message layouts per the §9.2 "hide via `gone`" rule
+(absent when there's no reasoning, or when the toggle is off).
+
+**Toggle (recommend a toggle, not forced-on):** a global "Show model thinking"
+setting (Settings → Appearance/Behavior). Recommend **on, collapsed** — present
+but not noisy — rather than forcing it expanded every turn. When off, the
+reasoning field is dropped (or not requested) and no section shows. *[Owner:
+confirm toggle vs always-on.]*
+
+**Scope/where:** new behavior in the single `generateResponse` →
+`regularGPTResponse` funnel plus `ChatAdapter` rendering — rides with **Phase
+4.5** (after the Phase 4 chat restyle that already reworks message rows). Keep
+it in the one funnel; do not add a second path.
 
 ---
 
@@ -806,6 +848,12 @@ gaps worth checking during Phase 4:
   `btn_debug_log` shortcut). Single UI now — no `AssistantFragment` to mirror.
   **Must also resolve the standing intermittent top-bar/header-vanishing bug —
   see Section 7.4 (it is a Phase 4 acceptance criterion, not a separate PR).**
+  Also moves **Listen to the top** of AI messages and **removes the Report
+  button** (§6.7 / §9.2).
+- **Phase 4.5 — Reasoning ("thinking") display** (§6.8): read the reasoning
+  field in the generation funnel; collapsible thinking section at the top of AI
+  messages; global show/hide toggle. Confirm GLM's field/param and the
+  toggle-vs-always-on decision first.
 - **Phase 5 — Settings & Characters restyle** (tiles → rows/cards).
 - **Phase 6 — List screens & item layouts.**
 - **Phase 7 — Dialogs & bottom sheets.**
@@ -871,6 +919,14 @@ each contain: `ui` (ConstraintLayout), `icon` (ImageView), `message`
 The adapter does **no null checks** on the rest — a missing id crashes on
 first bind. If the redesign hides a button, hide it via
 `visibility="gone"`, never by deleting the view.
+
+**Phase 4 exception — `btn_report` is being removed** (owner decision
+2026-06-24, §6.7): the report action has no backend. Its removal is the one
+sanctioned drop from this contract — delete `btn_report` from all three
+layouts **and** remove its `findViewById`/listener/`updateReportButton` in
+`ChatAdapter` in the same PR (and the now-unused `ReportAIContentBottomSheet`
+wiring), so there is no orphaned bind. Also note `btn_speak` (Listen) moves to
+the **top** of the assistant layout — still the same id, just repositioned.
 
 ### 9.3 ~~AssistantFragment contract~~ — REMOVED (June 2026)
 

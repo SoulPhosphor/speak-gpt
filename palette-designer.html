@@ -329,6 +329,7 @@
   .bubble.user { background: var(--userBg); color: var(--userText); border-bottom-right-radius: 7px; }
   .row.user { display: flex; justify-content: flex-end; }
   .actions { display: flex; gap: 14px; margin: 4px 2px 10px; opacity: .85; }
+  .actions.top { margin: 4px 2px 5px; }
   .actions.user { justify-content: flex-end; }
   .actions .icon { width: 17px; height: 17px; color: var(--accent); cursor: pointer; }
 
@@ -432,6 +433,16 @@
       <label class="chk"><input type="checkbox" id="reduceMotion" /> Reduce motion</label>
     </div>
     <div id="zones"></div>
+
+    <div class="savebar">
+      <h3>Starter palettes (try these on your phone)</h3>
+      <div class="note">Three ready-made schemes to feel the app. Load one, flip Dark/Light &amp; Vibrant/Calm, then tweak or save. More can be added later — that part's cheap.</div>
+      <div class="row">
+        <button class="btn ghost" data-preset="Phosphor">Phosphor</button>
+        <button class="btn ghost" data-preset="Ocean">Ocean</button>
+        <button class="btn ghost" data-preset="Ember">Ember</button>
+      </div>
+    </div>
 
     <div class="savebar">
       <h3>Save theme</h3>
@@ -571,12 +582,14 @@
               </div>
 
               <div class="messages">
-                <!-- AI message: speak · share · report(!) · regenerate · copy · edit -->
-                <div class="bubble-wrap"><div class="bubble bot">This is how an assistant message looks. The card stays easy to read — the <i>edge</i> carries the color.</div></div>
+                <!-- AI message: Listen sits at the TOP (no scrolling a long answer to start playback);
+                     below the text: share · regenerate · copy · edit. Report removed (no backend). -->
+                <div class="actions top">
+                  <svg class="icon" title="Listen" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 6.5a9 9 0 0 1 0 11"/></svg>
+                </div>
+                <div class="bubble-wrap"><div class="bubble bot">This is how an assistant message looks. The card stays easy to read — the <i>edge</i> carries the color. Listen is up top so you can start playback without scrolling.</div></div>
                 <div class="actions">
-                  <svg class="icon" title="Speak" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/></svg>
                   <svg class="icon" title="Share" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"/><line x1="15.4" y1="6.5" x2="8.6" y2="10.5"/></svg>
-                  <svg class="icon" title="Report" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h16.9a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><line x1="12" y1="9" x2="12" y2="13.5"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
                   <svg class="icon" title="Regenerate" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.5 15a9 9 0 1 1-2.1-9.4L23 10"/></svg>
                   <svg class="icon" title="Copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
                   <svg class="icon" title="Edit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
@@ -746,6 +759,72 @@ const LEGACY = {
     edge1:"#dfdded", edge2:"#302936", edge3:"#dfdded", glow:"#cac1de", divider:"#D9D9D6",
     primaryBtnBg:"#302936", primaryBtnText:"#FFFFFF", secondaryBtnBg:"#dfdded", secondaryBtnText:"#27222D",
     accent:"#27222D", selected:"#dfdded", error:"#4F1E1A", warning:"#9A6A12",
+  }
+};
+
+// Three starter palettes for the owner to feel on a phone. Reading surfaces stay
+// charcoal (dark) / off-white (light) for legibility; color lives in the edges,
+// accents and buttons. These are candidates — the owner refines/replaces later.
+const PRESETS = {
+  Phosphor: {
+    dark: {
+      pageBg:"#0B0F0C", readSurface:"#141A16", readText:"#E6F0E9",
+      topbarBg:"#0B0F0C", topbarText:"#D7F7E5",
+      drawerBg:"#0F1512", drawerText:"#E6F0E9", drawerSelectedBg:"#1B2A22",
+      userBg:"#15201A", userText:"#E6F0E9", botBg:"#141A16", botText:"#E6F0E9",
+      edge1:"#34D399", edge2:"#10B981", edge3:"#2DD4BF", glow:"#10B981", divider:"#1E2A24",
+      primaryBtnBg:"#34D399", primaryBtnText:"#06120D", secondaryBtnBg:"#141A16", secondaryBtnText:"#D7F7E5",
+      accent:"#34D399", selected:"#1B2A22", error:"#E5484D", warning:"#E0A23C",
+    },
+    light: {
+      pageBg:"#F2F6F3", readSurface:"#FBFEFC", readText:"#10241A",
+      topbarBg:"#F2F6F3", topbarText:"#10241A",
+      drawerBg:"#E8F0EB", drawerText:"#10241A", drawerSelectedBg:"#D5E8DD",
+      userBg:"#FBFEFC", userText:"#10241A", botBg:"#FBFEFC", botText:"#10241A",
+      edge1:"#0E9F6E", edge2:"#0B8457", edge3:"#14B8A6", glow:"#7AD7B5", divider:"#DDE8E1",
+      primaryBtnBg:"#0E9F6E", primaryBtnText:"#FFFFFF", secondaryBtnBg:"#FBFEFC", secondaryBtnText:"#0B5B3E",
+      accent:"#0E9F6E", selected:"#D5E8DD", error:"#C62A2F", warning:"#9A6A12",
+    }
+  },
+  Ocean: {
+    dark: {
+      pageBg:"#0B0F14", readSurface:"#141A22", readText:"#E6EEF6",
+      topbarBg:"#0B0F14", topbarText:"#CFE6FF",
+      drawerBg:"#0F1620", drawerText:"#E6EEF6", drawerSelectedBg:"#1A2735",
+      userBg:"#152030", userText:"#E6EEF6", botBg:"#141A22", botText:"#E6EEF6",
+      edge1:"#38BDF8", edge2:"#2563EB", edge3:"#22D3EE", glow:"#2563EB", divider:"#1C2836",
+      primaryBtnBg:"#38BDF8", primaryBtnText:"#06121E", secondaryBtnBg:"#141A22", secondaryBtnText:"#CFE6FF",
+      accent:"#38BDF8", selected:"#1A2735", error:"#E5484D", warning:"#E0A23C",
+    },
+    light: {
+      pageBg:"#F1F5F9", readSurface:"#FBFDFF", readText:"#0F2233",
+      topbarBg:"#F1F5F9", topbarText:"#0F2233",
+      drawerBg:"#E7EEF5", drawerText:"#0F2233", drawerSelectedBg:"#D5E3F0",
+      userBg:"#FBFDFF", userText:"#0F2233", botBg:"#FBFDFF", botText:"#0F2233",
+      edge1:"#0284C7", edge2:"#1D4ED8", edge3:"#0891B2", glow:"#8EC5EC", divider:"#DCE6F0",
+      primaryBtnBg:"#0284C7", primaryBtnText:"#FFFFFF", secondaryBtnBg:"#FBFDFF", secondaryBtnText:"#0B4E78",
+      accent:"#0284C7", selected:"#D5E3F0", error:"#C62A2F", warning:"#9A6A12",
+    }
+  },
+  Ember: {
+    dark: {
+      pageBg:"#120E0B", readSurface:"#1C1612", readText:"#F3E9E2",
+      topbarBg:"#120E0B", topbarText:"#FFD9B8",
+      drawerBg:"#17110D", drawerText:"#F3E9E2", drawerSelectedBg:"#2C1E15",
+      userBg:"#221610", userText:"#F3E9E2", botBg:"#1C1612", botText:"#F3E9E2",
+      edge1:"#FB923C", edge2:"#F97316", edge3:"#F59E0B", glow:"#F97316", divider:"#2A1C14",
+      primaryBtnBg:"#FB923C", primaryBtnText:"#1A0E06", secondaryBtnBg:"#1C1612", secondaryBtnText:"#FFD9B8",
+      accent:"#FB923C", selected:"#2C1E15", error:"#E5484D", warning:"#E0A23C",
+    },
+    light: {
+      pageBg:"#F7F3EF", readSurface:"#FFFDFB", readText:"#2A1A0F",
+      topbarBg:"#F7F3EF", topbarText:"#2A1A0F",
+      drawerBg:"#F0E7DE", drawerText:"#2A1A0F", drawerSelectedBg:"#EBD9C8",
+      userBg:"#FFFDFB", userText:"#2A1A0F", botBg:"#FFFDFB", botText:"#2A1A0F",
+      edge1:"#E8740F", edge2:"#D9531A", edge3:"#F59E0B", glow:"#F3C28A", divider:"#E9DCCD",
+      primaryBtnBg:"#E8740F", primaryBtnText:"#FFFFFF", secondaryBtnBg:"#FFFDFB", secondaryBtnText:"#9A4E0C",
+      accent:"#E8740F", selected:"#EBD9C8", error:"#C62A2F", warning:"#9A6A12",
+    }
   }
 };
 
@@ -937,6 +1016,17 @@ document.getElementById("loadNeutral").addEventListener("click", () => {
   document.getElementById("themeName").value = "";
   syncControls(); applyPreview(); saveWork();
 });
+
+// Starter palettes — load one into the editor (then the owner can tweak/save).
+function loadPreset(name) {
+  const p = PRESETS[name];
+  if (!p) return;
+  state.theme = structuredClone(p);
+  document.getElementById("themeName").value = name;
+  syncControls(); applyPreview(); saveWork();
+}
+document.querySelectorAll("[data-preset]").forEach(b =>
+  b.addEventListener("click", () => loadPreset(b.dataset.preset)));
 
 function readableExport() {
   const name = document.getElementById("themeName").value.trim() || "(unnamed)";
