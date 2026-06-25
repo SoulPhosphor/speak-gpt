@@ -56,10 +56,26 @@ a foreground service that keeps generation alive in the background.
 - `ui/adapters/chat/ChatAdapter.kt` — message rendering (Markwon markdown,
   selectable text, copy/edit/speak buttons, bulk select).
 - `service/HandsFreeService.kt` — microphone-typed foreground service for
-  screen-off hands-free conversation (wake lock + notification).
-- `service/GenerationForegroundService.kt` — dataSync-typed foreground service
-  held only while a response streams; ref-counted via `begin()`/`end()` in the
-  `try`/`finally` of the `generateResponse` funnel.
+  screen-off hands-free conversation (wake lock + notification). Its
+  notification carries a **Hang Up** action (see below).
+- `service/GenerationForegroundService.kt` — **mediaPlayback**-typed foreground
+  service (was dataSync; switched so it can legitimately span audio readback,
+  and to dodge Android 15+'s daily dataSync cap — manifest type + the
+  `FOREGROUND_SERVICE_MEDIA_PLAYBACK` permission must stay in sync with the
+  runtime type or `startForeground` throws on 14+). Ref-counted via
+  `begin()`/`end()`. It is held for the response stream (begin/end in the
+  `try`/`finally` of the `generateResponse` funnel) **and** extended across the
+  plain (non-hands-free) read-aloud that follows: `ChatActivity`'s
+  `acquireReadbackKeepAlive()`/`releaseReadbackKeepAlive()` add a second ref
+  driven by real playback state (`tts.isSpeaking`/`mediaPlayer.isPlaying`) plus
+  a hard timeout, so leaving the app mid-readback no longer freezes the process
+  and cuts the reply off. Hands-free read-aloud is already covered by
+  `HandsFreeService`, so the readback keep-alive is skipped there (no second
+  bar). Both service notifications expose a **Hang Up** action that broadcasts
+  `ChatActivity.ACTION_HANG_UP` (package-scoped, non-exported; `hangUpReceiver`
+  registered for the activity's whole life so it fires while backgrounded) →
+  runs `cancelAllAiActivity()` (the same teardown as the in-app stop control:
+  stops readback + listening).
 - `stt/` — on-device speech: `LocalWhisperEngine/Native` (whisper.cpp JNI),
   `WebRtcVadNative` + `VoiceActivityDetector` (energy VAD + libfvad), model
   download/storage. Native sources in `app/src/main/cpp/`.
@@ -117,7 +133,19 @@ Everything is on-device. No cloud sync, no accounts.
   official `openai-java` client for function calling.
 - Voice: hands-free loop (VAD listen → Whisper/Google STT → generate → TTS
   readback → re-arm), manual mic button, per-message speak button, audible
-  error/done chimes, screen-off operation via foreground services.
+  error/done chimes, screen-off operation via foreground services (the bar with
+  a **Hang Up** button — see `GenerationForegroundService`/`HandsFreeService`
+  above; plain read-aloud now survives app-switch/screen-off via the readback
+  keep-alive). The Event (Voice Debug) log is **never wiped on startup** —
+  `MainApplication` used to call `Logger.clearEventLog` in `onCreate`, which
+  Android reran on every process recreation and silently erased the log between
+  sessions; clearing is user-driven only (the button in `LogsActivity`). On
+  start `MainApplication` instead calls `Logger.logLastExitReason`, which uses
+  `ActivityManager.getHistoricalProcessExitReasons` (API 30+) to record *why
+  the previous process died* (low memory / force-stop / crash / ANR vs. clean
+  exit) — a hard kill runs no code on the way out, so this after-the-fact query
+  is the only trace a screen-off readback killed mid-sentence leaves; deduped by
+  exit timestamp.
   Voice diagnostics: with any VAD-logging toggle on (Energy, WebRTC or Silero
   — each detector has its own toggle, now in the Alert & Debug menu), every
   loop decision (mic open/close + why, readback, failures, loop stop reasons)
