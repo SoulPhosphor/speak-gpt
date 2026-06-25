@@ -244,6 +244,14 @@ Everything is on-device. No cloud sync, no accounts.
 
 ## Do not touch / fragile
 
+- **Never clear the Voice Debug / event log on startup.** `MainApplication`
+  used to call `Logger.clearEventLog` in `onCreate`, which Android re-runs every
+  time it recreates the process (leaving the app, screen-off, low memory). That
+  silently wiped the user's voice diagnostics whenever they navigated away and
+  back — the "VAD logging is on but the log is empty / it deletes the whole log
+  when I switch screens" bug. The log is meant to persist across restarts;
+  growth is already bounded by `Logger.trimByEntries` retention. Clearing is
+  user-driven only (the Clear button in `LogsActivity`).
 - **Ktor pinned at 2.3.12** (`app/build.gradle`): newer Ktor breaks the
   `openai-client` streaming. Don't "helpfully" upgrade.
 - **TLS / OkHttp defaults**: history includes a security fix restoring default

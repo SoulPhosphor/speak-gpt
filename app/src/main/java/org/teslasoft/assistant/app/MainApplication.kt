@@ -23,7 +23,6 @@ import com.google.android.material.color.DynamicColors
 import org.conscrypt.Conscrypt
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.GlobalPreferences
-import org.teslasoft.assistant.preferences.Logger
 import org.teslasoft.assistant.theme.ThemeManager
 import java.security.Security
 
@@ -48,8 +47,16 @@ class MainApplication : Application() {
             Security.insertProviderAt(Conscrypt.newProvider(), 1)
         }
 
-        // Clear event log on startup
-        Logger.clearEventLog(this)
+        // NOTE: the Voice Debug Log is intentionally NOT cleared here. Android
+        // recreates this Application (and runs onCreate again) every time the
+        // process is restarted — leaving the app, screen-off, low memory — so
+        // wiping the event log on startup silently erased the user's voice
+        // diagnostics whenever they navigated away and came back ("the log is
+        // empty even though VAD logging is on"). Growth is bounded by Logger's
+        // own retention (entry/age caps in trimByEntries), which is the whole
+        // reason that retention exists; it must persist across restarts to be
+        // useful for intermittent, screen-off hands-free failures. Clearing is
+        // user-driven only (the Clear button in the log screen).
 
         CaocConfig.Builder.create()
             .backgroundMode(CaocConfig.BACKGROUND_MODE_SHOW_CUSTOM)
