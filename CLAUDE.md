@@ -147,7 +147,7 @@ Everything is on-device. No cloud sync, no accounts.
   is the only trace a screen-off readback killed mid-sentence leaves; deduped by
   exit timestamp.
   Voice diagnostics: with any VAD-logging toggle on (Energy, WebRTC or Silero
-  — each detector has its own toggle, now in the Alert & Debug menu), every
+  — each detector has its own toggle, in the Audio Debugging screen), every
   loop decision (mic open/close + why, readback, failures, loop stop reasons)
   is written to the persistent Event log via `ChatActivity.logVoiceEvent` —
   when adding a new loop exit path, log it there or failures become
@@ -155,8 +155,9 @@ Everything is on-device. No cloud sync, no accounts.
   follows the same toggles (`voiceDiagnosticsEnabled()`), so logging off means
   no VadDiag spam. `Logger` is local-only (no telemetry); it must not be gated
   on the installation id.
-  Advanced voice & debugging screen (`VoiceAdvancedSettingsActivity`, plain
-  rows not tiles, reached from a full-width tile in Voice settings): VAD
+  Advanced Voice Settings screen (`VoiceAdvancedSettingsActivity`, plain
+  rows not tiles, reached from a full-width tile in Voice settings — the VAD
+  *logging* toggles are NOT here, they're in Audio Debugging): VAD
   energy-gate tuning (`VadTuning` — gate on/off, min RMS, floor factor,
   ceiling, min speech duration, plus hysteresis: a two-level gate where
   speech enters at the full gate but only has to stay above gate×exit-ratio,
@@ -174,7 +175,7 @@ Everything is on-device. No cloud sync, no accounts.
   cleanup toggle — plumbed Kotlin→JNI→whisper_full, defaults match the old
   hardcoded values), and device-TTS rate/pitch (set in both ttsPostInit
   funnels). (The voice-diagnostics logging toggles that used to live here moved
-  to the Alert & Debug menu.) The VAD energy gate exists because WebRTC
+  to the Audio Debugging screen.) The VAD energy gate exists because WebRTC
   mislabels fan noise as voice, but a fixed gate also silently discarded a
   quiet voice ("voiced N, gated 0" in diagnostics) — that's why it's tunable.
 - Lorebook memory system: multiple books (title/description/type-tag,
@@ -192,18 +193,26 @@ Everything is on-device. No cloud sync, no accounts.
 - Markdown/LaTeX rendering, partial text selection, message edit/delete/copy/
   share, bulk select, image attach + DALL·E-style generation, in-app
   translator, playground, logit bias editor, AMOLED theme, onboarding flow.
-- Settings → Debug is a single full-width "Alert and Debug Menu" tile opening
-  `AlertDebugMenuActivity` (plain rows, mirrors `VoiceAdvancedSettingsActivity`).
-  It holds, top to bottom: **Show chat errors** and **Sound alert for model
-  errors** (was "Error sound") switches; a **Voice Diagnostics** section with
-  the **Energy / WebRTC / Silero** VAD-logging switches (moved here from the
-  Advanced voice screen — each detector has its own toggle now, so Silero's
-  logs are no longer tied to WebRTC's) plus an **Audio Health** switch; then
-  **Crash log** / **Event log** as "label ›" rows that open `LogsActivity`. The
-  error and VAD-logging toggles are all global prefs; the logs are local-only
-  and intentionally always reachable (not gated on the installation id) — don't
-  reintroduce that gate when restyling. **Audio Health** is a separate
-  hands-free diagnostic from VAD logging (`getAudioHealthLogging`): per-turn
+- Debug menus are split by **audio vs non-audio** (owner's mental model: all
+  audio settings live together under Voice; everything else stays with the error
+  logs). Two screens:
+  - **Audio Debugging** (`AudioDebuggingActivity`, plain rows) — reached from a
+    **Voice Debugging** tile at the bottom of Voice & Speech (the sibling tile is
+    **Advanced Voice Settings** = `VoiceAdvancedSettingsActivity`), *and* from a
+    shortcut row in the Alerts/Errors/Logs screen. Holds everything
+    microphone/voice: the **transcription-finished chime** (moved here from a
+    tile in Voice & Speech), the **Energy / WebRTC / Silero** VAD-logging
+    switches (each detector its own toggle), and the **Audio Health** switch.
+  - **Alerts, Errors & Logs** (`AlertDebugMenuActivity`, plain rows; was "Alert &
+    Debug") — the single full-width tile under Settings → Debug. Holds the
+    NON-audio items: **Show chat errors** and **Sound alert for model errors**
+    switches; a **→ Audio Debugging** shortcut row (so someone hunting for VAD
+    logging here still finds it); then **Crash log** / **Event log** as "label ›"
+    rows that open `LogsActivity`.
+  All toggles are global prefs; the logs are local-only and intentionally always
+  reachable (not gated on the installation id) — don't reintroduce that gate when
+  restyling. **Audio Health** is a separate hands-free diagnostic from VAD
+  logging (`getAudioHealthLogging`): per-turn
   microphone input-health stats (frames, RMS/peak levels, near-silent/clipped
   counts, sample rate, channels, input route + mid-capture route changes) with
   plain-words hints, collected in `LocalWhisperEngine`'s capture loop

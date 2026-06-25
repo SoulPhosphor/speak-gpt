@@ -16,14 +16,12 @@
 
 package org.teslasoft.assistant.ui.activities
 
-import android.content.Intent
 import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
 import android.view.WindowInsets
 import android.widget.ImageButton
-import android.widget.LinearLayout
 import android.widget.ScrollView
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
@@ -36,25 +34,18 @@ import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.theme.ThemeManager
 
 /**
- * The "Alerts, Errors & Logs" screen, opened from the single full-width tile
- * under the Debug header in Settings. Holds the NON-audio diagnostics: the two
- * model-error toggles (show chat errors, error sound), a shortcut row down to
- * Audio Debugging (where everything microphone/voice related now lives), and
- * the crash/event log rows. The audio toggles (VAD logging, Audio Health,
- * transcription chime) moved out to [AudioDebuggingActivity] so audio settings
- * sit together under Voice and aren't buried in a non-voice menu.
+ * "Audio Debugging" — everything microphone/voice related in one place, reached
+ * from the Voice Debugging tile in Voice & Speech (and from a shortcut row in
+ * the Alerts, Errors & Logs menu). Holds the transcription-finished chime, the
+ * per-detector VAD logging toggles (Energy/WebRTC/Silero), and microphone Audio
+ * Health. Split out of the old Alert & Debug screen so that audio things live
+ * together and non-audio error settings stay with the error logs.
  *
- * Deliberately NOT tiles: the error toggles read better as inline switch rows
- * (label + description), and the shortcut/log rows read better as plain
- * "label >" rows that open the target when tapped.
- *
- * The error toggles are global preferences (one error policy per app); chatId
- * is only threaded through so the log screen keeps the same intent contract it
- * had when launched from Settings. The logs are intentionally always available
- * — they are local-only and must not be gated on the (telemetry) installation
- * id (see CLAUDE.md).
+ * Plain inline switch rows, not tiles — same convention as the sibling debug
+ * screens. All toggles are global preferences; chatId is threaded through only
+ * to keep the Preferences contract identical to the old call sites.
  */
-class AlertDebugMenuActivity : FragmentActivity() {
+class AudioDebuggingActivity : FragmentActivity() {
 
     private var preferences: Preferences? = null
     private var chatId = ""
@@ -62,18 +53,16 @@ class AlertDebugMenuActivity : FragmentActivity() {
     private var actionBar: ConstraintLayout? = null
     private var btnBack: ImageButton? = null
 
-    private var switchShowChatErrors: MaterialSwitch? = null
-    private var switchErrorSound: MaterialSwitch? = null
-    // Shortcut down to the audio-only diagnostics, so a user who lands here
-    // looking for VAD logging doesn't have to know it lives under Voice.
-    private var rowAudioDebugging: LinearLayout? = null
-    private var rowCrashLog: LinearLayout? = null
-    private var rowEventLog: LinearLayout? = null
+    private var switchTranscriptionSound: MaterialSwitch? = null
+    private var switchLogEnergy: MaterialSwitch? = null
+    private var switchLogWebrtc: MaterialSwitch? = null
+    private var switchLogSilero: MaterialSwitch? = null
+    private var switchAudioHealth: MaterialSwitch? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         ThemeManager.getThemeManager().applyPalette(this)
-        setContentView(R.layout.activity_alert_debug_menu)
+        setContentView(R.layout.activity_audio_debugging)
 
         chatId = intent.extras?.getString("chatId", "") ?: ""
         preferences = Preferences.getPreferences(this, chatId)
@@ -88,11 +77,11 @@ class AlertDebugMenuActivity : FragmentActivity() {
         actionBar = findViewById(R.id.action_bar)
         btnBack = findViewById(R.id.btn_back)
 
-        switchShowChatErrors = findViewById(R.id.switch_show_chat_errors)
-        switchErrorSound = findViewById(R.id.switch_error_sound)
-        rowAudioDebugging = findViewById(R.id.row_audio_debugging)
-        rowCrashLog = findViewById(R.id.row_crash_log)
-        rowEventLog = findViewById(R.id.row_event_log)
+        switchTranscriptionSound = findViewById(R.id.switch_transcription_sound)
+        switchLogEnergy = findViewById(R.id.switch_log_energy)
+        switchLogWebrtc = findViewById(R.id.switch_log_webrtc)
+        switchLogSilero = findViewById(R.id.switch_log_silero)
+        switchAudioHealth = findViewById(R.id.switch_audio_health)
     }
 
     @Suppress("DEPRECATION")
@@ -120,8 +109,11 @@ class AlertDebugMenuActivity : FragmentActivity() {
 
     private fun loadValues() {
         val p = preferences ?: return
-        switchShowChatErrors?.isChecked = p.showChatErrors()
-        switchErrorSound?.isChecked = p.getErrorSound()
+        switchTranscriptionSound?.isChecked = p.getTranscriptionDoneSound()
+        switchLogEnergy?.isChecked = p.getVadLoggingEnergy()
+        switchLogWebrtc?.isChecked = p.getVadLoggingWebrtc()
+        switchLogSilero?.isChecked = p.getVadLoggingSilero()
+        switchAudioHealth?.isChecked = p.getAudioHealthLogging()
     }
 
     private fun initLogic() {
@@ -129,19 +121,11 @@ class AlertDebugMenuActivity : FragmentActivity() {
 
         btnBack?.setOnClickListener { finish() }
 
-        switchShowChatErrors?.setOnCheckedChangeListener { _, checked -> p.setShowChatErrors(checked) }
-        switchErrorSound?.setOnCheckedChangeListener { _, checked -> p.setErrorSound(checked) }
-
-        rowAudioDebugging?.setOnClickListener {
-            startActivity(Intent(this, AudioDebuggingActivity::class.java).putExtra("chatId", chatId))
-        }
-
-        rowCrashLog?.setOnClickListener {
-            startActivity(Intent(this, LogsActivity::class.java).putExtra("type", "crash").putExtra("chatId", chatId))
-        }
-        rowEventLog?.setOnClickListener {
-            startActivity(Intent(this, LogsActivity::class.java).putExtra("type", "event").putExtra("chatId", chatId))
-        }
+        switchTranscriptionSound?.setOnCheckedChangeListener { _, checked -> p.setTranscriptionDoneSound(checked) }
+        switchLogEnergy?.setOnCheckedChangeListener { _, checked -> p.setVadLoggingEnergy(checked) }
+        switchLogWebrtc?.setOnCheckedChangeListener { _, checked -> p.setVadLoggingWebrtc(checked) }
+        switchLogSilero?.setOnCheckedChangeListener { _, checked -> p.setVadLoggingSilero(checked) }
+        switchAudioHealth?.setOnCheckedChangeListener { _, checked -> p.setAudioHealthLogging(checked) }
     }
 
     override fun onAttachedToWindow() {

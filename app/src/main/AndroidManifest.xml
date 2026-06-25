@@ -219,6 +219,13 @@
         </activity>
 
         <activity
+            android:name=".ui.activities.AudioDebuggingActivity"
+            android:exported="false"
+            android:label="@string/title_audio_debugging"
+            android:launchMode="singleTask">
+        </activity>
+
+        <activity
             android:name=".ui.activities.LocalWhisperManageActivity"
             android:exported="false"
             android:label="@string/title_manage_downloaded_models"

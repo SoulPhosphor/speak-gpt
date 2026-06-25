@@ -603,11 +603,13 @@
          Settings that opens its own screen. The two error toggles became inline
          switch rows and the crash/event logs became plain "label >" rows there,
          so the dense debug grid is no longer crammed into half-width tiles. -->
-    <string name="title_alert_debug_menu">Alert &amp; Debug</string>
-    <string name="tile_alert_debug_menu_title">Alert and Debug Menu</string>
-    <string name="tile_alert_debug_menu_subtitle">Chat errors, alert sound, and logs</string>
-    <string name="tile_alert_debug_menu_desc">Open the Alert and Debug menu to choose how errors are surfaced in chat, toggle the error alert sound, and open the crash and event logs.</string>
-    <string name="alert_debug_intro">Choose how problems are surfaced, and open the diagnostic logs.</string>
+    <string name="title_alert_debug_menu">Alerts, Errors &amp; Logs</string>
+    <string name="tile_alert_debug_menu_title">Alerts, Errors &amp; Logs</string>
+    <string name="tile_alert_debug_menu_subtitle">Chat errors, alert sound, and logs (and a shortcut to Audio Debugging)</string>
+    <string name="tile_alert_debug_menu_desc">Choose how model errors are surfaced in chat, toggle the error alert sound, jump to Audio Debugging for anything microphone/voice related, and open the crash and event logs.</string>
+    <string name="alert_debug_intro">Settings for non-audio problems — model errors and alert sounds — plus the diagnostic logs. Anything to do with the microphone, voice detection, or transcription lives in Audio Debugging.</string>
+    <string name="row_audio_debugging_title">Audio Debugging</string>
+    <string name="row_audio_debugging_subtitle">Microphone, voice detection &amp; transcription diagnostics</string>
     <string name="alert_debug_section_alerts">Alerts</string>
     <string name="alert_debug_section_logs">Logs</string>
     <string name="on">On</string>
@@ -773,10 +775,16 @@
     <string name="audio_health_desc">When on, records microphone input health for each hands-free turn: frames received, average/max RMS and peak levels, near-silent and clipped frame counts, sample rate, channel count, and the input device — flagging if the mic was (near-)silent, clipping, or the input route changed (e.g. Bluetooth) mid-capture. Writes to the Event log alongside any VAD diagnostics. Turn off when not debugging.</string>
 
     <!-- Advanced voice & debugging screen -->
-    <string name="title_voice_advanced">Advanced voice &amp; debugging</string>
-    <string name="tile_voice_advanced_title">Advanced &amp; debugging</string>
-    <string name="tile_voice_advanced_subtitle">Detection tuning, Whisper decoding, delivery, logs</string>
-    <string name="tile_voice_advanced_desc">Tune how speech is detected, how on-device Whisper decodes it, how replies are spoken, and what gets logged. Includes plain-language hints for fixing “it never hears me” and “it cuts me off mid-sentence”.</string>
+    <string name="title_voice_advanced">Advanced Voice Settings</string>
+    <string name="tile_voice_advanced_title">Advanced Voice Settings</string>
+    <string name="tile_voice_advanced_subtitle">Detection tuning, Whisper decoding, delivery</string>
+    <string name="tile_voice_advanced_desc">Tune how speech is detected, how on-device Whisper decodes it, and how replies are spoken. Includes plain-language hints for fixing “it never hears me” and “it cuts me off mid-sentence”. (Diagnostic logging lives in Voice Debugging.)</string>
+    <string name="title_audio_debugging">Audio Debugging</string>
+    <string name="tile_voice_debugging_title">Voice Debugging</string>
+    <string name="tile_voice_debugging_subtitle">VAD logging, audio health, transcription chime</string>
+    <string name="tile_voice_debugging_desc">Everything microphone/voice related in one place: turn on detector logging (Energy, WebRTC, Silero) and microphone Audio Health before reporting a voice bug, and toggle the chime that plays once your speech is transcribed.</string>
+    <string name="audio_debugging_intro">Everything to do with the microphone, voice detection, and transcription. Turn the logging switches on before reporting a voice problem, then reproduce it and open the Event log.</string>
+    <string name="audio_debugging_section_sounds">Sounds</string>
     <string name="adv_intro">Defaults match the app’s long-standing behaviour — you only need this screen when voice misbehaves on your device. Changes apply from the next turn. Settings marked on-device only do not affect Google voice input or cloud Whisper.</string>
 
     <string name="adv_section_vad">Voice detection — on-device hands-free only</string>

@@ -51,7 +51,7 @@
             android:id="@+id/activity_title"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="@string/title_alert_debug_menu"
+            android:text="@string/title_audio_debugging"
             android:textColor="@color/text_title"
             android:textSize="20sp"
             android:textStyle="bold"
@@ -82,16 +82,16 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:paddingTop="16dp"
-                android:text="@string/alert_debug_intro"
+                android:text="@string/audio_debugging_intro"
                 android:textColor="@color/text_subtitle"
                 android:textSize="14sp" />
 
-            <!-- ============ Alerts ============ -->
+            <!-- ============ Sounds ============ -->
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:paddingTop="24dp"
-                android:text="@string/alert_debug_section_alerts"
+                android:text="@string/audio_debugging_section_sounds"
                 android:textColor="?attr/colorPrimary"
                 android:textSize="18sp"
                 android:textStyle="bold" />
@@ -103,34 +103,115 @@
                 android:orientation="horizontal"
                 android:paddingTop="16dp">
 
-                <LinearLayout
+                <TextView
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:orientation="vertical">
-
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/tile_show_chat_errors_title"
-                        android:textColor="@color/text"
-                        android:textSize="16sp" />
-
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/tile_show_chat_errors_desc"
-                        android:textColor="@color/text_subtitle"
-                        android:textSize="13sp" />
-                </LinearLayout>
+                    android:text="@string/tile_transcription_sound_title"
+                    android:textColor="@color/text"
+                    android:textSize="16sp" />
 
                 <com.google.android.material.materialswitch.MaterialSwitch
-                    android:id="@+id/switch_show_chat_errors"
+                    android:id="@+id/switch_transcription_sound"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="12dp" />
             </LinearLayout>
 
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="4dp"
+                android:text="@string/tile_transcription_sound_desc"
+                android:textColor="@color/text_subtitle"
+                android:textSize="13sp" />
+
+            <!-- ============ Voice Diagnostics ============ -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="28dp"
+                android:text="@string/adv_section_diag"
+                android:textColor="?attr/colorPrimary"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="4dp"
+                android:text="@string/adv_section_diag_caption"
+                android:textColor="@color/text_subtitle"
+                android:textSize="13sp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingTop="16dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/tile_vad_log_energy_title"
+                    android:textColor="@color/text"
+                    android:textSize="16sp" />
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_log_energy"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="12dp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingTop="12dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/tile_vad_log_webrtc_title"
+                    android:textColor="@color/text"
+                    android:textSize="16sp" />
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_log_webrtc"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="12dp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingTop="12dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/tile_vad_log_silero_title"
+                    android:textColor="@color/text"
+                    android:textSize="16sp" />
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_log_silero"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="12dp" />
+            </LinearLayout>
+
+            <!-- Audio Health: microphone input-health stats, separate from the
+                 VAD logging toggles above. -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -138,153 +219,28 @@
                 android:orientation="horizontal"
                 android:paddingTop="20dp">
 
-                <LinearLayout
+                <TextView
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:orientation="vertical">
-
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/tile_error_sound_title"
-                        android:textColor="@color/text"
-                        android:textSize="16sp" />
-
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/tile_error_sound_desc"
-                        android:textColor="@color/text_subtitle"
-                        android:textSize="13sp" />
-                </LinearLayout>
+                    android:text="@string/audio_health_title"
+                    android:textColor="@color/text"
+                    android:textSize="16sp" />
 
                 <com.google.android.material.materialswitch.MaterialSwitch
-                    android:id="@+id/switch_error_sound"
+                    android:id="@+id/switch_audio_health"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="12dp" />
             </LinearLayout>
 
-            <!-- ============ Audio Debugging shortcut ============ -->
-            <!-- All microphone/voice diagnostics moved to their own Audio
-                 Debugging screen (reached from Voice & Speech). This row is a
-                 jump straight there, so a user who lands here looking for VAD
-                 logging finds it without having to know it lives under Voice. -->
-            <LinearLayout
-                android:id="@+id/row_audio_debugging"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="28dp"
-                android:background="?attr/selectableItemBackground"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center_vertical"
-                android:minHeight="56dp"
-                android:orientation="horizontal"
-                android:paddingVertical="12dp">
-
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
-
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/row_audio_debugging_title"
-                        android:textColor="@color/text"
-                        android:textSize="16sp" />
-
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/row_audio_debugging_subtitle"
-                        android:textColor="@color/text_subtitle"
-                        android:textSize="13sp" />
-                </LinearLayout>
-
-                <ImageView
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:layout_marginStart="12dp"
-                    android:contentDescription="@string/row_audio_debugging_title"
-                    android:src="@drawable/ic_chevron_right"
-                    android:tint="@color/text_subtitle" />
-            </LinearLayout>
-
-            <!-- ============ Logs ============ -->
-            <!-- Plain "label >" rows, not tiles: tapping a row opens that log.
-                 Logs are local-only and always available (CLAUDE.md: the Logger
-                 must not be gated on the installation id). -->
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:paddingTop="28dp"
-                android:text="@string/alert_debug_section_logs"
-                android:textColor="?attr/colorPrimary"
-                android:textSize="18sp"
-                android:textStyle="bold" />
-
-            <LinearLayout
-                android:id="@+id/row_crash_log"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:background="?attr/selectableItemBackground"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center_vertical"
-                android:minHeight="56dp"
-                android:orientation="horizontal"
-                android:paddingVertical="12dp">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/tile_crash_log_title"
-                    android:textColor="@color/text"
-                    android:textSize="16sp" />
-
-                <ImageView
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:layout_marginStart="12dp"
-                    android:contentDescription="@string/tile_crash_log_title"
-                    android:src="@drawable/ic_chevron_right"
-                    android:tint="@color/text_subtitle" />
-            </LinearLayout>
-
-            <LinearLayout
-                android:id="@+id/row_event_log"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:background="?attr/selectableItemBackground"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center_vertical"
-                android:minHeight="56dp"
-                android:orientation="horizontal"
-                android:paddingVertical="12dp">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/tile_events_log_title"
-                    android:textColor="@color/text"
-                    android:textSize="16sp" />
-
-                <ImageView
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:layout_marginStart="12dp"
-                    android:contentDescription="@string/tile_events_log_title"
-                    android:src="@drawable/ic_chevron_right"
-                    android:tint="@color/text_subtitle" />
-            </LinearLayout>
+                android:paddingTop="4dp"
+                android:text="@string/audio_health_desc"
+                android:textColor="@color/text_subtitle"
+                android:textSize="13sp" />
         </LinearLayout>
     </ScrollView>
 </androidx.constraintlayout.widget.ConstraintLayout>

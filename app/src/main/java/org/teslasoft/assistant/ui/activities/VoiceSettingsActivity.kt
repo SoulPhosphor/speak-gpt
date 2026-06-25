@@ -73,8 +73,8 @@ class VoiceSettingsActivity : FragmentActivity() {
     private var tileAutoSend: TileFragment? = null
     private var tileHandsFreeTiming: TileFragment? = null
     private var tileVadMethod: TileFragment? = null
-    private var tileTranscriptionSound: TileFragment? = null
     private var tileVoiceAdvanced: TileFragment? = null
+    private var tileVoiceDebugging: TileFragment? = null
 
     private var btnBack: ImageButton? = null
 
@@ -306,23 +306,11 @@ class VoiceSettingsActivity : FragmentActivity() {
             functionDesc = getString(R.string.tile_vad_method_desc)
         )
 
-        tileTranscriptionSound = TileFragment.newInstance(
-            preferences?.getTranscriptionDoneSound() == true,
-            true,
-            getString(R.string.tile_transcription_sound_title),
-            null,
-            getString(R.string.on),
-            getString(R.string.off),
-            R.drawable.ic_volume_up,
-            false,
-            chatId,
-            getString(R.string.tile_transcription_sound_desc)
-        )
-
-        // One full-width entry point: the dense, explanation-heavy advanced
-        // controls (VAD tuning, Whisper decoding, TTS delivery, diagnostics
-        // logging) live on their own screen with readable rows instead of
-        // being crammed into half-width tiles.
+        // Two full-width entry points at the bottom. Advanced Voice Settings is
+        // the dense tuning screen (VAD tuning, Whisper decoding, TTS delivery);
+        // Voice Debugging opens Audio Debugging, where all microphone/voice
+        // diagnostics (detector logging, Audio Health, the transcription chime)
+        // now live together.
         tileVoiceAdvanced = TileFragment.newInstance(
             checked = false,
             checkable = false,
@@ -334,6 +322,19 @@ class VoiceSettingsActivity : FragmentActivity() {
             disabled = false,
             chatId = chatId,
             functionDesc = getString(R.string.tile_voice_advanced_desc)
+        )
+
+        tileVoiceDebugging = TileFragment.newInstance(
+            checked = false,
+            checkable = false,
+            enabledText = getString(R.string.tile_voice_debugging_title),
+            disabledText = null,
+            enabledDesc = getString(R.string.tile_voice_debugging_subtitle),
+            disabledDesc = null,
+            icon = R.drawable.ic_microphone,
+            disabled = false,
+            chatId = chatId,
+            functionDesc = getString(R.string.tile_voice_debugging_desc)
         )
     }
 
@@ -350,8 +351,8 @@ class VoiceSettingsActivity : FragmentActivity() {
             .replace(R.id.tile_autosend, tileAutoSend!!)
             .replace(R.id.tile_hands_free_timing, tileHandsFreeTiming!!)
             .replace(R.id.tile_vad_method, tileVadMethod!!)
-            .replace(R.id.tile_transcription_sound, tileTranscriptionSound!!)
             .replace(R.id.tile_voice_advanced, tileVoiceAdvanced!!)
+            .replace(R.id.tile_voice_debugging, tileVoiceDebugging!!)
             .commitNow()
     }
 
@@ -444,12 +445,12 @@ class VoiceSettingsActivity : FragmentActivity() {
             vadMethodSelector()
         }
 
-        tileTranscriptionSound?.setOnCheckedChangeListener { isChecked ->
-            preferences?.setTranscriptionDoneSound(isChecked)
-        }
-
         tileVoiceAdvanced?.setOnTileClickListener {
             startActivity(Intent(this, VoiceAdvancedSettingsActivity::class.java))
+        }
+
+        tileVoiceDebugging?.setOnTileClickListener {
+            startActivity(Intent(this, AudioDebuggingActivity::class.java).putExtra("chatId", chatId))
         }
     }
 
