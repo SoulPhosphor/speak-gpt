@@ -23,7 +23,6 @@ import com.google.android.material.color.DynamicColors
 import org.conscrypt.Conscrypt
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.GlobalPreferences
-import org.teslasoft.assistant.preferences.Logger
 import org.teslasoft.assistant.theme.ThemeManager
 import java.security.Security
 
@@ -48,8 +47,12 @@ class MainApplication : Application() {
             Security.insertProviderAt(Conscrypt.newProvider(), 1)
         }
 
-        // Clear event log on startup
-        Logger.clearEventLog(this)
+        // Do NOT clear the event log on startup. Application.onCreate runs every
+        // time Android recreates the process (leaving the app, screen off, memory
+        // pressure), so clearing here silently erased the Voice Debug Log between
+        // sessions — the "VAD logging is on but the log is empty" bug. The log
+        // self-limits via Logger.trimByEntries (~1000 entries / 7 days for the
+        // voice channel); clearing stays user-driven via the button in LogsActivity.
 
         CaocConfig.Builder.create()
             .backgroundMode(CaocConfig.BACKGROUND_MODE_SHOW_CUSTOM)
