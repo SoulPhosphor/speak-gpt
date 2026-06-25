@@ -127,6 +127,18 @@ Everything is on-device. No cloud sync, no accounts.
   follows the same toggles (`voiceDiagnosticsEnabled()`), so logging off means
   no VadDiag spam. `Logger` is local-only (no telemetry); it must not be gated
   on the installation id.
+  Readback (TTS) failures and interruptions are logged the same way: the
+  `ttsProgressListener` onError overloads log "TTS failed mid-readback", and an
+  `AudioDeviceCallback` (registered for the activity's lifetime in onCreate)
+  logs "audio output device connected/disconnected mid-readback (<device>)"
+  when a headset/BT/USB output sink appears or drops *while a readback is
+  playing*. That last one exists because connecting a headset mid-readback
+  silently reroutes (and often stops) device TTS with no error callback — the
+  "it just stopped reading and nothing said why" report. Tracked via the
+  `readbackInProgress` flag (set when playback actually starts in `speak()`,
+  cleared on done/error/stop) rather than polling `tts?.isSpeaking`, because
+  the engine has often torn down its speaking state by the time the route
+  callback fires. Not gated on hands-free, so plain auto-readback is covered.
   Advanced voice & debugging screen (`VoiceAdvancedSettingsActivity`, plain
   rows not tiles, reached from a full-width tile in Voice settings): VAD
   energy-gate tuning (`VadTuning` — gate on/off, min RMS, floor factor,

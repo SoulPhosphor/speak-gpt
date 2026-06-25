@@ -38,6 +38,8 @@ import android.graphics.RectF
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.media.AudioAttributes
+import android.media.AudioDeviceCallback
+import android.media.AudioDeviceInfo
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioTrack
@@ -951,6 +953,21 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     private var tts: TextToSpeech? = null
     private var pendingSpeak: String? = null
     private var ttsUtteranceCounter: Long = 0
+
+    // Audio-output route monitoring. A headset connecting or dropping mid-
+    // readback silently reroutes (and frequently stops) device TTS — the OS
+    // moves the audio route out from under the engine, often without any
+    // onError/onDone callback. That is the "it just stopped reading and nothing
+    // said why" report. We register an AudioDeviceCallback for the activity's
+    // lifetime and, while a readback is actually playing, leave a Voice Debug
+    // Log line naming the device that came or went, so the silence is
+    // explainable after the fact. [readbackInProgress] is tracked explicitly
+    // rather than polled from tts?.isSpeaking in the callback because by the
+    // time the route-change callback fires the engine may already have torn
+    // down its speaking state, which would make the check miss the very event
+    // we want to record.
+    private var audioDeviceCallback: AudioDeviceCallback? = null
+    private var readbackInProgress = false
     private val ttsListener: TextToSpeech.OnInitListener =
         TextToSpeech.OnInitListener { status ->
             if (status == TextToSpeech.SUCCESS) {
@@ -970,12 +987,18 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     private val ttsProgressListener = object : UtteranceProgressListener() {
         override fun onStart(utteranceId: String?) { /* no-op */ }
         override fun onDone(utteranceId: String?) {
+            readbackInProgress = false
             runOnUiThread { adapter?.clearSpeakingPosition() }
             onHandsFreeReadbackFinished()
         }
         @Suppress("OverridingDeprecatedMember")
         override fun onError(utteranceId: String?) {
+            readbackInProgress = false
             Log.w("TTS", "TTS utterance error: $utteranceId; re-initialising engine")
+            // Mirror the two-arg overload's Voice Debug Log line: some engines
+            // only call this older callback, and without a line the readback
+            // just stops with nothing to read afterwards.
+            runOnUiThread { logVoiceEvent("TTS failed mid-readback; re-initialising the speech engine") }
             Handler(Looper.getMainLooper()).post { reinitTTS() }
             runOnUiThread { adapter?.clearSpeakingPosition() }
             // A failed utterance must not strand the hands-free loop — re-arm
@@ -983,6 +1006,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             onHandsFreeReadbackFinished()
         }
         override fun onError(utteranceId: String?, errorCode: Int) {
+            readbackInProgress = false
             Log.w("TTS", "TTS utterance error code $errorCode: $utteranceId; re-initialising engine")
             runOnUiThread { logVoiceEvent("TTS failed mid-readback (error $errorCode); re-initialising the speech engine") }
             Handler(Looper.getMainLooper()).post { reinitTTS() }
@@ -1127,6 +1151,91 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         } catch (_: Exception) { /* ignore */ }
         isTTSInitialized = false
         tts = TextToSpeech(this, ttsListener)
+    }
+
+    /**
+     * Start watching for audio-output devices appearing/disappearing. Only the
+     * fact that a route-changing output device (a headset/speaker/BT/USB sink)
+     * connected or dropped *while a readback was playing* is logged — see
+     * [reportReadbackRouteChange] — so this never spams the Voice Debug Log with
+     * unrelated route changes during normal use. Registered once for the
+     * activity's lifetime and released in onDestroy.
+     */
+    private fun registerAudioDeviceMonitor() {
+        if (audioDeviceCallback != null) return
+        val am = getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
+        val cb = object : AudioDeviceCallback() {
+            override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>?) {
+                reportReadbackRouteChange("connected", addedDevices)
+            }
+            override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>?) {
+                reportReadbackRouteChange("disconnected", removedDevices)
+            }
+        }
+        try {
+            am.registerAudioDeviceCallback(cb, handsFreeHandler)
+            audioDeviceCallback = cb
+        } catch (_: Throwable) { /* monitoring is a diagnostic nicety; never fatal */ }
+    }
+
+    private fun unregisterAudioDeviceMonitor() {
+        val cb = audioDeviceCallback ?: return
+        audioDeviceCallback = null
+        try {
+            (getSystemService(Context.AUDIO_SERVICE) as? AudioManager)?.unregisterAudioDeviceCallback(cb)
+        } catch (_: Throwable) { /* ignore */ }
+    }
+
+    /**
+     * If a readback is currently playing and a route-changing output device just
+     * [verb]ed (connected/disconnected), leave a Voice Debug Log line naming it.
+     * This is the trail for "the assistant went silent the moment I put my
+     * headset on" — Android reroutes (and often stops) device TTS on the route
+     * change with no error callback, so without this line there is nothing to
+     * read afterwards. Filtered to output sinks of the types that actually move
+     * playback, so unrelated additions (e.g. an HDMI sink) don't fire.
+     */
+    private fun reportReadbackRouteChange(verb: String, devices: Array<out AudioDeviceInfo>?) {
+        if (!readbackInProgress) return
+        val relevant = devices?.filter { it.isSink && isReadbackRouteDevice(it.type) } ?: return
+        if (relevant.isEmpty()) return
+        val labels = relevant.joinToString(", ") { readbackDeviceLabel(it) }
+        logVoiceEvent(
+            "audio output device $verb mid-readback ($labels) — Android moved the audio route, " +
+                    "which can stop device TTS without any error; if the assistant fell silent here, this is why"
+        )
+    }
+
+    /** Output device types whose connect/disconnect actually reroutes playback
+     *  (headsets, speakers, Bluetooth, USB) — the ones worth logging when they
+     *  change mid-readback. BLE-audio types are intentionally omitted to keep
+     *  this off the minSdk-28 new-API lint path; the owner's headsets surface as
+     *  A2DP/SCO anyway. */
+    private fun isReadbackRouteDevice(type: Int): Boolean = type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
+            type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+            type == AudioDeviceInfo.TYPE_WIRED_HEADSET ||
+            type == AudioDeviceInfo.TYPE_WIRED_HEADPHONES ||
+            type == AudioDeviceInfo.TYPE_USB_HEADSET ||
+            type == AudioDeviceInfo.TYPE_USB_DEVICE ||
+            type == AudioDeviceInfo.TYPE_HEARING_AID
+
+    /** Plain-words name for an output device for the readback route-change line.
+     *  MicRouteSelector.label is mic-focused (it has no A2DP/headphones cases),
+     *  so the output side names its own types here; the product name is appended
+     *  when it adds detail (e.g. the headset's name). */
+    private fun readbackDeviceLabel(dev: AudioDeviceInfo): String {
+        val base = when (dev.type) {
+            AudioDeviceInfo.TYPE_BLUETOOTH_A2DP -> "Bluetooth audio"
+            AudioDeviceInfo.TYPE_BLUETOOTH_SCO -> "Bluetooth headset"
+            AudioDeviceInfo.TYPE_WIRED_HEADSET -> "wired headset"
+            AudioDeviceInfo.TYPE_WIRED_HEADPHONES -> "wired headphones"
+            AudioDeviceInfo.TYPE_USB_HEADSET -> "USB headset"
+            AudioDeviceInfo.TYPE_USB_DEVICE -> "USB audio"
+            AudioDeviceInfo.TYPE_HEARING_AID -> "hearing aid"
+            else -> "audio device"
+        }
+        val name = try { dev.productName?.toString()?.trim() } catch (_: Throwable) { null }
+        return if (!name.isNullOrEmpty() && !base.contains(name, ignoreCase = true)) "$base ($name)" else base
     }
 
     private fun ttsPostInit() {
@@ -1281,6 +1390,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             logVoiceEvent("chat screen destroyed while voice was active — readback and mic loop torn down" +
                     if (isFinishing) " (screen was closed)" else " (destroyed by the system)")
         }
+        unregisterAudioDeviceMonitor()
+        readbackInProgress = false
         if (tts != null) {
             tts!!.stop()
             tts!!.shutdown()
@@ -1367,6 +1478,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             reloadAmoled()
             initSpeechListener()
             initTTS()
+            registerAudioDeviceMonitor()
             initLogic()
             initAI()
         }
@@ -2240,6 +2352,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     mediaPlayer?.reset()
                 }
             } catch (_: Exception) { /* ignore */ }
+            readbackInProgress = false
             try { tts?.stop() } catch (_: Exception) { /* ignore */ }
             startHandsFreeService()
         }
@@ -3028,6 +3141,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 mediaPlayer?.reset()
             }
         } catch (_: Exception) { /* ignore */ }
+        readbackInProgress = false
         try { tts?.stop() } catch (_: Exception) { /* ignore */ }
         try { recognizer?.stopListening() } catch (_: Exception) { /* ignore */ }
         // A whisper-local capture holds the device mic (and the OS privacy
@@ -4095,6 +4209,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     pendingSpeak = message
                     reinitTTS()
                 } else {
+                    // Playback is now in flight: a headset connect/disconnect from
+                    // here until onDone/onError is what we want to surface.
+                    readbackInProgress = true
                     beginHandsFreeReadbackWatch()
                 }
             }
@@ -4141,18 +4258,23 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                                 mediaPlayer?.setDataSource(fis.fd)
                                 mediaPlayer?.prepare()
                                 mediaPlayer?.setOnCompletionListener {
+                                    readbackInProgress = false
                                     adapter?.clearSpeakingPosition()
                                     // Mirror the device-TTS onDone path so a
                                     // cloud voice also keeps hands-free looping.
                                     onHandsFreeReadbackFinished()
                                 }
                                 mediaPlayer?.setOnErrorListener { _, _, _ ->
+                                    readbackInProgress = false
                                     adapter?.clearSpeakingPosition()
                                     // A playback error must not strand the loop
                                     // either — re-arm as if readback finished.
                                     onHandsFreeReadbackFinished()
                                     false
                                 }
+                                // Cloud-voice playback is now in flight (same as
+                                // the device-TTS path above).
+                                readbackInProgress = true
                                 mediaPlayer?.start()
                                 beginHandsFreeReadbackWatch()
                             } catch (ex: IOException) {
@@ -4443,7 +4565,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 LocalWhisperEngine.get().cancel()
             }
         }
-        // Stop any current playback so taps don't pile up.
+        // Stop any current playback so taps don't pile up. speak() below sets
+        // the flag back to true when this new utterance actually starts.
+        readbackInProgress = false
         try { tts?.stop() } catch (_: Exception) { /* ignore */ }
         try { if (mediaPlayer?.isPlaying == true) { mediaPlayer?.stop(); mediaPlayer?.reset() } } catch (_: Exception) { /* ignore */ }
         // Tint the tapped speaker button until playback finishes, so the press
