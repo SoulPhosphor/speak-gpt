@@ -743,10 +743,26 @@ private class AudioHealthMonitor(private val record: AudioRecord) {
     private var routeKnown = false
     private var initialRouteId = -1
     private var initialRouteLabel = "unavailable"
+    private var initialRouteType = -1
     private var currentRouteLabel = "unavailable"
+    private var currentRouteType = -1
     private var routeChanged = false
     private var bluetoothSeen = false
     private var lastRouteCheckSamples = 0L
+
+    // A Bluetooth SCO mic link takes a beat to come up after capture starts, so
+    // the first second or so is captured on the built-in mic and Android then
+    // switches the route to the headset. That built-in→SCO transition is normal
+    // warm-up, NOT the user (dis)connecting anything — distinguishing it from the
+    // opposite SCO→built-in transition (the headset actually dropping) is the
+    // difference between a reassuring note and a misleading "disconnect your
+    // headset" hint for a headset the user kept on the whole time.
+    private val scoWarmUp: Boolean
+        get() = routeChanged && initialRouteType != AudioDeviceInfo.TYPE_BLUETOOTH_SCO &&
+                currentRouteType == AudioDeviceInfo.TYPE_BLUETOOTH_SCO
+    private val scoDropped: Boolean
+        get() = routeChanged && initialRouteType == AudioDeviceInfo.TYPE_BLUETOOTH_SCO &&
+                currentRouteType != AudioDeviceInfo.TYPE_BLUETOOTH_SCO
 
     init {
         // Capture the route at the start of the turn (called right after
@@ -787,14 +803,18 @@ private class AudioHealthMonitor(private val record: AudioRecord) {
         val id = dev?.id ?: -1
         val label = deviceLabel(dev)
         if (dev?.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO) bluetoothSeen = true
+        val type = dev?.type ?: -1
         if (!routeKnown) {
             routeKnown = true
             initialRouteId = id
             initialRouteLabel = label
+            initialRouteType = type
             currentRouteLabel = label
+            currentRouteType = type
         } else if (id != initialRouteId) {
             routeChanged = true
             currentRouteLabel = label
+            currentRouteType = type
         }
     }
 
@@ -817,10 +837,11 @@ private class AudioHealthMonitor(private val record: AudioRecord) {
             2 -> "stereo"
             else -> "$ch-channel"
         }
-        val routeText = if (routeChanged) {
-            "$initialRouteLabel → $currentRouteLabel (changed mid-capture)"
-        } else {
-            initialRouteLabel
+        val routeText = when {
+            scoWarmUp -> "$initialRouteLabel → $currentRouteLabel (Bluetooth connected after recording started)"
+            scoDropped -> "$initialRouteLabel → $currentRouteLabel (Bluetooth headset dropped mid-recording)"
+            routeChanged -> "$initialRouteLabel → $currentRouteLabel (changed mid-capture)"
+            else -> initialRouteLabel
         }
         var s = "Audio Health ${tenths / 10}.${tenths % 10}s: $frames frames received, " +
                 "RMS avg $avgRms/max ${rmsMax.toInt()}, peak max $peakMax, " +
@@ -854,8 +875,12 @@ private class AudioHealthMonitor(private val record: AudioRecord) {
         } else if (!nearSilent && peakMax in (NEAR_ZERO_PEAK + 1)..QUIET_PEAK) {
             hints.add("The sound coming in was quite quiet (but not silent) — could be the mic, the distance, or a quiet room, not necessarily you. What to do: move the phone a bit closer; or if you're often far away, turn down 'Minimum speech energy' in Settings > Voice & speech > Advanced & debugging so quiet speech still counts.")
         }
-        if (routeChanged) {
-            hints.add("The audio switched to a different microphone partway through (for example a Bluetooth headset connecting or dropping), which can chop the recording in half. What to do: connect or disconnect headsets before you start talking, not while you speak.")
+        if (scoWarmUp) {
+            hints.add("The recording started on the phone's microphone and switched to your Bluetooth headset a moment later. This is normal Bluetooth 'warm-up' — the headset's mic link takes a beat to connect after the mic opens — NOT your headset dropping or you disconnecting anything. Only the very start was on the phone mic; the rest was the headset. Nothing to fix; if the first word ever gets clipped, pause briefly before speaking after the mic opens.")
+        } else if (scoDropped) {
+            hints.add("Your Bluetooth headset dropped partway through and recording fell back to the phone's microphone, which can chop the recording. This one IS a real drop, not warm-up. What to do: check the headset's battery and that it stays in range; if it keeps dropping, turn it off and use the phone's own mic.")
+        } else if (routeChanged) {
+            hints.add("The audio switched to a different microphone partway through, which can chop the recording in half. What to do: connect or disconnect headsets before you start talking, not while you speak.")
         } else if (bluetoothSeen) {
             hints.add("You're recording through a Bluetooth headset (SCO), which is low quality and drops out easily. What to do: if recognition is poor, turn the headset off and use the phone's own microphone.")
         }
