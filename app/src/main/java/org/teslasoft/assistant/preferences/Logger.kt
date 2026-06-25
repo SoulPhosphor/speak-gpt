@@ -16,8 +16,14 @@
 
 package org.teslasoft.assistant.preferences
 
+import android.app.ActivityManager
+import android.app.ApplicationExitInfo
 import android.content.Context
+import android.os.Build
+import androidx.annotation.RequiresApi
+import java.time.Instant
 import java.time.LocalDateTime
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 class Logger {
@@ -178,6 +184,85 @@ class Logger {
                 kept = kept.subList(kept.size - maxEntries, kept.size)
             }
             return kept.joinToString("") { it.text }
+        }
+
+        /**
+         * Surface *why the previous process died* into the Event (Voice Debug)
+         * log on the next start. A hard kill — low memory, force-stop — is a
+         * SIGKILL: no app code runs as the process dies, so it can never write a
+         * tombstone on the way out the way a normal onDestroy can. The only way to
+         * make that visible is to ask the system after the fact, which
+         * ActivityManager.getHistoricalProcessExitReasons does (API 30+). This is
+         * exactly the "the readback just stopped and nothing in the log says why"
+         * case: now the next launch records the real cause.
+         *
+         * Deduped by the exit timestamp (stored in the logs prefs) so the same
+         * death is logged once, not on every cold start. Best-effort and fully
+         * guarded — diagnostics must never crash startup. Written unconditionally
+         * (not gated on the voice-diagnostics toggle): it's one line per process
+         * death and is the whole point of asking "was I killed?".
+         */
+        fun logLastExitReason(context: Context) {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
+            try {
+                collectAndLogLastExitReason(context)
+            } catch (_: Throwable) { /* never let diagnostics crash startup */ }
+        }
+
+        private const val LAST_EXIT_TS_KEY = "last_exit_ts"
+
+        @RequiresApi(Build.VERSION_CODES.R)
+        private fun collectAndLogLastExitReason(context: Context) {
+            val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager ?: return
+            val reasons = am.getHistoricalProcessExitReasons(context.packageName, 0, 1)
+            if (reasons.isEmpty()) return
+            val info = reasons[0]
+
+            // Log each death once. The most recent exit stays the same across cold
+            // starts until a new one happens, so dedup on its timestamp.
+            val ts = info.timestamp.toString()
+            val lastSeen = EncryptedPreferences.getEncryptedPreference(context, "logs", LAST_EXIT_TS_KEY)
+            if (lastSeen == ts) return
+            EncryptedPreferences.setEncryptedPreference(context, "logs", LAST_EXIT_TS_KEY, ts)
+
+            val whenStr = LocalDateTime
+                .ofInstant(Instant.ofEpochMilli(info.timestamp), ZoneId.systemDefault())
+                .format(LOG_TIME_FORMAT)
+            val detail = info.description?.takeIf { it.isNotBlank() }?.let { " — $it" } ?: ""
+            val message = "previous app session ended at $whenStr: ${describeExitReason(info.reason)}$detail"
+
+            // Low-memory / signaled / crash deaths are the ones that silently cut
+            // off a readback; flag them as warnings so they stand out from a clean
+            // exit in the log.
+            val level = when (info.reason) {
+                ApplicationExitInfo.REASON_LOW_MEMORY,
+                ApplicationExitInfo.REASON_SIGNALED,
+                ApplicationExitInfo.REASON_CRASH,
+                ApplicationExitInfo.REASON_CRASH_NATIVE,
+                ApplicationExitInfo.REASON_ANR,
+                ApplicationExitInfo.REASON_EXCESSIVE_RESOURCE_USAGE -> "warning"
+                else -> "info"
+            }
+            log(context, "event", "ProcessExit", level, message)
+        }
+
+        @RequiresApi(Build.VERSION_CODES.R)
+        private fun describeExitReason(reason: Int): String = when (reason) {
+            ApplicationExitInfo.REASON_EXIT_SELF -> "exited normally"
+            ApplicationExitInfo.REASON_SIGNALED -> "force-stopped or killed by signal"
+            ApplicationExitInfo.REASON_LOW_MEMORY -> "killed by the system to free memory"
+            ApplicationExitInfo.REASON_CRASH -> "crashed (app exception)"
+            ApplicationExitInfo.REASON_CRASH_NATIVE -> "crashed (native code)"
+            ApplicationExitInfo.REASON_ANR -> "stopped: app not responding (ANR)"
+            ApplicationExitInfo.REASON_INITIALIZATION_FAILURE -> "failed to initialize"
+            ApplicationExitInfo.REASON_PERMISSION_CHANGE -> "killed after a permission change"
+            ApplicationExitInfo.REASON_EXCESSIVE_RESOURCE_USAGE -> "killed for excessive resource use"
+            ApplicationExitInfo.REASON_USER_REQUESTED -> "stopped at the user's request"
+            ApplicationExitInfo.REASON_USER_STOPPED -> "stopped by the user"
+            ApplicationExitInfo.REASON_DEPENDENCY_DIED -> "killed because a dependency died"
+            ApplicationExitInfo.REASON_OTHER -> "killed by the system (other)"
+            ApplicationExitInfo.REASON_FREEZER -> "frozen by the system"
+            else -> "ended for an unknown reason (code $reason)"
         }
 
         /**

@@ -23,6 +23,7 @@ import com.google.android.material.color.DynamicColors
 import org.conscrypt.Conscrypt
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.GlobalPreferences
+import org.teslasoft.assistant.preferences.Logger
 import org.teslasoft.assistant.theme.ThemeManager
 import java.security.Security
 
@@ -53,6 +54,12 @@ class MainApplication : Application() {
         // sessions — the "VAD logging is on but the log is empty" bug. The log
         // self-limits via Logger.trimByEntries (~1000 entries / 7 days for the
         // voice channel); clearing stays user-driven via the button in LogsActivity.
+
+        // Record *why the previous process died* (low memory, force-stop, crash)
+        // into the Voice Debug Log. A hard kill runs no code on the way out, so
+        // this after-the-fact query is the only way a screen-off readback that
+        // was killed mid-sentence leaves any trace. Deduped + best-effort inside.
+        Logger.logLastExitReason(this)
 
         CaocConfig.Builder.create()
             .backgroundMode(CaocConfig.BACKGROUND_MODE_SHOW_CUSTOM)
