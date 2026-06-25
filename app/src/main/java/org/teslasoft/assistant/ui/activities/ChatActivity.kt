@@ -2873,6 +2873,27 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         }
     }
 
+    /**
+     * A manual turn — typed send or regenerate — while hands-free mode is on
+     * counts as the user deliberately continuing the conversation, so it resumes
+     * a loop that an earlier error (or a Hang Up) had stopped. Without this the
+     * reply still reads back (readback keys off the mode toggle) but the mic
+     * never reopens, because the loop-stopped flag is otherwise only cleared by a
+     * fresh mic press — leaving the user talking to a dead mic after a regenerate.
+     * Safe against error-loop spirals: it only re-arms after a successful,
+     * user-initiated turn; a turn that errors again re-stops the loop as before.
+     * No-op when the loop is already live, so a typed message mid-conversation
+     * doesn't log or change anything.
+     */
+    private fun resumeHandsFreeForManualTurn() {
+        if (preferences?.getHandsFreeMode() != true) return
+        if (!handsFreeStopped && !cancelState) return
+        logVoiceEvent("manual turn while hands-free is on — resuming the loop a prior error/hang-up had stopped")
+        handsFreeStopped = false
+        cancelState = false
+        handsFreeTurnRetries = 0
+    }
+
     private fun parseMessage(message: String, shouldAdd: Boolean = true) {
         // Put timestamp to chat to sort chats by last message
         ChatPreferences.getChatPreferences().putTimestampToChatById(this, chatId)
@@ -2887,6 +2908,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             messageInput?.setText("")
 
             keyboardMode = false
+
+            // Re-engage hands-free if an earlier error/hang-up left the loop
+            // stopped: this manual turn is the user's "keep going" signal, so the
+            // mic re-arms once the reply finishes reading back.
+            resumeHandsFreeForManualTurn()
 
             val m = prefix + message + endSeparator
 
