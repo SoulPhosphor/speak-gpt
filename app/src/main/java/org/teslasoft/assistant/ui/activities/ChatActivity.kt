@@ -967,7 +967,38 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     // down its speaking state, which would make the check miss the very event
     // we want to record.
     private var audioDeviceCallback: AudioDeviceCallback? = null
-    private var readbackInProgress = false
+
+    // True whether the keep-alive foreground service is currently held *for the
+    // readback* (as opposed to for a generation). Tracked separately so the
+    // begin/end ref count stays balanced no matter how many code paths flip
+    // [readbackInProgress] off (onDone, onError, several stop sites, onDestroy):
+    // we only call end() if we actually called begin().
+    private var readbackKeepAliveHeld = false
+
+    // Set true the moment a readback actually starts playing and false when it
+    // ends/errors/stops. The custom setter doubles as the keep-alive trigger:
+    // a plain (non-hands-free) read-aloud runs *after* generation has finished,
+    // so the generation keep-alive is already gone and nothing holds the
+    // process up — switch apps and Android reclaims it, cutting the reading off
+    // mid-sentence (the "it stops reading when I leave the app" bug). Holding
+    // the same ref-counted GenerationForegroundService across playback keeps the
+    // process at foreground importance until the reading finishes. Hands-free is
+    // excluded because HandsFreeService already keeps the whole loop alive, so
+    // adding a second service there would just double the notification.
+    private var readbackInProgress: Boolean = false
+        set(value) {
+            if (field == value) return
+            field = value
+            if (value) {
+                if (preferences?.getHandsFreeMode() != true && !readbackKeepAliveHeld) {
+                    readbackKeepAliveHeld = true
+                    GenerationForegroundService.begin(this, chatId, chatName)
+                }
+            } else if (readbackKeepAliveHeld) {
+                readbackKeepAliveHeld = false
+                GenerationForegroundService.end(this)
+            }
+        }
     private val ttsListener: TextToSpeech.OnInitListener =
         TextToSpeech.OnInitListener { status ->
             if (status == TextToSpeech.SUCCESS) {

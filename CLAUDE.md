@@ -58,8 +58,15 @@ a foreground service that keeps generation alive in the background.
 - `service/HandsFreeService.kt` — microphone-typed foreground service for
   screen-off hands-free conversation (wake lock + notification).
 - `service/GenerationForegroundService.kt` — dataSync-typed foreground service
-  held only while a response streams; ref-counted via `begin()`/`end()` in the
-  `try`/`finally` of the `generateResponse` funnel.
+  (keep-alive: foreground importance + wake lock + Wi-Fi lock); ref-counted via
+  `begin()`/`end()`. Held while a response streams (the `try`/`finally` of the
+  `generateResponse` funnel) **and** across a non-hands-free TTS readback: a
+  plain read-aloud runs after generation ends, so without this the process can
+  be reclaimed on app-switch and the reading is cut off mid-sentence. The
+  readback hold is driven by `ChatActivity.readbackInProgress`'s setter (begin
+  on start, end on finish/error/stop, balanced by `readbackKeepAliveHeld`);
+  hands-free is excluded because `HandsFreeService` already keeps that loop
+  alive.
 - `stt/` — on-device speech: `LocalWhisperEngine/Native` (whisper.cpp JNI),
   `WebRtcVadNative` + `VoiceActivityDetector` (energy VAD + libfvad), model
   download/storage. Native sources in `app/src/main/cpp/`.
