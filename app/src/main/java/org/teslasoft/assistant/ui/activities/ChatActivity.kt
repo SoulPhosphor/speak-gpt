@@ -18,10 +18,12 @@ package org.teslasoft.assistant.ui.activities
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.content.BroadcastReceiver
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.content.res.Configuration
@@ -212,6 +214,13 @@ import okio.Path.Companion.toPath
 
 class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
+    companion object {
+        // Broadcast action posted by the keep-alive notifications' "Hang Up"
+        // action and handled by the live ChatActivity. Package-scoped and
+        // non-exported; see hangUpReceiver.
+        const val ACTION_HANG_UP = "org.teslasoft.assistant.action.HANG_UP"
+    }
+
     // Init UI
     private var messageInput: EditText? = null
     private var btnSend: ImageButton? = null
@@ -347,6 +356,37 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
     // Media player for OpenAI TTS
     private var mediaPlayer: MediaPlayer? = null
+
+    // Keep-alive that spans the read-aloud *after* generation in the plain
+    // (non-hands-free) path. The generation keep-alive is released the instant
+    // the text stream ends (the generateResponse finally), but TTS playback
+    // starts right after and would otherwise run with no foreground importance —
+    // switch apps or turn the screen off and Android freezes the process, cutting
+    // the reply off mid-sentence. Hands-free is already protected by
+    // HandsFreeService, so this only guards plain read-aloud. It rides on the
+    // ref-counted GenerationForegroundService and is driven by real playback
+    // state plus a hard timeout (not the TTS completion callback, which is
+    // unreliable across engines) so it can neither leak the wake lock nor release
+    // while audio is still playing.
+    private var readbackKeepAliveActive = false
+    private var readbackKeepAliveToken = 0
+    // Dedicated handler so the poll is never swept away by the hands-free
+    // teardown's removeCallbacksAndMessages(null); release is always explicit.
+    private val readbackKeepAliveHandler = Handler(Looper.getMainLooper())
+
+    // Receiver for the notification "Hang Up" action (GenerationForegroundService
+    // / HandsFreeService). A package-scoped, non-exported broadcast is the way the
+    // service reaches the live activity that owns the TTS / recognizer / loop
+    // state; on receipt it runs the same teardown as the in-app stop control.
+    private val hangUpReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action != ACTION_HANG_UP) return
+            runOnUiThread {
+                cancelAllAiActivity()
+                restoreUIState()
+            }
+        }
+    }
 
     // Init preferences
     private var preferences: Preferences? = null
@@ -1237,6 +1277,18 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
         setContentView(R.layout.activity_chat)
 
+        // Listen for the notification "Hang Up" action. Registered for the life of
+        // the activity (not just the foreground window) so it still fires while the
+        // chat is backgrounded with the screen off — exactly when the keep-alive
+        // bar is the only way to stop a readback. Not exported: only our own
+        // services post this package-scoped broadcast.
+        ContextCompat.registerReceiver(
+            this,
+            hangUpReceiver,
+            IntentFilter(ACTION_HANG_UP),
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
+
         preloadAmoled()
         reloadAmoled()
 
@@ -1289,6 +1341,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             mediaPlayer!!.stop()
             mediaPlayer!!.reset()
         }
+
+        try { unregisterReceiver(hangUpReceiver) } catch (_: Exception) { /* not registered */ }
+        // The read-aloud keep-alive must not outlive the activity: its poll runs on
+        // a handler tied to this instance, so without this the service could hold a
+        // wake lock with nothing to release it.
+        releaseReadbackKeepAlive()
+        readbackKeepAliveHandler.removeCallbacksAndMessages(null)
 
         killAllProcesses()
         stopHandsFreeService()
@@ -3037,7 +3096,53 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         try { speakScope?.coroutineContext?.cancel(CancellationException("Cancelled by user")) } catch (_: Exception) { /* ignore */ }
         isRecording = false
         micIdle()
+        // Drop the read-aloud keep-alive too, so Hang Up actually clears the bar
+        // instead of leaving the (now silent) service holding a wake lock.
+        releaseReadbackKeepAlive()
         stopHandsFreeService()
+    }
+
+    /**
+     * Begin holding the process at foreground importance while the plain
+     * read-aloud plays. Idempotent: a second call while already held is a no-op.
+     * The poll watches actual playback (tts.isSpeaking / mediaPlayer.isPlaying)
+     * and releases once audio has been heard and then stayed quiet, or once a
+     * hard cap elapses with no audio (engine swallowed the utterance) — never
+     * earlier, so a slow OpenAI-voice fetch can't drop the guard before playback
+     * starts.
+     */
+    private fun acquireReadbackKeepAlive() {
+        if (readbackKeepAliveActive) return
+        readbackKeepAliveActive = true
+        GenerationForegroundService.begin(this, chatId, chatName, reading = true)
+        val token = ++readbackKeepAliveToken
+        val startedAt = System.currentTimeMillis()
+        var everPlaying = false
+        var quietPolls = 0
+        lateinit var poll: Runnable
+        poll = Runnable {
+            if (token != readbackKeepAliveToken || !readbackKeepAliveActive) return@Runnable
+            val playing = (try { tts?.isSpeaking == true } catch (_: Exception) { false }) ||
+                          (try { mediaPlayer?.isPlaying == true } catch (_: Exception) { false })
+            if (playing) { everPlaying = true; quietPolls = 0 } else if (everPlaying) quietPolls++
+            val elapsed = System.currentTimeMillis() - startedAt
+            when {
+                everPlaying && quietPolls >= HANDS_FREE_READBACK_STOP_POLLS -> releaseReadbackKeepAlive()
+                // Audio never became audible within the hard cap: assume the
+                // utterance was lost rather than hold the wake lock forever.
+                !everPlaying && elapsed > HANDS_FREE_HARD_FALLBACK_MS -> releaseReadbackKeepAlive()
+                else -> readbackKeepAliveHandler.postDelayed(poll, HANDS_FREE_READBACK_POLL_MS)
+            }
+        }
+        readbackKeepAliveHandler.postDelayed(poll, HANDS_FREE_READBACK_POLL_MS)
+    }
+
+    /** Release the read-aloud keep-alive if held. Idempotent. */
+    private fun releaseReadbackKeepAlive() {
+        if (!readbackKeepAliveActive) return
+        readbackKeepAliveActive = false
+        readbackKeepAliveToken++ // stop any in-flight poll
+        GenerationForegroundService.end(this)
     }
 
     private val postNotificationsLauncher = registerForActivityResult(
@@ -4042,6 +4147,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         }
 
         if (willReadAloud) {
+            // Plain read-aloud only: keep the process alive through TTS playback
+            // so leaving the app or turning the screen off doesn't cut the reply
+            // off mid-sentence. Hands-free already has HandsFreeService holding
+            // the loop, so it needs no second keep-alive (and no second bar).
+            if (!handsFree) acquireReadbackKeepAlive()
             if (autoLangDetect) {
                 try {
                     languageIdentifier = LanguageIdentification.getClient()
@@ -4449,6 +4559,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         // Tint the tapped speaker button until playback finishes, so the press
         // is visibly registered even while the audio is still being prepared.
         adapter?.setSpeakingPosition(position)
+        // Same backgrounding guard as the auto read-after-reply: a manual re-read
+        // is user-initiated playback that should survive leaving the app / screen
+        // off. Hands-free is already covered by HandsFreeService, so skip there to
+        // avoid a second keep-alive bar.
+        if (preferences?.getHandsFreeMode() != true) acquireReadbackKeepAlive()
         speak(message)
     }
 

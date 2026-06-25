@@ -9,6 +9,13 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!-- The generation keep-alive is typed mediaPlayback (not dataSync) so it can
+         also hold the process up while a reply is read aloud: TTS readback is
+         audio playback, and Android 15+ caps dataSync foreground services to a
+         daily aggregate that mediaPlayback is exempt from. Required since the
+         runtime FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK must match a declared
+         permission on Android 14+ or startForeground throws. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <!-- Read-only: labels the active transport (wifi/cellular) in the Error Log's
          Network flag. Normal permission, no runtime prompt. -->
@@ -318,6 +325,6 @@
         <service
             android:name=".service.GenerationForegroundService"
             android:exported="false"
-            android:foregroundServiceType="dataSync" />
+            android:foregroundServiceType="mediaPlayback" />
     </application>
 </manifest>

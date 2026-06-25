@@ -167,9 +167,23 @@ class HandsFreeService : Service() {
             .setOnlyAlertOnce(true)
             .setSilent(true)
             .setContentIntent(pi)
+            // Hang Up: stops any readback and ends the listening loop in one tap,
+            // the same as the in-app stop control. Routed to the live ChatActivity
+            // via a package-scoped broadcast (ChatActivity.ACTION_HANG_UP).
+            .addAction(R.drawable.ic_stop_recording, getString(R.string.notification_hang_up), buildHangUpIntent())
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .build()
+    }
+
+    private fun buildHangUpIntent(): PendingIntent {
+        val intent = Intent(ChatActivity.ACTION_HANG_UP).setPackage(packageName)
+        return PendingIntent.getBroadcast(
+            this,
+            1,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
     }
 
     override fun onDestroy() {

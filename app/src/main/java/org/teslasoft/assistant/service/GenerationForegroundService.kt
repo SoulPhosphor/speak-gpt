@@ -56,16 +56,25 @@ class GenerationForegroundService : Service() {
 
         private const val EXTRA_CHAT_ID = "chatId"
         private const val EXTRA_CHAT_NAME = "chatName"
+        private const val EXTRA_READING = "reading"
 
         // Generations in flight. The service stops only when this drops to 0.
         private val activeGenerations = AtomicInteger(0)
 
-        /** Call when a generation starts. Must be paired with [end]. */
-        fun begin(context: Context, chatId: String?, chatName: String?) {
+        /**
+         * Call when a keep-alive phase starts. Must be paired with [end].
+         * [reading] = true means the phase is reading the reply aloud (TTS
+         * playback) rather than streaming text, so the notification can say so;
+         * a readback begin after the generation begin simply re-posts the
+         * notification with the reading title while the ref count keeps the
+         * service alive across both phases.
+         */
+        fun begin(context: Context, chatId: String?, chatName: String?, reading: Boolean = false) {
             activeGenerations.incrementAndGet()
             val intent = Intent(context, GenerationForegroundService::class.java).apply {
                 putExtra(EXTRA_CHAT_ID, chatId)
                 putExtra(EXTRA_CHAT_NAME, chatName)
+                putExtra(EXTRA_READING, reading)
             }
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -102,16 +111,23 @@ class GenerationForegroundService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val chatId = intent?.getStringExtra(EXTRA_CHAT_ID)
         val chatName = intent?.getStringExtra(EXTRA_CHAT_NAME)
+        val reading = intent?.getBooleanExtra(EXTRA_READING, false) == true
 
         createChannelIfNeeded()
 
-        val notification = buildNotification(chatId, chatName)
+        val notification = buildNotification(chatId, chatName, reading)
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                // mediaPlayback (not dataSync): this keep-alive now spans both the
+                // text stream and the TTS readback that follows it. Reading a reply
+                // aloud is audio playback, and mediaPlayback is exempt from the
+                // daily aggregate cap Android 15+ puts on dataSync services. The
+                // manifest declares the matching type + permission; mismatching the
+                // two throws here on Android 14+.
                 startForeground(
                     NOTIFICATION_ID,
                     notification,
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
                 )
             } else {
                 startForeground(NOTIFICATION_ID, notification)
@@ -183,7 +199,7 @@ class GenerationForegroundService : Service() {
         nm.createNotificationChannel(channel)
     }
 
-    private fun buildNotification(chatId: String?, chatName: String?): Notification {
+    private fun buildNotification(chatId: String?, chatName: String?, reading: Boolean): Notification {
         val openIntent = Intent(this, ChatActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP
             putExtra("chatId", chatId)
@@ -197,17 +213,37 @@ class GenerationForegroundService : Service() {
         )
         val contentText = chatName?.takeIf { it.isNotBlank() }
             ?: getString(R.string.generation_notification_text)
+        val title = if (reading) {
+            getString(R.string.voice_reading_notification_title)
+        } else {
+            getString(R.string.generation_notification_title)
+        }
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_chat)
-            .setContentTitle(getString(R.string.generation_notification_title))
+            .setContentTitle(title)
             .setContentText(contentText)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setSilent(true)
             .setContentIntent(pi)
+            // Hang Up: a single tap that stops any readback and stops listening,
+            // exactly like the in-app stop control. Delivered to the live
+            // ChatActivity via a package-scoped broadcast (see
+            // ChatActivity.ACTION_HANG_UP / hangUpReceiver).
+            .addAction(R.drawable.ic_stop_recording, getString(R.string.notification_hang_up), buildHangUpIntent())
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .build()
+    }
+
+    private fun buildHangUpIntent(): PendingIntent {
+        val intent = Intent(ChatActivity.ACTION_HANG_UP).setPackage(packageName)
+        return PendingIntent.getBroadcast(
+            this,
+            1,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
     }
 
     override fun onDestroy() {
