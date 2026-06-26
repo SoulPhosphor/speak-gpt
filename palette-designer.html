@@ -2,17 +2,27 @@
 <!--
   Phosphor Shines — Palette Designer (design tool, NOT app code)
 
-  A standalone, offline, self-contained page for designing color themes by eye.
-  It renders mockups of the app's real surfaces (top bar, drawer, message cards,
-  input bar, buttons) and lets you pick every color, in light and dark,
-  in a "calm" or "vibrant" treatment, then save/export the result.
+  A standalone, offline, self-contained page for designing color themes by eye
+  AND sanity-checking the planned UI layout (drawer + chat) from ui-redesign-plan.md.
+
+  It renders TWO phone mockups side by side, both driven by the SAME palette:
+    • LEFT  = the slide-out drawer fully open (folders + chat list + bottom bar).
+    • RIGHT = a normal chat screen (top bar, messages, input pill).
+  Below them, a small "buttons & alerts" strip so those color roles are visible too.
+
+  It is also a partly-functional CLICK-THROUGH so the owner can SEE the planned
+  menus before any app code is written. Nothing here is saved, created or deleted:
+    • Click a chat        → it "opens" (highlights) — visual only.
+    • Long-press OR right-click a chat / folder / the "Folders" row → its real
+      context menu appears (Rename / Export / Pin / Add to Folder / Select /
+      Delete, etc.). Menu buttons just flash "demo only".
+    • Click the "Folders" row → expand / collapse the folder list.
+    • Click a folder        → drill into it (back arrow returns).
 
   Nothing here ships in the app. It exists so the owner (an artist, not a coder)
-  can choose colors visually and hand the exact hex values + a name back to the
-  agent, who then translates an APPROVED palette into the app's theme overlays.
-
-  The two-column layout is the DESIGN TOOL only — the app itself never looks
-  like this. The right side is a phone-shaped preview of the actual app.
+  can choose colors visually + verify the layout, then hand the exact hex values
+  + a name back to the agent, who translates an APPROVED palette into the app's
+  theme overlays.
 
   Open it by double-clicking the file, or via your browser's File > Open.
   No internet, no build step, no dependencies.
@@ -71,7 +81,7 @@
     padding: 4px 20px 40px;
     align-items: start;
   }
-  @media (max-width: 900px) {
+  @media (max-width: 1040px) {
     .layout { grid-template-columns: 1fr; }
     .preview-col { order: -1; }
   }
@@ -187,10 +197,23 @@
   .preview-col { position: sticky; top: 12px; }
   .preview-label {
     text-align: center; color: var(--ui-text-dim); font-size: 12px;
-    margin-bottom: 8px; letter-spacing: .04em;
+    margin-bottom: 10px; letter-spacing: .04em; line-height: 1.5;
+  }
+  /* #stage holds the palette CSS variables + the vibrant/calm/reduce treatment;
+     both phones AND the components strip inherit from it, so one palette drives
+     everything you see. */
+  .stage.calm   { --glow-strength: 0; }
+  .stage.vibrant { --glow-strength: 1; }
+  .stage.reduce * { animation: none !important; transition: none !important; }
+
+  .phones { display: flex; gap: 18px; justify-content: center; flex-wrap: wrap; align-items: flex-start; }
+  .phone-col { display: flex; flex-direction: column; align-items: center; }
+  .phone-label {
+    text-transform: uppercase; letter-spacing: .06em; font-size: 11px;
+    color: var(--ui-text-dim); margin-bottom: 6px; font-weight: 700;
   }
   .phone {
-    width: 100%; max-width: 390px; margin: 0 auto;
+    width: 320px; max-width: 44vw;
     border-radius: 30px; padding: 12px;
     background: #000; border: 1px solid #2a2c33;
     box-shadow: 0 20px 60px rgba(0,0,0,.5);
@@ -201,17 +224,12 @@
     background: var(--pageBg);
     color: var(--readText);
     display: flex; flex-direction: column;
-    /* Fit the viewport so the whole phone is visible without scrolling the page
-       (it used to be a fixed 720px and ran off the bottom of laptop screens). */
-    height: min(720px, calc(100vh - 96px));
+    height: min(600px, calc(100vh - 210px));
     transition: background .25s, color .25s;
   }
-  .app.calm { --glow-strength: 0; }
-  .app.vibrant { --glow-strength: 1; }
-  .app.reduce * { animation: none !important; transition: none !important; }
 
   .edge { background: var(--edge1); }
-  .app.vibrant .edge {
+  .stage.vibrant .edge {
     background: linear-gradient(135deg, var(--edge1), var(--edge2) 55%, var(--edge3));
   }
 
@@ -222,131 +240,181 @@
     color: var(--topbarText);
     border-bottom: 1px solid var(--divider);
   }
-  .topbar .icon { width: 22px; height: 22px; color: var(--topbarText); opacity: .92; flex: none; cursor: default; }
+  .topbar .icon { width: 22px; height: 22px; color: var(--topbarText); opacity: .92; flex: none; cursor: pointer; }
   .topbar .title { font-size: 16px; font-weight: 650; line-height: 1.2; }
   .topbar .spacer { flex: 1; }
   .bug { color: var(--accent) !important; }
 
-  .body { flex: 1; display: flex; min-height: 0; }
-  .drawer {
-    width: 155px; flex: none; padding: 10px 8px;
+  /* ---- Drawer (LEFT phone: the slide-out fully open) ---- */
+  .drawer-full {
+    flex: 1; min-height: 0;
     background: var(--drawerBg); color: var(--drawerText);
-    border-right: 1px solid var(--divider);
-    font-size: 12.5px;
     display: flex; flex-direction: column;
   }
-  .drawer .drawer-header {
-    font-size: 14px; font-weight: 700; padding: 8px 10px 6px;
-    opacity: .85;
+  .drawer-pane { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .drawer-head, .folder-head {
+    display: flex; align-items: center; gap: 10px;
+    padding: 13px 12px 10px;
+    border-bottom: 1px solid var(--divider);
   }
-  .drawer .new-chat {
-    display: flex; align-items: center; gap: 6px;
-    padding: 8px 10px; border-radius: 10px; margin-bottom: 4px;
-    font-weight: 600; font-size: 12.5px; opacity: .85;
+  .drawer-head .spacer { flex: 1; }
+  .dic { width: 22px; height: 22px; color: var(--drawerText); opacity: .92; flex: none; cursor: pointer; }
+  .folder-title { font-size: 15px; font-weight: 700; }
+
+  .folders-section { padding: 8px 8px 2px; }
+  .folders-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 9px 10px; border-radius: 10px; cursor: pointer;
+    font-weight: 700; font-size: 13px; opacity: .92; user-select: none;
   }
-  .drawer .new-chat .nc-icon {
-    width: 16px; height: 16px; opacity: .7;
-  }
-  .drawer .search-field {
-    margin: 0 4px 8px; padding: 6px 8px; border-radius: 8px;
-    font-size: 11px; opacity: .5;
-    border: 1px solid var(--divider);
-    background: transparent;
-    color: var(--drawerText);
-  }
-  .drawer .ditem {
-    padding: 9px 10px; border-radius: 10px; margin-bottom: 4px; opacity: .85;
+  .folders-row:hover { background: var(--drawerSelectedBg); }
+  .folders-row .chev { width: 16px; height: 16px; margin-left: auto; transition: transform .2s; opacity: .8; }
+  .folders-row.collapsed .chev { transform: rotate(-90deg); }
+  .folders-list { padding: 2px 0 4px; }
+  .folders-row.collapsed + .folders-list { display: none; }
+  .folder-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 10px 8px 22px; border-radius: 10px; cursor: pointer;
+    font-size: 12.8px; opacity: .9; user-select: none;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
-  .drawer .ditem.sel {
+  .folder-item:hover { background: var(--drawerSelectedBg); }
+  .folder-item .ficon { width: 15px; height: 15px; flex: none; opacity: .85; }
+
+  .chat-list { flex: 1; overflow: hidden; padding: 4px 8px; }
+  .ditem {
+    position: relative;
+    padding: 10px 10px; border-radius: 10px; margin-bottom: 4px; opacity: .9;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    cursor: pointer; user-select: none; font-size: 12.8px;
+  }
+  .ditem:hover { background: var(--drawerSelectedBg); }
+  .ditem.sel {
     background: var(--drawerSelectedBg); opacity: 1; font-weight: 600;
-    /* The "Selection accent" color shows here as a bar on the open chat, so that
-       control has a visible effect instead of doing nothing. */
     box-shadow: inset 3px 0 0 var(--selected);
   }
-  .drawer .d-divider {
-    height: 1px; background: var(--divider); margin: 8px 4px;
+  .ditem .pin-dot {
+    position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+    width: 12px; height: 12px; color: var(--accent); opacity: .9;
   }
-  .drawer .d-nav {
-    padding: 8px 10px; border-radius: 10px; margin-bottom: 4px; opacity: .7;
-    font-size: 12px;
+  .drawer-bottom {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px; border-top: 1px solid var(--divider);
   }
-  .drawer .chat-list { flex: 1; overflow: hidden; }
+  .search-field {
+    flex: 1; display: flex; align-items: center; gap: 6px;
+    padding: 8px 10px; border-radius: 12px;
+    border: 1px solid var(--divider); background: transparent;
+    color: var(--drawerText); opacity: .65; font-size: 12px;
+  }
+  .search-field .sicon { width: 14px; height: 14px; flex: none; }
+  .round-btn {
+    width: 38px; height: 38px; border-radius: 50%; flex: none;
+    display: grid; place-items: center; cursor: pointer;
+    background: var(--drawerSelectedBg); color: var(--drawerText);
+  }
+  .round-btn.accent { background: var(--accent); color: var(--pageBg); }
+  .round-btn .icon { width: 18px; height: 18px; }
 
-  .messages { flex: 1; padding: 14px; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
+  /* ---- Chat (RIGHT phone) ---- */
+  .messages { flex: 1; padding: 14px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
 
   .bubble-wrap {
     padding: 1.6px; border-radius: 20px; max-width: 86%;
-    box-shadow: 0 0 0 rgba(0,0,0,0);
   }
-  .app.vibrant .bubble-wrap {
-    box-shadow: 0 0 18px -2px var(--glow);
-  }
-  .bubble {
-    border-radius: 18.5px; padding: 11px 13px; font-size: 13.5px;
-  }
+  .stage.vibrant .bubble-wrap { box-shadow: 0 0 18px -2px var(--glow); background: linear-gradient(135deg, var(--edge1), var(--edge2) 55%, var(--edge3)); }
+  .stage.calm .bubble-wrap { background: var(--edge1); }
+  .bubble { border-radius: 18.5px; padding: 11px 13px; font-size: 13.5px; }
   .bubble.bot { background: var(--botBg); color: var(--botText); border-bottom-left-radius: 7px; }
   .bubble.user { background: var(--userBg); color: var(--userText); border-bottom-right-radius: 7px; }
   .row.user { display: flex; justify-content: flex-end; }
-  .actions { display: flex; gap: 14px; margin-top: 9px; opacity: .8; }
-  .actions .icon { width: 17px; height: 17px; color: var(--accent); }
+  .actions { display: flex; gap: 14px; margin: 4px 2px 10px; opacity: .85; }
+  .actions.top { margin: 4px 2px 5px; }
+  .actions.user { justify-content: flex-end; }
+  .actions .icon { width: 17px; height: 17px; color: var(--accent); cursor: pointer; }
 
   .inputbar { padding: 12px 12px 16px; border-top: 1px solid var(--divider); display: flex; align-items: center; gap: 10px; background: var(--pageBg); }
   .circle { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; flex: none; }
-  .circle.plus { background: var(--secondaryBtnBg); color: var(--secondaryBtnText); border: 1px solid var(--divider); }
+  .circle.plus { background: var(--secondaryBtnBg); color: var(--secondaryBtnText); border: 1px solid var(--divider); cursor: pointer; }
   .pill {
     flex: 1; border-radius: 22px; padding: 11px 16px; font-size: 13px;
     background: var(--readSurface); color: var(--readText); opacity: .92;
     border: 1px solid var(--divider);
   }
-  .circle.send { background: var(--accent); color: var(--pageBg); }
-  .app.vibrant .circle.send { box-shadow: 0 0 16px -1px var(--glow); }
+  .circle.send { background: var(--accent); color: var(--pageBg); cursor: pointer; }
+  .stage.vibrant .circle.send { box-shadow: 0 0 16px -1px var(--glow); }
   .circle .icon { width: 20px; height: 20px; }
+  .mic-ic { width: 22px; height: 22px; color: var(--accent); cursor: pointer; flex: none; }
 
-  .btnsrow { display: flex; gap: 10px; padding: 0 14px 14px; }
-  .ui-btn { padding: 10px 16px; border-radius: 22px; font-size: 13px; font-weight: 600; }
+  /* ---- Components strip (buttons + alerts, same palette) ---- */
+  .components {
+    margin: 16px auto 0; max-width: 658px;
+    background: var(--pageBg); color: var(--readText);
+    border: 1px solid var(--divider); border-radius: 16px; padding: 14px;
+  }
+  .comp-label { font-size: 11px; letter-spacing: .06em; color: var(--readText); opacity: .55; text-transform: uppercase; margin-bottom: 10px; }
+  .btnsrow { display: flex; gap: 10px; margin-bottom: 12px; }
+  .ui-btn { padding: 10px 18px; border-radius: 22px; font-size: 13px; font-weight: 600; }
   .ui-btn.primary { background: var(--primaryBtnBg); color: var(--primaryBtnText); }
-  .app.vibrant .ui-btn.primary { box-shadow: 0 0 14px -3px var(--glow); }
-  .ui-btn.secondary { background: var(--secondaryBtnBg); color: var(--secondaryBtnText); border: 1.4px solid; border-image: none; }
-  .app.calm .ui-btn.secondary { border-color: var(--edge1); }
-  .app.vibrant .ui-btn.secondary {
+  .stage.vibrant .ui-btn.primary { box-shadow: 0 0 14px -3px var(--glow); }
+  .ui-btn.secondary { background: var(--secondaryBtnBg); color: var(--secondaryBtnText); border: 1.4px solid; }
+  .stage.calm .ui-btn.secondary { border-color: var(--edge1); }
+  .stage.vibrant .ui-btn.secondary {
     border: 1.6px solid transparent;
     background:
       linear-gradient(var(--secondaryBtnBg), var(--secondaryBtnBg)) padding-box,
       linear-gradient(135deg, var(--edge1), var(--edge2) 55%, var(--edge3)) border-box;
   }
-  .alertsrow { display: flex; gap: 10px; padding: 0 14px 16px; }
+  .alertsrow { display: flex; gap: 10px; }
   .chip { padding: 7px 12px; border-radius: 10px; font-size: 12px; font-weight: 600; }
   .chip.error { background: var(--error); color: #fff; }
   .chip.warning { background: var(--warning); color: #1a1205; }
+  .divider-demo { height: 1px; background: var(--divider); margin: 12px 0 0; }
 
-  .app.vibrant .bubble-wrap { background: linear-gradient(135deg, var(--edge1), var(--edge2) 55%, var(--edge3)); }
-  .app.calm .bubble-wrap { background: var(--edge1); }
-  .divider-demo { height: 1px; background: var(--divider); margin: 0 14px 14px; }
-
-  /* When you hover or focus a color control, the preview element(s) it changes
-     get this dashed outline — so you can always see what a control affects. */
+  /* hover/focus a color control → its target(s) get this dashed outline */
   .pv-highlight { outline: 2px dashed #ffd166 !important; outline-offset: 2px; border-radius: 8px; }
+
+  /* ---- Click-through context menu + demo toast (mockup only) ---- */
+  .ctx-menu {
+    position: fixed; z-index: 50; min-width: 168px;
+    background: var(--ui-panel); border: 1px solid var(--ui-line);
+    border-radius: 12px; padding: 6px; box-shadow: 0 16px 40px rgba(0,0,0,.5);
+  }
+  .ctx-item {
+    display: block; width: 100%; text-align: left;
+    background: transparent; color: var(--ui-text); border: 0;
+    padding: 9px 12px; border-radius: 8px; font-size: 13px; cursor: pointer;
+  }
+  .ctx-item:hover { background: var(--ui-panel-2); }
+  .ctx-item.danger { color: #ff8a8a; }
+  .ctx-sep { height: 1px; background: var(--ui-line); margin: 5px 6px; }
+  .demo-toast {
+    position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%);
+    background: #07101f; color: #d6e2ff; border: 1px solid var(--ui-accent);
+    padding: 9px 14px; border-radius: 10px; font-size: 13px; z-index: 60;
+    box-shadow: 0 10px 30px rgba(0,0,0,.5);
+  }
 </style>
 </head>
 <body>
 <header class="page-head">
   <h1>Phosphor Shines — Palette Designer</h1>
-  <span class="sub">Pick colors, see them live on the phone preview, save your themes. Nothing here changes the app.</span>
+  <span class="sub">Pick colors, see them on two live phone previews, click around the menus. Nothing here changes the app.</span>
 </header>
 
 <details class="help">
   <summary>How to use this (click to expand)</summary>
   <ul>
-    <li><b>This is a design tool.</b> The side-by-side layout (controls on the left, phone on the right) is only how this tool works — the app itself will NOT look split-screened like this. The phone shape on the right is a preview of what the app will actually look like.</li>
-    <li><b>Dark / Light:</b> you're designing two versions of each theme. Switch the toggle — the pickers and preview follow the mode you're editing.</li>
-    <li><b>Calm / Vibrant:</b> same colors, two treatments. <b>Calm</b> = solid single-color edges, no glow (sensory-safe). <b>Vibrant</b> = multicolored gradient outlines + glow (the lively look). You design both — they share the same palette.</li>
-    <li><b>Pick a color:</b> click a color square to open the full-spectrum picker, or type/paste an exact hex code. The preview updates the instant you change a color.</li>
-    <li><b>Not sure what a color affects?</b> Hover (or tab to) any control and the exact spot it changes lights up with a dashed outline on the phone preview.</li>
-    <li><b>Save a theme:</b> type a name, click Save. Your theme appears in the <b>Saved Themes</b> list below. Click any saved theme to load it back for editing. You can save as many themes as you want.</li>
-    <li><b>Copy for Claude:</b> when you're happy with a theme, hit this button. It produces a readable list of all colors that you paste back in chat. That's how your chosen colors get into the app.</li>
-    <li><b>Reading surfaces</b> (message bubbles, input box) default to charcoal (dark) or off-white (light) for readability. Color lives in the edges, glow, accents and buttons. You can change them, but readable defaults are there for a reason.</li>
-    <li><b>Reduce motion</b> previews the still version (no animation), for overstimulation-sensitive design.</li>
+    <li><b>This is a design + layout check tool.</b> The controls are on the left; the two phones on the right are a preview of what the app will actually look like. The app itself will NOT be split-screened — the two phones just show the same palette in two states at once.</li>
+    <li><b>Left phone = the slide-out drawer open</b> (folders, chat list, bottom bar). <b>Right phone = a normal chat.</b> Both use the colors you pick.</li>
+    <li><b>You can click around (nothing is saved or deleted):</b> click a chat to "open" it; <b>long-press or right-click</b> a chat, a folder, or the "Folders" row to see its menu; click "Folders" to expand/collapse; click a folder to drill into it (the back arrow returns).</li>
+    <li><b>Dark / Light:</b> you're designing two versions of each theme. Switch the toggle — pickers and preview follow the mode you're editing.</li>
+    <li><b>Calm / Vibrant:</b> same colors, two treatments. <b>Calm</b> = solid single-color edges, no glow (sensory-safe). <b>Vibrant</b> = multicolored gradient outlines + glow.</li>
+    <li><b>Pick a color:</b> click a color square for the full picker, or type/paste a hex code. The preview updates instantly.</li>
+    <li><b>Not sure what a color affects?</b> Hover (or tab to) any control and the exact spot it changes lights up with a dashed outline on the phones.</li>
+    <li><b>Save a theme:</b> name it, click Save — it appears in <b>Saved Themes</b> below. Click any saved theme to load it for editing.</li>
+    <li><b>Copy for Claude:</b> when happy, hit this and paste the result back in chat. That's how your colors get into the app.</li>
+    <li><b>Reduce motion</b> previews the still version (no animation).</li>
   </ul>
 </details>
 
@@ -365,6 +433,16 @@
       <label class="chk"><input type="checkbox" id="reduceMotion" /> Reduce motion</label>
     </div>
     <div id="zones"></div>
+
+    <div class="savebar">
+      <h3>Starter palettes (try these on your phone)</h3>
+      <div class="note">Three ready-made schemes to feel the app. Load one, flip Dark/Light &amp; Vibrant/Calm, then tweak or save. More can be added later — that part's cheap.</div>
+      <div class="row">
+        <button class="btn ghost" data-preset="Phosphor">Phosphor</button>
+        <button class="btn ghost" data-preset="Ocean">Ocean</button>
+        <button class="btn ghost" data-preset="Ember">Ember</button>
+      </div>
+    </div>
 
     <div class="savebar">
       <h3>Save theme</h3>
@@ -400,57 +478,155 @@
 
   <!-- ============ PREVIEW ============ -->
   <div class="preview-col">
-    <div class="preview-label">PREVIEW — this is how the app will look on your phone</div>
-    <div class="phone">
-      <div class="app vibrant" id="app">
-        <!-- top bar: hamburger, chat title, spacer, new-chat, gear (quick settings), bug (debug), overflow -->
-        <div class="topbar">
-          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
-          <div class="title">My Chat</div>
-          <div class="spacer"></div>
-          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.2A1.6 1.6 0 0 0 6.6 19l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 4 13.4H4a2 2 0 1 1 0-4h.2A1.6 1.6 0 0 0 5.4 6.6l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H10a1.6 1.6 0 0 0 1-1.5V2a2 2 0 1 1 4 0v.2a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V8a1.6 1.6 0 0 0 1.5 1H22a2 2 0 1 1 0 4h-.2a1.6 1.6 0 0 0-1.4 1z"/></svg>
-          <svg class="icon bug" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="6" width="8" height="12" rx="4"/><path d="M19 8l-3 2M5 8l3 2M19 16l-3-2M5 16l3-2M12 6V3M9 4l1.5 2M15 4l-1.5 2"/></svg>
-          <svg class="icon" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></svg>
-        </div>
+    <div class="preview-label">
+      PREVIEW — same palette, two states. Long-press or right-click chats &amp; folders to see menus.<br>Nothing here is saved, created or deleted.
+    </div>
 
-        <div class="body">
-          <!-- Drawer: matches Section 5.1 of ui-redesign-plan.md exactly -->
-          <div class="drawer">
-            <div class="drawer-header">Phosphor Shines</div>
-            <div class="new-chat">
-              <svg class="nc-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              New chat
+    <div class="stage vibrant" id="stage">
+      <div class="phones">
+        <!-- ---------- LEFT: drawer open ---------- -->
+        <div class="phone-col">
+          <div class="phone-label">Drawer (slide-out panel)</div>
+          <div class="phone">
+            <div class="app" id="appDrawer">
+              <div class="drawer-full">
+                <!-- Main drawer pane -->
+                <div class="drawer-pane" id="drawerMain">
+                  <div class="drawer-head">
+                    <!-- >> closes the panel (back to chat) -->
+                    <svg class="dic" id="drawerClose" title="Close panel" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 6 15 12 9 18"/><polyline points="4 6 10 12 4 18"/></svg>
+                    <div class="spacer"></div>
+                    <!-- add-folder: prompts for a name -->
+                    <svg class="dic" id="addFolder" title="New folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><line x1="12" y1="11" x2="12" y2="16"/><line x1="9.5" y1="13.5" x2="14.5" y2="13.5"/></svg>
+                  </div>
+
+                  <!-- Collapsible Folders section (hidden entirely when no folders exist) -->
+                  <div class="folders-section">
+                    <div class="folders-row" id="foldersRow">
+                      <span id="foldersLabel">Folders</span>
+                      <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                    </div>
+                    <div class="folders-list" id="foldersList">
+                      <div class="folder-item" data-name="Worlds">
+                        <svg class="ficon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+                        Worlds
+                      </div>
+                      <div class="folder-item" data-name="Recipes">
+                        <svg class="ficon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+                        Recipes
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Chat list: pinned first (Work notes is pinned in this example), then the rest -->
+                  <div class="chat-list" id="chatList">
+                    <div class="ditem" data-pinned="true">Work notes
+                      <svg class="pin-dot" viewBox="0 0 24 24" fill="currentColor"><path d="M14 4v6l3 3v2H7v-2l3-3V4z"/></svg>
+                    </div>
+                    <div class="ditem sel" data-pinned="false">My Chat</div>
+                    <div class="ditem" data-pinned="false">Travel plans</div>
+                  </div>
+
+                  <div class="drawer-bottom">
+                    <div class="search-field" id="searchField">
+                      <svg class="sicon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.7" y2="16.7"/></svg>
+                      Search chats…
+                    </div>
+                    <div class="round-btn" id="bottomGear" title="Settings">
+                      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.2A1.6 1.6 0 0 0 6.6 19l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 4 13.4H4a2 2 0 1 1 0-4h.2A1.6 1.6 0 0 0 5.4 6.6l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H10a1.6 1.6 0 0 0 1-1.5V2a2 2 0 1 1 4 0v.2a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V8a1.6 1.6 0 0 0 1.5 1H22a2 2 0 1 1 0 4h-.2a1.6 1.6 0 0 0-1.4 1z"/></svg>
+                    </div>
+                    <div class="round-btn accent" id="bottomNewChat" title="New chat">
+                      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Folder drill-in pane (hidden until a folder is opened) -->
+                <div class="drawer-pane" id="folderView" style="display:none">
+                  <div class="folder-head">
+                    <svg class="dic" id="folderBack" title="Back" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 6 9 12 15 18"/><polyline points="20 6 14 12 20 18"/></svg>
+                    <div class="folder-title" id="folderTitle">Worlds</div>
+                  </div>
+                  <div class="chat-list">
+                    <div class="ditem" data-pinned="false">Eldoria lore</div>
+                    <div class="ditem" data-pinned="false">Character arcs</div>
+                  </div>
+                  <div class="drawer-bottom">
+                    <div class="search-field">
+                      <svg class="sicon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.7" y2="16.7"/></svg>
+                      Search this folder…
+                    </div>
+                    <div class="round-btn accent" title="New chat in folder">
+                      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div class="search-field">Search chats...</div>
-            <div class="chat-list">
-              <div class="ditem sel">My Chat</div>
-              <div class="ditem">Work notes</div>
-              <div class="ditem">Recipe ideas</div>
-              <div class="ditem">Travel plans</div>
-            </div>
-            <div class="d-divider"></div>
-            <div class="d-nav">Settings</div>
           </div>
+        </div>
 
-          <div class="messages">
-            <div class="bubble-wrap"><div class="bubble bot">This is how an assistant message looks. The card stays easy to read — the <i>edge</i> carries the color.</div></div>
-            <div class="actions">
-              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
-              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/></svg>
-              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 9V5a3 3 0 0 0-6 0v4H5l1 11h12l1-11z"/></svg>
+        <!-- ---------- RIGHT: chat ---------- -->
+        <div class="phone-col">
+          <div class="phone-label">Chat</div>
+          <div class="phone">
+            <div class="app" id="appChat">
+              <!-- top bar: << (opens drawer) · centered title · bug (when diagnostics on) · gear (quick settings) -->
+              <div class="topbar">
+                <svg class="icon t-back" title="Open panel" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 6 9 12 15 18"/><polyline points="20 6 14 12 20 18"/></svg>
+                <div class="spacer"></div>
+                <div class="title">My Chat</div>
+                <div class="spacer"></div>
+                <svg class="icon bug t-bug" title="Event log (shown when voice diagnostics on)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="6" width="8" height="12" rx="4"/><path d="M19 8l-3 2M5 8l3 2M19 16l-3-2M5 16l3-2M12 6V3M9 4l1.5 2M15 4l-1.5 2"/></svg>
+                <svg class="icon t-gear" title="Quick Settings (per-chat)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.2A1.6 1.6 0 0 0 6.6 19l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 4 13.4H4a2 2 0 1 1 0-4h.2A1.6 1.6 0 0 0 5.4 6.6l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H10a1.6 1.6 0 0 0 1-1.5V2a2 2 0 1 1 4 0v.2a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V8a1.6 1.6 0 0 0 1.5 1H22a2 2 0 1 1 0 4h-.2a1.6 1.6 0 0 0-1.4 1z"/></svg>
+              </div>
+
+              <div class="messages">
+                <!-- AI message: Listen sits at the TOP (no scrolling a long answer to start playback);
+                     below the text: share · regenerate · copy · edit. Report removed (no backend). -->
+                <div class="actions top">
+                  <svg class="icon" title="Listen" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 6.5a9 9 0 0 1 0 11"/></svg>
+                </div>
+                <div class="bubble-wrap"><div class="bubble bot">This is how an assistant message looks. The card stays easy to read — the <i>edge</i> carries the color. Listen is up top so you can start playback without scrolling.</div></div>
+                <div class="actions">
+                  <svg class="icon" title="Info: Model GLM-4.6 · Received Jun 24, 2026 2:14 PM" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16.5"/><line x1="12" y1="7.7" x2="12.01" y2="7.7"/></svg>
+                  <svg class="icon" title="Share" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"/><line x1="15.4" y1="6.5" x2="8.6" y2="10.5"/></svg>
+                  <svg class="icon" title="Regenerate" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.5 15a9 9 0 1 1-2.1-9.4L23 10"/></svg>
+                  <svg class="icon" title="Copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                  <svg class="icon" title="Edit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+                </div>
+
+                <!-- User message: copy · edit only -->
+                <div class="row user"><div class="bubble-wrap"><div class="bubble user">And this is your message. You can select part of it and copy with the normal Android toolbar.</div></div></div>
+                <div class="actions user">
+                  <svg class="icon" title="Copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                  <svg class="icon" title="Edit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+                </div>
+              </div>
+
+              <div class="inputbar">
+                <div class="circle plus" title="Attach"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></div>
+                <div class="pill">Type a message…</div>
+                <svg class="mic-ic" title="Mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+                <div class="circle send" title="Send"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></div>
+              </div>
             </div>
-            <div class="row user"><div class="bubble-wrap"><div class="bubble user">And this is your message. The outline, glow, and buttons all pull from the colors you pick.</div></div></div>
           </div>
         </div>
+      </div>
 
-        <div class="inputbar">
-          <div class="circle plus"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></div>
-          <div class="pill">Type a message...</div>
-          <svg class="icon" style="width:22px;height:22px;color:var(--accent)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
-          <div class="circle send"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></div>
+      <!-- Components strip so button/alert/divider colors are visible too -->
+      <div class="components">
+        <div class="comp-label">Buttons &amp; alerts (same palette)</div>
+        <div class="btnsrow">
+          <div class="ui-btn primary">Save</div>
+          <div class="ui-btn secondary">Cancel</div>
         </div>
+        <div class="alertsrow">
+          <div class="chip error">Error</div>
+          <div class="chip warning">Warning</div>
+        </div>
+        <div class="divider-demo"></div>
       </div>
     </div>
   </div>
@@ -500,16 +676,16 @@ const GROUPS = [
 ];
 
 // For each color control, the preview element(s) it visibly changes. Hovering or
-// focusing a control outlines exactly these, so "what does this color touch?" is
-// answerable just by looking — that was the single most confusing thing here.
+// focusing a control outlines exactly these across BOTH phones + the components
+// strip, so "what does this color touch?" is answerable just by looking.
 const PREVIEW_TARGETS = {
-  pageBg: [".app", ".inputbar"],
+  pageBg: [".app", ".inputbar", ".components"],
   readSurface: [".pill"],
-  readText: [".pill"],
+  readText: [".pill", ".comp-label"],
   topbarBg: [".topbar"],
   topbarText: [".topbar .icon", ".topbar .title"],
-  drawerBg: [".drawer"],
-  drawerText: [".drawer-header", ".ditem", ".d-nav"],
+  drawerBg: [".drawer-full"],
+  drawerText: [".folders-row", ".ditem", ".folder-item", ".search-field"],
   drawerSelectedBg: [".ditem.sel"],
   userBg: [".bubble.user"],
   userText: [".bubble.user"],
@@ -519,12 +695,12 @@ const PREVIEW_TARGETS = {
   edge2: [".bubble-wrap", ".ui-btn.secondary"],
   edge3: [".bubble-wrap", ".ui-btn.secondary"],
   glow: [".bubble-wrap", ".circle.send"],
-  divider: [".divider-demo", ".d-divider", ".topbar", ".inputbar"],
+  divider: [".topbar", ".inputbar", ".drawer-bottom", ".divider-demo"],
   primaryBtnBg: [".ui-btn.primary"],
   primaryBtnText: [".ui-btn.primary"],
   secondaryBtnBg: [".ui-btn.secondary"],
   secondaryBtnText: [".ui-btn.secondary"],
-  accent: [".circle.send", ".actions .icon", ".bug"],
+  accent: [".circle.send", ".actions .icon", ".bug", ".round-btn.accent", ".mic-ic", ".pin-dot"],
   selected: [".ditem.sel"],
   error: [".chip.error"],
   warning: [".chip.warning"],
@@ -534,8 +710,8 @@ function highlightPreview(key) {
   clearPreviewHighlight();
   const sels = PREVIEW_TARGETS[key];
   if (!sels) return;
-  const app = document.getElementById("app");
-  sels.forEach(s => app.querySelectorAll(s).forEach(el => {
+  const stage = document.getElementById("stage");
+  sels.forEach(s => stage.querySelectorAll(s).forEach(el => {
     el.classList.add("pv-highlight");
     pvHighlighted.push(el);
   }));
@@ -584,6 +760,72 @@ const LEGACY = {
     edge1:"#dfdded", edge2:"#302936", edge3:"#dfdded", glow:"#cac1de", divider:"#D9D9D6",
     primaryBtnBg:"#302936", primaryBtnText:"#FFFFFF", secondaryBtnBg:"#dfdded", secondaryBtnText:"#27222D",
     accent:"#27222D", selected:"#dfdded", error:"#4F1E1A", warning:"#9A6A12",
+  }
+};
+
+// Three starter palettes for the owner to feel on a phone. Reading surfaces stay
+// charcoal (dark) / off-white (light) for legibility; color lives in the edges,
+// accents and buttons. These are candidates — the owner refines/replaces later.
+const PRESETS = {
+  Phosphor: {
+    dark: {
+      pageBg:"#0B0F0C", readSurface:"#141A16", readText:"#E6F0E9",
+      topbarBg:"#0B0F0C", topbarText:"#D7F7E5",
+      drawerBg:"#0F1512", drawerText:"#E6F0E9", drawerSelectedBg:"#1B2A22",
+      userBg:"#15201A", userText:"#E6F0E9", botBg:"#141A16", botText:"#E6F0E9",
+      edge1:"#34D399", edge2:"#10B981", edge3:"#2DD4BF", glow:"#10B981", divider:"#1E2A24",
+      primaryBtnBg:"#34D399", primaryBtnText:"#06120D", secondaryBtnBg:"#141A16", secondaryBtnText:"#D7F7E5",
+      accent:"#34D399", selected:"#1B2A22", error:"#E5484D", warning:"#E0A23C",
+    },
+    light: {
+      pageBg:"#F2F6F3", readSurface:"#FBFEFC", readText:"#10241A",
+      topbarBg:"#F2F6F3", topbarText:"#10241A",
+      drawerBg:"#E8F0EB", drawerText:"#10241A", drawerSelectedBg:"#D5E8DD",
+      userBg:"#FBFEFC", userText:"#10241A", botBg:"#FBFEFC", botText:"#10241A",
+      edge1:"#0E9F6E", edge2:"#0B8457", edge3:"#14B8A6", glow:"#7AD7B5", divider:"#DDE8E1",
+      primaryBtnBg:"#0E9F6E", primaryBtnText:"#FFFFFF", secondaryBtnBg:"#FBFEFC", secondaryBtnText:"#0B5B3E",
+      accent:"#0E9F6E", selected:"#D5E8DD", error:"#C62A2F", warning:"#9A6A12",
+    }
+  },
+  Ocean: {
+    dark: {
+      pageBg:"#0B0F14", readSurface:"#141A22", readText:"#E6EEF6",
+      topbarBg:"#0B0F14", topbarText:"#CFE6FF",
+      drawerBg:"#0F1620", drawerText:"#E6EEF6", drawerSelectedBg:"#1A2735",
+      userBg:"#152030", userText:"#E6EEF6", botBg:"#141A22", botText:"#E6EEF6",
+      edge1:"#38BDF8", edge2:"#2563EB", edge3:"#22D3EE", glow:"#2563EB", divider:"#1C2836",
+      primaryBtnBg:"#38BDF8", primaryBtnText:"#06121E", secondaryBtnBg:"#141A22", secondaryBtnText:"#CFE6FF",
+      accent:"#38BDF8", selected:"#1A2735", error:"#E5484D", warning:"#E0A23C",
+    },
+    light: {
+      pageBg:"#F1F5F9", readSurface:"#FBFDFF", readText:"#0F2233",
+      topbarBg:"#F1F5F9", topbarText:"#0F2233",
+      drawerBg:"#E7EEF5", drawerText:"#0F2233", drawerSelectedBg:"#D5E3F0",
+      userBg:"#FBFDFF", userText:"#0F2233", botBg:"#FBFDFF", botText:"#0F2233",
+      edge1:"#0284C7", edge2:"#1D4ED8", edge3:"#0891B2", glow:"#8EC5EC", divider:"#DCE6F0",
+      primaryBtnBg:"#0284C7", primaryBtnText:"#FFFFFF", secondaryBtnBg:"#FBFDFF", secondaryBtnText:"#0B4E78",
+      accent:"#0284C7", selected:"#D5E3F0", error:"#C62A2F", warning:"#9A6A12",
+    }
+  },
+  Ember: {
+    dark: {
+      pageBg:"#120E0B", readSurface:"#1C1612", readText:"#F3E9E2",
+      topbarBg:"#120E0B", topbarText:"#FFD9B8",
+      drawerBg:"#17110D", drawerText:"#F3E9E2", drawerSelectedBg:"#2C1E15",
+      userBg:"#221610", userText:"#F3E9E2", botBg:"#1C1612", botText:"#F3E9E2",
+      edge1:"#FB923C", edge2:"#F97316", edge3:"#F59E0B", glow:"#F97316", divider:"#2A1C14",
+      primaryBtnBg:"#FB923C", primaryBtnText:"#1A0E06", secondaryBtnBg:"#1C1612", secondaryBtnText:"#FFD9B8",
+      accent:"#FB923C", selected:"#2C1E15", error:"#E5484D", warning:"#E0A23C",
+    },
+    light: {
+      pageBg:"#F7F3EF", readSurface:"#FFFDFB", readText:"#2A1A0F",
+      topbarBg:"#F7F3EF", topbarText:"#2A1A0F",
+      drawerBg:"#F0E7DE", drawerText:"#2A1A0F", drawerSelectedBg:"#EBD9C8",
+      userBg:"#FFFDFB", userText:"#2A1A0F", botBg:"#FFFDFB", botText:"#2A1A0F",
+      edge1:"#E8740F", edge2:"#D9531A", edge3:"#F59E0B", glow:"#F3C28A", divider:"#E9DCCD",
+      primaryBtnBg:"#E8740F", primaryBtnText:"#FFFFFF", secondaryBtnBg:"#FFFDFB", secondaryBtnText:"#9A4E0C",
+      accent:"#E8740F", selected:"#EBD9C8", error:"#C62A2F", warning:"#9A6A12",
+    }
   }
 };
 
@@ -645,12 +887,12 @@ function syncControls() {
 }
 
 function applyPreview() {
-  const app = document.getElementById("app");
+  const stage = document.getElementById("stage");
   const t = state.theme[state.mode];
-  for (const k in t) app.style.setProperty("--" + k, t[k]);
-  app.classList.toggle("vibrant", state.style === "vibrant");
-  app.classList.toggle("calm", state.style === "calm");
-  app.classList.toggle("reduce", state.reduceMotion);
+  for (const k in t) stage.style.setProperty("--" + k, t[k]);
+  stage.classList.toggle("vibrant", state.style === "vibrant");
+  stage.classList.toggle("calm", state.style === "calm");
+  stage.classList.toggle("reduce", state.reduceMotion);
 }
 
 /* ---------- toolbar ---------- */
@@ -776,6 +1018,17 @@ document.getElementById("loadNeutral").addEventListener("click", () => {
   syncControls(); applyPreview(); saveWork();
 });
 
+// Starter palettes — load one into the editor (then the owner can tweak/save).
+function loadPreset(name) {
+  const p = PRESETS[name];
+  if (!p) return;
+  state.theme = structuredClone(p);
+  document.getElementById("themeName").value = name;
+  syncControls(); applyPreview(); saveWork();
+}
+document.querySelectorAll("[data-preset]").forEach(b =>
+  b.addEventListener("click", () => loadPreset(b.dataset.preset)));
+
 function readableExport() {
   const name = document.getElementById("themeName").value.trim() || "(unnamed)";
   let out = `Palette: ${name}\nTreatment: ${state.style}\n`;
@@ -812,6 +1065,129 @@ document.getElementById("importBtn").addEventListener("click", () => {
   } catch { alert("Could not parse JSON. Make sure you pasted the full JSON text."); }
 });
 
+/* ============================================================
+   CLICK-THROUGH (mockup only) — context menus, folder expand,
+   drill-in, selection highlight. Nothing here saves or deletes.
+   ============================================================ */
+let lastMenuOpen = 0;
+function menuJustOpened() { return Date.now() - lastMenuOpen < 400; }
+
+function closeContextMenu() { document.querySelectorAll(".ctx-menu").forEach(m => m.remove()); }
+function showContextMenu(items, x, y) {
+  closeContextMenu();
+  const menu = document.createElement("div");
+  menu.className = "ctx-menu";
+  items.forEach(it => {
+    if (it.sep) { const d = document.createElement("div"); d.className = "ctx-sep"; menu.appendChild(d); return; }
+    const b = document.createElement("button");
+    b.className = "ctx-item" + (it.danger ? " danger" : "");
+    b.textContent = it.label;
+    b.addEventListener("click", (e) => { e.stopPropagation(); flashDemo(it.label); closeContextMenu(); });
+    menu.appendChild(b);
+  });
+  document.body.appendChild(menu);
+  const mw = menu.offsetWidth, mh = menu.offsetHeight;
+  let px = x, py = y;
+  if (px + mw > window.innerWidth - 8) px = window.innerWidth - mw - 8;
+  if (py + mh > window.innerHeight - 8) py = window.innerHeight - mh - 8;
+  menu.style.left = Math.max(8, px) + "px";
+  menu.style.top = Math.max(8, py) + "px";
+}
+document.addEventListener("click", closeContextMenu);
+document.addEventListener("scroll", closeContextMenu, true);
+
+function flashDemo(label) {
+  document.querySelectorAll(".demo-toast").forEach(t => t.remove());
+  const t = document.createElement("div");
+  t.className = "demo-toast";
+  t.textContent = label + " — demo only (nothing changes here)";
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 1500);
+}
+
+// Attach long-press (450ms) + right-click to an element; itemsFn() is evaluated
+// at open time so menus can reflect current state (e.g. Pin vs Unpin).
+function attachMenu(el, itemsFn) {
+  let timer = null;
+  const open = (x, y) => { lastMenuOpen = Date.now(); showContextMenu(itemsFn(), x, y); };
+  const cancel = () => { if (timer) { clearTimeout(timer); timer = null; } };
+  el.addEventListener("contextmenu", e => { e.preventDefault(); open(e.clientX, e.clientY); });
+  el.addEventListener("mousedown", e => { if (e.button !== 0) return; const x = e.clientX, y = e.clientY; timer = setTimeout(() => open(x, y), 450); });
+  ["mouseup", "mouseleave"].forEach(ev => el.addEventListener(ev, cancel));
+  el.addEventListener("touchstart", e => { const tt = e.touches[0]; const x = tt.clientX, y = tt.clientY; timer = setTimeout(() => open(x, y), 450); }, { passive: true });
+  ["touchend", "touchmove", "touchcancel"].forEach(ev => el.addEventListener(ev, cancel, { passive: true }));
+}
+
+function bindDemo(el, label) {
+  if (!el) return;
+  el.addEventListener("click", e => { e.stopPropagation(); if (menuJustOpened()) return; flashDemo(label); });
+}
+
+function chatMenuItems(row) {
+  const pinned = row.dataset.pinned === "true";
+  return [
+    { label: "Rename" },
+    { label: "Export" },
+    { label: pinned ? "Unpin" : "Pin" },
+    { label: "Add to Folder" },
+    { label: "Select" },
+    { sep: true },
+    { label: "Delete", danger: true },
+  ];
+}
+
+function enterFolder(name) {
+  document.getElementById("folderTitle").textContent = name;
+  document.getElementById("drawerMain").style.display = "none";
+  document.getElementById("folderView").style.display = "flex";
+}
+function exitFolder() {
+  document.getElementById("folderView").style.display = "none";
+  document.getElementById("drawerMain").style.display = "flex";
+}
+function toggleFolders() {
+  document.getElementById("foldersRow").classList.toggle("collapsed");
+}
+
+function setupPreviewInteractions() {
+  // Chat rows (both panes): click = open/select, long-press/right-click = menu
+  document.querySelectorAll("#appDrawer .chat-list .ditem").forEach(row => {
+    attachMenu(row, () => chatMenuItems(row));
+    row.addEventListener("click", () => {
+      if (menuJustOpened()) return;
+      const list = row.closest(".chat-list");
+      list.querySelectorAll(".ditem").forEach(r => r.classList.remove("sel"));
+      row.classList.add("sel");
+    });
+  });
+
+  // Folder rows: click = drill in, long-press/right-click = Rename/Delete
+  document.querySelectorAll("#appDrawer .folder-item").forEach(f => {
+    attachMenu(f, () => [{ label: "Rename" }, { sep: true }, { label: "Delete", danger: true }]);
+    f.addEventListener("click", () => { if (menuJustOpened()) return; enterFolder(f.dataset.name); });
+  });
+
+  // "Folders" row: click = expand/collapse, long-press/right-click = rename the label
+  const fr = document.getElementById("foldersRow");
+  attachMenu(fr, () => [{ label: 'Rename label (e.g. "Worlds")' }]);
+  fr.addEventListener("click", () => { if (menuJustOpened()) return; toggleFolders(); });
+
+  // Folder drill-in back arrow
+  document.getElementById("folderBack").addEventListener("click", exitFolder);
+
+  // Demo-only taps so every control "does something" visible
+  bindDemo(document.getElementById("drawerClose"), "Close panel");
+  bindDemo(document.getElementById("addFolder"), "New folder (prompts for a name)");
+  bindDemo(document.getElementById("bottomGear"), "Settings (global)");
+  bindDemo(document.getElementById("bottomNewChat"), "New chat");
+  bindDemo(document.getElementById("searchField"), "Search chats");
+  bindDemo(document.querySelector("#appChat .t-back"), "Open side panel");
+  bindDemo(document.querySelector("#appChat .t-bug"), "Event log");
+  bindDemo(document.querySelector("#appChat .t-gear"), "Quick Settings (per-chat)");
+  document.querySelectorAll("#appChat .messages .actions .icon, #appChat .inputbar .icon, #appChat .mic-ic")
+    .forEach(ic => bindDemo(ic, ic.getAttribute("title") || "Action"));
+}
+
 /* ---------- init ---------- */
 buildZones();
 loadWork();
@@ -821,6 +1197,7 @@ document.getElementById("reduceMotion").checked = state.reduceMotion;
 refreshSavedList();
 syncControls();
 applyPreview();
+setupPreviewInteractions();
 </script>
 </body>
 </html>
