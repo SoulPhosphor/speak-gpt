@@ -992,9 +992,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     private var pendingSpeak: String? = null
     private var ttsUtteranceCounter: Long = 0
     // The exact text last handed to the TTS engine, recorded so a readback
-    // failure can log *what* it choked on (length vs the engine's max) instead
-    // of just an opaque error code.
+    // failure can log *what* it choked on (length vs the engine's max, plus a
+    // short sample) instead of just an opaque error code.
     private var lastTtsText: String = ""
+    // Did the current utterance actually begin speaking (onStart) before it
+    // failed? Distinguishes "engine rejected it outright" from "failed
+    // mid-synthesis" — the two have very different causes for the same -8.
+    private var lastTtsUtteranceStarted = false
     // Consecutive failures for the current readback. A reply the engine keeps
     // rejecting used to re-initialise the engine forever — several "error -8"
     // lines a second that filled the whole Event log. Capped so it gives up
@@ -1019,7 +1023,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         }
 
     private val ttsProgressListener = object : UtteranceProgressListener() {
-        override fun onStart(utteranceId: String?) { /* no-op */ }
+        override fun onStart(utteranceId: String?) { lastTtsUtteranceStarted = true }
         override fun onDone(utteranceId: String?) {
             // A real readback completed — clear the failure budget.
             ttsErrorRetries = 0
@@ -1054,11 +1058,21 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         val engineName = try { tts?.defaultEngine ?: "?" } catch (_: Throwable) { "?" }
         val voiceName = try { tts?.voice?.name ?: "?" } catch (_: Throwable) { "?" }
         val langName = try { tts?.voice?.locale?.toString() ?: "?" } catch (_: Throwable) { "?" }
+        // Factual descriptors of the failing text. The log is local-only, but
+        // keep the sample short and newline-free so it's one readable line. A
+        // blank text or a non-ASCII character are the usual content causes of a
+        // -8, and "started" tells reject-outright apart from fail-mid-synthesis.
+        val len = lastTtsText.length
+        val blank = lastTtsText.isBlank()
+        val nonAscii = lastTtsText.any { it.code > 127 }
+        val sample = lastTtsText.take(80).replace("\n", " ").replace("\r", " ")
+        val sampleSuffix = if (len > 80) "…" else ""
         runOnUiThread {
             logVoiceEventAlways(
                 "TTS readback failed (error $codeText), attempt $ttsErrorRetries/$TTS_MAX_ERROR_RETRIES: " +
-                "text=${lastTtsText.length} chars (engine max $maxLen), engine=$engineName, " +
-                "voice=$voiceName, lang=$langName"
+                "text=$len chars${if (blank) " BLANK" else ""}${if (nonAscii) " has-non-ASCII" else ""}, " +
+                "started=$lastTtsUtteranceStarted, engine max $maxLen, engine=$engineName, " +
+                "voice=$voiceName, lang=$langName, sample=\"$sample$sampleSuffix\""
             )
             adapter?.clearSpeakingPosition()
         }
@@ -4375,6 +4389,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 ttsUtteranceCounter++
                 val utteranceId = "speakgpt-$ttsUtteranceCounter"
                 lastTtsText = message
+                lastTtsUtteranceStarted = false
                 val result = engine.speak(message, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
                 if (result == TextToSpeech.ERROR) {
                     Log.w("TTS", "speak() returned ERROR; re-initialising engine and queueing message")
