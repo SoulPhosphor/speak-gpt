@@ -133,7 +133,18 @@ Everything is on-device. No cloud sync, no accounts.
   official `openai-java` client for function calling.
 - Voice: hands-free loop (VAD listen → Whisper/Google STT → generate → TTS
   readback → re-arm), manual mic button, per-message speak button, audible
-  error/done chimes, screen-off operation via foreground services (the bar with
+  error/done chimes (plus a distinct low `playNoSpeechSignal` two-tone when the
+  loop gives up on its own — heard nothing / couldn't capture / recognizer died
+  after retries; gated on the error-sound pref, played from `stopHandsFreeLoop`'s
+  `notify` flag). Device-TTS readback failures funnel through
+  `handleTtsReadbackError`: it logs the *factual* failure state (error code+name,
+  text length vs `getMaxSpeechInputLength`, engine, voice, language) via
+  `logVoiceEventAlways` (persisted even with VAD logging off) and caps consecutive
+  re-inits at `TTS_MAX_ERROR_RETRIES` (3) — a reply the engine keeps rejecting
+  (e.g. ERROR_INVALID_REQUEST/-8) used to re-init the engine forever and flood
+  the Event log; now it gives up on that one readback and the loop continues. The
+  budget resets on a clean `onDone` and at each new readback (`pronounce`,
+  `onSpeakClick`). screen-off operation via foreground services (the bar with
   a **Hang Up** button — see `GenerationForegroundService`/`HandsFreeService`
   above; plain read-aloud now survives app-switch/screen-off via the readback
   keep-alive). The Event (Voice Debug) log is **never wiped on startup** —

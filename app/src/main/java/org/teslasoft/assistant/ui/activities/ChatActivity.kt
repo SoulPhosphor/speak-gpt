@@ -598,7 +598,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     }, 400)
                     return
                 }
-                stopHandsFreeLoop("recognizer error $error (after ${handsFreeTurnRetries} rebuild retries)")
+                stopHandsFreeLoop("recognizer error $error (after ${handsFreeTurnRetries} rebuild retries)", notify = true)
                 return
             }
             isRecording = false
@@ -991,6 +991,17 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     private var tts: TextToSpeech? = null
     private var pendingSpeak: String? = null
     private var ttsUtteranceCounter: Long = 0
+    // The exact text last handed to the TTS engine, recorded so a readback
+    // failure can log *what* it choked on (length vs the engine's max) instead
+    // of just an opaque error code.
+    private var lastTtsText: String = ""
+    // Consecutive failures for the current readback. A reply the engine keeps
+    // rejecting used to re-initialise the engine forever — several "error -8"
+    // lines a second that filled the whole Event log. Capped so it gives up
+    // after a few tries instead of running away. Reset when a readback actually
+    // completes or a new one starts.
+    private var ttsErrorRetries = 0
+    private val TTS_MAX_ERROR_RETRIES = 3
     private val ttsListener: TextToSpeech.OnInitListener =
         TextToSpeech.OnInitListener { status ->
             if (status == TextToSpeech.SUCCESS) {
@@ -1010,25 +1021,73 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     private val ttsProgressListener = object : UtteranceProgressListener() {
         override fun onStart(utteranceId: String?) { /* no-op */ }
         override fun onDone(utteranceId: String?) {
+            // A real readback completed — clear the failure budget.
+            ttsErrorRetries = 0
             runOnUiThread { adapter?.clearSpeakingPosition() }
             onHandsFreeReadbackFinished()
         }
         @Suppress("OverridingDeprecatedMember")
         override fun onError(utteranceId: String?) {
             Log.w("TTS", "TTS utterance error: $utteranceId; re-initialising engine")
-            Handler(Looper.getMainLooper()).post { reinitTTS() }
-            runOnUiThread { adapter?.clearSpeakingPosition() }
-            // A failed utterance must not strand the hands-free loop — re-arm
-            // the mic as if the readback had finished normally.
-            onHandsFreeReadbackFinished()
+            handleTtsReadbackError(null)
         }
         override fun onError(utteranceId: String?, errorCode: Int) {
             Log.w("TTS", "TTS utterance error code $errorCode: $utteranceId; re-initialising engine")
-            runOnUiThread { logVoiceEvent("TTS failed mid-readback (error $errorCode); re-initialising the speech engine") }
-            Handler(Looper.getMainLooper()).post { reinitTTS() }
-            runOnUiThread { adapter?.clearSpeakingPosition() }
-            onHandsFreeReadbackFinished()
+            handleTtsReadbackError(errorCode)
         }
+    }
+
+    /**
+     * Common TTS readback-failure handler. Records the factual state at the
+     * moment of failure (error code/name, the length of the text vs the engine's
+     * max input length, the engine package, the voice/language) so a failure is
+     * diagnosable instead of an opaque code, then either re-initialises the
+     * engine and lets the loop continue, or — once the same readback has failed
+     * [TTS_MAX_ERROR_RETRIES] times — gives up reading this reply aloud instead
+     * of re-initialising forever (the runaway that filled the Event log). Either
+     * way the hands-free loop is moved forward so it can't strand.
+     */
+    private fun handleTtsReadbackError(errorCode: Int?) {
+        ttsErrorRetries++
+        val codeText = errorCode?.let { "$it ${ttsErrorName(it)}" } ?: "unknown"
+        val maxLen = try { TextToSpeech.getMaxSpeechInputLength() } catch (_: Throwable) { -1 }
+        val engineName = try { tts?.defaultEngine ?: "?" } catch (_: Throwable) { "?" }
+        val voiceName = try { tts?.voice?.name ?: "?" } catch (_: Throwable) { "?" }
+        val langName = try { tts?.voice?.locale?.toString() ?: "?" } catch (_: Throwable) { "?" }
+        runOnUiThread {
+            logVoiceEventAlways(
+                "TTS readback failed (error $codeText), attempt $ttsErrorRetries/$TTS_MAX_ERROR_RETRIES: " +
+                "text=${lastTtsText.length} chars (engine max $maxLen), engine=$engineName, " +
+                "voice=$voiceName, lang=$langName"
+            )
+            adapter?.clearSpeakingPosition()
+        }
+        if (ttsErrorRetries >= TTS_MAX_ERROR_RETRIES) {
+            // Give up: do NOT rebuild the engine again, and drop the pending
+            // utterance so a fresh init can't replay the failing text.
+            pendingSpeak = null
+            runOnUiThread {
+                logVoiceEventAlways("TTS gave up on this readback after $ttsErrorRetries failures; continuing without reading it aloud")
+            }
+            onHandsFreeReadbackFinished()
+            return
+        }
+        // A failed utterance must not strand the hands-free loop — rebuild the
+        // engine and re-arm the mic as if the readback had finished normally.
+        Handler(Looper.getMainLooper()).post { reinitTTS() }
+        onHandsFreeReadbackFinished()
+    }
+
+    private fun ttsErrorName(code: Int): String = when (code) {
+        TextToSpeech.ERROR -> "ERROR"
+        TextToSpeech.ERROR_SYNTHESIS -> "ERROR_SYNTHESIS"
+        TextToSpeech.ERROR_SERVICE -> "ERROR_SERVICE"
+        TextToSpeech.ERROR_OUTPUT -> "ERROR_OUTPUT"
+        TextToSpeech.ERROR_NETWORK -> "ERROR_NETWORK"
+        TextToSpeech.ERROR_NETWORK_TIMEOUT -> "ERROR_NETWORK_TIMEOUT"
+        TextToSpeech.ERROR_INVALID_REQUEST -> "ERROR_INVALID_REQUEST"
+        TextToSpeech.ERROR_NOT_INSTALLED_YET -> "ERROR_NOT_INSTALLED_YET"
+        else -> "(unknown)"
     }
 
     /**
@@ -2376,7 +2435,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             // The toast below is suppressed by the OS when the chat isn't the
             // foreground screen (settings open over it, screen off) — the
             // event log line above via stopHandsFreeLoop is the durable record.
-            stopHandsFreeLoop("whisper capture failed to start (after $handsFreeTurnRetries retries)")
+            stopHandsFreeLoop("whisper capture failed to start (after $handsFreeTurnRetries retries)", notify = true)
             Toast.makeText(this, R.string.local_whisper_capture_failed, Toast.LENGTH_LONG).show()
             return
         }
@@ -2404,7 +2463,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     private fun onHandsFreeWhisperNoSpeech() {
         if (handsFreeStopped) return
         logVadDiagnostics("no-speech-timeout")
-        stopHandsFreeLoop("no speech within the no-speech window")
+        stopHandsFreeLoop("no speech within the no-speech window", notify = true)
         LocalWhisperEngine.get().cancel()
     }
 
@@ -2483,6 +2542,17 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         if (!voiceDiagnosticsEnabled()) return
         try {
             org.teslasoft.assistant.preferences.Logger.log(this, "event", "VoiceLoop", "info", message)
+        } catch (_: Throwable) { /* never let diagnostics crash the loop */ }
+    }
+
+    /** Like [logVoiceEvent] but always persists to the Event log, regardless of
+     *  the VAD-logging toggles — for genuine failures (e.g. a TTS readback error)
+     *  the user needs recorded even with per-turn diagnostics off. Callers must be
+     *  bounded (e.g. the capped TTS retry path) so this can't spam the log. */
+    private fun logVoiceEventAlways(message: String) {
+        Log.w("VoiceLoop", message)
+        try {
+            org.teslasoft.assistant.preferences.Logger.log(this, "event", "VoiceLoop", "warning", message)
         } catch (_: Throwable) { /* never let diagnostics crash the loop */ }
     }
 
@@ -3054,10 +3124,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         recognizer?.startListening(intent)
     }
 
-    private fun stopHandsFreeLoop(reason: String = "unspecified") {
+    private fun stopHandsFreeLoop(reason: String = "unspecified", notify: Boolean = false) {
         // The reason lands in the event log: "the mic never reopened" is only
         // diagnosable if every loop ending says why it ended.
         logVoiceEvent("hands-free loop stopped: $reason")
+        // notify = the loop gave up on its own (heard nothing / couldn't capture),
+        // not a user tap. Play an audible cue so a hands-free user with the screen
+        // off knows it stopped listening and is waiting for them, rather than
+        // sitting in silence assuming it's still listening.
+        if (notify) playNoSpeechSignal()
         handsFreeStopped = true
         handsFreeReadbackExpected = false
         handsFreeReadbackToken++ // invalidate any in-flight readback watchdog
@@ -3755,6 +3830,77 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     }
 
     /**
+     * Played when the hands-free loop gives up on its own — it heard nothing, or
+     * couldn't capture audio, within the listening window — so a user with the
+     * screen off knows it stopped listening rather than sitting in false silence.
+     * Deliberately distinct from [playErrorSignal] (the model-error tone): two
+     * low, slow descending notes (A3 -> E3) that read as "going quiet", not the
+     * higher three-note "something failed" cadence. Same alarm-stream routing so
+     * it stays audible on silent/vibrate. Respects the error-sound toggle so it
+     * has an off switch alongside the other alert sound.
+     */
+    private fun playNoSpeechSignal() {
+        if (preferences?.getErrorSound() != true) return
+
+        Thread {
+            var track: AudioTrack? = null
+            try {
+                val sampleRate = 44100
+                // A3 -> E3: low, "settling down / went quiet" cadence.
+                val notes = floatArrayOf(220.0f, 164.81f)
+                val noteMs = 260
+                val gapMs = 60
+                val samplesPerNote = sampleRate * noteMs / 1000
+                val samplesPerGap = sampleRate * gapMs / 1000
+                val totalSamples = (samplesPerNote + samplesPerGap) * notes.size
+                val buffer = ShortArray(totalSamples)
+
+                var idx = 0
+                for (freq in notes) {
+                    for (i in 0 until samplesPerNote) {
+                        val t = i.toDouble() / sampleRate
+                        val envelope = when {
+                            i < samplesPerNote * 0.1 -> i / (samplesPerNote * 0.1)
+                            i > samplesPerNote * 0.8 -> (samplesPerNote - i) / (samplesPerNote * 0.2)
+                            else -> 1.0
+                        }
+                        val sample = Math.sin(2.0 * Math.PI * freq * t) * envelope * 0.5 * Short.MAX_VALUE
+                        buffer[idx++] = sample.toInt().toShort()
+                    }
+                    idx += samplesPerGap // silence (buffer is zero-initialized)
+                }
+
+                val attributes = AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_ALARM)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build()
+                val format = AudioFormat.Builder()
+                    .setSampleRate(sampleRate)
+                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                    .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                    .build()
+
+                track = AudioTrack(
+                    attributes,
+                    format,
+                    totalSamples * 2,
+                    AudioTrack.MODE_STATIC,
+                    AudioManager.AUDIO_SESSION_ID_GENERATE
+                )
+                track.write(buffer, 0, totalSamples)
+                track.play()
+
+                Thread.sleep(((noteMs + gapMs) * notes.size + 150).toLong())
+                track.stop()
+            } catch (_: Exception) {
+                // A missing cue must never crash the loop teardown.
+            } finally {
+                try { track?.release() } catch (_: Exception) { /* ignore */ }
+            }
+        }.start()
+    }
+
+    /**
      * Plays a short ascending three-note tone once the user's speech has been
      * transcribed, so they know dictation finished without looking at the screen.
      * Deliberately the mirror image of [playErrorSignal]: same alarm-stream
@@ -4146,6 +4292,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         val handsFree = preferences?.getHandsFreeMode() == true
         val willReadAloud = (st && !silenceMode) || preferences!!.getNotSilence()
 
+        // Fresh reply → fresh TTS failure budget (see handleTtsReadbackError).
+        if (willReadAloud) ttsErrorRetries = 0
+
         if (handsFree && willReadAloud) {
             logVoiceEvent("reply ready; reading it back (${preferences?.getTtsEngine()})")
             // This is a loop readback: its completion is what re-arms the mic.
@@ -4225,6 +4374,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             val runSpeak = {
                 ttsUtteranceCounter++
                 val utteranceId = "speakgpt-$ttsUtteranceCounter"
+                lastTtsText = message
                 val result = engine.speak(message, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
                 if (result == TextToSpeech.ERROR) {
                     Log.w("TTS", "speak() returned ERROR; re-initialising engine and queueing message")
@@ -4590,6 +4740,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         // off. Hands-free is already covered by HandsFreeService, so skip there to
         // avoid a second keep-alive bar.
         if (preferences?.getHandsFreeMode() != true) acquireReadbackKeepAlive()
+        // Fresh manual readback → fresh TTS failure budget.
+        ttsErrorRetries = 0
         speak(message)
     }
 
