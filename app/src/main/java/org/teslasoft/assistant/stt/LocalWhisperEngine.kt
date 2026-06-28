@@ -237,8 +237,8 @@ class LocalWhisperEngine private constructor() {
         val vadLog = vad?.logging == true
         val audioHealth = vad?.audioHealth == true
         if (isCapturing) {
-            if (vadLog) Log.w(TAG, "[Turn ${turnNumber}] startRecording called while isCapturing=true — returning early WITHOUT resetting state!")
-            return true
+            Log.w(TAG, "startRecording called while a previous capture is still active; cancelling stale capture before starting a new turn")
+            cancel()
         }
         turnNumber++
         synchronized(chunkLock) {
