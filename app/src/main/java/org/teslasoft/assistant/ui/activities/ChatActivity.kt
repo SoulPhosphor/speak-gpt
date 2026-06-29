@@ -1284,9 +1284,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     private val permissionResultLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         run {
             if (result.resultCode == RESULT_OK) {
-                if (preferences?.getHandsFreeMode() == true) micHandsFreeActive(listening = true)
-                else micRecording()
-                isRecording = true
                 startRecognition()
             }
         }
@@ -1295,13 +1292,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     private val permissionResultLauncherV2 = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         run {
             if (result.resultCode == RESULT_OK) {
-                if (preferences?.getEffectiveAudioModel() == "whisper-local" &&
-                    preferences?.getHandsFreeMode() == true
-                ) {
-                    startLocalWhisperHandsFreeTurn(freshTurn = true)
-                } else {
-                    startWhisper()
-                }
+                startWhisper()
             }
         }
     }
