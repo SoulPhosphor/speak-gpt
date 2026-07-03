@@ -222,7 +222,24 @@ PR that lands the phase.
   seed / database / export / transcript" rule. (`example_seed.json` itself
   was already removed by the owner; history purge only on owner request.)
 
-### ☐ Phase 1 — Storage: `MemoryStore` + migrations + seed + export
+### ☑ Phase 1 — Storage: `MemoryStore` + migrations + seed + export
+**Landed July 2026.** What shipped vs. the outline below, so later phases
+build on what exists rather than what was planned: the store is
+`preferences/memory/` (MemoryStore + MemorySeedCodec + MemoryData +
+MemoryDatabaseKey + MemoryCompanionSync + MemoryExporter); the entry point is
+a **"Memory system" tile in the Characters hub** (next to Lorebooks — the
+main Settings grid needed constraint-chain surgery, Characters didn't), which
+opens `MemorySettingsActivity`. The rotating automatic export runs from
+`MainApplication` at app start (background thread, 24h throttle via meta,
+keeps 5 in `getExternalFilesDir/memory_backups`) instead of adding a
+WorkManager dependency — Phase 8 moves it to a user-chosen SAF folder.
+Singletons (owner profile / archivist settings / retrieval policy) import
+only on the FIRST seed import (`meta.seed_imported_at`). Schema deviations
+from the table plan are documented in MemoryStore's header (draft status,
+transcripts.chat_id + user_persona_id, nullable transcript companion_id,
+deleted_ids tombstones). Unit tests cover the codec (template parse,
+lossless round-trip, export envelope); DB-level behavior is verified
+on-device — SQLCipher can't run in plain JVM tests.
 Specs: `sqlite_table_plan.md`, `companion_memory_schema.json`,
 `seed_public_template.json`, app_adaptation_notes §Bootstrap, §Data care.
 - SQLCipher dependency (D9 note) + key management (D2).

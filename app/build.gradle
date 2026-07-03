@@ -177,6 +177,15 @@ dependencies {
     // detection that doesn't need per-room energy-gate tuning.
     implementation 'com.microsoft.onnxruntime:onnxruntime-android:1.20.0'
 
+    // SQLCipher for the companion memory store (companion_memory.db) — the
+    // memory-system spec mandates encryption at rest for exactly this data
+    // (protected topics, relationship history). Maven Central artifact; the
+    // key lives in EncryptedPreferences (see MemoryDatabaseKey).
+    implementation 'net.zetetic:sqlcipher-android:4.16.0'
+
     // JVM unit tests (app/src/test); run in CI via "gradlew test".
     testImplementation 'junit:junit:4.13.2'
+    // Real org.json for unit tests (the android.jar stub throws); lets the
+    // memory seed codec be tested without Robolectric.
+    testImplementation 'org.json:json:20240303'
 }

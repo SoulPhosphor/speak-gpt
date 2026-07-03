@@ -226,6 +226,13 @@
         </activity>
 
         <activity
+            android:name=".ui.activities.MemorySettingsActivity"
+            android:exported="false"
+            android:label="@string/title_memory_settings"
+            android:launchMode="singleTask">
+        </activity>
+
+        <activity
             android:name=".ui.activities.LocalWhisperManageActivity"
             android:exported="false"
             android:label="@string/title_manage_downloaded_models"

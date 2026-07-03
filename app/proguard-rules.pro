@@ -151,3 +151,7 @@ org.apache.hc.core5.**
 # ONNX Runtime (Silero VAD): the native layer resolves Java classes and
 # callbacks reflectively; stripping/renaming them breaks session creation.
 -keep class ai.onnxruntime.** { *; }
+
+# SQLCipher (companion memory store): native layer binds these classes by
+# name; renaming them breaks database open on minified release builds.
+-keep class net.zetetic.database.** { *; }

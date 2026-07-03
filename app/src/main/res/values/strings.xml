@@ -845,4 +845,37 @@
     <string name="adv_section_diag">Voice Diagnostics</string>
     <string name="adv_section_diag_caption">With any of these on, every hands-free decision (mic opened/closed and why, readback, failures, stop reasons) is written to the Event log, plus detailed per-frame detector state to logcat. This is what to turn on before reporting a voice bug.</string>
     <string name="adv_open_event_log">Open Event log</string>
+
+    <!-- Companion memory system (Phase 1: store, seed, backups) -->
+    <string name="title_memory_settings">Memory (experimental)</string>
+    <string name="tile_memory_title">Memory system</string>
+    <string name="tile_memory_desc">Long-term companion memory: status, starter seed, backups (experimental)</string>
+    <string name="memory_settings_intro">The long-term memory store for your companions. This early version sets up the encrypted database, loads a starter seed, links your personas, and keeps backups. Memory doesn\'t influence conversations yet — that arrives in a later update.</string>
+    <string name="memory_section_status">Status</string>
+    <string name="memory_section_actions">Seed &amp; backup</string>
+    <string name="memory_status_loading">Loading…</string>
+    <string name="memory_status_not_provisioned">The memory store hasn\'t been created yet. Load the starter template, import a backup, or create companions from your personas to set it up.</string>
+    <string name="memory_status_integrity_ok">Store integrity: OK</string>
+    <string name="memory_status_integrity_bad">Store integrity: FAILED — %1$s. Restore from a backup export rather than continuing on a corrupt store.</string>
+    <string name="memory_status_counts">Companions: %1$d · Memories: %2$d · Entities: %3$d · Modes: %4$d · Directives: %5$d</string>
+    <string name="memory_status_counts2">Worlds: %1$d · User personas: %2$d · Roleplay characters: %3$d · Proposals: %4$d</string>
+    <string name="memory_status_transcripts">Transcripts: %1$d (%2$d pending review)</string>
+    <string name="memory_status_seed_yes">Seed: imported</string>
+    <string name="memory_status_seed_no">Seed: not imported yet</string>
+    <string name="memory_status_bootstrap_yes">Personas linked to companions: yes</string>
+    <string name="memory_status_bootstrap_no">Personas linked to companions: not yet</string>
+    <string name="memory_status_last_backup">Last automatic backup: %1$s</string>
+    <string name="memory_status_last_backup_never">Last automatic backup: never</string>
+    <string name="btn_memory_load_template">Load starter template</string>
+    <string name="btn_memory_import">Import seed or backup (JSON)</string>
+    <string name="btn_memory_export">Export backup (JSON)</string>
+    <string name="btn_memory_bootstrap">Create companions from personas</string>
+    <string name="memory_auto_backup">Automatic daily backup</string>
+    <string name="memory_auto_backup_hint">Writes a rotating JSON backup (memories, settings and chats, never embeddings) to this app\'s files folder once a day. Use “Export backup” to put a copy somewhere safer — the export file is also how you move to a new phone.</string>
+    <string name="memory_not_provisioned_toast">The memory store hasn\'t been set up yet.</string>
+    <string name="memory_export_done">Backup exported.</string>
+    <string name="memory_operation_failed">Memory operation failed: %1$s</string>
+    <string name="memory_file_unreadable">The selected file couldn\'t be read.</string>
+    <string name="memory_integrity_failed">Memory store check failed — open Memory settings in Characters for details.</string>
+    <string name="memory_bootstrap_done">Created %1$d companion record(s) from your personas.</string>
 </resources>

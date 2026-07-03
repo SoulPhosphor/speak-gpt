@@ -18,12 +18,17 @@ package org.teslasoft.assistant.app
 
 import android.app.Application
 import android.content.res.Configuration
+import android.os.Handler
+import android.os.Looper
+import android.widget.Toast
 import cat.ereza.customactivityoncrash.config.CaocConfig
 import com.google.android.material.color.DynamicColors
 import org.conscrypt.Conscrypt
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.Logger
+import org.teslasoft.assistant.preferences.memory.MemoryExporter
+import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.theme.ThemeManager
 import java.security.Security
 
@@ -60,6 +65,29 @@ class MainApplication : Application() {
         // this after-the-fact query is the only way a screen-off readback that
         // was killed mid-sentence leaves any trace. Deduped + best-effort inside.
         Logger.logLastExitReason(this)
+
+        // Companion memory store housekeeping (only once the store exists —
+        // nothing here may create the encrypted database as a side effect):
+        // integrity_check surfaced loudly per the spec, then the rotating
+        // automatic backup if one is due. Off the main thread; app start must
+        // not wait on SQLCipher.
+        Thread {
+            try {
+                if (MemoryStore.isProvisioned(this)) {
+                    val problem = MemoryStore.getInstance(this).integrityCheck()
+                    if (problem != null) {
+                        Logger.log(this, "event", "MemoryStore", "ERROR", "Memory store integrity check failed: $problem")
+                        Handler(Looper.getMainLooper()).post {
+                            Toast.makeText(this, getString(R.string.memory_integrity_failed), Toast.LENGTH_LONG).show()
+                        }
+                    } else {
+                        MemoryExporter.autoExportIfDue(this)
+                    }
+                }
+            } catch (e: Exception) {
+                Logger.log(this, "event", "MemoryStore", "ERROR", "Memory store startup check failed: ${e.message}")
+            }
+        }.start()
 
         CaocConfig.Builder.create()
             .backgroundMode(CaocConfig.BACKGROUND_MODE_SHOW_CUSTOM)

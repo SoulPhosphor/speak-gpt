@@ -20,15 +20,19 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
 import org.teslasoft.assistant.preferences.dto.PersonaObject
+import org.teslasoft.assistant.preferences.memory.MemoryCompanionSync
 import org.teslasoft.assistant.util.Hash
 
-class PersonaPreferences private constructor(private var preferences: SharedPreferences) {
+class PersonaPreferences private constructor(private var preferences: SharedPreferences, private val appContext: Context) {
     companion object {
         private var personaPreferences: PersonaPreferences? = null
 
         fun getPersonaPreferences(context: Context): PersonaPreferences {
             if (personaPreferences == null) {
-                personaPreferences = PersonaPreferences(context.getSharedPreferences("personas", Context.MODE_PRIVATE))
+                personaPreferences = PersonaPreferences(
+                    context.getSharedPreferences("personas", Context.MODE_PRIVATE),
+                    context.applicationContext
+                )
             }
 
             return personaPreferences!!
@@ -64,6 +68,19 @@ class PersonaPreferences private constructor(private var preferences: SharedPref
     }
 
     fun setPersona(persona: PersonaObject) {
+        writePersona(persona)
+
+        for (listener in listeners) {
+            listener.onPersonaChange()
+        }
+
+        // One-way app -> store sync: keep the linked companion's personality
+        // mirror fresh (memory system D6). Best-effort, no-op until the memory
+        // store exists; never blocks or fails a persona save.
+        MemoryCompanionSync.onPersonaSaved(appContext, null, persona)
+    }
+
+    private fun writePersona(persona: PersonaObject) {
         val id = Hash.hash(persona.label)
         putString(id + "_label", persona.label)
         putString(id + "_prompt", persona.prompt)
@@ -72,10 +89,6 @@ class PersonaPreferences private constructor(private var preferences: SharedPref
         putString(id + "_additional_lorebook_ids", persona.additionalLoreBookIds)
         putString(id + "_autoload_last_lorebooks", if (persona.autoLoadLastLoreBooks) "true" else "false")
         putString(id + "_last_used_lorebook_ids", persona.lastUsedLoreBookIds)
-
-        for (listener in listeners) {
-            listener.onPersonaChange()
-        }
     }
 
     /**
@@ -113,14 +126,12 @@ class PersonaPreferences private constructor(private var preferences: SharedPref
         }
     }
 
+    // Deleting a persona deliberately does NOT touch the memory store: the
+    // store owns continuity, and deleting companions is a user-only action in
+    // the memory editor. The companion's app link simply dangles until the
+    // user decides there.
     fun deletePersona(id: String) {
-        preferences.edit { remove(id + "_label") }
-        preferences.edit { remove(id + "_prompt") }
-        preferences.edit { remove(id + "_activation_prompt_id") }
-        preferences.edit { remove(id + "_core_lorebook_id") }
-        preferences.edit { remove(id + "_additional_lorebook_ids") }
-        preferences.edit { remove(id + "_autoload_last_lorebooks") }
-        preferences.edit { remove(id + "_last_used_lorebook_ids") }
+        removePersonaKeys(id)
 
         for (listener in listeners) {
             listener.onPersonaChange()
@@ -128,8 +139,28 @@ class PersonaPreferences private constructor(private var preferences: SharedPref
     }
 
     fun editPersona(oldLabel: String, persona: PersonaObject) {
-        deletePersona(Hash.hash(oldLabel))
-        setPersona(persona)
+        val oldId = Hash.hash(oldLabel)
+        removePersonaKeys(oldId)
+        writePersona(persona)
+
+        for (listener in listeners) {
+            listener.onPersonaChange()
+        }
+
+        // Renames change the persona id (edit = delete + recreate), so the
+        // companion link must be re-pointed under the OLD id — that's the whole
+        // reason the sync hook exists.
+        MemoryCompanionSync.onPersonaSaved(appContext, oldId, persona)
+    }
+
+    private fun removePersonaKeys(id: String) {
+        preferences.edit { remove(id + "_label") }
+        preferences.edit { remove(id + "_prompt") }
+        preferences.edit { remove(id + "_activation_prompt_id") }
+        preferences.edit { remove(id + "_core_lorebook_id") }
+        preferences.edit { remove(id + "_additional_lorebook_ids") }
+        preferences.edit { remove(id + "_autoload_last_lorebooks") }
+        preferences.edit { remove(id + "_last_used_lorebook_ids") }
     }
 
     fun getPersonasList(): ArrayList<PersonaObject> {

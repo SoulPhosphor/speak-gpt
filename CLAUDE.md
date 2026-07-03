@@ -80,7 +80,10 @@ a foreground service that keeps generation alive in the background.
   `WebRtcVadNative` + `VoiceActivityDetector` (energy VAD + libfvad), model
   download/storage. Native sources in `app/src/main/cpp/`.
 - `preferences/` — all persistence (see Storage below).
-- `preferences/lorebook/LoreBookStore.kt` — the only SQLite database.
+- `preferences/lorebook/LoreBookStore.kt` — the lorebook SQLite database.
+- `preferences/memory/` — the companion memory store (SQLCipher, Phase 1 of
+  `memory-system-integration-plan.md`): store, seed/export codec, key
+  management, persona→companion sync, backup exporter.
 - `ui/fragments/dialogs/QuickSettingsBottomSheetDialogFragment.kt` — per-chat
   settings sheet (model, endpoint, persona, activation prompt, lorebook
   checklist, sampling params).
@@ -109,16 +112,36 @@ Everything is on-device. No cloud sync, no accounts.
      `LogitBiasPreferences`/`LogitBiasConfigPreferences`,
      `FavoriteModelsPreferences`, `GlobalPreferences`, `EncryptedPreferences`
      (androidx security-crypto for API keys).
-2. **SQLite** — `lorebook.db` via `LoreBookStore` (singleton SQLiteOpenHelper).
+2. **SQLite (plain)** — `lorebook.db` via `LoreBookStore` (singleton
+   SQLiteOpenHelper).
    Schema v3: `lorebooks` (id/name/description/tag/timestamps),
    `memory_entries` (id/lorebook_id/label/content/source_text/enabled/timestamps),
    `memory_triggers` (FK → entries, ON DELETE CASCADE). Migrations are
    additive `ALTER TABLE` steps in `onUpgrade` — always bump
-   `DATABASE_VERSION`, never edit old migration blocks. The planned **vector
-   memory** is expected to extend this database (that's why it's SQLite and not
-   prefs) — design new tables, don't bolt blobs onto prefs.
-3. **Files** — images in `getExternalFilesDir("images")`, whisper models via
-   `LocalWhisperStorage`.
+   `DATABASE_VERSION`, never edit old migration blocks. The full memory
+   system does NOT extend this database (superseded assumption — see below);
+   lorebooks stay the independent low-RAM tier.
+3. **SQLCipher** — `companion_memory.db` via `preferences/memory/MemoryStore`
+   (singleton over `net.zetetic:sqlcipher-android`; random 32-byte key in
+   `EncryptedPreferences`, minted by `MemoryDatabaseKey` — which NEVER mints a
+   new key when the DB file already exists, that would brick the store).
+   Schema v1.11 from `Memory System/sqlite_table_plan.md` (companions,
+   memories + protection/provenance, entities, modes, directives, worlds,
+   user_personas, roleplay_characters, transcripts, proposals, change_log,
+   embeddings sidecar, deleted_ids tombstones; deviations documented in the
+   MemoryStore header). Created lazily — `MemoryStore.isProvisioned()` gates
+   every hook so nothing provisions it as a side effect. Seeds/backups are
+   schema-shaped JSON via `MemorySeedCodec` (unit-tested round-trip);
+   `MemoryExporter` writes rotating daily backups at app start + manual SAF
+   export (chats ride along under `app_chats`; embeddings never exported).
+   Persona edits sync one-way into linked companion records via the hook in
+   `PersonaPreferences` (`MemoryCompanionSync`) — renames re-point
+   `app_character_id` under the OLD id; keep that when touching persona save
+   paths. UI: "Memory system" tile in the Characters hub →
+   `MemorySettingsActivity` (status, seed import, export, persona bootstrap).
+4. **Files** — images in `getExternalFilesDir("images")`, whisper models via
+   `LocalWhisperStorage`, rotating memory backups in
+   `getExternalFilesDir("memory_backups")`.
 
 ## Current feature list
 
@@ -201,6 +224,13 @@ Everything is on-device. No cloud sync, no accounts.
   injection budget 20 entries / 6000 chars, debug view of injections.
 - Personas (prompt + activation prompt + lorebooks + auto-load-last-books),
   activation prompts, custom assistant name/avatar.
+- Companion memory store, Phase 1 (storage only — memory does not influence
+  conversations yet): encrypted `companion_memory.db`, starter-seed/backup
+  import, rotating + manual JSON export, persona→companion bootstrap and
+  edit-sync. Surface: Characters → Memory system. Later phases
+  (transcripts, librarian, enforcer, Archivist) are specified in
+  `memory-system-integration-plan.md` — read it before touching
+  `preferences/memory/`.
 - Markdown/LaTeX rendering, partial text selection, message edit/delete/copy/
   share, bulk select, image attach + DALL·E-style generation, in-app
   translator, playground, logit bias editor, AMOLED theme, onboarding flow.
