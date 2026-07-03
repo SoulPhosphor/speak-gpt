@@ -182,6 +182,12 @@ dependencies {
     // (protected topics, relationship history). Maven Central artifact; the
     // key lives in EncryptedPreferences (see MemoryDatabaseKey).
     implementation 'net.zetetic:sqlcipher-android:4.16.0'
+    // sqlcipher-android's POM declares androidx.sqlite only at RUNTIME scope,
+    // but its SQLiteOpenHelper/SQLiteDatabase implement androidx.sqlite.db
+    // interfaces — without this explicit compile dependency, Kotlin can't
+    // resolve those supertypes and every MemoryStore call site fails to
+    // compile. Version matches the one sqlcipher-android 4.16.0 resolves.
+    implementation 'androidx.sqlite:sqlite:2.6.2'
 
     // JVM unit tests (app/src/test); run in CI via "gradlew test".
     testImplementation 'junit:junit:4.13.2'
