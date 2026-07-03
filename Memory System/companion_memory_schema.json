@@ -1,0 +1,478 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://example.local/companion-memory-store.schema.json",
+  "title": "Companion Memory Store",
+  "description": "Model-agnostic memory store for AI companions. Any 'librarian' (embedding/retrieval layer) can read this. Embeddings are NOT stored here; they live in a sidecar index keyed by memory_id + embedding_model so the librarian can be swapped without touching memories.",
+  "type": "object",
+  "required": ["schema_version", "companions", "memories", "modes", "directives"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "description": "Version of this schema, e.g. '1.0.0'. Lets future code migrate old data safely."
+    },
+
+    "owner_profile": {
+      "type": "object",
+      "description": "A single narrative portrait of the user, written as prose, not labels. This is always loaded. It should read like a thoughtful friend describing a whole person.",
+      "required": ["portrait"],
+      "properties": {
+        "portrait": {
+          "type": "string",
+          "description": "Free-form narrative. Who the user is, what matters to them, how they think and communicate. No trait lists, no emotional labels."
+        },
+        "standing_context": {
+          "type": "string",
+          "description": "Current season of life: what's going on lately. Updated periodically."
+        },
+        "updated_at": { "type": "string", "format": "date-time" }
+      }
+    },
+
+    "companions": {
+      "type": "array",
+      "description": "Registry of companions. Identity is the immutable companion_id, never the name.",
+      "items": {
+        "type": "object",
+        "required": ["companion_id", "current_name", "essence", "status"],
+        "properties": {
+          "companion_id": {
+            "type": "string",
+            "description": "Permanent UUID. All memory links use this, so renaming a companion breaks nothing."
+          },
+          "app_character_id": {
+            "type": "string",
+            "description": "Link to this companion's character definition in the app's own config area. Ownership rule: the APP owns character configuration — visible name, avatar, greeting, base prompt, personality settings — and that is what the enforcer injects as base personality when this link is set. The STORE owns continuity — companion_id, essence, relationship history, memories, hard limits, protection, provenance, proposals. The store never overrides app config; the Archivist never writes to it. Personality proposals are delivered to the user, who edits the app; the mirror below re-syncs."
+          },
+          "base_personality_mirror": {
+            "type": "object",
+            "description": "A read-only synced snapshot of the app's character definition, refreshed one-way (app → store) whenever the user edits the character. Exists so the Archivist can detect drift and target proposals at concrete text. This is a copy for reference, never a second place to edit personality.",
+            "properties": {
+              "text": { "type": "string" },
+              "synced_at": { "type": "string", "format": "date-time" }
+            }
+          },
+          "model_adaptations": {
+            "type": "array",
+            "description": "Per-model tuning notes, because different chat models interpret the same personality differently — the known hard problem of reproducing a companion across providers. The enforcer injects the note matching the currently active chat model alongside base personality. The Archivist may propose new adaptations when it notices a model consistently playing the companion wrong (e.g., 'On provider X her snark drifts mean; explicitly counteract').",
+            "items": {
+              "type": "object",
+              "required": ["model_tag", "notes"],
+              "properties": {
+                "model_tag": { "type": "string", "description": "Provider/model this note applies to." },
+                "notes": { "type": "string" }
+              }
+            }
+          },
+          "current_name": { "type": "string" },
+          "name_history": {
+            "type": "array",
+            "description": "Past names, so the companion can remember being called something else.",
+            "items": {
+              "type": "object",
+              "required": ["name", "effective_from"],
+              "properties": {
+                "name": { "type": "string" },
+                "effective_from": { "type": "string", "format": "date-time" },
+                "effective_until": { "type": "string", "format": "date-time" }
+              }
+            }
+          },
+          "essence": {
+            "type": "string",
+            "description": "The store's own continuity description of who this companion is: voice, temperament, way of being with the user. Prose, not a settings list. STABLE CORE: changes only deliberately — by the user directly, or via an accepted proposal — never by memory accumulation, a hard moment, or the companion itself. When app_character_id is set, the app config is what gets injected as base personality and essence serves as the memory system's continuity view (the Archivist's reference point); it is not a copy of app config and never overrides it. For store-only companions (no app link), essence IS the injected personality."
+          },
+          "relationship_notes": {
+            "type": "string",
+            "description": "The living history of this specific relationship: how they talk to each other, inside references, how trust has developed."
+          },
+          "memory_participation": {
+            "type": "string",
+            "enum": ["full", "global_only", "none"],
+            "description": "How much the Archivist remembers about this companion. 'full' (default): everything. 'global_only': the ephemeral/throwaway setting — the companion follows its own config normally, and global facts the user states still get filed, but the Archivist writes NO companion-scoped records for it: no relationship notes, no lore, no history. 'none': conversations with this companion contribute nothing at all (transcripts auto-excluded)."
+          },
+          "hard_limits": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Per-companion lines that never move regardless of personality, e.g. 'Never mean to the user; snark is always on the user's side.' Personality is flavor; these are floor."
+          },
+          "created_at": { "type": "string", "format": "date-time" },
+          "status": { "type": "string", "enum": ["draft", "active", "resting", "retired"], "description": "'draft' = placeholder or unapproved: never selectable in conversation and never injected until the user reviews it and sets it active. No companion is canon without explicit user approval." }
+        }
+      }
+    },
+
+    "entities": {
+      "type": "array",
+      "description": "Durable things memories can point at: projects, people, spiritual practices, places. Keeps project knowledge coherent even across many scattered memories.",
+      "items": {
+        "type": "object",
+        "required": ["entity_id", "kind", "name", "summary"],
+        "properties": {
+          "entity_id": { "type": "string", "description": "Permanent UUID." },
+          "kind": {
+            "type": "string",
+            "enum": ["project", "person", "practice", "place", "creature", "other"]
+          },
+          "name": { "type": "string" },
+          "aliases": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Other names the user calls this thing, so retrieval still works."
+          },
+          "summary": {
+            "type": "string",
+            "description": "Narrative overview. For a project: what it is, why it matters, where it stands, what's blocked, what's next."
+          },
+          "status": {
+            "type": "string",
+            "enum": ["active", "paused", "completed", "ongoing", "abandoned"]
+          },
+          "importance": { "type": "integer", "minimum": 1, "maximum": 5 },
+          "last_touched": { "type": "string", "format": "date-time" }
+        }
+      }
+    },
+
+    "memories": {
+      "type": "array",
+      "description": "The heart of the system. Each memory is a narrative record, scoped globally or to specific companions.",
+      "items": {
+        "type": "object",
+        "required": ["memory_id", "scope", "kind", "title", "content", "created_at", "status"],
+        "properties": {
+          "memory_id": { "type": "string", "description": "Permanent UUID." },
+          "scope": {
+            "type": "string",
+            "enum": ["global", "companion"],
+            "description": "global = available to every companion. companion = only for the companions listed in companion_ids."
+          },
+          "companion_ids": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Required when scope is 'companion'. An array, so a memory can belong to two companions but not all."
+          },
+          "world_id": {
+            "type": "string",
+            "description": "If set, this memory belongs to a fictional roleplay world and is ONLY retrieved when that world's session is active. World memories never leak into ordinary conversation, and world fiction is never treated as fact about the user's real life."
+          },
+          "roleplay_character_id": {
+            "type": "string",
+            "description": "If set, this memory is about a roleplay character. Character memories follow the character: archiving the character shelves them; deleting the character (user-only) deletes them. A character memory may carry both roleplay_character_id and world_id; if the world is torn down but the character is kept, memories about the character's nature and arc survive with it."
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["identity", "preference", "project", "episode", "relationship", "spiritual", "insight", "practical", "calibration", "journal", "companion_lore", "other"],
+            "description": "Loose category to help retrieval, never a substitute for the narrative content."
+          },
+          "title": { "type": "string", "description": "Short human-readable handle." },
+          "content": {
+            "type": "string",
+            "description": "The memory itself, written as rich prose. This is the source of truth. Write it the way a person who knows the user well would describe it."
+          },
+          "embedding_text": {
+            "type": "string",
+            "description": "Optional condensed version for the librarian to embed. If absent, embed 'content'. Useful when content is long."
+          },
+          "tags": { "type": "array", "items": { "type": "string" } },
+          "entity_refs": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "entity_ids this memory relates to (e.g., a project)."
+          },
+          "importance": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5,
+            "description": "Retrieval weight. 5 = core to who the user is."
+          },
+          "always_load": {
+            "type": "boolean",
+            "default": false,
+            "description": "If true, the librarian includes this in every context regardless of relevance search."
+          },
+          "protection": {
+            "type": "object",
+            "description": "Marks memories where generic model behavior would be harmful or wrong — not just private topics. A protected memory carries topic-specific handling instructions that override the model's default instincts. Protection should store the truth of the situation (in content) plus the rules for holding it (here); understanding and guardrails together.",
+            "properties": {
+              "is_protected": { "type": "boolean" },
+              "reasons": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": ["complicated_grief_or_family", "trauma_context", "health_disability", "legal_financial_housing_benefits", "private_spiritual", "companion_trust_or_rupture", "user_requested_no_casual_mention", "assumption_risk", "other"]
+                },
+                "description": "Why the Archivist protected this memory."
+              },
+              "handling": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "Topic-specific instructions, e.g. 'Do not offer automatic sympathy', 'Do not probe', 'Do not assume emotional meaning', 'Follow the user's lead'."
+              },
+              "never_assume": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "Specific assumptions to never make, e.g. 'that the relationship was loving and simple'."
+              },
+              "casual_mention_ok": {
+                "type": "boolean",
+                "description": "Whether the companion may bring this topic up unprompted."
+              },
+              "suggested_mode": {
+                "type": "string",
+                "description": "mode_id the librarian should surface alongside this memory."
+              }
+            }
+          },
+          "mode_hints": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "mode_ids likely relevant when this memory is retrieved."
+          },
+          "provenance": {
+            "type": "object",
+            "description": "Where this memory came from, so inferred things are never confused with things the user actually said.",
+            "properties": {
+              "source": { "type": "string", "enum": ["user_stated", "inferred", "imported", "companion_observed", "archivist"] },
+              "confidence": { "type": "string", "enum": ["certain", "likely", "tentative"] },
+              "noted_on": { "type": "string", "format": "date-time" },
+              "context": { "type": "string", "description": "Brief note on the conversation or moment it came from." }
+            }
+          },
+          "change_log": {
+            "type": "array",
+            "description": "Audit trail. Lets the Archivist maintain memories hands-off ('a brain the user doesn't have to touch') while every change stays visible, reviewable, and reversible. When the user tells a companion something is wrong, the correction flows here: the Archivist writes a superseding memory and logs action 'corrected'.",
+            "items": {
+              "type": "object",
+              "required": ["at", "actor", "action"],
+              "properties": {
+                "at": { "type": "string", "format": "date-time" },
+                "actor": { "type": "string", "enum": ["user", "archivist", "companion", "system"] },
+                "action": { "type": "string", "enum": ["created", "edited", "protected", "corrected", "superseded", "archived", "flagged"] },
+                "note": { "type": "string", "description": "What changed and why, e.g. 'User corrected this in conversation with Ash on 2026-07-03.'" }
+              }
+            }
+          },
+          "created_at": { "type": "string", "format": "date-time" },
+          "updated_at": { "type": "string", "format": "date-time" },
+          "status": { "type": "string", "enum": ["active", "archived", "superseded"] },
+          "supersedes": {
+            "type": "string",
+            "description": "memory_id of an older memory this one replaces. Preserves history without stale facts leaking into context."
+          }
+        },
+        "allOf": [
+          {
+            "if": { "properties": { "scope": { "const": "companion" } } },
+            "then": { "required": ["companion_ids"] }
+          }
+        ]
+      }
+    },
+
+    "modes": {
+      "type": "array",
+      "description": "Reusable communication modes: how the companion should respond in different contexts (technical help, presence, emotional support, writing help, correction/repair, etc.). The librarian injects the relevant mode(s) into the model's context.",
+      "items": {
+        "type": "object",
+        "required": ["mode_id", "name", "purpose", "signals", "respond", "avoid"],
+        "properties": {
+          "mode_id": { "type": "string" },
+          "name": { "type": "string" },
+          "purpose": { "type": "string", "description": "One sentence: what this mode is for." },
+          "signals": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "How to recognize this context: phrasings, situations, cues. Written for any model to understand."
+          },
+          "respond": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Positive guidance: what good responses look like in this mode."
+          },
+          "avoid": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Anti-behaviors, e.g. 'Do not repeat the entire explanation after a small correction.'"
+          },
+          "transition_note": {
+            "type": "string",
+            "description": "How to shift into this mode gracefully, without announcing it or making it feel mechanical."
+          },
+          "overrides": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "mode_ids this mode takes precedence over when signals conflict."
+          },
+          "scope": {
+            "type": "string",
+            "enum": ["global", "companion"],
+            "default": "global"
+          },
+          "companion_ids": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+
+    "directives": {
+      "type": "array",
+      "description": "Always-on rules, loaded into every conversation regardless of retrieval. Keep this list short so each directive keeps its weight.",
+      "items": {
+        "type": "object",
+        "required": ["directive_id", "text"],
+        "properties": {
+          "directive_id": { "type": "string" },
+          "text": { "type": "string", "description": "The rule itself, addressed to the model." },
+          "rationale": { "type": "string", "description": "Why this matters, which helps models apply it in spirit, not just letter." },
+          "applies_to": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "companion_ids, or omit for all companions."
+          },
+          "priority": { "type": "integer", "minimum": 1, "maximum": 5 }
+        }
+      }
+    },
+
+    "user_personas": {
+      "type": "array",
+      "description": "Presentation variants of the user — 'casual me', 'swimsuit me' — all the SAME person. A persona changes how the user appears to the model (clothing, hair, vibe), never what is known about them: all memories, directives, protections, and calibrations belong to the one real user and apply under every persona. Distinct from roleplay_characters, which are fictional people the user plays. Firewall: persona presentation is scene-dressing; it is never harvested as real-life appearance fact.",
+      "items": {
+        "type": "object",
+        "required": ["persona_id", "name", "presentation", "status"],
+        "properties": {
+          "persona_id": { "type": "string", "description": "Permanent UUID." },
+          "name": { "type": "string" },
+          "presentation": { "type": "string", "description": "Prose: how the user appears and carries themselves under this persona." },
+          "status": { "type": "string", "enum": ["active", "archived"] },
+          "created_at": { "type": "string", "format": "date-time" }
+        }
+      }
+    },
+
+    "roleplay_characters": {
+      "type": "array",
+      "description": "(Named roleplay_characters deliberately: the app's own 'characters' are companions in this store — a different concept.) Playable personas for roleplay — usually the user's (a Mage, a rogue) — independent of any world, so they can retire or travel. Archiving a character shelves it and its memories for possible reuse elsewhere; deleting it (user-only) removes it and its memories entirely. A world can be archived while its characters live on, and vice versa: keep Finlandia, retire the Mage — or keep the Mage for a new world.",
+      "items": {
+        "type": "object",
+        "required": ["roleplay_character_id", "name", "played_by", "description", "status"],
+        "properties": {
+          "roleplay_character_id": { "type": "string", "description": "Permanent UUID." },
+          "name": { "type": "string" },
+          "played_by": { "type": "string", "description": "'user', or a companion_id if a companion plays a recurring character of its own." },
+          "description": { "type": "string", "description": "USER-OWNED definition: who this character is — traits, appearance, voice. The Archivist writes this once when a character emerges mid-chat; afterward it is the user's to edit in the app's roleplay characters tab, and the Archivist may only propose changes." },
+          "arc": { "type": "string", "description": "ARCHIVIST-MAINTAINED (auto): the character's story so far — what they have done and been through across sessions. Never overwrites the definition." },
+          "worlds_played": { "type": "array", "items": { "type": "string" }, "description": "world_ids this character has appeared in." },
+          "status": { "type": "string", "enum": ["active", "archived"] },
+          "created_at": { "type": "string", "format": "date-time" }
+        }
+      }
+    },
+
+    "worlds": {
+      "type": "array",
+      "description": "Fictional settings for roleplay — from light D&D-style adventures to future full campaigns. A world's memories are isolated: retrieved only when the world is active. The companion remains themselves inside the world (same essence, same hard_limits), like a friend running a game. When a world is marked 'ended', all its memories retire with it and can never surface again; the user can archive or delete an entire world and everything tagged to it in one action (teardown).",
+      "items": {
+        "type": "object",
+        "required": ["world_id", "name", "premise", "status"],
+        "properties": {
+          "world_id": { "type": "string", "description": "Permanent UUID." },
+          "name": { "type": "string" },
+          "premise": { "type": "string", "description": "Narrative overview: the setting, the user's character(s), the tone, where the story stands." },
+          "rules": { "type": "string", "description": "How this world runs: lightness vs. crunch, dice or no dice, themes to include or avoid." },
+          "companion_ids": { "type": "array", "items": { "type": "string" }, "description": "Which companions play in this world." },
+          "status": { "type": "string", "enum": ["active", "dormant", "ended"] },
+          "created_at": { "type": "string", "format": "date-time" }
+        }
+      }
+    },
+
+    "archivist_settings": {
+      "type": "object",
+      "description": "Dials controlling the Archivist. These are settings, not constants: as trust builds, the user can flip categories from 'propose' to 'auto'. The Archivist may suggest changing a dial but NEVER changes its own permissions.",
+      "properties": {
+        "trigger": { "type": "string", "enum": ["manual", "auto", "auto_plus_manual"] },
+        "harvest_generosity": {
+          "type": "string",
+          "enum": ["conservative", "balanced", "generous"],
+          "description": "How freely the Archivist creates tentative pattern memories. Generous is safe when paired with confidence-weighted retrieval and the compost cycle."
+        },
+        "autonomy": {
+          "type": "object",
+          "description": "Per-category permission. 'auto' = apply immediately and record in change_log. 'propose' = write a proposal and wait for user approval.",
+          "additionalProperties": { "type": "string", "enum": ["auto", "propose"] }
+        },
+        "notes": { "type": "string" }
+      }
+    },
+
+    "proposals": {
+      "type": "array",
+      "description": "Pending changes awaiting user approval — the trust-building lane. Accepted proposals get applied and logged. Rejected proposals are kept: they teach the Archivist what not to suggest again.",
+      "items": {
+        "type": "object",
+        "required": ["proposal_id", "target_type", "summary", "status", "created_at"],
+        "properties": {
+          "proposal_id": { "type": "string" },
+          "target_type": { "type": "string", "enum": ["mode", "directive", "memory", "owner_profile", "companion", "entity", "archivist_setting"] },
+          "target_id": { "type": "string", "description": "ID of the record being changed, if it already exists." },
+          "summary": { "type": "string", "description": "Plain-language: what would change and why, written for the user to approve in one read." },
+          "proposed_change": { "description": "The new or edited record, in schema shape." },
+          "rationale": { "type": "string" },
+          "status": { "type": "string", "enum": ["pending", "accepted", "rejected"] },
+          "created_at": { "type": "string", "format": "date-time" },
+          "resolved_at": { "type": "string", "format": "date-time" }
+        }
+      }
+    },
+
+    "retrieval_policy": {
+      "type": "object",
+      "description": "Instructions any librarian implementation should follow. This is configuration, not code, so it travels with the data.",
+      "properties": {
+        "always_include": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "What goes into every context, e.g. ['owner_profile', 'directives', 'active_companion_record', 'always_load_memories']."
+        },
+        "top_k": { "type": "integer", "description": "How many relevant memories to retrieve per turn." },
+        "weights": {
+          "type": "object",
+          "properties": {
+            "similarity": { "type": "number" },
+            "importance": { "type": "number" },
+            "recency": { "type": "number" }
+          },
+          "description": "Relative weights for ranking retrieved memories."
+        },
+        "scope_rule": {
+          "type": "string",
+          "description": "E.g. 'Retrieve from global memories plus memories scoped to the active companion_id. Never surface another companion's private memories.'"
+        },
+        "mode_detection": {
+          "type": "string",
+          "description": "Instruction for how the librarian (or the model itself) decides which mode(s) apply each turn, using the signals lists."
+        },
+        "context_budget": {
+          "type": "string",
+          "description": "Rule keeping prompts lean, e.g. 'Always-load material stays tiny and sacred: short portrait, few directives, a handful of calibration memories. Inject only the one or two active modes per turn, never the full mode list.'"
+        },
+        "world_rule": {
+          "type": "string",
+          "description": "E.g. 'Memories with a world_id are retrieved only while that world's session is active. Real-life memories remain available inside a world (the companion is still themselves), but world fiction is never written back as real-life fact.'"
+        },
+        "tentative_rule": {
+          "type": "string",
+          "description": "Quarantine for harvested patterns, e.g. 'Tentative memories are never always_load, receive reduced retrieval weight, and must be rejectable in one action from the run report.'"
+        },
+        "archive_rule": {
+          "type": "string",
+          "description": "E.g. 'Anything archived, ended, or superseded is removed from the librarian's search index entirely — off the shelf but still in the building. It cannot surface in retrieval, costs nothing at search time, and is re-indexed if reactivated. Deletion is user-only and permanent.'"
+        },
+        "embedding_note": {
+          "type": "string",
+          "description": "Reminder that embeddings live in a sidecar index (memory_id + embedding_model -> vector) and must be rebuilt when the embedding model changes."
+        }
+      }
+    }
+  }
+}
