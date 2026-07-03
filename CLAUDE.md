@@ -315,11 +315,17 @@ Everything is on-device. No cloud sync, no accounts.
   over-invest in pixel-perfect tweaks to current layouts, and keep feature
   logic out of layout/adapter code where practical so the UI can be swapped
   without rewriting behavior.
-- **Vector memory is planned** (see `Memory System Plans June 1 2026`,
-  Phases 2+: search, summaries, embeddings, ReAct-style retrieval). The
-  lorebook SQLite schema is the intended foundation — extend `lorebook.db`
-  with new tables/columns via versioned migrations; keep memory access going
-  through `LoreBookStore` so a retrieval layer can slot in behind one API.
+- **The full Companion Memory System is planned and specified in the
+  `Memory System/` folder (schema v1.11)**, with the phased integration plan
+  in `memory-system-integration-plan.md` — read both before any memory work.
+  It supersedes the older `Memory System Plans June 1 2026` roadmap from
+  Phase 2 onward and changes one earlier assumption: the new memory store is
+  a **separate SQLCipher database** (`companion_memory.db`), NOT an extension
+  of `lorebook.db`. Lorebooks stay untouched as the independent low-RAM tier
+  (user-authored lore outranks system memories at injection). Two spec
+  documents (`enforcer_librarian_spec.md`, `prompt_assembly_template.md`) are
+  referenced by the package README but missing from the folder — the owner
+  has been asked to supply them; don't guess their contents.
 - Whisper/voice work follows `whisper-local-plan.md`.
 
 ## Quick verification checklist before any push
