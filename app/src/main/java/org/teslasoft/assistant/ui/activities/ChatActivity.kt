@@ -171,6 +171,7 @@ import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.LogitBiasPreferences
 import org.teslasoft.assistant.preferences.Preferences
+import org.teslasoft.assistant.preferences.SecurePrefs
 import org.teslasoft.assistant.preferences.lorebook.LoreBookInjectionLog
 import org.teslasoft.assistant.preferences.lorebook.LoreBookMatch
 import org.teslasoft.assistant.preferences.lorebook.LoreBookStore
@@ -2882,11 +2883,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         val persona = PersonaPreferences.getPersonaPreferences(this).getPersona(personaId)
         if (!persona.autoLoadLastLoreBooks) return
 
-        val linked = persona.additionalLoreBookIdList()
-        val store = LoreBookStore.getInstance(this)
-        val ids = persona.lastUsedLoreBookIdList().filter { linked.contains(it) && store.getBook(it) != null }
-        if (ids.isNotEmpty()) {
-            preferences?.setActiveLoreBookIds(ids)
+        try {
+            val linked = persona.additionalLoreBookIdList()
+            val store = LoreBookStore.getInstance(this)
+            val ids = persona.lastUsedLoreBookIdList().filter { linked.contains(it) && store.getBook(it) != null }
+            if (ids.isNotEmpty()) {
+                preferences?.setActiveLoreBookIds(ids)
+            }
+        } catch (e: Exception) {
+            // Store unavailable (SQLCipher key problem): skip seeding, keep the chat usable.
+            org.teslasoft.assistant.preferences.Logger.log(this, "error", "LoreBook", "ERROR", "Lorebook seeding skipped: ${e.message}")
         }
     }
 
@@ -2948,7 +2954,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     /** SYSTEM INITIALIZATION END **/
 
     private fun saveSettings() {
-        val chat = getSharedPreferences("chat_$chatId", MODE_PRIVATE)
+        val chat = SecurePrefs.get(this, "chat_$chatId")
         chat.edit {
             val gson = Gson()
             val json: String = gson.toJson(messages)
@@ -4061,24 +4067,31 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         // whichever additional lorebooks are checked for this chat, and inject the
         // matched memories as their own System message, placed after the base
         // prompt so prefix caching of the stable prompt holds.
-        val loreStore = LoreBookStore.getInstance(this)
-        val activeBookIds = LinkedHashSet<String>()
-        val checkedIds = preferences?.getActiveLoreBookIds() ?: arrayListOf()
-        if (personaId != "") {
-            val loreBookPersona = PersonaPreferences.getPersonaPreferences(this).getPersona(personaId)
-            // Core book first: when the injection budget truncates, core memories win.
-            if (loreBookPersona.coreLoreBookId != "") activeBookIds.add(loreBookPersona.coreLoreBookId)
-            // Only books still linked to the persona count; a stale checked id
-            // left over from before an unlink must not keep injecting.
-            val linked = loreBookPersona.additionalLoreBookIdList()
-            activeBookIds.addAll(checkedIds.filter { linked.contains(it) })
-        } else {
-            activeBookIds.addAll(checkedIds)
-        }
-
         val allLoreMatches = ArrayList<LoreBookMatch>()
-        for (bookId in activeBookIds) {
-            allLoreMatches.addAll(loreStore.findMatches(lastUserMessageForLore, bookId))
+        try {
+            val loreStore = LoreBookStore.getInstance(this)
+            val activeBookIds = LinkedHashSet<String>()
+            val checkedIds = preferences?.getActiveLoreBookIds() ?: arrayListOf()
+            if (personaId != "") {
+                val loreBookPersona = PersonaPreferences.getPersonaPreferences(this).getPersona(personaId)
+                // Core book first: when the injection budget truncates, core memories win.
+                if (loreBookPersona.coreLoreBookId != "") activeBookIds.add(loreBookPersona.coreLoreBookId)
+                // Only books still linked to the persona count; a stale checked id
+                // left over from before an unlink must not keep injecting.
+                val linked = loreBookPersona.additionalLoreBookIdList()
+                activeBookIds.addAll(checkedIds.filter { linked.contains(it) })
+            } else {
+                activeBookIds.addAll(checkedIds)
+            }
+
+            for (bookId in activeBookIds) {
+                allLoreMatches.addAll(loreStore.findMatches(lastUserMessageForLore, bookId))
+            }
+        } catch (e: Exception) {
+            // The lorebook is now SQLCipher-backed; if its key/store is ever
+            // unreadable the conversation must continue without lore rather
+            // than crash mid-generation (never break the companion).
+            org.teslasoft.assistant.preferences.Logger.log(this, "error", "LoreBook", "ERROR", "Lorebook unavailable this turn: ${e.message}")
         }
 
         if (allLoreMatches.isNotEmpty()) {

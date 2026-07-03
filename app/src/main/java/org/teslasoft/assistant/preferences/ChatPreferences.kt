@@ -52,15 +52,15 @@ class ChatPreferences private constructor() {
         if (raw.isNullOrBlank() || raw == "[]" || raw == "null") return false
 
         val backupName = "${prefsName}_corrupt_${System.currentTimeMillis()}"
-        context.getSharedPreferences(backupName, Context.MODE_PRIVATE)
+        SecurePrefs.get(context, backupName)
             .edit(commit = true) { putString(key, raw) }
         // Reset only after the backup is committed.
-        context.getSharedPreferences(prefsName, Context.MODE_PRIVATE)
+        SecurePrefs.get(context, prefsName)
             .edit(commit = true) { putString(key, "[]") }
 
         Logger.log(
             context, "error", "ChatPreferences", "error",
-            "Stored $what failed to parse. The raw data was preserved in shared_prefs/$backupName.xml and the broken entry was reset."
+            "Stored $what failed to parse. The raw data was preserved in the encrypted preferences file $backupName and the broken entry was reset."
         )
 
         Handler(Looper.getMainLooper()).post {
@@ -83,7 +83,7 @@ class ChatPreferences private constructor() {
      * @param chatId The ID of the chat to clear.
      */
     fun clearChat(context: Context, chatId: String) {
-        context.getSharedPreferences("chat_$chatId", Context.MODE_PRIVATE).edit { putString("chat", "[]") }
+        SecurePrefs.get(context, "chat_$chatId").edit { putString("chat", "[]") }
     }
 
     /**
@@ -104,10 +104,10 @@ class ChatPreferences private constructor() {
 
         val json: String = Gson().toJson(list)
 
-        val settings: SharedPreferences = context.getSharedPreferences("chat_list", Context.MODE_PRIVATE)
+        val settings: SharedPreferences = SecurePrefs.get(context, "chat_list")
         settings.edit { putString("data", json) }
 
-        val settings2: SharedPreferences = context.getSharedPreferences("chat_${Hash.hash(chatName)}", Context.MODE_PRIVATE)
+        val settings2: SharedPreferences = SecurePrefs.get(context, "chat_${Hash.hash(chatName)}")
         settings2.edit { clear() }
     }
 
@@ -118,7 +118,7 @@ class ChatPreferences private constructor() {
      * @return An ArrayList of HashMap objects, where each HashMap represents a chat with key-value pairs for the chat name and ID.
      */
     fun getChatList(context: Context) : ArrayList<HashMap<String, String>> {
-        val settings: SharedPreferences = context.getSharedPreferences("chat_list", Context.MODE_PRIVATE)
+        val settings: SharedPreferences = SecurePrefs.get(context, "chat_list")
 
         val gson = Gson()
         val json = settings.getString("data", "[]")
@@ -170,7 +170,7 @@ class ChatPreferences private constructor() {
 
         val json: String = Gson().toJson(list)
 
-        val settings: SharedPreferences = context.getSharedPreferences("chat_list", Context.MODE_PRIVATE)
+        val settings: SharedPreferences = SecurePrefs.get(context, "chat_list")
         settings.edit { putString("data", json) }
     }
 
@@ -192,7 +192,7 @@ class ChatPreferences private constructor() {
 
         val json: String = Gson().toJson(list)
 
-        val settings: SharedPreferences = context.getSharedPreferences("chat_list", Context.MODE_PRIVATE)
+        val settings: SharedPreferences = SecurePrefs.get(context, "chat_list")
         settings.edit { putString("data", json) }
     }
 
@@ -204,9 +204,7 @@ class ChatPreferences private constructor() {
      * @return An ArrayList of HashMap objects, where each HashMap represents a message with key-value pairs for the message content and sender ID.
      */
     fun getChatById(context: Context, chatId: String) : ArrayList<HashMap<String, Any>> {
-        val chat: SharedPreferences = context.getSharedPreferences("chat_$chatId",
-            Context.MODE_PRIVATE
-        )
+        val chat: SharedPreferences = SecurePrefs.get(context, "chat_$chatId")
 
         var list: ArrayList<HashMap<String, Any>> = try {
             val gson = Gson()
@@ -230,9 +228,7 @@ class ChatPreferences private constructor() {
     }
 
     fun clearChatById(context: Context, chatId: String) {
-        val chat: SharedPreferences = context.getSharedPreferences("chat_$chatId",
-            Context.MODE_PRIVATE
-        )
+        val chat: SharedPreferences = SecurePrefs.get(context, "chat_$chatId")
 
         chat.edit { putString("chat", "[]") }
     }
@@ -307,7 +303,7 @@ class ChatPreferences private constructor() {
 
         val json: String = Gson().toJson(list)
 
-        val settings: SharedPreferences = context.getSharedPreferences("chat_$chatId", Context.MODE_PRIVATE)
+        val settings: SharedPreferences = SecurePrefs.get(context, "chat_$chatId")
         settings.edit { putString("chat", json) }
     }
 
@@ -323,7 +319,7 @@ class ChatPreferences private constructor() {
 
         val json: String = Gson().toJson(list)
 
-        val settings: SharedPreferences = context.getSharedPreferences("chat_$chatId", Context.MODE_PRIVATE)
+        val settings: SharedPreferences = SecurePrefs.get(context, "chat_$chatId")
         settings.edit { putString("chat", json) }
     }
 
@@ -380,10 +376,10 @@ class ChatPreferences private constructor() {
         list.add(map)
         val json: String = Gson().toJson(list)
 
-        val settings: SharedPreferences = context.getSharedPreferences("chat_list", Context.MODE_PRIVATE)
+        val settings: SharedPreferences = SecurePrefs.get(context, "chat_list")
         settings.edit { putString("data", json) }
 
-        val settings2: SharedPreferences = context.getSharedPreferences("chat_${Hash.hash(chatName)}", Context.MODE_PRIVATE)
+        val settings2: SharedPreferences = SecurePrefs.get(context, "chat_${Hash.hash(chatName)}")
         settings2.edit { putString("chat", "[]") }
     }
 
@@ -437,18 +433,18 @@ class ChatPreferences private constructor() {
                 map["name"] = chatName
                 map["id"] = Hash.hash(chatName)
 
-                val settings: SharedPreferences = context.getSharedPreferences("chat_list", Context.MODE_PRIVATE)
+                val settings: SharedPreferences = SecurePrefs.get(context, "chat_list")
 
                 val json: String = Gson().toJson(list)
 
                 settings.edit { putString("data", json) }
 
-                val settings1: SharedPreferences = context.getSharedPreferences("chat_${Hash.hash(previousName)}", Context.MODE_PRIVATE)
+                val settings1: SharedPreferences = SecurePrefs.get(context, "chat_${Hash.hash(previousName)}")
 
                 val str = settings1.getString("chat", "")
                 settings1.edit { clear() }
 
-                val settings2: SharedPreferences = context.getSharedPreferences("chat_${Hash.hash(chatName)}", Context.MODE_PRIVATE)
+                val settings2: SharedPreferences = SecurePrefs.get(context, "chat_${Hash.hash(chatName)}")
                 settings2.edit { putString("chat", str) }
 
                 break
@@ -468,10 +464,10 @@ class ChatPreferences private constructor() {
 
         val json: String = Gson().toJson(list)
 
-        val settings: SharedPreferences = context.getSharedPreferences("chat_list", Context.MODE_PRIVATE)
+        val settings: SharedPreferences = SecurePrefs.get(context, "chat_list")
         settings.edit { putString("data", json) }
 
-        val settings2: SharedPreferences = context.getSharedPreferences("chat_$chatId", Context.MODE_PRIVATE)
+        val settings2: SharedPreferences = SecurePrefs.get(context, "chat_$chatId")
         settings2.edit { clear() }
     }
 }

@@ -58,6 +58,7 @@ import com.google.gson.JsonSyntaxException
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.Preferences
+import org.teslasoft.assistant.preferences.SecurePrefs
 import org.teslasoft.assistant.ui.activities.ChatActivity
 import org.teslasoft.assistant.ui.activities.SettingsActivity
 import org.teslasoft.assistant.ui.adapters.ChatListAdapter
@@ -112,7 +113,7 @@ class ChatsListFragment : Fragment(), ChatListAdapter.OnInteractionListener {
             initSettings()
 
             if (fromFile && selectedFile.replace("null", "") != "") {
-                val chat = mContext?.getSharedPreferences("chat_$id", FragmentActivity.MODE_PRIVATE)
+                val chat = mContext?.let { SecurePrefs.get(it, "chat_$id") }
                 chat?.edit {
                     putString("chat", selectedFile)
                 }

@@ -24,7 +24,7 @@ import androidx.core.content.edit
 class Preferences private constructor(private var preferences: SharedPreferences, private var gp: SharedPreferences, private var chatId: String) {
     companion object {
         fun getPreferences(context: Context, xchatId: String) : Preferences {
-            return Preferences(context.getSharedPreferences("settings.$xchatId", Context.MODE_PRIVATE), context.getSharedPreferences("settings", Context.MODE_PRIVATE), xchatId)
+            return Preferences(SecurePrefs.get(context, "settings.$xchatId"), context.getSharedPreferences("settings", Context.MODE_PRIVATE), xchatId)
         }
     }
 
@@ -36,7 +36,7 @@ class Preferences private constructor(private var preferences: SharedPreferences
      */
     fun setPreferences(chatId: String, context: Context) {
         this.chatId = chatId
-        this.preferences = context.getSharedPreferences("settings.$chatId", Context.MODE_PRIVATE)
+        this.preferences = SecurePrefs.get(context, "settings.$chatId")
     }
 
     /**
@@ -657,7 +657,7 @@ class Preferences private constructor(private var preferences: SharedPreferences
     }
 
     fun getAvatarTypeByChatId(chatId: String, context: Context) : String {
-        val sharedPreferences = context.getSharedPreferences("settings.$chatId", Context.MODE_PRIVATE)
+        val sharedPreferences = SecurePrefs.get(context, "settings.$chatId")
         return sharedPreferences.getString("avatar_type", "builtin").toString()
     }
 
@@ -680,7 +680,7 @@ class Preferences private constructor(private var preferences: SharedPreferences
     }
 
     fun getAvatarIdByChatId(chatId: String, context: Context) : String {
-        val sharedPreferences = context.getSharedPreferences("settings.$chatId", Context.MODE_PRIVATE)
+        val sharedPreferences = SecurePrefs.get(context, "settings.$chatId")
         return sharedPreferences.getString("avatar_id", "gpt").toString()
     }
 

@@ -73,7 +73,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                         libraryLoaded = true
                     }
                     val appContext = context.applicationContext
-                    val key = MemoryDatabaseKey.getOrCreate(appContext, isProvisioned(appContext))
+                    val key = DatabaseKeys.getOrCreate(appContext, DatabaseKeys.KEY_MEMORY, isProvisioned(appContext))
                         ?: throw IllegalStateException(
                             "Memory store key unavailable (database exists but its key could not be read)"
                         )

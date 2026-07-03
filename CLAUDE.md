@@ -100,10 +100,19 @@ Everything is on-device. No cloud sync, no accounts.
 
 1. **SharedPreferences** (the bulk of persistence, all under `preferences/`):
    - `Preferences.kt` — per-chat settings, keyed by chat id (`Hash.hash(chatName)`).
-     One SharedPreferences file per chat (`settings_<chatId>`), plus global
+     One SharedPreferences file per chat (`settings.<chatId>`), plus global
      fallbacks. Includes the chat's checked lorebooks (`active_lorebook_ids`,
      comma-separated) and one-shot seed flags.
    - `ChatPreferences.kt` — chat list + message history (JSON in prefs).
+   - **Chat content is encrypted at rest** (owner-requested): the chat list,
+     per-chat message history (`chat_<id>`) and per-chat settings
+     (`settings.<id>`) all go through `SecurePrefs.get(context, name)`, which
+     wraps `EncryptedSharedPreferences` files named `enc.<name>` and migrates
+     the old plaintext file on first access (copy → verify → clear, plaintext
+     kept on any failure). NEVER call `context.getSharedPreferences` directly
+     for these names — data would silently split between the plaintext and
+     encrypted files. The global `settings` file (shared with
+     `GlobalPreferences`) stays plaintext.
    - `PersonaPreferences.kt` — personas, flat keys `<personaId>_<field>` where
      `personaId = Hash.hash(label)`. **Renaming a persona changes its id**
      (edit = delete + recreate); lorebook links survive only because the edit
@@ -112,19 +121,25 @@ Everything is on-device. No cloud sync, no accounts.
      `LogitBiasPreferences`/`LogitBiasConfigPreferences`,
      `FavoriteModelsPreferences`, `GlobalPreferences`, `EncryptedPreferences`
      (androidx security-crypto for API keys).
-2. **SQLite (plain)** — `lorebook.db` via `LoreBookStore` (singleton
-   SQLiteOpenHelper).
+2. **SQLite (SQLCipher)** — `lorebook.db` via `LoreBookStore` (singleton
+   over `net.zetetic:sqlcipher-android`). Legacy plaintext databases are
+   encrypted in place on first open by `LoreBookEncryption`
+   (sqlcipher_export → verify → swap; on ANY failure the plaintext file keeps
+   working with an empty password and the migration retries next start —
+   lorebooks must never stop working over encryption).
    Schema v3: `lorebooks` (id/name/description/tag/timestamps),
    `memory_entries` (id/lorebook_id/label/content/source_text/enabled/timestamps),
    `memory_triggers` (FK → entries, ON DELETE CASCADE). Migrations are
    additive `ALTER TABLE` steps in `onUpgrade` — always bump
    `DATABASE_VERSION`, never edit old migration blocks. The full memory
    system does NOT extend this database (superseded assumption — see below);
-   lorebooks stay the independent low-RAM tier.
+   lorebooks stay the independent low-RAM tier. `ChatActivity`'s lorebook
+   call sites (injection + new-chat seeding) are try/catch-guarded so a
+   key/store failure degrades to "no lore this turn", never a crash.
 3. **SQLCipher** — `companion_memory.db` via `preferences/memory/MemoryStore`
-   (singleton over `net.zetetic:sqlcipher-android`; random 32-byte key in
-   `EncryptedPreferences`, minted by `MemoryDatabaseKey` — which NEVER mints a
-   new key when the DB file already exists, that would brick the store).
+   (singleton over `net.zetetic:sqlcipher-android`; random 32-byte key per
+   database in `EncryptedPreferences`, minted by `DatabaseKeys` — which NEVER
+   mints a new key when the DB file already exists, that would brick the store).
    Schema v1.11 from `Memory System/sqlite_table_plan.md` (companions,
    memories + protection/provenance, entities, modes, directives, worlds,
    user_personas, roleplay_characters, transcripts, proposals, change_log,

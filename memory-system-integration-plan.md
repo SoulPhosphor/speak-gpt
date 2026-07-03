@@ -226,7 +226,7 @@ PR that lands the phase.
 **Landed July 2026.** What shipped vs. the outline below, so later phases
 build on what exists rather than what was planned: the store is
 `preferences/memory/` (MemoryStore + MemorySeedCodec + MemoryData +
-MemoryDatabaseKey + MemoryCompanionSync + MemoryExporter); the entry point is
+DatabaseKeys + MemoryCompanionSync + MemoryExporter); the entry point is
 a **"Memory system" tile in the Characters hub** (next to Lorebooks — the
 main Settings grid needed constraint-chain surgery, Characters didn't), which
 opens `MemorySettingsActivity`. The rotating automatic export runs from
@@ -239,7 +239,10 @@ from the table plan are documented in MemoryStore's header (draft status,
 transcripts.chat_id + user_persona_id, nullable transcript companion_id,
 deleted_ids tombstones). Unit tests cover the codec (template parse,
 lossless round-trip, export envelope); DB-level behavior is verified
-on-device — SQLCipher can't run in plain JVM tests.
+on-device — SQLCipher can't run in plain JVM tests. CI gotcha for future
+phases: sqlcipher-android's POM declares `androidx.sqlite` at runtime scope
+only, so it must stay an explicit `implementation` dependency or nothing
+touching the zetetic classes compiles.
 Specs: `sqlite_table_plan.md`, `companion_memory_schema.json`,
 `seed_public_template.json`, app_adaptation_notes §Bootstrap, §Data care.
 - SQLCipher dependency (D9 note) + key management (D2).
@@ -269,16 +272,26 @@ Specs: `sqlite_table_plan.md`, `companion_memory_schema.json`,
 - **Visible result:** import the template seed, see companions/memories in
   the status screen, export a JSON and open it in a file manager.
 
-### ☐ Phase 1b — Encrypt the existing stores (owner-requested)
-Specs: D9 above; CLAUDE.md fragile list (`ChatPreferences` invariant).
-- `lorebook.db` → SQLCipher via one-time `sqlcipher_export()` migration with
-  verify-then-swap and keep-plaintext-on-failure.
-- `ChatPreferences` + per-chat `Preferences` files → `EncryptedSharedPreferences`
-  with one-time copy migration, same failure rule, corrupt-data preservation
-  path intact.
-- Migration status logged to the Event log (`Logger`), never gated on ids.
-- **Visible result:** nothing changes for the user (that's the point);
-  Event log shows the migrations ran; chats/lorebooks intact.
+### ☑ Phase 1b — Encrypt the existing stores (owner-requested)
+**Landed July 2026.** What shipped: `preferences/SecurePrefs.kt` wraps
+`EncryptedSharedPreferences` files (`enc.<name>`) for `chat_list`,
+`chat_<id>` and `settings.<id>`, with an idempotent copy → verify → clear
+migration on first access and a loud plaintext fallback if the Keystore is
+unavailable (chats LOOK missing, never ARE lost). ALL direct
+`getSharedPreferences` call sites for those names were rerouted
+(ChatPreferences, Preferences, ChatActivity.saveSettings, MainActivity,
+ChatsListFragment) — future code must go through SecurePrefs or data splits.
+`lorebook.db` converted to SQLCipher: `LoreBookEncryption.obtainPassword`
+runs the one-time in-place migration (sqlcipher_export → integrity +
+row-count + version verify → swap with the original kept aside), returns an
+empty password (= keep operating plaintext, retry next start) on any
+failure, and only throws when the DB is already encrypted but its key is
+unreadable. `MemoryDatabaseKey` generalized to `DatabaseKeys` (one key per
+database; the memory key keeps its legacy pref name so existing installs
+keep working). ChatActivity's two lorebook call sites are try/catch-guarded
+to degrade to no-lore rather than crash. The global `settings` file and
+other non-chat prefs stay plaintext (out of scope). No JVM tests —
+Keystore/SQLCipher paths verify on-device.
 
 ### ☐ Phase 2 — Transcript capture, review markers, kill switch
 Specs: app_adaptation_notes §Conversation review markers, §Kill switch,

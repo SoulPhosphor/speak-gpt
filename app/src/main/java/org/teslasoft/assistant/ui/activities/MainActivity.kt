@@ -57,6 +57,7 @@ import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.DeviceInfoProvider
 import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.Preferences
+import org.teslasoft.assistant.preferences.SecurePrefs
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.fragments.tabs.ChatsListFragment
 import org.teslasoft.assistant.ui.fragments.tabs.PlaygroundFragment
@@ -295,7 +296,7 @@ class MainActivity : FragmentActivity() {
             if (preferences!!.getApiKey(this) == "") {
                 if (preferences!!.getOldApiKey() == "") {
                     startActivity(Intent(this, WelcomeActivity::class.java).setAction(Intent.ACTION_VIEW))
-                    getSharedPreferences("chat_list", MODE_PRIVATE)?.edit {
+                    SecurePrefs.get(this, "chat_list").edit {
                         putString("data", "[]")
                     }
                     finish()

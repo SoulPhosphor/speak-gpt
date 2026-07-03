@@ -18,8 +18,8 @@ package org.teslasoft.assistant.preferences.lorebook
 
 import android.content.ContentValues
 import android.content.Context
-import android.database.sqlite.SQLiteDatabase
-import android.database.sqlite.SQLiteOpenHelper
+import net.zetetic.database.sqlcipher.SQLiteDatabase
+import net.zetetic.database.sqlcipher.SQLiteOpenHelper
 import org.teslasoft.assistant.preferences.dto.LoreBook
 import org.teslasoft.assistant.preferences.dto.LoreBookEntry
 import java.util.UUID
@@ -33,6 +33,13 @@ import java.util.UUID
  * (full-text search, conversation summaries, vector embeddings, sync metadata)
  * all need relational rows and queries that key-value preferences can't provide.
  *
+ * Encrypted at rest with SQLCipher (owner-requested, matching the companion
+ * memory store). Legacy plaintext databases are encrypted in place on first
+ * open by LoreBookEncryption, which also supplies the password — an EMPTY
+ * password means the migration couldn't run and the store keeps operating on
+ * the plaintext file until the next attempt; lorebooks never stop working over
+ * encryption.
+ *
  * Three tables:
  *  - lorebooks: one row per lorebook (a named collection of memories)
  *  - memory_entries: one row per memory, scoped to a lorebook via lorebook_id
@@ -40,8 +47,8 @@ import java.util.UUID
  *
  * A chat injects only from the single lorebook selected as active for that chat.
  */
-class LoreBookStore private constructor(context: Context) :
-    SQLiteOpenHelper(context.applicationContext, DATABASE_NAME, null, DATABASE_VERSION) {
+class LoreBookStore private constructor(context: Context, password: ByteArray) :
+    SQLiteOpenHelper(context.applicationContext, DATABASE_NAME, password, null, DATABASE_VERSION, 0, null, null, false) {
 
     companion object {
         private const val DATABASE_NAME = "lorebook.db"
@@ -85,7 +92,14 @@ class LoreBookStore private constructor(context: Context) :
 
         fun getInstance(context: Context): LoreBookStore {
             return instance ?: synchronized(this) {
-                instance ?: LoreBookStore(context).also { instance = it }
+                instance ?: run {
+                    val appContext = context.applicationContext
+                    // Runs the one-time plaintext -> SQLCipher migration when
+                    // needed and loads the native library; must happen before
+                    // the helper first touches the file.
+                    val password = LoreBookEncryption.obtainPassword(appContext, DATABASE_NAME)
+                    LoreBookStore(appContext, password).also { instance = it }
+                }
             }
         }
     }
