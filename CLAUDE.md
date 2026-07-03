@@ -322,10 +322,9 @@ Everything is on-device. No cloud sync, no accounts.
   Phase 2 onward and changes one earlier assumption: the new memory store is
   a **separate SQLCipher database** (`companion_memory.db`), NOT an extension
   of `lorebook.db`. Lorebooks stay untouched as the independent low-RAM tier
-  (user-authored lore outranks system memories at injection). Two spec
-  documents (`enforcer_librarian_spec.md`, `prompt_assembly_template.md`) are
-  referenced by the package README but missing from the folder — the owner
-  has been asked to supply them; don't guess their contents.
+  (user-authored lore outranks system memories at injection). All eleven
+  package documents are present; `enforcer_librarian_spec.md` and
+  `prompt_assembly_template.md` are the authoritative runtime/prompt specs.
 - Whisper/voice work follows `whisper-local-plan.md`.
 
 ## Quick verification checklist before any push

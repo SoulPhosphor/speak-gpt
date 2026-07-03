@@ -1,13 +1,19 @@
 # Companion Memory System — Integration Plan
 
-Status: **proposed, awaiting owner answers** (see "Open questions" at the bottom).
-Written July 2026 against the design package in `Memory System/` (schema v1.11)
-and the current codebase. This plan supersedes the phase list in
-`Memory System Plans June 1 2026` from Phase 2 onward — Phase 1 of that older
-roadmap (the lorebook) is built and stays as the low-RAM tier, exactly as the
-new design intends. Where this plan and the spec documents disagree, the spec
-documents win; where the spec is silent, this plan records the code-level
-decision so future agents don't re-litigate it.
+Status: **approved by the owner (July 2026) — execution in progress.**
+Written against the complete design package in `Memory System/` (schema v1.11,
+all eleven documents present) and the current codebase. This file is
+self-sufficient: an agent in a fresh session should be able to read this plan
+plus the `Memory System/` docs and CLAUDE.md, pick the next unchecked phase,
+and build it. **Before starting any phase, read this whole file, the spec
+documents a phase cites, and CLAUDE.md.** Where this plan and the spec
+documents disagree, the specs win; where the specs are silent, this plan
+records the code-level decision so future agents don't re-litigate it.
+Update the checkboxes and notes here as phases land.
+
+This plan supersedes the phase list in `Memory System Plans June 1 2026` from
+Phase 2 onward — Phase 1 of that older roadmap (the lorebook) is built and
+stays as the low-RAM tier, exactly as the new design intends.
 
 ## What we're building, in one paragraph
 
@@ -16,65 +22,102 @@ companion memory system from `Memory System/sqlite_table_plan.md`: companions
 (mapped 1:1 to the app's existing personas), global and companion-scoped prose
 memories with protection/provenance, entities, modes, directives, roleplay
 worlds/characters, user personas, transcripts, proposals, and a change log.
-Around it: a **librarian** (on-device EmbeddingGemma embeddings + brute-force
-cosine retrieval), an **enforcer** (per-turn prompt assembly + change-set
-validation, living behind the existing `generateResponse` →
-`regularGPTResponse` funnel), and an **Archivist** (an LLM run manually by the
-user that reviews pending transcripts and maintains the store under autonomy
-dials, with one-tap undo). Lore books remain untouched as the lightweight tier
-and outrank system memories at injection.
+Around it: a **librarian** (on-device embeddings + brute-force cosine
+retrieval, model swappable, EmbeddingGemma the default), an **enforcer**
+(per-turn prompt assembly per `prompt_assembly_template.md` + change-set
+validation per `enforcer_librarian_spec.md`, living behind the existing
+`generateResponse` → `regularGPTResponse` funnel), and an **Archivist** (an
+LLM run manually by the user that reviews pending transcripts and maintains
+the store under autonomy dials, with one-tap undo). Lore books remain
+untouched as the lightweight tier and outrank system memories at injection.
+Existing stores (lorebook DB, chat history) also get encrypted at rest.
+
+## Decision log (owner answers, July 2026)
+
+- **Archivist model** is a user choice: a global app setting (endpoint
+  profile picker over the existing `ApiEndpointPreferences` profiles + a
+  model-name field). Today it points at z.ai; it may point at another
+  endpoint or a local server later — nothing may assume a specific provider.
+- **Librarian** defaults to EmbeddingGemma but MUST be swappable/updatable:
+  code against an embedding-model abstraction, never a hardcoded model (D3).
+- **Rename "Personas" → "Companions"** in the UI: approved.
+- **ONNX Runtime + Hugging Face downloads** for embedding models: approved.
+- **Encryption scope expanded**: the owner wants the existing lorebook DB and
+  chat history encrypted too, not just the new store → Phase 1b.
+- **Transcript watermark model** (D5): approved, with two additions — a
+  visible **partially processed** state, and the user must be able to stop
+  further archiving of a chat even after part of it was processed (exclusion
+  applies from the watermark forward; already-written memories stay).
+- **`example_seed.json`** was removed from the repo by the owner. It remains
+  in git history; a history purge is the owner's call, on request. The
+  gitignore rules from the package README are Phase 0 work.
+- **Cross-device future (D10)**: the owner wants chats & memories eventually
+  shared seamlessly between Android and a future Windows build (possibly via
+  a user-provided synced folder such as Google Drive), with Windows using a
+  different, higher-quality embedding model. v1 stays local-only but every
+  design choice must keep that door open.
+- **Agents/usage**: implementation sessions should be frugal — delegate
+  mechanical, well-specified work to cheaper models where quality allows;
+  keep fragile areas (anything in `ChatActivity`'s generation/voice paths,
+  encryption/migrations) with a strong model.
 
 ## Ground rules carried over from CLAUDE.md (they all still apply)
 
-- CI is the compile gate. Every phase below ends in a pushed, green,
-  user-testable state. No phase may leave `main`-bound code half-wired.
+- CI is the compile gate (no local SDK; `dl.google.com` blocked in sandboxes).
+  Statically verify before pushing; every phase ends pushed and green on the
+  `Android Checks` workflow. Every phase leaves the app fully usable.
 - All cross-cutting request changes go through the single funnel in
   `ChatActivity` (`generateResponse` → `regularGPTResponse`). The memory
   system's injection joins the existing lorebook block there (~line 4060);
   it must NOT reorder or merge the stable first system message (prefix
-  caching) — retrieved memories go in separate system messages after it,
-  like lorebook matches do today.
+  caching) — everything the enforcer adds goes in separate system messages
+  after it, like lorebook matches do today.
 - Any new per-chat preference must be added to the auto-naming copy block in
   `ChatActivity`, or it silently vanishes when a chat is auto-renamed.
 - New strings in `res/values/strings.xml` only; Views/XML UI matching current
-  style (the UI redesign is a later, separate effort — build these screens as
-  plain functional Material 3 Views screens; keep feature logic out of
-  layouts/adapters so the redesign can restyle them later).
+  style (the UI redesign in `ui-redesign-plan.md` is a later, separate
+  effort — build these screens as plain functional Material 3 Views screens;
+  keep feature logic out of layouts/adapters so the redesign can restyle them).
 - Voice pipeline untouched. Nothing here touches `stt/` except *reusing* the
   Whisper downloader pattern for the embedding model.
+- Dependencies come from Maven Central / the repos already configured —
+  verify a new artifact exists there before depending on it.
 
-## Key architecture decisions (made here, from the code)
+## Key architecture decisions
 
 **D1 — Separate database, not an extension of `lorebook.db`.**
-CLAUDE.md previously assumed vector memory would extend `lorebook.db`; the
-v1.11 package supersedes that with its own table plan and mandates SQLCipher.
-Mixing an encrypted and unencrypted schema in one file isn't possible, and the
-lorebook is deliberately the independent low-RAM tier. So: new file
-`companion_memory.db` (SQLCipher), new `preferences/memory/MemoryStore.kt`
-singleton (`getInstance(context)` with `applicationContext`, same as
-`LoreBookStore`), `meta.db_migration` numbered migrations per the table plan.
-`lorebook.db` stays exactly as it is. CLAUDE.md gets updated to say so.
+New file `companion_memory.db` (SQLCipher), new
+`preferences/memory/MemoryStore.kt` singleton (`getInstance(context)` with
+`applicationContext`, same as `LoreBookStore`), `meta.db_migration` numbered
+migrations, DDL exactly per `sqlite_table_plan.md`. `lorebook.db` keeps its
+own schema and store class (it gains encryption in Phase 1b, nothing else).
 
-**D2 — Encryption key management.** SQLCipher passphrase is a random 32-byte
-key generated on first use, wrapped by an Android Keystore AES key, stored in
-`EncryptedPreferences` (the existing androidx security-crypto wrapper). No
-user-facing password (losing it would orphan the store; the JSON export is the
-recovery path, and exports are plain JSON by design — the user's own encrypted
-backups are their responsibility, per the README).
+**D2 — Encryption key management.** One random 32-byte key per encrypted
+database, generated on first use and stored in `EncryptedPreferences`
+(androidx security-crypto, already used for API keys — its master key lives
+in the Android Keystore). No user-facing password: losing it would orphan the
+store; the JSON export is the recovery path (exports are plain JSON by
+design — the user's own encrypted backups are their responsibility, per the
+package README).
 
-**D3 — Embedding runtime: ONNX Runtime.** `onnxruntime-android:1.20.0` is
-already a dependency (Silero VAD). EmbeddingGemma-308M has official ONNX
-exports in several quantizations; we offer them as downloadable variants
-through a model manager cloned from the `LocalWhisperModels` /
-`LocalWhisperDownloader` / `LocalWhisperStorage` pattern (Hugging Face URLs,
-user picks what fits, removable). Tier 2 requires one installed. No new native
-code; if ORT can't load the model on a device, tier 2 refuses to enable with a
-plain-words message (mirroring Silero's graceful fallback precedent).
+**D3 — Librarian is an abstraction; EmbeddingGemma is the default.**
+A small interface (suggested `stt/`-style package `memory/librarian/`):
+`EmbeddingModel { val tag: String; val dimensions: Int; fun embed(text): FloatArray }`
+plus a catalog of downloadable variants cloned from the
+`LocalWhisperModels`/`LocalWhisperDownloader`/`LocalWhisperStorage` pattern
+(Hugging Face URLs, user picks what fits, removable). Runtime: ONNX Runtime
+(`onnxruntime-android:1.20.0`, already a dependency for Silero). Default
+catalog entries: EmbeddingGemma-308M ONNX quantizations at 256-dim output
+(Matryoshka truncation — the enforcer spec's recommendation). The sidecar
+`embeddings` table is keyed `(memory_id, embedding_model)`, so adding e.g. a
+nomic-embed variant later, or a higher-quality model on Windows, is a catalog
+entry + re-embed — never a schema or code-structure change. Everything
+outside `librarian/` talks to the interface only.
 
 **D4 — Vector search is brute-force cosine in Kotlin.** Read active vectors,
-score in memory. The table plan itself recommends this below ~50k memories;
-zero new dependencies. The `embeddings` table shape supports moving to
-sqlite-vec later without schema change.
+score in memory. The table plan recommends this below ~50k memories; zero new
+dependencies. The `embeddings` table shape supports moving to sqlite-vec
+later without schema change.
 
 **D5 — Chats vs. "conversations": transcripts use a watermark.** The spec
 assumes discrete conversations that end; the app has persistent, resumable
@@ -83,24 +126,36 @@ A per-chat message-index watermark records how far the Archivist has
 processed. When the user runs the Archivist, each chat with unprocessed
 messages contributes its unprocessed tail as the transcript content, then the
 watermark advances and the row is marked processed (a new row opens if the
-chat continues). Exclusion and the kill switch mark the chat so its tail is
-never captured. *(Open question Q7 — owner may prefer different semantics.)*
+chat continues). Chat-list review markers show four states:
+**pending** (unprocessed content, nothing processed yet), **partially
+processed** (watermark > 0 and new content since), **processed** (watermark
+at the end), **excluded**. Exclusion can be applied at any time, including
+after partial processing: it stops capture *from the watermark forward* —
+messages already processed into memories stay (removing those is a memory-
+editor action), and no further messages are ever captured while excluded.
+Reversible: flipping back to pending resumes capture from the exclusion
+point (the excluded span is not retroactively captured).
 
 **D6 — Companion mapping.** `companions.app_character_id` stores the app's
 `personaId` (= `Hash.hash(label)`). Because renaming a persona changes its id
 (edit = delete + recreate, a documented invariant), the persona edit path gets
 a sync hook that (a) re-points `app_character_id`, (b) appends to
 `companion_name_history`, and (c) refreshes `base_personality_mirror_text`.
-This makes the store's stable `companion_id` the thing that survives renames —
-which is exactly what the schema was designed for.
+The store's stable `companion_id` is what survives renames — exactly what the
+schema was designed for. Slot 1 of prompt assembly injects the APP's persona
+prompt when the link exists (essence is never a second personality — see the
+essence-injection guardrail in `enforcer_librarian_spec.md`).
 
-**D7 — The Archivist and the compressor are ordinary chat-completions calls**
-through the existing `com.aallam.openai` client against an endpoint profile +
-model the user picks in Archivist settings (reusing `ApiEndpointPreferences`).
-Manual trigger only, per spec. Response must be the single JSON object from
-`archivist_prompt.md`; the enforcer validates every operation against the
-schema and autonomy dials before applying — invalid or over-permissioned ops
-are dropped to the run report, never silently mutated.
+**D7 — The Archivist and the standing-packet compressor are ordinary
+chat-completions calls** through the existing `com.aallam.openai` client,
+against a **global app setting**: an endpoint profile (from
+`ApiEndpointPreferences`) + model name that the user picks in Archivist
+settings. Works with z.ai today, any OpenAI-compatible endpoint (including a
+future local server) tomorrow. Manual trigger only, per spec. The response
+must be the single JSON object from `archivist_prompt.md`; the enforcer
+validates every operation against the schema and autonomy dials before
+applying — invalid or over-permissioned ops are dropped to the run report,
+never silently mutated.
 
 **D8 — Where "active world / roleplay character / user persona" live.**
 Per-chat state through `Preferences` (added to the auto-naming copy block),
@@ -108,187 +163,248 @@ mirrored into the `app_state` table at generation time so the enforcer and
 Archivist read one place. Prefs are the source of truth; `app_state` is
 derived.
 
+**D9 — Encrypting the existing stores (owner-requested expansion).**
+- `lorebook.db`: migrate the existing plaintext SQLite file to SQLCipher
+  once, via `sqlcipher_export()` into a new encrypted file, verify row
+  counts, then atomically swap and delete the plaintext file. On any
+  failure: keep the plaintext DB and retry next launch — never lose data to
+  a half-finished migration (same spirit as the `ChatPreferences`
+  parse-failure invariant).
+- Chat history + per-chat settings (`ChatPreferences`, `Preferences`):
+  migrate to `EncryptedSharedPreferences` (security-crypto is already a
+  dependency), file-per-chat layout unchanged, with a one-time copy
+  migration and the same keep-plaintext-on-failure rule. The corrupt-data
+  preservation path in `ChatPreferences` must survive the move untouched.
+- SQLCipher dependency: `net.zetetic:sqlcipher-android` (Maven Central) +
+  `androidx.sqlite:sqlite`. arm64-only APK is fine (app is arm64-only).
+
+**D10 — Android ⇄ Windows sync (future; design for it now, build later).**
+The bridge is the **schema-shaped JSON export**, never the database file
+(SQLCipher files are device-keyed; the export is the portable artifact — this
+is already the spec's position). Decisions that keep the door open, binding
+on every phase:
+- Embeddings are per-device and never exported. Windows using a
+  higher-quality embedding model is already supported by the model-keyed
+  sidecar (D3): each device embeds the shared memories with its own model.
+- Every mutable record carries `updated_at` (schema already does); writes
+  must always set it. Deletions of synced record types must leave a
+  tombstone from Phase 1 on (a `deleted_ids` table: record type, id,
+  deleted_at) so a future merge can distinguish "deleted here" from "never
+  had it". Cheap now, impossible to retrofit later.
+- Exports include transcripts and chat history (chats are prefs, not the
+  store — the exporter serializes them alongside, in a documented envelope:
+  `{schema export} + {app_chats: [...]}`), so "chats & memories" both travel.
+- Phase 8 builds the actual sync: rotating exports written to a
+  user-chosen folder via Storage Access Framework (a Google Drive folder
+  works through SAF without any Drive API dependency), import-with-merge on
+  the other side (per old roadmap Phase 8 rules: missing → add, newer
+  `updated_at` → offer update, both-changed → surface conflict, never
+  silently overwrite). Live/continuous sync only after file-based sync is
+  boringly reliable.
+
 ## Phases
 
-Each phase is a separate branch/PR, ends green in CI, and produces something
-the owner can see working on the phone. Order follows the README's build
-order (storage → librarian → enforcer → editor UI → Archivist → proposals UI)
-with one deliberate change: transcript capture is pulled forward to Phase 2 so
-raw material accumulates while the rest is being built.
+Each phase = one branch/PR, green in CI, visible result on the phone. Order
+follows the package README's build order (storage → librarian → enforcer →
+editor UI → Archivist → proposals UI) with transcript capture pulled forward
+so raw material accumulates while the rest is built.
 
-### Phase 0 — Repo hygiene (tiny, do first)
-- Add to `.gitignore`: `example_seed*.json`, `*.db`, memory exports and
-  transcript files, any personal seed patterns — per the README's "NEVER
-  commit a personal seed" rule.
-- Remove `Memory System/example_seed.json` from the repo **pending owner
-  confirmation (Q2)** — it reads as derived from real life (protected family
-  memory, PTSD context, the real companion Slate). `seed_public_template.json`
-  stays; it is the only seed that belongs in the repo.
-- Move the design docs into `design/` (README's recommendation) or leave in
-  `Memory System/` — cosmetic either way; default: leave, just fix hygiene.
-- Chase the two missing spec documents (Q1). Phases 4 and 6 have soft
-  dependencies on them.
+Execution notes for whoever builds a phase: read the spec docs cited in the
+phase; follow CLAUDE.md's coding rules (style, strings, singletons,
+confirm-dialogs, `finally`-restored UI state); statically verify every `R.*`
+reference and call-site before pushing; update this file's checkbox + a
+one-line landing note, and CLAUDE.md's feature/storage sections, in the same
+PR that lands the phase.
 
-### Phase 1 — Storage: `MemoryStore` + migrations + seed + export
-- `MemoryStore.kt` (SQLCipher, WAL, `PRAGMA foreign_keys=ON`, launch-time
-  `PRAGMA integrity_check` surfaced loudly on failure), full DDL from
-  `sqlite_table_plan.md`, migration runner keyed on `meta.db_migration`.
-- SQLCipher dependency (`net.zetetic:sqlcipher-android`), key management per D2.
-- Seed import: parse a schema-shaped JSON file (ship
-  `seed_public_template.json` as the bundled default) into the tables.
-  Draft companions arrive as drafts.
-- Export: walk tables back to schema shape (embeddings never exported;
-  transcripts included per adaptation note 11c). One-tap manual export to
-  user-accessible storage + rotating automatic exports (WorkManager, keep
-  last N). Import = the new-phone flow; sets a "rebuild index needed" flag.
-- Bootstrap migration: on first tier-2 enable, create an **active** companion
-  record for every existing app persona (generate `companion_id`, set
-  `app_character_id`, sync `base_personality_mirror`).
-- Persona-edit sync hook (D6) in `PersonaPreferences` call sites.
-- Unit tests in `app/src/test` for migrations, seed round-trip
-  (import → export → import), and the bootstrap mapping.
-- **Visible result:** a hidden-ish "Memory (experimental)" settings entry
-  showing store status, seed import, export now, and the companion records
-  created from personas.
+### ☑ Phase 0 — Repo hygiene (landed with this plan)
+- `.gitignore`: `example_seed*.json`, `*.db`, `memory-export*.json`,
+  `transcripts-export*` — per the package README's "never commit a personal
+  seed / database / export / transcript" rule. (`example_seed.json` itself
+  was already removed by the owner; history purge only on owner request.)
 
-### Phase 2 — Transcript capture, review markers, kill switch
-- Capture per D5: hook at the end of the `generateResponse` funnel (single
-  path, both voice and typed) appending the turn to the chat's open
-  transcript row with `companion_id`, `model_tag`, quick-settings snapshot,
-  timestamps, and world/rp/persona ids when set (null fine).
-- Chat-list marker for `review_status` (pending / processed / excluded) and
-  an exclude toggle on each chat (reversible; excluded ≠ deleted).
+### ☐ Phase 1 — Storage: `MemoryStore` + migrations + seed + export
+Specs: `sqlite_table_plan.md`, `companion_memory_schema.json`,
+`seed_public_template.json`, app_adaptation_notes §Bootstrap, §Data care.
+- SQLCipher dependency (D9 note) + key management (D2).
+- `preferences/memory/MemoryStore.kt`: WAL, `PRAGMA foreign_keys=ON`,
+  launch-time `PRAGMA integrity_check` surfaced loudly on failure (a
+  Material dialog on next activity, not a silent log), full DDL from the
+  table plan **plus** the `deleted_ids` tombstone table (D10), migration
+  runner keyed on `meta.db_migration`.
+- Seed import: parse a schema-shaped JSON file into the tables (ship
+  `seed_public_template.json` as the bundled default seed). Draft
+  companions arrive as drafts.
+- Export: walk tables back to schema shape + the `app_chats` envelope (D10;
+  embeddings never exported; transcripts included). One-tap manual export
+  (SAF document picker) + rotating automatic exports (WorkManager, keep
+  last N, default 5). Import = the new-phone flow; sets a
+  "rebuild index needed" flag for Phase 3 to honor.
+- Bootstrap migration (idempotent, runs at first tier-2 enable): create an
+  **active** companion record for every existing app persona
+  (`companion_id` generated, `app_character_id` set, mirror synced).
+- Persona-edit sync hook (D6) in the persona save path.
+- Unit tests (`app/src/test`, Robolectric if needed for SQLCipher — else
+  gate DB tests to androidTest and unit-test the JSON mapping pure-Kotlin):
+  migrations, seed round-trip (import → export → import), bootstrap mapping,
+  tombstone writes.
+- Settings entry: a "Memory (experimental)" screen showing store status,
+  seed import, export now, auto-export toggle, and the companion records.
+- **Visible result:** import the template seed, see companions/memories in
+  the status screen, export a JSON and open it in a file manager.
+
+### ☐ Phase 1b — Encrypt the existing stores (owner-requested)
+Specs: D9 above; CLAUDE.md fragile list (`ChatPreferences` invariant).
+- `lorebook.db` → SQLCipher via one-time `sqlcipher_export()` migration with
+  verify-then-swap and keep-plaintext-on-failure.
+- `ChatPreferences` + per-chat `Preferences` files → `EncryptedSharedPreferences`
+  with one-time copy migration, same failure rule, corrupt-data preservation
+  path intact.
+- Migration status logged to the Event log (`Logger`), never gated on ids.
+- **Visible result:** nothing changes for the user (that's the point);
+  Event log shows the migrations ran; chats/lorebooks intact.
+
+### ☐ Phase 2 — Transcript capture, review markers, kill switch
+Specs: app_adaptation_notes §Conversation review markers, §Kill switch,
+§Transcript capture; D5.
+- Capture per D5 at the end of the `generateResponse` funnel (single path,
+  voice and typed): append the turn to the chat's open transcript row with
+  `companion_id`, `model_tag`, quick-settings snapshot, timestamps, and
+  world/rp/persona ids when set (null fine).
+- Chat-list markers: pending / **partially processed** / processed /
+  excluded (D5 states). Exclude toggle on each chat, allowed at any time;
+  from-watermark-forward semantics per D5.
 - **Memory off** kill switch: per-chat quick-settings toggle + global
-  default. Off ⇒ nothing injected from the store *and* the transcript is
-  auto-marked excluded. Per-chat toggle joins the auto-naming copy block.
-- Per-companion `memory_participation` (full / global-only / none) surfaced
-  later in Phase 5's companion page; stored from day one.
-- **Visible result:** markers in the chat list; transcripts visibly queuing
-  in the Phase 1 status screen.
+  default. Off ⇒ enforcer skipped entirely (model gets only app prompt
+  materials) and capture stops / transcript marked excluded. Per-chat
+  toggle joins the auto-naming copy block.
+- `memory_participation` stored per companion from day one (UI in Phase 5).
+- **Visible result:** markers in the chat list; transcripts queue up in the
+  Phase 1 status screen; kill switch verifiably stops injection + capture.
 
-### Phase 3 — Librarian: embedding model manager + index
-- Embedding model manager cloned from the Whisper pattern (D3): variant list,
-  download/remove, active-model tag.
-- `Librarian.kt`: embed text → vector; store in `embeddings` keyed
-  (memory_id, embedding_model); cosine top-k over active memories with scope
-  filters **in the query** (status='active', world isolation, companion
-  isolation) — isolation is enforced in queries, not convention.
+### ☐ Phase 3 — Librarian: embedding model manager + index
+Specs: `enforcer_librarian_spec.md` §embedding model, §retrieval;
+app_adaptation_notes §Librarian model management; D3, D4.
+- `memory/librarian/`: `EmbeddingModel` interface, ONNX implementation,
+  model catalog + downloader/storage cloned from the Whisper pattern.
+  EmbeddingGemma variants (256-dim Matryoshka) as the default catalog.
+- Embed → store in `embeddings` keyed `(memory_id, embedding_model)`;
+  cosine top-k with scope filters **in the query** (status='active', world
+  isolation, companion isolation — isolation is enforced in queries, not
+  convention). Score = w_sim·cosine + w_imp·importance/5 + w_rec·recency,
+  weights from `retrieval_policy`; tentative confidence dampens by 0.6.
 - The archive rule: status leaving 'active' deletes embedding rows;
-  reactivation re-embeds.
-- **Rebuild memory index** settings button; same routine runs at first
-  tier-2 enable, after import, and automatically when the installed model
-  tag differs from stored vectors' tags.
-- Unit tests for cosine ranking, scope filtering, archive rule.
-- **Visible result:** a debug search box in the memory area — type a phrase,
+  reactivation re-embeds. Also embed lore entries (for Phase 4's
+  near-duplicate suppression).
+- **Rebuild memory index** settings button; same routine at first tier-2
+  enable, after import, and automatically on model-tag mismatch.
+- Keyword/tag fallback search for when no embedding model is installed.
+- Unit tests: cosine ranking, scope filtering, archive rule, tag-mismatch
+  detection (pure-Kotlin with fake vectors; no ORT in unit tests).
+- **Visible result:** debug search box in the memory area — type a phrase,
   see ranked memories with scores.
 
-### Phase 4 — Enforcer: tiers + prompt assembly
-- **Memory engine** setting: `none` / `lore books` / `full system`. Tier
-  gate: full requires an installed embedding model.
-- Per-turn assembly in `regularGPTResponse`, after the stable first system
-  message and alongside the existing lorebook block: standing packet
-  (directives, owner profile, always_load memories, active companion essence +
-  hard limits + relationship notes + model adaptations for the serving model,
-  modes), then retrieved memories for the latest user message, then lorebook
-  matches — user-authored lore book entries outrank system memories, and
-  protected memories always travel with their handling + never_assume lists
-  (structural, not best-effort: one object, rendered together or not at all).
-- Injection budgets analogous to the lorebook's (entries + chars), plus the
-  debug injection log extended to show memory-system injections (which, why,
-  scores, what was skipped and why).
-- Quick-settings additions (tier 2 only): active world / roleplay character /
-  user persona selectors, all nullable (D8; copy block!).
-- **Soft dependency:** the exact packet skeleton and the standing-packet
-  compressor live in the missing `prompt_assembly_template.md` (Q1). Until it
-  arrives, assemble conservatively from the schema + archivist spec and mark
-  the assembly function with a TODO-spec comment; retrofit verbatim once the
-  doc lands.
+### ☐ Phase 4 — Enforcer: tiers + prompt assembly
+Specs: `prompt_assembly_template.md` (the literal skeleton — follow it
+verbatim, including the assembly rules section), `enforcer_librarian_spec.md`
+(turn loop, mode detection with stickiness + protective tie-break, lore-book
+coexistence, essence guardrail, failure behavior); D7 (compressor), D8.
+⚠ Touches `ChatActivity`'s generation path — strong model, smallest diff.
+- **Memory engine** setting: none / lore books / full system. Full requires
+  an installed embedding model.
+- Per-turn assembly in `regularGPTResponse` after the stable first system
+  message: the template's slots 1–6 rendered exactly as specified; retrieved
+  memories with provenance markers; protected memories structurally
+  inseparable from handling (one render function, no separate code path);
+  lore entries in their own labeled slot before retrieved memories, with
+  near-duplicate suppression and contradiction flagging for the next run
+  report; activation prompt last, verbatim.
+- Standing-packet compressor: rendered via the Archivist-model setting,
+  cached, invalidated when any component changes; raw records as fallback
+  if the compressor call fails.
+- Mode detection per spec (signal embeddings at index time, per-turn scoring,
+  ≤2 modes, stickiness for protective modes, suggested_mode activation).
+- Budgets from `retrieval_policy`, cut lowest-scored retrieved memories
+  first, never hard limits / standing packet / handling.
+- Failure behavior: librarian down → keyword fallback; store unreadable →
+  app materials alone + one soft notification; never block generation.
+- Quick-settings additions (tier 2): active world / roleplay character /
+  user persona selectors, nullable (D8; copy block!).
+- Extend the lorebook debug injection view to show the full assembly:
+  what was injected, why, scores, what was cut and why.
 - **Visible result:** with tier 2 on, a companion demonstrably knows seeded
-  facts; debug view shows exactly what was injected.
+  facts; the debug view shows the exact assembled packet.
 
-### Phase 5 — Memory editor + companions/worlds/personas UI
-- Memory browser/editor: search (librarian-backed + plain text), view, add,
-  edit, protect/unprotect (editing handling + never_assume), archive, delete
-  (delete = user-only, Material confirm dialog), change-log view per memory.
-- Characters area: Personas renamed **Companions** in UI strings (Q4);
+### ☐ Phase 5 — Memory editor + companions/worlds/personas UI
+Specs: app_adaptation_notes §Tab structure, §Worlds UI, §Characters area,
+§New areas, §Required memory UI; `enforcer_librarian_spec.md` §Manual
+authority.
+- Memory browser/editor: search (librarian + text), view, add, edit,
+  protect/unprotect (handling + never_assume editors), archive, delete
+  (user-only, Material confirm), change-log view per memory.
+- Characters area: "Personas" renamed **"Companions"** in UI strings;
   companion page gains draft badge + approve action, `memory_participation`
-  selector, essence/hard-limits editor (user edits are direct; only the
-  Archivist is proposal-bound), model-adaptations list.
+  selector, essence/hard-limits editor (user edits direct; Archivist is
+  proposal-bound), model-adaptations list.
 - New areas: **My Personas** (user personas), **Roleplay Characters**
   (definition user-editable, arc read-only), **Worlds** (list → world page:
-  premise/rules editable, characters, world-scoped memory browser, teardown —
+  premise/rules, characters, world-scoped memory browser, teardown —
   archive-all or delete-all, one action, confirm dialog, "keep character
   memories" option per the table plan).
 - Entity browser (living summaries), owner-profile editor, directives and
-  modes viewers (user-editable; Archivist changes remain proposal-only).
-- **Visible result:** the whole store is inspectable and editable by hand —
-  the troubleshooting guide's workflows all have a place to happen.
+  modes editors (user-editable).
+- **Visible result:** the whole store inspectable and editable by hand —
+  every troubleshooting_guide workflow has a place to happen.
 
-### Phase 6 — Archivist pipeline + proposals + run reports
-- Archivist settings screen: endpoint profile + model (D7), autonomy dials
-  (`archivist_settings.autonomy_json`), harvest generosity, run trigger
-  (manual per spec).
+### ☐ Phase 6 — Archivist pipeline + proposals + run reports
+Specs: `archivist_spec.md`, `archivist_prompt.md` (send verbatim with
+injections), `enforcer_librarian_spec.md` §Applying change-sets; D7.
+- Archivist settings screen (global): endpoint profile + model, autonomy
+  dials, harvest generosity, run trigger (manual per spec).
 - "Process conversations" button with pending count. Run: build inputs
-  (pending transcripts chronological; working set of the store;
-  `archivist_prompt.md` verbatim with injections), call the model, parse the
-  single JSON object, validate each operation against schema + dials
-  (drop/downgrade invalid ones to the report), apply in order with
-  `change_log` prior-state snapshots, advance watermarks, mark processed.
-- Run report screen: the Archivist's plain-language report + every
-  auto-applied change listed with **one-tap undo** (restore snapshot, log
-  'reverted', re-embed if needed). Tentative-memory quarantine: never
-  always_load, reduced retrieval weight, each one rejectable in one action,
-  rejections remembered.
-- Proposals screen: pending proposals with summaries, accept/reject;
-  accepted ops applied by the enforcer with the same validation.
-- Emergence support: `create_world` / `create_roleplay_character` ops
-  back-tag fiction memories; records appear in the tabs and quick-settings
-  selectors even though the user never created them.
+  (pending transcript tails chronological, store working set, settings),
+  call the model, parse the single JSON object, validate each op against
+  schema + dials (drop/downgrade to report), apply in order with
+  `change_log` prior-state snapshots, maintain the index, advance
+  watermarks, set processed/partially-processed states.
+- Run report screen: the report text + every auto-applied change with
+  **one-tap undo** (restore snapshot, log 'reverted', fix index).
+  Tentative-memory quarantine: never always_load, dampened retrieval,
+  one-action reject, rejections remembered.
+- Proposals screen: pending proposals, accept/reject; accepted ops applied
+  through the same validation path. Personality proposals presented as
+  exact text for the user to paste into the app persona (mirror updates on
+  next sync).
+- Emergence: `create_world` / `create_roleplay_character` ops back-tag
+  fiction memories; records appear in tabs and quick-settings selectors.
 - Imported-transcript backfill: import old conversations as
   `source='imported'` transcripts queued like any others.
-- **Soft dependency:** the enforcer-side validation details are partly in the
-  missing `enforcer_librarian_spec.md` (Q1); the archivist spec + prompt +
-  table plan cover most of it, but the missing doc is authoritative.
 - **Visible result:** the full loop — talk, run the Archivist, read the run
   report, watch memories appear, undo one, reject a pattern, accept a
   proposal.
 
-### Phase 7 — Hardening + docs
-- End-to-end pass over the troubleshooting guide: every symptom's "where to
+### ☐ Phase 7 — Hardening + docs
+- End-to-end pass over `troubleshooting_guide.md`: every symptom's "where to
   look / how to fix" must actually exist in the UI.
 - Failure-mode sweep: mid-conversation degradation (store locked, model
   missing, embedding load failure) never blocks generation — tier drops to
-  lore-books-only for that turn with an event-log line.
-- CLAUDE.md updated: storage section (new DB), feature list, fragile list
-  (enforcer assembly joins the "system-message assembly" do-not-reorder
-  warning), this plan referenced from the roadmap section.
+  lore-books-only for that turn with an Event-log line.
+- CLAUDE.md fully updated: storage section (new DB + encrypted stores),
+  feature list, fragile list (enforcer assembly joins the
+  "system-message assembly" do-not-reorder warning).
 
-## Sizing and agent use
+### ☐ Phase 8 — Android ⇄ Windows sync (file-based, later)
+Specs: D10; old roadmap Phase 8 merge rules.
+- Rotating exports to a user-chosen SAF folder (Google Drive folder works
+  with zero Drive-API dependency); import-with-merge using `updated_at` +
+  tombstones; conflicts surfaced, never silently overwritten.
+- Windows-side is a separate future project reading the same export format
+  with its own (higher-quality) embedding model — nothing to build here
+  beyond keeping the export format documented and stable.
 
-Phases 1–2 and 3 are medium; Phase 4 touches `ChatActivity`'s fragile
-generation path and should be done carefully by a strong model (Opus-class)
-with the smallest possible diff; Phases 5–6 are large but mostly additive new
-screens (Sonnet-class parallelizable per screen, one reviewer pass after).
-No agents were needed to produce this plan.
+## Sizing and delegation guidance
 
-## Open questions for the owner (blocking marked ⛔, the rest have defaults)
-
-- **Q1 ⛔ (Phases 4 & 6):** `enforcer_librarian_spec.md` (doc 7) and
-  `prompt_assembly_template.md` (doc 10) are listed in the package README but
-  are not in the `Memory System/` folder. Please add them. Everything else
-  can start without them.
-- **Q2 ⛔ (Phase 0):** `example_seed.json` appears to contain personal
-  material and per the README should never be committed. Remove and gitignore?
-  And should git history be purged, or is deletion going forward enough?
-- **Q3:** Archivist model = a picker over your existing endpoint profiles +
-  a model name (default: your usual endpoint). OK? (Default: yes.)
-- **Q4:** Rename "Personas" → "Companions" in the UI, per the adaptation
-  notes' recommendation? (Default: yes.)
-- **Q5:** EmbeddingGemma via ONNX Runtime with Hugging Face downloads, like
-  Whisper models. OK? (Default: yes.)
-- **Q6:** The new store is SQLCipher-encrypted, but existing chat history in
-  `ChatPreferences` (and the lorebook) stays plaintext as today — encrypting
-  those is out of scope here. Acceptable? (Default: yes.)
-- **Q7:** Transcript semantics for persistent chats (D5): the Archivist
-  processes each chat's *unprocessed tail* on every run, rather than waiting
-  for a chat to "end" (chats here never really end). OK? (Default: yes.)
+Phases 1, 1b, 4 are fragile-or-foundational (encryption, migrations, the
+generation funnel): strong model, small diffs, no incidental refactors.
+Phases 2, 3 are medium and well-specified. Phases 5, 6 are large but mostly
+additive new screens — parallelizable per screen by cheaper (Sonnet-class)
+agents against this plan + the cited specs, with one reviewer pass after.

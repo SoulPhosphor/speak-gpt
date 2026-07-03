@@ -24,3 +24,11 @@ local.properties
 *.jks
 release.keystore
 keystore.properties
+
+# Companion memory system: personal seeds, databases, exports, transcripts
+# must never be committed (see Memory System/README.md). The public template
+# seed is the only seed that belongs in the repo.
+example_seed*.json
+*.db
+memory-export*.json
+transcripts-export*
