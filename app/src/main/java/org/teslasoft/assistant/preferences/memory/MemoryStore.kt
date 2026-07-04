@@ -1112,6 +1112,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
      * captured (so exclusion is reversible and the experiment can be
      * recovered) but the row is marked do-not-review.
      */
+    /** Returns a short outcome string for the Event Log (capture is otherwise
+     *  invisible): "inserted <id>", "appended <id>", or "insert failed (rc)". */
     fun appendTranscriptTurn(
         chatId: String,
         companionId: String?,
@@ -1120,7 +1122,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         modelTag: String,
         quickSettingsJson: String?,
         markExcluded: Boolean
-    ) {
+    ): String {
         val now = nowIso()
         val db = writableDatabase
         db.beginTransaction()
@@ -1147,9 +1149,14 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             turns.put(org.json.JSONObject().put("role", "user").put("content", userMessage).put("at", now))
             turns.put(org.json.JSONObject().put("role", "assistant").put("content", assistantMessage).put("at", now))
 
+            val outcome: String
             if (rowId == null) {
-                db.insert("transcripts", null, ContentValues().apply {
-                    put("transcript_id", newId("t-"))
+                val newRowId = newId("t-")
+                // insertOrThrow so a constraint failure surfaces as an exception
+                // (and rolls back) instead of silently returning -1 — a silent
+                // failed insert is exactly what "0 transcripts" would look like.
+                db.insertOrThrow("transcripts", null, ContentValues().apply {
+                    put("transcript_id", newRowId)
                     put("chat_id", chatId)
                     put("companion_id", companionId)
                     put("source", "live")
@@ -1160,6 +1167,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                     put("quick_settings_json", quickSettingsJson)
                     put("review_status", if (markExcluded) "excluded" else "pending")
                 })
+                outcome = "inserted $newRowId (${if (markExcluded) "excluded" else "pending"})"
             } else {
                 db.update("transcripts", ContentValues().apply {
                     put("content", turns.toString())
@@ -1167,8 +1175,10 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                     put("quick_settings_json", quickSettingsJson)
                     if (markExcluded) put("review_status", "excluded")
                 }, "transcript_id = ?", arrayOf(rowId))
+                outcome = "appended $rowId"
             }
             db.setTransactionSuccessful()
+            return outcome
         } finally {
             db.endTransaction()
         }

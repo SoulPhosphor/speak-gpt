@@ -51,9 +51,21 @@ object TranscriptRecorder {
         excludedByUser: Boolean
     ) {
         try {
-            if (chatId.isBlank() || userMessage.isBlank() || assistantMessage.isBlank()) return
-            if (!MemoryStore.isProvisioned(context)) return
-            if (excludedByUser) return
+            // Diagnostic breadcrumbs: capture is otherwise invisible, so each
+            // early exit and the final DB outcome are logged to the Event log.
+            if (chatId.isBlank() || userMessage.isBlank() || assistantMessage.isBlank()) {
+                Logger.log(context, "event", "Transcript", "info",
+                    "skip: blank field (chatId=${chatId.isNotBlank()} user=${userMessage.isNotBlank()} reply=${assistantMessage.isNotBlank()})")
+                return
+            }
+            if (!MemoryStore.isProvisioned(context)) {
+                Logger.log(context, "event", "Transcript", "info", "skip: memory store not provisioned")
+                return
+            }
+            if (excludedByUser) {
+                Logger.log(context, "event", "Transcript", "info", "skip: chat is set to \"Don't archive\"")
+                return
+            }
 
             val store = MemoryStore.getInstance(context)
 
@@ -71,7 +83,7 @@ object TranscriptRecorder {
             }
 
             val markExcluded = !memoryEnabled || participation == "none"
-            store.appendTranscriptTurn(
+            val outcome = store.appendTranscriptTurn(
                 chatId = chatId,
                 companionId = companionId,
                 userMessage = userMessage,
@@ -80,6 +92,8 @@ object TranscriptRecorder {
                 quickSettingsJson = quickSettingsJson,
                 markExcluded = markExcluded
             )
+            Logger.log(context, "event", "Transcript", "info",
+                "captured chat=$chatId companion=${companionId ?: "none"} memOn=$memoryEnabled -> $outcome")
         } catch (e: Exception) {
             Logger.log(context, "event", "Transcript", "error", "Turn capture failed: ${e.message}")
         }

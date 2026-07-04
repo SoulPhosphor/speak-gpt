@@ -3719,7 +3719,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     turnModel, quickSettings, memoryEnabled, excluded
                 )
             }.start()
-        } catch (_: Exception) { /* capture must never break a turn */ }
+        } catch (e: Exception) {
+            // Capture must never break a turn — but a silently swallowed error
+            // here is why a capture failure was invisible. Log it (best effort).
+            try {
+                org.teslasoft.assistant.preferences.Logger.log(
+                    this, "event", "Transcript", "error", "recordTranscriptTurn threw: ${e.message}"
+                )
+            } catch (_: Exception) { /* logging is best effort */ }
+        }
     }
 
     /** True when this turn is part of voice interaction (hands-free mode, an
