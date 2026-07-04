@@ -17,7 +17,6 @@
 package org.teslasoft.assistant.preferences.memory
 
 import android.content.Context
-import org.teslasoft.assistant.preferences.Logger
 import org.teslasoft.assistant.preferences.PersonaPreferences
 import org.teslasoft.assistant.preferences.dto.PersonaObject
 import org.teslasoft.assistant.util.Hash
@@ -86,7 +85,7 @@ object MemoryCompanionSync {
         } catch (e: Exception) {
             // Persona saves must always succeed; the mirror can be re-synced on
             // the next edit or a bootstrap re-run.
-            Logger.log(context, "event", "MemorySync", "error", "Persona->companion sync failed: ${e.message}")
+            MemoryLog.log(context, "MemorySync", "error", "Persona->companion sync failed: ${e.message}")
         }
     }
 

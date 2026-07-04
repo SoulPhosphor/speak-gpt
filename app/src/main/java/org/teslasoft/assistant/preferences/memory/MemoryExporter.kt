@@ -21,7 +21,6 @@ import com.google.gson.Gson
 import org.json.JSONArray
 import org.json.JSONObject
 import org.teslasoft.assistant.preferences.ChatPreferences
-import org.teslasoft.assistant.preferences.Logger
 import org.teslasoft.assistant.util.Hash
 import java.io.File
 import java.time.Instant
@@ -108,9 +107,9 @@ object MemoryExporter {
             if (backups != null && backups.size > ROTATION_KEEP) {
                 backups.sortedBy { it.name }.dropLast(ROTATION_KEEP).forEach { it.delete() }
             }
-            Logger.log(context, "event", "MemoryExport", "info", "Automatic memory backup written: ${file.name}")
+            MemoryLog.log(context, "MemoryExport", "info", "Automatic memory backup written: ${file.name}")
         } catch (e: Exception) {
-            Logger.log(context, "event", "MemoryExport", "error", "Automatic memory backup failed: ${e.message}")
+            MemoryLog.log(context, "MemoryExport", "error", "Automatic memory backup failed: ${e.message}")
         }
     }
 }

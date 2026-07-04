@@ -17,7 +17,6 @@
 package org.teslasoft.assistant.preferences.memory
 
 import android.content.Context
-import org.teslasoft.assistant.preferences.Logger
 import org.teslasoft.assistant.util.Hash
 
 /**
@@ -54,16 +53,16 @@ object TranscriptRecorder {
             // Diagnostic breadcrumbs: capture is otherwise invisible, so each
             // early exit and the final DB outcome are logged to the Event log.
             if (chatId.isBlank() || userMessage.isBlank() || assistantMessage.isBlank()) {
-                Logger.log(context, "event", "Transcript", "info",
+                MemoryLog.log(context, "Transcript", "info",
                     "skip: blank field (chatId=${chatId.isNotBlank()} user=${userMessage.isNotBlank()} reply=${assistantMessage.isNotBlank()})")
                 return
             }
             if (!MemoryStore.isProvisioned(context)) {
-                Logger.log(context, "event", "Transcript", "info", "skip: memory store not provisioned")
+                MemoryLog.log(context, "Transcript", "info", "skip: memory store not provisioned")
                 return
             }
             if (excludedByUser) {
-                Logger.log(context, "event", "Transcript", "info", "skip: chat is set to \"Don't archive\"")
+                MemoryLog.log(context, "Transcript", "info", "skip: chat is set to \"Don't archive\"")
                 return
             }
 
@@ -92,10 +91,10 @@ object TranscriptRecorder {
                 quickSettingsJson = quickSettingsJson,
                 markExcluded = markExcluded
             )
-            Logger.log(context, "event", "Transcript", "info",
+            MemoryLog.log(context, "Transcript", "info",
                 "captured chat=$chatId companion=${companionId ?: "none"} memOn=$memoryEnabled -> $outcome")
         } catch (e: Exception) {
-            Logger.log(context, "event", "Transcript", "error", "Turn capture failed: ${e.message}")
+            MemoryLog.log(context, "Transcript", "error", "Turn capture failed: ${e.message}")
         }
     }
 }

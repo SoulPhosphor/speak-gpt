@@ -501,17 +501,20 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         switchChatMemory = view.findViewById(R.id.switch_chat_memory)
         switchChatExcluded = view.findViewById(R.id.switch_chat_excluded)
         switchChatMemory?.isChecked = preferences?.getChatMemoryEnabled() ?: true
-        switchChatExcluded?.isChecked = preferences?.isChatExcludedFromMemory() ?: false
+        // "Archive this chat": positive framing. Checked = archive (capture on).
+        // The stored pref is still "excluded" (the inverse), so flip both ways.
+        switchChatExcluded?.isChecked = !(preferences?.isChatExcludedFromMemory() ?: false)
         switchChatMemory?.setOnCheckedChangeListener { _, checked ->
             preferences?.setChatMemoryEnabled(checked)
         }
-        switchChatExcluded?.setOnCheckedChangeListener { _, checked ->
-            preferences?.setChatExcludedFromMemory(checked)
+        switchChatExcluded?.setOnCheckedChangeListener { _, archive ->
+            val excluded = !archive
+            preferences?.setChatExcludedFromMemory(excluded)
             val appContext = context?.applicationContext ?: return@setOnCheckedChangeListener
             Thread {
                 try {
                     if (MemoryStore.isProvisioned(appContext)) {
-                        MemoryStore.getInstance(appContext).setChatTranscriptsExcluded(chatId, checked)
+                        MemoryStore.getInstance(appContext).setChatTranscriptsExcluded(chatId, excluded)
                     }
                 } catch (_: Exception) { /* queue flip is best-effort; the pref alone already stops capture */ }
             }.start()

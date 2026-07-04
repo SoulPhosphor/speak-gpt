@@ -1472,6 +1472,21 @@ class Preferences private constructor(private var preferences: SharedPreferences
     }
 
     /**
+     * Memory diagnostics logging (Alerts, Errors & Logs). Off by default —
+     * when on, the memory system writes what it's doing (transcript capture
+     * decisions, librarian/model events, migrations) to the Event log, the
+     * same opt-in pattern as the VAD logging toggles. Nothing memory-related
+     * logs while this is off.
+     */
+    fun getMemoryDebugLogging() : Boolean {
+        return getGlobalBoolean("memory_debug_logging", false)
+    }
+
+    fun setMemoryDebugLogging(enabled: Boolean) {
+        putGlobalBoolean("memory_debug_logging", enabled, false)
+    }
+
+    /**
      * User exclusion (do-not-review): while excluded, NO further messages are
      * captured into the transcript queue and the chat's existing transcript
      * rows are marked excluded so the Archivist never reads them. Reversible:

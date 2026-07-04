@@ -21,6 +21,7 @@ import android.content.SharedPreferences
 import androidx.core.content.edit
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import org.teslasoft.assistant.preferences.memory.MemoryLog
 
 /**
  * Encrypted-at-rest replacement for the chat-content SharedPreferences files
@@ -62,8 +63,7 @@ object SecurePrefs {
         val encrypted = try {
             createEncrypted(appContext, ENC_PREFIX + name)
         } catch (e: Exception) {
-            Logger.log(
-                appContext, "event", "SecurePrefs", "error",
+            MemoryLog.log(appContext, "SecurePrefs", "error",
                 "Encrypted preferences unavailable for '$name' (${e.message}); using plaintext fallback. " +
                     "If data appears missing it is still in the encrypted file and returns when the Keystore recovers."
             )
@@ -120,20 +120,18 @@ object SecurePrefs {
                     clear()
                     putBoolean(MIGRATED_MARKER, true)
                 }
-                Logger.log(
-                    context, "event", "SecurePrefs", "info",
+                MemoryLog.log(context, "SecurePrefs", "info",
                     "Migrated ${entries.size} entr${if (entries.size == 1) "y" else "ies"} of '$name' to encrypted storage."
                 )
             } else {
-                Logger.log(
-                    context, "event", "SecurePrefs", "error",
+                MemoryLog.log(context, "SecurePrefs", "error",
                     "Migration of '$name' did not verify; plaintext kept for retry on next access."
                 )
             }
         } catch (e: Exception) {
             // Keep the plaintext data untouched; a failed migration retries on
             // the next access.
-            Logger.log(context, "event", "SecurePrefs", "error", "Migration of '$name' failed: ${e.message}")
+            MemoryLog.log(context, "SecurePrefs", "error", "Migration of '$name' failed: ${e.message}")
         }
     }
 }

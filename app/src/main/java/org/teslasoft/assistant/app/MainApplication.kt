@@ -28,6 +28,7 @@ import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.Logger
 import org.teslasoft.assistant.preferences.memory.MemoryExporter
+import org.teslasoft.assistant.preferences.memory.MemoryLog
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.theme.ThemeManager
 import java.security.Security
@@ -76,7 +77,7 @@ class MainApplication : Application() {
                 if (MemoryStore.isProvisioned(this)) {
                     val problem = MemoryStore.getInstance(this).integrityCheck()
                     if (problem != null) {
-                        Logger.log(this, "event", "MemoryStore", "error", "Memory store integrity check failed: $problem")
+                        MemoryLog.log(this, "MemoryStore", "error", "Memory store integrity check failed: $problem")
                         Handler(Looper.getMainLooper()).post {
                             Toast.makeText(this, getString(R.string.memory_integrity_failed), Toast.LENGTH_LONG).show()
                         }
@@ -85,7 +86,7 @@ class MainApplication : Application() {
                     }
                 }
             } catch (e: Exception) {
-                Logger.log(this, "event", "MemoryStore", "error", "Memory store startup check failed: ${e.message}")
+                MemoryLog.log(this, "MemoryStore", "error", "Memory store startup check failed: ${e.message}")
             }
         }.start()
 

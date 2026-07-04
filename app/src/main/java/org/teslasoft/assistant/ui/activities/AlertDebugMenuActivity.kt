@@ -64,6 +64,7 @@ class AlertDebugMenuActivity : FragmentActivity() {
 
     private var switchShowChatErrors: MaterialSwitch? = null
     private var switchErrorSound: MaterialSwitch? = null
+    private var switchMemoryDebug: MaterialSwitch? = null
     // Shortcut down to the audio-only diagnostics, so a user who lands here
     // looking for VAD logging doesn't have to know it lives under Voice.
     private var rowAudioDebugging: LinearLayout? = null
@@ -90,6 +91,7 @@ class AlertDebugMenuActivity : FragmentActivity() {
 
         switchShowChatErrors = findViewById(R.id.switch_show_chat_errors)
         switchErrorSound = findViewById(R.id.switch_error_sound)
+        switchMemoryDebug = findViewById(R.id.switch_memory_debug)
         rowAudioDebugging = findViewById(R.id.row_audio_debugging)
         rowCrashLog = findViewById(R.id.row_crash_log)
         rowEventLog = findViewById(R.id.row_event_log)
@@ -122,6 +124,7 @@ class AlertDebugMenuActivity : FragmentActivity() {
         val p = preferences ?: return
         switchShowChatErrors?.isChecked = p.showChatErrors()
         switchErrorSound?.isChecked = p.getErrorSound()
+        switchMemoryDebug?.isChecked = p.getMemoryDebugLogging()
     }
 
     private fun initLogic() {
@@ -131,6 +134,7 @@ class AlertDebugMenuActivity : FragmentActivity() {
 
         switchShowChatErrors?.setOnCheckedChangeListener { _, checked -> p.setShowChatErrors(checked) }
         switchErrorSound?.setOnCheckedChangeListener { _, checked -> p.setErrorSound(checked) }
+        switchMemoryDebug?.setOnCheckedChangeListener { _, checked -> p.setMemoryDebugLogging(checked) }
 
         rowAudioDebugging?.setOnClickListener {
             startActivity(Intent(this, AudioDebuggingActivity::class.java).putExtra("chatId", chatId))

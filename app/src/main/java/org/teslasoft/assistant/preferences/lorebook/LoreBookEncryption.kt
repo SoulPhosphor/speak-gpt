@@ -18,7 +18,7 @@ package org.teslasoft.assistant.preferences.lorebook
 
 import android.content.Context
 import net.zetetic.database.sqlcipher.SQLiteDatabase
-import org.teslasoft.assistant.preferences.Logger
+import org.teslasoft.assistant.preferences.memory.MemoryLog
 import org.teslasoft.assistant.preferences.memory.DatabaseKeys
 import java.io.File
 import java.io.FileInputStream
@@ -73,8 +73,7 @@ object LoreBookEncryption {
         // stored key yet, so minting one is always safe.
         val key = DatabaseKeys.getOrCreate(context, DatabaseKeys.KEY_LOREBOOK, databaseExists = false)
         if (key == null) {
-            Logger.log(
-                context, "event", "LoreBookEncryption", "error",
+            MemoryLog.log(context, "LoreBookEncryption", "error",
                 "Could not create/read the lorebook encryption key; lorebook stays unencrypted for now."
             )
             return ByteArray(0)
@@ -138,8 +137,7 @@ object LoreBookEncryption {
             enc.close()
             if (!ok) {
                 tmp.delete()
-                Logger.log(
-                    context, "event", "LoreBookEncryption", "error",
+                MemoryLog.log(context, "LoreBookEncryption", "error",
                     "Encrypted lorebook copy failed verification; keeping the plaintext database."
                 )
                 return false
@@ -162,8 +160,7 @@ object LoreBookEncryption {
                 return false
             }
             backup.delete()
-            Logger.log(
-                context, "event", "LoreBookEncryption", "info",
+            MemoryLog.log(context, "LoreBookEncryption", "info",
                 "lorebook.db encrypted in place ($books books, $entries memories)."
             )
             return true
@@ -172,8 +169,7 @@ object LoreBookEncryption {
             tmp.delete()
             // If the aside-rename happened but the swap didn't, restore it.
             if (!plainFile.exists() && backup.exists()) backup.renameTo(plainFile)
-            Logger.log(
-                context, "event", "LoreBookEncryption", "error",
+            MemoryLog.log(context, "LoreBookEncryption", "error",
                 "Lorebook encryption failed (${e.message}); keeping the plaintext database."
             )
             return false

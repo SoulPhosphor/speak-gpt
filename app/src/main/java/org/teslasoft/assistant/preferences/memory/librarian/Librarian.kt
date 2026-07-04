@@ -18,7 +18,7 @@ package org.teslasoft.assistant.preferences.memory.librarian
 
 import android.content.Context
 import org.json.JSONObject
-import org.teslasoft.assistant.preferences.Logger
+import org.teslasoft.assistant.preferences.memory.MemoryLog
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.memory.RetrievableMemory
 import org.teslasoft.assistant.preferences.memory.ScoredMemory
@@ -95,7 +95,7 @@ class Librarian private constructor(private val appContext: Context) {
             OnnxEmbeddingModel.create(appContext, catalog).also { model = it }
         } catch (t: Throwable) {
             modelLoadFailed = true
-            Logger.log(appContext, "event", "Librarian", "error", "Embedding model failed to load: ${t.message}")
+            MemoryLog.log(appContext, "Librarian", "error", "Embedding model failed to load: ${t.message}")
             null
         }
     }
@@ -146,7 +146,7 @@ class Librarian private constructor(private val appContext: Context) {
                     return rank(queryVec, triples, weights(store), topK)
                 }
             } catch (t: Throwable) {
-                Logger.log(appContext, "event", "Librarian", "error", "Vector search failed, using keyword fallback: ${t.message}")
+                MemoryLog.log(appContext, "Librarian", "error", "Vector search failed, using keyword fallback: ${t.message}")
             }
         }
         return keywordFallback(candidates, query, topK)
@@ -196,7 +196,7 @@ class Librarian private constructor(private val appContext: Context) {
                 val vec = m.embed(mem.textToEmbed(), isQuery = false)
                 store.upsertEmbedding(mem.memoryId, m.tag, VectorMath.toBlob(vec))
             } catch (t: Throwable) {
-                Logger.log(appContext, "event", "Librarian", "error", "Embed failed for ${mem.memoryId}: ${t.message}")
+                MemoryLog.log(appContext, "Librarian", "error", "Embed failed for ${mem.memoryId}: ${t.message}")
             }
             done++
             progress(done, memories.size)
