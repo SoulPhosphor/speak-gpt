@@ -1269,19 +1269,19 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         )
         scan(
             "SELECT current_name, essence FROM companions WHERE current_name LIKE ? OR essence LIKE ? LIMIT $limit",
-            { "Companion: ${it.getString(0)}" }, { it.getStringOrNull(1) ?: "" }
+            { "Companion: ${it.getString(0)}" }, { it.getString(1) ?: "" }
         )
         scan(
             "SELECT name, summary FROM entities WHERE name LIKE ? OR summary LIKE ? LIMIT $limit",
-            { "Entity: ${it.getString(0)}" }, { it.getStringOrNull(1) ?: "" }
+            { "Entity: ${it.getString(0)}" }, { it.getString(1) ?: "" }
         )
         scan(
             "SELECT name, description FROM roleplay_characters WHERE name LIKE ? OR description LIKE ? LIMIT $limit",
-            { "Roleplay character: ${it.getString(0)}" }, { it.getStringOrNull(1) ?: "" }
+            { "Roleplay character: ${it.getString(0)}" }, { it.getString(1) ?: "" }
         )
         scan(
             "SELECT name, premise FROM worlds WHERE name LIKE ? OR premise LIKE ? LIMIT $limit",
-            { "World: ${it.getString(0)}" }, { it.getStringOrNull(1) ?: "" }
+            { "World: ${it.getString(0)}" }, { it.getString(1) ?: "" }
         )
         return out.take(limit)
     }
