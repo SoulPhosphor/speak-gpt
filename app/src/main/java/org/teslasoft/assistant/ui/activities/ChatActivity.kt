@@ -172,6 +172,8 @@ import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.LogitBiasPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.SecurePrefs
+import org.teslasoft.assistant.preferences.memory.MemoryStore
+import org.teslasoft.assistant.preferences.memory.TranscriptRecorder
 import org.teslasoft.assistant.preferences.lorebook.LoreBookInjectionLog
 import org.teslasoft.assistant.preferences.lorebook.LoreBookMatch
 import org.teslasoft.assistant.preferences.lorebook.LoreBookStore
@@ -3665,11 +3667,59 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             }
         } finally {
             GenerationForegroundService.end(this)
+            // Memory system transcript capture: this finally is the one place
+            // every turn (typed or voice, success or failure) passes exactly
+            // once with the user's message still in scope — the same
+            // single-funnel property the lorebook relies on.
+            recordTranscriptTurn(request)
             calculateCost()
             runOnUiThread {
                 restoreUIState()
             }
         }
+    }
+
+    /**
+     * Queue this completed turn for the memory system's Archivist (Phase 2 of
+     * memory-system-integration-plan.md). Reads the assistant's reply from the
+     * live message list, snapshots the sampling settings (quick settings are
+     * gospel — the Archivist wants to know which knobs served the turn), and
+     * hands off to TranscriptRecorder on a worker thread. Best-effort in every
+     * direction: no store, memory off, or any failure must never disturb the
+     * conversation or the voice loop.
+     */
+    private fun recordTranscriptTurn(request: String) {
+        try {
+            if (!MemoryStore.isProvisioned(this)) return
+            val last = messages.lastOrNull() ?: return
+            if (last["isBot"] != true) return
+            val reply = last["message"].toString()
+            if (reply.isBlank() || request.isBlank()) return
+
+            val appContext = applicationContext
+            val turnChatId = chatId
+            val turnPersonaId = preferences?.getPersonaId().orEmpty()
+            val turnModel = model
+            val memoryEnabled = preferences?.getChatMemoryEnabled() ?: true
+            val excluded = preferences?.isChatExcludedFromMemory() ?: false
+            val quickSettings = try {
+                org.json.JSONObject()
+                    .put("model", turnModel)
+                    .put("temperature", preferences?.getTemperature()?.toDouble())
+                    .put("top_p", preferences?.getTopP()?.toDouble())
+                    .put("frequency_penalty", preferences?.getFrequencyPenalty()?.toDouble())
+                    .put("presence_penalty", preferences?.getPresencePenalty()?.toDouble())
+                    .put("max_tokens", preferences?.getMaxTokens())
+                    .toString()
+            } catch (_: Exception) { null }
+
+            Thread {
+                TranscriptRecorder.recordTurn(
+                    appContext, turnChatId, turnPersonaId, request, reply,
+                    turnModel, quickSettings, memoryEnabled, excluded
+                )
+            }.start()
+        } catch (_: Exception) { /* capture must never break a turn */ }
     }
 
     /** True when this turn is part of voice interaction (hands-free mode, an
@@ -4258,6 +4308,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     val personaActivationSeeded = preferences.isPersonaActivationSeeded()
                     val activeLoreBookIds = preferences.getActiveLoreBookIds()
                     val loreBooksSeeded = preferences.isLoreBooksSeeded()
+                    val chatMemoryEnabledRaw = preferences.getChatMemoryEnabledRaw()
+                    val chatExcludedFromMemory = preferences.isChatExcludedFromMemory()
 
                     preferences.setPreferences(Hash.hash(newChatName.toString()), this)
                     preferences.setResolution(resolution)
@@ -4288,6 +4340,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     preferences.setPersonaActivationSeeded(personaActivationSeeded)
                     preferences.setActiveLoreBookIds(activeLoreBookIds)
                     preferences.setLoreBooksSeeded(loreBooksSeeded)
+                    preferences.setChatMemoryEnabledRaw(chatMemoryEnabledRaw)
+                    preferences.setChatExcludedFromMemory(chatExcludedFromMemory)
+
+                    // The rename changed the chat id; captured transcripts are
+                    // keyed by it, so the queue must follow the chat.
+                    try {
+                        if (MemoryStore.isProvisioned(this)) {
+                            MemoryStore.getInstance(this).repointChat(Hash.hash(chatName), chatId)
+                        }
+                    } catch (_: Exception) { /* transcripts re-point on the next capture-free path; never block renaming */ }
 
                     // Adopt the renamed chat in place. This used to relaunch
                     // ChatActivity (startActivity + finish) to pick up the new

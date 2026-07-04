@@ -116,6 +116,15 @@
                     android:text="debug.model.name"
                     android:textColor="@color/text_subtitle"
                     android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/memory_marker"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:alpha="0.7"
+                    android:textColor="@color/text_subtitle"
+                    android:textSize="12sp"
+                    android:visibility="gone" />
             </LinearLayout>
 
             <ImageView

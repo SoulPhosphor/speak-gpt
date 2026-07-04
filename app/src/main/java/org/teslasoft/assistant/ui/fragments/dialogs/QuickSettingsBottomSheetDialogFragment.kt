@@ -49,6 +49,7 @@ import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.preferences.dto.PersonaObject
 import org.teslasoft.assistant.preferences.lorebook.LoreBookStore
+import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.ui.activities.ActivationPromptsListActivity
 import org.teslasoft.assistant.ui.activities.ApiEndpointsListActivity
 import org.teslasoft.assistant.ui.activities.LogitBiasConfigListActivity
@@ -105,6 +106,8 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     private var presencePenaltySeekbar: com.google.android.material.slider.Slider? = null
     private var fieldSeed: TextInputEditText? = null
     private var btnSaveToProfile: MaterialButton? = null
+    private var switchChatMemory: com.google.android.material.materialswitch.MaterialSwitch? = null
+    private var switchChatExcluded: com.google.android.material.materialswitch.MaterialSwitch? = null
 
     private var textUsage: TextView? = null
     private var textCost: TextView? = null
@@ -491,6 +494,28 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         presencePenaltySeekbar = view.findViewById(R.id.presence_penalty_slider)
         topPSeekbar = view.findViewById(R.id.top_p_slider)
         fieldSeed = view.findViewById(R.id.field_seed)
+
+        // Memory system (Phase 2): per-chat kill switch + do-not-archive
+        // exclusion. Toggling exclusion also flips the chat's already-queued
+        // transcripts so the Archivist's view matches immediately.
+        switchChatMemory = view.findViewById(R.id.switch_chat_memory)
+        switchChatExcluded = view.findViewById(R.id.switch_chat_excluded)
+        switchChatMemory?.isChecked = preferences?.getChatMemoryEnabled() ?: true
+        switchChatExcluded?.isChecked = preferences?.isChatExcludedFromMemory() ?: false
+        switchChatMemory?.setOnCheckedChangeListener { _, checked ->
+            preferences?.setChatMemoryEnabled(checked)
+        }
+        switchChatExcluded?.setOnCheckedChangeListener { _, checked ->
+            preferences?.setChatExcludedFromMemory(checked)
+            val appContext = context?.applicationContext ?: return@setOnCheckedChangeListener
+            Thread {
+                try {
+                    if (MemoryStore.isProvisioned(appContext)) {
+                        MemoryStore.getInstance(appContext).setChatTranscriptsExcluded(chatId, checked)
+                    }
+                } catch (_: Exception) { /* queue flip is best-effort; the pref alone already stops capture */ }
+            }.start()
+        }
         btnSaveToProfile = view.findViewById(R.id.btn_save_to_profile)
         textModel = view.findViewById(R.id.text_model)
         textHost = view.findViewById(R.id.text_host)

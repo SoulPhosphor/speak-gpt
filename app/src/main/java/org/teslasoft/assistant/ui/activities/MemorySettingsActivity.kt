@@ -68,6 +68,7 @@ class MemorySettingsActivity : FragmentActivity() {
     private var btnExport: MaterialButton? = null
     private var btnBootstrap: MaterialButton? = null
     private var switchAutoBackup: MaterialSwitch? = null
+    private var switchDefaultMemory: MaterialSwitch? = null
 
     private val importSeedLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) importSeedFromUri(uri)
@@ -106,6 +107,7 @@ class MemorySettingsActivity : FragmentActivity() {
         btnExport = findViewById(R.id.btn_memory_export)
         btnBootstrap = findViewById(R.id.btn_memory_bootstrap)
         switchAutoBackup = findViewById(R.id.switch_auto_backup)
+        switchDefaultMemory = findViewById(R.id.switch_default_memory)
     }
 
     @Suppress("DEPRECATION")
@@ -166,6 +168,13 @@ class MemorySettingsActivity : FragmentActivity() {
                     MemoryStore.META_AUTO_EXPORT_ENABLED, if (checked) "1" else "0"
                 )
             }
+        }
+
+        // Global default for the per-chat memory kill switch (a plain global
+        // pref — usable before the store is even provisioned).
+        switchDefaultMemory?.isChecked = preferences?.getDefaultMemoryEnabled() ?: true
+        switchDefaultMemory?.setOnCheckedChangeListener { _, checked ->
+            preferences?.setDefaultMemoryEnabled(checked)
         }
     }
 

@@ -23,6 +23,7 @@ import android.os.Looper
 import android.widget.Toast
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.util.Hash
 import java.lang.Exception
 import java.lang.reflect.Type
@@ -446,6 +447,15 @@ class ChatPreferences private constructor() {
 
                 val settings2: SharedPreferences = SecurePrefs.get(context, "chat_${Hash.hash(chatName)}")
                 settings2.edit { putString("chat", str) }
+
+                // Renaming changes the chat id; the memory system's transcript
+                // queue is keyed by it and must follow the chat.
+                try {
+                    if (MemoryStore.isProvisioned(context)) {
+                        MemoryStore.getInstance(context)
+                            .repointChat(Hash.hash(previousName), Hash.hash(chatName))
+                    }
+                } catch (_: Exception) { /* never block a rename over the memory store */ }
 
                 break
             }

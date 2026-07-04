@@ -293,23 +293,29 @@ to degrade to no-lore rather than crash. The global `settings` file and
 other non-chat prefs stay plaintext (out of scope). No JVM tests —
 Keystore/SQLCipher paths verify on-device.
 
-### ☐ Phase 2 — Transcript capture, review markers, kill switch
-Specs: app_adaptation_notes §Conversation review markers, §Kill switch,
-§Transcript capture; D5.
-- Capture per D5 at the end of the `generateResponse` funnel (single path,
-  voice and typed): append the turn to the chat's open transcript row with
-  `companion_id`, `model_tag`, quick-settings snapshot, timestamps, and
-  world/rp/persona ids when set (null fine).
-- Chat-list markers: pending / **partially processed** / processed /
-  excluded (D5 states). Exclude toggle on each chat, allowed at any time;
-  from-watermark-forward semantics per D5.
-- **Memory off** kill switch: per-chat quick-settings toggle + global
-  default. Off ⇒ enforcer skipped entirely (model gets only app prompt
-  materials) and capture stops / transcript marked excluded. Per-chat
-  toggle joins the auto-naming copy block.
-- `memory_participation` stored per companion from day one (UI in Phase 5).
-- **Visible result:** markers in the chat list; transcripts queue up in the
-  Phase 1 status screen; kill switch verifiably stops injection + capture.
+### ☑ Phase 2 — Transcript capture, review markers, kill switch
+**Landed July 2026.** What shipped: capture hooks into the `finally` of
+`generateResponse` — the one place every turn (typed or voice, success,
+cancel or error) passes exactly once with the user's message in scope —
+via `ChatActivity.recordTranscriptTurn` → `TranscriptRecorder` (policy) →
+`MemoryStore.appendTranscriptTurn` (a chat's newest unprocessed row is
+"open"; a model or companion change, or the 200k-char cap, starts a new row
+so each row's model_tag/companion_id stay truthful). Content is a JSON
+array of {role, content, at} turns. Semantics as decided: user exclusion
+("Don't archive this chat", Quick Settings) stops capture entirely and
+flips the chat's queued rows; the memory kill switch ("Use memory in this
+chat", Quick Settings; global default in Characters → Memory system) keeps
+capturing but marks rows excluded, so an experiment can be recovered by
+re-including; companions with memory_participation='none' capture
+pre-excluded. Both per-chat prefs are in the auto-naming copy block, and
+chat renames (auto-naming + manual `ChatPreferences.editChat`) re-point
+transcripts.chat_id. Chat-list rows show the review marker (waiting /
+partially archived / archived / excluded) fed by
+`MemoryStore.chatReviewStates()`, loaded off-thread in ChatListAdapter.
+Enforcer-side injection skipping for the kill switch is Phase 4 (there is
+nothing to inject yet). Note for Phase 6: the Archivist consumes pending
+rows per-row (no separate watermark — a row IS the unprocessed unit;
+"partially processed" = chat has both processed and pending rows).
 
 ### ☐ Phase 3 — Librarian: embedding model manager + index
 Specs: `enforcer_librarian_spec.md` §embedding model, §retrieval;

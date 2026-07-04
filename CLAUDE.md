@@ -239,12 +239,20 @@ Everything is on-device. No cloud sync, no accounts.
   injection budget 20 entries / 6000 chars, debug view of injections.
 - Personas (prompt + activation prompt + lorebooks + auto-load-last-books),
   activation prompts, custom assistant name/avatar.
-- Companion memory store, Phase 1 (storage only — memory does not influence
-  conversations yet): encrypted `companion_memory.db`, starter-seed/backup
-  import, rotating + manual JSON export, persona→companion bootstrap and
-  edit-sync. Surface: Characters → Memory system. Later phases
-  (transcripts, librarian, enforcer, Archivist) are specified in
-  `memory-system-integration-plan.md` — read it before touching
+- Companion memory store, Phases 1–2 (storage + capture — memory does not
+  influence conversations yet): encrypted `companion_memory.db`,
+  starter-seed/backup import, rotating + manual JSON export,
+  persona→companion bootstrap and edit-sync (surface: Characters → Memory
+  system). Every completed turn is captured into the transcripts queue from
+  the `finally` of `generateResponse` (single funnel; best-effort, never
+  disturbs a turn) via `TranscriptRecorder`. Quick Settings has two per-chat
+  memory controls (both in the auto-naming copy block): "Use memory" (kill
+  switch — still captures, marks rows excluded; global default in Memory
+  settings) and "Don't archive" (stops capture entirely). Chat renames must
+  re-point `transcripts.chat_id` (`MemoryStore.repointChat`, hooked in
+  auto-naming and `ChatPreferences.editChat`). Chat-list rows show a memory
+  review marker. Later phases (librarian, enforcer, Archivist) are specified
+  in `memory-system-integration-plan.md` — read it before touching
   `preferences/memory/`.
 - Markdown/LaTeX rendering, partial text selection, message edit/delete/copy/
   share, bulk select, image attach + DALL·E-style generation, in-app

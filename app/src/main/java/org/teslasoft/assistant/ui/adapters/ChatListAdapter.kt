@@ -47,6 +47,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.card.MaterialCardView
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
+import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.ui.activities.ChatActivity
 import org.teslasoft.assistant.util.Hash
 import org.teslasoft.assistant.util.StaticAvatarParser
@@ -59,6 +60,26 @@ class ChatListAdapter(private val dataArray: ArrayList<HashMap<String, String>>,
 
     private var preferences: Preferences? = null
     private var bulkActionMode = false
+
+    // Memory-system review markers (pending / partially archived / archived /
+    // excluded) per chat id. Loaded once off the main thread — the store is
+    // SQLCipher-backed and must never be opened during a bind. Null until
+    // loaded (or when the store doesn't exist): markers simply stay hidden.
+    private var reviewStates: HashMap<String, String>? = null
+
+    init {
+        Thread {
+            try {
+                val appContext = mContext.context?.applicationContext ?: return@Thread
+                if (!MemoryStore.isProvisioned(appContext)) return@Thread
+                val states = MemoryStore.getInstance(appContext).chatReviewStates()
+                mContext.activity?.runOnUiThread {
+                    reviewStates = states
+                    notifyDataSetChanged()
+                }
+            } catch (_: Exception) { /* markers are decoration; never break the list */ }
+        }.start()
+    }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
         val view = if (Preferences.getPreferences(mContext.requireActivity(), "").getHideModelNames()) {
@@ -146,6 +167,7 @@ class ChatListAdapter(private val dataArray: ArrayList<HashMap<String, String>>,
         private val root: MaterialCardView = itemView.findViewById(R.id.root)
         private val pinMarker: ImageView = itemView.findViewById(R.id.pin_marker)
         private val textModel: TextView = itemView.findViewById(R.id.textModel)
+        private val memoryMarker: TextView = itemView.findViewById(R.id.memory_marker)
 
         @SuppressLint("SetTextI18n")
         fun bind(chatMessage: HashMap<String, String>, projection: HashMap<String, String>, position: Int) {
@@ -167,7 +189,26 @@ class ChatListAdapter(private val dataArray: ArrayList<HashMap<String, String>>,
 
             textFirstMessage.text = chatMessage["first_message"] ?: "No messages yet."
 
-            val model: String = Preferences.getPreferences(mContext.requireActivity(), Hash.hash(chatMessage["name"].toString())).getModel()
+            val chatHash = Hash.hash(chatMessage["name"].toString())
+            val chatPreferences = Preferences.getPreferences(mContext.requireActivity(), chatHash)
+            val model: String = chatPreferences.getModel()
+
+            // Review marker: the per-chat exclusion pref wins (it stops capture
+            // itself), otherwise show what the transcript queue says.
+            val memoryState = if (chatPreferences.isChatExcludedFromMemory()) "excluded" else reviewStates?.get(chatHash)
+            if (memoryState == null) {
+                memoryMarker.visibility = View.GONE
+            } else {
+                memoryMarker.visibility = View.VISIBLE
+                memoryMarker.text = mContext.getString(
+                    when (memoryState) {
+                        "pending" -> R.string.memory_marker_pending
+                        "partial" -> R.string.memory_marker_partial
+                        "processed" -> R.string.memory_marker_processed
+                        else -> R.string.memory_marker_excluded
+                    }
+                )
+            }
 
             icon.contentDescription = name.text
 

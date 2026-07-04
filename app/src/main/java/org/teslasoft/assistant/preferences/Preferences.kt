@@ -1433,6 +1433,62 @@ class Preferences private constructor(private var preferences: SharedPreferences
     }
 
     /**
+     * Memory kill switch (companion memory system, integration plan D5/Phase 2):
+     * with memory OFF for a chat, nothing from the memory store is injected
+     * (enforcer phase) and the chat's transcript is auto-marked excluded —
+     * though its content is still captured, so flipping exclusion back to
+     * pending later can recover an experiment that turned out to matter.
+     * Per-chat value; a chat that has never set it follows the global default.
+     * Stored as a string tri-state ("" = follow global) so the auto-naming
+     * copy block can move an unset value without pinning it.
+     * */
+    fun getChatMemoryEnabled() : Boolean {
+        return when (getString("memory_enabled", "")) {
+            "true" -> true
+            "false" -> false
+            else -> getDefaultMemoryEnabled()
+        }
+    }
+
+    fun getChatMemoryEnabledRaw() : String {
+        return getString("memory_enabled", "")
+    }
+
+    fun setChatMemoryEnabledRaw(value: String) {
+        putString("memory_enabled", value)
+    }
+
+    fun setChatMemoryEnabled(enabled: Boolean) {
+        putString("memory_enabled", if (enabled) "true" else "false")
+    }
+
+    /** Global default for the memory kill switch (Settings → Memory). */
+    fun getDefaultMemoryEnabled() : Boolean {
+        return getGlobalBoolean("default_memory_enabled", true)
+    }
+
+    fun setDefaultMemoryEnabled(enabled: Boolean) {
+        putGlobalBoolean("default_memory_enabled", enabled, true)
+    }
+
+    /**
+     * User exclusion (do-not-review): while excluded, NO further messages are
+     * captured into the transcript queue and the chat's existing transcript
+     * rows are marked excluded so the Archivist never reads them. Reversible:
+     * flipping back re-queues the rows and resumes capture from that point
+     * (the excluded span is not retroactively captured). Distinct from the
+     * kill switch above — exclusion stops recording, the kill switch stops
+     * memory *use* (and capture continues under an excluded marker).
+     * */
+    fun isChatExcludedFromMemory() : Boolean {
+        return getBoolean("memory_excluded", false)
+    }
+
+    fun setChatExcludedFromMemory(excluded: Boolean) {
+        putBoolean("memory_excluded", excluded)
+    }
+
+    /**
      * Get logit biases config ID
      *
      * @return logit biases config ID

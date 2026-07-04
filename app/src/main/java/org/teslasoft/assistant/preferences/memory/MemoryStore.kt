@@ -59,6 +59,10 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         const val META_AUTO_EXPORT_ENABLED = "auto_export_enabled"
         const val META_LAST_AUTO_EXPORT_AT = "last_auto_export_at"
 
+        // A transcript row past this size closes and a new row opens: keeps the
+        // per-turn parse-append-write affordable and Archivist inputs bounded.
+        private const val MAX_TRANSCRIPT_CHARS = 200_000
+
         @Volatile
         private var instance: MemoryStore? = null
 
@@ -1070,6 +1074,141 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                         priorStateJson = it.getStringOrNull("prior_state_json")
                     )
                 )
+            }
+        }
+        return out
+    }
+
+    /* ---------------------------------------------------------------------- */
+    /* transcripts (Phase 2: capture queue for the Archivist)                 */
+    /* ---------------------------------------------------------------------- */
+
+    /**
+     * Appends one completed turn to the chat's open transcript row (creating
+     * one when needed). "Open" = the chat's newest unprocessed row, still
+     * served by the same model and companion and under the size cap — a change
+     * of model or companion, or an oversized row, starts a new row so each
+     * transcript's model_tag/companion_id stay truthful for the Archivist.
+     * [markExcluded] implements the memory kill switch: content is still
+     * captured (so exclusion is reversible and the experiment can be
+     * recovered) but the row is marked do-not-review.
+     */
+    fun appendTranscriptTurn(
+        chatId: String,
+        companionId: String?,
+        userMessage: String,
+        assistantMessage: String,
+        modelTag: String,
+        quickSettingsJson: String?,
+        markExcluded: Boolean
+    ) {
+        val now = nowIso()
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            var rowId: String? = null
+            var content = "[]"
+            db.query(
+                "transcripts", arrayOf("transcript_id", "content", "model_tag", "companion_id", "review_status"),
+                "chat_id = ? AND processed_at IS NULL", arrayOf(chatId),
+                null, null, "started_at DESC", "1"
+            ).use {
+                if (it.moveToFirst()) {
+                    val sameModel = it.getStringOrNull("model_tag") == modelTag
+                    val sameCompanion = it.getStringOrNull("companion_id") == companionId
+                    val existing = it.getString(it.getColumnIndexOrThrow("content"))
+                    if (sameModel && sameCompanion && existing.length < MAX_TRANSCRIPT_CHARS) {
+                        rowId = it.getString(0)
+                        content = existing
+                    }
+                }
+            }
+
+            val turns = org.json.JSONArray(content)
+            turns.put(org.json.JSONObject().put("role", "user").put("content", userMessage).put("at", now))
+            turns.put(org.json.JSONObject().put("role", "assistant").put("content", assistantMessage).put("at", now))
+
+            if (rowId == null) {
+                db.insert("transcripts", null, ContentValues().apply {
+                    put("transcript_id", newId("t-"))
+                    put("chat_id", chatId)
+                    put("companion_id", companionId)
+                    put("source", "live")
+                    put("started_at", now)
+                    put("ended_at", now)
+                    put("content", turns.toString())
+                    put("model_tag", modelTag)
+                    put("quick_settings_json", quickSettingsJson)
+                    put("review_status", if (markExcluded) "excluded" else "pending")
+                })
+            } else {
+                db.update("transcripts", ContentValues().apply {
+                    put("content", turns.toString())
+                    put("ended_at", now)
+                    put("quick_settings_json", quickSettingsJson)
+                    if (markExcluded) put("review_status", "excluded")
+                }, "transcript_id = ?", arrayOf(rowId))
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    /**
+     * User exclusion toggle: excluding marks every unprocessed row
+     * do-not-review; re-including re-queues them as pending (processed rows
+     * are history and never change). Capture start/stop is the recorder's job.
+     */
+    fun setChatTranscriptsExcluded(chatId: String, excluded: Boolean) {
+        if (excluded) {
+            writableDatabase.execSQL(
+                "UPDATE transcripts SET review_status = 'excluded' WHERE chat_id = ? AND review_status = 'pending'",
+                arrayOf(chatId)
+            )
+        } else {
+            writableDatabase.execSQL(
+                "UPDATE transcripts SET review_status = 'pending' WHERE chat_id = ? AND review_status = 'excluded' AND processed_at IS NULL",
+                arrayOf(chatId)
+            )
+        }
+    }
+
+    /** Chats survive renames but transcripts are keyed by chat_id — re-point
+     *  them whenever a chat id changes (auto-naming, manual rename). */
+    fun repointChat(oldChatId: String, newChatId: String) {
+        if (oldChatId == newChatId || oldChatId.isBlank() || newChatId.isBlank()) return
+        writableDatabase.execSQL(
+            "UPDATE transcripts SET chat_id = ? WHERE chat_id = ?", arrayOf(newChatId, oldChatId)
+        )
+    }
+
+    /**
+     * Review-state summary per chat for the chat-list markers:
+     * "pending" (unreviewed content, nothing processed), "partial" (processed
+     * AND new unreviewed content — the partially-processed marker), "processed"
+     * (everything reviewed), "excluded" (only excluded rows). Chats with no
+     * transcripts are absent.
+     */
+    fun chatReviewStates(): HashMap<String, String> {
+        val out = HashMap<String, String>()
+        readableDatabase.rawQuery(
+            "SELECT chat_id, " +
+                "SUM(CASE WHEN review_status = 'pending' THEN 1 ELSE 0 END), " +
+                "SUM(CASE WHEN review_status = 'processed' THEN 1 ELSE 0 END) " +
+                "FROM transcripts WHERE chat_id IS NOT NULL GROUP BY chat_id",
+            emptyArray<String>()
+        ).use {
+            while (it.moveToNext()) {
+                val chatId = it.getString(0) ?: continue
+                val pending = it.getInt(1)
+                val processed = it.getInt(2)
+                out[chatId] = when {
+                    pending > 0 && processed > 0 -> "partial"
+                    pending > 0 -> "pending"
+                    processed > 0 -> "processed"
+                    else -> "excluded"
+                }
             }
         }
         return out
