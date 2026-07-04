@@ -913,4 +913,6 @@
     <string name="memory_debug_search_button">Search</string>
     <string name="memory_debug_search_empty">No matches.</string>
     <string name="memory_debug_search_result_fmt">%1$.2f  %2$s\n%3$s</string>
+    <string name="memory_debug_semantic_header">— Semantic memory matches —</string>
+    <string name="memory_debug_all_header">— All records (keyword) —</string>
 </resources>

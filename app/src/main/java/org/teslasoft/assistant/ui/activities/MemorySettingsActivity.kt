@@ -343,13 +343,38 @@ class MemorySettingsActivity : FragmentActivity() {
             val rendered = try {
                 if (!MemoryStore.isProvisioned(this)) getString(R.string.memory_debug_search_empty)
                 else {
-                    // Debug search runs unscoped (companion/world null): a
-                    // developer view of the whole active store, not a turn.
-                    val hits = Librarian.getInstance(this).search(null, null, query, 10)
-                    if (hits.isEmpty()) getString(R.string.memory_debug_search_empty)
-                    else hits.joinToString("\n\n") {
-                        getString(R.string.memory_debug_search_result_fmt, it.score, it.memory.title, it.memory.content)
+                    val store = MemoryStore.getInstance(this)
+                    val sb = StringBuilder()
+
+                    // Semantic memory ranking when a model is installed — this is
+                    // what the enforcer will actually inject. Keyword-only until
+                    // then, so it may be empty; the broad inspector below always
+                    // runs so the user can still find anything they stored.
+                    val librarian = Librarian.getInstance(this)
+                    if (librarian.hasUsableModel()) {
+                        val hits = librarian.search(null, null, query, 10)
+                        if (hits.isNotEmpty()) {
+                            sb.append(getString(R.string.memory_debug_semantic_header)).append("\n")
+                            hits.forEach {
+                                sb.append(getString(
+                                    R.string.memory_debug_search_result_fmt, it.score, it.memory.title, it.memory.content
+                                )).append("\n\n")
+                            }
+                        }
                     }
+
+                    // Broad inspector across every record type (not just
+                    // memories) — finds companions like "Storyteller", entities,
+                    // characters and worlds too.
+                    val all = store.debugSearchAll(query, 20)
+                    if (all.isNotEmpty()) {
+                        sb.append(getString(R.string.memory_debug_all_header)).append("\n")
+                        all.forEach { (label, snippet) ->
+                            sb.append(label).append("\n").append(snippet).append("\n\n")
+                        }
+                    }
+
+                    if (sb.isBlank()) getString(R.string.memory_debug_search_empty) else sb.toString().trim()
                 }
             } catch (e: Exception) {
                 getString(R.string.memory_operation_failed, e.message ?: e.javaClass.simpleName)

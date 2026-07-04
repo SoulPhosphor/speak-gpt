@@ -1231,6 +1231,51 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         return out
     }
 
+    /**
+     * Debug inspector search (the Memory settings box): a plain LIKE scan
+     * across EVERY record type — memories, companions, entities, roleplay
+     * characters, worlds — not just memories, so the user can confirm anything
+     * they put in the store actually landed. Returns (label, snippet) pairs.
+     * This is intentionally separate from [Librarian.search], which stays
+     * memories-only because only memories are injected into conversations.
+     */
+    fun debugSearchAll(query: String, limit: Int): List<Pair<String, String>> {
+        val q = query.trim()
+        if (q.isBlank()) return emptyList()
+        val like = "%${q.replace("%", "").replace("_", "")}%"
+        val out = ArrayList<Pair<String, String>>()
+        val db = readableDatabase
+
+        fun scan(sql: String, label: (android.database.Cursor) -> String, snippet: (android.database.Cursor) -> String) {
+            db.rawQuery(sql, arrayOf(like, like)).use {
+                while (it.moveToNext() && out.size < limit) out.add(label(it) to snippet(it))
+            }
+        }
+
+        scan(
+            "SELECT title, content, scope FROM memories WHERE status='active' AND (title LIKE ? OR content LIKE ?) LIMIT $limit",
+            { "Memory · ${it.getString(2)}: ${it.getString(0)}" },
+            { it.getString(1) }
+        )
+        scan(
+            "SELECT current_name, essence FROM companions WHERE current_name LIKE ? OR essence LIKE ? LIMIT $limit",
+            { "Companion: ${it.getString(0)}" }, { it.getStringOrNull(1) ?: "" }
+        )
+        scan(
+            "SELECT name, summary FROM entities WHERE name LIKE ? OR summary LIKE ? LIMIT $limit",
+            { "Entity: ${it.getString(0)}" }, { it.getStringOrNull(1) ?: "" }
+        )
+        scan(
+            "SELECT name, description FROM roleplay_characters WHERE name LIKE ? OR description LIKE ? LIMIT $limit",
+            { "Roleplay character: ${it.getString(0)}" }, { it.getStringOrNull(1) ?: "" }
+        )
+        scan(
+            "SELECT name, premise FROM worlds WHERE name LIKE ? OR premise LIKE ? LIMIT $limit",
+            { "World: ${it.getString(0)}" }, { it.getStringOrNull(1) ?: "" }
+        )
+        return out.take(limit)
+    }
+
     /** Every active memory, ignoring scope — used to (re)build the whole index. */
     fun allActiveMemories(): List<RetrievableMemory> {
         val out = ArrayList<RetrievableMemory>()
