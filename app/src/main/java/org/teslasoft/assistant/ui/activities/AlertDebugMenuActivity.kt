@@ -70,6 +70,7 @@ class AlertDebugMenuActivity : FragmentActivity() {
     private var rowAudioDebugging: LinearLayout? = null
     private var rowCrashLog: LinearLayout? = null
     private var rowEventLog: LinearLayout? = null
+    private var rowMemoryLog: LinearLayout? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -95,6 +96,7 @@ class AlertDebugMenuActivity : FragmentActivity() {
         rowAudioDebugging = findViewById(R.id.row_audio_debugging)
         rowCrashLog = findViewById(R.id.row_crash_log)
         rowEventLog = findViewById(R.id.row_event_log)
+        rowMemoryLog = findViewById(R.id.row_memory_log)
     }
 
     @Suppress("DEPRECATION")
@@ -145,6 +147,9 @@ class AlertDebugMenuActivity : FragmentActivity() {
         }
         rowEventLog?.setOnClickListener {
             startActivity(Intent(this, LogsActivity::class.java).putExtra("type", "event").putExtra("chatId", chatId))
+        }
+        rowMemoryLog?.setOnClickListener {
+            startActivity(Intent(this, LogsActivity::class.java).putExtra("type", "memory").putExtra("chatId", chatId))
         }
     }
 

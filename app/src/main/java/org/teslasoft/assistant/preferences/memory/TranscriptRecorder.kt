@@ -17,6 +17,10 @@
 package org.teslasoft.assistant.preferences.memory
 
 import android.content.Context
+import org.json.JSONArray
+import org.json.JSONObject
+import org.teslasoft.assistant.preferences.ChatPreferences
+import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.util.Hash
 
 /**
@@ -95,6 +99,56 @@ object TranscriptRecorder {
                 "captured chat=$chatId companion=${companionId ?: "none"} memOn=$memoryEnabled -> $outcome")
         } catch (e: Exception) {
             MemoryLog.log(context, "Transcript", "error", "Turn capture failed: ${e.message}")
+        }
+    }
+
+    /**
+     * One-time backfill of chats that existed before the memory system: each
+     * chat's current history becomes a single 'imported' pending transcript so
+     * pre-update conversations are eligible for review too. Skips chats set to
+     * "Archive" off (excluded) and any chat that already has a transcript, so
+     * it is safe to run more than once. Returns how many chats were added.
+     */
+    fun backfillExistingChats(context: Context): Int {
+        return try {
+            if (!MemoryStore.isProvisioned(context)) return 0
+            val store = MemoryStore.getInstance(context)
+            val chatPrefs = ChatPreferences.getChatPreferences()
+            var created = 0
+            for (chat in chatPrefs.getChatList(context)) {
+                val name = chat["name"] ?: continue
+                val chatId = Hash.hash(name)
+                if (store.hasAnyTranscriptForChat(chatId)) continue
+
+                val prefs = Preferences.getPreferences(context, chatId)
+                val messages = chatPrefs.getChatById(context, chatId)
+                if (messages.isEmpty()) continue
+
+                val turns = JSONArray()
+                for (m in messages) {
+                    val content = m["message"]?.toString() ?: continue
+                    if (content.isBlank()) continue
+                    val role = if (m["isBot"] == true) "assistant" else "user"
+                    turns.put(JSONObject().put("role", role).put("content", content))
+                }
+                if (turns.length() == 0) continue
+
+                val personaId = prefs.getPersonaId()
+                val companionId = if (personaId.isNotBlank())
+                    store.findCompanionByAppCharacterId(personaId)?.companionId else null
+
+                // "Archive this chat" off => capture but mark excluded, same as
+                // the live path; the row still exists so it can be re-included.
+                val markExcluded = prefs.isChatExcludedFromMemory() || !prefs.getChatMemoryEnabled()
+                if (store.insertBackfillTranscript(chatId, companionId, turns.toString(), prefs.getModel(), markExcluded)) {
+                    created++
+                }
+            }
+            MemoryLog.log(context, "Backfill", "info", "Backfilled $created existing chat(s) into the review queue.")
+            created
+        } catch (e: Exception) {
+            MemoryLog.log(context, "Backfill", "error", "Backfill failed: ${e.message}")
+            0
         }
     }
 }

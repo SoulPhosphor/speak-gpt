@@ -417,8 +417,12 @@ class MemorySettingsActivity : FragmentActivity() {
             val json = MemoryExporter.buildExportJson(this)
             contentResolver.openOutputStream(uri, "wt")?.bufferedWriter()?.use { it.write(json) }
                 ?: throw IllegalStateException(getString(R.string.memory_file_unreadable))
+            // A manual export counts as a backup, so "Chats since last back-up"
+            // resets after it too (not just the automatic daily one).
+            MemoryStore.getInstance(this).setMeta(MemoryStore.META_LAST_AUTO_EXPORT_AT, MemoryStore.nowIso())
             runOnUiThread {
                 Toast.makeText(this, R.string.memory_export_done, Toast.LENGTH_SHORT).show()
+                refreshStatus()
             }
         }
     }
@@ -457,10 +461,10 @@ class MemorySettingsActivity : FragmentActivity() {
                         )
                     )
                     appendLine(
-                        getString(
-                            R.string.memory_status_transcripts,
-                            counts["transcripts"] ?: 0, counts["pending_transcripts"] ?: 0
-                        )
+                        getString(R.string.memory_status_chats_since_backup, store.chatsSinceLastBackup())
+                    )
+                    appendLine(
+                        getString(R.string.memory_status_pending_review, store.pendingReviewCount())
                     )
                     appendLine(
                         if (store.getMeta(MemoryStore.META_SEED_IMPORTED_AT) != null)

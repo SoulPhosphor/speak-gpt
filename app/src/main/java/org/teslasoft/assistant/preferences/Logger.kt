@@ -71,6 +71,23 @@ class Logger {
         }
 
         /**
+         * Memory Debug Log — the companion memory system's own diagnostics
+         * channel, separate from the Voice Debug (event) log so the two never
+         * mix. Written only when "Memory diagnostics logging" is enabled.
+         * */
+        fun getMemoryLog(context: Context) : String {
+            return EncryptedPreferences.getEncryptedPreference(context, "logs", "memory")
+        }
+
+        private fun setMemoryLog(context: Context, log: String) {
+            EncryptedPreferences.setEncryptedPreference(context, "logs", "memory", log)
+        }
+
+        fun clearMemoryLog(context: Context) {
+            setMemoryLog(context, "")
+        }
+
+        /**
          * Get ads log
          * */
         fun getAdsLog(context: Context) : String {
@@ -125,6 +142,13 @@ class Logger {
                     setEventLog(context, log)
                 }
 
+                "memory" -> {
+                    val log = trimByEntries(
+                        "${getMemoryLog(context)}$logString", MEMORY_LOG_MAX_ENTRIES, MEMORY_LOG_MAX_AGE_DAYS
+                    )
+                    setMemoryLog(context, log)
+                }
+
                 // Unknown channel: drop silently rather than crash.
                 else -> return
             }
@@ -140,6 +164,8 @@ class Logger {
         private const val ERROR_LOG_MAX_AGE_DAYS = 30L
         private const val VOICE_LOG_MAX_ENTRIES = 1000
         private const val VOICE_LOG_MAX_AGE_DAYS = 7L
+        private const val MEMORY_LOG_MAX_ENTRIES = 1000
+        private const val MEMORY_LOG_MAX_AGE_DAYS = 7L
 
         // Safety cap used only if a log somehow contains no recognizable entry
         // headers (it never should — every line we write starts with one).
@@ -275,6 +301,7 @@ class Logger {
         fun deleteAllLogs(context: Context) {
             clearCrashLog(context)
             clearEventLog(context)
+            clearMemoryLog(context)
         }
     }
 }

@@ -59,6 +59,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         const val META_AUTO_EXPORT_ENABLED = "auto_export_enabled"
         const val META_LAST_AUTO_EXPORT_AT = "last_auto_export_at"
         const val META_INDEX_MODEL_TAG = "index_model_tag"
+        const val META_BACKFILL_DONE = "backfill_done"
 
         // A transcript row past this size closes and a new row opens: keeps the
         // per-turn parse-append-write affordable and Archivist inputs bounded.
@@ -435,6 +436,30 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 w.optDouble("recency", 0.1)
             )
         } catch (_: Exception) { null }
+    }
+
+    /** Distinct chats with captured memory activity since the last backup
+     *  (all captured chats if no backup has run yet). */
+    fun chatsSinceLastBackup(): Int {
+        val last = getMeta(META_LAST_AUTO_EXPORT_AT)
+        val db = readableDatabase
+        val cursor = if (last.isNullOrBlank()) {
+            db.rawQuery("SELECT COUNT(DISTINCT chat_id) FROM transcripts WHERE chat_id IS NOT NULL", emptyArray<String>())
+        } else {
+            db.rawQuery(
+                "SELECT COUNT(DISTINCT chat_id) FROM transcripts WHERE chat_id IS NOT NULL AND ended_at > ?",
+                arrayOf(last)
+            )
+        }
+        cursor.use { return if (it.moveToFirst()) it.getInt(0) else 0 }
+    }
+
+    /** Distinct chats with a transcript still awaiting Archivist review. */
+    fun pendingReviewCount(): Int {
+        readableDatabase.rawQuery(
+            "SELECT COUNT(DISTINCT chat_id) FROM transcripts WHERE review_status = 'pending' AND chat_id IS NOT NULL",
+            emptyArray<String>()
+        ).use { return if (it.moveToFirst()) it.getInt(0) else 0 }
     }
 
     fun recordDeletion(recordType: String, recordId: String) {
@@ -1356,6 +1381,41 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 "(SELECT 1 FROM embeddings e WHERE e.memory_id = m.memory_id AND e.embedding_model = ?)",
             arrayOf(embeddingModel)
         ).use { return if (it.moveToFirst()) it.getInt(0) else 0 }
+    }
+
+    fun hasAnyTranscriptForChat(chatId: String): Boolean {
+        readableDatabase.rawQuery("SELECT 1 FROM transcripts WHERE chat_id = ? LIMIT 1", arrayOf(chatId)).use {
+            return it.moveToFirst()
+        }
+    }
+
+    /** Insert a pre-existing chat's history as one imported transcript (the
+     *  backfill path). source='imported' per the spec's old-conversation rule.
+     *  Returns true on success. */
+    fun insertBackfillTranscript(
+        chatId: String,
+        companionId: String?,
+        contentJson: String,
+        modelTag: String?,
+        markExcluded: Boolean
+    ): Boolean {
+        return try {
+            val now = nowIso()
+            writableDatabase.insertOrThrow("transcripts", null, ContentValues().apply {
+                put("transcript_id", newId("t-"))
+                put("chat_id", chatId)
+                put("companion_id", companionId)
+                put("source", "imported")
+                put("started_at", now)
+                put("ended_at", now)
+                put("content", contentJson)
+                put("model_tag", modelTag)
+                put("review_status", if (markExcluded) "excluded" else "pending")
+            })
+            true
+        } catch (_: Exception) {
+            false
+        }
     }
 
     /** Chats survive renames but transcripts are keyed by chat_id — re-point

@@ -30,6 +30,7 @@ import org.teslasoft.assistant.preferences.Logger
 import org.teslasoft.assistant.preferences.memory.MemoryExporter
 import org.teslasoft.assistant.preferences.memory.MemoryLog
 import org.teslasoft.assistant.preferences.memory.MemoryStore
+import org.teslasoft.assistant.preferences.memory.TranscriptRecorder
 import org.teslasoft.assistant.theme.ThemeManager
 import java.security.Security
 
@@ -82,6 +83,13 @@ class MainApplication : Application() {
                             Toast.makeText(this, getString(R.string.memory_integrity_failed), Toast.LENGTH_LONG).show()
                         }
                     } else {
+                        // One-time backfill: pre-existing chats become eligible
+                        // for memory review too (guarded so it runs just once).
+                        val store = MemoryStore.getInstance(this)
+                        if (store.getMeta(MemoryStore.META_BACKFILL_DONE) != "1") {
+                            TranscriptRecorder.backfillExistingChats(this)
+                            store.setMeta(MemoryStore.META_BACKFILL_DONE, "1")
+                        }
                         MemoryExporter.autoExportIfDue(this)
                     }
                 }

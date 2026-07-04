@@ -406,6 +406,7 @@
     <string name="title_crash_log">Error Log</string>
     <string name="title_ads_log">Ads log</string>
     <string name="title_event_log">Voice Debug Log</string>
+    <string name="title_memory_log">Memory Debug Log</string>
     <string name="btn_open_event_log">Open event log</string>
     <string name="btn_open_voice_advanced">Advanced voice &amp; debugging</string>
     <string name="label_clear_log">Clear log</string>
@@ -860,6 +861,8 @@
     <string name="memory_status_counts">Companions: %1$d · Memories: %2$d · Entities: %3$d · Modes: %4$d · Directives: %5$d</string>
     <string name="memory_status_counts2">Worlds: %1$d · User personas: %2$d · Roleplay characters: %3$d · Proposals: %4$d</string>
     <string name="memory_status_transcripts">Transcripts: %1$d (%2$d pending review)</string>
+    <string name="memory_status_chats_since_backup">Chats since last back-up: %1$d</string>
+    <string name="memory_status_pending_review">Pending memory review: %1$d</string>
     <string name="memory_status_seed_yes">Seed: imported</string>
     <string name="memory_status_seed_no">Seed: not imported yet</string>
     <string name="memory_status_bootstrap_yes">Personas linked to companions: yes</string>

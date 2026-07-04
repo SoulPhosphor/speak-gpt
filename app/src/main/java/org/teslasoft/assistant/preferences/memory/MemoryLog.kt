@@ -37,10 +37,11 @@ object MemoryLog {
         false
     }
 
-    /** Log to the Event channel only when memory diagnostics are enabled. */
+    /** Log to the Memory Debug Log (its own channel, separate from the Voice
+     *  Debug log) only when memory diagnostics are enabled. */
     fun log(context: Context, tag: String, level: String, message: String) {
         try {
-            if (enabled(context)) Logger.log(context, "event", tag, level, message)
+            if (enabled(context)) Logger.log(context, "memory", tag, level, message)
         } catch (_: Exception) { /* diagnostics must never break the caller */ }
     }
 }

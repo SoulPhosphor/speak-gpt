@@ -102,6 +102,12 @@ class LogsActivity : FragmentActivity() {
                             }
                         }
 
+                        "memory" -> {
+                            activityLogsTitle?.text = getString(R.string.title_memory_log)
+                            this.title = getString(R.string.title_memory_log)
+                            textLog?.text = Logger.getMemoryLog(this)
+                        }
+
                         else -> finish()
                     }
                 } catch (_: Exception) {
@@ -122,6 +128,11 @@ class LogsActivity : FragmentActivity() {
                                 "event" -> {
                                     Logger.clearEventLog(this)
                                     textLog?.text = Logger.getEventLog(this)
+                                }
+
+                                "memory" -> {
+                                    Logger.clearMemoryLog(this)
+                                    textLog?.text = Logger.getMemoryLog(this)
                                 }
                             }
                         }
