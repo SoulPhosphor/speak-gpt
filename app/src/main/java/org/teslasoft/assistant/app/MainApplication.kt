@@ -76,7 +76,7 @@ class MainApplication : Application() {
                 if (MemoryStore.isProvisioned(this)) {
                     val problem = MemoryStore.getInstance(this).integrityCheck()
                     if (problem != null) {
-                        Logger.log(this, "event", "MemoryStore", "ERROR", "Memory store integrity check failed: $problem")
+                        Logger.log(this, "event", "MemoryStore", "error", "Memory store integrity check failed: $problem")
                         Handler(Looper.getMainLooper()).post {
                             Toast.makeText(this, getString(R.string.memory_integrity_failed), Toast.LENGTH_LONG).show()
                         }
@@ -85,7 +85,7 @@ class MainApplication : Application() {
                     }
                 }
             } catch (e: Exception) {
-                Logger.log(this, "event", "MemoryStore", "ERROR", "Memory store startup check failed: ${e.message}")
+                Logger.log(this, "event", "MemoryStore", "error", "Memory store startup check failed: ${e.message}")
             }
         }.start()
 

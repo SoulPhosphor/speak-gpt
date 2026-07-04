@@ -86,7 +86,7 @@ object MemoryCompanionSync {
         } catch (e: Exception) {
             // Persona saves must always succeed; the mirror can be re-synced on
             // the next edit or a bootstrap re-run.
-            Logger.log(context, "event", "MemorySync", "ERROR", "Persona->companion sync failed: ${e.message}")
+            Logger.log(context, "event", "MemorySync", "error", "Persona->companion sync failed: ${e.message}")
         }
     }
 

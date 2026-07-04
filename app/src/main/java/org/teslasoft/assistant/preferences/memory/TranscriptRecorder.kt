@@ -81,7 +81,7 @@ object TranscriptRecorder {
                 markExcluded = markExcluded
             )
         } catch (e: Exception) {
-            Logger.log(context, "event", "Transcript", "ERROR", "Turn capture failed: ${e.message}")
+            Logger.log(context, "event", "Transcript", "error", "Turn capture failed: ${e.message}")
         }
     }
 }

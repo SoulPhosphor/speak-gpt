@@ -2894,7 +2894,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             }
         } catch (e: Exception) {
             // Store unavailable (SQLCipher key problem): skip seeding, keep the chat usable.
-            org.teslasoft.assistant.preferences.Logger.log(this, "error", "LoreBook", "ERROR", "Lorebook seeding skipped: ${e.message}")
+            org.teslasoft.assistant.preferences.Logger.log(this, "event", "LoreBook", "error", "Lorebook seeding skipped: ${e.message}")
         }
     }
 
@@ -4141,7 +4141,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             // The lorebook is now SQLCipher-backed; if its key/store is ever
             // unreadable the conversation must continue without lore rather
             // than crash mid-generation (never break the companion).
-            org.teslasoft.assistant.preferences.Logger.log(this, "error", "LoreBook", "ERROR", "Lorebook unavailable this turn: ${e.message}")
+            org.teslasoft.assistant.preferences.Logger.log(this, "event", "LoreBook", "error", "Lorebook unavailable this turn: ${e.message}")
         }
 
         if (allLoreMatches.isNotEmpty()) {

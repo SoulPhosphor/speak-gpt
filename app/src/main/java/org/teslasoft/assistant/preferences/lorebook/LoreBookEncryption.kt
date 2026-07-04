@@ -74,7 +74,7 @@ object LoreBookEncryption {
         val key = DatabaseKeys.getOrCreate(context, DatabaseKeys.KEY_LOREBOOK, databaseExists = false)
         if (key == null) {
             Logger.log(
-                context, "error", "LoreBookEncryption", "ERROR",
+                context, "event", "LoreBookEncryption", "error",
                 "Could not create/read the lorebook encryption key; lorebook stays unencrypted for now."
             )
             return ByteArray(0)
@@ -139,7 +139,7 @@ object LoreBookEncryption {
             if (!ok) {
                 tmp.delete()
                 Logger.log(
-                    context, "error", "LoreBookEncryption", "ERROR",
+                    context, "event", "LoreBookEncryption", "error",
                     "Encrypted lorebook copy failed verification; keeping the plaintext database."
                 )
                 return false
@@ -163,7 +163,7 @@ object LoreBookEncryption {
             }
             backup.delete()
             Logger.log(
-                context, "event", "LoreBookEncryption", "INFO",
+                context, "event", "LoreBookEncryption", "info",
                 "lorebook.db encrypted in place ($books books, $entries memories)."
             )
             return true
@@ -173,7 +173,7 @@ object LoreBookEncryption {
             // If the aside-rename happened but the swap didn't, restore it.
             if (!plainFile.exists() && backup.exists()) backup.renameTo(plainFile)
             Logger.log(
-                context, "error", "LoreBookEncryption", "ERROR",
+                context, "event", "LoreBookEncryption", "error",
                 "Lorebook encryption failed (${e.message}); keeping the plaintext database."
             )
             return false

@@ -108,9 +108,9 @@ object MemoryExporter {
             if (backups != null && backups.size > ROTATION_KEEP) {
                 backups.sortedBy { it.name }.dropLast(ROTATION_KEEP).forEach { it.delete() }
             }
-            Logger.log(context, "event", "MemoryExport", "INFO", "Automatic memory backup written: ${file.name}")
+            Logger.log(context, "event", "MemoryExport", "info", "Automatic memory backup written: ${file.name}")
         } catch (e: Exception) {
-            Logger.log(context, "event", "MemoryExport", "ERROR", "Automatic memory backup failed: ${e.message}")
+            Logger.log(context, "event", "MemoryExport", "error", "Automatic memory backup failed: ${e.message}")
         }
     }
 }

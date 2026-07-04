@@ -63,7 +63,7 @@ object SecurePrefs {
             createEncrypted(appContext, ENC_PREFIX + name)
         } catch (e: Exception) {
             Logger.log(
-                appContext, "error", "SecurePrefs", "ERROR",
+                appContext, "event", "SecurePrefs", "error",
                 "Encrypted preferences unavailable for '$name' (${e.message}); using plaintext fallback. " +
                     "If data appears missing it is still in the encrypted file and returns when the Keystore recovers."
             )
@@ -121,19 +121,19 @@ object SecurePrefs {
                     putBoolean(MIGRATED_MARKER, true)
                 }
                 Logger.log(
-                    context, "event", "SecurePrefs", "INFO",
+                    context, "event", "SecurePrefs", "info",
                     "Migrated ${entries.size} entr${if (entries.size == 1) "y" else "ies"} of '$name' to encrypted storage."
                 )
             } else {
                 Logger.log(
-                    context, "error", "SecurePrefs", "ERROR",
+                    context, "event", "SecurePrefs", "error",
                     "Migration of '$name' did not verify; plaintext kept for retry on next access."
                 )
             }
         } catch (e: Exception) {
             // Keep the plaintext data untouched; a failed migration retries on
             // the next access.
-            Logger.log(context, "error", "SecurePrefs", "ERROR", "Migration of '$name' failed: ${e.message}")
+            Logger.log(context, "event", "SecurePrefs", "error", "Migration of '$name' failed: ${e.message}")
         }
     }
 }

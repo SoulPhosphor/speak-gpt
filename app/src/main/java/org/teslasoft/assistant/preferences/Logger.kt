@@ -90,39 +90,43 @@ class Logger {
             // logging entirely when the installation id was zeroed (telemetry
             // consent revoked), which silently ate the user's own diagnostics
             // — the "I turned logging on and the event log stayed empty" bug.
-            if (level == "info" || level == "error" || level == "warning" || level == "debug" || level == "verbose") {
-                // Local time, second precision. The ISO/UTC instant this used
-                // to print ("2026-06-12T19:03:31.903759Z") was unreadable on a
-                // phone and in the wrong timezone, which made correlating a
-                // log line with "the turn that just failed" impossible.
-                val timestamp = LocalDateTime.now().format(LOG_TIME_FORMAT)
-                val logString =
-                    "[$timestamp] [$tag] [${level.uppercase()}] $message\n"
-                when (type) {
-                    // The "crash" channel is the user-facing Error Log (app crashes
-                    // plus all generation/handled GenError entries); the "event"
-                    // channel is the Voice Debug Log. Storage keys are kept as-is so
-                    // existing logs survive; only the labels and retention differ.
-                    "crash" -> {
-                        val log = trimByEntries(
-                            "${getCrashLog(context)}$logString", ERROR_LOG_MAX_ENTRIES, ERROR_LOG_MAX_AGE_DAYS
-                        )
-                        setCrashLog(context, log)
-                    }
+            // A diagnostic logging call must NEVER crash the app. This used to
+            // `error("Invalid log level")` / `error("Invalid log type")`, which
+            // turned a mistyped level (e.g. "ERROR" instead of "error") into a
+            // fatal IllegalStateException — a logging helper taking down the
+            // process. Now the level is case-normalized and anything
+            // unrecognized is dropped silently.
+            val lvl = level.lowercase()
+            if (lvl != "info" && lvl != "error" && lvl != "warning" && lvl != "debug" && lvl != "verbose") return
 
-                    "event" -> {
-                        val log = trimByEntries(
-                            "${getEventLog(context)}$logString", VOICE_LOG_MAX_ENTRIES, VOICE_LOG_MAX_AGE_DAYS
-                        )
-                        setEventLog(context, log)
-                    }
-
-                    else -> {
-                        error("Invalid log type")
-                    }
+            // Local time, second precision. The ISO/UTC instant this used
+            // to print ("2026-06-12T19:03:31.903759Z") was unreadable on a
+            // phone and in the wrong timezone, which made correlating a
+            // log line with "the turn that just failed" impossible.
+            val timestamp = LocalDateTime.now().format(LOG_TIME_FORMAT)
+            val logString =
+                "[$timestamp] [$tag] [${lvl.uppercase()}] $message\n"
+            when (type) {
+                // The "crash" channel is the user-facing Error Log (app crashes
+                // plus all generation/handled GenError entries); the "event"
+                // channel is the Voice Debug Log. Storage keys are kept as-is so
+                // existing logs survive; only the labels and retention differ.
+                "crash" -> {
+                    val log = trimByEntries(
+                        "${getCrashLog(context)}$logString", ERROR_LOG_MAX_ENTRIES, ERROR_LOG_MAX_AGE_DAYS
+                    )
+                    setCrashLog(context, log)
                 }
-            } else {
-                error("Invalid log level")
+
+                "event" -> {
+                    val log = trimByEntries(
+                        "${getEventLog(context)}$logString", VOICE_LOG_MAX_ENTRIES, VOICE_LOG_MAX_AGE_DAYS
+                    )
+                    setEventLog(context, log)
+                }
+
+                // Unknown channel: drop silently rather than crash.
+                else -> return
             }
         }
 
