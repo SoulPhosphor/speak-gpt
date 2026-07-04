@@ -215,6 +215,34 @@ data class MemoryStoreData(
     val transcripts: List<TranscriptRecord>
 )
 
+/**
+ * A memory as the librarian sees it: enough to embed, score, and render a
+ * retrieval result, without loading joins/change-log the way [MemoryRecord]
+ * does. `embeddingText` is the condensed text to embed when present, else the
+ * content; `companionScoped` is false for global memories.
+ */
+data class RetrievableMemory(
+    val memoryId: String,
+    val scope: String,
+    val title: String,
+    val content: String,
+    val embeddingText: String?,
+    val importance: Int,
+    val alwaysLoad: Boolean,
+    val createdAt: String,
+    val worldId: String?,
+    val provenanceConfidence: String?
+) {
+    fun textToEmbed(): String = embeddingText?.takeIf { it.isNotBlank() } ?: content
+}
+
+/** A scored retrieval hit for the debug view and (later) the enforcer packet. */
+data class ScoredMemory(
+    val memory: RetrievableMemory,
+    val similarity: Float,
+    val score: Float
+)
+
 /** Per-record-type added/skipped tallies from an import, for the user-facing summary. */
 data class ImportReport(
     val added: LinkedHashMap<String, Int> = LinkedHashMap(),

@@ -317,27 +317,36 @@ nothing to inject yet). Note for Phase 6: the Archivist consumes pending
 rows per-row (no separate watermark — a row IS the unprocessed unit;
 "partially processed" = chat has both processed and pending rows).
 
-### ☐ Phase 3 — Librarian: embedding model manager + index
-Specs: `enforcer_librarian_spec.md` §embedding model, §retrieval;
-app_adaptation_notes §Librarian model management; D3, D4.
-- `memory/librarian/`: `EmbeddingModel` interface, ONNX implementation,
-  model catalog + downloader/storage cloned from the Whisper pattern.
-  EmbeddingGemma variants (256-dim Matryoshka) as the default catalog.
-- Embed → store in `embeddings` keyed `(memory_id, embedding_model)`;
-  cosine top-k with scope filters **in the query** (status='active', world
-  isolation, companion isolation — isolation is enforced in queries, not
-  convention). Score = w_sim·cosine + w_imp·importance/5 + w_rec·recency,
-  weights from `retrieval_policy`; tentative confidence dampens by 0.6.
-- The archive rule: status leaving 'active' deletes embedding rows;
-  reactivation re-embeds. Also embed lore entries (for Phase 4's
-  near-duplicate suppression).
-- **Rebuild memory index** settings button; same routine at first tier-2
-  enable, after import, and automatically on model-tag mismatch.
-- Keyword/tag fallback search for when no embedding model is installed.
-- Unit tests: cosine ranking, scope filtering, archive rule, tag-mismatch
-  detection (pure-Kotlin with fake vectors; no ORT in unit tests).
-- **Visible result:** debug search box in the memory area — type a phrase,
-  see ranked memories with scores.
+### ☑ Phase 3 — Librarian: embedding model manager + index
+**Landed July 2026.** What shipped, in `preferences/memory/librarian/`:
+`EmbeddingModel` interface (D3 — nothing outside the package depends on a
+concrete model); `EmbeddingModels` catalog of EmbeddingGemma-300M ONNX
+variants (q4/int8, 256-dim Matryoshka) + `EmbeddingModelStorage` (a dir per
+model = transformer + tokenizer) + `EmbeddingModelDownloader` (two-file
+download, Whisper pattern); `OnnxEmbeddingModel` runs the model via ONNX
+Runtime with **ONNX Runtime Extensions** for on-device SentencePiece
+tokenization (owner-chosen, option 1); `VectorMath` (cosine, L2, float32
+BLOB codec) and `Librarian` (brute-force cosine top-k, scope filters in the
+SQL query, score = w_sim·cos + w_imp·imp/5 + w_rec·recency with
+retrieval_policy weights, tentative×0.6 dampening, keyword fallback,
+`rebuildIndex`, model-tag-mismatch detection). MemoryStore gained the
+embeddings CRUD, scope-isolated `activeMemoriesForScope`, and the archive-rule
+helpers. UI: a "Librarian" section in Memory settings (download/remove model
+rows with progress, Rebuild index button + status, debug search box).
+Unit-tested pure-Kotlin core (`VectorMath` + `Librarian.rank`:
+cosine/blob/ranking/dampening/topK). Lore-entry embedding for Phase 4
+near-dup suppression is deferred to Phase 4 (nothing consumes it yet).
+
+⚠ **ON-DEVICE VALIDATION PENDING (the flagged risk):** huggingface.co is
+blocked in the build sandbox, so the model/tokenizer download URLs and the
+ONNX graph's tensor I/O names could not be exercised — `OnnxEmbeddingModel`
+therefore *probes* input/output names and guards every step, so a mismatch
+degrades to keyword search rather than crashing (Silero-style fallback). On
+the Pixel: confirm the onnx-community EmbeddingGemma URLs, generate/host the
+`tokenizer.onnx` graph (via `onnxruntime_extensions.gen_processing_models`
+from the repo's tokenizer.json), and verify pooling/normalization produce
+sane similarities. Everything compiles and the retrieval/scoring/storage
+half is solid; the neural inference is the piece to bring up on-device.
 
 ### ☐ Phase 4 — Enforcer: tiers + prompt assembly
 Specs: `prompt_assembly_template.md` (the literal skeleton — follow it

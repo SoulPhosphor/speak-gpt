@@ -155,3 +155,7 @@ org.apache.hc.core5.**
 # SQLCipher (companion memory store): native layer binds these classes by
 # name; renaming them breaks database open on minified release builds.
 -keep class net.zetetic.database.** { *; }
+
+# ONNX Runtime Extensions (embedding tokenizer): the custom-op library is
+# resolved reflectively by name, same as the core runtime.
+-keep class ai.onnxruntime.extensions.** { *; }

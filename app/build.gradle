@@ -172,10 +172,15 @@ dependencies {
         exclude group: 'org.jetbrains', module: 'annotations'
     }
 
-    // ONNX Runtime for the Silero neural VAD (assets/silero_vad.onnx). The
-    // model is ~2 MB and the arm64 runtime ~12 MB — the price of voice
-    // detection that doesn't need per-room energy-gate tuning.
+    // ONNX Runtime for the Silero neural VAD (assets/silero_vad.onnx) and the
+    // companion memory librarian (EmbeddingGemma). The model is ~2 MB and the
+    // arm64 runtime ~12 MB — the price of voice detection that doesn't need
+    // per-room energy-gate tuning.
     implementation 'com.microsoft.onnxruntime:onnxruntime-android:1.20.0'
+    // ONNX Runtime Extensions: on-device tokenization for the embedding model
+    // (EmbeddingGemma's SentencePiece tokenizer runs as an ONNX graph via the
+    // extensions custom-op library — see librarian/OnnxEmbeddingModel).
+    implementation 'com.microsoft.onnxruntime:onnxruntime-extensions-android:0.13.0'
 
     // SQLCipher for the companion memory store (companion_memory.db) — the
     // memory-system spec mandates encryption at rest for exactly this data

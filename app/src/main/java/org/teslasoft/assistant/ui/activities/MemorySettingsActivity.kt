@@ -21,8 +21,11 @@ import android.content.res.Configuration
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.view.LayoutInflater
+import android.view.View
 import android.view.WindowInsets
 import android.widget.ImageButton
+import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
@@ -31,15 +34,24 @@ import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
 import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.lifecycleScope
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.materialswitch.MaterialSwitch
+import com.google.android.material.progressindicator.LinearProgressIndicator
+import com.google.android.material.textfield.TextInputEditText
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.memory.MemoryCompanionSync
 import org.teslasoft.assistant.preferences.memory.MemoryExporter
 import org.teslasoft.assistant.preferences.memory.MemorySeedCodec
 import org.teslasoft.assistant.preferences.memory.MemoryStore
+import org.teslasoft.assistant.preferences.memory.librarian.EmbeddingModelDownloader
+import org.teslasoft.assistant.preferences.memory.librarian.EmbeddingModelStorage
+import org.teslasoft.assistant.preferences.memory.librarian.EmbeddingModels
+import org.teslasoft.assistant.preferences.memory.librarian.Librarian
 import org.teslasoft.assistant.theme.ThemeManager
 
 /**
@@ -69,6 +81,16 @@ class MemorySettingsActivity : FragmentActivity() {
     private var btnBootstrap: MaterialButton? = null
     private var switchAutoBackup: MaterialSwitch? = null
     private var switchDefaultMemory: MaterialSwitch? = null
+
+    private var librarianModels: LinearLayout? = null
+    private var btnRebuildIndex: MaterialButton? = null
+    private var textIndexStatus: TextView? = null
+    private var fieldDebugSearch: TextInputEditText? = null
+    private var btnDebugSearch: MaterialButton? = null
+    private var textDebugSearchResults: TextView? = null
+
+    // Per-model download jobs so a second tap cancels an in-flight download.
+    private val downloadJobs = HashMap<String, Job>()
 
     private val importSeedLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) importSeedFromUri(uri)
@@ -108,6 +130,12 @@ class MemorySettingsActivity : FragmentActivity() {
         btnBootstrap = findViewById(R.id.btn_memory_bootstrap)
         switchAutoBackup = findViewById(R.id.switch_auto_backup)
         switchDefaultMemory = findViewById(R.id.switch_default_memory)
+        librarianModels = findViewById(R.id.librarian_models)
+        btnRebuildIndex = findViewById(R.id.btn_rebuild_index)
+        textIndexStatus = findViewById(R.id.text_index_status)
+        fieldDebugSearch = findViewById(R.id.field_debug_search)
+        btnDebugSearch = findViewById(R.id.btn_debug_search)
+        textDebugSearchResults = findViewById(R.id.text_debug_search_results)
     }
 
     @Suppress("DEPRECATION")
@@ -176,6 +204,158 @@ class MemorySettingsActivity : FragmentActivity() {
         switchDefaultMemory?.setOnCheckedChangeListener { _, checked ->
             preferences?.setDefaultMemoryEnabled(checked)
         }
+
+        buildLibrarianRows()
+
+        btnRebuildIndex?.setOnClickListener { rebuildIndex() }
+        btnDebugSearch?.setOnClickListener { runDebugSearch() }
+    }
+
+    /* ------------------------------ librarian ------------------------------ */
+
+    private fun buildLibrarianRows() {
+        val container = librarianModels ?: return
+        val inflater = LayoutInflater.from(this)
+        container.removeAllViews()
+        for (model in EmbeddingModels.ALL) {
+            val row = inflater.inflate(R.layout.view_embedding_model_row, container, false)
+            row.tag = model.id
+            container.addView(row)
+            refreshModelRow(row, model)
+        }
+        refreshIndexStatus()
+    }
+
+    private fun refreshModelRow(row: View, model: EmbeddingModels.Model) {
+        val title = row.findViewById<TextView>(R.id.model_row_title)
+        val subtitle = row.findViewById<TextView>(R.id.model_row_subtitle)
+        val action = row.findViewById<MaterialButton>(R.id.model_row_action)
+        title.text = model.displayName
+        subtitle.text = getString(R.string.memory_model_progress_placeholder, model.sizeMb, model.description)
+
+        val installed = EmbeddingModelStorage.isInstalled(this, model)
+        val downloading = downloadJobs[model.id]?.isActive == true
+        action.text = when {
+            downloading -> getString(R.string.memory_model_cancel)
+            installed -> getString(R.string.memory_model_delete)
+            else -> getString(R.string.memory_model_download)
+        }
+        action.setOnClickListener {
+            val job = downloadJobs[model.id]
+            when {
+                job != null && job.isActive -> { job.cancel(); downloadJobs.remove(model.id); refreshModelRow(row, model) }
+                EmbeddingModelStorage.isInstalled(this, model) -> deleteModel(model, row)
+                else -> downloadModel(model, row)
+            }
+        }
+    }
+
+    private fun downloadModel(model: EmbeddingModels.Model, row: View) {
+        val progress = row.findViewById<LinearProgressIndicator>(R.id.model_row_progress)
+        val progressLabel = row.findViewById<TextView>(R.id.model_row_progress_label)
+        progress.visibility = View.VISIBLE
+        progress.isIndeterminate = true
+        progressLabel.visibility = View.VISIBLE
+        progressLabel.text = ""
+
+        val job = lifecycleScope.launch {
+            val result = EmbeddingModelDownloader.download(this@MemorySettingsActivity, model) { bytes, total ->
+                runOnUiThread {
+                    if (total > 0) {
+                        progress.isIndeterminate = false
+                        progress.setProgressCompat((bytes * 100 / total).toInt().coerceIn(0, 100), true)
+                        progressLabel.text = getString(
+                            R.string.memory_model_progress_fmt,
+                            (bytes / 1_000_000).toInt(), (total / 1_000_000).toInt()
+                        )
+                    } else progress.isIndeterminate = true
+                }
+            }
+            downloadJobs.remove(model.id)
+            runOnUiThread {
+                progress.visibility = View.GONE
+                progressLabel.visibility = View.GONE
+                when (result) {
+                    EmbeddingModelDownloader.Result.Success -> {
+                        Librarian.getInstance(this@MemorySettingsActivity).invalidateModel()
+                        Toast.makeText(this@MemorySettingsActivity,
+                            getString(R.string.memory_model_downloaded, model.displayName), Toast.LENGTH_SHORT).show()
+                    }
+                    EmbeddingModelDownloader.Result.Canceled -> { }
+                    is EmbeddingModelDownloader.Result.Failed ->
+                        Toast.makeText(this@MemorySettingsActivity,
+                            getString(R.string.memory_model_download_failed, result.reason), Toast.LENGTH_LONG).show()
+                }
+                refreshModelRow(row, model)
+                refreshIndexStatus()
+            }
+        }
+        downloadJobs[model.id] = job
+        refreshModelRow(row, model)
+    }
+
+    private fun deleteModel(model: EmbeddingModels.Model, row: View) {
+        EmbeddingModelStorage.delete(this, model)
+        Librarian.getInstance(this).invalidateModel()
+        refreshModelRow(row, model)
+        refreshIndexStatus()
+    }
+
+    private fun rebuildIndex() {
+        textIndexStatus?.text = getString(R.string.memory_index_building, 0, 0)
+        Thread {
+            try {
+                val count = Librarian.getInstance(this).rebuildIndex { done, total ->
+                    runOnUiThread { textIndexStatus?.text = getString(R.string.memory_index_building, done, total) }
+                }
+                runOnUiThread {
+                    textIndexStatus?.text =
+                        if (count < 0) getString(R.string.memory_index_failed)
+                        else getString(R.string.memory_index_done, count)
+                }
+            } catch (e: Exception) {
+                runOnUiThread { textIndexStatus?.text = getString(R.string.memory_index_failed) }
+            }
+        }.start()
+    }
+
+    private fun refreshIndexStatus() {
+        Thread {
+            val text = try {
+                val librarian = Librarian.getInstance(this)
+                when {
+                    librarian.activeTag() == null -> getString(R.string.memory_index_none)
+                    librarian.indexNeedsRebuild() -> getString(R.string.memory_index_stale)
+                    !MemoryStore.isProvisioned(this) -> getString(R.string.memory_index_ok, 0)
+                    else -> getString(R.string.memory_index_ok,
+                        MemoryStore.getInstance(this).counts()["memories"] ?: 0)
+                }
+            } catch (_: Exception) { getString(R.string.memory_index_none) }
+            runOnUiThread { textIndexStatus?.text = text }
+        }.start()
+    }
+
+    private fun runDebugSearch() {
+        val query = fieldDebugSearch?.text?.toString()?.trim().orEmpty()
+        if (query.isEmpty()) return
+        textDebugSearchResults?.text = ""
+        Thread {
+            val rendered = try {
+                if (!MemoryStore.isProvisioned(this)) getString(R.string.memory_debug_search_empty)
+                else {
+                    // Debug search runs unscoped (companion/world null): a
+                    // developer view of the whole active store, not a turn.
+                    val hits = Librarian.getInstance(this).search(null, null, query, 10)
+                    if (hits.isEmpty()) getString(R.string.memory_debug_search_empty)
+                    else hits.joinToString("\n\n") {
+                        getString(R.string.memory_debug_search_result_fmt, it.score, it.memory.title, it.memory.content)
+                    }
+                }
+            } catch (e: Exception) {
+                getString(R.string.memory_operation_failed, e.message ?: e.javaClass.simpleName)
+            }
+            runOnUiThread { textDebugSearchResults?.text = rendered }
+        }.start()
     }
 
     private fun importBundledTemplate() {

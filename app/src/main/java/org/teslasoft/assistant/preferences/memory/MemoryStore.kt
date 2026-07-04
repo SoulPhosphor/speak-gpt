@@ -58,6 +58,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         const val META_BOOTSTRAP_DONE = "bootstrap_done"
         const val META_AUTO_EXPORT_ENABLED = "auto_export_enabled"
         const val META_LAST_AUTO_EXPORT_AT = "last_auto_export_at"
+        const val META_INDEX_MODEL_TAG = "index_model_tag"
 
         // A transcript row past this size closes and a new row opens: keeps the
         // per-turn parse-append-write affordable and Archivist inputs bounded.
@@ -416,6 +417,24 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             out["pending_transcripts"] = if (it.moveToFirst()) it.getInt(0) else 0
         }
         return out
+    }
+
+    /** Retrieval weights [similarity, importance, recency] from the stored
+     *  retrieval_policy, or null to use the librarian's defaults. */
+    fun getRetrievalWeights(): DoubleArray? {
+        val json = readableDatabase.let { db ->
+            db.query("retrieval_policy", arrayOf("policy_json"), "id = 1", null, null, null, null).use {
+                if (it.moveToFirst()) it.getString(0) else null
+            }
+        } ?: return null
+        return try {
+            val w = org.json.JSONObject(json).optJSONObject("weights") ?: return null
+            doubleArrayOf(
+                w.optDouble("similarity", 0.6),
+                w.optDouble("importance", 0.3),
+                w.optDouble("recency", 0.1)
+            )
+        } catch (_: Exception) { null }
     }
 
     fun recordDeletion(recordType: String, recordId: String) {
@@ -1172,6 +1191,116 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 arrayOf(chatId)
             )
         }
+    }
+
+    /* ---------------------------------------------------------------------- */
+    /* librarian: retrievable memories + embeddings sidecar (Phase 3)         */
+    /* ---------------------------------------------------------------------- */
+
+    /**
+     * Active memories visible to a conversation, with scope isolation enforced
+     * IN THE QUERY (not by convention, per the spec's non-negotiable): global
+     * memories plus those scoped to [companionId], and — for world sessions —
+     * only memories with no world or this world; real-life (world-less)
+     * memories remain available inside a world. [worldId] null = ordinary chat
+     * (world-tagged fiction is excluded).
+     */
+    fun activeMemoriesForScope(companionId: String?, worldId: String?): List<RetrievableMemory> {
+        val out = ArrayList<RetrievableMemory>()
+        val args = ArrayList<String>()
+        val sb = StringBuilder(
+            "SELECT DISTINCT m.memory_id, m.scope, m.title, m.content, m.embedding_text, " +
+                "m.importance, m.always_load, m.created_at, m.world_id, m.provenance_confidence " +
+                "FROM memories m LEFT JOIN memory_companions mc ON mc.memory_id = m.memory_id " +
+                "WHERE m.status = 'active' AND (m.scope = 'global'"
+        )
+        if (companionId != null) {
+            sb.append(" OR mc.companion_id = ?")
+            args.add(companionId)
+        }
+        sb.append(")")
+        if (worldId == null) {
+            sb.append(" AND m.world_id IS NULL")
+        } else {
+            sb.append(" AND (m.world_id IS NULL OR m.world_id = ?)")
+            args.add(worldId)
+        }
+        readableDatabase.rawQuery(sb.toString(), args.toTypedArray()).use {
+            while (it.moveToNext()) out.add(readRetrievable(it))
+        }
+        return out
+    }
+
+    /** Every active memory, ignoring scope — used to (re)build the whole index. */
+    fun allActiveMemories(): List<RetrievableMemory> {
+        val out = ArrayList<RetrievableMemory>()
+        readableDatabase.query(
+            "memories",
+            arrayOf("memory_id", "scope", "title", "content", "embedding_text",
+                "importance", "always_load", "created_at", "world_id", "provenance_confidence"),
+            "status = 'active'", null, null, null, "created_at ASC"
+        ).use {
+            while (it.moveToNext()) out.add(readRetrievable(it))
+        }
+        return out
+    }
+
+    private fun readRetrievable(c: Cursor): RetrievableMemory = RetrievableMemory(
+        memoryId = c.getString(c.getColumnIndexOrThrow("memory_id")),
+        scope = c.getString(c.getColumnIndexOrThrow("scope")),
+        title = c.getString(c.getColumnIndexOrThrow("title")),
+        content = c.getString(c.getColumnIndexOrThrow("content")),
+        embeddingText = c.getStringOrNull("embedding_text"),
+        importance = c.getInt(c.getColumnIndexOrThrow("importance")),
+        alwaysLoad = c.getInt(c.getColumnIndexOrThrow("always_load")) == 1,
+        createdAt = c.getString(c.getColumnIndexOrThrow("created_at")) ?: "",
+        worldId = c.getStringOrNull("world_id"),
+        provenanceConfidence = c.getStringOrNull("provenance_confidence")
+    )
+
+    /** Stored vectors for [embeddingModel] over the active memories, keyed by
+     *  memory id — the working set brute-force cosine search reads each turn. */
+    fun activeEmbeddings(embeddingModel: String): HashMap<String, ByteArray> {
+        val out = HashMap<String, ByteArray>()
+        readableDatabase.rawQuery(
+            "SELECT e.memory_id, e.vector FROM embeddings e " +
+                "JOIN memories m ON m.memory_id = e.memory_id " +
+                "WHERE e.embedding_model = ? AND m.status = 'active'",
+            arrayOf(embeddingModel)
+        ).use {
+            while (it.moveToNext()) out[it.getString(0)] = it.getBlob(1)
+        }
+        return out
+    }
+
+    fun upsertEmbedding(memoryId: String, embeddingModel: String, vector: ByteArray) {
+        writableDatabase.execSQL(
+            "INSERT INTO embeddings (memory_id, embedding_model, vector, embedded_at) VALUES (?, ?, ?, ?) " +
+                "ON CONFLICT(memory_id, embedding_model) DO UPDATE SET vector = excluded.vector, embedded_at = excluded.embedded_at",
+            arrayOf(memoryId, embeddingModel, vector, nowIso())
+        )
+    }
+
+    /** The archive rule: when a memory leaves 'active' its vectors go (the
+     *  librarian can no longer see it); re-embed on reactivation. */
+    fun deleteEmbeddings(memoryId: String) {
+        writableDatabase.delete("embeddings", "memory_id = ?", arrayOf(memoryId))
+    }
+
+    /** Drop vectors from other models — called when the active model's tag
+     *  differs from what's stored, so a model switch re-indexes cleanly. */
+    fun deleteEmbeddingsNotModel(embeddingModel: String) {
+        writableDatabase.delete("embeddings", "embedding_model != ?", arrayOf(embeddingModel))
+    }
+
+    /** How many active memories still lack a vector for this model (0 = index
+     *  fully built) — drives the "rebuild needed" hint. */
+    fun countMissingEmbeddings(embeddingModel: String): Int {
+        readableDatabase.rawQuery(
+            "SELECT COUNT(*) FROM memories m WHERE m.status = 'active' AND NOT EXISTS " +
+                "(SELECT 1 FROM embeddings e WHERE e.memory_id = m.memory_id AND e.embedding_model = ?)",
+            arrayOf(embeddingModel)
+        ).use { return if (it.moveToFirst()) it.getInt(0) else 0 }
     }
 
     /** Chats survive renames but transcripts are keyed by chat_id — re-point
