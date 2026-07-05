@@ -50,6 +50,9 @@ import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.preferences.dto.PersonaObject
 import org.teslasoft.assistant.preferences.lorebook.LoreBookStore
 import org.teslasoft.assistant.preferences.memory.MemoryStore
+import org.teslasoft.assistant.preferences.memory.RoleplayCharacterRecord
+import org.teslasoft.assistant.preferences.memory.UserPersonaRecord
+import org.teslasoft.assistant.preferences.memory.WorldRecord
 import org.teslasoft.assistant.ui.activities.ActivationPromptsListActivity
 import org.teslasoft.assistant.ui.activities.ApiEndpointsListActivity
 import org.teslasoft.assistant.ui.activities.LogitBiasConfigListActivity
@@ -109,6 +112,17 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     private var switchChatMemory: com.google.android.material.materialswitch.MaterialSwitch? = null
     private var switchChatExcluded: com.google.android.material.materialswitch.MaterialSwitch? = null
 
+    // Memory system Phase 4: per-chat scene (world / roleplay character / user
+    // persona). Only shown once the full engine is selected and the store
+    // exists — before that there is nothing meaningful to pick from.
+    private var containerMemoryScene: LinearLayout? = null
+    private var rowChatWorld: LinearLayout? = null
+    private var textChatWorld: TextView? = null
+    private var rowChatRoleplayCharacter: LinearLayout? = null
+    private var textChatRoleplayCharacter: TextView? = null
+    private var rowChatUserPersona: LinearLayout? = null
+    private var textChatUserPersona: TextView? = null
+
     private var textUsage: TextView? = null
     private var textCost: TextView? = null
     private var btnCostInfo: MaterialButton? = null
@@ -130,6 +144,12 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     private var usageOut = 0
 
     private var isAttached = false
+
+    // Cached from a background load (see loadMemorySceneLists) so the picker
+    // dialogs don't touch the encrypted store from the click handler.
+    private var cachedWorlds: List<WorldRecord> = emptyList()
+    private var cachedRoleplayCharacters: List<RoleplayCharacterRecord> = emptyList()
+    private var cachedUserPersonas: List<UserPersonaRecord> = emptyList()
 
     private var requestNetwork: RequestNetwork? = null
 
@@ -500,6 +520,13 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         // transcripts so the Archivist's view matches immediately.
         switchChatMemory = view.findViewById(R.id.switch_chat_memory)
         switchChatExcluded = view.findViewById(R.id.switch_chat_excluded)
+        containerMemoryScene = view.findViewById(R.id.container_memory_scene)
+        rowChatWorld = view.findViewById(R.id.row_chat_world)
+        textChatWorld = view.findViewById(R.id.text_chat_world)
+        rowChatRoleplayCharacter = view.findViewById(R.id.row_chat_roleplay_character)
+        textChatRoleplayCharacter = view.findViewById(R.id.text_chat_roleplay_character)
+        rowChatUserPersona = view.findViewById(R.id.row_chat_user_persona)
+        textChatUserPersona = view.findViewById(R.id.text_chat_user_persona)
         switchChatMemory?.isChecked = preferences?.getChatMemoryEnabled() ?: true
         // "Archive this chat": positive framing. Checked = archive (capture on).
         // The stored pref is still "excluded" (the inverse), so flip both ways.
@@ -519,6 +546,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
                 } catch (_: Exception) { /* queue flip is best-effort; the pref alone already stops capture */ }
             }.start()
         }
+        setupMemorySceneRows()
         btnSaveToProfile = view.findViewById(R.id.btn_save_to_profile)
         textModel = view.findViewById(R.id.text_model)
         textHost = view.findViewById(R.id.text_host)
@@ -667,6 +695,133 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         btnSaveToProfile?.setOnClickListener {
             saveCurrentSettingsToProfile()
         }
+    }
+
+    /* ------------------------------ memory scene (Phase 4) ------------------------------ */
+
+    /**
+     * The world / roleplay-character / user-persona rows only make sense once
+     * the full memory engine is selected and the store has actually been
+     * created — otherwise there is nothing to pick from. Values are read
+     * per-turn by the enforcer, so persisting them here needs no
+     * shouldForceUpdate/restart.
+     */
+    private fun setupMemorySceneRows() {
+        val engineIsFull = preferences?.getMemoryEngine() == "full"
+        val provisioned = MemoryStore.isProvisioned(requireContext())
+        val visible = engineIsFull && provisioned
+        containerMemoryScene?.visibility = if (visible) View.VISIBLE else View.GONE
+        if (!visible) return
+
+        updateChatWorldLabel()
+        updateChatRoleplayCharacterLabel()
+        updateChatUserPersonaLabel()
+
+        rowChatWorld?.setOnClickListener { showWorldPicker() }
+        rowChatRoleplayCharacter?.setOnClickListener { showRoleplayCharacterPicker() }
+        rowChatUserPersona?.setOnClickListener { showUserPersonaPicker() }
+
+        loadMemorySceneLists()
+    }
+
+    private fun loadMemorySceneLists() {
+        val appContext = context?.applicationContext ?: return
+        Thread {
+            try {
+                val store = MemoryStore.getInstance(appContext)
+                val worlds = store.getActiveWorlds()
+                // Only characters played by the user belong here — companion-played
+                // characters are the Storyteller/companion's own cast, not a chat scene pick.
+                val roleplayCharacters = store.getActiveRoleplayCharacters().filter { it.playedBy == "user" }
+                val userPersonas = store.getActiveUserPersonas()
+                activity?.runOnUiThread {
+                    if (!isAdded) return@runOnUiThread
+                    cachedWorlds = worlds
+                    cachedRoleplayCharacters = roleplayCharacters
+                    cachedUserPersonas = userPersonas
+                    updateChatWorldLabel()
+                    updateChatRoleplayCharacterLabel()
+                    updateChatUserPersonaLabel()
+                }
+            } catch (_: Exception) { /* the rows keep working, just empty until the store is reachable */ }
+        }.start()
+    }
+
+    private fun updateChatWorldLabel() {
+        val id = preferences?.getChatWorldId().orEmpty()
+        textChatWorld?.text = if (id.isEmpty()) {
+            getString(R.string.label_world_none)
+        } else {
+            cachedWorlds.firstOrNull { it.worldId == id }?.name ?: getString(R.string.label_world_none)
+        }
+    }
+
+    private fun updateChatRoleplayCharacterLabel() {
+        val id = preferences?.getChatRoleplayCharacterId().orEmpty()
+        textChatRoleplayCharacter?.text = if (id.isEmpty()) {
+            getString(R.string.label_roleplay_character_none)
+        } else {
+            cachedRoleplayCharacters.firstOrNull { it.roleplayCharacterId == id }?.name
+                ?: getString(R.string.label_roleplay_character_none)
+        }
+    }
+
+    private fun updateChatUserPersonaLabel() {
+        val id = preferences?.getChatUserPersonaId().orEmpty()
+        textChatUserPersona?.text = if (id.isEmpty()) {
+            getString(R.string.label_user_persona_none)
+        } else {
+            cachedUserPersonas.firstOrNull { it.personaId == id }?.name
+                ?: getString(R.string.label_user_persona_none)
+        }
+    }
+
+    private fun showWorldPicker() {
+        val ids = listOf("") + cachedWorlds.map { it.worldId }
+        val labels = (listOf(getString(R.string.label_world_none)) + cachedWorlds.map { it.name }).toTypedArray()
+        val current = ids.indexOf(preferences?.getChatWorldId().orEmpty()).coerceAtLeast(0)
+
+        MaterialAlertDialogBuilder(requireContext(), R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.memory_scene_world_picker_title)
+            .setSingleChoiceItems(labels, current) { dialog, which ->
+                preferences?.setChatWorldId(ids[which])
+                updateChatWorldLabel()
+                dialog.dismiss()
+            }
+            .setNegativeButton(android.R.string.cancel) { _, _ -> }
+            .show()
+    }
+
+    private fun showRoleplayCharacterPicker() {
+        val ids = listOf("") + cachedRoleplayCharacters.map { it.roleplayCharacterId }
+        val labels = (listOf(getString(R.string.label_roleplay_character_none)) + cachedRoleplayCharacters.map { it.name }).toTypedArray()
+        val current = ids.indexOf(preferences?.getChatRoleplayCharacterId().orEmpty()).coerceAtLeast(0)
+
+        MaterialAlertDialogBuilder(requireContext(), R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.memory_scene_playing_as_picker_title)
+            .setSingleChoiceItems(labels, current) { dialog, which ->
+                preferences?.setChatRoleplayCharacterId(ids[which])
+                updateChatRoleplayCharacterLabel()
+                dialog.dismiss()
+            }
+            .setNegativeButton(android.R.string.cancel) { _, _ -> }
+            .show()
+    }
+
+    private fun showUserPersonaPicker() {
+        val ids = listOf("") + cachedUserPersonas.map { it.personaId }
+        val labels = (listOf(getString(R.string.label_user_persona_none)) + cachedUserPersonas.map { it.name }).toTypedArray()
+        val current = ids.indexOf(preferences?.getChatUserPersonaId().orEmpty()).coerceAtLeast(0)
+
+        MaterialAlertDialogBuilder(requireContext(), R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.memory_scene_appear_as_picker_title)
+            .setSingleChoiceItems(labels, current) { dialog, which ->
+                preferences?.setChatUserPersonaId(ids[which])
+                updateChatUserPersonaLabel()
+                dialog.dismiss()
+            }
+            .setNegativeButton(android.R.string.cancel) { _, _ -> }
+            .show()
     }
 
     private fun saveCurrentSettingsToProfile() {

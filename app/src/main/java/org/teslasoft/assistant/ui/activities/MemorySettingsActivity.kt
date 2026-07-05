@@ -36,6 +36,7 @@ import androidx.core.graphics.drawable.toDrawable
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.progressindicator.LinearProgressIndicator
@@ -43,7 +44,9 @@ import com.google.android.material.textfield.TextInputEditText
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.Preferences
+import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.preferences.memory.MemoryCompanionSync
 import org.teslasoft.assistant.preferences.memory.MemoryExporter
 import org.teslasoft.assistant.preferences.memory.MemorySeedCodec
@@ -53,6 +56,7 @@ import org.teslasoft.assistant.preferences.memory.librarian.EmbeddingModelStorag
 import org.teslasoft.assistant.preferences.memory.librarian.EmbeddingModels
 import org.teslasoft.assistant.preferences.memory.librarian.Librarian
 import org.teslasoft.assistant.theme.ThemeManager
+import org.teslasoft.assistant.util.Hash
 
 /**
  * "Memory (experimental)" — Phase 1 surface of the companion memory system:
@@ -81,6 +85,14 @@ class MemorySettingsActivity : FragmentActivity() {
     private var switchAutoBackup: MaterialSwitch? = null
     private var switchDefaultMemory: MaterialSwitch? = null
 
+    private var rowMemoryEngine: LinearLayout? = null
+    private var textMemoryEngineValue: TextView? = null
+    private var rowArchivistEndpoint: LinearLayout? = null
+    private var textArchivistEndpointValue: TextView? = null
+    private var rowArchivistModel: LinearLayout? = null
+    private var textArchivistModelValue: TextView? = null
+    private var apiEndpointPreferences: ApiEndpointPreferences? = null
+
     private var librarianModels: LinearLayout? = null
     private var btnRebuildIndex: MaterialButton? = null
     private var textIndexStatus: TextView? = null
@@ -108,6 +120,7 @@ class MemorySettingsActivity : FragmentActivity() {
 
         chatId = intent.extras?.getString("chatId", "") ?: ""
         preferences = Preferences.getPreferences(this, chatId)
+        apiEndpointPreferences = ApiEndpointPreferences.getApiEndpointPreferences(this)
 
         bindViews()
         applyTheme()
@@ -128,6 +141,12 @@ class MemorySettingsActivity : FragmentActivity() {
         btnBootstrap = findViewById(R.id.btn_memory_bootstrap)
         switchAutoBackup = findViewById(R.id.switch_auto_backup)
         switchDefaultMemory = findViewById(R.id.switch_default_memory)
+        rowMemoryEngine = findViewById(R.id.row_memory_engine)
+        textMemoryEngineValue = findViewById(R.id.text_memory_engine_value)
+        rowArchivistEndpoint = findViewById(R.id.row_archivist_endpoint)
+        textArchivistEndpointValue = findViewById(R.id.text_archivist_endpoint_value)
+        rowArchivistModel = findViewById(R.id.row_archivist_model)
+        textArchivistModelValue = findViewById(R.id.text_archivist_model_value)
         librarianModels = findViewById(R.id.librarian_models)
         btnRebuildIndex = findViewById(R.id.btn_rebuild_index)
         textIndexStatus = findViewById(R.id.text_index_status)
@@ -203,10 +222,121 @@ class MemorySettingsActivity : FragmentActivity() {
             preferences?.setDefaultMemoryEnabled(checked)
         }
 
+        setupMemoryEngineSection()
+
         buildLibrarianRows()
 
         btnRebuildIndex?.setOnClickListener { rebuildIndex() }
         btnDebugSearch?.setOnClickListener { runDebugSearch() }
+    }
+
+    /* ------------------------------ memory engine (Phase 4) ------------------------------ */
+
+    private fun setupMemoryEngineSection() {
+        refreshMemoryEngineRow()
+        refreshArchivistRows()
+
+        rowMemoryEngine?.setOnClickListener { showMemoryEnginePicker() }
+        rowArchivistEndpoint?.setOnClickListener { showArchivistEndpointPicker() }
+        rowArchivistModel?.setOnClickListener { showArchivistModelDialog() }
+    }
+
+    private fun engineLabel(engine: String): String = when (engine) {
+        "none" -> getString(R.string.memory_engine_none)
+        "full" -> getString(R.string.memory_engine_full)
+        else -> getString(R.string.memory_engine_lorebooks)
+    }
+
+    private fun refreshMemoryEngineRow() {
+        textMemoryEngineValue?.text = engineLabel(preferences?.getMemoryEngine() ?: "lorebooks")
+    }
+
+    private fun showMemoryEnginePicker() {
+        val engines = arrayOf("none", "lorebooks", "full")
+        val labels = arrayOf(
+            getString(R.string.memory_engine_none),
+            getString(R.string.memory_engine_lorebooks),
+            getString(R.string.memory_engine_full)
+        )
+        val current = engines.indexOf(preferences?.getMemoryEngine() ?: "lorebooks").coerceAtLeast(0)
+
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.memory_engine_picker_title)
+            .setSingleChoiceItems(labels, current) { dialog, which ->
+                val picked = engines[which]
+                if (picked == "full" && EmbeddingModelStorage.activeModel(this) == null) {
+                    // The full engine needs semantic retrieval to be usable — refuse
+                    // the switch rather than silently degrading to keyword-only.
+                    Toast.makeText(this, R.string.memory_engine_full_needs_model_toast, Toast.LENGTH_LONG).show()
+                    dialog.dismiss()
+                    return@setSingleChoiceItems
+                }
+                preferences?.setMemoryEngine(picked)
+                refreshMemoryEngineRow()
+                dialog.dismiss()
+            }
+            .setNegativeButton(android.R.string.cancel) { _, _ -> }
+            .show()
+    }
+
+    private fun refreshArchivistRows() {
+        val endpointId = preferences?.getArchivistEndpointId().orEmpty()
+        textArchivistEndpointValue?.text = if (endpointId.isEmpty()) {
+            getString(R.string.label_endpoint_none)
+        } else {
+            val endpoints = apiEndpointPreferences?.getApiEndpointsList(this) ?: arrayListOf()
+            val label = endpoints.firstOrNull { Hash.hash(it.label) == endpointId }?.label
+            if (!label.isNullOrEmpty()) label else getString(R.string.label_endpoint_none)
+        }
+
+        val model = preferences?.getArchivistModel().orEmpty()
+        textArchivistModelValue?.text = model.ifEmpty { getString(R.string.label_archivist_model_none) }
+    }
+
+    private fun showArchivistEndpointPicker() {
+        val endpoints = apiEndpointPreferences?.getApiEndpointsList(this) ?: arrayListOf()
+        if (endpoints.isEmpty()) {
+            Toast.makeText(this, R.string.memory_archivist_endpoint_none_toast, Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val currentId = preferences?.getArchivistEndpointId().orEmpty()
+        val labels = endpoints.map { it.label }.toTypedArray()
+        val current = endpoints.indexOfFirst { Hash.hash(it.label) == currentId }.coerceAtLeast(0)
+
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.memory_archivist_endpoint_picker_title)
+            .setSingleChoiceItems(labels, current) { dialog, which ->
+                val picked: ApiEndpointObject = endpoints[which]
+                preferences?.setArchivistEndpointId(Hash.hash(picked.label))
+                refreshArchivistRows()
+                dialog.dismiss()
+            }
+            .setNegativeButton(android.R.string.cancel) { _, _ -> }
+            .show()
+    }
+
+    private fun showArchivistModelDialog() {
+        val field = android.widget.EditText(this)
+        field.setText(preferences?.getArchivistModel().orEmpty())
+        field.hint = getString(R.string.memory_archivist_model_hint)
+
+        val density = resources.displayMetrics.density
+        val pad = (20 * density).toInt()
+        val container = LinearLayout(this)
+        container.orientation = LinearLayout.VERTICAL
+        container.setPadding(pad, pad, pad, 0)
+        container.addView(field)
+
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.memory_archivist_model_dialog_title)
+            .setView(container)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                preferences?.setArchivistModel(field.text?.toString()?.trim().orEmpty())
+                refreshArchivistRows()
+            }
+            .setNegativeButton(android.R.string.cancel) { _, _ -> }
+            .show()
     }
 
     /* ------------------------------ librarian ------------------------------ */

@@ -32,6 +32,7 @@ import com.google.android.material.elevation.SurfaceColors
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.lorebook.LoreBookInjectionLog
+import org.teslasoft.assistant.preferences.memory.enforcer.AssemblyLog
 import org.teslasoft.assistant.theme.ThemeManager
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -91,6 +92,7 @@ class LoreBookDebugActivity : FragmentActivity() {
 
         btnBack?.setOnClickListener { finish() }
         btnClear?.setOnClickListener {
+            AssemblyLog.clear()
             LoreBookInjectionLog.clear()
             render()
         }
@@ -134,32 +136,121 @@ class LoreBookDebugActivity : FragmentActivity() {
         return (px * density).toInt()
     }
 
+    /**
+     * Renders two independent debug logs, oldest section first: the Phase 4
+     * enforcer's per-turn assembly (AssemblyLog, only present when the full
+     * memory engine is on) above the classic lorebook trigger-match log
+     * (LoreBookInjectionLog, always present). Both are process-local and
+     * cleared together by btn_clear.
+     */
     private fun render() {
-        val records = LoreBookInjectionLog.getRecords()
+        val assemblyRecords = AssemblyLog.getRecords()
+        val lorebookRecords = LoreBookInjectionLog.getRecords()
 
-        if (records.isEmpty()) {
+        if (assemblyRecords.isEmpty() && lorebookRecords.isEmpty()) {
             debugText?.text = getString(R.string.lorebook_debug_empty)
             return
         }
 
         val sb = StringBuilder()
-        for (record in records) {
-            sb.append(timeFormat.format(Date(record.timestamp)))
+
+        if (assemblyRecords.isNotEmpty()) {
+            sb.append(getString(R.string.memory_debug_assembly_header))
             sb.append('\n')
-            sb.append("Message: ").append(record.userMessage)
-            sb.append('\n')
-            sb.append("Injected ").append(record.matches.size).append(" memory(ies):")
-            sb.append('\n')
-            for (match in record.matches) {
-                sb.append("  • ").append(match.entry.label)
-                sb.append("  (matched trigger: \"").append(match.matchedTrigger).append("\")")
-                sb.append('\n')
+            for (record in assemblyRecords) {
+                appendAssemblyRecord(sb, record)
             }
-            sb.append("────────────────────")
             sb.append('\n')
         }
 
+        if (lorebookRecords.isNotEmpty()) {
+            sb.append(getString(R.string.lorebook_debug_records_header))
+            sb.append('\n')
+            for (record in lorebookRecords) {
+                sb.append(timeFormat.format(Date(record.timestamp)))
+                sb.append('\n')
+                sb.append("Message: ").append(record.userMessage)
+                sb.append('\n')
+                sb.append("Injected ").append(record.matches.size).append(" memory(ies):")
+                sb.append('\n')
+                for (match in record.matches) {
+                    sb.append("  • ").append(match.entry.label)
+                    sb.append("  (matched trigger: \"").append(match.matchedTrigger).append("\")")
+                    sb.append('\n')
+                }
+                sb.append("────────────────────")
+                sb.append('\n')
+            }
+        }
+
         debugText?.text = sb.toString()
+    }
+
+    private fun appendAssemblyRecord(sb: StringBuilder, record: AssemblyLog.Record) {
+        sb.append(timeFormat.format(Date(record.timestamp)))
+        sb.append('\n')
+        sb.append("Message: ").append(record.userMessage)
+        sb.append('\n')
+
+        if (record.companionName != null) {
+            sb.append(getString(R.string.memory_debug_companion_fmt, record.companionName))
+            sb.append('\n')
+        }
+
+        when (record.packetSource) {
+            "compressed" -> sb.append(getString(R.string.memory_debug_packet_compressed)).append('\n')
+            "raw" -> sb.append(getString(R.string.memory_debug_packet_raw)).append('\n')
+            else -> { /* no packet this turn */ }
+        }
+
+        if (record.modes.isNotEmpty()) {
+            sb.append(getString(R.string.memory_debug_modes_fmt, record.modes.joinToString(", ")))
+            sb.append('\n')
+        }
+
+        if (record.injected.isNotEmpty()) {
+            sb.append(getString(R.string.memory_debug_injected_header))
+            sb.append('\n')
+            for (line in record.injected) {
+                sb.append("  • ").append(line.label).append(" — ").append(line.detail)
+                sb.append('\n')
+            }
+        }
+
+        if (record.cut.isNotEmpty()) {
+            sb.append(getString(R.string.memory_debug_cut_header))
+            sb.append('\n')
+            for (line in record.cut) {
+                sb.append("  • ").append(line.label).append(" — ").append(line.detail)
+                sb.append('\n')
+            }
+        }
+
+        if (record.loreNotes.isNotEmpty()) {
+            sb.append(getString(R.string.memory_debug_lore_notes_header))
+            sb.append('\n')
+            for (note in record.loreNotes) {
+                sb.append("  • ").append(note)
+                sb.append('\n')
+            }
+        }
+
+        if (record.scene != null) {
+            sb.append(getString(R.string.memory_debug_scene_fmt, record.scene))
+            sb.append('\n')
+        }
+
+        if (record.notes.isNotEmpty()) {
+            sb.append(getString(R.string.memory_debug_notes_header))
+            sb.append('\n')
+            for (note in record.notes) {
+                sb.append("  • ").append(note)
+                sb.append('\n')
+            }
+        }
+
+        sb.append("────────────────────")
+        sb.append('\n')
     }
 
     private fun isDarkThemeEnabled(): Boolean {

@@ -919,4 +919,49 @@
     <string name="memory_debug_all_header">— All records (keyword) —</string>
     <string name="memory_debug_logging_title">Memory diagnostics logging</string>
     <string name="memory_debug_logging_desc">Write what the memory system is doing to the Event log. Off by default; turn on only when investigating a memory problem.</string>
+
+    <!-- Memory system Phase 4: engine tier, Archivist model, per-chat scene picker, assembly debug -->
+    <string name="memory_section_engine">Memory engine</string>
+    <string name="label_memory_engine">Engine</string>
+    <string name="memory_engine_hint">Controls how much of the companion memory system reaches your conversations. \"None\" uses only personas and activation prompts. \"Lore books\" is the classic trigger-based tier. \"Full\" needs an on-device embedding model — download one in the Librarian section below first.</string>
+    <string name="memory_engine_picker_title">Choose memory engine</string>
+    <string name="memory_engine_none">None — personas and activation prompts only</string>
+    <string name="memory_engine_lorebooks">Lore books (classic)</string>
+    <string name="memory_engine_full">Full memory system</string>
+    <string name="memory_engine_full_needs_model_toast">Install an embedding model in the Librarian section below before switching to the full memory system.</string>
+    <string name="label_archivist_endpoint">Archivist endpoint</string>
+    <string name="label_archivist_model">Archivist model name</string>
+    <string name="memory_archivist_hint">The Archivist model compresses the \"About you\" briefing shown to your companions and, in a later phase, reviews conversations for memories worth keeping. It can point at any API endpoint you\'ve already saved — a small, cheap model is enough.</string>
+    <string name="memory_archivist_endpoint_picker_title">Choose an endpoint</string>
+    <string name="memory_archivist_endpoint_none_toast">No saved API endpoints yet — add one in API Endpoints first.</string>
+    <string name="memory_archivist_model_dialog_title">Archivist model name</string>
+    <string name="memory_archivist_model_hint">e.g. gpt-4o-mini</string>
+    <string name="label_endpoint_none">None configured</string>
+    <string name="label_archivist_model_none">Not set</string>
+
+    <!-- Memory system Phase 4: per-chat scene selection in Quick Settings -->
+    <string name="label_memory_scene">Scene</string>
+    <string name="label_chat_world">World</string>
+    <string name="label_chat_playing_as">Playing as</string>
+    <string name="label_chat_appear_as">Appear as</string>
+    <string name="label_world_none">None</string>
+    <string name="label_roleplay_character_none">None</string>
+    <string name="label_user_persona_none">None</string>
+    <string name="memory_scene_world_picker_title">Choose a world</string>
+    <string name="memory_scene_playing_as_picker_title">Choose who you\'re playing</string>
+    <string name="memory_scene_appear_as_picker_title">Choose how you appear</string>
+
+    <!-- Memory system Phase 4: enforcer assembly debug view (shown above the lorebook debug log) -->
+    <string name="memory_debug_assembly_header">Memory assembly (full engine)</string>
+    <string name="lorebook_debug_records_header">Lore book injections</string>
+    <string name="memory_debug_companion_fmt">Companion: %1$s</string>
+    <string name="memory_debug_packet_compressed">Packet: compressed</string>
+    <string name="memory_debug_packet_raw">Packet: raw</string>
+    <string name="memory_debug_modes_fmt">Modes: %1$s</string>
+    <string name="memory_debug_injected_header">Injected:</string>
+    <string name="memory_debug_cut_header">Cut:</string>
+    <string name="memory_debug_lore_notes_header">Lore notes:</string>
+    <string name="memory_debug_scene_fmt">Scene: %1$s</string>
+    <string name="memory_debug_notes_header">Notes:</string>
+    <string name="memory_degraded_notice">Memory unavailable this turn — continuing without it</string>
 </resources>
