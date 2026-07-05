@@ -20,7 +20,6 @@ import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
 import org.teslasoft.assistant.preferences.Preferences
-import org.teslasoft.assistant.preferences.lorebook.LoreBookInjectionLog
 import org.teslasoft.assistant.preferences.lorebook.LoreBookMatch
 import org.teslasoft.assistant.preferences.lorebook.LoreBookStore
 import org.teslasoft.assistant.preferences.memory.CompanionRecord
@@ -274,11 +273,6 @@ class Enforcer private constructor(private val appContext: Context) {
                 notes = notes
             )
         )
-        if (loreNotes.isNotEmpty()) {
-            // Keep the classic lore debug trail alive on the enforcer path too.
-            LoreBookInjectionLog.record(input.userMessage, input.loreMatches.take(loreNotes.size))
-        }
-
         return rendered.ifBlank { null }
     }
 

@@ -4160,30 +4160,40 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         // matched memories as their own System message, placed after the base
         // prompt so prefix caching of the stable prompt holds.
         val allLoreMatches = ArrayList<LoreBookMatch>()
-        if (memoryEngine != "none") try {
-            val loreStore = LoreBookStore.getInstance(this)
-            val activeBookIds = LinkedHashSet<String>()
-            val checkedIds = preferences?.getActiveLoreBookIds() ?: arrayListOf()
-            if (personaId != "") {
-                val loreBookPersona = PersonaPreferences.getPersonaPreferences(this).getPersona(personaId)
-                // Core book first: when the injection budget truncates, core memories win.
-                if (loreBookPersona.coreLoreBookId != "") activeBookIds.add(loreBookPersona.coreLoreBookId)
-                // Only books still linked to the persona count; a stale checked id
-                // left over from before an unlink must not keep injecting.
-                val linked = loreBookPersona.additionalLoreBookIdList()
-                activeBookIds.addAll(checkedIds.filter { linked.contains(it) })
-            } else {
-                activeBookIds.addAll(checkedIds)
-            }
+        // -1 = the store threw (unavailable); the debug view distinguishes that
+        // from "searched N books and matched nothing" and "had no active books".
+        var activeLoreBookCount = -1
+        if (memoryEngine != "none") {
+            try {
+                val loreStore = LoreBookStore.getInstance(this)
+                val activeBookIds = LinkedHashSet<String>()
+                val checkedIds = preferences?.getActiveLoreBookIds() ?: arrayListOf()
+                if (personaId != "") {
+                    val loreBookPersona = PersonaPreferences.getPersonaPreferences(this).getPersona(personaId)
+                    // Core book first: when the injection budget truncates, core memories win.
+                    if (loreBookPersona.coreLoreBookId != "") activeBookIds.add(loreBookPersona.coreLoreBookId)
+                    // Only books still linked to the persona count; a stale checked id
+                    // left over from before an unlink must not keep injecting.
+                    val linked = loreBookPersona.additionalLoreBookIdList()
+                    activeBookIds.addAll(checkedIds.filter { linked.contains(it) })
+                } else {
+                    activeBookIds.addAll(checkedIds)
+                }
 
-            for (bookId in activeBookIds) {
-                allLoreMatches.addAll(loreStore.findMatches(lastUserMessageForLore, bookId))
+                for (bookId in activeBookIds) {
+                    allLoreMatches.addAll(loreStore.findMatches(lastUserMessageForLore, bookId))
+                }
+                activeLoreBookCount = activeBookIds.size
+            } catch (e: Exception) {
+                // The lorebook is now SQLCipher-backed; if its key/store is ever
+                // unreadable the conversation must continue without lore rather
+                // than crash mid-generation (never break the companion).
+                org.teslasoft.assistant.preferences.memory.MemoryLog.log(this, "LoreBook", "error", "Lorebook unavailable this turn: ${e.message}")
             }
-        } catch (e: Exception) {
-            // The lorebook is now SQLCipher-backed; if its key/store is ever
-            // unreadable the conversation must continue without lore rather
-            // than crash mid-generation (never break the companion).
-            org.teslasoft.assistant.preferences.memory.MemoryLog.log(this, "LoreBook", "error", "Lorebook unavailable this turn: ${e.message}")
+            // Every turn is recorded — zero-match and store-unavailable turns
+            // included — so "lore didn't reach the model" is diagnosable from
+            // the debug screen instead of invisible.
+            LoreBookInjectionLog.record(lastUserMessageForLore, allLoreMatches, activeLoreBookCount)
         }
 
         // Full memory system (Phase 4 enforcer): assemble the per-turn memory
@@ -4252,7 +4262,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     content = loreText.toString()
                 )
             )
-            LoreBookInjectionLog.record(lastUserMessageForLore, loreMatches)
         }
 
         msgs.addAll(chatMessages)

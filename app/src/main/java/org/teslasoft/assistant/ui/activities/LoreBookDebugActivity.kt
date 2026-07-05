@@ -171,6 +171,17 @@ class LoreBookDebugActivity : FragmentActivity() {
                 sb.append('\n')
                 sb.append("Message: ").append(record.userMessage)
                 sb.append('\n')
+                // The three failure shapes look identical from the chat, so the
+                // search scope is spelled out: unavailable store vs. no active
+                // books vs. books searched but no trigger matched.
+                when {
+                    record.activeBooks < 0 ->
+                        sb.append(getString(R.string.lorebook_debug_store_unavailable)).append('\n')
+                    record.activeBooks == 0 ->
+                        sb.append(getString(R.string.lorebook_debug_no_active_books)).append('\n')
+                    else ->
+                        sb.append(getString(R.string.lorebook_debug_searched_fmt, record.activeBooks)).append('\n')
+                }
                 sb.append("Injected ").append(record.matches.size).append(" memory(ies):")
                 sb.append('\n')
                 for (match in record.matches) {

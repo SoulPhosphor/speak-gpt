@@ -28,7 +28,13 @@ object LoreBookInjectionLog {
     data class Record(
         val timestamp: Long,
         val userMessage: String,
-        val matches: List<LoreBookMatch>
+        val matches: List<LoreBookMatch>,
+        /** How many active books were searched this turn; -1 = the lorebook
+         *  store was unavailable (see the Event log for why). Zero-match turns
+         *  are recorded too — "searched 3 books, matched nothing" and "had no
+         *  books to search" are different diagnoses and the debug view must be
+         *  able to tell them apart. */
+        val activeBooks: Int = -1
     )
 
     private const val MAX_RECORDS = 50
@@ -36,8 +42,8 @@ object LoreBookInjectionLog {
     private val records = ArrayList<Record>()
 
     @Synchronized
-    fun record(userMessage: String, matches: List<LoreBookMatch>) {
-        records.add(0, Record(System.currentTimeMillis(), userMessage, matches))
+    fun record(userMessage: String, matches: List<LoreBookMatch>, activeBooks: Int = -1) {
+        records.add(0, Record(System.currentTimeMillis(), userMessage, matches, activeBooks))
         while (records.size > MAX_RECORDS) {
             records.removeAt(records.size - 1)
         }

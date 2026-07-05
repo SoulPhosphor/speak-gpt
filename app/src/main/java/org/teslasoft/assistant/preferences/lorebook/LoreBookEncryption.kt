@@ -121,15 +121,25 @@ object LoreBookEncryption {
                 "ATTACH DATABASE ? AS encrypted KEY \"x'${DatabaseKeys.toHex(key)}'\"", tmp.path
             )
             plain.rawExecSQL("SELECT sqlcipher_export('encrypted')")
-            plain.rawExecSQL("PRAGMA encrypted.user_version = $version")
-            plain.rawExecSQL("DETACH DATABASE encrypted")
+            // NO schema-qualified statements after this point. ATTACH is
+            // sqlite3_stmt_readonly()==true, so the pooled connection layer may
+            // run it (and the export SELECT) on a non-primary connection, while
+            // a write statement like "PRAGMA encrypted.user_version = N"
+            // compiles on the PRIMARY connection — where 'encrypted' was never
+            // attached. That mismatch made this migration fail on-device for
+            // months with "unknown database encrypted"; the version is stamped
+            // below on the encrypted file's own handle instead. DETACH is
+            // best-effort for the same reason: close() detaches everything.
+            try { plain.rawExecSQL("DETACH DATABASE encrypted") } catch (_: Exception) { }
             plain.close()
             plain = null
 
-            // Verify the encrypted copy before touching the original.
+            // Stamp the schema version on the encrypted copy directly, then
+            // verify it before touching the original.
             val enc = SQLiteDatabase.openDatabase(
                 tmp.path, key, null, SQLiteDatabase.OPEN_READWRITE, null, null
             )
+            enc.version = version
             val ok = enc.isDatabaseIntegrityOk &&
                 enc.version == version &&
                 countRows(enc, "lorebooks") == books &&
@@ -170,7 +180,8 @@ object LoreBookEncryption {
             // If the aside-rename happened but the swap didn't, restore it.
             if (!plainFile.exists() && backup.exists()) backup.renameTo(plainFile)
             MemoryLog.log(context, "LoreBookEncryption", "error",
-                "Lorebook encryption failed (${e.message}); keeping the plaintext database."
+                "Lorebook encryption failed (${e.message}); keeping the plaintext database. " +
+                    "Lore books keep working normally; the migration retries next launch."
             )
             return false
         }

@@ -964,4 +964,7 @@
     <string name="memory_debug_scene_fmt">Scene: %1$s</string>
     <string name="memory_debug_notes_header">Notes:</string>
     <string name="memory_degraded_notice">Memory unavailable this turn — continuing without it</string>
+    <string name="lorebook_debug_store_unavailable">Lore books were UNAVAILABLE this turn (see the Event log)</string>
+    <string name="lorebook_debug_no_active_books">No active lore books to search — check the persona\'s linked books and the Quick Settings checklist</string>
+    <string name="lorebook_debug_searched_fmt">Searched %1$d active book(s)</string>
 </resources>
