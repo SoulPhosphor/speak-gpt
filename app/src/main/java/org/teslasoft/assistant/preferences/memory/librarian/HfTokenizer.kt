@@ -253,20 +253,61 @@ class HfTokenizer private constructor(
         }
     }
 
+    /**
+     * All five HF SplitDelimiterBehavior variants. Reference semantics, from
+     * the tokenizers docs, splitting "the-final--countdown" on "-":
+     *   Removed             -> [the, final, countdown]
+     *   Isolated            -> [the, -, final, -, -, countdown]
+     *   MergedWithPrevious  -> [the-, final-, -, countdown]
+     *   MergedWithNext      -> [the, -final, -, -countdown]
+     *   Contiguous          -> [the, -, final, --, countdown]
+     * (The real EmbeddingGemma tokenizer.json uses MergedWithPrevious — found
+     * the hard way on-device; HfTokenizerTest pins every variant so the next
+     * model can't surprise us the same way.)
+     */
     private class SplitPre(
         private val regex: Regex,
-        /** "Isolated" keeps delimiters as own pieces; "Removed" drops them. */
-        private val isolated: Boolean
+        private val behavior: Behavior
     ) : PreTokenizer {
+
+        enum class Behavior { REMOVED, ISOLATED, MERGED_WITH_PREVIOUS, MERGED_WITH_NEXT, CONTIGUOUS }
+
         override fun split(text: String): List<String> {
             val out = ArrayList<String>()
             var last = 0
+            // MergedWithNext holds each match until its following gap arrives.
+            var pending: String? = null
             for (m in regex.findAll(text)) {
-                if (m.range.first > last) out.add(text.substring(last, m.range.first))
-                if (isolated && m.value.isNotEmpty()) out.add(m.value)
+                val between = text.substring(last, m.range.first)
+                when (behavior) {
+                    Behavior.REMOVED -> if (between.isNotEmpty()) out.add(between)
+                    Behavior.ISOLATED -> {
+                        if (between.isNotEmpty()) out.add(between)
+                        out.add(m.value)
+                    }
+                    Behavior.MERGED_WITH_PREVIOUS -> out.add(between + m.value)
+                    Behavior.MERGED_WITH_NEXT -> {
+                        val piece = (pending ?: "") + between
+                        if (piece.isNotEmpty()) out.add(piece)
+                        pending = m.value
+                    }
+                    Behavior.CONTIGUOUS -> {
+                        if (between.isNotEmpty()) {
+                            out.add(between)
+                            out.add(m.value)
+                        } else if (out.isNotEmpty() && last > 0) {
+                            // Adjacent to the previous match: extend its piece.
+                            out[out.size - 1] = out.last() + m.value
+                        } else out.add(m.value)
+                    }
+                }
                 last = m.range.last + 1
             }
-            if (last < text.length) out.add(text.substring(last))
+            val tail = text.substring(last)
+            if (behavior == Behavior.MERGED_WITH_NEXT) {
+                val rest = (pending ?: "") + tail
+                if (rest.isNotEmpty()) out.add(rest)
+            } else if (tail.isNotEmpty()) out.add(tail)
             return out
         }
     }
@@ -544,13 +585,16 @@ class HfTokenizer private constructor(
                     if (o.get("invert")?.asBoolean == true)
                         throw IllegalStateException("tokenizer: inverted Split unsupported")
                     when (val behavior = o.get("behavior")?.asString) {
-                        "Isolated" -> SplitPre(regex, isolated = true)
-                        "Removed" -> SplitPre(regex, isolated = false)
+                        "Isolated" -> SplitPre(regex, SplitPre.Behavior.ISOLATED)
+                        "Removed" -> SplitPre(regex, SplitPre.Behavior.REMOVED)
+                        "MergedWithPrevious" -> SplitPre(regex, SplitPre.Behavior.MERGED_WITH_PREVIOUS)
+                        "MergedWithNext" -> SplitPre(regex, SplitPre.Behavior.MERGED_WITH_NEXT)
+                        "Contiguous" -> SplitPre(regex, SplitPre.Behavior.CONTIGUOUS)
                         else -> throw IllegalStateException("tokenizer: Split behavior '$behavior' unsupported")
                     }
                 }
                 "Digits" -> DigitsPre(o.get("individual_digits")?.asBoolean ?: false)
-                "Whitespace", "WhitespaceSplit" -> SplitPre(Regex("\\s+"), isolated = false)
+                "Whitespace", "WhitespaceSplit" -> SplitPre(Regex("\\s+"), SplitPre.Behavior.REMOVED)
                 else -> throw IllegalStateException("tokenizer: unsupported pre-tokenizer '$type'")
             }
         }

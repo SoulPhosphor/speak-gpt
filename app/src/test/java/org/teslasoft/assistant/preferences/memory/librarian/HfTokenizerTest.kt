@@ -156,6 +156,69 @@ class HfTokenizerTest {
         assertArrayEquals(longArrayOf(4, 0), tok.encode("z", 64))
     }
 
+    /* --------------------------- Split behaviors ------------------------- */
+
+    // The real EmbeddingGemma tokenizer.json uses a Split pre-tokenizer with
+    // behavior MergedWithPrevious (found on-device — the loader threw exactly
+    // as designed). All five behaviors are pinned here. The merges would fuse
+    // across a boundary if splitting were wrong, so ids prove the boundaries.
+    // vocab ids: a=0 -=1 b=2 a-=3 -b=4 ab=5 --=6
+    private fun splitFixture(behavior: String): String = """
+        {
+          "normalizer": null,
+          "pre_tokenizer": {"type": "Split", "pattern": {"String": "-"}, "behavior": "$behavior", "invert": false},
+          "post_processor": null,
+          "model": {
+            "type": "BPE",
+            "unk_token": null,
+            "fuse_unk": false,
+            "byte_fallback": false,
+            "vocab": {"a": 0, "-": 1, "b": 2, "a-": 3, "-b": 4, "ab": 5, "--": 6},
+            "merges": ["a -", "- b", "a b", "- -"]
+          }
+        }
+    """.trimIndent()
+
+    @Test
+    fun splitRemovedDropsDelimiters() {
+        val tok = HfTokenizer.fromJson(splitFixture("Removed"))
+        // [a][b] — "ab" merge exists but must not fire across the boundary.
+        assertArrayEquals(longArrayOf(0, 2), tok.encode("a-b", 64))
+    }
+
+    @Test
+    fun splitIsolatedKeepsDelimitersAlone() {
+        val tok = HfTokenizer.fromJson(splitFixture("Isolated"))
+        assertArrayEquals(longArrayOf(0, 1, 2), tok.encode("a-b", 64))
+    }
+
+    @Test
+    fun splitMergedWithPreviousAttachesDelimiterBackwards() {
+        val tok = HfTokenizer.fromJson(splitFixture("MergedWithPrevious"))
+        // [a-][b] — the "a -" merge fires inside the piece.
+        assertArrayEquals(longArrayOf(3, 2), tok.encode("a-b", 64))
+        // Double delimiter: [a-][-][b] (second "-" has an empty gap before it).
+        assertArrayEquals(longArrayOf(3, 1, 2), tok.encode("a--b", 64))
+    }
+
+    @Test
+    fun splitMergedWithNextAttachesDelimiterForwards() {
+        val tok = HfTokenizer.fromJson(splitFixture("MergedWithNext"))
+        // [a][-b]
+        assertArrayEquals(longArrayOf(0, 4), tok.encode("a-b", 64))
+        // Double delimiter: [a][-][-b].
+        assertArrayEquals(longArrayOf(0, 1, 4), tok.encode("a--b", 64))
+    }
+
+    @Test
+    fun splitContiguousGroupsAdjacentDelimiters() {
+        val tok = HfTokenizer.fromJson(splitFixture("Contiguous"))
+        // Adjacent matches fuse into one piece: [a][--][b].
+        assertArrayEquals(longArrayOf(0, 6, 2), tok.encode("a--b", 64))
+        // Non-adjacent behaves like Isolated: [a][-][b].
+        assertArrayEquals(longArrayOf(0, 1, 2), tok.encode("a-b", 64))
+    }
+
     /* ---------------------------- strictness ----------------------------- */
 
     @Test
