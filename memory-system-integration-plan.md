@@ -481,7 +481,40 @@ game-state facts (unchanged essence guardrail). DM-piloted NPCs are
 machinery; NPC relationship facts are campaign-scoped memories referencing
 them.
 
-### ☐ Phase 4 — Enforcer: tiers + prompt assembly
+### ☑ Phase 4 — Enforcer: tiers + prompt assembly
+**Landed July 2026.** What shipped, in `preferences/memory/enforcer/`:
+`Enforcer` (orchestrator singleton; `assembleTurn` returns the ONE extra
+system message or null), `PromptAssembler` (pure renderer of the template —
+protected memories render through a single `renderMemoryLine`, structurally
+inseparable from handling; budget cuts lowest-scored retrieved first, lore
+charges the budget but is never cut), `ModeSelection` (pure ≤2-mode pick,
+protective tie-break by normalized name, suggested_mode direct activation,
+stickiness state machine with exit phrases), `NearDuplicate` (cosine or
+Jaccard fallback), `StandingPacketManager` (raw packet serves the turn,
+background compression via the Archivist-model setting caches into meta —
+a turn never waits on the compressor), `DefaultOperatingData` (retrieval
+policy + the five origin='system' modes, provisioned ONLY into empty
+tables), `AssemblyLog` (process-local debug records rendered in the lorebook
+debug screen). Code-level decisions recorded: (a) template slots already
+owned by the app (slot 1 persona prompt, standing instruction, slot 6
+activation prompt in history) are NOT re-injected — prefix caching wins,
+per this plan's own ground rule; (b) lore notes render AFTER retrieved
+memories per the template ("outrank anything above"), not before as the
+enforcer spec's coexistence rule says — the template is the layout
+authority; (c) near-dup suppressed pairs are persisted to meta
+`enforcer.contradiction_flags` (capped 50) for Phase 6's run report;
+(d) memory_participation='none' companions return null (classic lore path);
+'global_only' scopes retrieval to global. RetrievableMemory gained
+protection_json + provenance_source columns in the SELECT (no schema
+change). ChatActivity hook: tier gate around lore gathering ("none" skips
+both tiers), enforcer on Dispatchers.IO in regularGPTResponse, any failure
+degrades to the classic lore message + one soft toast per process. Per-chat
+world/roleplay-character/user-persona prefs are in the auto-naming copy
+block; D8 mirror via `MemoryStore.updateAppState`. Unit tests:
+PromptAssemblerTest, ModeSelectionTest. Mode-signal vectors are cached
+per process; on-device validation of retrieval quality (thresholds 0.45
+mode / 0.30 retrieval floor / 0.85 dup) rides the same Pixel bring-up gate
+as Phase 3.
 Specs: `prompt_assembly_template.md` (the literal skeleton — follow it
 verbatim, including the assembly rules section), `enforcer_librarian_spec.md`
 (turn loop, mode detection with stickiness + protective tie-break, lore-book

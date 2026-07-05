@@ -1259,6 +1259,225 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
     }
 
     /* ---------------------------------------------------------------------- */
+    /* enforcer (Phase 4): targeted single-purpose readers                     */
+    /*                                                                         */
+    /* The enforcer assembles a prompt on EVERY turn; it must never pay for    */
+    /* exportData()'s full-store walk (transcripts alone can be megabytes).    */
+    /* These readers fetch exactly what one assembly needs.                    */
+    /* ---------------------------------------------------------------------- */
+
+    fun getOwnerProfile(): OwnerProfile? {
+        readableDatabase.query("owner_profile", null, "id = 1", null, null, null, null).use {
+            if (!it.moveToFirst()) return null
+            return OwnerProfile(
+                portrait = it.getString(it.getColumnIndexOrThrow("portrait")),
+                standingContext = it.getStringOrNull("standing_context"),
+                updatedAt = it.getStringOrNull("updated_at")
+            )
+        }
+    }
+
+    /** Directives, most binding first (priority 5 outranks 1 in the packet). */
+    fun getDirectives(): List<DirectiveRecord> {
+        val out = ArrayList<DirectiveRecord>()
+        readableDatabase.query("directives", null, null, null, null, null, "priority DESC, directive_id ASC").use {
+            while (it.moveToNext()) {
+                out.add(
+                    DirectiveRecord(
+                        directiveId = it.getString(it.getColumnIndexOrThrow("directive_id")),
+                        text = it.getString(it.getColumnIndexOrThrow("text")),
+                        rationale = it.getStringOrNull("rationale"),
+                        appliesToJson = it.getStringOrNull("applies_to_json") ?: "[]",
+                        priority = it.getInt(it.getColumnIndexOrThrow("priority")),
+                        origin = it.getStringOrNull("origin") ?: "user"
+                    )
+                )
+            }
+        }
+        return out
+    }
+
+    fun getModes(): List<ModeRecord> {
+        val out = ArrayList<ModeRecord>()
+        readableDatabase.query("modes", null, null, null, null, null, "mode_id ASC").use {
+            while (it.moveToNext()) {
+                out.add(
+                    ModeRecord(
+                        modeId = it.getString(it.getColumnIndexOrThrow("mode_id")),
+                        name = it.getString(it.getColumnIndexOrThrow("name")),
+                        purpose = it.getStringOrNull("purpose"),
+                        signalsJson = it.getStringOrNull("signals_json") ?: "[]",
+                        respondJson = it.getStringOrNull("respond_json") ?: "[]",
+                        avoidJson = it.getStringOrNull("avoid_json") ?: "[]",
+                        transitionNote = it.getStringOrNull("transition_note"),
+                        overridesJson = it.getStringOrNull("overrides_json") ?: "[]",
+                        scope = it.getStringOrNull("scope") ?: "global",
+                        companionIdsJson = it.getStringOrNull("companion_ids_json") ?: "[]",
+                        origin = it.getStringOrNull("origin") ?: "user"
+                    )
+                )
+            }
+        }
+        return out
+    }
+
+    /** One-shot provisioning of the enforcer's operating defaults: only ever
+     *  inserts when the table/row is empty, so user-authored (or imported)
+     *  modes and policy are never mixed with or overwritten by defaults. */
+    fun provisionOperatingDefaults(policyJson: String, defaultModes: List<ModeRecord>): Boolean {
+        val db = writableDatabase
+        var provisioned = false
+        db.beginTransaction()
+        try {
+            val hasPolicy = db.rawQuery("SELECT 1 FROM retrieval_policy WHERE id = 1", emptyArray<String>())
+                .use { it.moveToFirst() }
+            if (!hasPolicy) {
+                db.execSQL("INSERT INTO retrieval_policy (id, policy_json) VALUES (1, ?)", arrayOf(policyJson))
+                provisioned = true
+            }
+            val hasModes = db.rawQuery("SELECT 1 FROM modes LIMIT 1", emptyArray<String>())
+                .use { it.moveToFirst() }
+            if (!hasModes) {
+                for (m in defaultModes) {
+                    db.insert("modes", null, ContentValues().apply {
+                        put("mode_id", m.modeId)
+                        put("name", m.name)
+                        put("purpose", m.purpose)
+                        put("signals_json", m.signalsJson)
+                        put("respond_json", m.respondJson)
+                        put("avoid_json", m.avoidJson)
+                        put("transition_note", m.transitionNote)
+                        put("overrides_json", m.overridesJson)
+                        put("scope", m.scope)
+                        put("companion_ids_json", m.companionIdsJson)
+                        put("origin", m.origin)
+                    })
+                }
+                provisioned = true
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+        return provisioned
+    }
+
+    fun getRetrievalPolicyJson(): String? {
+        readableDatabase.query("retrieval_policy", arrayOf("policy_json"), "id = 1", null, null, null, null).use {
+            return if (it.moveToFirst()) it.getString(0) else null
+        }
+    }
+
+    fun getWorld(worldId: String): WorldRecord? =
+        readWorlds("world_id = ?", arrayOf(worldId)).firstOrNull()
+
+    fun getActiveWorlds(): List<WorldRecord> =
+        readWorlds("status = 'active'", null)
+
+    private fun readWorlds(selection: String?, args: Array<String>?): List<WorldRecord> {
+        val out = ArrayList<WorldRecord>()
+        readableDatabase.query("worlds", null, selection, args, null, null, "name ASC").use {
+            while (it.moveToNext()) {
+                out.add(
+                    WorldRecord(
+                        worldId = it.getString(it.getColumnIndexOrThrow("world_id")),
+                        name = it.getString(it.getColumnIndexOrThrow("name")),
+                        premise = it.getString(it.getColumnIndexOrThrow("premise")),
+                        rules = it.getStringOrNull("rules"),
+                        companionIdsJson = it.getStringOrNull("companion_ids_json") ?: "[]",
+                        status = it.getString(it.getColumnIndexOrThrow("status")),
+                        createdAt = it.getStringOrNull("created_at")
+                    )
+                )
+            }
+        }
+        return out
+    }
+
+    fun getUserPersona(personaId: String): UserPersonaRecord? =
+        readUserPersonas("persona_id = ?", arrayOf(personaId)).firstOrNull()
+
+    fun getActiveUserPersonas(): List<UserPersonaRecord> =
+        readUserPersonas("status = 'active'", null)
+
+    private fun readUserPersonas(selection: String?, args: Array<String>?): List<UserPersonaRecord> {
+        val out = ArrayList<UserPersonaRecord>()
+        readableDatabase.query("user_personas", null, selection, args, null, null, "name ASC").use {
+            while (it.moveToNext()) {
+                out.add(
+                    UserPersonaRecord(
+                        personaId = it.getString(it.getColumnIndexOrThrow("persona_id")),
+                        name = it.getString(it.getColumnIndexOrThrow("name")),
+                        presentation = it.getString(it.getColumnIndexOrThrow("presentation")),
+                        status = it.getString(it.getColumnIndexOrThrow("status")),
+                        createdAt = it.getStringOrNull("created_at")
+                    )
+                )
+            }
+        }
+        return out
+    }
+
+    fun getRoleplayCharacter(id: String): RoleplayCharacterRecord? =
+        readRoleplayCharacters("roleplay_character_id = ?", arrayOf(id)).firstOrNull()
+
+    fun getActiveRoleplayCharacters(): List<RoleplayCharacterRecord> =
+        readRoleplayCharacters("status = 'active'", null)
+
+    private fun readRoleplayCharacters(selection: String?, args: Array<String>?): List<RoleplayCharacterRecord> {
+        val out = ArrayList<RoleplayCharacterRecord>()
+        readableDatabase.query("roleplay_characters", null, selection, args, null, null, "name ASC").use {
+            while (it.moveToNext()) {
+                out.add(
+                    RoleplayCharacterRecord(
+                        roleplayCharacterId = it.getString(it.getColumnIndexOrThrow("roleplay_character_id")),
+                        name = it.getString(it.getColumnIndexOrThrow("name")),
+                        playedBy = it.getString(it.getColumnIndexOrThrow("played_by")),
+                        description = it.getString(it.getColumnIndexOrThrow("description")),
+                        arc = it.getStringOrNull("arc"),
+                        worldsPlayedJson = it.getStringOrNull("worlds_played_json") ?: "[]",
+                        status = it.getString(it.getColumnIndexOrThrow("status")),
+                        createdAt = it.getStringOrNull("created_at")
+                    )
+                )
+            }
+        }
+        return out
+    }
+
+    /** D8: prefs are the source of truth for what's active; app_state is the
+     *  derived mirror the enforcer/Archivist read. Refreshed at generation time. */
+    fun updateAppState(
+        companionId: String?,
+        worldId: String?,
+        roleplayCharacterId: String?,
+        userPersonaId: String?
+    ) {
+        writableDatabase.execSQL(
+            "UPDATE app_state SET active_companion_id = ?, active_world_id = ?, " +
+                "active_roleplay_character_id = ?, active_user_persona_id = ? WHERE id = 1",
+            arrayOf(companionId, worldId, roleplayCharacterId, userPersonaId)
+        )
+    }
+
+    /** Entity-linked expansion (enforcer spec): summaries of entities referenced
+     *  by the retrieved memories, each entity once, keyed by entity name. */
+    fun entitySummariesForMemories(memoryIds: Collection<String>): LinkedHashMap<String, String> {
+        val out = LinkedHashMap<String, String>()
+        if (memoryIds.isEmpty()) return out
+        val placeholders = memoryIds.joinToString(",") { "?" }
+        readableDatabase.rawQuery(
+            "SELECT DISTINCT e.name, e.summary FROM entities e " +
+                "JOIN memory_entities me ON me.entity_id = e.entity_id " +
+                "WHERE me.memory_id IN ($placeholders) ORDER BY e.name ASC",
+            memoryIds.toTypedArray()
+        ).use {
+            while (it.moveToNext()) out[it.getString(0)] = it.getString(1)
+        }
+        return out
+    }
+
+    /* ---------------------------------------------------------------------- */
     /* librarian: retrievable memories + embeddings sidecar (Phase 3)         */
     /* ---------------------------------------------------------------------- */
 
@@ -1282,7 +1501,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         val args = ArrayList<String>()
         val sb = StringBuilder(
             "SELECT DISTINCT m.memory_id, m.scope, m.title, m.content, m.embedding_text, " +
-                "m.importance, m.always_load, m.created_at, m.world_id, m.provenance_confidence " +
+                "m.importance, m.always_load, m.created_at, m.world_id, m.provenance_confidence, " +
+                "m.protection_json, m.provenance_source " +
                 "FROM memories m LEFT JOIN memory_companions mc ON mc.memory_id = m.memory_id " +
                 "WHERE m.status = 'active' AND (m.scope = 'global'"
         )
@@ -1383,7 +1603,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         readableDatabase.query(
             "memories",
             arrayOf("memory_id", "scope", "title", "content", "embedding_text",
-                "importance", "always_load", "created_at", "world_id", "provenance_confidence"),
+                "importance", "always_load", "created_at", "world_id", "provenance_confidence",
+                "protection_json", "provenance_source"),
             "status = 'active'", null, null, null, "created_at ASC"
         ).use {
             while (it.moveToNext()) out.add(readRetrievable(it))
@@ -1401,7 +1622,9 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         alwaysLoad = c.getInt(c.getColumnIndexOrThrow("always_load")) == 1,
         createdAt = c.getString(c.getColumnIndexOrThrow("created_at")) ?: "",
         worldId = c.getStringOrNull("world_id"),
-        provenanceConfidence = c.getStringOrNull("provenance_confidence")
+        provenanceConfidence = c.getStringOrNull("provenance_confidence"),
+        protectionJson = c.getStringOrNull("protection_json"),
+        provenanceSource = c.getStringOrNull("provenance_source")
     )
 
     /** Stored vectors for [embeddingModel] over the active memories, keyed by

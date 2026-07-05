@@ -257,8 +257,7 @@ Everything is on-device. No cloud sync, no accounts.
   injection budget 20 entries / 6000 chars, debug view of injections.
 - Personas (prompt + activation prompt + lorebooks + auto-load-last-books),
   activation prompts, custom assistant name/avatar.
-- Companion memory store, Phases 1–2 (storage + capture — memory does not
-  influence conversations yet): encrypted `companion_memory.db`,
+- Companion memory store, Phases 1–2 (storage + capture): encrypted `companion_memory.db`,
   user backup import (own exported file, no bundled example data), rotating +
   manual JSON export, persona→companion bootstrap and edit-sync (surface:
   Characters → Memory system). Every completed turn is captured into the transcripts queue from
@@ -298,8 +297,35 @@ Everything is on-device. No cloud sync, no accounts.
   model dir, cleared on re-download) — any failure logs to MemoryLog and
   degrades to keyword search rather than indexing garbage vectors. Still
   needs on-device bring-up on the Pixel (URLs + real-graph tensor names) —
-  see the Phase 3 note in the plan. Enforcer injection (using this
-  retrieval) is Phase 4. Read `memory-system-integration-plan.md` before
+  see the Phase 3 note in the plan.
+  Phase 4 (enforcer — memory now influences conversations) is built, in
+  `preferences/memory/enforcer/`: a global **Memory engine** setting in
+  Memory settings — none / lore books (default = classic behavior) / full
+  (selectable only with an embedding model installed). At "full",
+  `Enforcer.assembleTurn` builds ONE extra system message per turn on
+  Dispatchers.IO in `regularGPTResponse`, after the stable first message
+  (never reordered — prefix caching): model-adaptation note, companion hard
+  limits, the **standing packet** (owner portrait + directives + always-load
+  memories; the raw render serves the turn while a background call to the
+  global **Archivist model** setting — endpoint profile + model name, shared
+  with Phase 6 — compresses it into the store's meta cache), ≤2 detected
+  **modes** (signal-embedding scores + keyword bonus; protective tie-break
+  steady > emotional > presence; stickiness with exit phrases; suggested_mode
+  from retrieved protected memories), retrieved memories with provenance
+  markers and inline HANDLE WITH CARE handling (one render function —
+  structurally inseparable), entity summaries, the lorebook matches rendered
+  INSIDE this message as "hand-written notes" that outrank memories
+  (near-duplicate memories suppressed; pairs flagged to meta
+  `enforcer.contradiction_flags` for Phase 6's run report), and the scene
+  from three per-chat Quick Settings selectors (world / roleplay character /
+  user persona — ALL in the auto-naming copy block). Operating defaults
+  (retrieval policy + five origin='system' modes) provision only into EMPTY
+  tables. ANY enforcer failure degrades to the classic lorebook message plus
+  one soft toast per process — never blocks generation. Tier "none" disables
+  lorebook injection too. The lorebook debug screen also renders the
+  enforcer's per-turn `AssemblyLog` (injected/cut + why, scores, packet
+  source, modes). Pure logic (PromptAssembler, ModeSelection, NearDuplicate)
+  is unit-tested. Read `memory-system-integration-plan.md` before
   touching `preferences/memory/`.
 - Markdown/LaTeX rendering, partial text selection, message edit/delete/copy/
   share, bulk select, image attach + DALL·E-style generation, in-app
@@ -391,8 +417,11 @@ Everything is on-device. No cloud sync, no accounts.
   about it, and read the commit history of the file first.
 - **System-message assembly in `regularGPTResponse`**: persona prompt + system
   message are merged into ONE stable first system message specifically for
-  provider prefix caching; lorebook matches go in a SEPARATE system message
-  after it. Don't reorder or merge these.
+  provider prefix caching; lorebook matches — or, at the full memory tier, the
+  enforcer's single assembled message (which contains the lore notes) — go in
+  a SEPARATE system message after it. Don't reorder or merge these, and never
+  inject two competing memory messages (the enforcer path and the classic lore
+  path are strictly either/or per turn).
 - **`ChatPreferences` parse-failure handling**: chat data must be preserved,
   never wiped, on JSON parse errors (regression fixed in c72853a).
 - **Native layer** (`app/src/main/cpp`, CPU gating in `NativeCpuSupport`):

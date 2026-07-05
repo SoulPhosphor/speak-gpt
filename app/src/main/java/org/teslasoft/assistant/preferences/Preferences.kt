@@ -1504,6 +1504,75 @@ class Preferences private constructor(private var preferences: SharedPreferences
     }
 
     /**
+     * Memory engine tier (integration plan Phase 4, global): "none" = character
+     * config + activation prompts only; "lorebooks" = the classic trigger-based
+     * lorebook tier (today's behavior, the default); "full" = the complete
+     * companion memory system (enforcer assembly; requires an installed
+     * embedding model to be selectable, though it degrades to keyword retrieval
+     * if the model later breaks — the tier never blocks generation).
+     */
+    fun getMemoryEngine() : String {
+        return getGlobalString("memory_engine", "lorebooks")
+    }
+
+    fun setMemoryEngine(engine: String) {
+        putGlobalString("memory_engine", engine)
+    }
+
+    /**
+     * Archivist model (global, decision D7): an endpoint profile id from
+     * ApiEndpointPreferences plus a model name. Phase 4 uses it for the
+     * standing-packet compressor; Phase 6's Archivist runs use the same
+     * setting. Empty = not configured (the packet falls back to raw records).
+     */
+    fun getArchivistEndpointId() : String {
+        return getGlobalString("archivist_endpoint_id", "")
+    }
+
+    fun setArchivistEndpointId(id: String) {
+        putGlobalString("archivist_endpoint_id", id)
+    }
+
+    fun getArchivistModel() : String {
+        return getGlobalString("archivist_model", "")
+    }
+
+    fun setArchivistModel(model: String) {
+        putGlobalString("archivist_model", model)
+    }
+
+    /**
+     * Per-chat scene selection (Phase 4, D8): the active world, roleplay
+     * character and user persona for this chat, as memory-store ids; "" =
+     * none. Prefs are the source of truth — the enforcer mirrors them into
+     * the store's app_state at generation time. All three are in the
+     * auto-naming copy block (they'd silently vanish on rename otherwise).
+     */
+    fun getChatWorldId() : String {
+        return getString("memory_world_id", "")
+    }
+
+    fun setChatWorldId(id: String) {
+        putString("memory_world_id", id)
+    }
+
+    fun getChatRoleplayCharacterId() : String {
+        return getString("memory_roleplay_character_id", "")
+    }
+
+    fun setChatRoleplayCharacterId(id: String) {
+        putString("memory_roleplay_character_id", id)
+    }
+
+    fun getChatUserPersonaId() : String {
+        return getString("memory_user_persona_id", "")
+    }
+
+    fun setChatUserPersonaId(id: String) {
+        putString("memory_user_persona_id", id)
+    }
+
+    /**
      * Get logit biases config ID
      *
      * @return logit biases config ID

@@ -239,7 +239,13 @@ data class RetrievableMemory(
     val alwaysLoad: Boolean,
     val createdAt: String,
     val worldId: String?,
-    val provenanceConfidence: String?
+    val provenanceConfidence: String?,
+    // Phase 4 (enforcer): a protected memory must be structurally inseparable
+    // from its handling, so the retrieval row carries the protection object and
+    // provenance source with it — the assembler never has to re-query (and can
+    // therefore never "forget" the HANDLE WITH CARE line).
+    val protectionJson: String? = null,
+    val provenanceSource: String? = null
 ) {
     fun textToEmbed(): String = embeddingText?.takeIf { it.isNotBlank() } ?: content
 }

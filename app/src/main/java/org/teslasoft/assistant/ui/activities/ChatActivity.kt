@@ -3688,6 +3688,35 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
      * direction: no store, memory off, or any failure must never disturb the
      * conversation or the voice loop.
      */
+    // One soft notification per process when the full memory system degrades
+    // mid-conversation (enforcer spec: "user notified once, softly") — the
+    // Event/Memory log carries the details, the toast just says it happened.
+    private var memoryDegradedNotified = false
+
+    private fun notifyMemoryDegradedOnce() {
+        if (memoryDegradedNotified) return
+        memoryDegradedNotified = true
+        runOnUiThread {
+            Toast.makeText(this, getString(R.string.memory_degraded_notice), Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /** Short rolling context for the librarian's retrieval query (enforcer
+     *  spec: the message plus a summary of the last few turns, so
+     *  mid-conversation topics keep retrieving — not just the latest line).
+     *  The current user message is already the list's tail, so it's dropped. */
+    private fun recentTurnsContext(): String {
+        return try {
+            chatMessages.dropLast(1)
+                .takeLast(org.teslasoft.assistant.preferences.memory.enforcer.Enforcer.RECENT_CONTEXT_TURNS)
+                .joinToString("\n") {
+                    (it.content ?: "").take(
+                        org.teslasoft.assistant.preferences.memory.enforcer.Enforcer.RECENT_CONTEXT_CHARS_PER_TURN
+                    )
+                }
+        } catch (_: Exception) { "" }
+    }
+
     private fun recordTranscriptTurn(request: String) {
         try {
             if (!MemoryStore.isProvisioned(this)) return
@@ -4120,13 +4149,18 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             )
         }
 
+        // Memory engine tier (Phase 4): "none" = no injected memory of either
+        // kind, "lorebooks" = the classic tier below, "full" = the enforcer
+        // assembly (which renders the lore matches inside its own message).
+        val memoryEngine = preferences!!.getMemoryEngine()
+
         // Lorebook (memory system): match the user's latest message against the
         // persona's core lorebook (always active when the persona is used) plus
         // whichever additional lorebooks are checked for this chat, and inject the
         // matched memories as their own System message, placed after the base
         // prompt so prefix caching of the stable prompt holds.
         val allLoreMatches = ArrayList<LoreBookMatch>()
-        try {
+        if (memoryEngine != "none") try {
             val loreStore = LoreBookStore.getInstance(this)
             val activeBookIds = LinkedHashSet<String>()
             val checkedIds = preferences?.getActiveLoreBookIds() ?: arrayListOf()
@@ -4152,7 +4186,50 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             org.teslasoft.assistant.preferences.memory.MemoryLog.log(this, "LoreBook", "error", "Lorebook unavailable this turn: ${e.message}")
         }
 
-        if (allLoreMatches.isNotEmpty()) {
+        // Full memory system (Phase 4 enforcer): assemble the per-turn memory
+        // message — standing packet, modes, retrieved memories with protection
+        // handling, lore notes, scene — as ONE separate system message after
+        // the stable base prompt. The kill switch skips the store entirely
+        // (lorebooks are user-authored app material and still apply), and ANY
+        // failure degrades to the classic lore path below: never block a turn.
+        var memoryAssembly: String? = null
+        if (memoryEngine == "full" && preferences?.getChatMemoryEnabled() == true &&
+            MemoryStore.isProvisioned(this)
+        ) {
+            memoryAssembly = try {
+                withContext(Dispatchers.IO) {
+                    org.teslasoft.assistant.preferences.memory.enforcer.Enforcer.getInstance(this@ChatActivity)
+                        .assembleTurn(
+                            org.teslasoft.assistant.preferences.memory.enforcer.Enforcer.TurnInput(
+                                chatId = chatId,
+                                personaId = personaId,
+                                userMessage = lastUserMessageForLore,
+                                recentContext = recentTurnsContext(),
+                                modelTag = model,
+                                loreMatches = allLoreMatches,
+                                worldId = preferences?.getChatWorldId(),
+                                roleplayCharacterId = preferences?.getChatRoleplayCharacterId(),
+                                userPersonaId = preferences?.getChatUserPersonaId()
+                            )
+                        )
+                }
+            } catch (e: Exception) {
+                org.teslasoft.assistant.preferences.memory.MemoryLog.log(
+                    this, "Enforcer", "error", "Assembly failed, lore-books-only this turn: ${e.message}"
+                )
+                notifyMemoryDegradedOnce()
+                null
+            }
+        }
+
+        if (memoryAssembly != null) {
+            msgs.add(
+                ChatMessage(
+                    role = ChatRole.System,
+                    content = memoryAssembly
+                )
+            )
+        } else if (allLoreMatches.isNotEmpty()) {
             // Safety budget: a message that trips many triggers at once must not
             // flood the context. Inject at most MAX_INJECTED_ENTRIES memories /
             // MAX_INJECTED_CHARS characters, in book order (core book first).
@@ -4318,6 +4395,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     val loreBooksSeeded = preferences.isLoreBooksSeeded()
                     val chatMemoryEnabledRaw = preferences.getChatMemoryEnabledRaw()
                     val chatExcludedFromMemory = preferences.isChatExcludedFromMemory()
+                    val chatWorldId = preferences.getChatWorldId()
+                    val chatRoleplayCharacterId = preferences.getChatRoleplayCharacterId()
+                    val chatUserPersonaId = preferences.getChatUserPersonaId()
 
                     preferences.setPreferences(Hash.hash(newChatName.toString()), this)
                     preferences.setResolution(resolution)
@@ -4350,6 +4430,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     preferences.setLoreBooksSeeded(loreBooksSeeded)
                     preferences.setChatMemoryEnabledRaw(chatMemoryEnabledRaw)
                     preferences.setChatExcludedFromMemory(chatExcludedFromMemory)
+                    preferences.setChatWorldId(chatWorldId)
+                    preferences.setChatRoleplayCharacterId(chatRoleplayCharacterId)
+                    preferences.setChatUserPersonaId(chatUserPersonaId)
 
                     // The rename changed the chat id; captured transcripts are
                     // keyed by it, so the queue must follow the chat.

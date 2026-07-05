@@ -128,6 +128,22 @@ class Librarian private constructor(private val appContext: Context) {
         }
     }
 
+    /**
+     * Embed arbitrary text with the active model, or null when no model is
+     * usable or inference fails. Phase 4's enforcer uses this for mode-signal
+     * vectors and lore-entry near-duplicate checks; both degrade gracefully
+     * on null (keyword scoring / word-overlap check).
+     */
+    fun embedOrNull(text: String, isQuery: Boolean): FloatArray? {
+        val m = ensureModel() ?: return null
+        return try {
+            m.embed(text, isQuery)
+        } catch (t: Throwable) {
+            MemoryLog.log(appContext, "Librarian", "error", "Embed failed: ${t.message}")
+            null
+        }
+    }
+
     /** Force a reload next time (after a model download/removal). */
     @Synchronized
     fun invalidateModel() {
