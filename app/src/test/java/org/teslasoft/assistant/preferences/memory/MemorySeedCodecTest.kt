@@ -70,6 +70,32 @@ class MemorySeedCodecTest {
     }
 
     @Test
+    fun templateExamplesCanNeverPoseAsUserTruth() {
+        // Seed-safety audit (July 2026): example/template records must be
+        // machine-readable as seed data and must not ship injectable. A
+        // template edit that reintroduces active/user_stated examples is a
+        // safety regression — fail it here, in CI, not on a device.
+        val data = MemorySeedCodec.parse(templateJson())
+
+        for (m in data.memories) {
+            assertEquals("template memories must be origin=seed", "seed", m.origin)
+            assertEquals("template memories must not ship active", "archived", m.status)
+            assertEquals("seed_example", m.provenanceSource)
+            assertTrue(
+                "template memories must not claim certainty",
+                m.provenanceConfidence != "certain"
+            )
+        }
+        for (c in data.companions) {
+            assertEquals("seed", c.origin)
+            assertEquals("placeholder companion must stay draft", "draft", c.status)
+        }
+        for (e in data.entities) assertEquals("seed", e.origin)
+        for (m in data.modes) assertEquals("seed", m.origin)
+        for (d in data.directives) assertEquals("seed", d.origin)
+    }
+
+    @Test
     fun roundTripIsLossless() {
         val first = MemorySeedCodec.parse(templateJson())
         val serialized = MemorySeedCodec.serialize(first)

@@ -144,7 +144,24 @@ Everything is on-device. No cloud sync, no accounts.
    memories + protection/provenance, entities, modes, directives, worlds,
    user_personas, roleplay_characters, transcripts, proposals, change_log,
    embeddings sidecar, deleted_ids tombstones; deviations documented in the
-   MemoryStore header). Created lazily — `MemoryStore.isProvisioned()` gates
+   MemoryStore header). DB v2 (seed-safety audit, July 2026) adds a
+   machine-readable `origin` column ('user' default / 'seed' /
+   'archivist'-reserved) on memories, companions, entities, modes and
+   directives: `activeMemoriesForScope` — the SINGLE eligibility gate that
+   Phase 4 injection must also consume — excludes origin='seed' rows (and
+   the bundled template's fixed all-zeros ids, which is how pre-v2 imports
+   are caught) unless the "Include seed records (testing)" switch in Memory
+   settings is on, and excludes memories whose companion is still 'draft'.
+   The bundled template ships its examples archived +
+   provenance 'seed_example'/'tentative' (enforced by
+   `MemorySeedCodecTest.templateExamplesCanNeverPoseAsUserTruth` — never
+   ship active/user_stated example records), and Memory settings has a
+   confirm-dialog purge ("Remove seed & example records") that deletes seed
+   memories/companions/entities + embeddings with tombstones while never
+   touching transcripts, user records, modes or directives. The Librarian
+   also applies a min-similarity floor (0.30) so top-k can't surface weak
+   matches from a small store; debug-search labels show status/origin/
+   provenance and include non-active memories. Created lazily — `MemoryStore.isProvisioned()` gates
    every hook so nothing provisions it as a side effect. Seeds/backups are
    schema-shaped JSON via `MemorySeedCodec` (unit-tested round-trip);
    `MemoryExporter` writes rotating daily backups at app start + manual SAF

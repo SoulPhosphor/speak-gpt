@@ -380,6 +380,25 @@ downloader now skips already-complete files and keeps what landed on
 failure, so a partial install shows "not installed" and re-downloading only
 fetches the missing pieces.
 
+### ☑ Seed-safety audit (July 2026, pre-Phase-4 gate)
+Owner requirement: runtime injection must never treat seed examples or
+placeholders as approved user memory. Landed as DB v2 + template + retrieval
+changes: machine-readable `origin` column ('user'/'seed'; 'archivist'
+reserved) on memories/companions/entities/modes/directives, round-tripped by
+the codec; the bundled template's example records ship `archived` +
+`seed_example`/`tentative` provenance (CI-enforced by
+`templateExamplesCanNeverPoseAsUserTruth`); `activeMemoriesForScope` is THE
+eligibility gate (Phase 4 must consume it, not raw queries): active status,
+scope isolation, no seed rows (origin OR the template's fixed all-zeros ids,
+catching pre-v2 imports) unless the Memory-settings testing switch is on, no
+memories of draft companions; Librarian adds a 0.30 min-cosine floor so
+top-k can't return weak matches; debug search labels every hit with
+status/origin/provenance and shows non-active memories; "Remove seed &
+example records" purge (confirm dialog) deletes seed
+memories/companions/entities + embeddings with tombstones — transcripts,
+user records, modes and directives (the operating defaults, origin-marked
+for a future purge if wanted) are never touched.
+
 ### ☐ Phase 4 — Enforcer: tiers + prompt assembly
 Specs: `prompt_assembly_template.md` (the literal skeleton — follow it
 verbatim, including the assembly rules section), `enforcer_librarian_spec.md`

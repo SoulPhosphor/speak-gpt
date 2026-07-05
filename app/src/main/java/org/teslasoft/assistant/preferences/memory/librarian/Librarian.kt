@@ -51,6 +51,13 @@ class Librarian private constructor(private val appContext: Context) {
         private const val DEFAULT_W_REC = 0.1
         private const val TENTATIVE_DAMPEN = 0.6
 
+        // Relevance floor (seed-safety audit requirement 8): top-k alone
+        // surfaces weak matches when the store is small, so results below
+        // this cosine similarity are dropped even if they'd make the cut.
+        // Conservative for EmbeddingGemma-256's asymmetric prompts; tune
+        // on-device if real queries show it cutting good matches.
+        private const val MIN_SIMILARITY = 0.30f
+
         /**
          * Pure ranking: score each candidate and return the top [topK], highest
          * first. score = w_sim·cosine + w_imp·(importance/5) + w_rec·recency;
@@ -147,7 +154,12 @@ class Librarian private constructor(private val appContext: Context) {
     fun search(companionId: String?, worldId: String?, query: String, topK: Int): List<ScoredMemory> {
         if (!MemoryStore.isProvisioned(appContext)) return emptyList()
         val store = MemoryStore.getInstance(appContext)
-        val candidates = store.activeMemoriesForScope(companionId, worldId)
+        // Eligibility gates live in the store query (active, scope, no seed
+        // data unless the owner's testing mode, no draft-companion memories) —
+        // Phase 4 injection consumes this same method, so it inherits them.
+        val candidates = store.activeMemoriesForScope(
+            companionId, worldId, includeSeed = store.seedTestingModeEnabled()
+        )
         if (candidates.isEmpty()) return emptyList()
 
         val m = ensureModel()
@@ -165,6 +177,7 @@ class Librarian private constructor(private val appContext: Context) {
                         Triple(mem, vec, recency[mem.memoryId] ?: 0.0)
                     }
                     return rank(queryVec, triples, weights(store), topK)
+                        .filter { it.similarity >= MIN_SIMILARITY }
                 }
             } catch (t: Throwable) {
                 MemoryLog.log(appContext, "Librarian", "error", "Vector search failed, using keyword fallback: ${t.message}")

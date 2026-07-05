@@ -54,7 +54,11 @@ data class CompanionRecord(
     val modelAdaptationsJson: String,     // JSON array of {model_tag, notes}
     val createdAt: String,
     val status: String,                   // draft | active | resting | retired
-    val nameHistory: List<NameHistoryEntry>
+    val nameHistory: List<NameHistoryEntry>,
+    /** 'user' (default), 'seed' (bundled/example template), 'archivist' (future
+     *  proposals). Machine-readable record source — 'seed' is gated out of
+     *  retrieval and targeted by the purge (seed-safety audit, July 2026). */
+    val origin: String = "user"
 )
 
 data class EntityRecord(
@@ -65,7 +69,8 @@ data class EntityRecord(
     val summary: String,
     val status: String?,
     val importance: Int,
-    val lastTouched: String?
+    val lastTouched: String?,
+    val origin: String = "user"
 )
 
 data class WorldRecord(
@@ -129,7 +134,8 @@ data class MemoryRecord(
     val supersedes: String?,
     val companionIds: List<String>,       // memory_companions join rows
     val entityRefs: List<String>,         // memory_entities join rows
-    val changeLog: List<ChangeLogEntry>
+    val changeLog: List<ChangeLogEntry>,
+    val origin: String = "user"
 )
 
 data class ModeRecord(
@@ -142,7 +148,8 @@ data class ModeRecord(
     val transitionNote: String?,
     val overridesJson: String,            // JSON array of mode ids
     val scope: String,                    // 'global' or 'companion'
-    val companionIdsJson: String          // JSON array
+    val companionIdsJson: String,         // JSON array
+    val origin: String = "user"
 )
 
 data class DirectiveRecord(
@@ -150,7 +157,8 @@ data class DirectiveRecord(
     val text: String,
     val rationale: String?,
     val appliesToJson: String,            // JSON array; empty = all companions
-    val priority: Int
+    val priority: Int,
+    val origin: String = "user"
 )
 
 data class ArchivistSettingsRecord(

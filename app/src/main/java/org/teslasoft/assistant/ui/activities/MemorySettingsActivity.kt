@@ -36,6 +36,7 @@ import androidx.core.graphics.drawable.toDrawable
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.progressindicator.LinearProgressIndicator
@@ -81,6 +82,8 @@ class MemorySettingsActivity : FragmentActivity() {
     private var btnBootstrap: MaterialButton? = null
     private var switchAutoBackup: MaterialSwitch? = null
     private var switchDefaultMemory: MaterialSwitch? = null
+    private var switchSeedTesting: MaterialSwitch? = null
+    private var btnPurgeSeed: MaterialButton? = null
 
     private var librarianModels: LinearLayout? = null
     private var btnRebuildIndex: MaterialButton? = null
@@ -130,6 +133,8 @@ class MemorySettingsActivity : FragmentActivity() {
         btnBootstrap = findViewById(R.id.btn_memory_bootstrap)
         switchAutoBackup = findViewById(R.id.switch_auto_backup)
         switchDefaultMemory = findViewById(R.id.switch_default_memory)
+        switchSeedTesting = findViewById(R.id.switch_seed_testing)
+        btnPurgeSeed = findViewById(R.id.btn_memory_purge_seed)
         librarianModels = findViewById(R.id.librarian_models)
         btnRebuildIndex = findViewById(R.id.btn_rebuild_index)
         textIndexStatus = findViewById(R.id.text_index_status)
@@ -203,6 +208,38 @@ class MemorySettingsActivity : FragmentActivity() {
         switchDefaultMemory?.isChecked = preferences?.getDefaultMemoryEnabled() ?: true
         switchDefaultMemory?.setOnCheckedChangeListener { _, checked ->
             preferences?.setDefaultMemoryEnabled(checked)
+        }
+
+        // Seed-safety controls (July 2026 audit): testing mode lets
+        // seed/example records into retrieval (default OFF — they can never
+        // reach a prompt otherwise), purge removes them for good. Both need a
+        // provisioned store.
+        if (MemoryStore.isProvisioned(this)) {
+            runOffThread {
+                val on = MemoryStore.getInstance(this).seedTestingModeEnabled()
+                runOnUiThread { switchSeedTesting?.isChecked = on }
+            }
+        }
+        switchSeedTesting?.setOnCheckedChangeListener { _, checked ->
+            if (!MemoryStore.isProvisioned(this)) return@setOnCheckedChangeListener
+            runOffThread {
+                MemoryStore.getInstance(this).setMeta(
+                    MemoryStore.META_SEED_TESTING_MODE, if (checked) "1" else "0"
+                )
+            }
+        }
+
+        btnPurgeSeed?.setOnClickListener {
+            if (!MemoryStore.isProvisioned(this)) {
+                Toast.makeText(this, R.string.memory_not_provisioned_toast, Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.btn_memory_purge_seed)
+                .setMessage(R.string.memory_purge_seed_confirm)
+                .setPositiveButton(R.string.memory_purge_seed_go) { _, _ -> purgeSeedRecords() }
+                .setNegativeButton(R.string.btn_cancel, null)
+                .show()
         }
 
         buildLibrarianRows()
@@ -381,6 +418,25 @@ class MemorySettingsActivity : FragmentActivity() {
             }
             runOnUiThread { textDebugSearchResults?.text = rendered }
         }.start()
+    }
+
+    private fun purgeSeedRecords() {
+        runOffThread {
+            val result = try {
+                val counts = MemoryStore.getInstance(this).purgeSeedRecords()
+                getString(
+                    R.string.memory_purge_seed_done,
+                    counts["memories"] ?: 0, counts["companions"] ?: 0, counts["entities"] ?: 0
+                )
+            } catch (e: Exception) {
+                getString(R.string.memory_operation_failed, e.message ?: e.javaClass.simpleName)
+            }
+            runOnUiThread {
+                Toast.makeText(this, result, Toast.LENGTH_LONG).show()
+                refreshStatus()
+                refreshIndexStatus()
+            }
+        }
     }
 
     private fun importBundledTemplate() {

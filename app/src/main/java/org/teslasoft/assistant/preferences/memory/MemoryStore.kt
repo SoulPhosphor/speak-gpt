@@ -49,7 +49,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
 
     companion object {
         const val DATABASE_NAME = "companion_memory.db"
-        private const val DATABASE_VERSION = 1
+        private const val DATABASE_VERSION = 2
 
         // meta keys
         const val META_SCHEMA_VERSION = "schema_version"
@@ -60,6 +60,23 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         const val META_LAST_AUTO_EXPORT_AT = "last_auto_export_at"
         const val META_INDEX_MODEL_TAG = "index_model_tag"
         const val META_BACKFILL_DONE = "backfill_done"
+        /** "1" = seed/example records participate in retrieval (owner testing
+         *  only). Default off: seed data must never reach prompt injection. */
+        const val META_SEED_TESTING_MODE = "seed_testing_mode"
+
+        /**
+         * The bundled template's fixed record ids (deliberately all-zeros
+         * UUIDs). Purge matches these IN ADDITION to origin='seed' because
+         * rows imported before the origin column existed carry the default
+         * 'user' origin — the ids are the only machine-readable trace of
+         * those earlier imports.
+         */
+        private val SEED_TEMPLATE_MEMORY_IDS = listOf(
+            "m-00000000-0000-0000-0000-000000000001",
+            "m-00000000-0000-0000-0000-000000000002"
+        )
+        private val SEED_TEMPLATE_COMPANION_IDS = listOf("c-00000000-0000-0000-0000-000000000001")
+        private val SEED_TEMPLATE_ENTITY_IDS = listOf("e-00000000-0000-0000-0000-000000000001")
 
         // A transcript row past this size closes and a new row opens: keeps the
         // per-turn parse-append-write affordable and Archivist inputs bounded.
@@ -136,7 +153,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 "base_personality_mirror_synced_at TEXT, " +
                 "model_adaptations_json TEXT DEFAULT '[]', " +
                 "created_at TEXT NOT NULL, " +
-                "status TEXT NOT NULL CHECK (status IN ('draft','active','resting','retired')))"
+                "status TEXT NOT NULL CHECK (status IN ('draft','active','resting','retired')), " +
+                "origin TEXT NOT NULL DEFAULT 'user')"
         )
 
         db.execSQL(
@@ -157,7 +175,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 "summary TEXT NOT NULL, " +
                 "status TEXT, " +
                 "importance INTEGER DEFAULT 3, " +
-                "last_touched TEXT)"
+                "last_touched TEXT, " +
+                "origin TEXT NOT NULL DEFAULT 'user')"
         )
 
         db.execSQL(
@@ -214,7 +233,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 "created_at TEXT NOT NULL, " +
                 "updated_at TEXT, " +
                 "status TEXT NOT NULL CHECK (status IN ('active','archived','superseded')), " +
-                "supersedes TEXT REFERENCES memories(memory_id))"
+                "supersedes TEXT REFERENCES memories(memory_id), " +
+                "origin TEXT NOT NULL DEFAULT 'user')"
         )
 
         db.execSQL(
@@ -253,7 +273,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 "transition_note TEXT, " +
                 "overrides_json TEXT DEFAULT '[]', " +
                 "scope TEXT NOT NULL DEFAULT 'global', " +
-                "companion_ids_json TEXT DEFAULT '[]')"
+                "companion_ids_json TEXT DEFAULT '[]', " +
+                "origin TEXT NOT NULL DEFAULT 'user')"
         )
 
         db.execSQL(
@@ -262,7 +283,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 "text TEXT NOT NULL, " +
                 "rationale TEXT, " +
                 "applies_to_json TEXT DEFAULT '[]', " +
-                "priority INTEGER DEFAULT 3)"
+                "priority INTEGER DEFAULT 3, " +
+                "origin TEXT NOT NULL DEFAULT 'user')"
         )
 
         db.execSQL(
@@ -360,6 +382,21 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
         // v1 is the first shipped schema; future migrations are additive steps
         // gated on oldVersion, each ending with an update of meta.db_migration.
+        if (oldVersion < 2) {
+            // v2 (seed-safety audit, July 2026): machine-readable record origin
+            // so seed/example/template imports can be gated out of retrieval
+            // and purged without touching user data. Rows that predate this
+            // column get 'user' — the bundled template's fixed all-zeros ids
+            // (SEED_TEMPLATE_*_IDS) are how the purge still finds pre-v2
+            // seed imports.
+            for (table in listOf("memories", "companions", "entities", "modes", "directives")) {
+                db.execSQL("ALTER TABLE $table ADD COLUMN origin TEXT NOT NULL DEFAULT 'user'")
+            }
+            db.execSQL(
+                "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                arrayOf(META_DB_MIGRATION, "2")
+            )
+        }
     }
 
     /* ---------------------------------------------------------------------- */
@@ -563,6 +600,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         put("model_adaptations_json", c.modelAdaptationsJson)
         put("created_at", c.createdAt)
         put("status", c.status)
+        put("origin", c.origin)
     }
 
     private fun readCompanion(c: Cursor, includeHistory: Boolean): CompanionRecord {
@@ -580,7 +618,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             modelAdaptationsJson = c.getStringOrNull("model_adaptations_json") ?: "[]",
             createdAt = c.getString(c.getColumnIndexOrThrow("created_at")) ?: "",
             status = c.getString(c.getColumnIndexOrThrow("status")),
-            nameHistory = if (includeHistory) readNameHistory(id) else emptyList()
+            nameHistory = if (includeHistory) readNameHistory(id) else emptyList(),
+            origin = c.getStringOrNull("origin") ?: "user"
         )
     }
 
@@ -673,6 +712,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                     put("status", e.status)
                     put("importance", e.importance)
                     put("last_touched", e.lastTouched)
+                    put("origin", e.origin)
                 })
                 report.addAdded("entities")
             }
@@ -750,6 +790,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                     put("updated_at", m.updatedAt)
                     put("status", m.status)
                     put("supersedes", m.supersedes)
+                    put("origin", m.origin)
                 })
                 for (cid in m.companionIds) {
                     db.insertWithOnConflict("memory_companions", null, ContentValues().apply {
@@ -791,6 +832,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                     put("overrides_json", m.overridesJson)
                     put("scope", m.scope)
                     put("companion_ids_json", m.companionIdsJson)
+                    put("origin", m.origin)
                 })
                 report.addAdded("modes")
             }
@@ -805,6 +847,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                     put("rationale", d.rationale)
                     put("applies_to_json", d.appliesToJson)
                     put("priority", d.priority)
+                    put("origin", d.origin)
                 })
                 report.addAdded("directives")
             }
@@ -893,7 +936,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                         summary = it.getString(it.getColumnIndexOrThrow("summary")),
                         status = it.getStringOrNull("status"),
                         importance = it.getInt(it.getColumnIndexOrThrow("importance")),
-                        lastTouched = it.getStringOrNull("last_touched")
+                        lastTouched = it.getStringOrNull("last_touched"),
+                        origin = it.getStringOrNull("origin") ?: "user"
                     )
                 )
             }
@@ -978,7 +1022,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                         supersedes = it.getStringOrNull("supersedes"),
                         companionIds = readJoin(db, "memory_companions", "companion_id", id),
                         entityRefs = readJoin(db, "memory_entities", "entity_id", id),
-                        changeLog = readChangeLog(db, id)
+                        changeLog = readChangeLog(db, id),
+                        origin = it.getStringOrNull("origin") ?: "user"
                     )
                 )
             }
@@ -998,7 +1043,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                         transitionNote = it.getStringOrNull("transition_note"),
                         overridesJson = it.getStringOrNull("overrides_json") ?: "[]",
                         scope = it.getStringOrNull("scope") ?: "global",
-                        companionIdsJson = it.getStringOrNull("companion_ids_json") ?: "[]"
+                        companionIdsJson = it.getStringOrNull("companion_ids_json") ?: "[]",
+                        origin = it.getStringOrNull("origin") ?: "user"
                     )
                 )
             }
@@ -1013,7 +1059,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                         text = it.getString(it.getColumnIndexOrThrow("text")),
                         rationale = it.getStringOrNull("rationale"),
                         appliesToJson = it.getStringOrNull("applies_to_json") ?: "[]",
-                        priority = it.getInt(it.getColumnIndexOrThrow("priority"))
+                        priority = it.getInt(it.getColumnIndexOrThrow("priority")),
+                        origin = it.getStringOrNull("origin") ?: "user"
                     )
                 )
             }
@@ -1240,7 +1287,20 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
      * memories remain available inside a world. [worldId] null = ordinary chat
      * (world-tagged fiction is excluded).
      */
-    fun activeMemoriesForScope(companionId: String?, worldId: String?): List<RetrievableMemory> {
+    /**
+     * The eligibility gate every retrieval (and later, Phase 4 injection)
+     * goes through: active status, scope match, NOT seed/example data
+     * (unless [includeSeed] — the owner's explicit testing mode), and the
+     * companion-scoped branch requires the companion itself to be past
+     * 'draft' — a draft companion's memories must never reach a live prompt.
+     * The pre-origin-column seed rows are excluded by their fixed template
+     * ids, so even an unmigrated import can't slip through.
+     */
+    fun activeMemoriesForScope(
+        companionId: String?,
+        worldId: String?,
+        includeSeed: Boolean = false
+    ): List<RetrievableMemory> {
         val out = ArrayList<RetrievableMemory>()
         val args = ArrayList<String>()
         val sb = StringBuilder(
@@ -1250,7 +1310,10 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 "WHERE m.status = 'active' AND (m.scope = 'global'"
         )
         if (companionId != null) {
-            sb.append(" OR mc.companion_id = ?")
+            sb.append(
+                " OR (mc.companion_id = ? AND EXISTS (SELECT 1 FROM companions c " +
+                    "WHERE c.companion_id = mc.companion_id AND c.status != 'draft'))"
+            )
             args.add(companionId)
         }
         sb.append(")")
@@ -1260,10 +1323,88 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             sb.append(" AND (m.world_id IS NULL OR m.world_id = ?)")
             args.add(worldId)
         }
+        if (!includeSeed) {
+            sb.append(" AND m.origin != 'seed'")
+            sb.append(" AND m.memory_id NOT IN (")
+            sb.append(SEED_TEMPLATE_MEMORY_IDS.joinToString(",") { "'$it'" })
+            sb.append(")")
+        }
         readableDatabase.rawQuery(sb.toString(), args.toTypedArray()).use {
             while (it.moveToNext()) out.add(readRetrievable(it))
         }
         return out
+    }
+
+    /** Is the owner's seed-testing mode on? (Memory settings switch.) */
+    fun seedTestingModeEnabled(): Boolean = getMeta(META_SEED_TESTING_MODE) == "1"
+
+    /**
+     * Removes seed/example/template records — matched by origin='seed' OR the
+     * bundled template's fixed ids (which is how pre-v2 imports are found) —
+     * along with their embeddings, links and name history (via cascades),
+     * writing tombstones for each. Deliberately NEVER touches transcripts
+     * (references to a purged companion are nulled, the transcript rows
+     * stay), user-created records (origin 'user'), modes or directives (the
+     * spec's standard operating defaults — origin-marked, so a future purge
+     * can target them if the owner decides). Returns per-type counts.
+     */
+    fun purgeSeedRecords(): Map<String, Int> {
+        val db = writableDatabase
+        val counts = LinkedHashMap<String, Int>()
+        db.beginTransaction()
+        try {
+            fun collectIds(table: String, idCol: String, fixedIds: List<String>): List<String> {
+                val fixedIn = fixedIds.joinToString(",") { "'$it'" }
+                val ids = ArrayList<String>()
+                db.rawQuery(
+                    "SELECT $idCol FROM $table WHERE origin = 'seed' OR $idCol IN ($fixedIn)",
+                    emptyArray<String>()
+                ).use { while (it.moveToNext()) ids.add(it.getString(0)) }
+                return ids
+            }
+
+            val memoryIds = collectIds("memories", "memory_id", SEED_TEMPLATE_MEMORY_IDS)
+            for (id in memoryIds) {
+                // A user memory may supersede a seed one; keep the user memory,
+                // drop the dangling pointer. Links/embeddings/change_log cascade.
+                db.execSQL("UPDATE memories SET supersedes = NULL WHERE supersedes = ?", arrayOf(id))
+                db.execSQL("DELETE FROM memories WHERE memory_id = ?", arrayOf(id))
+                db.execSQL(
+                    "INSERT OR REPLACE INTO deleted_ids (record_type, record_id, deleted_at) VALUES (?, ?, ?)",
+                    arrayOf("memories", id, nowIso())
+                )
+            }
+            counts["memories"] = memoryIds.size
+
+            val companionIds = collectIds("companions", "companion_id", SEED_TEMPLATE_COMPANION_IDS)
+            for (id in companionIds) {
+                // Preserve transcripts: null the companion reference, keep the row.
+                db.execSQL("UPDATE transcripts SET companion_id = NULL WHERE companion_id = ?", arrayOf(id))
+                db.execSQL("DELETE FROM memory_companions WHERE companion_id = ?", arrayOf(id))
+                db.execSQL("DELETE FROM companions WHERE companion_id = ?", arrayOf(id))
+                db.execSQL(
+                    "INSERT OR REPLACE INTO deleted_ids (record_type, record_id, deleted_at) VALUES (?, ?, ?)",
+                    arrayOf("companions", id, nowIso())
+                )
+            }
+            counts["companions"] = companionIds.size
+
+            val entityIds = collectIds("entities", "entity_id", SEED_TEMPLATE_ENTITY_IDS)
+            for (id in entityIds) {
+                db.execSQL("DELETE FROM memory_entities WHERE entity_id = ?", arrayOf(id))
+                db.execSQL("DELETE FROM entities WHERE entity_id = ?", arrayOf(id))
+                db.execSQL(
+                    "INSERT OR REPLACE INTO deleted_ids (record_type, record_id, deleted_at) VALUES (?, ?, ?)",
+                    arrayOf("entities", id, nowIso())
+                )
+            }
+            counts["entities"] = entityIds.size
+
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+        return counts
     }
 
     /**
@@ -1287,18 +1428,44 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             }
         }
 
+        // Labels carry status + origin + provenance so the owner can tell a
+        // real user memory from a seed example or an archived draft at a
+        // glance (seed-safety audit requirement). Non-active memories are
+        // shown too — with their status — so "archived but still present"
+        // is verifiable from the debug box.
         scan(
-            "SELECT title, content, scope FROM memories WHERE status='active' AND (title LIKE ? OR content LIKE ?) LIMIT $limit",
-            { "Memory · ${it.getString(2)}: ${it.getString(0)}" },
+            "SELECT title, content, scope, status, origin, provenance_source FROM memories " +
+                "WHERE title LIKE ? OR content LIKE ? LIMIT $limit",
+            {
+                val status = it.getString(3)
+                val origin = it.getString(4)
+                val prov = it.getString(5)
+                val marks = StringBuilder()
+                if (status != "active") marks.append(" [").append(status).append("]")
+                if (origin != "user") marks.append(" [").append(origin).append("]")
+                if (!prov.isNullOrBlank()) marks.append(" (").append(prov).append(")")
+                "Memory · ${it.getString(2)}$marks: ${it.getString(0)}"
+            },
             { it.getString(1) }
         )
         scan(
-            "SELECT current_name, essence FROM companions WHERE current_name LIKE ? OR essence LIKE ? LIMIT $limit",
-            { "Companion: ${it.getString(0)}" }, { it.getString(1) ?: "" }
+            "SELECT current_name, essence, status, origin FROM companions " +
+                "WHERE current_name LIKE ? OR essence LIKE ? LIMIT $limit",
+            {
+                val marks = StringBuilder()
+                if (it.getString(2) != "active") marks.append(" [").append(it.getString(2)).append("]")
+                if (it.getString(3) != "user") marks.append(" [").append(it.getString(3)).append("]")
+                "Companion$marks: ${it.getString(0)}"
+            },
+            { it.getString(1) ?: "" }
         )
         scan(
-            "SELECT name, summary FROM entities WHERE name LIKE ? OR summary LIKE ? LIMIT $limit",
-            { "Entity: ${it.getString(0)}" }, { it.getString(1) ?: "" }
+            "SELECT name, summary, origin FROM entities WHERE name LIKE ? OR summary LIKE ? LIMIT $limit",
+            {
+                val marks = if (it.getString(2) != "user") " [${it.getString(2)}]" else ""
+                "Entity$marks: ${it.getString(0)}"
+            },
+            { it.getString(1) ?: "" }
         )
         scan(
             "SELECT name, description FROM roleplay_characters WHERE name LIKE ? OR description LIKE ? LIMIT $limit",

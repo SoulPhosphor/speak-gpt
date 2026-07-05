@@ -114,6 +114,7 @@ object MemorySeedCodec {
                 modelAdaptationsJson = c.arrText("model_adaptations"),
                 createdAt = c.str("created_at") ?: "",
                 status = c.reqStr("status"),
+                origin = c.str("origin") ?: "user",
                 nameHistory = each(c, "name_history").map { h ->
                     NameHistoryEntry(
                         name = h.reqStr("name"),
@@ -133,7 +134,8 @@ object MemorySeedCodec {
                 summary = e.reqStr("summary"),
                 status = e.str("status"),
                 importance = e.optInt("importance", 3),
-                lastTouched = e.str("last_touched")
+                lastTouched = e.str("last_touched"),
+                origin = e.str("origin") ?: "user"
             )
         }
 
@@ -161,6 +163,7 @@ object MemorySeedCodec {
                 updatedAt = m.str("updated_at"),
                 status = m.reqStr("status"),
                 supersedes = m.str("supersedes"),
+                origin = m.str("origin") ?: "user",
                 companionIds = m.strList("companion_ids"),
                 entityRefs = m.strList("entity_refs"),
                 changeLog = each(m, "change_log").map { l ->
@@ -186,7 +189,8 @@ object MemorySeedCodec {
                 transitionNote = m.str("transition_note"),
                 overridesJson = m.arrText("overrides"),
                 scope = m.str("scope") ?: "global",
-                companionIdsJson = m.arrText("companion_ids")
+                companionIdsJson = m.arrText("companion_ids"),
+                origin = m.str("origin") ?: "user"
             )
         }
 
@@ -196,7 +200,8 @@ object MemorySeedCodec {
                 text = d.reqStr("text"),
                 rationale = d.str("rationale"),
                 appliesToJson = d.arrText("applies_to"),
-                priority = d.optInt("priority", 3)
+                priority = d.optInt("priority", 3),
+                origin = d.str("origin") ?: "user"
             )
         }
 
@@ -345,6 +350,7 @@ object MemorySeedCodec {
                     }
                     put("created_at", c.createdAt)
                     put("status", c.status)
+                    if (c.origin != "user") put("origin", c.origin)
                 })
             }
         })
@@ -360,6 +366,7 @@ object MemorySeedCodec {
                     putIfNotNull("status", e.status)
                     put("importance", e.importance)
                     putIfNotNull("last_touched", e.lastTouched)
+                    if (e.origin != "user") put("origin", e.origin)
                 })
             }
         })
@@ -409,6 +416,7 @@ object MemorySeedCodec {
                     putIfNotNull("updated_at", m.updatedAt)
                     put("status", m.status)
                     putIfNotNull("supersedes", m.supersedes)
+                    if (m.origin != "user") put("origin", m.origin)
                 })
             }
         })
@@ -426,6 +434,7 @@ object MemorySeedCodec {
                     put("overrides", jsonArrayOrEmpty(m.overridesJson))
                     put("scope", m.scope)
                     put("companion_ids", jsonArrayOrEmpty(m.companionIdsJson))
+                    if (m.origin != "user") put("origin", m.origin)
                 })
             }
         })
@@ -438,6 +447,7 @@ object MemorySeedCodec {
                     putIfNotNull("rationale", d.rationale)
                     put("applies_to", jsonArrayOrEmpty(d.appliesToJson))
                     put("priority", d.priority)
+                    if (d.origin != "user") put("origin", d.origin)
                 })
             }
         })
