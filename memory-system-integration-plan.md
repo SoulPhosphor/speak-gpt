@@ -399,6 +399,78 @@ memories/companions/entities + embeddings with tombstones — transcripts,
 user records, modes and directives (the operating defaults, origin-marked
 for a future purge if wanted) are never touched.
 
+### 📌 Campaign layer amendment (owner-approved design, July 2026)
+Owner decision after Phase 3: the roleplay design gains a **Campaign**
+(roleplay continuity) layer. World + roleplay character is NOT a sufficient
+scope key — the same world can host several playthroughs (possibly
+concurrently), and the same character can live multiple separate existences
+in the same world; without a continuity bucket their facts bleed together.
+This section is the authoritative amendment to Phases 5–6; **do not
+implement it before its phase**, but any earlier code touching retrieval or
+schema must not paint it into a corner.
+
+**1. Campaign card (new table, additive migration — next DB version bump
+when built):** `campaign_id` PK, user-facing `name` (the variable that holds
+a continuity together; campaigns are selected and archived by name),
+`world_id` FK, `roleplay_character_id` FK (the user's character),
+`companion_id` FK (the DM/GM running it), `status`
+('active'/'paused'/'ended'/'archived'), `created_at`, and `story_so_far`
+(Archivist-maintained summary, proposal-bound like `arc`).
+
+**2. Memories gain a nullable `campaign_id` column** (additive). All
+game-state facts key here: current inventory, injuries/curses/blessings,
+NPC relationships, promises made, places visited, plot events, current
+emotional/story state, items gained or lost.
+
+**3. The scoping ladder** — every fact lives at the HIGHEST rung where it
+stays true; the same *kind* of fact legitimately lives at different rungs
+by durability (the signature magic staff the character always carries is
+character-level lore; the Olympian Amulet owned only in one game is
+campaign-level state — only the user can always tell which):
+- **Character card**: appearance, abilities/spells (user-editable core
+  list), core backstory, signature possessions — stable across campaigns.
+- **World card**: premise, rules, factions, geography — reusable across
+  campaigns, simultaneously.
+- **Campaign card + campaign-scoped memories**: the specific continuity's
+  state (list above). Archiving/deleting a campaign archives its memories
+  (same recipe as world teardown); the world and character walk away clean.
+- **Companion layer**: the REAL user↔companion relationship only. The
+  campaign links to the DM companion so a session knows who's running it,
+  but game-state facts never attach to the companion; "we finished that
+  campaign together and loved it" is a companion memory, "the innkeeper
+  distrusts you" is not.
+
+**4. Ordinary conversation never retrieves campaign-scoped memories.**
+`activeMemoriesForScope` (still the single eligibility gate) gains a
+`campaignId` parameter: null ⇒ campaign-scoped rows are invisible (also
+invisible to *other* campaigns); set ⇒ that campaign's state joins the mix
+alongside global + companion + world + character-durable rows.
+
+**5. One selection implies the rest:** picking a campaign in Quick Settings
+implies its world, user roleplay character, and DM companion — one control,
+not three. (Transcripts should record the campaign id when one is active so
+the Archivist attributes captured turns to the right continuity.)
+
+**6. Archivist proposal UI must allow scope editing before approval** —
+facts get misclassified between character/world/campaign level, and the
+accept step is where the user re-scopes them (consistent with the
+commit-style override rules: newer can override, needs approval, editable).
+
+**7. Merge tooling** covers accidental duplicate worlds, roleplay
+characters, AND campaigns: re-point memory links, union fields, archive the
+duplicate with a tombstone.
+
+**8. Same librarian/RAG system** — the campaign axis is one more scope
+column in the same store, index and retrieval query. NO separate roleplay
+RAG system; different in-campaign retrieval behavior, if ever wanted, is a
+`retrieval_policy` tweak.
+
+**9. Companion identity stays app-owned** and never absorbs campaign or
+game-state facts (unchanged essence guardrail). DM-piloted NPCs are
+`roleplay_characters` rows with `played_by` = the companion id — no new
+machinery; NPC relationship facts are campaign-scoped memories referencing
+them.
+
 ### ☐ Phase 4 — Enforcer: tiers + prompt assembly
 Specs: `prompt_assembly_template.md` (the literal skeleton — follow it
 verbatim, including the assembly rules section), `enforcer_librarian_spec.md`
@@ -442,10 +514,16 @@ authority.
   selector, essence/hard-limits editor (user edits direct; Archivist is
   proposal-bound), model-adaptations list.
 - New areas: **My Personas** (user personas), **Roleplay Characters**
-  (definition user-editable, arc read-only), **Worlds** (list → world page:
+  (definition user-editable, arc read-only; card gains the user-editable
+  **abilities/spells** list per the campaign amendment — equipment stays in
+  memories), **Worlds** (list → world page:
   premise/rules, characters, world-scoped memory browser, teardown —
   archive-all or delete-all, one action, confirm dialog, "keep character
-  memories" option per the table plan).
+  memories" option per the table plan), and **Campaigns** (per the 📌
+  campaign amendment above: campaign cards, campaign-scoped memory browser,
+  archive/delete teardown, merge tooling for duplicate
+  worlds/characters/campaigns; campaign table + memories.campaign_id land
+  here as the next additive migration).
 - Entity browser (living summaries), owner-profile editor, directives and
   modes editors (user-editable).
 - **Visible result:** the whole store inspectable and editable by hand —
@@ -470,8 +548,13 @@ injections), `enforcer_librarian_spec.md` §Applying change-sets; D7.
   through the same validation path. Personality proposals presented as
   exact text for the user to paste into the app persona (mirror updates on
   next sync).
-- Emergence: `create_world` / `create_roleplay_character` ops back-tag
-  fiction memories; records appear in tabs and quick-settings selectors.
+- Emergence: `create_world` / `create_roleplay_character` /
+  `create_campaign` ops back-tag fiction memories; records appear in tabs
+  and quick-settings selectors. Per the 📌 campaign amendment: an unnamed
+  proposed world/campaign must be named by the user before acceptance, and
+  the proposal sheet lets the user EDIT the proposed scope
+  (character/world/campaign level) before approving — misclassified
+  durability is expected, the accept step is where it gets fixed.
 - Imported-transcript backfill: import old conversations as
   `source='imported'` transcripts queued like any others.
 - **Visible result:** the full loop — talk, run the Archivist, read the run
