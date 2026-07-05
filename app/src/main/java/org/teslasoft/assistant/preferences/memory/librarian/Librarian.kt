@@ -92,7 +92,28 @@ class Librarian private constructor(private val appContext: Context) {
         if (modelLoadFailed) return null
         val catalog = EmbeddingModelStorage.activeModel(appContext) ?: return null
         return try {
-            OnnxEmbeddingModel.create(appContext, catalog).also { model = it }
+            val m = OnnxEmbeddingModel.create(appContext, catalog)
+            // One-time semantic self-check per installed model (marker-cached in
+            // the model dir; a re-download clears it): bad tokenization or a
+            // mis-probed graph must disable semantic retrieval — keyword
+            // fallback — rather than silently index garbage vectors.
+            val marker = EmbeddingModelStorage.selfCheckMarker(appContext, catalog)
+            if (!marker.exists()) {
+                val failure = m.selfCheck()
+                if (failure != null) {
+                    try { m.close() } catch (_: Throwable) { }
+                    modelLoadFailed = true
+                    MemoryLog.log(
+                        appContext, "Librarian", "error",
+                        "Embedding self-check FAILED for ${catalog.id}: $failure — semantic retrieval disabled, using keyword fallback"
+                    )
+                    return null
+                }
+                try { marker.createNewFile() } catch (_: Throwable) { /* re-check next process; still correct */ }
+                MemoryLog.log(appContext, "Librarian", "info", "Embedding self-check passed for ${catalog.id}")
+            }
+            model = m
+            m
         } catch (t: Throwable) {
             modelLoadFailed = true
             MemoryLog.log(appContext, "Librarian", "error", "Embedding model failed to load: ${t.message}")

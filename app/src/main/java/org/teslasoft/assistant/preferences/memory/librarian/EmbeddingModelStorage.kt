@@ -50,6 +50,14 @@ object EmbeddingModelStorage {
     fun tokenizerFile(context: Context, model: EmbeddingModels.Model): File =
         File(modelDir(context, model), model.tokenizerFileName)
 
+    /**
+     * Marker written by the Librarian after a model passes its one-time
+     * semantic self-check (see Librarian.ensureModel). Lives next to the model
+     * files so deleting/re-downloading the model naturally resets it.
+     */
+    fun selfCheckMarker(context: Context, model: EmbeddingModels.Model): File =
+        File(modelDir(context, model), ".selfcheck_ok")
+
     fun isInstalled(context: Context, model: EmbeddingModels.Model): Boolean {
         val m = modelFile(context, model)
         val t = tokenizerFile(context, model)

@@ -54,6 +54,10 @@ object EmbeddingModelDownloader {
         model: EmbeddingModels.Model,
         progress: ProgressListener
     ): Result = withContext(Dispatchers.IO) {
+        // A fresh download must re-earn the self-check pass — the files are
+        // about to change under the marker.
+        EmbeddingModelStorage.selfCheckMarker(context, model).delete()
+
         // Head requests would let us total both files up front, but many CDNs
         // omit Content-Length; report per-file totals as they arrive instead.
         var carried = 0L

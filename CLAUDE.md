@@ -254,17 +254,30 @@ Everything is on-device. No cloud sync, no accounts.
   review marker.
   Phase 3 (librarian) adds on-device semantic retrieval in
   `preferences/memory/librarian/`: a swappable `EmbeddingModel` (default
-  EmbeddingGemma-300M ONNX, tokenized via ONNX Runtime Extensions), model
+  EmbeddingGemma-300M ONNX **q4**; int8 optional, never the default), model
   catalog/download/storage cloned from the Whisper pattern, `VectorMath` +
   `Librarian` (brute-force cosine top-k, scope isolation in the SQL query,
   retrieval_policy-weighted scoring, tentative dampening, keyword fallback,
   rebuild-index + model-tag-mismatch detection). Managed from the "Librarian"
   section of Memory settings (download models, rebuild index, debug search).
-  The ONNX inference path (`OnnxEmbeddingModel`) is written defensively
-  (probes tensor names, degrades to keyword search on any mismatch) and needs
-  on-device bring-up — see the Phase 3 note in the plan. Enforcer injection
-  (using this retrieval) is Phase 4. Read `memory-system-integration-plan.md`
-  before touching `preferences/memory/`.
+  Tokenization is **pure Kotlin** (`HfTokenizer`, unit-tested): each model
+  download fetches the repo's own `tokenizer.json` and it's parsed/encoded
+  on-device (BPE+byte-fallback for Gemma, Unigram for a future BGE-M3 —
+  model-specific prompt prefixes/pooling/dims are catalog fields, so a new
+  model is a catalog entry, not code). The app must NEVER bundle or
+  redistribute a Gemma-derived tokenizer artifact (owner decision July 2026 —
+  release builds auto-publish to GitHub, which would make bundling a
+  redistribution); do not add ONNX Runtime Extensions back for this.
+  Safety net, in order: unknown tokenizer.json constructs throw at load;
+  `OnnxEmbeddingModel` probes tensor names defensively; and the Librarian
+  runs a one-time **semantic self-check** per installed model
+  (related-vs-unrelated cosine ordering; pass marker `.selfcheck_ok` in the
+  model dir, cleared on re-download) — any failure logs to MemoryLog and
+  degrades to keyword search rather than indexing garbage vectors. Still
+  needs on-device bring-up on the Pixel (URLs + real-graph tensor names) —
+  see the Phase 3 note in the plan. Enforcer injection (using this
+  retrieval) is Phase 4. Read `memory-system-integration-plan.md` before
+  touching `preferences/memory/`.
 - Markdown/LaTeX rendering, partial text selection, message edit/delete/copy/
   share, bulk select, image attach + DALL·E-style generation, in-app
   translator, playground, logit bias editor, AMOLED theme, onboarding flow.

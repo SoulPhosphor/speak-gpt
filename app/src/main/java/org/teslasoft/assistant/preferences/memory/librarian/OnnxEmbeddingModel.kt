@@ -19,68 +19,85 @@ package org.teslasoft.assistant.preferences.memory.librarian
 import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtSession
-import ai.onnxruntime.extensions.OrtxPackage
 import android.content.Context
 import java.nio.LongBuffer
 
 /**
- * EmbeddingGemma via ONNX Runtime + ONNX Runtime Extensions.
- *
- * Two sessions: a tokenizer graph (EmbeddingGemma's SentencePiece tokenizer
- * wrapped as an ONNX custom op, run through the extensions library) turns a
- * string into token ids; the transformer turns ids into a sentence vector,
- * which is mean-pooled if needed, L2-normalized, Matryoshka-truncated to the
- * catalog dimension, and re-normalized.
+ * Embedding inference via ONNX Runtime, tokenized on-device by [HfTokenizer]
+ * from the model repo's own `tokenizer.json` (downloaded at runtime alongside
+ * the transformer — the app never bundles or redistributes model-licensed
+ * tokenizer artifacts; owner decision, July 2026). All model-specific choices
+ * (prompt prefixes, pooling, dimensions, token budget) come from the catalog
+ * entry, so a different future model (BGE-M3 etc.) needs no changes here.
  *
  * ON-DEVICE VALIDATION PENDING (memory-system-integration-plan.md, Phase 3).
  * huggingface.co is blocked in the build sandbox, so the exact tensor names
- * and the tokenizer-graph artifact could not be exercised here. The code
- * therefore PROBES input/output names rather than hardcoding them, and every
- * step is guarded: any mismatch throws, the Librarian catches it, and
- * retrieval degrades to keyword matching — exactly how Silero falls back to
- * the energy detector. Confirm names/behaviour on the Pixel and tighten if
- * needed.
+ * could not be exercised here. The code therefore PROBES input/output names
+ * rather than hardcoding them, and every step is guarded: any mismatch throws,
+ * the Librarian catches it, and retrieval degrades to keyword matching —
+ * exactly how Silero falls back to the energy detector. On top of that the
+ * Librarian runs [selfCheck] once per installed model before trusting it, so
+ * a pipeline that loads but embeds nonsense is disabled instead of silently
+ * poisoning the index.
  *
- * The environment and sessions are heavy; [create] builds them once and the
+ * The environment and session are heavy; [create] builds them once and the
  * Librarian keeps the instance for the process. Not thread-safe: the Librarian
  * serializes embed calls.
  */
 class OnnxEmbeddingModel private constructor(
     private val env: OrtEnvironment,
-    private val tokenizerSession: OrtSession,
+    private val tokenizer: HfTokenizer,
     private val modelSession: OrtSession,
     override val tag: String,
     override val dimensions: Int,
-    private val fullDimensions: Int
+    private val fullDimensions: Int,
+    private val queryPrefix: String,
+    private val documentPrefix: String,
+    private val pooling: EmbeddingModels.Pooling,
+    private val maxTokens: Int
 ) : EmbeddingModel {
-
-    // EmbeddingGemma's asymmetric prompts. Retrieval queries and stored
-    // documents use different prefixes; getting this right matters more than
-    // any quantization choice.
-    private val queryPrefix = "task: search result | query: "
-    private val documentPrefix = "title: none | text: "
 
     override fun embed(text: String, isQuery: Boolean): FloatArray {
         val prepared = (if (isQuery) queryPrefix else documentPrefix) + text
-        val (ids, mask) = tokenize(prepared)
+        val ids = tokenizer.encode(prepared, maxTokens)
+        if (ids.isEmpty()) throw IllegalStateException("tokenizer produced no ids")
+        val mask = LongArray(ids.size) { 1L }
         val pooled = runModel(ids, mask)
         val truncated = VectorMath.truncate(pooled, dimensions)
         return VectorMath.normalize(truncated)
     }
 
-    private fun tokenize(text: String): Pair<LongArray, LongArray> {
-        val inputName = tokenizerSession.inputNames.firstOrNull()
-            ?: throw IllegalStateException("tokenizer has no input")
-        OnnxTensor.createTensor(env, arrayOf(text), longArrayOf(1)).use { inputT ->
-            tokenizerSession.run(mapOf(inputName to inputT)).use { result ->
-                val outputs = tokenizerSession.outputNames.toList()
-                val idsName = outputs.firstOrNull { it.contains("ids", true) } ?: outputs.first()
-                val ids = readInt64(result, idsName)
-                val maskName = outputs.firstOrNull { it.contains("mask", true) }
-                val mask = if (maskName != null) readInt64(result, maskName) else LongArray(ids.size) { 1L }
-                return ids to mask
+    /**
+     * End-to-end sanity check of tokenizer + graph + pooling, run by the
+     * Librarian once per installed model (marker-cached). Embeds two related
+     * and one unrelated sentence and demands the obvious ordering with a
+     * margin, plus non-degenerate finite vectors. Returns null on pass, else
+     * a human-readable failure reason for MemoryLog. A wrong tokenizer or a
+     * mis-probed tensor fails here BEFORE any vector reaches the index.
+     */
+    fun selfCheck(): String? {
+        val a = embed("I love drinking coffee in the morning.", isQuery = false)
+        val b = embed("My favorite morning drink is coffee.", isQuery = false)
+        val c = embed("The spaceship landed on the distant planet.", isQuery = false)
+
+        for ((name, v) in listOf("a" to a, "b" to b, "c" to c)) {
+            if (v.size != dimensions) return "vector '$name' has ${v.size} dims, expected $dimensions"
+            var norm = 0.0
+            for (x in v) {
+                if (!x.isFinite()) return "vector '$name' contains non-finite values"
+                norm += x.toDouble() * x.toDouble()
             }
+            if (norm < 1e-6) return "vector '$name' is (near) zero"
         }
+
+        val simRelated = VectorMath.cosine(a, b)
+        val simUnrelated = VectorMath.cosine(a, c)
+        // Near-identical similarities for ALL pairs means the model collapsed
+        // to a constant output (a classic wrong-tokenizer symptom).
+        if (simUnrelated > 0.98f) return "unrelated texts score $simUnrelated — output looks constant"
+        if (simRelated < simUnrelated + 0.05f)
+            return "related pair ($simRelated) not above unrelated pair ($simUnrelated) — embeddings look wrong"
+        return null
     }
 
     private fun runModel(ids: LongArray, mask: LongArray): FloatArray {
@@ -105,7 +122,7 @@ class OnnxEmbeddingModel private constructor(
 
             modelSession.run(tensors).use { result ->
                 val outputs = modelSession.outputNames.toList()
-                // Prefer a ready sentence embedding; otherwise mean-pool the token states.
+                // Prefer a ready sentence embedding; otherwise pool the token states.
                 val sentenceName = outputs.firstOrNull {
                     it.contains("sentence", true) || it.contains("embedding", true) || it.contains("pooler", true)
                 }
@@ -114,7 +131,12 @@ class OnnxEmbeddingModel private constructor(
                     if (vec.size >= fullDimensions) return vec
                 }
                 val hiddenName = outputs.firstOrNull { it.contains("hidden", true) } ?: outputs.first()
-                return meanPool(readFloat3D(result, hiddenName), mask)
+                val states = readFloat3D(result, hiddenName)
+                return when (pooling) {
+                    EmbeddingModels.Pooling.MEAN -> meanPool(states, mask)
+                    EmbeddingModels.Pooling.CLS ->
+                        states.firstOrNull() ?: throw IllegalStateException("empty hidden states")
+                }
             }
         } finally {
             for (t in tensors.values) try { t.close() } catch (_: Throwable) { }
@@ -137,25 +159,6 @@ class OnnxEmbeddingModel private constructor(
     }
 
     /* --- output readers, tolerant of the several shapes ORT hands back --- */
-
-    private fun readInt64(result: OrtSession.Result, name: String): LongArray {
-        val value = result.get(name).orElseThrow { IllegalStateException("missing tokenizer output $name") }.value
-        return flattenLong(value)
-    }
-
-    private fun flattenLong(value: Any?): LongArray = when (value) {
-        is LongArray -> value
-        is Array<*> -> {
-            val parts = value.map { flattenLong(it) }
-            val total = parts.sumOf { it.size }
-            val out = LongArray(total)
-            var i = 0
-            for (p in parts) { System.arraycopy(p, 0, out, i, p.size); i += p.size }
-            out
-        }
-        is IntArray -> LongArray(value.size) { value[it].toLong() }
-        else -> throw IllegalStateException("unexpected token id type ${value?.javaClass}")
-    }
 
     /** [1, dim] or [dim] float output -> flat vector. */
     private fun readFloatVector(result: OrtSession.Result, name: String): FloatArray {
@@ -181,34 +184,42 @@ class OnnxEmbeddingModel private constructor(
     }
 
     override fun close() {
-        try { tokenizerSession.close() } catch (_: Throwable) { }
         try { modelSession.close() } catch (_: Throwable) { }
     }
 
     companion object {
         /**
-         * Builds both sessions with the extensions custom-op library registered
-         * (needed for the tokenizer graph's SentencePiece op). Throws on any
-         * failure — the Librarian treats a null/thrown model as "no vectors
-         * this session" and uses keyword fallback.
+         * Loads the tokenizer.json and builds the ORT session. Throws on any
+         * failure — including a tokenizer whose basic output is already broken
+         * (empty/out-of-range ids) — and the Librarian treats a thrown model as
+         * "no vectors this session" and uses keyword fallback.
          */
         fun create(context: Context, model: EmbeddingModels.Model): OnnxEmbeddingModel {
             val modelFile = EmbeddingModelStorage.modelFile(context, model)
             val tokFile = EmbeddingModelStorage.tokenizerFile(context, model)
             require(modelFile.exists() && tokFile.exists()) { "model files missing" }
 
+            val tokenizer = HfTokenizer.load(tokFile)
+            // Cheap structural sanity before any inference: ids exist, are in
+            // range, and distinct texts tokenize differently.
+            val probeA = tokenizer.encode("hello world", 64)
+            val probeB = tokenizer.encode("The quick brown fox jumps over 12 lazy dogs.", 64)
+            if (probeA.isEmpty() || probeB.isEmpty())
+                throw IllegalStateException("tokenizer produced no ids")
+            if (probeA.contentEquals(probeB))
+                throw IllegalStateException("tokenizer maps different texts to identical ids")
+            for (id in probeA + probeB) {
+                if (id < 0 || id >= tokenizer.vocabSize)
+                    throw IllegalStateException("tokenizer id $id out of range (vocab ${tokenizer.vocabSize})")
+            }
+
             val env = OrtEnvironment.getEnvironment()
-            val extPath = OrtxPackage.getLibraryPath()
-
-            val tokOptions = OrtSession.SessionOptions().apply { registerCustomOpLibrary(extPath) }
-            val modelOptions = OrtSession.SessionOptions().apply { registerCustomOpLibrary(extPath) }
-
-            val tokSession = env.createSession(tokFile.path, tokOptions)
-            val modelSession = env.createSession(modelFile.path, modelOptions)
+            val session = env.createSession(modelFile.path, OrtSession.SessionOptions())
 
             return OnnxEmbeddingModel(
-                env, tokSession, modelSession,
-                model.embeddingTag, model.dimensions, model.fullDimensions
+                env, tokenizer, session,
+                model.embeddingTag, model.dimensions, model.fullDimensions,
+                model.queryPrefix, model.documentPrefix, model.pooling, model.maxTokens
             )
         }
     }

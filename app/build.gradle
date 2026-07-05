@@ -177,10 +177,10 @@ dependencies {
     // arm64 runtime ~12 MB — the price of voice detection that doesn't need
     // per-room energy-gate tuning.
     implementation 'com.microsoft.onnxruntime:onnxruntime-android:1.20.0'
-    // ONNX Runtime Extensions: on-device tokenization for the embedding model
-    // (EmbeddingGemma's SentencePiece tokenizer runs as an ONNX graph via the
-    // extensions custom-op library — see librarian/OnnxEmbeddingModel).
-    implementation 'com.microsoft.onnxruntime:onnxruntime-extensions-android:0.13.0'
+    // Embedding-model tokenization is pure Kotlin (librarian/HfTokenizer reads
+    // the downloaded tokenizer.json) — no ONNX Runtime Extensions dependency.
+    // Do not reintroduce it (or a bundled tokenizer graph): the app must not
+    // redistribute Gemma-licensed tokenizer artifacts.
 
     // SQLCipher for the companion memory store (companion_memory.db) — the
     // memory-system spec mandates encryption at rest for exactly this data

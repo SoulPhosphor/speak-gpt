@@ -321,11 +321,22 @@ rows per-row (no separate watermark — a row IS the unprocessed unit;
 **Landed July 2026.** What shipped, in `preferences/memory/librarian/`:
 `EmbeddingModel` interface (D3 — nothing outside the package depends on a
 concrete model); `EmbeddingModels` catalog of EmbeddingGemma-300M ONNX
-variants (q4/int8, 256-dim Matryoshka) + `EmbeddingModelStorage` (a dir per
-model = transformer + tokenizer) + `EmbeddingModelDownloader` (two-file
-download, Whisper pattern); `OnnxEmbeddingModel` runs the model via ONNX
-Runtime with **ONNX Runtime Extensions** for on-device SentencePiece
-tokenization (owner-chosen, option 1); `VectorMath` (cosine, L2, float32
+variants (**q4 is the default**, int8 optional — owner decision; 256-dim
+Matryoshka; prompt prefixes, pooling and token budget are per-model catalog
+fields so a future BGE-M3 is a catalog entry, not code) +
+`EmbeddingModelStorage` (a dir per model = transformer + tokenizer.json) +
+`EmbeddingModelDownloader` (two-file download, Whisper pattern);
+`OnnxEmbeddingModel` runs the transformer via ONNX Runtime, tokenized by
+**`HfTokenizer` — a pure-Kotlin encoder for the repo's own `tokenizer.json`**
+(BPE with byte-fallback for the Gemma family, Unigram for XLM-R/BGE-M3;
+Gson-streamed parse since Gemma's file is ~33 MB; unit-tested with synthetic
+fixtures). The earlier ONNX-Runtime-Extensions tokenizer-graph approach was
+DROPPED (July 2026): the required `tokenizer.onnx` doesn't exist upstream
+and generating+bundling one would make the app (and its auto-published
+GitHub releases) redistribute a Gemma-licensed artifact — owner decided
+against that. Downloading the real tokenizer.json at runtime keeps the
+distribution clean; do not reintroduce a bundled tokenizer or the
+extensions dependency. `VectorMath` (cosine, L2, float32
 BLOB codec) and `Librarian` (brute-force cosine top-k, scope filters in the
 SQL query, score = w_sim·cos + w_imp·imp/5 + w_rec·recency with
 retrieval_policy weights, tentative×0.6 dampening, keyword fallback,
@@ -333,20 +344,31 @@ retrieval_policy weights, tentative×0.6 dampening, keyword fallback,
 embeddings CRUD, scope-isolated `activeMemoriesForScope`, and the archive-rule
 helpers. UI: a "Librarian" section in Memory settings (download/remove model
 rows with progress, Rebuild index button + status, debug search box).
-Unit-tested pure-Kotlin core (`VectorMath` + `Librarian.rank`:
-cosine/blob/ranking/dampening/topK). Lore-entry embedding for Phase 4
-near-dup suppression is deferred to Phase 4 (nothing consumes it yet).
+Unit-tested pure-Kotlin core (`VectorMath`, `Librarian.rank`, `HfTokenizer`).
+Lore-entry embedding for Phase 4 near-dup suppression is deferred to Phase 4
+(nothing consumes it yet).
+
+**Wrong-tokenization safety net** (layered, so bad embeddings can never
+silently poison the index): unknown tokenizer.json constructs throw at load;
+`OnnxEmbeddingModel.create` sanity-checks basic encodes (non-empty,
+in-range, distinct); and `Librarian.ensureModel` runs a one-time **semantic
+self-check** per installed model — embed two related and one unrelated
+sentence and require the obvious cosine ordering with margin, plus
+non-degenerate finite vectors. Pass writes a `.selfcheck_ok` marker in the
+model dir (cleared when a download starts, gone when the model is deleted);
+fail logs the reason to MemoryLog, disables the model, and retrieval stays
+on keyword fallback.
 
 ⚠ **ON-DEVICE VALIDATION PENDING (the flagged risk):** huggingface.co is
-blocked in the build sandbox, so the model/tokenizer download URLs and the
-ONNX graph's tensor I/O names could not be exercised — `OnnxEmbeddingModel`
-therefore *probes* input/output names and guards every step, so a mismatch
-degrades to keyword search rather than crashing (Silero-style fallback). On
-the Pixel: confirm the onnx-community EmbeddingGemma URLs, generate/host the
-`tokenizer.onnx` graph (via `onnxruntime_extensions.gen_processing_models`
-from the repo's tokenizer.json), and verify pooling/normalization produce
-sane similarities. Everything compiles and the retrieval/scoring/storage
-half is solid; the neural inference is the piece to bring up on-device.
+blocked in the build sandbox, so the download URLs, the real ONNX graph's
+tensor I/O names, and `HfTokenizer` against the real 262k-entry Gemma
+tokenizer.json could not be exercised — only synthetic fixtures ran. On the
+Pixel: download the q4 model from Memory settings, watch MemoryLog for the
+"Embedding self-check passed" line (a failure line means tokenizer or graph
+mismatch — fix from the logged reason), then Rebuild index and try the debug
+search box for a semantic (not keyword) hit. Everything compiles and the
+retrieval/scoring/storage half is solid; the self-check verdict on-device is
+the remaining acceptance gate.
 
 ### ☐ Phase 4 — Enforcer: tiers + prompt assembly
 Specs: `prompt_assembly_template.md` (the literal skeleton — follow it
