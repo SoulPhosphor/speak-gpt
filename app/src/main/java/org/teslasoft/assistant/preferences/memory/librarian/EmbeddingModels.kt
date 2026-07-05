@@ -28,9 +28,11 @@ package org.teslasoft.assistant.preferences.memory.librarian
  * deliberately NOT the default (owner decision: prioritize reliable install
  * and low memory on the Pixel).
  *
- * Each variant is TWO files in its own directory: the transformer (`model*.onnx`
- * from onnx-community/embeddinggemma-300m-ONNX) and the repo's own
- * **`tokenizer.json`**, tokenized on-device by the pure-Kotlin HfTokenizer.
+ * Each variant lives in its own directory holding the transformer
+ * (`model*.onnx` from onnx-community/embeddinggemma-300m-ONNX), any ONNX
+ * external-data companions ([ExtraFile] — q4 keeps its weights in
+ * `model_q4.onnx_data`), and the repo's own **`tokenizer.json`**, tokenized
+ * on-device by the pure-Kotlin HfTokenizer.
  * Downloading the real tokenizer file at runtime (instead of generating and
  * bundling a tokenizer graph) means the app and its GitHub releases never
  * redistribute Gemma-licensed artifacts — owner decision, July 2026. Do not
@@ -56,6 +58,22 @@ object EmbeddingModels {
      *  states. Models that output a ready sentence embedding ignore this. */
     enum class Pooling { MEAN, CLS }
 
+    /**
+     * Additional file a model needs beside the transformer and tokenizer —
+     * ONNX "external data" (weights split out of the protobuf; the graph
+     * references this file BY NAME relative to its own directory, so
+     * [fileName] must match the reference inside the .onnx exactly, not our
+     * renamed model file). [optional] files may 404 upstream (absent by
+     * design) without failing the install; any other download error still
+     * fails. Use optional only when a file's existence couldn't be verified.
+     */
+    data class ExtraFile(
+        val fileName: String,
+        val url: String,
+        val sha256: String?,
+        val optional: Boolean = false
+    )
+
     data class Model(
         /** Stable id: directory name, preference value, and part of the sidecar tag. */
         val id: String,
@@ -67,6 +85,9 @@ object EmbeddingModels {
         /** Direct URL to the transformer ONNX. */
         val modelUrl: String,
         val modelSha256: String?,
+        /** Companion files (e.g. ONNX external weight data). All non-optional
+         *  ones must be present for the model to count as installed. */
+        val extraFiles: List<ExtraFile>,
         /** Tokenizer file name inside the model directory (HF tokenizer.json). */
         val tokenizerFileName: String,
         /** Direct URL to the repo's tokenizer.json. */
@@ -105,6 +126,16 @@ object EmbeddingModels {
         modelFileName = "model.onnx",
         modelUrl = "$BASE/onnx/model_q4.onnx",
         modelSha256 = null,
+        // The q4 export splits its weights into ONNX external data — the graph
+        // references "model_q4.onnx_data" by that exact name (proven by the
+        // on-device ORT error when it was missing). Required for install.
+        extraFiles = listOf(
+            ExtraFile(
+                fileName = "model_q4.onnx_data",
+                url = "$BASE/onnx/model_q4.onnx_data",
+                sha256 = null
+            )
+        ),
         tokenizerFileName = "tokenizer.json",
         tokenizerUrl = "$BASE/tokenizer.json",
         tokenizerSha256 = null,
@@ -124,6 +155,19 @@ object EmbeddingModels {
         modelFileName = "model.onnx",
         modelUrl = "$BASE/onnx/model_quantized.onnx",
         modelSha256 = null,
+        // q4's external-data companion is confirmed on-device; whether the
+        // int8 export also splits its weights couldn't be verified from the
+        // sandbox (huggingface.co blocked). Optional: a 404 means "absent
+        // upstream" and the install still succeeds; if the file exists it is
+        // downloaded and required at load time by ORT anyway.
+        extraFiles = listOf(
+            ExtraFile(
+                fileName = "model_quantized.onnx_data",
+                url = "$BASE/onnx/model_quantized.onnx_data",
+                sha256 = null,
+                optional = true
+            )
+        ),
         tokenizerFileName = "tokenizer.json",
         tokenizerUrl = "$BASE/tokenizer.json",
         tokenizerSha256 = null,

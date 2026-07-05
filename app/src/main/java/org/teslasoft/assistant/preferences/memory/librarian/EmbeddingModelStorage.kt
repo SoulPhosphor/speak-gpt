@@ -50,6 +50,9 @@ object EmbeddingModelStorage {
     fun tokenizerFile(context: Context, model: EmbeddingModels.Model): File =
         File(modelDir(context, model), model.tokenizerFileName)
 
+    fun extraFile(context: Context, model: EmbeddingModels.Model, extra: EmbeddingModels.ExtraFile): File =
+        File(modelDir(context, model), extra.fileName)
+
     /**
      * Marker written by the Librarian after a model passes its one-time
      * semantic self-check (see Librarian.ensureModel). Lives next to the model
@@ -58,10 +61,21 @@ object EmbeddingModelStorage {
     fun selfCheckMarker(context: Context, model: EmbeddingModels.Model): File =
         File(modelDir(context, model), ".selfcheck_ok")
 
+    /** Installed = EVERY required file present and non-empty: transformer,
+     *  tokenizer, and all non-optional extras (ONNX external data). A missing
+     *  companion file must read as "not installed", never as a loadable model —
+     *  ORT throws at session creation otherwise (seen on-device with q4's
+     *  model_q4.onnx_data). */
     fun isInstalled(context: Context, model: EmbeddingModels.Model): Boolean {
         val m = modelFile(context, model)
         val t = tokenizerFile(context, model)
-        return m.exists() && m.length() > 0 && t.exists() && t.length() > 0
+        if (!(m.exists() && m.length() > 0 && t.exists() && t.length() > 0)) return false
+        for (extra in model.extraFiles) {
+            if (extra.optional) continue
+            val f = extraFile(context, model, extra)
+            if (!f.exists() || f.length() == 0L) return false
+        }
+        return true
     }
 
     fun installedModels(context: Context): List<EmbeddingModels.Model> =

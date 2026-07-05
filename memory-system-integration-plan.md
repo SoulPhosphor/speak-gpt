@@ -370,6 +370,16 @@ search box for a semantic (not keyword) hit. Everything compiles and the
 retrieval/scoring/storage half is solid; the self-check verdict on-device is
 the remaining acceptance gate.
 
+Two on-device findings already folded back in (July 2026): the real Gemma
+tokenizer.json uses a Split pre-tokenizer with behavior MergedWithPrevious
+(all five SplitDelimiterBehavior variants are now implemented + tested), and
+the q4 export keeps its weights in ONNX **external data**
+(`model_q4.onnx_data`, referenced by that exact name from inside the graph
+— catalog `ExtraFile`, required for q4, optional/unverified for int8). The
+downloader now skips already-complete files and keeps what landed on
+failure, so a partial install shows "not installed" and re-downloading only
+fetches the missing pieces.
+
 ### ☐ Phase 4 — Enforcer: tiers + prompt assembly
 Specs: `prompt_assembly_template.md` (the literal skeleton — follow it
 verbatim, including the assembly rules section), `enforcer_librarian_spec.md`

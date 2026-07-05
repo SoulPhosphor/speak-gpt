@@ -260,6 +260,11 @@ Everything is on-device. No cloud sync, no accounts.
   retrieval_policy-weighted scoring, tentative dampening, keyword fallback,
   rebuild-index + model-tag-mismatch detection). Managed from the "Librarian"
   section of Memory settings (download models, rebuild index, debug search).
+  A model is a directory of files: transformer ONNX, any ONNX external-data
+  companions (catalog `ExtraFile` — q4's weights live in `model_q4.onnx_data`,
+  referenced by that exact name from inside the graph), and `tokenizer.json`;
+  `isInstalled` requires every non-optional file, and the downloader skips
+  already-complete files (partial installs repair by re-tapping Download).
   Tokenization is **pure Kotlin** (`HfTokenizer`, unit-tested): each model
   download fetches the repo's own `tokenizer.json` and it's parsed/encoded
   on-device (BPE+byte-fallback for Gemma, Unigram for a future BGE-M3 —
