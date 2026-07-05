@@ -144,33 +144,34 @@ Everything is on-device. No cloud sync, no accounts.
    memories + protection/provenance, entities, modes, directives, worlds,
    user_personas, roleplay_characters, transcripts, proposals, change_log,
    embeddings sidecar, deleted_ids tombstones; deviations documented in the
-   MemoryStore header). DB v2 (seed-safety audit, July 2026) adds a
-   machine-readable `origin` column ('user' default / 'seed' /
-   'archivist'-reserved) on memories, companions, entities, modes and
-   directives: `activeMemoriesForScope` — the SINGLE eligibility gate that
-   Phase 4 injection must also consume — excludes origin='seed' rows (and
-   the bundled template's fixed all-zeros ids, which is how pre-v2 imports
-   are caught) unless the "Include seed records (testing)" switch in Memory
-   settings is on, and excludes memories whose companion is still 'draft'.
-   The bundled template ships its examples archived +
-   provenance 'seed_example'/'tentative' (enforced by
-   `MemorySeedCodecTest.templateExamplesCanNeverPoseAsUserTruth` — never
-   ship active/user_stated example records), and Memory settings has a
-   confirm-dialog purge ("Remove seed & example records") that deletes seed
-   memories/companions/entities + embeddings with tombstones while never
-   touching transcripts, user records, modes or directives. The Librarian
-   also applies a min-similarity floor (0.30) so top-k can't surface weak
-   matches from a small store; debug-search labels show status/origin/
-   provenance and include non-active memories. Created lazily — `MemoryStore.isProvisioned()` gates
-   every hook so nothing provisions it as a side effect. Seeds/backups are
-   schema-shaped JSON via `MemorySeedCodec` (unit-tested round-trip);
-   `MemoryExporter` writes rotating daily backups at app start + manual SAF
-   export (chats ride along under `app_chats`; embeddings never exported).
-   Persona edits sync one-way into linked companion records via the hook in
+   MemoryStore header). DB v2 (July 2026) adds a machine-readable `origin`
+   column ('user' default; 'archivist' reserved for Phase 6 proposals) on
+   memories, companions, entities, modes and directives, so later phases can
+   tell user records from archivist-proposed ones. **The app ships and
+   auto-loads NO seed/example memory data** — a fresh store starts empty and
+   fills only from real conversations, persona-bootstrapped companions, and
+   the user's own imported backups (owner decision July 2026, after a bundled
+   example companion caused confusion; the old "Load starter template" button,
+   the seed-purge button, the seed-testing switch and the bundled
+   `memory_seed_template.json` were all removed). `activeMemoriesForScope` is
+   the SINGLE eligibility gate Phase 4 injection must also consume: active
+   status, scope match, and the companion-scoped branch requires the companion
+   to be past 'draft' (an unapproved companion's memories never inject — this
+   is the real protection). The Librarian applies a min-similarity floor
+   (0.30) so top-k can't surface weak matches from a small store; debug-search
+   labels show status/origin/provenance and include non-active memories.
+   Created lazily — `MemoryStore.isProvisioned()` gates
+   every hook so nothing provisions it as a side effect. Backups are
+   schema-shaped JSON via `MemorySeedCodec` (unit-tested round-trip against an
+   inline fixture); `MemoryExporter` writes rotating daily backups at app
+   start + manual SAF export (chats ride along under `app_chats`; embeddings
+   never exported). **Import** (SAF file picker → the encrypted store) restores
+   the user's own exported file. Persona edits sync one-way into linked
+   companion records via the hook in
    `PersonaPreferences` (`MemoryCompanionSync`) — renames re-point
    `app_character_id` under the OLD id; keep that when touching persona save
    paths. UI: "Memory system" tile in the Characters hub →
-   `MemorySettingsActivity` (status, seed import, export, persona bootstrap).
+   `MemorySettingsActivity` (status, import backup, export, persona bootstrap).
 4. **Files** — images in `getExternalFilesDir("images")`, whisper models via
    `LocalWhisperStorage`, rotating memory backups in
    `getExternalFilesDir("memory_backups")`.
@@ -258,9 +259,9 @@ Everything is on-device. No cloud sync, no accounts.
   activation prompts, custom assistant name/avatar.
 - Companion memory store, Phases 1–2 (storage + capture — memory does not
   influence conversations yet): encrypted `companion_memory.db`,
-  starter-seed/backup import, rotating + manual JSON export,
-  persona→companion bootstrap and edit-sync (surface: Characters → Memory
-  system). Every completed turn is captured into the transcripts queue from
+  user backup import (own exported file, no bundled example data), rotating +
+  manual JSON export, persona→companion bootstrap and edit-sync (surface:
+  Characters → Memory system). Every completed turn is captured into the transcripts queue from
   the `finally` of `generateResponse` (single funnel; best-effort, never
   disturbs a turn) via `TranscriptRecorder`. Quick Settings has two per-chat
   memory controls (both in the auto-naming copy block): "Use memory" (kill

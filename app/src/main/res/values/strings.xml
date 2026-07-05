@@ -869,8 +869,7 @@
     <string name="memory_status_bootstrap_no">Personas linked to companions: not yet</string>
     <string name="memory_status_last_backup">Last automatic backup: %1$s</string>
     <string name="memory_status_last_backup_never">Last automatic backup: never</string>
-    <string name="btn_memory_load_template">Load starter template</string>
-    <string name="btn_memory_import">Import seed or backup (JSON)</string>
+    <string name="btn_memory_import">Import backup (JSON)</string>
     <string name="btn_memory_export">Export backup (JSON)</string>
     <string name="btn_memory_bootstrap">Create companions from personas</string>
     <string name="memory_auto_backup">Automatic daily backup</string>
@@ -892,12 +891,6 @@
     <string name="memory_marker_excluded">Memory: excluded</string>
     <string name="memory_default_enabled">Use memory in new chats</string>
     <string name="memory_default_enabled_hint">The default for the per-chat "Use memory" switch in Quick Settings. With memory off, nothing is injected and the chat\'s recording is marked excluded — the content is still captured, so you can un-exclude it later if the experiment turned out to matter. Turning off "Archive this chat" in Quick Settings stops recording entirely.</string>
-    <string name="memory_seed_testing">Include seed/example records (testing)</string>
-    <string name="memory_seed_testing_hint">Seed and example records from imported templates are normally excluded from memory retrieval so placeholder text can never be treated as something you actually said. Turn this on only to test with them; it never affects your own memories.</string>
-    <string name="btn_memory_purge_seed">Remove seed &amp; example records</string>
-    <string name="memory_purge_seed_confirm">This permanently removes example/template records that came from imported seeds — the sample memories, the placeholder companion and the example entity. Your own memories, companions from your personas, chats and transcripts are not touched. Continue?</string>
-    <string name="memory_purge_seed_go">Remove</string>
-    <string name="memory_purge_seed_done">Removed %1$d seed memories, %2$d companions, %3$d entities.</string>
 
     <!-- Memory system Phase 3: librarian (embedding model + semantic search) -->
     <string name="memory_section_librarian">Librarian (semantic memory)</string>

@@ -154,12 +154,10 @@ class Librarian private constructor(private val appContext: Context) {
     fun search(companionId: String?, worldId: String?, query: String, topK: Int): List<ScoredMemory> {
         if (!MemoryStore.isProvisioned(appContext)) return emptyList()
         val store = MemoryStore.getInstance(appContext)
-        // Eligibility gates live in the store query (active, scope, no seed
-        // data unless the owner's testing mode, no draft-companion memories) —
-        // Phase 4 injection consumes this same method, so it inherits them.
-        val candidates = store.activeMemoriesForScope(
-            companionId, worldId, includeSeed = store.seedTestingModeEnabled()
-        )
+        // Eligibility gates live in the store query (active status, scope, no
+        // draft-companion memories) — Phase 4 injection consumes this same
+        // method, so it inherits them.
+        val candidates = store.activeMemoriesForScope(companionId, worldId)
         if (candidates.isEmpty()) return emptyList()
 
         val m = ensureModel()

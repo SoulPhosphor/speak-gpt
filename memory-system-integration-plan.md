@@ -380,24 +380,34 @@ downloader now skips already-complete files and keeps what landed on
 failure, so a partial install shows "not installed" and re-downloading only
 fetches the missing pieces.
 
-### ☑ Seed-safety audit (July 2026, pre-Phase-4 gate)
+### ☑ Seed-safety audit + no-bundled-seed decision (July 2026, pre-Phase-4 gate)
 Owner requirement: runtime injection must never treat seed examples or
-placeholders as approved user memory. Landed as DB v2 + template + retrieval
-changes: machine-readable `origin` column ('user'/'seed'; 'archivist'
-reserved) on memories/companions/entities/modes/directives, round-tripped by
-the codec; the bundled template's example records ship `archived` +
-`seed_example`/`tentative` provenance (CI-enforced by
-`templateExamplesCanNeverPoseAsUserTruth`); `activeMemoriesForScope` is THE
-eligibility gate (Phase 4 must consume it, not raw queries): active status,
-scope isolation, no seed rows (origin OR the template's fixed all-zeros ids,
-catching pre-v2 imports) unless the Memory-settings testing switch is on, no
-memories of draft companions; Librarian adds a 0.30 min-cosine floor so
-top-k can't return weak matches; debug search labels every hit with
-status/origin/provenance and shows non-active memories; "Remove seed &
-example records" purge (confirm dialog) deletes seed
-memories/companions/entities + embeddings with tombstones — transcripts,
-user records, modes and directives (the operating defaults, origin-marked
-for a future purge if wanted) are never touched.
+placeholders as approved user memory. First landed as gating around a bundled
+example template; then the owner decided the cleaner fix is to **ship no
+example memory data at all** (a bundled example companion had caused exactly
+the confusion the gating was defending against). Final state:
+- **The app bundles and auto-loads NO seed/example memory data.** The
+  "Load starter template" button, the bundled `memory_seed_template.json`,
+  the seed-purge button and the seed-testing switch were all removed. A fresh
+  store starts empty and fills only from real conversations,
+  persona-bootstrapped companions, and the user's own imported backups.
+- **`activeMemoriesForScope` is THE eligibility gate** (Phase 4 must consume
+  it, not raw queries): active status, scope isolation, and the
+  companion-scoped branch requires the companion to be past `draft` — an
+  unapproved companion's memories never inject. This draft gate is the real
+  protection.
+- **`origin` column** ('user' default; 'archivist' reserved for Phase 6
+  proposals) stays on memories/companions/entities/modes/directives,
+  round-tripped by the codec — it now distinguishes user vs
+  archivist-proposed records, not seed data.
+- Librarian adds a **0.30 min-cosine floor** so top-k can't return weak
+  matches from a small store; debug search labels every hit with
+  status/origin/provenance and shows non-active memories.
+- **Operating defaults (modes/directives/retrieval_policy)** are no longer
+  bundled; when Phase 4's enforcer needs them it provisions them as
+  `origin='system'` defaults on first use. Import/Export (the user's own
+  backup files) are untouched — those are the only way data enters the store
+  besides live capture.
 
 ### 📌 Campaign layer amendment (owner-approved design, July 2026)
 Owner decision after Phase 3: the roleplay design gains a **Campaign**

@@ -19,96 +19,101 @@ package org.teslasoft.assistant.preferences.memory
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 /**
- * The seed/export codec is the contract between the store, the bundled starter
- * seed, backups, and the future cross-device sync — a silent asymmetry here
- * corrupts every one of them. These tests run against the real bundled
- * template (the same file shipped in assets), so a template edit that breaks
- * parsing fails CI instead of failing on the phone.
+ * The seed/export codec is the contract behind the user's memory backup and
+ * restore (Import/Export) and the future cross-device sync — a silent
+ * asymmetry between parse and serialize corrupts every one of them. The app
+ * ships no bundled seed any more, so these tests run against an inline
+ * fixture that exercises the tricky passthrough fields (protection block,
+ * provenance, origin) rather than a shipped asset.
  */
 class MemorySeedCodecTest {
 
-    private fun templateJson(): String {
-        // Gradle JVM tests run with the module directory as the working dir,
-        // but be tolerant of a repo-root runner too.
-        val candidates = listOf(
-            File("src/main/assets/memory_seed_template.json"),
-            File("app/src/main/assets/memory_seed_template.json")
-        )
-        val file = candidates.firstOrNull { it.exists() }
-            ?: throw AssertionError("memory_seed_template.json asset not found from ${File(".").absolutePath}")
-        return file.readText()
-    }
+    /** A minimal but representative store: one of each record type, with the
+     *  fields most likely to be dropped in a round-trip (protection, provenance,
+     *  non-default origin, raw-JSON policy). */
+    private fun fixtureJson(): String = """
+        {
+          "schema_version": "1.11.0",
+          "owner_profile": { "portrait": "A test owner.", "standing_context": "ctx", "updated_at": "2026-07-05T00:00:00Z" },
+          "companions": [
+            { "companion_id": "c-1", "current_name": "Test", "essence": "e",
+              "memory_participation": "full", "hard_limits": ["never mean"],
+              "created_at": "2026-07-05T00:00:00Z", "status": "active" }
+          ],
+          "entities": [
+            { "entity_id": "e-1", "kind": "project", "name": "Proj", "summary": "s",
+              "status": "active", "importance": 3 }
+          ],
+          "memories": [
+            { "memory_id": "m-1", "scope": "global", "kind": "identity",
+              "title": "Protected one", "content": "truth + handling",
+              "importance": 4, "always_load": false,
+              "protection": { "is_protected": true, "reasons": ["assumption_risk"],
+                              "handling": ["follow the user's lead"], "casual_mention_ok": false },
+              "provenance": { "source": "user_stated", "confidence": "certain", "noted_on": "2026-07-05T00:00:00Z" },
+              "created_at": "2026-07-05T00:00:00Z", "status": "active" }
+          ],
+          "modes": [
+            { "mode_id": "mode-x", "name": "X", "signals": ["a"], "respond": ["b"], "avoid": ["c"] }
+          ],
+          "directives": [
+            { "directive_id": "d-1", "text": "Be kind.", "priority": 2 }
+          ],
+          "worlds": [], "user_personas": [], "roleplay_characters": [], "proposals": [],
+          "archivist_settings": { "trigger": "manual", "harvest_generosity": "balanced",
+                                  "autonomy": {}, "notes": null },
+          "retrieval_policy": { "weights": { "similarity": 0.6, "importance": 0.3, "recency": 0.1 } }
+        }
+    """.trimIndent()
 
     @Test
-    fun parsesBundledTemplate() {
-        val data = MemorySeedCodec.parse(templateJson())
-
+    fun parsesFixtureWithProtectionBlock() {
+        val data = MemorySeedCodec.parse(fixtureJson())
         assertEquals("1.11.0", data.schemaVersion)
-        assertNotNull(data.ownerProfile)
         assertEquals(1, data.companions.size)
-        assertEquals(2, data.memories.size)
-        assertEquals(8, data.modes.size)
-        assertEquals(6, data.directives.size)
-        assertEquals(1, data.entities.size)
-        assertNotNull(data.archivistSettings)
-        assertNotNull(data.retrievalPolicyJson)
+        assertEquals(1, data.memories.size)
         assertEquals("manual", data.archivistSettings!!.runTrigger)
 
-        // The template's protected memory must carry its protection block —
-        // the whole system's core invariant starts with the codec not losing it.
-        val protected = data.memories.firstOrNull { it.protectionJson != null }
-        assertNotNull("template should contain a protected memory", protected)
-        val protection = JSONObject(protected!!.protectionJson!!)
+        // The protection block is the system's core invariant — the codec must
+        // never lose it.
+        val protected = data.memories.first()
+        val protection = JSONObject(protected.protectionJson!!)
         assertTrue(protection.getBoolean("is_protected"))
         assertTrue(protection.getJSONArray("handling").length() > 0)
     }
 
     @Test
-    fun templateExamplesCanNeverPoseAsUserTruth() {
-        // Seed-safety audit (July 2026): example/template records must be
-        // machine-readable as seed data and must not ship injectable. A
-        // template edit that reintroduces active/user_stated examples is a
-        // safety regression — fail it here, in CI, not on a device.
-        val data = MemorySeedCodec.parse(templateJson())
-
-        for (m in data.memories) {
-            assertEquals("template memories must be origin=seed", "seed", m.origin)
-            assertEquals("template memories must not ship active", "archived", m.status)
-            assertEquals("seed_example", m.provenanceSource)
-            assertTrue(
-                "template memories must not claim certainty",
-                m.provenanceConfidence != "certain"
-            )
-        }
-        for (c in data.companions) {
-            assertEquals("seed", c.origin)
-            assertEquals("placeholder companion must stay draft", "draft", c.status)
-        }
-        for (e in data.entities) assertEquals("seed", e.origin)
-        for (m in data.modes) assertEquals("seed", m.origin)
-        for (d in data.directives) assertEquals("seed", d.origin)
-    }
-
-    @Test
     fun roundTripIsLossless() {
-        val first = MemorySeedCodec.parse(templateJson())
+        val first = MemorySeedCodec.parse(fixtureJson())
         val serialized = MemorySeedCodec.serialize(first)
         val second = MemorySeedCodec.parse(serialized)
 
         // Data-class equality covers every field of every record, including the
-        // raw-JSON passthrough columns (both sides normalized by org.json).
+        // raw-JSON passthrough columns and origin (both sides normalized by org.json).
         assertEquals(first, second)
     }
 
     @Test
+    fun originRoundTripsAndDefaultsToUser() {
+        // A record with no origin in the JSON parses as 'user'; a non-default
+        // origin survives a serialize/parse cycle.
+        val data = MemorySeedCodec.parse(fixtureJson())
+        assertEquals("user", data.memories.first().origin)
+
+        val withOrigin = data.copy(
+            companions = listOf(data.companions.first().copy(origin = "archivist"))
+        )
+        val back = MemorySeedCodec.parse(MemorySeedCodec.serialize(withOrigin))
+        assertEquals("archivist", back.companions.first().origin)
+    }
+
+    @Test
     fun exportEnvelopeCarriesChatsAndMeta() {
-        val data = MemorySeedCodec.parse(templateJson())
+        val data = MemorySeedCodec.parse(fixtureJson())
         val chats = JSONArray().put(
             JSONObject().put("name", "Test chat").put("messages", JSONArray())
         )
