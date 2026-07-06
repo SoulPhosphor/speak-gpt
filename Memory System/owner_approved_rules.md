@@ -359,6 +359,17 @@ roleplay-suggestions toggle or stays a per-campaign opt-in.
 - **Canon proposals outside roleplay:** never existed, never will (law 3).
 - **Rule-suggestion toggle:** not built — the Archivist does not suggest
   always-on rules at all (law 4).
+- **Entities:** retired (owner ruling, July 6 2026). People in the user's
+  life are real-world information — ordinary memories under the scope/type
+  system, tagged and retrieved by relevance — NOT "entities" with their own
+  cards or summaries. The Entities screen is removed, the entity-summaries
+  injection is removed, the table stays dormant.
+- **Owner profile:** retired (owner ruling, July 6 2026). What the system
+  knows about the user is **Preference and Fact memories**, retrieved by
+  relevance like everything else — never a profile form or an
+  always-injected "portrait." The form is removed, the portrait line is
+  removed, the table stays dormant. If a "system's picture of you" surface
+  is ever wanted, the owner designs it first.
 
 ---
 
@@ -378,9 +389,18 @@ roleplay-suggestions toggle or stays a per-campaign opt-in.
 - **Hard limits** live on the character card, user-authored, always-on
   system-prompt material. The user writes them in personally — the
   Archivist never proposes card content outside roleplay (law 3).
-- **The memory hub collapses.** The Memory manager opens straight into the
-  Memories browser; Companions one tap away; everything else behind a single
-  quiet "Advanced" entry.
+- **The memory hub collapses; the browser is global.** The Memory manager
+  screen is removed: "Browse & edit" opens straight into the Memories
+  browser — the single browser over ALL scopes and ALL types, roleplay
+  included, with the Pending banner pinned at its top (pending first, then
+  browsing) and the full filter system (scope, type, tag, source, status).
+  Companions one tap away. **ONE Roleplay card on Settings** holds all
+  roleplay areas (Worlds, Campaigns, Roleplay characters). **Every
+  individual page — each companion card, each world, each campaign, each
+  RP character — has a Memories button at its bottom opening that same
+  central browser pre-filtered to it.** No "Advanced" screen; no new
+  navigation invented. (Corrected July 6 2026: an earlier wording
+  mentioned an "Advanced" entry — it will never be built.)
 - **One real browser, many doors:** character cards, world cards, campaign
   pages, and RP character cards each get a button that opens the SAME
   browser pre-filtered to that thing's memories.
