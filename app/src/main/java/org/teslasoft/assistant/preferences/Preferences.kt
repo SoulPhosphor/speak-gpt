@@ -1487,6 +1487,42 @@ class Preferences private constructor(private var preferences: SharedPreferences
     }
 
     /**
+     * Whisper performance logging (Alerts, Errors & Logs). Off by default —
+     * when on, one line per on-device transcription is written to the
+     * Performance Log: how long the audio was, how long the model load took (0
+     * when already warm), how long the actual decode ran, plus a compact memory
+     * snapshot at that instant. This is the direct diagnostic for "Whisper
+     * suddenly takes forever to transcribe": it separates a longer recording
+     * from a cold model load from a genuinely slower decode, and correlates the
+     * slow turn with the memory pressure at that moment.
+     */
+    fun getWhisperPerfLogging() : Boolean {
+        return getGlobalBoolean("whisper_perf_logging", false)
+    }
+
+    fun setWhisperPerfLogging(enabled: Boolean) {
+        putGlobalBoolean("whisper_perf_logging", enabled, false)
+    }
+
+    /**
+     * Memory usage logging (Alerts, Errors & Logs). Off by default — when on, a
+     * lightweight app-wide heartbeat writes the process's memory footprint
+     * (Java heap, native heap, total PSS, thread count, and the system's
+     * available/low-memory state) to the Performance Log every ~60s, plus a
+     * line whenever Android asks the app to trim memory. Runs process-wide (not
+     * only in a chat) so a leak that grows while the app sits idle is still
+     * captured. Left on across a long session, a steadily-climbing PSS or
+     * thread count is what a leak looks like.
+     */
+    fun getMemoryUsageLogging() : Boolean {
+        return getGlobalBoolean("memory_usage_logging", false)
+    }
+
+    fun setMemoryUsageLogging(enabled: Boolean) {
+        putGlobalBoolean("memory_usage_logging", enabled, false)
+    }
+
+    /**
      * User exclusion (do-not-review): while excluded, NO further messages are
      * captured into the transcript queue and the chat's existing transcript
      * rows are marked excluded so the Archivist never reads them. Reversible:

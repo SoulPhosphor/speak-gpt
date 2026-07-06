@@ -407,6 +407,7 @@
     <string name="title_ads_log">Ads log</string>
     <string name="title_event_log">Voice Debug Log</string>
     <string name="title_memory_log">Memory Debug Log</string>
+    <string name="title_performance_log">Performance Log</string>
     <string name="btn_open_event_log">Open event log</string>
     <string name="btn_open_voice_advanced">Advanced voice &amp; debugging</string>
     <string name="label_clear_log">Clear log</string>
@@ -919,6 +920,14 @@
     <string name="memory_debug_all_header">— All records (keyword) —</string>
     <string name="memory_debug_logging_title">Memory diagnostics logging</string>
     <string name="memory_debug_logging_desc">Write what the memory system is doing to the Event log. Off by default; turn on only when investigating a memory problem.</string>
+
+    <!-- Performance diagnostics: two independent opt-in toggles, both off by
+         default, both writing to the dedicated Performance Log (kept separate
+         from the Voice Debug and Error logs so they stay readable). -->
+    <string name="whisper_perf_logging_title">Whisper performance logging</string>
+    <string name="whisper_perf_logging_desc">Write one line per on-device transcription to the Performance Log: how long the recording was, how long the model took to load, and how long it took to transcribe — plus a snapshot of memory use. Off by default; turn on to find out why Whisper is suddenly slow.</string>
+    <string name="memory_usage_logging_title">Memory usage logging</string>
+    <string name="memory_usage_logging_desc">Write the app\'s memory use to the Performance Log about once a minute (and whenever the system asks the app to free memory). Off by default; leave it on across a long session to spot a memory leak — a steadily rising figure is the tell-tale sign.</string>
 
     <!-- Memory system Phase 4: engine tier, Archivist model, per-chat scene picker, assembly debug -->
     <string name="memory_section_engine">Memory engine</string>

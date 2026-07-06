@@ -506,9 +506,28 @@ Everything is on-device. No cloud sync, no accounts.
   - **Alerts, Errors & Logs** (`AlertDebugMenuActivity`, plain rows; was "Alert &
     Debug") — the single full-width tile under Settings → Debug. Holds the
     NON-audio items: **Show chat errors** and **Sound alert for model errors**
-    switches; a **→ Audio Debugging** shortcut row (so someone hunting for VAD
-    logging here still finds it); then **Crash log** / **Event log** as "label ›"
-    rows that open `LogsActivity`.
+    switches; **Memory diagnostics logging** (`getMemoryDebugLogging`), and the
+    two **performance** toggles below it — **Whisper performance logging**
+    (`getWhisperPerfLogging`) and **Memory usage logging** (`getMemoryUsageLogging`),
+    all three **off by default**; a **→ Audio Debugging** shortcut row (so someone
+    hunting for VAD logging here still finds it); then **Crash log** (a.k.a. the
+    Error Log) / **Event log** (Voice Debug Log) / **Memory log** / **Performance
+    Log** as "label ›" rows that open `LogsActivity`.
+    The **Performance Log** is a dedicated `Logger` channel (`type == "performance"`,
+    2000 entries / 7 days) fed by exactly those two toggles, kept separate from the
+    Error and Voice logs so its high-volume output never evicts real crash entries
+    or buries the per-turn voice trail: **Whisper performance logging** writes one
+    line per on-device transcription from `LocalWhisperEngine.stopAndTranscribe`
+    (audio ms / model-load ms / decode ms + a compact `MemoryDiagnostics` snapshot),
+    and **Memory usage logging** drives an app-wide ~60s heartbeat plus
+    `onTrimMemory`/`onLowMemory` lines from `MainApplication` (Java heap, native
+    heap, total PSS, thread count, system availMem/low-memory) so a slow decode can
+    be read against memory pressure and a slow RAM leak shows as a rising curve even
+    while the app is idle. Footprint sampling lives in `util/MemoryDiagnostics`
+    (shared by both). Added July 2026 to diagnose "Whisper suddenly slow in long
+    conversations" — the transcribe path itself has no per-turn accumulation
+    (native decode caps threads at 4, `no_context` defaults on), so the cause is an
+    emergent system effect these logs are built to localize.
   All toggles are global prefs; the logs are local-only and intentionally always
   reachable (not gated on the installation id) — don't reintroduce that gate when
   restyling. **Audio Health** is a separate hands-free diagnostic from VAD

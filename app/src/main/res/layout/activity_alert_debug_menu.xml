@@ -201,6 +201,78 @@
                     android:layout_marginStart="12dp" />
             </LinearLayout>
 
+            <!-- Performance diagnostics: two opt-in toggles, both off by default,
+                 both writing to the dedicated Performance Log (row below). -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingTop="20dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/whisper_perf_logging_title"
+                        android:textColor="@color/text"
+                        android:textSize="16sp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/whisper_perf_logging_desc"
+                        android:textColor="@color/text_subtitle"
+                        android:textSize="13sp" />
+                </LinearLayout>
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_whisper_perf"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="12dp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingTop="20dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/memory_usage_logging_title"
+                        android:textColor="@color/text"
+                        android:textSize="16sp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/memory_usage_logging_desc"
+                        android:textColor="@color/text_subtitle"
+                        android:textSize="13sp" />
+                </LinearLayout>
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_memory_usage"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="12dp" />
+            </LinearLayout>
+
             <!-- ============ Audio Debugging shortcut ============ -->
             <!-- All microphone/voice diagnostics moved to their own Audio
                  Debugging screen (reached from Voice & Speech). This row is a
@@ -346,6 +418,35 @@
                     android:layout_height="24dp"
                     android:layout_marginStart="12dp"
                     android:contentDescription="@string/title_memory_log"
+                    android:src="@drawable/ic_chevron_right"
+                    android:tint="@color/text_subtitle" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/row_performance_log"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="?attr/selectableItemBackground"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center_vertical"
+                android:minHeight="56dp"
+                android:orientation="horizontal"
+                android:paddingVertical="12dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/title_performance_log"
+                    android:textColor="@color/text"
+                    android:textSize="16sp" />
+
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:layout_marginStart="12dp"
+                    android:contentDescription="@string/title_performance_log"
                     android:src="@drawable/ic_chevron_right"
                     android:tint="@color/text_subtitle" />
             </LinearLayout>

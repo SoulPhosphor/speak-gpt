@@ -88,6 +88,29 @@ class Logger {
         }
 
         /**
+         * Performance Log — a dedicated channel for the two opt-in performance
+         * diagnostics (both off by default, both in Alerts, Errors & Logs):
+         * Whisper transcription timing and the app-wide memory-usage heartbeat.
+         * Kept separate from the Error Log and the Voice Debug Log on purpose:
+         * these are high-volume and only written while actively investigating a
+         * slowdown or a suspected RAM leak, so they must not evict real crash
+         * entries or bury the per-turn voice trail. Timing lines and memory
+         * samples share this one channel so they can be read side by side (a
+         * decode spike next to the memory state at that instant).
+         * */
+        fun getPerformanceLog(context: Context) : String {
+            return EncryptedPreferences.getEncryptedPreference(context, "logs", "performance")
+        }
+
+        private fun setPerformanceLog(context: Context, log: String) {
+            EncryptedPreferences.setEncryptedPreference(context, "logs", "performance", log)
+        }
+
+        fun clearPerformanceLog(context: Context) {
+            setPerformanceLog(context, "")
+        }
+
+        /**
          * Get ads log
          * */
         fun getAdsLog(context: Context) : String {
@@ -95,7 +118,7 @@ class Logger {
         }
 
         /**
-         * @param type - type of log (crash/event/ads)
+         * @param type - type of log (crash/event/memory/performance/ads)
          * @param tag - any tag to identify log message and source
          * @param level - log level (info/error/warning/debug/verbose)
          * @param message - log message
@@ -149,6 +172,13 @@ class Logger {
                     setMemoryLog(context, log)
                 }
 
+                "performance" -> {
+                    val log = trimByEntries(
+                        "${getPerformanceLog(context)}$logString", PERF_LOG_MAX_ENTRIES, PERF_LOG_MAX_AGE_DAYS
+                    )
+                    setPerformanceLog(context, log)
+                }
+
                 // Unknown channel: drop silently rather than crash.
                 else -> return
             }
@@ -166,6 +196,11 @@ class Logger {
         private const val VOICE_LOG_MAX_AGE_DAYS = 7L
         private const val MEMORY_LOG_MAX_ENTRIES = 1000
         private const val MEMORY_LOG_MAX_AGE_DAYS = 7L
+        // The performance channel is the highest-volume of all (a memory sample
+        // every ~60s plus a line per transcription), so it keeps the most
+        // entries over the same short window as the voice log.
+        private const val PERF_LOG_MAX_ENTRIES = 2000
+        private const val PERF_LOG_MAX_AGE_DAYS = 7L
 
         // Safety cap used only if a log somehow contains no recognizable entry
         // headers (it never should — every line we write starts with one).
@@ -302,6 +337,7 @@ class Logger {
             clearCrashLog(context)
             clearEventLog(context)
             clearMemoryLog(context)
+            clearPerformanceLog(context)
         }
     }
 }

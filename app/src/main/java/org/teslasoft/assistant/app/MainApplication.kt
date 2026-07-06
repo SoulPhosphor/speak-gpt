@@ -17,8 +17,10 @@
 package org.teslasoft.assistant.app
 
 import android.app.Application
+import android.content.ComponentCallbacks2
 import android.content.res.Configuration
 import android.os.Handler
+import android.os.HandlerThread
 import android.os.Looper
 import android.widget.Toast
 import cat.ereza.customactivityoncrash.config.CaocConfig
@@ -27,11 +29,13 @@ import org.conscrypt.Conscrypt
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.Logger
+import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.memory.MemoryExporter
 import org.teslasoft.assistant.preferences.memory.MemoryLog
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.memory.TranscriptRecorder
 import org.teslasoft.assistant.theme.ThemeManager
+import org.teslasoft.assistant.util.MemoryDiagnostics
 import java.security.Security
 
 /**
@@ -45,8 +49,32 @@ import java.security.Security
  * @see [DynamicColors.applyToActivitiesIfAvailable]
  */
 class MainApplication : Application() {
+
+    // Opt-in app-wide memory heartbeat (Memory usage logging, off by default).
+    // A dedicated background thread so the sample — which reads /proc and PSS —
+    // never touches the main thread. The runnable always re-posts and only
+    // *writes* when the toggle is on, so flipping the switch mid-session starts
+    // logging without an app restart, and flipping it off stops the writes.
+    private var memSampleThread: HandlerThread? = null
+    private var memSampleHandler: Handler? = null
+    private val memSampleRunnable = object : Runnable {
+        override fun run() {
+            try {
+                if (Preferences.getPreferences(this@MainApplication, "").getMemoryUsageLogging()) {
+                    Logger.log(this@MainApplication, "performance", "MemSample", "info",
+                        MemoryDiagnostics.snapshotFull(this@MainApplication))
+                }
+            } catch (_: Throwable) { /* a diagnostic must never crash the app */ }
+            memSampleHandler?.postDelayed(this, MEM_SAMPLE_INTERVAL_MS)
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
+
+        // Anchor the process-uptime clock to app start so every memory sample's
+        // "sessionMin/uptime" field measures from here (touches the lazy init).
+        MemoryDiagnostics.processUptimeMinutes()
 
         DynamicColors.applyToActivitiesIfAvailable(this)
         ThemeManager.getThemeManager().applyTheme(this, isDarkThemeEnabled() && GlobalPreferences.getPreferences(this).getAmoledPitchBlack())
@@ -112,6 +140,59 @@ class MainApplication : Application() {
             .eventListener(null)
             .customCrashDataCollector(null)
             .apply()
+
+        // Start the memory heartbeat. It runs process-wide (not tied to a chat)
+        // so a leak that grows while the app sits idle is still captured; the
+        // runnable is a no-op while the toggle is off, so this costs nothing in
+        // normal use beyond a parked thread.
+        try {
+            val t = HandlerThread("mem-sampler").apply { start() }
+            memSampleThread = t
+            memSampleHandler = Handler(t.looper).also {
+                it.postDelayed(memSampleRunnable, MEM_SAMPLE_INTERVAL_MS)
+            }
+        } catch (_: Throwable) { /* never let diagnostics setup crash startup */ }
+    }
+
+    /**
+     * Android asking the app to release memory is a strong leak/pressure signal,
+     * so record it (with a full footprint) to the Performance Log when Memory
+     * usage logging is on. A [TRIM_MEMORY_COMPLETE] while foregrounded, or trims
+     * arriving ever more frequently, is exactly the kind of thing a RAM problem
+     * shows up as. Best-effort and gated; silent when the toggle is off.
+     */
+    @Suppress("DEPRECATION")
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        try {
+            if (Preferences.getPreferences(this, "").getMemoryUsageLogging()) {
+                Logger.log(this, "performance", "MemTrim", "warning",
+                    "onTrimMemory ${trimLevelName(level)} | ${MemoryDiagnostics.snapshotFull(this)}")
+            }
+        } catch (_: Throwable) { /* a diagnostic must never crash the app */ }
+    }
+
+    @Suppress("DEPRECATION")
+    override fun onLowMemory() {
+        super.onLowMemory()
+        try {
+            if (Preferences.getPreferences(this, "").getMemoryUsageLogging()) {
+                Logger.log(this, "performance", "MemTrim", "warning",
+                    "onLowMemory | ${MemoryDiagnostics.snapshotFull(this)}")
+            }
+        } catch (_: Throwable) { /* a diagnostic must never crash the app */ }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun trimLevelName(level: Int): String = when (level) {
+        ComponentCallbacks2.TRIM_MEMORY_RUNNING_MODERATE -> "RUNNING_MODERATE"
+        ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW -> "RUNNING_LOW"
+        ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL -> "RUNNING_CRITICAL"
+        ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN -> "UI_HIDDEN"
+        ComponentCallbacks2.TRIM_MEMORY_BACKGROUND -> "BACKGROUND"
+        ComponentCallbacks2.TRIM_MEMORY_MODERATE -> "MODERATE"
+        ComponentCallbacks2.TRIM_MEMORY_COMPLETE -> "COMPLETE"
+        else -> "level=$level"
     }
 
     private fun isDarkThemeEnabled(): Boolean {
@@ -122,5 +203,11 @@ class MainApplication : Application() {
             Configuration.UI_MODE_NIGHT_UNDEFINED -> false
             else -> false
         }
+    }
+
+    private companion object {
+        // Memory heartbeat cadence. 60s is frequent enough to draw a growth
+        // curve over a long session without flooding the Performance Log.
+        private const val MEM_SAMPLE_INTERVAL_MS = 60_000L
     }
 }

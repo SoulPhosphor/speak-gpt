@@ -65,12 +65,15 @@ class AlertDebugMenuActivity : FragmentActivity() {
     private var switchShowChatErrors: MaterialSwitch? = null
     private var switchErrorSound: MaterialSwitch? = null
     private var switchMemoryDebug: MaterialSwitch? = null
+    private var switchWhisperPerf: MaterialSwitch? = null
+    private var switchMemoryUsage: MaterialSwitch? = null
     // Shortcut down to the audio-only diagnostics, so a user who lands here
     // looking for VAD logging doesn't have to know it lives under Voice.
     private var rowAudioDebugging: LinearLayout? = null
     private var rowCrashLog: LinearLayout? = null
     private var rowEventLog: LinearLayout? = null
     private var rowMemoryLog: LinearLayout? = null
+    private var rowPerformanceLog: LinearLayout? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -93,10 +96,13 @@ class AlertDebugMenuActivity : FragmentActivity() {
         switchShowChatErrors = findViewById(R.id.switch_show_chat_errors)
         switchErrorSound = findViewById(R.id.switch_error_sound)
         switchMemoryDebug = findViewById(R.id.switch_memory_debug)
+        switchWhisperPerf = findViewById(R.id.switch_whisper_perf)
+        switchMemoryUsage = findViewById(R.id.switch_memory_usage)
         rowAudioDebugging = findViewById(R.id.row_audio_debugging)
         rowCrashLog = findViewById(R.id.row_crash_log)
         rowEventLog = findViewById(R.id.row_event_log)
         rowMemoryLog = findViewById(R.id.row_memory_log)
+        rowPerformanceLog = findViewById(R.id.row_performance_log)
     }
 
     @Suppress("DEPRECATION")
@@ -127,6 +133,8 @@ class AlertDebugMenuActivity : FragmentActivity() {
         switchShowChatErrors?.isChecked = p.showChatErrors()
         switchErrorSound?.isChecked = p.getErrorSound()
         switchMemoryDebug?.isChecked = p.getMemoryDebugLogging()
+        switchWhisperPerf?.isChecked = p.getWhisperPerfLogging()
+        switchMemoryUsage?.isChecked = p.getMemoryUsageLogging()
     }
 
     private fun initLogic() {
@@ -137,6 +145,8 @@ class AlertDebugMenuActivity : FragmentActivity() {
         switchShowChatErrors?.setOnCheckedChangeListener { _, checked -> p.setShowChatErrors(checked) }
         switchErrorSound?.setOnCheckedChangeListener { _, checked -> p.setErrorSound(checked) }
         switchMemoryDebug?.setOnCheckedChangeListener { _, checked -> p.setMemoryDebugLogging(checked) }
+        switchWhisperPerf?.setOnCheckedChangeListener { _, checked -> p.setWhisperPerfLogging(checked) }
+        switchMemoryUsage?.setOnCheckedChangeListener { _, checked -> p.setMemoryUsageLogging(checked) }
 
         rowAudioDebugging?.setOnClickListener {
             startActivity(Intent(this, AudioDebuggingActivity::class.java).putExtra("chatId", chatId))
@@ -150,6 +160,9 @@ class AlertDebugMenuActivity : FragmentActivity() {
         }
         rowMemoryLog?.setOnClickListener {
             startActivity(Intent(this, LogsActivity::class.java).putExtra("type", "memory").putExtra("chatId", chatId))
+        }
+        rowPerformanceLog?.setOnClickListener {
+            startActivity(Intent(this, LogsActivity::class.java).putExtra("type", "performance").putExtra("chatId", chatId))
         }
     }
 

@@ -108,6 +108,12 @@ class LogsActivity : FragmentActivity() {
                             textLog?.text = Logger.getMemoryLog(this)
                         }
 
+                        "performance" -> {
+                            activityLogsTitle?.text = getString(R.string.title_performance_log)
+                            this.title = getString(R.string.title_performance_log)
+                            textLog?.text = Logger.getPerformanceLog(this)
+                        }
+
                         else -> finish()
                     }
                 } catch (_: Exception) {
@@ -133,6 +139,11 @@ class LogsActivity : FragmentActivity() {
                                 "memory" -> {
                                     Logger.clearMemoryLog(this)
                                     textLog?.text = Logger.getMemoryLog(this)
+                                }
+
+                                "performance" -> {
+                                    Logger.clearPerformanceLog(this)
+                                    textLog?.text = Logger.getPerformanceLog(this)
                                 }
                             }
                         }

@@ -35,6 +35,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.teslasoft.assistant.preferences.Logger
 import org.teslasoft.assistant.preferences.Preferences
+import org.teslasoft.assistant.util.MemoryDiagnostics
 
 /**
  * Owns the audio-capture + whisper.cpp transcription path for "on-device
@@ -523,8 +524,14 @@ class LocalWhisperEngine private constructor() {
         val samples = drainBuffer()
         if (samples.isEmpty()) return null
 
+        // Time the model-load phase separately from decode: a cold load (model
+        // not resident yet) can add multiple seconds, and the whole point of the
+        // Whisper performance log is to tell that apart from a genuinely slow
+        // decode. loadMs is ~0 when the context was already warm.
+        val loadStart = SystemClock.elapsedRealtime()
         if (!isModelLoaded(activeModelId)) onPhase?.invoke(Phase.LOADING_MODEL)
         if (!ensureContext(context, activeModelId)) return null
+        val loadMs = SystemClock.elapsedRealtime() - loadStart
         val handle = nativeHandle
         if (handle == 0L) return null
 
@@ -544,6 +551,7 @@ class LocalWhisperEngine private constructor() {
         val initialPrompt = prefs.getWhisperInitialPrompt()
         val cleanup = prefs.getWhisperCleanupTranscript()
         val debugParams = prefs.getWhisperDebugParams()
+        val perfLog = prefs.getWhisperPerfLogging()
 
         return withContext(Dispatchers.IO) {
             // Ask any still-running transcription to bail. If a previous run
@@ -574,6 +582,21 @@ class LocalWhisperEngine private constructor() {
                     if (debugParams) {
                         try {
                             Logger.log(context.applicationContext, "event", "WhisperParams", "debug", summary)
+                        } catch (_: Throwable) { /* diagnostics must never break STT */ }
+                    }
+                    // Whisper performance logging (opt-in, Performance Log): one
+                    // line per transcription isolating audio length / model-load /
+                    // decode, with a compact memory snapshot so a slow decode can
+                    // be read against the phone's memory pressure at that instant.
+                    // This is the direct diagnostic for "Whisper suddenly takes
+                    // forever" — separate channel so it never buries the voice log.
+                    if (perfLog) {
+                        try {
+                            val perfLine = "turn=$turnNumber sessionMin=${MemoryDiagnostics.processUptimeMinutes()} " +
+                                    "audio=${audioMs}ms load=${loadMs}ms decode=${elapsed}ms model=$activeModelId " +
+                                    "decoder=${if (useBeam) "beam($beamSize)" else "greedy"} | " +
+                                    MemoryDiagnostics.snapshotCompact(context.applicationContext)
+                            Logger.log(context.applicationContext, "performance", "WhisperPerf", "info", perfLine)
                         } catch (_: Throwable) { /* diagnostics must never break STT */ }
                     }
                     // After stripping non-speech markers, Whisper-generated
