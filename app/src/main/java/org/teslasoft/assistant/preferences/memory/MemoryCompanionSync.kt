@@ -62,6 +62,33 @@ object MemoryCompanionSync {
     }
 
     /**
+     * The lazy half of the bootstrap: resolve the companion for an app persona
+     * id, creating the record on the spot when it doesn't exist yet. A chat
+     * with a persona selected must ALWAYS resolve to a companion (owner
+     * requirement, July 2026 — the manual bootstrap button had left every
+     * pre-existing chat unattributed as "companion=none"). Returns null only
+     * when the store isn't provisioned or the persona id is stale (a dangling
+     * per-chat persona_id must not manufacture a ghost companion).
+     */
+    fun ensureCompanionForPersona(context: Context, personaId: String): CompanionRecord? {
+        return try {
+            if (personaId.isBlank() || !MemoryStore.isProvisioned(context)) return null
+            val store = MemoryStore.getInstance(context)
+            store.findCompanionByAppCharacterId(personaId)?.let { return it }
+            val persona = PersonaPreferences.getPersonaPreferences(context).getPersona(personaId)
+            if (persona.label.isBlank()) return null
+            val record = newCompanion(personaId, persona)
+            store.insertCompanion(record)
+            MemoryLog.log(context, "MemorySync", "info",
+                "Companion auto-created for persona \"${persona.label}\"")
+            record
+        } catch (e: Exception) {
+            MemoryLog.log(context, "MemorySync", "error", "ensureCompanion failed: ${e.message}")
+            null
+        }
+    }
+
+    /**
      * Persona save hook. [oldPersonaId] is non-null only for renames (the edit
      * path), where the companion must be found under the pre-rename id.
      * New personas created after bootstrap get a companion automatically so

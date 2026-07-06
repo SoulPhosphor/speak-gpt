@@ -515,6 +515,22 @@ PromptAssemblerTest, ModeSelectionTest. Mode-signal vectors are cached
 per process; on-device validation of retrieval quality (thresholds 0.45
 mode / 0.30 retrieval floor / 0.85 dup) rides the same Pixel bring-up gate
 as Phase 3.
+**Post-landing fixes (July 2026, owner-reported):** (1) the Phase 1b
+lorebook encryption migration had TWO stacked latent bugs — ATTACH is
+`sqlite3_stmt_readonly()`-true so pooled-connection routing broke the
+schema-qualified version PRAGMA, and the x'hex' raw-key ATTACH produced a
+file the app's byte[]-passphrase opens could never read (caught by the
+verification step, never by users). Rebuilt: the encrypted copy is created
+through the SAME byte[] API the open helper uses, plaintext is ATTACHed
+into it with KEY '', two-arg sqlcipher_export copies in, sidecar files are
+cleaned with the main file. KEY-SEMANTICS INVARIANT for all future
+migrations: byte[] = passphrase (KDF), x'hex' = raw key — never mix per
+database. (2) Companion records are now automatic: `ensureCompanionForPersona`
+creates on first contact (TranscriptRecorder + enforcer), and the Phase 1
+bootstrap auto-runs at tier-2 enable as this plan always specified (it had
+shipped as a manual button only). (3) The lore debug log records EVERY
+turn — store-unavailable / no-active-books / searched-N-matched-0 are
+distinguishable shapes now.
 Specs: `prompt_assembly_template.md` (the literal skeleton — follow it
 verbatim, including the assembly rules section), `enforcer_librarian_spec.md`
 (turn loop, mode detection with stickiness + protective tie-break, lore-book

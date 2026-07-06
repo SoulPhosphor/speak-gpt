@@ -75,10 +75,12 @@ object TranscriptRecorder {
             var companionId: String? = null
             var participation = "full"
             if (personaId.isNotBlank()) {
-                // personaId is already Hash.hash(label); guard against a raw
-                // label sneaking in by hashing only when lookup misses.
-                val companion = store.findCompanionByAppCharacterId(personaId)
-                    ?: store.findCompanionByAppCharacterId(Hash.hash(personaId))
+                // A chat with a persona always resolves to a companion: the
+                // record is created on first contact if the bootstrap hasn't
+                // covered it. personaId is already Hash.hash(label); guard
+                // against a raw label sneaking in by hashing on lookup miss.
+                val companion = MemoryCompanionSync.ensureCompanionForPersona(context, personaId)
+                    ?: MemoryCompanionSync.ensureCompanionForPersona(context, Hash.hash(personaId))
                 if (companion != null) {
                     companionId = companion.companionId
                     participation = companion.memoryParticipation

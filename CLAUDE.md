@@ -166,9 +166,22 @@ Everything is on-device. No cloud sync, no accounts.
    inline fixture); `MemoryExporter` writes rotating daily backups at app
    start + manual SAF export (chats ride along under `app_chats`; embeddings
    never exported). **Import** (SAF file picker → the encrypted store) restores
-   the user's own exported file. Persona edits sync one-way into linked
-   companion records via the hook in
-   `PersonaPreferences` (`MemoryCompanionSync`) — renames re-point
+   the user's own exported file. **Companion records are automatic** (owner
+   requirement, July 2026): the app's personas ARE the companions the user
+   sees; the store's `companions` table is the memory system's continuity
+   file for each persona (`app_character_id` = `Hash.hash(label)`, stable
+   `companion_id` survives renames). A chat with a persona must ALWAYS
+   resolve to a companion — `MemoryCompanionSync.ensureCompanionForPersona`
+   creates the record on first contact (called from `TranscriptRecorder` and
+   the enforcer), the full bootstrap runs automatically when the Memory
+   engine is switched to "full" (tier-2 enable, per the plan), and the
+   manual bootstrap button in Memory settings remains as a re-run.
+   `companion=none` in capture logs is legitimate ONLY for chats with no
+   persona selected or a stale persona id. The Archivist (Phase 6) maintains
+   memories INSIDE companions; it never creates the companion itself — the
+   record must exist as the scope anchor before anything can be filed under
+   it. Persona edits sync one-way into linked companion records via the hook
+   in `PersonaPreferences` (`MemoryCompanionSync`) — renames re-point
    `app_character_id` under the OLD id; keep that when touching persona save
    paths. UI: "Memory system" tile in the Characters hub →
    `MemorySettingsActivity` (status, import backup, export, persona bootstrap).

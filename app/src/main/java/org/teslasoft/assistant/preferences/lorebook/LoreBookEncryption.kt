@@ -105,48 +105,56 @@ object LoreBookEncryption {
     private fun encryptInPlace(context: Context, plainFile: File, key: ByteArray): Boolean {
         val tmp = File(plainFile.parentFile, plainFile.name + ".enc-tmp")
         val backup = File(plainFile.parentFile, plainFile.name + ".plain-backup")
-        tmp.delete()
+        deleteWithSidecars(tmp)
         var plain: SQLiteDatabase? = null
+        var enc: SQLiteDatabase? = null
         try {
+            // Ground-truth counts from the plaintext original, read-only.
             plain = SQLiteDatabase.openDatabase(
-                plainFile.path, "", null, SQLiteDatabase.OPEN_READWRITE, null, null
+                plainFile.path, "", null, SQLiteDatabase.OPEN_READONLY, null, null
             )
             val version = plain.version
             val books = countRows(plain, "lorebooks")
             val entries = countRows(plain, "memory_entries")
-
-            // Raw-key literal (x'…') — binding the key as a parameter would make
-            // SQLCipher derive a key FROM the string instead of using the bytes.
-            plain.rawExecSQL(
-                "ATTACH DATABASE ? AS encrypted KEY \"x'${DatabaseKeys.toHex(key)}'\"", tmp.path
-            )
-            plain.rawExecSQL("SELECT sqlcipher_export('encrypted')")
-            // NO schema-qualified statements after this point. ATTACH is
-            // sqlite3_stmt_readonly()==true, so the pooled connection layer may
-            // run it (and the export SELECT) on a non-primary connection, while
-            // a write statement like "PRAGMA encrypted.user_version = N"
-            // compiles on the PRIMARY connection — where 'encrypted' was never
-            // attached. That mismatch made this migration fail on-device for
-            // months with "unknown database encrypted"; the version is stamped
-            // below on the encrypted file's own handle instead. DETACH is
-            // best-effort for the same reason: close() detaches everything.
-            try { plain.rawExecSQL("DETACH DATABASE encrypted") } catch (_: Exception) { }
             plain.close()
             plain = null
 
-            // Stamp the schema version on the encrypted copy directly, then
-            // verify it before touching the original.
-            val enc = SQLiteDatabase.openDatabase(
+            // KEY-SEMANTICS INVARIANT (the bug history of this file): a byte[]
+            // password through this library is passphrase material (KDF), while
+            // an x'hex' KEY literal is a raw key with NO derivation — the two
+            // produce different files. LoreBookStore opens the database with
+            // the byte[] API, so the encrypted copy MUST be created through the
+            // byte[] API too: create tmp with the same call the open helper
+            // makes, then pull the plaintext in (ATTACH ... KEY '' = read a
+            // plaintext DB; two-arg sqlcipher_export copies source -> main).
+            // The earlier x'hex' ATTACH approach produced a copy the app could
+            // never have reopened — caught only by the verification below.
+            enc = SQLiteDatabase.openDatabase(
+                tmp.path, key, null, SQLiteDatabase.CREATE_IF_NECESSARY, null, null
+            )
+            enc.rawExecSQL("ATTACH DATABASE ? AS plaintext KEY ''", plainFile.path)
+            enc.rawExecSQL("SELECT sqlcipher_export('main', 'plaintext')")
+            // Best-effort: close() detaches everything anyway, and DETACH may
+            // compile on a different pooled connection than the ATTACH did
+            // (ATTACH is sqlite3_stmt_readonly()==true and can be routed to a
+            // non-primary connection — the cause of this migration's original
+            // months-long "unknown database" failure).
+            try { enc.rawExecSQL("DETACH DATABASE plaintext") } catch (_: Exception) { }
+            enc.version = version
+            enc.close()
+            enc = null
+
+            // Verify by reopening exactly the way LoreBookStore will.
+            val check = SQLiteDatabase.openDatabase(
                 tmp.path, key, null, SQLiteDatabase.OPEN_READWRITE, null, null
             )
-            enc.version = version
-            val ok = enc.isDatabaseIntegrityOk &&
-                enc.version == version &&
-                countRows(enc, "lorebooks") == books &&
-                countRows(enc, "memory_entries") == entries
-            enc.close()
+            val ok = check.isDatabaseIntegrityOk &&
+                check.version == version &&
+                countRows(check, "lorebooks") == books &&
+                countRows(check, "memory_entries") == entries
+            check.close()
             if (!ok) {
-                tmp.delete()
+                deleteWithSidecars(tmp)
                 MemoryLog.log(context, "LoreBookEncryption", "error",
                     "Encrypted lorebook copy failed verification; keeping the plaintext database."
                 )
@@ -161,12 +169,12 @@ object LoreBookEncryption {
             File(plainFile.path + "-shm").delete()
             backup.delete()
             if (!plainFile.renameTo(backup)) {
-                tmp.delete()
+                deleteWithSidecars(tmp)
                 return false
             }
             if (!tmp.renameTo(plainFile)) {
                 backup.renameTo(plainFile) // restore the plaintext original
-                tmp.delete()
+                deleteWithSidecars(tmp)
                 return false
             }
             backup.delete()
@@ -176,7 +184,8 @@ object LoreBookEncryption {
             return true
         } catch (e: Exception) {
             try { plain?.close() } catch (_: Exception) { /* already closing on error */ }
-            tmp.delete()
+            try { enc?.close() } catch (_: Exception) { /* already closing on error */ }
+            deleteWithSidecars(tmp)
             // If the aside-rename happened but the swap didn't, restore it.
             if (!plainFile.exists() && backup.exists()) backup.renameTo(plainFile)
             MemoryLog.log(context, "LoreBookEncryption", "error",
@@ -185,6 +194,16 @@ object LoreBookEncryption {
             )
             return false
         }
+    }
+
+    /** A database is its main file plus journal sidecars; a stale sidecar from
+     *  an earlier failed attempt can make a fresh copy unopenable, so cleanup
+     *  always removes all four together. */
+    private fun deleteWithSidecars(dbFile: File) {
+        dbFile.delete()
+        File(dbFile.path + "-journal").delete()
+        File(dbFile.path + "-wal").delete()
+        File(dbFile.path + "-shm").delete()
     }
 
     /** -1 when the table doesn't exist (old schema versions predate some

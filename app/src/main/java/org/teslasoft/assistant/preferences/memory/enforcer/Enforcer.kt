@@ -23,6 +23,7 @@ import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.lorebook.LoreBookMatch
 import org.teslasoft.assistant.preferences.lorebook.LoreBookStore
 import org.teslasoft.assistant.preferences.memory.CompanionRecord
+import org.teslasoft.assistant.preferences.memory.MemoryCompanionSync
 import org.teslasoft.assistant.preferences.memory.MemoryLog
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.memory.ModeRecord
@@ -112,13 +113,14 @@ class Enforcer private constructor(private val appContext: Context) {
 
         val policy = parsePolicy(store)
 
-        // Companion resolution. Draft companions are never assembled (the
-        // memory query enforces it for memories; this enforces it for hard
-        // limits / adaptations / packet scope). memory_participation:
-        // 'none' -> the store contributes nothing for this companion;
-        // 'global_only' -> global memories only.
+        // Companion resolution — auto-creating the record when the persona has
+        // none yet, so a chat with a persona ALWAYS resolves to a companion.
+        // Draft companions are never assembled (the memory query enforces it
+        // for memories; this enforces it for hard limits / adaptations /
+        // packet scope). memory_participation: 'none' -> the store contributes
+        // nothing for this companion; 'global_only' -> global memories only.
         var companion: CompanionRecord? = input.personaId.takeIf { it.isNotEmpty() }?.let {
-            store.findCompanionByAppCharacterId(it)
+            MemoryCompanionSync.ensureCompanionForPersona(appContext, it)
         }
         if (companion?.status == "draft") companion = null
         if (companion != null && companion.memoryParticipation == "none") return null

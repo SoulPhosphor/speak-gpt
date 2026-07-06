@@ -273,6 +273,26 @@ class MemorySettingsActivity : FragmentActivity() {
                 }
                 preferences?.setMemoryEngine(picked)
                 refreshMemoryEngineRow()
+                if (picked == "full") {
+                    // The plan's bootstrap runs "at first tier-2 enable":
+                    // enabling the full engine is the opt-in that provisions
+                    // the store and links a companion record to every existing
+                    // persona (idempotent — re-enabling changes nothing).
+                    // Without this, every chat captured as companion=none.
+                    Thread {
+                        try {
+                            val created = MemoryCompanionSync.bootstrapFromPersonas(this)
+                            org.teslasoft.assistant.preferences.memory.MemoryLog.log(
+                                this, "MemorySync", "info",
+                                "Tier-2 enable: bootstrap linked $created new companion(s)"
+                            )
+                        } catch (e: Exception) {
+                            org.teslasoft.assistant.preferences.memory.MemoryLog.log(
+                                this, "MemorySync", "error", "Tier-2 bootstrap failed: ${e.message}"
+                            )
+                        }
+                    }.start()
+                }
                 dialog.dismiss()
             }
             .setNegativeButton(android.R.string.cancel) { _, _ -> }
