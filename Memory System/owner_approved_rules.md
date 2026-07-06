@@ -280,11 +280,20 @@ suggestion path exists HERE and nowhere else.
 - This path exists ONLY for roleplay cards. Companion cards and user
   personas remain untouchable (law 3), always.
 
-**World and campaign card sections: ⏸ AWAITING THE OWNER'S DESIGN.** The
-owner will specify the world card's sections next. Do not design or build
-world/campaign card structure before that. (Open sub-question for that
-conversation: whether campaign "story so far" maintenance rides the same
-roleplay-suggestions toggle or stays a per-campaign opt-in.)
+**World and campaign card sections: ⏸ DEFERRED BY THE OWNER — safe to add
+later.** The retrieval machinery is section-agnostic (named entries in
+containers), so world/campaign cards plug into the same engine additively
+with no rework; deferring them blocks nothing. Directions already given by
+the owner for when they ARE built: use the FULL granular section list
+(e.g. Regions/Biomes, Settlements, Points of Interest, Organizations/
+Guilds, Religions/Pantheons, Historical Events, Species/Races, Languages &
+Scripts — final list confirmed with the owner at build time), NOT a
+consolidated few — "this isn't just for the model, it's for the user":
+sections exist so the user can find things without scrolling and guessing.
+World core (premise/vibe + hard cosmology/magic rules) is always-injected
+and kept ruthlessly small. Open sub-question for that conversation:
+whether campaign "story so far" maintenance rides the same
+roleplay-suggestions toggle or stays a per-campaign opt-in.
 
 ## 14. The Pending screen (memory approval)
 
