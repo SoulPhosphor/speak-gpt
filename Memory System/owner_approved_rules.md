@@ -188,6 +188,20 @@ Memories have four statuses: **Draft · Active · Archived · Superseded.**
   inventory. A section's name acts as a trigger for the whole (bounded)
   section — "what's in my inventory?" injects the full Items list for that
   turn.
+- **The freshness cooldown (applies to EVERYTHING delivered by
+  relevance — memories, Instruction rules, world entries, ledger items,
+  roleplay or not):** an entry is not re-injected while its last injection
+  is still fresh in the conversation; it refreshes only after enough turns
+  pass or when the conversation outgrows the old mention. The model does
+  not need to hear "user hates pineapple" ten turns running — the
+  conversation carries it. New entries always inject on first relevance
+  (nothing new is ever delayed; only repeats are suppressed). An edited
+  entry resets its clock and re-injects fresh. The cooldown is per-entry,
+  automatic, tuned by a constant (not a user setting), and visible in the
+  debug/assembly view so misbehavior is diagnosable. Exempt: the always-on
+  layer the user deliberately chose — card cores, hand-written
+  system-prompt rules, and a selected model-rules profile — which rides
+  every turn by design.
 - Eligibility is decided by scope rules (§1, §3) first; ranking (§12) only
   orders what is eligible. Selection happens in app code before anything is
   sent — the model never sees the mess.
