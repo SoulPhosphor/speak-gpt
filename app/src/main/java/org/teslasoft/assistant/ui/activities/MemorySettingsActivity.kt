@@ -185,7 +185,7 @@ class MemorySettingsActivity : FragmentActivity() {
 
         btnMemoryBrowser?.setOnClickListener {
             startActivity(
-                android.content.Intent(this, org.teslasoft.assistant.ui.activities.memory.MemoryBrowserActivity::class.java)
+                android.content.Intent(this, org.teslasoft.assistant.ui.activities.memory.MemoryManagerActivity::class.java)
                     .putExtra("chatId", chatId)
             )
         }

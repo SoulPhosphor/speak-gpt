@@ -197,7 +197,7 @@
     <string name="title_api_endpoints">API Profiles</string>
     <string name="btn_new_api_endpoint">Add profile</string>
     <string name="label_persona">Persona</string>
-    <string name="title_personas">Personas</string>
+    <string name="title_personas">Companions</string>
     <string name="btn_new_persona">Add persona</string>
     <string name="label_add_persona">Add persona</string>
 
@@ -428,11 +428,11 @@
     <string name="tile_profiles_title">API Profiles</string>
     <string name="tile_profiles_subtitle">Manage API connection profiles</string>
     <string name="tile_profiles_desc">Create and switch between API connection profiles. Each profile holds a base URL, API key, chat completions endpoint and auth mode.</string>
-    <string name="tile_personas_title">Personas</string>
-    <string name="tile_personas_subtitle">Manage personas</string>
-    <string name="tile_personas_desc">Create and switch between personas. A persona is a reusable prompt that is merged ahead of your system message. Personas are shared across all chats.</string>
+    <string name="tile_personas_title">Companions</string>
+    <string name="tile_personas_subtitle">Manage companions</string>
+    <string name="tile_personas_desc">Create and switch between companions. A companion is a reusable prompt (persona) merged ahead of your system message, and it carries its own long-term memory. Companions are shared across all chats.</string>
     <string name="tile_characters_title">Characters</string>
-    <string name="tile_characters_desc">Personas, activation prompts and your system message — all in one place.</string>
+    <string name="tile_characters_desc">Companions, activation prompts and your system message — all in one place.</string>
     <string name="title_characters">Characters</string>
     <string name="tile_activation_prompts_title">Activation prompts</string>
     <string name="tile_activation_prompts_desc">Reusable opening messages. Create several, give each a title, and attach one to a persona.</string>
@@ -974,7 +974,7 @@
     <string name="memory_list_empty">Nothing here yet.</string>
     <!-- Settings entry point -->
     <string name="memory_section_manage">Browse &amp; edit</string>
-    <string name="btn_memory_browse">Memory browser</string>
+    <string name="btn_memory_browse">Open memory manager</string>
     <string name="memory_manage_hint">View, add and edit everything the memory system stores.</string>
     <!-- Memory browser -->
     <string name="title_memories">Memories</string>
@@ -1025,4 +1025,255 @@
     <string name="memory_no_companions">No companions yet — enable the full memory engine to create them.</string>
     <string name="memory_title_content_required">A title and something to remember are both required.</string>
     <string name="memory_companion_required">Choose a companion, or turn off companion scoping.</string>
+
+    <!-- ============ Phase 5 area screens: Companions ============ -->
+    <!-- ===== List screen ===== -->
+    <string name="mem_comp_title">Companions</string>
+    <string name="mem_comp_empty">No companions yet. Companions are created automatically from your personas — add a persona, or enable the full memory engine to link them.</string>
+
+    <!-- Badges shown on a companion row / detail page -->
+    <string name="mem_comp_badge_draft">Draft</string>
+
+    <!-- memory_participation labels + subtitle fragments -->
+    <string name="mem_comp_participation_full">Full memory</string>
+    <string name="mem_comp_participation_global_only">Global only</string>
+    <string name="mem_comp_participation_none">No memory</string>
+
+    <!-- ===== Detail screen ===== -->
+    <string name="mem_comp_detail_title">Companion</string>
+
+    <!-- Draft / approve -->
+    <string name="mem_comp_draft_notice">This companion is a draft. A draft companion\'s memories never reach conversations until you approve it.</string>
+    <string name="mem_comp_approve">Approve companion</string>
+    <string name="mem_comp_approved_toast">Companion approved.</string>
+
+    <!-- Identity (read-only) -->
+    <string name="mem_comp_identity_hint">A companion\'s name is owned by its persona. Rename the persona to rename the companion.</string>
+
+    <!-- memory_participation selector -->
+    <string name="mem_comp_participation_section">Memory participation</string>
+    <string name="mem_comp_participation_picker_title">Memory participation</string>
+    <string name="mem_comp_participation_hint">Full: keeps this companion\'s own relationship history and global memory. Global only: a throwaway companion that keeps no relationship history, only shared facts. None: bypass the memory system entirely for this companion.</string>
+
+    <!-- essence -->
+    <string name="mem_comp_essence_section">Essence</string>
+    <string name="mem_comp_essence_hint">Your own short description of who this companion is. You edit this directly; nothing is generated for you.</string>
+    <string name="mem_comp_essence_field_hint">Essence</string>
+    <string name="mem_comp_essence_required">Please enter an essence.</string>
+
+    <!-- relationship notes -->
+    <string name="mem_comp_relationship_section">Relationship notes</string>
+    <string name="mem_comp_relationship_hint">Optional notes about your relationship with this companion.</string>
+    <string name="mem_comp_relationship_field_hint">Relationship notes</string>
+
+    <!-- hard limits -->
+    <string name="mem_comp_limits_section">Hard limits</string>
+    <string name="mem_comp_limits_hint">Lines the companion must never cross. One limit per line.</string>
+    <string name="mem_comp_limits_field_hint">One hard limit per line</string>
+
+    <!-- model adaptations (read-only list) -->
+    <string name="mem_comp_adaptations_section">Model adaptations</string>
+    <string name="mem_comp_adaptations_hint">Notes the memory system keeps about how this companion behaves on specific models. Read-only here.</string>
+    <string name="mem_comp_adaptations_empty">None yet.</string>
+    <string name="mem_comp_adaptation_row_fmt">%1$s: %2$s</string>
+
+    <!-- Save -->
+    <string name="mem_comp_save">Save</string>
+    <string name="mem_comp_saved_toast">Companion saved.</string>
+    <string name="mem_comp_load_failed">Could not load this companion.</string>
+
+    <!-- ============ Phase 5 area screens: My personas & roleplay characters ============ -->
+    <!-- My Personas (ui/activities/memory/MemoryUserPersonasActivity) -->
+    <string name="mem_pers_title_user_personas">My personas</string>
+    <string name="mem_pers_fab_add_persona">New persona</string>
+    <string name="mem_pers_field_name">Name</string>
+    <string name="mem_pers_field_presentation">Presentation</string>
+    <string name="mem_pers_field_presentation_hint">Appearance, voice and manner handed to the model for this presentation — the same person, same memories, just described differently.</string>
+    <string name="mem_pers_dialog_title_new_persona">New persona</string>
+    <string name="mem_pers_dialog_title_edit_persona">Edit persona</string>
+    <string name="mem_pers_validation_persona_required">A name and a presentation are both required.</string>
+    <string name="mem_pers_persona_saved">Persona saved</string>
+    <string name="mem_pers_persona_deleted">Persona deleted</string>
+    <string name="mem_pers_delete_persona_title">Delete persona?</string>
+    <string name="mem_pers_delete_persona_msg">Delete \"%1$s\"? This can\'t be undone.</string>
+
+    <!-- Roleplay Characters (ui/activities/memory/MemoryRoleplayCharactersActivity) -->
+    <string name="mem_pers_title_roleplay_characters">Roleplay characters</string>
+    <string name="mem_pers_fab_add_character">New character</string>
+    <string name="mem_pers_field_description">Description</string>
+    <string name="mem_pers_field_description_hint">Traits, appearance, voice — you can also list abilities or spells here for now; there isn\'t a separate field for those yet.</string>
+    <string name="mem_pers_field_played_by">Played by</string>
+    <string name="mem_pers_field_arc_label">Arc (story so far)</string>
+    <string name="mem_pers_arc_empty">No arc recorded yet. The Archivist fills this in as the story unfolds — it isn\'t editable here.</string>
+    <string name="mem_pers_dialog_title_new_character">New roleplay character</string>
+    <string name="mem_pers_dialog_title_edit_character">Edit roleplay character</string>
+    <string name="mem_pers_validation_character_required">A name and a description are both required.</string>
+    <string name="mem_pers_character_saved">Character saved</string>
+    <string name="mem_pers_character_deleted">Character deleted</string>
+    <string name="mem_pers_delete_character_title">Delete character?</string>
+    <string name="mem_pers_delete_character_msg">Delete \"%1$s\"? This can\'t be undone.</string>
+    <string name="mem_pers_delete_character_scope_title">Also delete its memories?</string>
+    <string name="mem_pers_delete_character_scope_msg">You can keep memories linked to \"%1$s\" (they\'ll stay in the store, unlinked from any character) or delete them together with the character.</string>
+    <string name="mem_pers_delete_character_keep_memories">Keep memories</string>
+    <string name="mem_pers_delete_character_with_memories">Delete memories too</string>
+
+    <!-- ============ Phase 5 area screens: Entities / modes / directives / owner profile ============ -->
+    <!-- ============ Screen titles ============ -->
+    <string name="mem_admin_title_entities">Entities</string>
+    <string name="mem_admin_title_modes">Modes</string>
+    <string name="mem_admin_title_directives">Directives</string>
+    <string name="mem_admin_title_owner_profile">Owner profile</string>
+
+    <!-- ============ FAB / add button labels ============ -->
+    <string name="mem_admin_btn_new_entity">New entity</string>
+    <string name="mem_admin_btn_new_mode">New mode</string>
+    <string name="mem_admin_btn_new_directive">New directive</string>
+
+    <!-- ============ Row subtitle formats ============ -->
+    <string name="mem_admin_entity_subtitle_fmt">%1$s · %2$s</string>
+    <string name="mem_admin_directive_subtitle_priority">Priority %1$d</string>
+    <string name="mem_admin_directive_subtitle_with_rationale">Priority %1$d · %2$s</string>
+
+    <!-- ============ Badges ============ -->
+    <string name="mem_admin_badge_system">system</string>
+
+    <!-- ============ Entity dialog ============ -->
+    <string name="mem_admin_dialog_entity_title_new">New entity</string>
+    <string name="mem_admin_dialog_entity_title_edit">Edit entity</string>
+    <string name="mem_admin_field_name">Name</string>
+    <string name="mem_admin_field_kind">Kind (person, place, project, …)</string>
+    <string name="mem_admin_field_summary">Summary</string>
+    <string name="mem_admin_field_aliases">Aliases (comma-separated)</string>
+    <string name="mem_admin_field_importance">Importance (1-5)</string>
+    <string name="mem_admin_entity_required">A name and summary are both required.</string>
+
+    <!-- ============ Mode dialog ============ -->
+    <string name="mem_admin_dialog_mode_title_new">New mode</string>
+    <string name="mem_admin_dialog_mode_title_edit">Edit mode</string>
+    <string name="mem_admin_field_purpose">Purpose</string>
+    <string name="mem_admin_field_signals">Signals (one per line)</string>
+    <string name="mem_admin_field_respond">How to respond (one per line)</string>
+    <string name="mem_admin_field_avoid">What to avoid (one per line)</string>
+    <string name="mem_admin_mode_name_required">A name is required.</string>
+
+    <!-- ============ Directive dialog ============ -->
+    <string name="mem_admin_dialog_directive_title_new">New directive</string>
+    <string name="mem_admin_dialog_directive_title_edit">Edit directive</string>
+    <string name="mem_admin_field_directive_text">Directive</string>
+    <string name="mem_admin_field_rationale">Rationale</string>
+    <string name="mem_admin_field_priority">Priority (1-5)</string>
+    <string name="mem_admin_directive_text_required">Directive text is required.</string>
+
+    <!-- ============ Owner profile screen ============ -->
+    <string name="mem_admin_field_portrait">Portrait</string>
+    <string name="mem_admin_field_standing_context">Standing context</string>
+    <string name="mem_admin_owner_portrait_required">A portrait is required.</string>
+    <string name="mem_admin_owner_profile_saved">Owner profile saved.</string>
+
+    <!-- ============ Shared delete confirm / toasts ============ -->
+    <string name="mem_admin_delete_confirm_title">Delete?</string>
+    <string name="mem_admin_delete_confirm_msg">Delete \"%1$s\"? This cannot be undone.</string>
+    <string name="mem_admin_saved">Saved.</string>
+    <string name="mem_admin_deleted">Deleted.</string>
+
+    <!-- ============ Phase 5 area screens: Worlds & campaigns ============ -->
+    <!-- ============ Worlds list ============ -->
+    <string name="mem_world_title">Worlds</string>
+    <string name="mem_world_add">New world</string>
+    <string name="mem_world_badge_ended">Ended</string>
+
+    <!-- ============ World detail ============ -->
+    <string name="mem_world_detail_title">World</string>
+    <string name="mem_world_detail_new_title">New world</string>
+    <string name="mem_world_section_details">Details</string>
+    <string name="mem_world_hint_name">Name</string>
+    <string name="mem_world_hint_premise">Premise</string>
+    <string name="mem_world_hint_rules">Rules (optional)</string>
+    <string name="mem_world_details_hint">Cities, cultures and lore are just world‑scoped memories written in prose — open “World memories” to add them.</string>
+    <string name="mem_world_btn_memories">World memories</string>
+    <string name="mem_world_btn_save">Save</string>
+    <string name="mem_world_btn_teardown">Tear down world</string>
+    <string name="mem_world_required">A name and a premise are required.</string>
+    <string name="mem_world_saved">World saved.</string>
+    <string name="mem_world_save_first">Save the world first.</string>
+
+    <!-- Teardown: one action, always a confirm. -->
+    <string name="mem_world_teardown_title">Tear down world</string>
+    <string name="mem_world_teardown_msg">How should this world be torn down? Archiving keeps everything but marks it ended; deleting removes the world for good.</string>
+    <string name="mem_world_teardown_archive">Archive everything</string>
+    <string name="mem_world_teardown_delete">Delete everything</string>
+    <string name="mem_world_archived">World archived.</string>
+    <string name="mem_world_deleted">World deleted.</string>
+    <string name="mem_world_delete_title">Delete world</string>
+    <string name="mem_world_delete_msg">This permanently deletes the world and its memories. This can’t be undone.</string>
+    <string name="mem_world_delete_keep_characters">Keep memories that also belong to a character</string>
+    <string name="mem_world_delete_confirm">Delete</string>
+    <string name="mem_world_cancel">Cancel</string>
+
+    <!-- ============ Campaigns list ============ -->
+    <string name="mem_world_campaigns_title">Campaigns</string>
+    <string name="mem_world_campaign_add">New campaign</string>
+    <!-- subtitle: "status · world name" -->
+    <string name="mem_world_campaign_subtitle_fmt">%1$s · %2$s</string>
+    <string name="mem_world_campaign_no_world">No world</string>
+
+    <!-- ============ Campaign detail ============ -->
+    <string name="mem_world_campaign_detail_title">Campaign</string>
+    <string name="mem_world_campaign_detail_new_title">New campaign</string>
+    <string name="mem_world_campaign_hint_name">Name</string>
+    <string name="mem_world_campaign_section_details">Details</string>
+    <string name="mem_world_campaign_row_status">Status</string>
+    <string name="mem_world_campaign_row_world">World</string>
+    <string name="mem_world_campaign_row_character">Your roleplay character</string>
+    <string name="mem_world_campaign_row_companion">DM companion</string>
+    <string name="mem_world_campaign_none">None</string>
+    <string name="mem_world_campaign_story_label">Story so far</string>
+    <string name="mem_world_campaign_story_note">Maintained automatically by the Archivist.</string>
+    <string name="mem_world_campaign_btn_memories">Campaign memories</string>
+    <string name="mem_world_campaign_btn_save">Save</string>
+    <string name="mem_world_campaign_btn_teardown">Tear down campaign</string>
+    <string name="mem_world_campaign_required">A name is required.</string>
+    <string name="mem_world_campaign_saved">Campaign saved.</string>
+    <string name="mem_world_campaign_save_first">Save the campaign first.</string>
+
+    <!-- Status values (single-choice picker). -->
+    <string name="mem_world_campaign_status_picker_title">Status</string>
+    <string name="mem_world_campaign_status_active">Active</string>
+    <string name="mem_world_campaign_status_paused">Paused</string>
+    <string name="mem_world_campaign_status_ended">Ended</string>
+    <string name="mem_world_campaign_status_archived">Archived</string>
+
+    <!-- Pickers. -->
+    <string name="mem_world_campaign_world_picker_title">World</string>
+    <string name="mem_world_campaign_character_picker_title">Your roleplay character</string>
+    <string name="mem_world_campaign_companion_picker_title">DM companion</string>
+
+    <!-- Teardown. -->
+    <string name="mem_world_campaign_teardown_title">Tear down campaign</string>
+    <string name="mem_world_campaign_teardown_msg">Archiving keeps the campaign but marks it archived; deleting removes it. The world and characters are left untouched either way.</string>
+    <string name="mem_world_campaign_teardown_archive">Archive</string>
+    <string name="mem_world_campaign_teardown_delete">Delete</string>
+    <string name="mem_world_campaign_archived">Campaign archived.</string>
+    <string name="mem_world_campaign_deleted">Campaign deleted.</string>
+    <string name="mem_world_campaign_delete_title">Delete campaign</string>
+    <string name="mem_world_campaign_delete_msg">This deletes the campaign. Choose whether its campaign‑scoped memories go with it.</string>
+    <string name="mem_world_campaign_delete_memories">Also delete this campaign’s memories</string>
+    <string name="mem_world_campaign_delete_confirm">Delete</string>
+    <string name="mem_world_campaign_cancel">Cancel</string>
+
+    <!-- Shared failure toast for these screens. -->
+    <string name="mem_world_op_failed">Something went wrong: %1$s</string>
+
+    <!-- ============ Phase 5: memory manager hub ============ -->
+    <string name="title_memory_manager">Memory manager</string>
+    <string name="mm_memories_desc">Facts, preferences and events your companions remember.</string>
+    <string name="mm_companions_desc">Your companions and how they use memory.</string>
+    <string name="mm_user_personas_desc">How you present yourself to the model.</string>
+    <string name="mm_roleplay_desc">Fictional characters you play.</string>
+    <string name="mm_worlds_desc">Settings your roleplays take place in.</string>
+    <string name="mm_campaigns_desc">Ongoing roleplay playthroughs.</string>
+    <string name="mm_entities_desc">People, places and things memory tracks.</string>
+    <string name="mm_modes_desc">How companions shift tone in different moments.</string>
+    <string name="mm_directives_desc">Standing instructions that always apply.</string>
+    <string name="mm_owner_desc">Who you are, in the memory system\'s words.</string>
 </resources>

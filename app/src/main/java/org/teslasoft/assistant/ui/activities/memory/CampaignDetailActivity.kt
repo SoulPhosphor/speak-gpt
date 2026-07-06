@@ -1,0 +1,483 @@
+/**************************************************************************
+ * Copyright (c) 2023-2026 Dmytro Ostapenko. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *  http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ **************************************************************************/
+
+package org.teslasoft.assistant.ui.activities.memory
+
+import android.content.Intent
+import android.content.res.ColorStateList
+import android.content.res.Configuration
+import android.os.Build
+import android.os.Bundle
+import android.view.View
+import android.view.WindowInsets
+import android.widget.ImageButton
+import android.widget.LinearLayout
+import android.widget.ScrollView
+import android.widget.TextView
+import android.widget.Toast
+import androidx.constraintlayout.widget.ConstraintLayout
+import androidx.core.content.res.ResourcesCompat
+import androidx.core.graphics.drawable.toDrawable
+import androidx.fragment.app.FragmentActivity
+import com.google.android.material.button.MaterialButton
+import com.google.android.material.checkbox.MaterialCheckBox
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.elevation.SurfaceColors
+import com.google.android.material.textfield.TextInputEditText
+import org.teslasoft.assistant.R
+import org.teslasoft.assistant.preferences.Preferences
+import org.teslasoft.assistant.preferences.memory.CampaignRecord
+import org.teslasoft.assistant.preferences.memory.MemoryStore
+import org.teslasoft.assistant.theme.ThemeManager
+
+/**
+ * The Phase 5 campaign page (integration plan 📌 amendment): the card fields for
+ * one roleplay continuity — name, status, and the three scope selectors (world,
+ * the user's roleplay character, the DM companion). "One selection implies the
+ * rest" is enforced downstream by `MemoryStore.campaignScope` when a campaign is
+ * wired into Quick Settings (a separate task — see NOTES); here we just persist
+ * the three ids. `story_so_far` is Archivist-maintained, so it's shown read-only
+ * and only when present. A campaign-scoped memory browser opens
+ * [MemoryBrowserActivity] with the "campaignId" extra. Teardown offers archive
+ * or delete (delete optionally taking the campaign-scoped memories with it).
+ *
+ * New/unsaved campaigns hide the memories/teardown controls until saved. All
+ * store work is off the main thread; failures degrade to a toast; destructive
+ * actions always confirm.
+ */
+class CampaignDetailActivity : FragmentActivity() {
+
+    private var preferences: Preferences? = null
+    private var chatId: String = ""
+
+    private var campaignId: String? = null
+    private var existing: CampaignRecord? = null
+
+    // Working scope selections (nullable ids).
+    private var status: String = "active"
+    private var selWorldId: String? = null
+    private var selCharacterId: String? = null
+    private var selCompanionId: String? = null
+    private var storySoFar: String? = null
+
+    private var actionBar: ConstraintLayout? = null
+    private var btnBack: ImageButton? = null
+    private var titleView: TextView? = null
+    private var fieldName: TextInputEditText? = null
+    private var rowStatus: LinearLayout? = null
+    private var textStatus: TextView? = null
+    private var rowWorld: LinearLayout? = null
+    private var textWorld: TextView? = null
+    private var rowCharacter: LinearLayout? = null
+    private var textCharacter: TextView? = null
+    private var rowCompanion: LinearLayout? = null
+    private var textCompanion: TextView? = null
+    private var groupStory: LinearLayout? = null
+    private var textStory: TextView? = null
+    private var btnSave: MaterialButton? = null
+    private var btnMemories: MaterialButton? = null
+    private var btnTeardown: MaterialButton? = null
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        ThemeManager.getThemeManager().applyPalette(this)
+        setContentView(R.layout.activity_campaign_detail)
+
+        chatId = intent.extras?.getString("chatId", "") ?: ""
+        campaignId = intent.extras?.getString("campaignId")
+        preferences = Preferences.getPreferences(this, chatId)
+
+        actionBar = findViewById(R.id.action_bar)
+        btnBack = findViewById(R.id.btn_back)
+        titleView = findViewById(R.id.activity_title)
+        fieldName = findViewById(R.id.field_campaign_name)
+        rowStatus = findViewById(R.id.row_campaign_status)
+        textStatus = findViewById(R.id.text_campaign_status_value)
+        rowWorld = findViewById(R.id.row_campaign_world)
+        textWorld = findViewById(R.id.text_campaign_world_value)
+        rowCharacter = findViewById(R.id.row_campaign_character)
+        textCharacter = findViewById(R.id.text_campaign_character_value)
+        rowCompanion = findViewById(R.id.row_campaign_companion)
+        textCompanion = findViewById(R.id.text_campaign_companion_value)
+        groupStory = findViewById(R.id.group_campaign_story)
+        textStory = findViewById(R.id.text_campaign_story)
+        btnSave = findViewById(R.id.btn_campaign_save)
+        btnMemories = findViewById(R.id.btn_campaign_memories)
+        btnTeardown = findViewById(R.id.btn_campaign_teardown)
+
+        titleView?.setText(
+            if (campaignId == null) R.string.mem_world_campaign_detail_new_title
+            else R.string.mem_world_campaign_detail_title
+        )
+
+        applyTheme()
+
+        btnBack?.setOnClickListener { finish() }
+        rowStatus?.setOnClickListener { showStatusPicker() }
+        rowWorld?.setOnClickListener { showWorldPicker() }
+        rowCharacter?.setOnClickListener { showCharacterPicker() }
+        rowCompanion?.setOnClickListener { showCompanionPicker() }
+        btnSave?.setOnClickListener { save() }
+        btnMemories?.setOnClickListener { openMemories() }
+        btnTeardown?.setOnClickListener { showTeardownDialog() }
+
+        refreshStatusLabel()
+        updateExtraButtons()
+        loadIfExisting()
+    }
+
+    /* ------------------------------ load ------------------------------ */
+
+    private fun loadIfExisting() {
+        val id = campaignId ?: return
+        runOffThread {
+            if (!MemoryStore.isProvisioned(this)) return@runOffThread
+            val store = MemoryStore.getInstance(this)
+            val c = store.getCampaign(id)
+            // Resolve the display labels for the three scope selections up front
+            // so the UI thread just paints strings (no store calls on main).
+            val worldName = c?.worldId?.let { store.getWorld(it)?.name }
+            val characterName = c?.roleplayCharacterId?.let { rid ->
+                store.getActiveRoleplayCharacters().firstOrNull { it.roleplayCharacterId == rid }?.name
+            }
+            val companionName = c?.companionId?.let { cid ->
+                store.getCompanions().firstOrNull { it.companionId == cid }?.currentName
+            }
+            runOnUiThread {
+                existing = c
+                if (c != null) {
+                    fieldName?.setText(c.name)
+                    status = c.status
+                    selWorldId = c.worldId
+                    selCharacterId = c.roleplayCharacterId
+                    selCompanionId = c.companionId
+                    storySoFar = c.storySoFar
+                    refreshStatusLabel()
+                    textWorld?.text = worldName ?: getString(R.string.mem_world_campaign_none)
+                    textCharacter?.text = characterName ?: getString(R.string.mem_world_campaign_none)
+                    textCompanion?.text = companionName ?: getString(R.string.mem_world_campaign_none)
+                    refreshStory()
+                }
+                updateExtraButtons()
+            }
+        }
+    }
+
+    private fun refreshStory() {
+        val s = storySoFar
+        if (s.isNullOrBlank()) {
+            groupStory?.visibility = View.GONE
+        } else {
+            groupStory?.visibility = View.VISIBLE
+            textStory?.text = s
+        }
+    }
+
+    private fun updateExtraButtons() {
+        val saved = campaignId != null
+        btnMemories?.visibility = if (saved) View.VISIBLE else View.GONE
+        btnTeardown?.visibility = if (saved) View.VISIBLE else View.GONE
+    }
+
+    /* ------------------------------ pickers ------------------------------ */
+
+    private fun statusLabel(s: String): String = when (s) {
+        "active" -> getString(R.string.mem_world_campaign_status_active)
+        "paused" -> getString(R.string.mem_world_campaign_status_paused)
+        "ended" -> getString(R.string.mem_world_campaign_status_ended)
+        "archived" -> getString(R.string.mem_world_campaign_status_archived)
+        else -> s
+    }
+
+    private fun refreshStatusLabel() {
+        textStatus?.text = statusLabel(status)
+    }
+
+    private fun showStatusPicker() {
+        val values = arrayOf("active", "paused", "ended", "archived")
+        val labels = values.map { statusLabel(it) }.toTypedArray()
+        val current = values.indexOf(status).coerceAtLeast(0)
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.mem_world_campaign_status_picker_title)
+            .setSingleChoiceItems(labels, current) { dialog, which ->
+                status = values[which]
+                refreshStatusLabel()
+                dialog.dismiss()
+            }
+            .setNegativeButton(R.string.mem_world_campaign_cancel) { _, _ -> }
+            .show()
+    }
+
+    /** Generic nullable single-choice picker: a leading "None" then the ids. */
+    private fun showIdPicker(
+        titleRes: Int,
+        ids: List<String?>,
+        labels: List<String>,
+        currentId: String?,
+        onPick: (String?) -> Unit
+    ) {
+        val current = ids.indexOf(currentId).coerceAtLeast(0)
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(titleRes)
+            .setSingleChoiceItems(labels.toTypedArray(), current) { dialog, which ->
+                onPick(ids[which])
+                dialog.dismiss()
+            }
+            .setNegativeButton(R.string.mem_world_campaign_cancel) { _, _ -> }
+            .show()
+    }
+
+    private fun showWorldPicker() {
+        runOffThread {
+            if (!MemoryStore.isProvisioned(this)) {
+                showEmptyPicker()
+                return@runOffThread
+            }
+            val worlds = MemoryStore.getInstance(this).getAllWorlds()
+            val ids = ArrayList<String?>().apply { add(null); addAll(worlds.map { it.worldId }) }
+            val labels = ArrayList<String>().apply {
+                add(getString(R.string.mem_world_campaign_none)); addAll(worlds.map { it.name })
+            }
+            runOnUiThread {
+                showIdPicker(R.string.mem_world_campaign_world_picker_title, ids, labels, selWorldId) { picked ->
+                    selWorldId = picked
+                    textWorld?.text = labels[ids.indexOf(picked).coerceAtLeast(0)]
+                }
+            }
+        }
+    }
+
+    private fun showCharacterPicker() {
+        runOffThread {
+            if (!MemoryStore.isProvisioned(this)) {
+                showEmptyPicker()
+                return@runOffThread
+            }
+            val chars = MemoryStore.getInstance(this).getActiveRoleplayCharacters()
+            val ids = ArrayList<String?>().apply { add(null); addAll(chars.map { it.roleplayCharacterId }) }
+            val labels = ArrayList<String>().apply {
+                add(getString(R.string.mem_world_campaign_none)); addAll(chars.map { it.name })
+            }
+            runOnUiThread {
+                showIdPicker(R.string.mem_world_campaign_character_picker_title, ids, labels, selCharacterId) { picked ->
+                    selCharacterId = picked
+                    textCharacter?.text = labels[ids.indexOf(picked).coerceAtLeast(0)]
+                }
+            }
+        }
+    }
+
+    private fun showCompanionPicker() {
+        runOffThread {
+            if (!MemoryStore.isProvisioned(this)) {
+                showEmptyPicker()
+                return@runOffThread
+            }
+            // DM companion must be a real, past-draft companion.
+            val companions = MemoryStore.getInstance(this).getCompanions().filter { it.status != "draft" }
+            val ids = ArrayList<String?>().apply { add(null); addAll(companions.map { it.companionId }) }
+            val labels = ArrayList<String>().apply {
+                add(getString(R.string.mem_world_campaign_none)); addAll(companions.map { it.currentName })
+            }
+            runOnUiThread {
+                showIdPicker(R.string.mem_world_campaign_companion_picker_title, ids, labels, selCompanionId) { picked ->
+                    selCompanionId = picked
+                    textCompanion?.text = labels[ids.indexOf(picked).coerceAtLeast(0)]
+                }
+            }
+        }
+    }
+
+    private fun showEmptyPicker() {
+        runOnUiThread {
+            Toast.makeText(this, R.string.mem_world_campaign_none, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /* ------------------------------ save ------------------------------ */
+
+    private fun save() {
+        val name = fieldName?.text?.toString()?.trim().orEmpty()
+        if (name.isEmpty()) {
+            Toast.makeText(this, R.string.mem_world_campaign_required, Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val prior = existing
+        val id = campaignId ?: MemoryStore.newId("camp-")
+        val record = CampaignRecord(
+            campaignId = id,
+            name = name,
+            worldId = selWorldId,
+            roleplayCharacterId = selCharacterId,
+            companionId = selCompanionId,
+            status = status,
+            storySoFar = prior?.storySoFar,   // Archivist-owned; never edited here
+            createdAt = prior?.createdAt ?: MemoryStore.nowIso()
+        )
+
+        runOffThread {
+            MemoryStore.getInstance(this).upsertCampaign(record)
+            runOnUiThread {
+                campaignId = id
+                existing = record
+                titleView?.setText(R.string.mem_world_campaign_detail_title)
+                updateExtraButtons()
+                Toast.makeText(this, R.string.mem_world_campaign_saved, Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    /* ------------------------------ memories ------------------------------ */
+
+    private fun openMemories() {
+        val id = campaignId
+        if (id == null) {
+            Toast.makeText(this, R.string.mem_world_campaign_save_first, Toast.LENGTH_SHORT).show()
+            return
+        }
+        startActivity(
+            Intent(this, MemoryBrowserActivity::class.java)
+                .putExtra("chatId", chatId)
+                .putExtra("campaignId", id)
+                .putExtra("screenTitle", fieldName?.text?.toString()?.trim().orEmpty())
+        )
+    }
+
+    /* ------------------------------ teardown ------------------------------ */
+
+    private fun showTeardownDialog() {
+        val id = campaignId ?: return
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.mem_world_campaign_teardown_title)
+            .setMessage(R.string.mem_world_campaign_teardown_msg)
+            .setPositiveButton(R.string.mem_world_campaign_teardown_delete) { _, _ -> showDeleteDialog(id) }
+            .setNeutralButton(R.string.mem_world_campaign_teardown_archive) { _, _ -> archive(id) }
+            .setNegativeButton(R.string.mem_world_campaign_cancel) { _, _ -> }
+            .show()
+    }
+
+    private fun archive(id: String) {
+        runOffThread {
+            MemoryStore.getInstance(this).archiveCampaign(id)
+            runOnUiThread {
+                Toast.makeText(this, R.string.mem_world_campaign_archived, Toast.LENGTH_SHORT).show()
+                finish()
+            }
+        }
+    }
+
+    private fun showDeleteDialog(id: String) {
+        val delBox = MaterialCheckBox(this).apply {
+            setText(R.string.mem_world_campaign_delete_memories)
+            isChecked = false
+        }
+        val pad = (20 * resources.displayMetrics.density).toInt()
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(pad, pad, pad, 0)
+            addView(delBox)
+        }
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.mem_world_campaign_delete_title)
+            .setMessage(R.string.mem_world_campaign_delete_msg)
+            .setView(container)
+            .setPositiveButton(R.string.mem_world_campaign_delete_confirm) { _, _ ->
+                val deleteMemories = delBox.isChecked
+                runOffThread {
+                    MemoryStore.getInstance(this).deleteCampaign(id, deleteMemories = deleteMemories)
+                    runOnUiThread {
+                        Toast.makeText(this, R.string.mem_world_campaign_deleted, Toast.LENGTH_SHORT).show()
+                        finish()
+                    }
+                }
+            }
+            .setNegativeButton(R.string.mem_world_campaign_cancel) { _, _ -> }
+            .show()
+    }
+
+    /* ------------------------------ off-thread ------------------------------ */
+
+    private fun runOffThread(work: () -> Unit) {
+        Thread {
+            try {
+                work()
+            } catch (e: Exception) {
+                runOnUiThread {
+                    Toast.makeText(
+                        this,
+                        getString(R.string.mem_world_op_failed, e.message ?: e.javaClass.simpleName),
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        }.start()
+    }
+
+    /* ------------------------------ theme + insets ------------------------------ */
+
+    @Suppress("DEPRECATION")
+    private fun applyTheme() {
+        val amoled = isDarkThemeEnabled() && preferences?.getAmoledPitchBlack() == true
+        ThemeManager.getThemeManager().applyTheme(this, amoled)
+
+        if (amoled) {
+            window.setBackgroundDrawableResource(R.color.amoled_window_background)
+            if (Build.VERSION.SDK_INT <= 34) {
+                window.navigationBarColor = ResourcesCompat.getColor(resources, R.color.amoled_window_background, theme)
+                window.statusBarColor = ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme)
+            }
+            actionBar?.setBackgroundColor(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
+            btnBack?.backgroundTintList = ColorStateList.valueOf(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
+        } else {
+            window.setBackgroundDrawable(SurfaceColors.SURFACE_0.getColor(this).toDrawable())
+            if (Build.VERSION.SDK_INT <= 34) {
+                window.navigationBarColor = SurfaceColors.SURFACE_0.getColor(this)
+                window.statusBarColor = SurfaceColors.SURFACE_4.getColor(this)
+            }
+            actionBar?.setBackgroundColor(SurfaceColors.SURFACE_4.getColor(this))
+            btnBack?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(this))
+        }
+    }
+
+    private fun isDarkThemeEnabled(): Boolean =
+        (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        adjustPaddings()
+    }
+
+    private fun adjustPaddings() {
+        if (Build.VERSION.SDK_INT < 35) return
+        try {
+            actionBar?.setPadding(
+                0,
+                window.decorView.rootWindowInsets.getInsets(WindowInsets.Type.statusBars()).top,
+                0,
+                0
+            )
+            findViewById<ScrollView>(R.id.scroll)?.setPadding(
+                0,
+                0,
+                0,
+                window.decorView.rootWindowInsets.getInsets(WindowInsets.Type.navigationBars()).bottom + pxToDp(24)
+            )
+        } catch (_: Exception) { /* unused */ }
+    }
+
+    private fun pxToDp(px: Int): Int = (px * resources.displayMetrics.density).toInt()
+}

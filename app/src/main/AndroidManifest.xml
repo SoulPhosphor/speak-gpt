@@ -239,6 +239,64 @@
         </activity>
 
         <activity
+            android:name=".ui.activities.memory.MemoryManagerActivity"
+            android:exported="false"
+            android:label="@string/title_memory_manager">
+        </activity>
+
+        <activity
+            android:name=".ui.activities.memory.MemoryCompanionsActivity"
+            android:exported="false"
+            android:label="@string/mem_comp_title" />
+        <activity
+            android:name=".ui.activities.memory.CompanionDetailActivity"
+            android:exported="false"
+            android:label="@string/mem_comp_detail_title" />
+
+        <activity
+            android:name=".ui.activities.memory.MemoryUserPersonasActivity"
+            android:exported="false"
+            android:label="@string/mem_pers_title_user_personas" />
+        <activity
+            android:name=".ui.activities.memory.MemoryRoleplayCharactersActivity"
+            android:exported="false"
+            android:label="@string/mem_pers_title_roleplay_characters" />
+
+        <activity
+            android:name=".ui.activities.memory.MemoryEntitiesActivity"
+            android:exported="false"
+            android:label="@string/mem_admin_title_entities" />
+        <activity
+            android:name=".ui.activities.memory.MemoryModesActivity"
+            android:exported="false"
+            android:label="@string/mem_admin_title_modes" />
+        <activity
+            android:name=".ui.activities.memory.MemoryDirectivesActivity"
+            android:exported="false"
+            android:label="@string/mem_admin_title_directives" />
+        <activity
+            android:name=".ui.activities.memory.OwnerProfileActivity"
+            android:exported="false"
+            android:label="@string/mem_admin_title_owner_profile" />
+
+        <activity
+            android:name=".ui.activities.memory.MemoryWorldsActivity"
+            android:exported="false"
+            android:label="@string/mem_world_title" />
+        <activity
+            android:name=".ui.activities.memory.WorldDetailActivity"
+            android:exported="false"
+            android:label="@string/mem_world_detail_title" />
+        <activity
+            android:name=".ui.activities.memory.MemoryCampaignsActivity"
+            android:exported="false"
+            android:label="@string/mem_world_campaigns_title" />
+        <activity
+            android:name=".ui.activities.memory.CampaignDetailActivity"
+            android:exported="false"
+            android:label="@string/mem_world_campaign_detail_title" />
+
+        <activity
             android:name=".ui.activities.LocalWhisperManageActivity"
             android:exported="false"
             android:label="@string/title_manage_downloaded_models"
