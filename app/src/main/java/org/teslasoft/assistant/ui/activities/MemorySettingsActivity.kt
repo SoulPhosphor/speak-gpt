@@ -36,6 +36,7 @@ import androidx.core.graphics.drawable.toDrawable
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.checkbox.MaterialCheckBox
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.materialswitch.MaterialSwitch
@@ -83,6 +84,7 @@ class MemorySettingsActivity : FragmentActivity() {
     private var btnImport: MaterialButton? = null
     private var btnExport: MaterialButton? = null
     private var btnBootstrap: MaterialButton? = null
+    private var btnReset: MaterialButton? = null
     private var switchAutoBackup: MaterialSwitch? = null
     private var switchDefaultMemory: MaterialSwitch? = null
 
@@ -141,6 +143,7 @@ class MemorySettingsActivity : FragmentActivity() {
         btnImport = findViewById(R.id.btn_memory_import)
         btnExport = findViewById(R.id.btn_memory_export)
         btnBootstrap = findViewById(R.id.btn_memory_bootstrap)
+        btnReset = findViewById(R.id.btn_memory_reset)
         switchAutoBackup = findViewById(R.id.switch_auto_backup)
         switchDefaultMemory = findViewById(R.id.switch_default_memory)
         rowMemoryEngine = findViewById(R.id.row_memory_engine)
@@ -217,6 +220,8 @@ class MemorySettingsActivity : FragmentActivity() {
             }
         }
 
+        btnReset?.setOnClickListener { showResetDialog() }
+
         switchAutoBackup?.setOnCheckedChangeListener { _, checked ->
             if (!MemoryStore.isProvisioned(this)) return@setOnCheckedChangeListener
             runOffThread {
@@ -239,6 +244,47 @@ class MemorySettingsActivity : FragmentActivity() {
 
         btnRebuildIndex?.setOnClickListener { rebuildIndex() }
         btnDebugSearch?.setOnClickListener { runDebugSearch() }
+    }
+
+    /* ------------------------------ reset (Stage 2.5) ------------------------------ */
+
+    private fun showResetDialog() {
+        if (!MemoryStore.isProvisioned(this)) {
+            Toast.makeText(this, R.string.memory_not_provisioned_toast, Toast.LENGTH_SHORT).show()
+            return
+        }
+        // The user decides whether a backup is written first (starts checked); if
+        // they decline, trust them (owner_approved_rules approved UI decisions).
+        val backupBox = MaterialCheckBox(this).apply {
+            setText(R.string.mem_reset_backup)
+            isChecked = true
+        }
+        val pad = (20 * resources.displayMetrics.density).toInt()
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(pad, pad, pad, 0)
+            addView(backupBox)
+        }
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.mem_reset_title)
+            .setMessage(R.string.mem_reset_message)
+            .setView(container)
+            .setPositiveButton(R.string.mem_reset_confirm) { _, _ -> doReset(backupBox.isChecked) }
+            .setNegativeButton(R.string.btn_cancel) { _, _ -> }
+            .show()
+    }
+
+    private fun doReset(backupFirst: Boolean) {
+        runOffThread {
+            val backupName = if (backupFirst) MemoryExporter.writeBackupNow(this) else null
+            MemoryStore.getInstance(this).resetAllMemoryData()
+            runOnUiThread {
+                val msg = if (backupName != null) getString(R.string.mem_reset_done_backup, backupName)
+                else getString(R.string.mem_reset_done)
+                Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+                refreshStatus()
+            }
+        }
     }
 
     /* ------------------------------ memory engine (Phase 4) ------------------------------ */

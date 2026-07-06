@@ -1075,6 +1075,15 @@
     <string name="mem_pending_done">Done</string>
     <string name="mem_edit_accept">Accept</string>
 
+    <!-- Reset memories (Stage 2.5) -->
+    <string name="mem_reset_button">Reset memories</string>
+    <string name="mem_reset_title">Reset memories?</string>
+    <string name="mem_reset_message">This will delete all your memories. It cannot be undone. Are you sure?</string>
+    <string name="mem_reset_backup">Save a backup file first</string>
+    <string name="mem_reset_confirm">Reset</string>
+    <string name="mem_reset_done">Memory reset.</string>
+    <string name="mem_reset_done_backup">Memory reset. Backup saved: %1$s</string>
+
     <!-- Row action menu -->
     <string name="action_edit">Edit</string>
     <string name="action_protect">Protect</string>

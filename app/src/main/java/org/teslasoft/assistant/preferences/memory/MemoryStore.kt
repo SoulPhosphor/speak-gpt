@@ -2567,6 +2567,43 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         }
     }
 
+    /**
+     * "Reset memories" (owner_approved_rules approved UI decisions): empties
+     * every memory-content table and leaves ONLY the empty structure the store
+     * needs — never refilled with anyone's defaults. The schema singletons
+     * (meta, archivist_settings, retrieval_policy) stay; app_state is blanked.
+     * Deleting `memories` cascades its join/child rows; the remaining tables are
+     * deleted in FK-safe order (children/referencing tables before the tables
+     * they point at) so no foreign key blocks the wipe.
+     */
+    fun resetAllMemoryData() {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.delete("memories", null, null) // cascades memory_* joins, change_log, embeddings
+            db.delete("transcripts", null, null)
+            db.delete("proposals", null, null)
+            db.delete("campaigns", null, null)
+            db.delete("roleplay_characters", null, null)
+            db.delete("worlds", null, null)
+            db.delete("companions", null, null) // cascades companion_name_history
+            db.delete("entities", null, null)
+            db.delete("user_personas", null, null)
+            db.delete("projects", null, null)
+            db.delete("modes", null, null)
+            db.delete("directives", null, null)
+            db.delete("owner_profile", null, null)
+            db.delete("deleted_ids", null, null)
+            db.update("app_state", ContentValues().apply {
+                putNull("active_companion_id"); putNull("active_world_id")
+                putNull("active_roleplay_character_id"); putNull("active_user_persona_id")
+            }, "id = 1", null)
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
     /** Text browser (title/content LIKE, else most-recent). Archived rows are
      *  hidden unless [includeArchived]. */
     fun browseMemories(query: String?, includeArchived: Boolean, limit: Int): List<MemoryRecord> {

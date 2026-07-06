@@ -45,6 +45,26 @@ object MemoryExporter {
     private const val BACKUP_DIR = "memory_backups"
     private const val ROTATION_KEEP = 5
 
+    /**
+     * Write a backup right now into the rotating backup dir, ignoring the daily
+     * throttle. Used by "Reset memories" when the user leaves the backup-first
+     * option checked. Returns the file name, or null on failure.
+     */
+    fun writeBackupNow(context: Context): String? = try {
+        val dir = File(context.getExternalFilesDir(null), BACKUP_DIR)
+        if (!dir.exists() && !dir.mkdirs()) null
+        else {
+            val stamp = MemoryStore.nowIso().replace(":", "-")
+            val file = File(dir, "memory-backup-$stamp.json")
+            file.writeText(buildExportJson(context))
+            MemoryLog.log(context, "MemoryExport", "info", "Backup written before reset: ${file.name}")
+            file.name
+        }
+    } catch (e: Exception) {
+        MemoryLog.log(context, "MemoryExport", "error", "Backup-before-reset failed: ${e.message}")
+        null
+    }
+
     fun buildExportJson(context: Context): String {
         val store = MemoryStore.getInstance(context)
         return MemorySeedCodec.serialize(
