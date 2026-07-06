@@ -50,6 +50,7 @@ import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.preferences.dto.PersonaObject
 import org.teslasoft.assistant.preferences.lorebook.LoreBookStore
 import org.teslasoft.assistant.preferences.memory.MemoryStore
+import org.teslasoft.assistant.preferences.memory.ProjectRecord
 import org.teslasoft.assistant.preferences.memory.RoleplayCharacterRecord
 import org.teslasoft.assistant.preferences.memory.UserPersonaRecord
 import org.teslasoft.assistant.preferences.memory.WorldRecord
@@ -122,6 +123,8 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     private var textChatRoleplayCharacter: TextView? = null
     private var rowChatUserPersona: LinearLayout? = null
     private var textChatUserPersona: TextView? = null
+    private var rowChatProject: LinearLayout? = null
+    private var textChatProject: TextView? = null
 
     private var textUsage: TextView? = null
     private var textCost: TextView? = null
@@ -150,6 +153,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     private var cachedWorlds: List<WorldRecord> = emptyList()
     private var cachedRoleplayCharacters: List<RoleplayCharacterRecord> = emptyList()
     private var cachedUserPersonas: List<UserPersonaRecord> = emptyList()
+    private var cachedProjects: List<ProjectRecord> = emptyList()
 
     private var requestNetwork: RequestNetwork? = null
 
@@ -527,6 +531,8 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         textChatRoleplayCharacter = view.findViewById(R.id.text_chat_roleplay_character)
         rowChatUserPersona = view.findViewById(R.id.row_chat_user_persona)
         textChatUserPersona = view.findViewById(R.id.text_chat_user_persona)
+        rowChatProject = view.findViewById(R.id.row_chat_project)
+        textChatProject = view.findViewById(R.id.text_chat_project)
         switchChatMemory?.isChecked = preferences?.getChatMemoryEnabled() ?: true
         // "Archive this chat": positive framing. Checked = archive (capture on).
         // The stored pref is still "excluded" (the inverse), so flip both ways.
@@ -716,10 +722,12 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         updateChatWorldLabel()
         updateChatRoleplayCharacterLabel()
         updateChatUserPersonaLabel()
+        updateChatProjectLabel()
 
         rowChatWorld?.setOnClickListener { showWorldPicker() }
         rowChatRoleplayCharacter?.setOnClickListener { showRoleplayCharacterPicker() }
         rowChatUserPersona?.setOnClickListener { showUserPersonaPicker() }
+        rowChatProject?.setOnClickListener { showProjectPicker() }
 
         loadMemorySceneLists()
     }
@@ -734,14 +742,17 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
                 // characters are the Storyteller/companion's own cast, not a chat scene pick.
                 val roleplayCharacters = store.getActiveRoleplayCharacters().filter { it.playedBy == "user" }
                 val userPersonas = store.getActiveUserPersonas()
+                val projects = store.getActiveProjects()
                 activity?.runOnUiThread {
                     if (!isAdded) return@runOnUiThread
                     cachedWorlds = worlds
                     cachedRoleplayCharacters = roleplayCharacters
                     cachedUserPersonas = userPersonas
+                    cachedProjects = projects
                     updateChatWorldLabel()
                     updateChatRoleplayCharacterLabel()
                     updateChatUserPersonaLabel()
+                    updateChatProjectLabel()
                 }
             } catch (_: Exception) { /* the rows keep working, just empty until the store is reachable */ }
         }.start()
@@ -774,6 +785,32 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
             cachedUserPersonas.firstOrNull { it.personaId == id }?.name
                 ?: getString(R.string.label_user_persona_none)
         }
+    }
+
+    private fun updateChatProjectLabel() {
+        val id = preferences?.getChatProjectId().orEmpty()
+        textChatProject?.text = if (id.isEmpty()) {
+            getString(R.string.label_project_none)
+        } else {
+            cachedProjects.firstOrNull { it.projectId == id }?.name ?: getString(R.string.label_project_none)
+        }
+    }
+
+    // §4: stores the per-chat project only; retrieval wiring is Stage 3.
+    private fun showProjectPicker() {
+        val ids = listOf("") + cachedProjects.map { it.projectId }
+        val labels = (listOf(getString(R.string.label_project_none)) + cachedProjects.map { it.name }).toTypedArray()
+        val current = ids.indexOf(preferences?.getChatProjectId().orEmpty()).coerceAtLeast(0)
+
+        MaterialAlertDialogBuilder(requireContext(), R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.memory_scene_project_picker_title)
+            .setSingleChoiceItems(labels, current) { dialog, which ->
+                preferences?.setChatProjectId(ids[which])
+                updateChatProjectLabel()
+                dialog.dismiss()
+            }
+            .setNegativeButton(android.R.string.cancel) { _, _ -> }
+            .show()
     }
 
     private fun showWorldPicker() {

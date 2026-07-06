@@ -950,6 +950,9 @@
     <string name="memory_scene_world_picker_title">Choose a world</string>
     <string name="memory_scene_playing_as_picker_title">Choose who you\'re playing</string>
     <string name="memory_scene_appear_as_picker_title">Choose how you appear</string>
+    <string name="label_chat_project">Project</string>
+    <string name="label_project_none">None</string>
+    <string name="memory_scene_project_picker_title">Choose a project</string>
 
     <!-- Memory system Phase 4: enforcer assembly debug view (shown above the lorebook debug log) -->
     <string name="memory_debug_assembly_header">Memory assembly (full engine)</string>

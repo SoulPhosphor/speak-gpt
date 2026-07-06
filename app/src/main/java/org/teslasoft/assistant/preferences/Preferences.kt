@@ -1573,6 +1573,19 @@ class Preferences private constructor(private var preferences: SharedPreferences
     }
 
     /**
+     * Per-chat Project scope selector (owner_approved_rules §4). Empty = no
+     * project. Like the scene selectors it lives in the auto-naming copy block.
+     * Stage 2.6 only stores it; retrieval wiring is Stage 3.
+     */
+    fun getChatProjectId() : String {
+        return getString("memory_project_id", "")
+    }
+
+    fun setChatProjectId(id: String) {
+        putString("memory_project_id", id)
+    }
+
+    /**
      * Get logit biases config ID
      *
      * @return logit biases config ID
