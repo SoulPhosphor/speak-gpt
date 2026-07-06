@@ -312,11 +312,12 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
 
         // Named target scopes are multi-select (owner_approved_rules §2): a memory
         // may belong to several worlds/campaigns/RP characters/projects at once,
-        // mirroring memory_companions. The single memories.world_id/campaign_id/
-        // roleplay_character_id/project_id columns are kept as a "primary target"
-        // mirror (the first selected) so the Stage-3-owned retrieval query keeps
-        // working unchanged; these join tables are the full multi-target truth
-        // that the editor and the scoped-browser doors read.
+        // mirroring memory_companions. These join tables are the full multi-target
+        // truth — the editor, the scoped-browser doors AND (since Stage 3.1) the
+        // retrieval eligibility query all read them. The single memories.world_id/
+        // campaign_id/roleplay_character_id/project_id columns remain as a
+        // "primary target" mirror (the first selected) used only by the target
+        // teardown paths (deleteCampaign/deleteProject) and legacy consumers.
         db.execSQL(
             "CREATE TABLE memory_worlds (" +
                 "memory_id TEXT NOT NULL REFERENCES memories(memory_id) ON DELETE CASCADE, " +
@@ -1754,60 +1755,97 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
     /* ---------------------------------------------------------------------- */
 
     /**
-     * Active memories visible to a conversation, with scope isolation enforced
-     * IN THE QUERY (not by convention, per the spec's non-negotiable): global
-     * memories plus those scoped to [companionId], and — for world sessions —
-     * only memories with no world or this world; real-life (world-less)
-     * memories remain available inside a world. [worldId] null = ordinary chat
-     * (world-tagged fiction is excluded).
+     * The single eligibility gate every retrieval (and Phase 4 injection) goes
+     * through, rewritten in Stage 3.1 to the owner-approved seven-category
+     * scope model (rules §1, §3, §4 rev 3). Scope isolation is enforced IN THE
+     * QUERY (not by convention, per the spec's non-negotiable), and named
+     * targets are read from the §2 multi-select join tables — a memory linked
+     * to several worlds/campaigns/RP characters is eligible under each of them.
+     *
+     * Ordinary (non-roleplay) chat — no world/campaign/RP character selected:
+     *  - global and real_life memories;
+     *  - companion memories of the chat's active companion (and only when that
+     *    companion is past 'draft' — an unapproved companion's memories never
+     *    reach a live prompt);
+     *  - ALL project memories: eligible on semantic relevance even with no
+     *    project selected (§4 rev 3 — selection is a ranking boost upstream,
+     *    never a gate here).
+     *
+     * Roleplay context — any of world/campaign/RP character selected:
+     *  - global memories (that is what Global means, §3);
+     *  - world/campaign/rp_character memories linked to the SELECTED targets;
+     *  - real_life memories are BLOCKED — the fiction wall (§3, no exceptions;
+     *    the Off/OOC-only/Always per-chat setting is future work);
+     *  - project memories are BLOCKED by default (§4 rev 3);
+     *  - companion memories only when [RetrievalScope.allowCompanionInRoleplay]
+     *    — the narrator/GM match from Stage 3.0 or the global §3 toggle.
+     *
+     * Draft/archived/superseded rows are never eligible (§9): status='active'.
      */
-    /**
-     * The eligibility gate every retrieval (and later, Phase 4 injection)
-     * goes through: active status, scope match, and — for the
-     * companion-scoped branch — the companion itself must be past 'draft'
-     * (a draft companion's memories must never reach a live prompt; that gate
-     * is what keeps an unapproved companion's records out of injection).
-     */
-    fun activeMemoriesForScope(
-        companionId: String?,
-        worldId: String?,
-        campaignId: String? = null
-    ): List<RetrievableMemory> {
+    fun activeMemoriesForScope(scope: RetrievalScope): List<RetrievableMemory> {
         val out = ArrayList<RetrievableMemory>()
         val args = ArrayList<String>()
-        val sb = StringBuilder(
-            "SELECT DISTINCT m.memory_id, m.scope, m.title, m.content, m.embedding_text, " +
-                "m.importance, m.created_at, m.world_id, m.provenance_confidence, " +
-                "m.protection_json, m.provenance_source " +
-                "FROM memories m LEFT JOIN memory_companions mc ON mc.memory_id = m.memory_id " +
-                "WHERE m.status = 'active' AND (m.scope = 'global'"
-        )
-        if (companionId != null) {
-            sb.append(
-                " OR (mc.companion_id = ? AND EXISTS (SELECT 1 FROM companions c " +
-                    "WHERE c.companion_id = mc.companion_id AND c.status != 'draft'))"
+        val branches = ArrayList<String>()
+
+        branches.add("m.scope = 'global'")
+
+        val companionBranchAllowed =
+            scope.companionId != null && (!scope.isRoleplay || scope.allowCompanionInRoleplay)
+        if (companionBranchAllowed) {
+            branches.add(
+                "(m.scope = 'companion' AND EXISTS (SELECT 1 FROM memory_companions mc " +
+                    "JOIN companions c ON c.companion_id = mc.companion_id " +
+                    "WHERE mc.memory_id = m.memory_id AND mc.companion_id = ? AND c.status != 'draft'))"
             )
-            args.add(companionId)
+            args.add(scope.companionId!!)
         }
-        sb.append(")")
-        if (worldId == null) {
-            sb.append(" AND m.world_id IS NULL")
+
+        if (scope.isRoleplay) {
+            if (scope.worldId != null) {
+                branches.add(
+                    "(m.scope = 'world' AND EXISTS (SELECT 1 FROM memory_worlds mw " +
+                        "WHERE mw.memory_id = m.memory_id AND mw.world_id = ?))"
+                )
+                args.add(scope.worldId)
+            }
+            if (scope.campaignId != null) {
+                branches.add(
+                    "(m.scope = 'campaign' AND EXISTS (SELECT 1 FROM memory_campaigns mcam " +
+                        "WHERE mcam.memory_id = m.memory_id AND mcam.campaign_id = ?))"
+                )
+                args.add(scope.campaignId)
+            }
+            if (scope.roleplayCharacterId != null) {
+                branches.add(
+                    "(m.scope = 'rp_character' AND EXISTS (SELECT 1 FROM memory_roleplay_characters mrc " +
+                        "WHERE mrc.memory_id = m.memory_id AND mrc.roleplay_character_id = ?))"
+                )
+                args.add(scope.roleplayCharacterId)
+            }
         } else {
-            sb.append(" AND (m.world_id IS NULL OR m.world_id = ?)")
-            args.add(worldId)
+            branches.add("m.scope = 'real_life'")
+            branches.add("m.scope = 'project'")
         }
-        // Campaign isolation (📌 amendment #4): ordinary conversation
-        // (campaignId null) never sees campaign-scoped rows, and those rows are
-        // invisible to OTHER campaigns; only when a campaign is active do its
-        // game-state facts join the mix alongside the non-campaign rows above.
-        if (campaignId == null) {
-            sb.append(" AND m.campaign_id IS NULL")
-        } else {
-            sb.append(" AND (m.campaign_id IS NULL OR m.campaign_id = ?)")
-            args.add(campaignId)
-        }
-        readableDatabase.rawQuery(sb.toString(), args.toTypedArray()).use {
+
+        val sql = "SELECT m.memory_id, m.scope, m.title, m.content, m.embedding_text, " +
+            "m.importance, m.created_at, m.world_id, m.provenance_confidence, " +
+            "m.protection_json, m.provenance_source, m.kind, m.tags_json " +
+            "FROM memories m WHERE m.status = 'active' AND (" +
+            branches.joinToString(" OR ") + ")"
+        readableDatabase.rawQuery(sql, args.toTypedArray()).use {
             while (it.moveToNext()) out.add(readRetrievable(it))
+        }
+        return out
+    }
+
+    /** Memory ids linked to a project via the §2 multi-select join table — the
+     *  Stage 3.2 ranking boost for the chat's selected project reads this. */
+    fun memoryIdsForProject(projectId: String): HashSet<String> {
+        val out = HashSet<String>()
+        readableDatabase.rawQuery(
+            "SELECT memory_id FROM memory_projects WHERE project_id = ?", arrayOf(projectId)
+        ).use {
+            while (it.moveToNext()) out.add(it.getString(0))
         }
         return out
     }
@@ -1890,7 +1928,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             "memories",
             arrayOf("memory_id", "scope", "title", "content", "embedding_text",
                 "importance", "created_at", "world_id", "provenance_confidence",
-                "protection_json", "provenance_source"),
+                "protection_json", "provenance_source", "kind", "tags_json"),
             "status = 'active'", null, null, null, "created_at ASC"
         ).use {
             while (it.moveToNext()) out.add(readRetrievable(it))
@@ -1909,7 +1947,9 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         worldId = c.getStringOrNull("world_id"),
         provenanceConfidence = c.getStringOrNull("provenance_confidence"),
         protectionJson = c.getStringOrNull("protection_json"),
-        provenanceSource = c.getStringOrNull("provenance_source")
+        provenanceSource = c.getStringOrNull("provenance_source"),
+        kind = c.getStringOrNull("kind") ?: "fact",
+        tagsJson = c.getStringOrNull("tags_json") ?: "[]"
     )
 
     /** Stored vectors for [embeddingModel] over the active memories, keyed by
@@ -2702,8 +2742,9 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         put("tags_json", m.tagsJson)
         put("importance", m.importance)
         // Primary-target mirror (§2 multi-select): the first of each target set
-        // is kept in the legacy single column for the Stage-3 retrieval query;
-        // the full set lives in the join tables (writeMemoryLinks).
+        // is kept in the legacy single column for the teardown paths; the full
+        // set lives in the join tables (writeMemoryLinks), which is what the
+        // Stage-3.1 retrieval eligibility query reads.
         put("world_id", m.worldIds.firstOrNull())
         put("roleplay_character_id", m.roleplayCharacterIds.firstOrNull())
         put("campaign_id", m.campaignIds.firstOrNull())

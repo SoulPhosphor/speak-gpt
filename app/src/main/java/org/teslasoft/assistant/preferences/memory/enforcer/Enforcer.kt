@@ -28,6 +28,7 @@ import org.teslasoft.assistant.preferences.memory.MemoryLog
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.memory.ModeRecord
 import org.teslasoft.assistant.preferences.memory.RetrievableMemory
+import org.teslasoft.assistant.preferences.memory.RetrievalScope
 import org.teslasoft.assistant.preferences.memory.ScoredMemory
 import org.teslasoft.assistant.preferences.memory.librarian.Librarian
 import org.teslasoft.assistant.preferences.memory.librarian.VectorMath
@@ -151,16 +152,36 @@ class Enforcer private constructor(private val appContext: Context) {
         } catch (_: Exception) { /* mirror only; never blocks a turn */ }
 
         val librarian = Librarian.getInstance(appContext)
+        val prefs = Preferences.getPreferences(appContext, input.chatId)
+
+        // §3 (rev 3): companion memories in roleplay need an explicit door —
+        // the narrator/GM match (the selected campaign's GM companion IS the
+        // chat's active companion) or the global "Allow active companion
+        // memories in roleplay" toggle (default OFF). Two independent paths;
+        // the toggle does not require narrator status.
+        val narratorMatch = campaign?.companionId != null &&
+            campaign.companionId == companion?.companionId
+        val companionInRoleplayAllowed =
+            narratorMatch || prefs.getAllowCompanionMemoriesInRoleplay()
+
+        // The seven-category eligibility context (Stage 3.1) — the store query
+        // is the single gate; ranking (Stage 3.2) only orders what's eligible.
+        val retrievalScope = RetrievalScope(
+            companionId = scopeCompanionId,
+            worldId = worldId,
+            campaignId = campaign?.campaignId,
+            roleplayCharacterId = roleplayCharacterId,
+            allowCompanionInRoleplay = companionInRoleplayAllowed
+        )
 
         // Retrieval: the librarian's search inherits the eligibility gates in the
         // store query. The per-memory always-load flag is retired
-        // (owner_approved_rules §10): nothing is force-injected every turn, so
-        // the standing packet carries no always-load section any more.
+        // (owner_approved_rules §10): nothing is force-injected every turn.
         val query = listOf(input.userMessage, input.recentContext)
             .filter { it.isNotBlank() }.joinToString("\n")
         if (!librarian.hasUsableModel()) notes.add("no embedding model — keyword retrieval")
         val retrievedRaw: List<ScoredMemory> = try {
-            librarian.search(scopeCompanionId, worldId, query, policy.topK, campaign?.campaignId)
+            librarian.search(retrievalScope, query, policy.topK, input.projectId?.takeIf { it.isNotBlank() })
         } catch (e: Exception) {
             notes.add("retrieval failed: ${e.message}")
             emptyList()
@@ -226,7 +247,6 @@ class Enforcer private constructor(private val appContext: Context) {
         } catch (_: Exception) { LinkedHashMap() }
 
         // Standing packet (slot 2): compressed & cached, raw records fallback.
-        val prefs = Preferences.getPreferences(appContext, input.chatId)
         val packet = try {
             StandingPacketManager.get(
                 appContext, store,

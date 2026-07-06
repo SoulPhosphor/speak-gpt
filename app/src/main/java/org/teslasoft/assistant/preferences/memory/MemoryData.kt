@@ -155,9 +155,10 @@ data class MemoryRecord(
     val importance: Int,
     /** Named target scopes are multi-select (owner_approved_rules §2): a memory
      *  may belong to several worlds/campaigns/RP characters/projects at once
-     *  (join-table backed, like [companionIds]). The store also mirrors the
-     *  first of each into the legacy single columns as a "primary target" for
-     *  the Stage-3 retrieval query; that mirror is internal and not exposed. */
+     *  (join-table backed, like [companionIds]). Retrieval eligibility reads
+     *  these join tables too (Stage 3.1); the store still mirrors the first of
+     *  each into the legacy single columns for the teardown paths — that
+     *  mirror is internal and not exposed. */
     val worldIds: List<String>,
     val roleplayCharacterIds: List<String>,
     val campaignIds: List<String>,
@@ -266,10 +267,40 @@ data class MemoryStoreData(
 )
 
 /**
+ * The conversation context every retrieval is scoped to (Stage 3.1, rules
+ * §1/§3/§4 rev 3). Built by the enforcer from the chat's Quick Settings
+ * selections; consumed by [MemoryStore.activeMemoriesForScope] — the single
+ * eligibility gate — so scope isolation stays enforced IN THE QUERY.
+ *
+ * The great split (law 1) is [isRoleplay]: ANY roleplay selection (world,
+ * campaign, or RP character) puts the chat in fiction, where real-life and
+ * project memories are blocked and companion memories need an explicit door
+ * ([allowCompanionInRoleplay] — the narrator/GM match or the global toggle).
+ */
+data class RetrievalScope(
+    /** The chat's active companion, already participation-filtered by the
+     *  caller (null = no companion branch at all). */
+    val companionId: String?,
+    val worldId: String?,
+    val campaignId: String?,
+    val roleplayCharacterId: String?,
+    val allowCompanionInRoleplay: Boolean = false
+) {
+    val isRoleplay: Boolean
+        get() = worldId != null || campaignId != null || roleplayCharacterId != null
+
+    companion object {
+        /** Scope-less context (debug search, index tooling): ordinary chat,
+         *  no companion — global + real-life + project memories only. */
+        val NONE = RetrievalScope(null, null, null, null)
+    }
+}
+
+/**
  * A memory as the librarian sees it: enough to embed, score, and render a
  * retrieval result, without loading joins/change-log the way [MemoryRecord]
  * does. `embeddingText` is the condensed text to embed when present, else the
- * content; `companionScoped` is false for global memories.
+ * content.
  */
 data class RetrievableMemory(
     val memoryId: String,
@@ -286,7 +317,11 @@ data class RetrievableMemory(
     // provenance source with it — the assembler never has to re-query (and can
     // therefore never "forget" the HANDLE WITH CARE line).
     val protectionJson: String? = null,
-    val provenanceSource: String? = null
+    val provenanceSource: String? = null,
+    // Stage 3: the Type drives the render (Instruction memories become handling
+    // rules) and the tags feed soft ranking hints (§6 — never gatekeepers).
+    val kind: String = "fact",
+    val tagsJson: String = "[]"
 ) {
     fun textToEmbed(): String = embeddingText?.takeIf { it.isNotBlank() } ?: content
 }

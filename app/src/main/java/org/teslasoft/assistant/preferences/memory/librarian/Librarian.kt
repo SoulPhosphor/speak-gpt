@@ -21,6 +21,7 @@ import org.json.JSONObject
 import org.teslasoft.assistant.preferences.memory.MemoryLog
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.memory.RetrievableMemory
+import org.teslasoft.assistant.preferences.memory.RetrievalScope
 import org.teslasoft.assistant.preferences.memory.ScoredMemory
 
 /**
@@ -58,32 +59,93 @@ class Librarian private constructor(private val appContext: Context) {
         // on-device if real queries show it cutting good matches.
         private const val MIN_SIMILARITY = 0.30f
 
+        // Priority ladder (Stage 3.2, rules §12): scope specificity as a
+        // bounded additive boost blended with relevance — a strong preference
+        // among comparably relevant entries, never a hard sort tier. With
+        // w_sim = 0.6, even the maximum stacked boost (~0.26) cannot let a
+        // weakly-relevant specific entry beat a strongly-relevant broader one
+        // (§12.4), and the MIN_SIMILARITY floor still gates everything.
+        // Ladder, most specific first: campaign → rp_character → world →
+        // project → companion → real_life → global.
+        private val SCOPE_BOOSTS = mapOf(
+            "campaign" to 0.12,
+            "rp_character" to 0.10,
+            "world" to 0.08,
+            "project" to 0.06,
+            "companion" to 0.04,
+            "real_life" to 0.02,
+            "global" to 0.0
+        )
+
+        /** §4 rev 3: the chat's SELECTED project boosts its memories on top of
+         *  the project scope tier — selection is a boost, never a gate. */
+        private const val PROJECT_SELECTED_BOOST = 0.08
+
+        // §6: tags are softer lorebook trigger words — useful ranking hints,
+        // never gatekeepers and never a forced injection.
+        private const val TAG_BONUS_PER_HIT = 0.02
+        private const val TAG_BONUS_CAP = 0.06
+
+        /**
+         * The Stage 3.2 context boost for one memory, pure and unit-tested:
+         * scope-specificity tier + selected-project boost + tag hints (a tag
+         * appearing in the query text as a whole word). Tags arrive parsed —
+         * org.json is an Android stub on the JVM, so no JSON in pure code.
+         */
+        fun retrievalBoost(
+            scope: String,
+            linkedToSelectedProject: Boolean,
+            tags: List<String>,
+            queryLower: String
+        ): Double {
+            var boost = SCOPE_BOOSTS[scope] ?: 0.0
+            if (linkedToSelectedProject) boost += PROJECT_SELECTED_BOOST
+            var tagBonus = 0.0
+            for (tag in tags) {
+                val t = tag.trim().lowercase()
+                if (t.length > 1 && Regex("\\b" + Regex.escape(t) + "\\b").containsMatchIn(queryLower)) {
+                    tagBonus += TAG_BONUS_PER_HIT
+                }
+            }
+            return boost + tagBonus.coerceAtMost(TAG_BONUS_CAP)
+        }
+
         /**
          * Pure ranking: score each candidate and return the top [topK], highest
-         * first. score = w_sim·cosine + w_imp·(importance/5) + w_rec·recency;
-         * tentative-confidence memories are dampened. No Android/ORT — unit
-         * tested (LibrarianRankingTest). [recency] is a 0..1 value the caller
-         * supplies per memory (1 = newest); tests pass it directly.
+         * first. score = w_sim·cosine + w_imp·(importance/5) + w_rec·recency +
+         * boost; tentative-confidence memories are dampened (before the boost,
+         * so context can't launder a guess into a certainty). No Android/ORT —
+         * unit tested (LibrarianRankingTest).
          */
         fun rank(
             queryVector: FloatArray,
-            candidates: List<Triple<RetrievableMemory, FloatArray, Double>>,
+            candidates: List<Candidate>,
             weights: Weights,
             topK: Int
         ): List<ScoredMemory> {
-            val scored = candidates.map { (mem, vec, recency) ->
-                val sim = VectorMath.cosine(queryVector, vec)
+            val scored = candidates.map { c ->
+                val sim = VectorMath.cosine(queryVector, c.vector)
                 var s = weights.similarity * sim +
-                    weights.importance * (mem.importance / 5.0) +
-                    weights.recency * recency
-                if (mem.provenanceConfidence.equals("tentative", ignoreCase = true)) s *= TENTATIVE_DAMPEN
-                ScoredMemory(mem, sim, s.toFloat())
+                    weights.importance * (c.memory.importance / 5.0) +
+                    weights.recency * c.recency
+                if (c.memory.provenanceConfidence.equals("tentative", ignoreCase = true)) s *= TENTATIVE_DAMPEN
+                s += c.boost
+                ScoredMemory(c.memory, sim, s.toFloat())
             }
             return scored.sortedByDescending { it.score }.take(topK)
         }
     }
 
     data class Weights(val similarity: Double, val importance: Double, val recency: Double)
+
+    /** One ranked candidate: the memory, its stored vector, a 0..1 recency
+     *  (1 = newest), and the precomputed context boost ([retrievalBoost]). */
+    data class Candidate(
+        val memory: RetrievableMemory,
+        val vector: FloatArray,
+        val recency: Double,
+        val boost: Double = 0.0
+    )
 
     @Volatile private var model: EmbeddingModel? = null
     @Volatile private var modelLoadFailed = false
@@ -183,18 +245,37 @@ class Librarian private constructor(private val appContext: Context) {
     }
 
     /**
-     * Semantic search within a conversation's scope. Falls back to keyword
-     * matching when there's no usable model or no vectors yet. Returns up to
-     * [topK] scored memories, best first.
+     * Semantic search within a conversation's scope (Stage 3.1/3.2). Falls
+     * back to keyword matching when there's no usable model or no vectors yet.
+     * Returns up to [topK] scored memories, best first.
+     *
+     * [scope] carries the seven-category eligibility context; the gates live
+     * in the store query (active status, scope categories, the fiction wall,
+     * no draft-companion memories) — Phase 4 injection consumes this same
+     * method, so it inherits them. [selectedProjectId] only boosts ranking
+     * (§4 rev 3), it never gates eligibility.
      */
-    fun search(companionId: String?, worldId: String?, query: String, topK: Int, campaignId: String? = null): List<ScoredMemory> {
+    fun search(
+        scope: RetrievalScope,
+        query: String,
+        topK: Int,
+        selectedProjectId: String? = null
+    ): List<ScoredMemory> {
         if (!MemoryStore.isProvisioned(appContext)) return emptyList()
         val store = MemoryStore.getInstance(appContext)
-        // Eligibility gates live in the store query (active status, scope, no
-        // draft-companion memories, campaign isolation) — Phase 4 injection
-        // consumes this same method, so it inherits them.
-        val candidates = store.activeMemoriesForScope(companionId, worldId, campaignId)
+        val candidates = store.activeMemoriesForScope(scope)
         if (candidates.isEmpty()) return emptyList()
+
+        // Context boosts (§12 ladder + selected project + tag hints) are
+        // precomputed here so [rank] stays pure and JSON-free.
+        val projectMemoryIds: Set<String> =
+            selectedProjectId?.takeIf { it.isNotBlank() && !scope.isRoleplay }?.let {
+                try { store.memoryIdsForProject(it) } catch (_: Exception) { emptySet() }
+            } ?: emptySet()
+        val queryLower = query.lowercase()
+        fun boostOf(mem: RetrievableMemory): Double = retrievalBoost(
+            mem.scope, projectMemoryIds.contains(mem.memoryId), parseTags(mem.tagsJson), queryLower
+        )
 
         val m = ensureModel()
         if (m != null) {
@@ -207,10 +288,10 @@ class Librarian private constructor(private val appContext: Context) {
                 if (withVectors.isNotEmpty()) {
                     val queryVec = m.embed(query, isQuery = true)
                     val recency = recencyMap(withVectors.map { it.first })
-                    val triples = withVectors.map { (mem, vec) ->
-                        Triple(mem, vec, recency[mem.memoryId] ?: 0.0)
+                    val ranked = withVectors.map { (mem, vec) ->
+                        Candidate(mem, vec, recency[mem.memoryId] ?: 0.0, boostOf(mem))
                     }
-                    return rank(queryVec, triples, weights(store), topK)
+                    return rank(queryVec, ranked, weights(store), topK)
                         .filter { it.similarity >= MIN_SIMILARITY }
                 }
             } catch (t: Throwable) {
@@ -219,6 +300,12 @@ class Librarian private constructor(private val appContext: Context) {
         }
         return keywordFallback(candidates, query, topK)
     }
+
+    /** tags_json -> list; a garbled column degrades to "no tags", never an error. */
+    private fun parseTags(tagsJson: String): List<String> = try {
+        val arr = org.json.JSONArray(tagsJson)
+        (0 until arr.length()).mapNotNull { arr.optString(it).takeIf { s -> s.isNotBlank() } }
+    } catch (_: Exception) { emptyList() }
 
     /** Recency in 0..1 by created_at order among the candidates (newest = 1).
      *  ISO-8601 strings sort correctly; unparseable ones fall to the bottom. */
