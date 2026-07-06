@@ -1039,6 +1039,23 @@
     <string name="mem_importance_4">4 High</string>
     <string name="mem_importance_5">5 Critical</string>
 
+    <!-- Browser filter/sort (Stage 2.3) -->
+    <string name="mem_filter_chip">%1$s: %2$s</string>
+    <string name="mem_filter_all">All</string>
+    <string name="mem_filter_sort">Sort</string>
+    <string name="mem_filter_sort_newest">Newest</string>
+    <string name="mem_filter_sort_oldest">Oldest</string>
+    <string name="mem_filter_status">Status</string>
+    <string name="mem_filter_source">Source</string>
+    <string name="mem_filter_tag">Tag</string>
+    <string name="mem_filter_reset">Reset</string>
+    <string name="mem_status_active">Active</string>
+    <string name="mem_status_draft">Draft</string>
+    <string name="mem_status_archived">Archived</string>
+    <string name="mem_status_superseded">Superseded</string>
+    <string name="mem_source_hand">Entered by hand</string>
+    <string name="mem_source_learned">Learned from chat</string>
+
     <!-- Row action menu -->
     <string name="action_edit">Edit</string>
     <string name="action_protect">Protect</string>

@@ -147,6 +147,29 @@
             android:textColorHint="@color/text_hint" />
     </com.google.android.material.textfield.TextInputLayout>
 
+    <!-- Optional filter/sort chip row (Stage 2.3, the memory browser). Hidden
+         unless the hosting screen enables it; when GONE it collapses so the list
+         sits right under the search field on the other list screens. -->
+    <HorizontalScrollView
+        android:id="@+id/filter_bar"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:paddingHorizontal="16dp"
+        android:clipToPadding="false"
+        android:scrollbars="none"
+        android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/search_bar">
+
+        <com.google.android.material.chip.ChipGroup
+            android:id="@+id/chips_filter"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            app:singleLine="true" />
+    </HorizontalScrollView>
+
     <TextView
         android:id="@+id/empty_view"
         android:layout_width="0dp"
@@ -160,7 +183,7 @@
         android:visibility="gone"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/search_bar" />
+        app:layout_constraintTop_toBottomOf="@+id/filter_bar" />
 
     <ListView
         android:id="@+id/list_view"
@@ -173,6 +196,6 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintHorizontal_bias="0.0"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/search_bar"
+        app:layout_constraintTop_toBottomOf="@+id/filter_bar"
         app:layout_constraintVertical_bias="0.0" />
 </androidx.constraintlayout.widget.ConstraintLayout>

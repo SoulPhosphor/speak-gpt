@@ -22,10 +22,12 @@ import android.os.Build
 import android.os.Bundle
 import android.view.View
 import android.view.WindowInsets
+import android.widget.HorizontalScrollView
 import android.widget.ImageButton
 import android.widget.ListView
 import android.widget.TextView
 import android.widget.Toast
+import com.google.android.material.chip.ChipGroup
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
@@ -64,6 +66,8 @@ abstract class MemoryScreenActivity : FragmentActivity(), MemoryRowAdapter.OnRow
     private var listView: ListView? = null
     private var emptyView: TextView? = null
     private var btnAdd: ExtendedFloatingActionButton? = null
+    private var filterBar: HorizontalScrollView? = null
+    private var filterChips: ChipGroup? = null
 
     protected var searchQuery: String = ""
 
@@ -91,6 +95,16 @@ abstract class MemoryScreenActivity : FragmentActivity(), MemoryRowAdapter.OnRow
     /** Load the rows for [query] — runs on a worker thread. */
     protected abstract fun loadRows(query: String): List<MemoryRow>
 
+    /** Show the filter/sort chip row (Stage 2.3, the memory browser only). */
+    protected open fun showFilterBar(): Boolean = false
+
+    /** Populate the filter chip row — called once the bar is shown, and again
+     *  by the screen after a filter changes. */
+    protected open fun renderFilterBar() {}
+
+    /** The filter chip row, for screens that populate it. */
+    protected fun filterChipGroup(): ChipGroup? = filterChips
+
     /* ------------------------------ event hooks ------------------------------ */
 
     protected open fun onAddClick() {}
@@ -117,6 +131,8 @@ abstract class MemoryScreenActivity : FragmentActivity(), MemoryRowAdapter.OnRow
         listView = findViewById(R.id.list_view)
         emptyView = findViewById(R.id.empty_view)
         btnAdd = findViewById(R.id.btn_add)
+        filterBar = findViewById(R.id.filter_bar)
+        filterChips = findViewById(R.id.chips_filter)
 
         titleView?.text = screenTitle()
 
@@ -156,6 +172,13 @@ abstract class MemoryScreenActivity : FragmentActivity(), MemoryRowAdapter.OnRow
                 btnActionSecondary?.tooltipText = it
             }
             btnActionSecondary?.setOnClickListener { onSecondaryActionClick() }
+        }
+
+        if (showFilterBar()) {
+            filterBar?.visibility = View.VISIBLE
+            renderFilterBar()
+        } else {
+            filterBar?.visibility = View.GONE
         }
     }
 
