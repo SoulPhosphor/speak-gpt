@@ -22,6 +22,7 @@ import android.os.Build
 import android.os.Bundle
 import android.view.View
 import android.view.WindowInsets
+import android.widget.CheckBox
 import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -74,6 +75,7 @@ class CompanionDetailActivity : FragmentActivity() {
     private var rowParticipation: LinearLayout? = null
     private var textParticipationValue: TextView? = null
     private var btnSave: MaterialButton? = null
+    private var btnDelete: MaterialButton? = null
 
     // The loaded record; status drives the draft/approve section.
     private var record: CompanionRecord? = null
@@ -97,6 +99,7 @@ class CompanionDetailActivity : FragmentActivity() {
         rowParticipation?.setOnClickListener { showParticipationPicker() }
         btnApprove?.setOnClickListener { approve() }
         btnSave?.setOnClickListener { save() }
+        btnDelete?.setOnClickListener { confirmDelete() }
 
         load()
     }
@@ -110,6 +113,7 @@ class CompanionDetailActivity : FragmentActivity() {
         rowParticipation = findViewById(R.id.row_participation)
         textParticipationValue = findViewById(R.id.text_participation_value)
         btnSave = findViewById(R.id.btn_save)
+        btnDelete = findViewById(R.id.btn_delete)
     }
 
     /* ------------------------------ data ------------------------------ */
@@ -193,6 +197,38 @@ class CompanionDetailActivity : FragmentActivity() {
             MemoryStore.getInstance(this).updateCompanionParticipation(id, part)
             runOnUiThread {
                 Toast.makeText(this, R.string.mem_comp_saved_toast, Toast.LENGTH_SHORT).show()
+                finish()
+            }
+        }
+    }
+
+    /** Material confirm that spells out what disappears and lets the user pick,
+     *  per deletion, whether this companion's memories go too (checkbox, off by
+     *  default — deleting the memories is the more destructive choice). The
+     *  persona/character card is app-owned and never touched. */
+    private fun confirmDelete() {
+        val name = record?.currentName ?: textName?.text?.toString().orEmpty()
+        val view = layoutInflater.inflate(R.layout.dialog_delete_companion, null)
+        view.findViewById<TextView>(R.id.text_delete_body).text =
+            getString(R.string.mem_comp_delete_body, name)
+        val checkDeleteMemories = view.findViewById<CheckBox>(R.id.check_delete_memories)
+
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.mem_comp_delete_title)
+            .setView(view)
+            .setPositiveButton(R.string.mem_comp_delete) { _, _ ->
+                deleteCompanion(checkDeleteMemories.isChecked)
+            }
+            .setNegativeButton(android.R.string.cancel) { _, _ -> }
+            .show()
+    }
+
+    private fun deleteCompanion(deleteMemories: Boolean) {
+        val id = companionId
+        runOffThread {
+            MemoryStore.getInstance(this).deleteCompanion(id, deleteMemories)
+            runOnUiThread {
+                Toast.makeText(this, R.string.mem_comp_deleted_toast, Toast.LENGTH_SHORT).show()
                 finish()
             }
         }

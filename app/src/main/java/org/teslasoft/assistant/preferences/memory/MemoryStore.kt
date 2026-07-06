@@ -1883,6 +1883,40 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         )
     }
 
+    /**
+     * Removes a companion from the memory system (its persona/character card is
+     * app-owned and untouched — only the memory-side record goes). Follows the
+     * [deleteRoleplayCharacter] pattern: tombstone for future cross-device
+     * merge; [deleteMemories] decides whether this companion's memories go with
+     * it or stay. memory_companions has ON DELETE CASCADE on the memory side but
+     * nothing on the companion side, so its links to this companion are scrubbed
+     * explicitly first (a dangling FK would block the companion delete).
+     */
+    fun deleteCompanion(companionId: String, deleteMemories: Boolean) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            if (deleteMemories) {
+                // Every memory linked to this companion is removed; deleting the
+                // memory rows cascades their memory_companions links away.
+                deleteMemoriesWhere(
+                    db,
+                    "memory_id IN (SELECT memory_id FROM memory_companions WHERE companion_id = ?)",
+                    arrayOf(companionId)
+                )
+            }
+            // Scrub any surviving links to this companion (the whole set when
+            // memories are kept; a no-op safety net when they were deleted) so
+            // no memory references a companion that no longer exists.
+            db.delete("memory_companions", "companion_id = ?", arrayOf(companionId))
+            db.delete("companions", "companion_id = ?", arrayOf(companionId))
+            recordDeletionTx(db, "companion", companionId)
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
     /* -------- entities -------- */
 
     fun getEntities(): List<EntityRecord> = readEntities(null, null)

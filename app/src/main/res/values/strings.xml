@@ -1060,6 +1060,13 @@
     <string name="mem_comp_saved_toast">Companion saved.</string>
     <string name="mem_comp_load_failed">Could not load this companion.</string>
 
+    <!-- Delete companion (wording from the Phase 5 rework work order 1.2) -->
+    <string name="mem_comp_delete">Delete</string>
+    <string name="mem_comp_delete_title">Delete companion?</string>
+    <string name="mem_comp_delete_body">This removes %1$s from the memory system. Its persona/character card is not affected.</string>
+    <string name="mem_comp_delete_also_memories">Also delete this companion\'s memories</string>
+    <string name="mem_comp_deleted_toast">Companion deleted.</string>
+
     <!-- ============ Phase 5 area screens: My personas & roleplay characters ============ -->
     <!-- My Personas (ui/activities/memory/MemoryUserPersonasActivity) -->
     <string name="mem_pers_title_user_personas">My Personas</string>
