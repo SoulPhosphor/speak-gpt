@@ -233,6 +233,12 @@
         </activity>
 
         <activity
+            android:name=".ui.activities.memory.MemoryBrowserActivity"
+            android:exported="false"
+            android:label="@string/title_memories">
+        </activity>
+
+        <activity
             android:name=".ui.activities.LocalWhisperManageActivity"
             android:exported="false"
             android:label="@string/title_manage_downloaded_models"

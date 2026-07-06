@@ -967,4 +967,62 @@
     <string name="lorebook_debug_store_unavailable">Lore books were UNAVAILABLE this turn (see the Event log)</string>
     <string name="lorebook_debug_no_active_books">No active lore books to search — check the persona\'s linked books and the Quick Settings checklist</string>
     <string name="lorebook_debug_searched_fmt">Searched %1$d active book(s)</string>
+
+    <!-- ============ Phase 5: memory manager UI ============ -->
+    <!-- Shared list scaffold -->
+    <string name="memory_row_actions">Actions</string>
+    <string name="memory_list_empty">Nothing here yet.</string>
+    <!-- Settings entry point -->
+    <string name="memory_section_manage">Browse &amp; edit</string>
+    <string name="btn_memory_browse">Memory browser</string>
+    <string name="memory_manage_hint">View, add and edit everything the memory system stores.</string>
+    <!-- Memory browser -->
+    <string name="title_memories">Memories</string>
+    <string name="memory_search_hint">Search memories</string>
+    <string name="memory_scope_global">Global</string>
+    <string name="memory_scope_companion">Companion</string>
+    <string name="memory_badge_archived">Archived</string>
+    <string name="memory_badge_superseded">Superseded</string>
+    <string name="memory_badge_protected">Protected</string>
+    <string name="memory_badge_always">Always</string>
+    <string name="memory_showing_archived">Showing archived memories too</string>
+    <string name="memory_hiding_archived">Hiding archived memories</string>
+    <string name="memory_saved">Memory saved</string>
+    <string name="memory_deleted">Memory deleted</string>
+    <string name="memory_change_edited">Edited by hand</string>
+    <string name="memory_change_status">Status changed by hand</string>
+    <string name="memory_change_protection">Protection changed by hand</string>
+    <!-- Row action menu -->
+    <string name="action_edit">Edit</string>
+    <string name="action_protect">Protect</string>
+    <string name="action_unprotect">Remove protection</string>
+    <string name="action_archive">Archive</string>
+    <string name="action_restore">Restore</string>
+    <string name="action_history">History</string>
+    <string name="action_delete">Delete</string>
+    <!-- Delete confirm -->
+    <string name="memory_delete_confirm_title">Delete this memory?</string>
+    <string name="memory_delete_confirm_msg">“%1$s” will be permanently removed. This cannot be undone.</string>
+    <!-- Protect dialog -->
+    <string name="memory_protect_dialog_msg">Protected memories are injected together with handling notes so the model treats them with care. One handling note per line.</string>
+    <string name="memory_protect_handling_hint">e.g. Follow the user\'s lead; never assume how they feel about it</string>
+    <!-- History dialog -->
+    <string name="memory_history_title">Change history</string>
+    <string name="memory_history_empty">No changes recorded yet.</string>
+    <!-- Edit dialog -->
+    <string name="dialog_memory_title_new">New memory</string>
+    <string name="dialog_memory_title_edit">Edit memory</string>
+    <string name="memory_field_title">Title</string>
+    <string name="memory_field_content">What to remember</string>
+    <string name="memory_field_kind">Kind (e.g. fact, preference, event)</string>
+    <string name="memory_field_importance">Importance (1–5)</string>
+    <string name="memory_field_tags">Tags (comma separated)</string>
+    <string name="memory_field_always_load">Always load this memory</string>
+    <string name="memory_field_always_load_hint">Always-load memories are included every turn, not just when relevant.</string>
+    <string name="memory_field_companion_scoped">Only for one companion</string>
+    <string name="memory_pick_companion">Choose companion</string>
+    <string name="memory_companion_selected">Companion: %1$s</string>
+    <string name="memory_no_companions">No companions yet — enable the full memory engine to create them.</string>
+    <string name="memory_title_content_required">A title and something to remember are both required.</string>
+    <string name="memory_companion_required">Choose a companion, or turn off companion scoping.</string>
 </resources>

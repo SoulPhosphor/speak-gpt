@@ -144,6 +144,26 @@ class Librarian private constructor(private val appContext: Context) {
         }
     }
 
+    /**
+     * Re-embed a single memory after a hand edit so the librarian matches on
+     * its current text, not a stale (or missing) vector. Best-effort: a no-op
+     * when there's no usable model or the memory is gone/inactive — the
+     * index-rebuild hint then covers it. Runs the embed work on the caller's
+     * thread, so call it off the main thread.
+     */
+    fun reindexMemory(memoryId: String) {
+        if (!MemoryStore.isProvisioned(appContext)) return
+        val m = ensureModel() ?: return
+        val store = MemoryStore.getInstance(appContext)
+        val mem = store.getMemory(memoryId)?.takeIf { it.status == "active" } ?: return
+        try {
+            val vec = m.embed(mem.embeddingText?.takeIf { it.isNotBlank() } ?: mem.content, isQuery = false)
+            store.upsertEmbedding(memoryId, m.tag, VectorMath.toBlob(vec))
+        } catch (t: Throwable) {
+            MemoryLog.log(appContext, "Librarian", "error", "Reindex of $memoryId failed: ${t.message}")
+        }
+    }
+
     /** Force a reload next time (after a model download/removal). */
     @Synchronized
     fun invalidateModel() {

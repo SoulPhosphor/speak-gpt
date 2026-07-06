@@ -86,6 +86,32 @@
                 android:textColor="@color/text_subtitle"
                 android:textSize="14sp" />
 
+            <!-- ============ Browse & edit ============ -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="24dp"
+                android:text="@string/memory_section_manage"
+                android:textColor="?attr/colorPrimary"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="8dp"
+                android:text="@string/memory_manage_hint"
+                android:textColor="@color/text_subtitle"
+                android:textSize="13sp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_memory_browser"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                app:icon="@drawable/ic_storage"
+                android:text="@string/btn_memory_browse" />
+
             <!-- ============ Status ============ -->
             <TextView
                 android:layout_width="match_parent"
