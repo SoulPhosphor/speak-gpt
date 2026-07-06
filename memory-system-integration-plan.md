@@ -605,8 +605,30 @@ coexistence, essence guardrail, failure behavior); D7 (compressor), D8.
 > - The five pre-written **modes** were deleted and are purged once at store
 >   open; no default modes ship.
 > - **My Personas moved out** to the Characters hub.
-> Stage 2 (record restructure + full browser filters/sort + Pending flow)
-> is not yet built. Read the work order before touching Phase 5 UI.
+>
+> **Stage 2 is now built (July 2026).** The memory record was restructured to
+> the owner-approved rules and the UI rebuilt on top of it:
+> - **Record/schema (DB v4–v5):** `memories.scope` holds the primary scope
+>   category (global | real_life | companion | project | world | campaign |
+>   rp_character); `kind` is the **Type** (fact|preference|event|status|
+>   instruction|lore); `status` gains `draft`; a new `projects` table (§4) +
+>   `memories.project_id`; the per-memory `always_load` flag is **retired**
+>   (§10, column dead). Named target scopes are **multi-select** (§2) via join
+>   tables (`memory_worlds`/`memory_campaigns`/`memory_roleplay_characters`/
+>   `memory_projects`, like `memory_companions`); the single columns stay as a
+>   primary-target mirror so the Stage-3 retrieval query is untouched.
+> - The **editor is a full-screen page** (`MemoryEditorActivity`) with the
+>   §2/§5/§6/§8 fields and a multi-select target picker (removable pills); the
+>   old pop-up editor was removed.
+> - The **browser** got the full filter/sort chip row (scope/type/status/
+>   source/tag + sort + Reset), and a pinned **Pending** banner opening the
+>   **Pending screen** (`MemoryPendingActivity`, §14).
+> - **Reset memories** (Memory settings) empties every memory-content table with
+>   a backup-first option. **Quick Settings** gained a per-chat **Project**
+>   selector (§4).
+> Stage 2 does NOT touch retrieval; the priority ladder, cooldown, scope-
+> eligibility rewrite and RP-ledger indexing are **Stage 3** (reserved). Read
+> the work order before touching Phase 5 UI.
 
 **Landed July 2026.** What shipped: a **Memory manager** hub
 (`ui/activities/memory/MemoryManagerActivity`, reached from a "Browse & edit"

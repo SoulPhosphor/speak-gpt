@@ -178,7 +178,29 @@ Everything is on-device. No cloud sync, no accounts.
    conversation never retrieves campaign-scoped rows —
    `activeMemoriesForScope(companionId, worldId, campaignId=null)` gained a
    `campaignId` param (null ⇒ campaign rows invisible; set ⇒ that campaign's
-   state joins) and `Librarian.search` threads it through. MemoryStore also
+   state joins) and `Librarian.search` threads it through. DB v4 (July 2026,
+   Phase 5 Stage 2) restructures the memory record to the owner-approved rules:
+   `memories.scope` now holds the **primary scope category** (global | real_life
+   | companion | project | world | campaign | rp_character), `kind` is the
+   **Type** (fact|preference|event|status|instruction|lore), `status` gains
+   `draft`, and a new `projects` table (§4) with `memories.project_id`.
+   Loosening the scope/status CHECK constraints can't be done with ALTER, so v4
+   **rebuilds** the `memories` table with foreign keys disabled for the
+   migration (`onConfigure` gates FK-off on the pending version, `onOpen`
+   restores them) so the drop doesn't cascade-delete the children. The
+   per-memory `always_load` flag is **retired** (§10): the column stays but
+   nothing reads or writes it, so the enforcer's standing packet has no
+   always-load section. DB v5 makes the named target scopes **multi-select**
+   (§2): join tables `memory_worlds`/`memory_campaigns`/
+   `memory_roleplay_characters`/`memory_projects` mirror `memory_companions`, so
+   a memory can belong to several worlds/campaigns/RP-characters/projects
+   without being duplicated. The legacy single columns are kept as a
+   **primary-target mirror** (first selected) so the Stage-3-owned
+   `activeMemoriesForScope` query is untouched; the scoped-browser doors read
+   the join tables and the target-delete paths scrub them. Source is DERIVED for
+   display (`provenance_source == "user_entered"` ⇒ "Entered by hand", else
+   "Learned from chat"); there is no "Imported" bucket — import preserves each
+   row's original source (owner decision). MemoryStore also
    grew the Phase-5 hand-editor CRUD (per-record upsert/delete with
    `deleted_ids` tombstones; memory edits snapshot prior state into
    `change_log` and drop stale embeddings so a rebuild re-embeds). **The app ships and
@@ -352,8 +374,9 @@ Everything is on-device. No cloud sync, no accounts.
   `Enforcer.assembleTurn` builds ONE extra system message per turn on
   Dispatchers.IO in `regularGPTResponse`, after the stable first message
   (never reordered — prefix caching): model-adaptation note, companion hard
-  limits, the **standing packet** (owner portrait + directives + always-load
-  memories; the raw render serves the turn while a background call to the
+  limits, the **standing packet** (owner portrait + directives; the per-memory
+  always-load section is retired as of Stage 2 — §10 — so it is now empty;
+  the raw render serves the turn while a background call to the
   global **Archivist model** setting — endpoint profile + model name, shared
   with Phase 6 — compresses it into the store's meta cache), ≤2 detected
   **modes** (signal-embedding scores + keyword bonus; protective tie-break
@@ -408,11 +431,39 @@ Everything is on-device. No cloud sync, no accounts.
   All CRUD is in `MemoryStore` (per-record upsert/delete with tombstones;
   memory edits log prior state + drop stale vectors; `deleteCompanion` added).
   Detail pages are plain `FragmentActivity` forms; the list screens subclass
-  `MemoryScreenActivity`. **Stage 2 (not yet built) restructures the memory
-  record (scope/type/projects/statuses) and rebuilds the browser's full
-  filter/sort + Pending flow** — see the work order. Follow-ups deferred:
-  merge tooling, an abilities/spells column, and campaign→Quick-Settings live
-  wiring.
+  `MemoryScreenActivity`. **Stage 2 is built** (July 2026): the memory record is
+  restructured (scope categories / Type / projects / draft status, DB v4–v5 —
+  see the storage section) and the UI rebuilt to the owner-approved rules:
+  - The **memory editor is a full-screen page** (`MemoryEditorActivity`, not a
+    pop-up — the owner's device mishandles large dialogs): title + content, a
+    Type picker (six, with the §5 meanings as hint lines), an Importance picker
+    (five), a primary Scope picker (seven), and — for the target-bearing scopes
+    — a **multi-select target picker with removable pills** (§2). Projects can
+    be created from that picker (no other creation surface yet). Protection
+    editing stays on the browser row menu. The old `EditMemoryDialogFragment`
+    was removed.
+  - The **browser** gained the full filter/sort chip row (sort + scope / type /
+    status / source / tag + Reset), filtered in memory over all statuses; state
+    is held statically so it survives leaving to the editor and back. Row =
+    title → status → tags → first content line. The chip bar + Pending banner
+    live on the shared list scaffold, hidden unless the browser turns them on.
+  - The **Pending screen** (`MemoryPendingActivity`, §14): a pinned "Pending
+    memories (N) ›" banner on the browser opens draft memories grouped under
+    collapsible destination-scope headers with per-group select-all, checkboxes,
+    Select all/none, Accept/Delete (count confirm); tap-to-edit opens the editor
+    (which shows an **Accept** button for drafts = save + activate).
+  - **Reset memories** in Memory settings (`resetAllMemoryData` + a blunt
+    confirm dialog with a "Save a backup file first" checkbox, checked by
+    default) empties every memory-content table. The work order's "Remove
+    everything imported" was intentionally NOT built (imported rows aren't
+    distinguishable; owner decision).
+  - **Quick Settings** gained an optional per-chat **Project** selector (§4;
+    `getChatProjectId`/`setChatProjectId`, in the auto-naming copy block; no
+    retrieval effect until Stage 3).
+  Stage 2 does NOT touch retrieval (`activeMemoriesForScope` still reads the
+  single primary-target columns); the priority ladder, cooldown, scope-
+  eligibility rewrite and RP-ledger indexing are **Stage 3** (reserved).
+  Follow-ups deferred: merge tooling and campaign→Quick-Settings live wiring.
 - Markdown/LaTeX rendering, partial text selection, message edit/delete/copy/
   share, bulk select, image attach + DALL·E-style generation, in-app
   translator, playground, logit bias editor, AMOLED theme, onboarding flow.
