@@ -183,9 +183,11 @@ class MemorySettingsActivity : FragmentActivity() {
     private fun initLogic() {
         btnBack?.setOnClickListener { finish() }
 
+        // "Browse & edit" opens the single global Memories browser directly (the
+        // memory-manager hub was removed — owner_approved_rules.md, July 6 2026).
         btnMemoryBrowser?.setOnClickListener {
             startActivity(
-                android.content.Intent(this, org.teslasoft.assistant.ui.activities.memory.MemoryManagerActivity::class.java)
+                android.content.Intent(this, org.teslasoft.assistant.ui.activities.memory.MemoryBrowserActivity::class.java)
                     .putExtra("chatId", chatId)
             )
         }

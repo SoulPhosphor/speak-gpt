@@ -57,6 +57,7 @@ abstract class MemoryScreenActivity : FragmentActivity(), MemoryRowAdapter.OnRow
     private var actionBar: ConstraintLayout? = null
     private var btnBack: ImageButton? = null
     private var btnAction: ImageButton? = null
+    private var btnActionSecondary: ImageButton? = null
     private var titleView: TextView? = null
     private var searchBar: TextInputLayout? = null
     private var fieldSearch: TextInputEditText? = null
@@ -80,6 +81,13 @@ abstract class MemoryScreenActivity : FragmentActivity(), MemoryRowAdapter.OnRow
     /** Bar action icon (e.g. a filter or teardown), or null to hide it. */
     protected open fun actionIcon(): Int? = null
 
+    /** Optional second bar action, left of the primary one (e.g. the browser's
+     *  Companions link), or null to hide it. */
+    protected open fun secondaryActionIcon(): Int? = null
+
+    /** Accessible label / tooltip for the secondary action, or null. */
+    protected open fun secondaryActionLabel(): String? = null
+
     /** Load the rows for [query] — runs on a worker thread. */
     protected abstract fun loadRows(query: String): List<MemoryRow>
 
@@ -87,6 +95,7 @@ abstract class MemoryScreenActivity : FragmentActivity(), MemoryRowAdapter.OnRow
 
     protected open fun onAddClick() {}
     protected open fun onActionClick() {}
+    protected open fun onSecondaryActionClick() {}
 
     /* ------------------------------ lifecycle ------------------------------ */
 
@@ -101,6 +110,7 @@ abstract class MemoryScreenActivity : FragmentActivity(), MemoryRowAdapter.OnRow
         actionBar = findViewById(R.id.action_bar)
         btnBack = findViewById(R.id.btn_back)
         btnAction = findViewById(R.id.btn_action)
+        btnActionSecondary = findViewById(R.id.btn_action_secondary)
         titleView = findViewById(R.id.activity_title)
         searchBar = findViewById(R.id.search_bar)
         fieldSearch = findViewById(R.id.field_search)
@@ -135,6 +145,17 @@ abstract class MemoryScreenActivity : FragmentActivity(), MemoryRowAdapter.OnRow
             btnAction?.visibility = View.VISIBLE
             btnAction?.setImageResource(icon)
             btnAction?.setOnClickListener { onActionClick() }
+        }
+
+        val secondaryIcon = secondaryActionIcon()
+        if (secondaryIcon != null) {
+            btnActionSecondary?.visibility = View.VISIBLE
+            btnActionSecondary?.setImageResource(secondaryIcon)
+            secondaryActionLabel()?.let {
+                btnActionSecondary?.contentDescription = it
+                btnActionSecondary?.tooltipText = it
+            }
+            btnActionSecondary?.setOnClickListener { onSecondaryActionClick() }
         }
     }
 
@@ -206,6 +227,7 @@ abstract class MemoryScreenActivity : FragmentActivity(), MemoryRowAdapter.OnRow
             val tint = ColorStateList.valueOf(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
             btnBack?.backgroundTintList = tint
             btnAction?.backgroundTintList = tint
+            btnActionSecondary?.backgroundTintList = tint
         } else {
             window.setBackgroundDrawable(SurfaceColors.SURFACE_0.getColor(this).toDrawable())
             if (Build.VERSION.SDK_INT <= 34) {
@@ -216,6 +238,7 @@ abstract class MemoryScreenActivity : FragmentActivity(), MemoryRowAdapter.OnRow
             val tint = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(this))
             btnBack?.backgroundTintList = tint
             btnAction?.backgroundTintList = tint
+            btnActionSecondary?.backgroundTintList = tint
         }
     }
 

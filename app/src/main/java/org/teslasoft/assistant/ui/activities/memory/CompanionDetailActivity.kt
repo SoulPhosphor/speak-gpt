@@ -74,6 +74,7 @@ class CompanionDetailActivity : FragmentActivity() {
     private var btnApprove: MaterialButton? = null
     private var rowParticipation: LinearLayout? = null
     private var textParticipationValue: TextView? = null
+    private var btnMemories: MaterialButton? = null
     private var btnSave: MaterialButton? = null
     private var btnDelete: MaterialButton? = null
 
@@ -98,6 +99,7 @@ class CompanionDetailActivity : FragmentActivity() {
         btnBack?.setOnClickListener { finish() }
         rowParticipation?.setOnClickListener { showParticipationPicker() }
         btnApprove?.setOnClickListener { approve() }
+        btnMemories?.setOnClickListener { openMemories() }
         btnSave?.setOnClickListener { save() }
         btnDelete?.setOnClickListener { confirmDelete() }
 
@@ -112,6 +114,7 @@ class CompanionDetailActivity : FragmentActivity() {
         btnApprove = findViewById(R.id.btn_approve)
         rowParticipation = findViewById(R.id.row_participation)
         textParticipationValue = findViewById(R.id.text_participation_value)
+        btnMemories = findViewById(R.id.btn_memories)
         btnSave = findViewById(R.id.btn_save)
         btnDelete = findViewById(R.id.btn_delete)
     }
@@ -200,6 +203,17 @@ class CompanionDetailActivity : FragmentActivity() {
                 finish()
             }
         }
+    }
+
+    /** Opens the single central memory browser pre-filtered to this companion
+     *  (the one browser, many doors — owner_approved_rules.md). */
+    private fun openMemories() {
+        startActivity(
+            android.content.Intent(this, MemoryBrowserActivity::class.java)
+                .putExtra("companionId", companionId)
+                .putExtra("screenTitle", record?.currentName ?: textName?.text?.toString())
+                .putExtra("chatId", chatId)
+        )
     }
 
     /** Material confirm that spells out what disappears and lets the user pick,

@@ -36,14 +36,17 @@ import org.teslasoft.assistant.ui.fragments.dialogs.EditMemoryDialogFragment
  * search (semantic when a model is installed, plus a text scan), add, edit,
  * protect/unprotect, archive/restore, delete (user-only, Material confirm), and
  * a per-memory change-log view. Every store read/write runs off the main
- * thread; failures degrade to a toast. Can be opened scoped to a world /
- * campaign / roleplay character (the scoped browsers pass those ids so its list
- * and its "new memory" are confined to that scope).
+ * thread; failures degrade to a toast. This is the single GLOBAL browser over
+ * all scopes and types; it can also be opened pre-filtered to a companion /
+ * world / campaign / roleplay character (each of those pages passes its id so
+ * the list and its "new memory" are confined to that scope). A Companions link
+ * sits in the action bar. (The full filter/sort rebuild is stage 2.3.)
  */
 class MemoryBrowserActivity : MemoryScreenActivity() {
 
     private var showArchived = false
 
+    private var presetCompanionId: String? = null
     private var presetWorldId: String? = null
     private var presetCampaignId: String? = null
     private var presetRoleplayCharacterId: String? = null
@@ -54,7 +57,24 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
     override fun addButtonText(): String = getString(R.string.btn_new_memory)
     override fun actionIcon(): Int = R.drawable.ic_storage
 
+    // The action bar's Companions link (only in the unscoped, global browser —
+    // a scoped view is already about one thing, so the jump would be confusing).
+    override fun secondaryActionIcon(): Int? =
+        if (isScoped()) null else R.drawable.ic_user
+    override fun secondaryActionLabel(): String? = getString(R.string.mem_comp_title)
+    override fun onSecondaryActionClick() {
+        startActivity(
+            android.content.Intent(this, MemoryCompanionsActivity::class.java)
+                .putExtra("chatId", chatId)
+        )
+    }
+
+    private fun isScoped(): Boolean =
+        presetCompanionId != null || presetWorldId != null ||
+            presetCampaignId != null || presetRoleplayCharacterId != null
+
     override fun onCreate(savedInstanceState: android.os.Bundle?) {
+        presetCompanionId = intent.getStringExtra("companionId")
         presetWorldId = intent.getStringExtra("worldId")
         presetCampaignId = intent.getStringExtra("campaignId")
         presetRoleplayCharacterId = intent.getStringExtra("roleplayCharacterId")
@@ -69,6 +89,7 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
         val store = MemoryStore.getInstance(this)
 
         val records: List<MemoryRecord> = when {
+            presetCompanionId != null -> store.memoriesForCompanion(presetCompanionId!!, showArchived)
             presetWorldId != null -> store.memoriesForWorld(presetWorldId!!, showArchived)
             presetCampaignId != null -> store.memoriesForCampaign(presetCampaignId!!, showArchived)
             presetRoleplayCharacterId != null ->
@@ -78,7 +99,7 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
 
         // In a scoped view the text query filters the already-narrowed list in
         // memory (the scope query has no LIKE); the main browser filters in SQL.
-        val filtered = if (presetWorldId != null || presetCampaignId != null || presetRoleplayCharacterId != null) {
+        val filtered = if (isScoped()) {
             val q = query.trim().lowercase()
             if (q.isEmpty()) records
             else records.filter { it.title.lowercase().contains(q) || it.content.lowercase().contains(q) }
@@ -184,8 +205,10 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
                     importance = existing?.importance ?: 3,
                     tags = existing?.let { tagsToText(it.tagsJson) } ?: "",
                     alwaysLoad = existing?.alwaysLoad ?: false,
-                    scope = existing?.scope ?: "global",
-                    companionId = existing?.companionIds?.firstOrNull(),
+                    // A companion-scoped browser defaults new memories to that
+                    // companion; existing memories keep their own scope.
+                    scope = existing?.scope ?: (if (presetCompanionId != null) "companion" else "global"),
+                    companionId = existing?.companionIds?.firstOrNull() ?: presetCompanionId,
                     presetWorldId = existing?.worldId ?: presetWorldId,
                     presetCampaignId = existing?.campaignId ?: presetCampaignId,
                     presetRoleplayCharacterId = existing?.roleplayCharacterId ?: presetRoleplayCharacterId,

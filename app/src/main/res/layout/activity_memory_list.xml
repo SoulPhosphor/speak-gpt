@@ -81,9 +81,25 @@
             android:textSize="24sp"
             android:textStyle="bold"
             app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toStartOf="@+id/btn_action"
+            app:layout_constraintEnd_toStartOf="@+id/btn_action_secondary"
             app:layout_constraintHorizontal_bias="0.0"
             app:layout_constraintStart_toEndOf="@+id/btn_back"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <!-- Optional secondary action (e.g. the browser's Companions link). Sits
+             left of the primary action; hidden unless the screen supplies an
+             icon, in which case it collapses to a point next to btn_action. -->
+        <ImageButton
+            android:id="@+id/btn_action_secondary"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_marginEnd="8dp"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="8dp"
+            android:background="@drawable/btn_accent_icon_large_100"
+            android:visibility="gone"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@+id/btn_action"
             app:layout_constraintTop_toTopOf="parent" />
 
         <ImageButton

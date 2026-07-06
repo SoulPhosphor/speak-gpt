@@ -100,6 +100,7 @@ class MemoryRoleplayCharactersActivity : MemoryScreenActivity() {
         } else {
             menu.menu.add(0, 3, 0, getString(R.string.action_restore))
         }
+        menu.menu.add(0, 5, 0, getString(R.string.title_memories))
         menu.menu.add(0, 4, 0, getString(R.string.action_delete))
         menu.setOnMenuItemClickListener { item ->
             when (item.itemId) {
@@ -107,10 +108,22 @@ class MemoryRoleplayCharactersActivity : MemoryScreenActivity() {
                 2 -> setStatus(r.roleplayCharacterId, "archived")
                 3 -> setStatus(r.roleplayCharacterId, "active")
                 4 -> confirmDelete(r)
+                5 -> openMemories(r)
             }
             true
         }
         menu.show()
+    }
+
+    /** Opens the single central memory browser pre-filtered to this roleplay
+     *  character (the one browser, many doors). */
+    private fun openMemories(r: RoleplayCharacterRecord) {
+        startActivity(
+            android.content.Intent(this, MemoryBrowserActivity::class.java)
+                .putExtra("roleplayCharacterId", r.roleplayCharacterId)
+                .putExtra("screenTitle", r.name)
+                .putExtra("chatId", chatId)
+        )
     }
 
     /* ------------------------------ editor ------------------------------ */

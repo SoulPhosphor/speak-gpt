@@ -239,12 +239,6 @@
         </activity>
 
         <activity
-            android:name=".ui.activities.memory.MemoryManagerActivity"
-            android:exported="false"
-            android:label="@string/title_memory_manager">
-        </activity>
-
-        <activity
             android:name=".ui.activities.memory.RoleplayHubActivity"
             android:exported="false"
             android:label="@string/title_roleplay">

@@ -1196,10 +1196,11 @@
     <!-- Shared failure toast for these screens. -->
     <string name="mem_world_op_failed">Something went wrong: %1$s</string>
 
-    <!-- ============ Phase 5: memory manager hub ============ -->
-    <string name="title_memory_manager">Memory Manager</string>
-    <string name="mm_memories_desc">Facts, preferences and events your companions remember.</string>
-    <string name="mm_companions_desc">Your companions and how they use memory.</string>
+    <!-- ============ Phase 5: memory-area tile descriptions ============ -->
+    <!-- The memory-manager hub was removed (owner ruling, July 6 2026): "Browse
+         & edit" opens the Memories browser directly. mm_user_personas_desc is
+         reused by the Characters hub's My Personas tile; the roleplay ones by
+         the Roleplay hub. -->
     <string name="mm_user_personas_desc">How you present yourself to the model.</string>
     <string name="mm_roleplay_desc">Fictional characters you play.</string>
     <string name="mm_worlds_desc">Settings your roleplays take place in.</string>

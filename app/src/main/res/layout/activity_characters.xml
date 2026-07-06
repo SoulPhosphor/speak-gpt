@@ -87,6 +87,18 @@
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent" />
 
+            <!-- My Personas moved here from the memory manager (owner ruling,
+                 July 6 2026): it is the user's self-presentation, an identity
+                 tile, and carries no memories. -->
+            <androidx.constraintlayout.widget.ConstraintLayout
+                android:id="@+id/tile_my_personas_entry"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/tile_personas_entry" />
+
             <androidx.constraintlayout.widget.ConstraintLayout
                 android:id="@+id/tile_activation_prompts_entry"
                 android:layout_width="match_parent"
@@ -94,7 +106,7 @@
                 android:layout_marginTop="8dp"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toBottomOf="@+id/tile_personas_entry" />
+                app:layout_constraintTop_toBottomOf="@+id/tile_my_personas_entry" />
 
             <androidx.constraintlayout.widget.ConstraintLayout
                 android:id="@+id/tile_system_message_entry"
