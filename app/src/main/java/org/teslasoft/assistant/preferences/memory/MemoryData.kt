@@ -153,14 +153,15 @@ data class MemoryRecord(
     val embeddingText: String?,
     val tagsJson: String,                 // JSON array of strings
     val importance: Int,
-    val worldId: String?,
-    val roleplayCharacterId: String?,
-    /** Campaign (roleplay continuity) scope — nullable. Ordinary conversation
-     *  never retrieves campaign-scoped rows; set only for game-state facts that
-     *  belong to one playthrough (integration plan 📌 campaign amendment). */
-    val campaignId: String?,
-    /** Project (§4) scope target — a user-defined named bucket. Nullable. */
-    val projectId: String?,
+    /** Named target scopes are multi-select (owner_approved_rules §2): a memory
+     *  may belong to several worlds/campaigns/RP characters/projects at once
+     *  (join-table backed, like [companionIds]). The store also mirrors the
+     *  first of each into the legacy single columns as a "primary target" for
+     *  the Stage-3 retrieval query; that mirror is internal and not exposed. */
+    val worldIds: List<String>,
+    val roleplayCharacterIds: List<String>,
+    val campaignIds: List<String>,
+    val projectIds: List<String>,
     val protectionJson: String?,          // schema protection object, verbatim
     val modeHintsJson: String,            // JSON array of mode ids
     val provenanceSource: String?,

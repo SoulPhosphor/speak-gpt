@@ -29,7 +29,6 @@ import org.teslasoft.assistant.preferences.memory.MemoryRecord
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.memory.librarian.Librarian
 import org.teslasoft.assistant.ui.adapters.memory.MemoryRow
-import org.teslasoft.assistant.ui.fragments.dialogs.EditMemoryDialogFragment
 
 /**
  * The memory browser/editor (Phase 5, app_adaptation_notes §Required memory UI):
@@ -187,86 +186,26 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
 
     /* ------------------------------ editor ------------------------------ */
 
+    // The editor is a full-screen activity now (owner: no pop-ups for big
+    // forms). A scoped browser pre-selects its scope + target for a NEW memory;
+    // an existing memory carries its own scope/targets, so no preset is sent.
+    // The browser reloads on resume, so returning refreshes the list.
     private fun openEditor(memoryId: String?) {
-        runOffThread {
-            val store = MemoryStore.getInstance(this)
-            val companions = store.getCompanions().filter { it.status != "draft" }
-            val companionIds = ArrayList(companions.map { it.companionId })
-            val companionNames = ArrayList(companions.map { it.currentName })
-
-            val existing = memoryId?.let { store.getMemory(it) }
-            runOnUiThread {
-                val dialog = EditMemoryDialogFragment.newInstance(
-                    memoryId = existing?.memoryId ?: "",
-                    title = existing?.title ?: "",
-                    content = existing?.content ?: "",
-                    kind = existing?.kind ?: "note",
-                    importance = existing?.importance ?: 3,
-                    tags = existing?.let { tagsToText(it.tagsJson) } ?: "",
-                    // A companion-scoped browser defaults new memories to that
-                    // companion; existing memories keep their own scope.
-                    scope = existing?.scope ?: (if (presetCompanionId != null) "companion" else "global"),
-                    companionId = existing?.companionIds?.firstOrNull() ?: presetCompanionId,
-                    presetWorldId = existing?.worldId ?: presetWorldId,
-                    presetCampaignId = existing?.campaignId ?: presetCampaignId,
-                    presetRoleplayCharacterId = existing?.roleplayCharacterId ?: presetRoleplayCharacterId,
-                    companionIds = companionIds,
-                    companionNames = companionNames
-                )
-                dialog.setListener(editorListener)
-                dialog.show(supportFragmentManager, "EditMemoryDialogFragment")
-            }
+        val intent = android.content.Intent(this, MemoryEditorActivity::class.java)
+            .putExtra("chatId", chatId)
+        if (memoryId != null) {
+            intent.putExtra("memoryId", memoryId)
+        } else when {
+            presetCompanionId != null ->
+                intent.putExtra("presetScope", "companion").putExtra("presetTargetId", presetCompanionId)
+            presetWorldId != null ->
+                intent.putExtra("presetScope", "world").putExtra("presetTargetId", presetWorldId)
+            presetCampaignId != null ->
+                intent.putExtra("presetScope", "campaign").putExtra("presetTargetId", presetCampaignId)
+            presetRoleplayCharacterId != null ->
+                intent.putExtra("presetScope", "rp_character").putExtra("presetTargetId", presetRoleplayCharacterId)
         }
-    }
-
-    private val editorListener = object : EditMemoryDialogFragment.Listener {
-        override fun onSave(
-            memoryId: String, title: String, content: String, kind: String, importance: Int,
-            tags: String, scope: String, companionId: String?,
-            presetWorldId: String?, presetCampaignId: String?, presetRoleplayCharacterId: String?
-        ) {
-            runOffThread {
-                val store = MemoryStore.getInstance(this@MemoryBrowserActivity)
-                val tagsJson = textToTagsJson(tags)
-                val companionIds = if (scope == "companion" && companionId != null) listOf(companionId) else emptyList()
-                if (memoryId.isEmpty()) {
-                    val record = MemoryRecord(
-                        memoryId = MemoryStore.newId("m-"),
-                        scope = scope, kind = kind, title = title, content = content,
-                        embeddingText = null, tagsJson = tagsJson, importance = importance,
-                        worldId = presetWorldId,
-                        roleplayCharacterId = presetRoleplayCharacterId, campaignId = presetCampaignId,
-                        projectId = null,
-                        protectionJson = null, modeHintsJson = "[]",
-                        provenanceSource = "user_entered", provenanceConfidence = null,
-                        provenanceNotedOn = MemoryStore.nowIso(), provenanceContext = null,
-                        createdAt = MemoryStore.nowIso(), updatedAt = null, status = "active",
-                        supersedes = null, companionIds = companionIds, entityRefs = emptyList(),
-                        changeLog = emptyList(), origin = "user"
-                    )
-                    store.insertMemory(record)
-                    Librarian.getInstance(this@MemoryBrowserActivity).reindexMemory(record.memoryId)
-                } else {
-                    val prior = store.getMemory(memoryId) ?: return@runOffThread
-                    val updated = prior.copy(
-                        scope = scope, kind = kind, title = title, content = content,
-                        importance = importance, tagsJson = tagsJson,
-                        worldId = presetWorldId, roleplayCharacterId = presetRoleplayCharacterId,
-                        campaignId = presetCampaignId, companionIds = companionIds
-                    )
-                    store.updateMemory(updated, getString(R.string.memory_change_edited))
-                    Librarian.getInstance(this@MemoryBrowserActivity).reindexMemory(memoryId)
-                }
-                runOnUiThread {
-                    Toast.makeText(this@MemoryBrowserActivity, R.string.memory_saved, Toast.LENGTH_SHORT).show()
-                    reload()
-                }
-            }
-        }
-
-        override fun onError(message: String) {
-            Toast.makeText(this@MemoryBrowserActivity, message, Toast.LENGTH_LONG).show()
-        }
+        startActivity(intent)
     }
 
     /* ------------------------------ actions ------------------------------ */
@@ -357,19 +296,6 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
     }
 
     /* ------------------------------ json helpers ------------------------------ */
-
-    private fun tagsToText(tagsJson: String?): String = try {
-        if (tagsJson.isNullOrBlank()) "" else {
-            val arr = JSONArray(tagsJson)
-            (0 until arr.length()).joinToString(", ") { arr.getString(it) }
-        }
-    } catch (_: Exception) { "" }
-
-    private fun textToTagsJson(text: String): String {
-        val arr = JSONArray()
-        text.split(",").map { it.trim() }.filter { it.isNotEmpty() }.forEach { arr.put(it) }
-        return arr.toString()
-    }
 
     private fun existingHandling(protectionJson: String?): String = try {
         if (protectionJson.isNullOrBlank()) "" else {

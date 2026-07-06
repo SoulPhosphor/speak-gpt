@@ -992,6 +992,53 @@
     <string name="memory_change_edited">Edited by hand</string>
     <string name="memory_change_status">Status changed by hand</string>
     <string name="memory_change_protection">Protection changed by hand</string>
+
+    <!-- Full-screen memory editor (Stage 2.2) -->
+    <string name="mem_edit_title_new">New memory</string>
+    <string name="mem_edit_title_edit">Edit memory</string>
+    <string name="mem_edit_hint_title">Title</string>
+    <string name="mem_edit_hint_content">What to remember</string>
+    <string name="mem_edit_hint_tags">Tags (comma-separated)</string>
+    <string name="mem_edit_label_type">Type</string>
+    <string name="mem_edit_label_importance">Importance</string>
+    <string name="mem_edit_label_scope">Scope</string>
+    <string name="mem_edit_targets_heading">Which ones does this belong to? Pick one or more.</string>
+    <string name="mem_edit_add_target">Add</string>
+    <string name="mem_edit_pick_targets_title">Select targets</string>
+    <string name="mem_edit_new_project">New project</string>
+    <string name="mem_edit_new_project_hint">Project name</string>
+    <string name="mem_edit_btn_save">Save</string>
+    <string name="mem_edit_required">A title and content are required.</string>
+    <string name="mem_edit_still_loading">Still loading — try again in a moment.</string>
+    <string name="mem_edit_op_failed">Couldn\'t save: %1$s</string>
+    <!-- Types (owner_approved_rules §5) -->
+    <string name="mem_type_fact">Fact</string>
+    <string name="mem_type_preference">Preference</string>
+    <string name="mem_type_event">Event</string>
+    <string name="mem_type_status">Status</string>
+    <string name="mem_type_instruction">Instruction</string>
+    <string name="mem_type_lore">Lore</string>
+    <string name="mem_type_fact_hint">Stable information.</string>
+    <string name="mem_type_preference_hint">Likes, dislikes, style needs, response preferences.</string>
+    <string name="mem_type_event_hint">Something that happened.</string>
+    <string name="mem_type_status_hint">Something currently true but expected to change.</string>
+    <string name="mem_type_instruction_hint">Applies when its topic comes up — for always-on rules, write them on the card.</string>
+    <string name="mem_type_lore_hint">Fictional/world/roleplay information.</string>
+    <!-- Scope categories (owner_approved_rules §1/§2) -->
+    <string name="mem_scope_global">Global</string>
+    <string name="mem_scope_real_life">Real life</string>
+    <string name="mem_scope_companion">Companion</string>
+    <string name="mem_scope_project">Project</string>
+    <string name="mem_scope_world">World</string>
+    <string name="mem_scope_campaign">Campaign</string>
+    <string name="mem_scope_rp_character">RP character</string>
+    <!-- Importance (owner_approved_rules §8) -->
+    <string name="mem_importance_1">1 Low importance</string>
+    <string name="mem_importance_2">2 Minor</string>
+    <string name="mem_importance_3">3 Notable</string>
+    <string name="mem_importance_4">4 High</string>
+    <string name="mem_importance_5">5 Critical</string>
+
     <!-- Row action menu -->
     <string name="action_edit">Edit</string>
     <string name="action_protect">Protect</string>

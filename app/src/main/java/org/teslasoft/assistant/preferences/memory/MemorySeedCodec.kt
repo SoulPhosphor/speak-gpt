@@ -63,6 +63,14 @@ object MemorySeedCodec {
     private fun jsonArrayOrEmpty(text: String?): JSONArray =
         if (text.isNullOrBlank()) JSONArray() else JSONArray(text)
 
+    /** Multi-target set (§2): the plural array key, else a legacy single key
+     *  wrapped as one element, else empty — so pre-restructure backups still
+     *  import their single world/campaign/RP/project link. */
+    private fun JSONObject.targetSet(arrayKey: String, singleKey: String): List<String> {
+        val arr = strList(arrayKey)
+        return if (arr.isNotEmpty()) arr else listOfNotNull(str(singleKey))
+    }
+
     private fun JSONObject.putJsonText(key: String, text: String?) {
         if (text.isNullOrBlank()) return
         val trimmed = text.trim()
@@ -150,10 +158,10 @@ object MemorySeedCodec {
                 embeddingText = m.str("embedding_text"),
                 tagsJson = m.arrText("tags"),
                 importance = m.optInt("importance", 3),
-                worldId = m.str("world_id"),
-                roleplayCharacterId = m.str("roleplay_character_id"),
-                campaignId = m.str("campaign_id"),
-                projectId = m.str("project_id"),
+                worldIds = m.targetSet("world_ids", "world_id"),
+                roleplayCharacterIds = m.targetSet("roleplay_character_ids", "roleplay_character_id"),
+                campaignIds = m.targetSet("campaign_ids", "campaign_id"),
+                projectIds = m.targetSet("project_ids", "project_id"),
                 protectionJson = m.objText("protection"),
                 modeHintsJson = m.arrText("mode_hints"),
                 provenanceSource = prov?.str("source"),
@@ -403,10 +411,10 @@ object MemorySeedCodec {
                     put("memory_id", m.memoryId)
                     put("scope", m.scope)
                     if (m.companionIds.isNotEmpty()) put("companion_ids", JSONArray(m.companionIds))
-                    putIfNotNull("world_id", m.worldId)
-                    putIfNotNull("roleplay_character_id", m.roleplayCharacterId)
-                    putIfNotNull("campaign_id", m.campaignId)
-                    putIfNotNull("project_id", m.projectId)
+                    if (m.worldIds.isNotEmpty()) put("world_ids", JSONArray(m.worldIds))
+                    if (m.roleplayCharacterIds.isNotEmpty()) put("roleplay_character_ids", JSONArray(m.roleplayCharacterIds))
+                    if (m.campaignIds.isNotEmpty()) put("campaign_ids", JSONArray(m.campaignIds))
+                    if (m.projectIds.isNotEmpty()) put("project_ids", JSONArray(m.projectIds))
                     put("kind", m.kind)
                     put("title", m.title)
                     put("content", m.content)

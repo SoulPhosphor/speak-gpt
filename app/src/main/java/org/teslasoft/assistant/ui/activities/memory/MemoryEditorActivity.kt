@@ -1,0 +1,547 @@
+/**************************************************************************
+ * Copyright (c) 2023-2026 Dmytro Ostapenko. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *  http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ **************************************************************************/
+
+package org.teslasoft.assistant.ui.activities.memory
+
+import android.content.res.ColorStateList
+import android.content.res.Configuration
+import android.os.Build
+import android.os.Bundle
+import android.view.View
+import android.view.WindowInsets
+import android.widget.EditText
+import android.widget.ImageButton
+import android.widget.ScrollView
+import android.widget.TextView
+import android.widget.Toast
+import androidx.constraintlayout.widget.ConstraintLayout
+import androidx.core.content.res.ResourcesCompat
+import androidx.core.graphics.drawable.toDrawable
+import androidx.fragment.app.FragmentActivity
+import com.google.android.material.button.MaterialButton
+import com.google.android.material.chip.Chip
+import com.google.android.material.chip.ChipGroup
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.elevation.SurfaceColors
+import com.google.android.material.textfield.TextInputEditText
+import org.json.JSONArray
+import org.teslasoft.assistant.R
+import org.teslasoft.assistant.preferences.Preferences
+import org.teslasoft.assistant.preferences.memory.MemoryRecord
+import org.teslasoft.assistant.preferences.memory.MemoryStore
+import org.teslasoft.assistant.preferences.memory.ProjectRecord
+import org.teslasoft.assistant.preferences.memory.librarian.Librarian
+import org.teslasoft.assistant.theme.ThemeManager
+
+/**
+ * The full-screen memory add/edit form (Phase 5 Stage 2.2). Replaces the old
+ * pop-up editor — the owner's device mishandles large dialogs, so anything with
+ * this many fields opens as its own screen. Fields, per owner_approved_rules
+ * §§2/5/6/8: title (required) + content, a Type dropdown (six types with their
+ * meanings shown as a hint line), an Importance dropdown (five steps), a primary
+ * Scope category (seven), and — for the target-bearing scopes — a multi-select
+ * target picker whose choices show as removable pills (§2). Protection/handling
+ * editing is unchanged; it stays on the browser row menu.
+ *
+ * All store work runs off the main thread; failures degrade to a toast.
+ */
+class MemoryEditorActivity : FragmentActivity() {
+
+    private var preferences: Preferences? = null
+    private var chatId: String = ""
+
+    private var memoryId: String? = null
+    private var existing: MemoryRecord? = null
+
+    /** Guards Save until the record + pick lists have loaded, so an edit is
+     *  never overwritten with the form's defaults before it populates. */
+    private var ready = false
+
+    private var actionBar: ConstraintLayout? = null
+    private var btnBack: ImageButton? = null
+    private var titleView: TextView? = null
+    private var fieldTitle: TextInputEditText? = null
+    private var fieldContent: TextInputEditText? = null
+    private var btnType: MaterialButton? = null
+    private var typeHint: TextView? = null
+    private var btnImportance: MaterialButton? = null
+    private var btnScope: MaterialButton? = null
+    private var sectionTargets: View? = null
+    private var targetsHeading: TextView? = null
+    private var chipsTargets: ChipGroup? = null
+    private var btnAddTarget: MaterialButton? = null
+    private var btnSave: MaterialButton? = null
+
+    // Current selections.
+    private var currentType: String = "fact"
+    private var currentImportance: Int = 3
+    private var currentScope: String = "global"
+
+    /** Selected targets for the current scope category, id -> display name. */
+    private val selectedTargets = LinkedHashMap<String, String>()
+
+    // Loaded pick lists (id -> name), populated off-thread once.
+    private val companionItems = LinkedHashMap<String, String>()
+    private val projectItems = LinkedHashMap<String, String>()
+    private val worldItems = LinkedHashMap<String, String>()
+    private val campaignItems = LinkedHashMap<String, String>()
+    private val rpItems = LinkedHashMap<String, String>()
+
+    companion object {
+        private val TYPE_KEYS = listOf("fact", "preference", "event", "status", "instruction", "lore")
+        private val SCOPE_KEYS = listOf("global", "real_life", "companion", "project", "world", "campaign", "rp_character")
+        private val TARGET_SCOPES = setOf("companion", "project", "world", "campaign", "rp_character")
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        ThemeManager.getThemeManager().applyPalette(this)
+        setContentView(R.layout.activity_memory_editor)
+
+        chatId = intent.extras?.getString("chatId", "") ?: ""
+        memoryId = intent.extras?.getString("memoryId")?.takeIf { it.isNotEmpty() }
+        preferences = Preferences.getPreferences(this, chatId)
+
+        actionBar = findViewById(R.id.action_bar)
+        btnBack = findViewById(R.id.btn_back)
+        titleView = findViewById(R.id.activity_title)
+        fieldTitle = findViewById(R.id.field_mem_title)
+        fieldContent = findViewById(R.id.field_mem_content)
+        btnType = findViewById(R.id.btn_mem_type)
+        typeHint = findViewById(R.id.text_type_hint)
+        btnImportance = findViewById(R.id.btn_mem_importance)
+        btnScope = findViewById(R.id.btn_mem_scope)
+        sectionTargets = findViewById(R.id.section_targets)
+        targetsHeading = findViewById(R.id.text_targets_heading)
+        chipsTargets = findViewById(R.id.chips_targets)
+        btnAddTarget = findViewById(R.id.btn_add_target)
+        btnSave = findViewById(R.id.btn_mem_save)
+
+        titleView?.setText(if (memoryId == null) R.string.mem_edit_title_new else R.string.mem_edit_title_edit)
+
+        applyTheme()
+
+        btnBack?.setOnClickListener { finish() }
+        btnType?.setOnClickListener { showTypePicker() }
+        btnImportance?.setOnClickListener { showImportancePicker() }
+        btnScope?.setOnClickListener { showScopePicker() }
+        btnAddTarget?.setOnClickListener { showTargetPicker() }
+        btnSave?.setOnClickListener { save() }
+
+        // Preset scope/target for a new memory opened from a scoped browser door.
+        intent.getStringExtra("presetScope")?.takeIf { it in SCOPE_KEYS }?.let { currentScope = it }
+
+        refreshType()
+        refreshImportance()
+        refreshScope()
+
+        loadEverything()
+    }
+
+    /* ------------------------------ load ------------------------------ */
+
+    private fun loadEverything() {
+        runOffThread {
+            if (!MemoryStore.isProvisioned(this)) {
+                runOnUiThread { Toast.makeText(this, R.string.memory_not_provisioned_toast, Toast.LENGTH_SHORT).show() }
+                return@runOffThread
+            }
+            val store = MemoryStore.getInstance(this)
+            store.getCompanions().filter { it.status != "draft" }.forEach { companionItems[it.companionId] = it.currentName }
+            store.getProjects().forEach { projectItems[it.projectId] = it.name }
+            store.getAllWorlds().forEach { worldItems[it.worldId] = it.name }
+            store.getCampaigns().forEach { campaignItems[it.campaignId] = it.name }
+            store.getAllRoleplayCharacters().forEach { rpItems[it.roleplayCharacterId] = it.name }
+
+            val record = memoryId?.let { store.getMemory(it) }
+            runOnUiThread {
+                existing = record
+                if (record != null) {
+                    fieldTitle?.setText(record.title)
+                    fieldContent?.setText(record.content)
+                    findViewById<TextInputEditText>(R.id.field_mem_tags)?.setText(tagsToText(record.tagsJson))
+                    currentType = record.kind.takeIf { it in TYPE_KEYS } ?: "fact"
+                    currentImportance = record.importance.coerceIn(1, 5)
+                    currentScope = record.scope.takeIf { it in SCOPE_KEYS } ?: "global"
+                    selectedTargets.clear()
+                    targetsForScope(currentScope, record).forEach { id ->
+                        selectedTargets[id] = nameFor(currentScope, id)
+                    }
+                    refreshType()
+                    refreshImportance()
+                } else {
+                    // New memory: a single preset target from a scoped door.
+                    val presetTarget = intent.getStringExtra("presetTargetId")
+                    if (presetTarget != null && currentScope in TARGET_SCOPES) {
+                        selectedTargets[presetTarget] = nameFor(currentScope, presetTarget)
+                    }
+                }
+                refreshScope()
+                ready = true
+            }
+        }
+    }
+
+    private fun targetsForScope(scope: String, r: MemoryRecord): List<String> = when (scope) {
+        "companion" -> r.companionIds
+        "project" -> r.projectIds
+        "world" -> r.worldIds
+        "campaign" -> r.campaignIds
+        "rp_character" -> r.roleplayCharacterIds
+        else -> emptyList()
+    }
+
+    private fun itemsForScope(scope: String): LinkedHashMap<String, String> = when (scope) {
+        "companion" -> companionItems
+        "project" -> projectItems
+        "world" -> worldItems
+        "campaign" -> campaignItems
+        "rp_character" -> rpItems
+        else -> LinkedHashMap()
+    }
+
+    private fun nameFor(scope: String, id: String): String = itemsForScope(scope)[id] ?: id
+
+    /* ------------------------------ type ------------------------------ */
+
+    private fun typeLabel(key: String): String = getString(
+        when (key) {
+            "fact" -> R.string.mem_type_fact
+            "preference" -> R.string.mem_type_preference
+            "event" -> R.string.mem_type_event
+            "status" -> R.string.mem_type_status
+            "instruction" -> R.string.mem_type_instruction
+            else -> R.string.mem_type_lore
+        }
+    )
+
+    private fun typeHintText(key: String): String = getString(
+        when (key) {
+            "fact" -> R.string.mem_type_fact_hint
+            "preference" -> R.string.mem_type_preference_hint
+            "event" -> R.string.mem_type_event_hint
+            "status" -> R.string.mem_type_status_hint
+            "instruction" -> R.string.mem_type_instruction_hint
+            else -> R.string.mem_type_lore_hint
+        }
+    )
+
+    private fun refreshType() {
+        btnType?.text = typeLabel(currentType)
+        typeHint?.text = typeHintText(currentType)
+    }
+
+    private fun showTypePicker() {
+        val labels = TYPE_KEYS.map { typeLabel(it) }.toTypedArray()
+        val current = TYPE_KEYS.indexOf(currentType).coerceAtLeast(0)
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.mem_edit_label_type)
+            .setSingleChoiceItems(labels, current) { d, which ->
+                currentType = TYPE_KEYS[which]
+                refreshType()
+                d.dismiss()
+            }
+            .setNegativeButton(R.string.btn_cancel) { _, _ -> }
+            .show()
+    }
+
+    /* ------------------------------ importance ------------------------------ */
+
+    private fun importanceLabel(i: Int): String = getString(
+        when (i) {
+            1 -> R.string.mem_importance_1
+            2 -> R.string.mem_importance_2
+            3 -> R.string.mem_importance_3
+            4 -> R.string.mem_importance_4
+            else -> R.string.mem_importance_5
+        }
+    )
+
+    private fun refreshImportance() {
+        btnImportance?.text = importanceLabel(currentImportance)
+    }
+
+    private fun showImportancePicker() {
+        val labels = (1..5).map { importanceLabel(it) }.toTypedArray()
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.mem_edit_label_importance)
+            .setSingleChoiceItems(labels, currentImportance - 1) { d, which ->
+                currentImportance = which + 1
+                refreshImportance()
+                d.dismiss()
+            }
+            .setNegativeButton(R.string.btn_cancel) { _, _ -> }
+            .show()
+    }
+
+    /* ------------------------------ scope ------------------------------ */
+
+    private fun scopeLabel(key: String): String = getString(
+        when (key) {
+            "global" -> R.string.mem_scope_global
+            "real_life" -> R.string.mem_scope_real_life
+            "companion" -> R.string.mem_scope_companion
+            "project" -> R.string.mem_scope_project
+            "world" -> R.string.mem_scope_world
+            "campaign" -> R.string.mem_scope_campaign
+            else -> R.string.mem_scope_rp_character
+        }
+    )
+
+    private fun refreshScope() {
+        btnScope?.text = scopeLabel(currentScope)
+        val hasTargets = currentScope in TARGET_SCOPES
+        sectionTargets?.visibility = if (hasTargets) View.VISIBLE else View.GONE
+        renderChips()
+    }
+
+    private fun showScopePicker() {
+        val labels = SCOPE_KEYS.map { scopeLabel(it) }.toTypedArray()
+        val current = SCOPE_KEYS.indexOf(currentScope).coerceAtLeast(0)
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.mem_edit_label_scope)
+            .setSingleChoiceItems(labels, current) { d, which ->
+                val picked = SCOPE_KEYS[which]
+                if (picked != currentScope) {
+                    currentScope = picked
+                    // Targets belong to one category; switching clears them.
+                    selectedTargets.clear()
+                    refreshScope()
+                }
+                d.dismiss()
+            }
+            .setNegativeButton(R.string.btn_cancel) { _, _ -> }
+            .show()
+    }
+
+    /* ------------------------------ targets ------------------------------ */
+
+    private fun renderChips() {
+        val group = chipsTargets ?: return
+        group.removeAllViews()
+        for ((id, name) in selectedTargets) {
+            val chip = Chip(this).apply {
+                text = name
+                isCloseIconVisible = true
+                setOnCloseIconClickListener {
+                    selectedTargets.remove(id)
+                    renderChips()
+                }
+            }
+            group.addView(chip)
+        }
+    }
+
+    private fun showTargetPicker() {
+        val items = itemsForScope(currentScope)
+        val ids = items.keys.toList()
+        val names = ids.map { items[it]!! }.toTypedArray()
+        val checked = BooleanArray(ids.size) { selectedTargets.containsKey(ids[it]) }
+
+        val builder = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.mem_edit_pick_targets_title)
+            .setMultiChoiceItems(names, checked) { _, which, isChecked -> checked[which] = isChecked }
+            .setPositiveButton(R.string.btn_save) { _, _ ->
+                selectedTargets.clear()
+                ids.forEachIndexed { i, id -> if (checked[i]) selectedTargets[id] = items[id]!! }
+                renderChips()
+            }
+            .setNegativeButton(R.string.btn_cancel) { _, _ -> }
+
+        // Projects have no other creation surface, so the picker can make one
+        // (owner_approved_rules §4). The other categories are authored on their
+        // own screens.
+        if (currentScope == "project") {
+            builder.setNeutralButton(R.string.mem_edit_new_project) { _, _ -> showNewProjectDialog() }
+        }
+        builder.show()
+    }
+
+    private fun showNewProjectDialog() {
+        val input = EditText(this).apply {
+            hint = getString(R.string.mem_edit_new_project_hint)
+            setSingleLine()
+        }
+        val pad = (20 * resources.displayMetrics.density).toInt()
+        val container = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(pad, pad, pad, 0)
+            addView(input)
+        }
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.mem_edit_new_project)
+            .setView(container)
+            .setPositiveButton(R.string.btn_save) { _, _ ->
+                val name = input.text?.toString()?.trim().orEmpty()
+                if (name.isEmpty()) return@setPositiveButton
+                val id = MemoryStore.newId("proj-")
+                val record = ProjectRecord(id, name, "active", MemoryStore.nowIso(), MemoryStore.nowIso())
+                runOffThread {
+                    MemoryStore.getInstance(this).upsertProject(record)
+                    runOnUiThread {
+                        projectItems[id] = name
+                        selectedTargets[id] = name
+                        renderChips()
+                    }
+                }
+            }
+            .setNegativeButton(R.string.btn_cancel) { _, _ -> }
+            .show()
+    }
+
+    /* ------------------------------ save ------------------------------ */
+
+    private fun save() {
+        if (!ready) {
+            Toast.makeText(this, R.string.mem_edit_still_loading, Toast.LENGTH_SHORT).show()
+            return
+        }
+        val title = fieldTitle?.text?.toString()?.trim().orEmpty()
+        val content = fieldContent?.text?.toString()?.trim().orEmpty()
+        if (title.isEmpty() || content.isEmpty()) {
+            Toast.makeText(this, R.string.mem_edit_required, Toast.LENGTH_SHORT).show()
+            return
+        }
+        val tagsJson = textToTagsJson(findViewById<TextInputEditText>(R.id.field_mem_tags)?.text?.toString().orEmpty())
+        val targets = selectedTargets.keys.toList()
+
+        val companionIds = if (currentScope == "companion") targets else emptyList()
+        val projectIds = if (currentScope == "project") targets else emptyList()
+        val worldIds = if (currentScope == "world") targets else emptyList()
+        val campaignIds = if (currentScope == "campaign") targets else emptyList()
+        val rpIds = if (currentScope == "rp_character") targets else emptyList()
+
+        runOffThread {
+            val store = MemoryStore.getInstance(this)
+            val prior = existing ?: memoryId?.let { store.getMemory(it) }
+            if (prior == null) {
+                val record = MemoryRecord(
+                    memoryId = MemoryStore.newId("m-"),
+                    scope = currentScope, kind = currentType, title = title, content = content,
+                    embeddingText = null, tagsJson = tagsJson, importance = currentImportance,
+                    worldIds = worldIds, roleplayCharacterIds = rpIds, campaignIds = campaignIds,
+                    projectIds = projectIds,
+                    protectionJson = null, modeHintsJson = "[]",
+                    provenanceSource = "user_entered", provenanceConfidence = null,
+                    provenanceNotedOn = MemoryStore.nowIso(), provenanceContext = null,
+                    createdAt = MemoryStore.nowIso(), updatedAt = null, status = "active",
+                    supersedes = null, companionIds = companionIds, entityRefs = emptyList(),
+                    changeLog = emptyList(), origin = "user"
+                )
+                store.insertMemory(record)
+                Librarian.getInstance(this).reindexMemory(record.memoryId)
+            } else {
+                val updated = prior.copy(
+                    scope = currentScope, kind = currentType, title = title, content = content,
+                    importance = currentImportance, tagsJson = tagsJson,
+                    worldIds = worldIds, roleplayCharacterIds = rpIds, campaignIds = campaignIds,
+                    projectIds = projectIds, companionIds = companionIds
+                )
+                store.updateMemory(updated, getString(R.string.memory_change_edited))
+                Librarian.getInstance(this).reindexMemory(prior.memoryId)
+            }
+            runOnUiThread {
+                Toast.makeText(this, R.string.memory_saved, Toast.LENGTH_SHORT).show()
+                finish()
+            }
+        }
+    }
+
+    /* ------------------------------ tags ------------------------------ */
+
+    private fun tagsToText(tagsJson: String): String = try {
+        val arr = JSONArray(tagsJson)
+        (0 until arr.length()).joinToString(", ") { arr.getString(it) }
+    } catch (_: Exception) { "" }
+
+    private fun textToTagsJson(text: String): String {
+        val arr = JSONArray()
+        text.split(",").map { it.trim() }.filter { it.isNotEmpty() }.forEach { arr.put(it) }
+        return arr.toString()
+    }
+
+    /* ------------------------------ off-thread ------------------------------ */
+
+    private fun runOffThread(work: () -> Unit) {
+        Thread {
+            try {
+                work()
+            } catch (e: Exception) {
+                runOnUiThread {
+                    Toast.makeText(
+                        this,
+                        getString(R.string.mem_edit_op_failed, e.message ?: e.javaClass.simpleName),
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        }.start()
+    }
+
+    /* ------------------------------ theme + insets ------------------------------ */
+
+    @Suppress("DEPRECATION")
+    private fun applyTheme() {
+        val amoled = isDarkThemeEnabled() && preferences?.getAmoledPitchBlack() == true
+        ThemeManager.getThemeManager().applyTheme(this, amoled)
+
+        if (amoled) {
+            window.setBackgroundDrawableResource(R.color.amoled_window_background)
+            if (Build.VERSION.SDK_INT <= 34) {
+                window.navigationBarColor = ResourcesCompat.getColor(resources, R.color.amoled_window_background, theme)
+                window.statusBarColor = ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme)
+            }
+            actionBar?.setBackgroundColor(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
+            btnBack?.backgroundTintList = ColorStateList.valueOf(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
+        } else {
+            window.setBackgroundDrawable(SurfaceColors.SURFACE_0.getColor(this).toDrawable())
+            if (Build.VERSION.SDK_INT <= 34) {
+                window.navigationBarColor = SurfaceColors.SURFACE_0.getColor(this)
+                window.statusBarColor = SurfaceColors.SURFACE_4.getColor(this)
+            }
+            actionBar?.setBackgroundColor(SurfaceColors.SURFACE_4.getColor(this))
+            btnBack?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(this))
+        }
+    }
+
+    private fun isDarkThemeEnabled(): Boolean =
+        (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        adjustPaddings()
+    }
+
+    private fun adjustPaddings() {
+        if (Build.VERSION.SDK_INT < 35) return
+        try {
+            actionBar?.setPadding(
+                0,
+                window.decorView.rootWindowInsets.getInsets(WindowInsets.Type.statusBars()).top,
+                0,
+                0
+            )
+            findViewById<ScrollView>(R.id.scroll)?.setPadding(
+                0,
+                0,
+                0,
+                window.decorView.rootWindowInsets.getInsets(WindowInsets.Type.navigationBars()).bottom + pxToDp(24)
+            )
+        } catch (_: Exception) { /* unused */ }
+    }
+
+    private fun pxToDp(px: Int): Int = (px * resources.displayMetrics.density).toInt()
+}

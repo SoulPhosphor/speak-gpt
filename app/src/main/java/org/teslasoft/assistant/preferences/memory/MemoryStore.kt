@@ -49,7 +49,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
 
     companion object {
         const val DATABASE_NAME = "companion_memory.db"
-        private const val DATABASE_VERSION = 4
+        private const val DATABASE_VERSION = 5
 
         // meta keys
         const val META_SCHEMA_VERSION = "schema_version"
@@ -310,6 +310,38 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 "PRIMARY KEY (memory_id, entity_id))"
         )
 
+        // Named target scopes are multi-select (owner_approved_rules §2): a memory
+        // may belong to several worlds/campaigns/RP characters/projects at once,
+        // mirroring memory_companions. The single memories.world_id/campaign_id/
+        // roleplay_character_id/project_id columns are kept as a "primary target"
+        // mirror (the first selected) so the Stage-3-owned retrieval query keeps
+        // working unchanged; these join tables are the full multi-target truth
+        // that the editor and the scoped-browser doors read.
+        db.execSQL(
+            "CREATE TABLE memory_worlds (" +
+                "memory_id TEXT NOT NULL REFERENCES memories(memory_id) ON DELETE CASCADE, " +
+                "world_id TEXT NOT NULL REFERENCES worlds(world_id), " +
+                "PRIMARY KEY (memory_id, world_id))"
+        )
+        db.execSQL(
+            "CREATE TABLE memory_campaigns (" +
+                "memory_id TEXT NOT NULL REFERENCES memories(memory_id) ON DELETE CASCADE, " +
+                "campaign_id TEXT NOT NULL REFERENCES campaigns(campaign_id), " +
+                "PRIMARY KEY (memory_id, campaign_id))"
+        )
+        db.execSQL(
+            "CREATE TABLE memory_roleplay_characters (" +
+                "memory_id TEXT NOT NULL REFERENCES memories(memory_id) ON DELETE CASCADE, " +
+                "roleplay_character_id TEXT NOT NULL REFERENCES roleplay_characters(roleplay_character_id), " +
+                "PRIMARY KEY (memory_id, roleplay_character_id))"
+        )
+        db.execSQL(
+            "CREATE TABLE memory_projects (" +
+                "memory_id TEXT NOT NULL REFERENCES memories(memory_id) ON DELETE CASCADE, " +
+                "project_id TEXT NOT NULL REFERENCES projects(project_id), " +
+                "PRIMARY KEY (memory_id, project_id))"
+        )
+
         db.execSQL(
             "CREATE TABLE change_log (" +
                 "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
@@ -416,6 +448,10 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         db.execSQL("CREATE INDEX idx_memories_campaign ON memories(campaign_id)")
         db.execSQL("CREATE INDEX idx_memories_project ON memories(project_id)")
         db.execSQL("CREATE INDEX idx_memcomp_companion ON memory_companions(companion_id)")
+        db.execSQL("CREATE INDEX idx_memworlds_world ON memory_worlds(world_id)")
+        db.execSQL("CREATE INDEX idx_memcampaigns_campaign ON memory_campaigns(campaign_id)")
+        db.execSQL("CREATE INDEX idx_memrpchars_rp ON memory_roleplay_characters(roleplay_character_id)")
+        db.execSQL("CREATE INDEX idx_memprojects_project ON memory_projects(project_id)")
         db.execSQL("CREATE INDEX idx_changelog_memory ON change_log(memory_id)")
         db.execSQL("CREATE INDEX idx_transcripts_queue ON transcripts(review_status) WHERE review_status = 'pending'")
         db.execSQL("CREATE INDEX idx_transcripts_chat ON transcripts(chat_id)")
@@ -568,6 +604,49 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             db.execSQL(
                 "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                 arrayOf(META_DB_MIGRATION, "4")
+            )
+        }
+        if (oldVersion < 5) {
+            // v5 (July 2026, Phase 5 Stage 2): named target scopes become
+            // multi-select (owner_approved_rules §2). New join tables mirror
+            // memory_companions; the single columns stay as the primary-target
+            // mirror. Existing memories are backfilled from those columns so
+            // every current link survives as a (single-element) target set.
+            db.execSQL(
+                "CREATE TABLE memory_worlds (" +
+                    "memory_id TEXT NOT NULL REFERENCES memories(memory_id) ON DELETE CASCADE, " +
+                    "world_id TEXT NOT NULL REFERENCES worlds(world_id), " +
+                    "PRIMARY KEY (memory_id, world_id))"
+            )
+            db.execSQL(
+                "CREATE TABLE memory_campaigns (" +
+                    "memory_id TEXT NOT NULL REFERENCES memories(memory_id) ON DELETE CASCADE, " +
+                    "campaign_id TEXT NOT NULL REFERENCES campaigns(campaign_id), " +
+                    "PRIMARY KEY (memory_id, campaign_id))"
+            )
+            db.execSQL(
+                "CREATE TABLE memory_roleplay_characters (" +
+                    "memory_id TEXT NOT NULL REFERENCES memories(memory_id) ON DELETE CASCADE, " +
+                    "roleplay_character_id TEXT NOT NULL REFERENCES roleplay_characters(roleplay_character_id), " +
+                    "PRIMARY KEY (memory_id, roleplay_character_id))"
+            )
+            db.execSQL(
+                "CREATE TABLE memory_projects (" +
+                    "memory_id TEXT NOT NULL REFERENCES memories(memory_id) ON DELETE CASCADE, " +
+                    "project_id TEXT NOT NULL REFERENCES projects(project_id), " +
+                    "PRIMARY KEY (memory_id, project_id))"
+            )
+            db.execSQL("INSERT INTO memory_worlds (memory_id, world_id) SELECT memory_id, world_id FROM memories WHERE world_id IS NOT NULL")
+            db.execSQL("INSERT INTO memory_campaigns (memory_id, campaign_id) SELECT memory_id, campaign_id FROM memories WHERE campaign_id IS NOT NULL")
+            db.execSQL("INSERT INTO memory_roleplay_characters (memory_id, roleplay_character_id) SELECT memory_id, roleplay_character_id FROM memories WHERE roleplay_character_id IS NOT NULL")
+            db.execSQL("INSERT INTO memory_projects (memory_id, project_id) SELECT memory_id, project_id FROM memories WHERE project_id IS NOT NULL")
+            db.execSQL("CREATE INDEX idx_memworlds_world ON memory_worlds(world_id)")
+            db.execSQL("CREATE INDEX idx_memcampaigns_campaign ON memory_campaigns(campaign_id)")
+            db.execSQL("CREATE INDEX idx_memrpchars_rp ON memory_roleplay_characters(roleplay_character_id)")
+            db.execSQL("CREATE INDEX idx_memprojects_project ON memory_projects(project_id)")
+            db.execSQL(
+                "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                arrayOf(META_DB_MIGRATION, "5")
             )
         }
     }
@@ -969,10 +1048,11 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                     put("embedding_text", m.embeddingText)
                     put("tags_json", m.tagsJson)
                     put("importance", m.importance)
-                    put("world_id", m.worldId)
-                    put("roleplay_character_id", m.roleplayCharacterId)
-                    put("campaign_id", m.campaignId)
-                    put("project_id", m.projectId)
+                    // Primary-target mirror; full sets go to the join tables below.
+                    put("world_id", m.worldIds.firstOrNull())
+                    put("roleplay_character_id", m.roleplayCharacterIds.firstOrNull())
+                    put("campaign_id", m.campaignIds.firstOrNull())
+                    put("project_id", m.projectIds.firstOrNull())
                     put("protection_json", m.protectionJson)
                     put("mode_hints_json", m.modeHintsJson)
                     put("provenance_source", m.provenanceSource)
@@ -985,18 +1065,12 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                     put("supersedes", m.supersedes)
                     put("origin", m.origin)
                 })
-                for (cid in m.companionIds) {
-                    db.insertWithOnConflict("memory_companions", null, ContentValues().apply {
-                        put("memory_id", m.memoryId)
-                        put("companion_id", cid)
-                    }, SQLiteDatabase.CONFLICT_IGNORE)
-                }
-                for (eid in m.entityRefs) {
-                    db.insertWithOnConflict("memory_entities", null, ContentValues().apply {
-                        put("memory_id", m.memoryId)
-                        put("entity_id", eid)
-                    }, SQLiteDatabase.CONFLICT_IGNORE)
-                }
+                writeLinkSet(db, "memory_companions", "companion_id", m.memoryId, m.companionIds)
+                writeLinkSet(db, "memory_entities", "entity_id", m.memoryId, m.entityRefs)
+                writeLinkSet(db, "memory_worlds", "world_id", m.memoryId, m.worldIds)
+                writeLinkSet(db, "memory_campaigns", "campaign_id", m.memoryId, m.campaignIds)
+                writeLinkSet(db, "memory_roleplay_characters", "roleplay_character_id", m.memoryId, m.roleplayCharacterIds)
+                writeLinkSet(db, "memory_projects", "project_id", m.memoryId, m.projectIds)
                 for (l in m.changeLog) {
                     db.insert("change_log", null, ContentValues().apply {
                         put("memory_id", m.memoryId)
@@ -1200,10 +1274,10 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                         embeddingText = it.getStringOrNull("embedding_text"),
                         tagsJson = it.getStringOrNull("tags_json") ?: "[]",
                         importance = it.getInt(it.getColumnIndexOrThrow("importance")),
-                        worldId = it.getStringOrNull("world_id"),
-                        roleplayCharacterId = it.getStringOrNull("roleplay_character_id"),
-                        campaignId = it.getStringOrNull("campaign_id"),
-                        projectId = it.getStringOrNull("project_id"),
+                        worldIds = readJoin(db, "memory_worlds", "world_id", id),
+                        roleplayCharacterIds = readJoin(db, "memory_roleplay_characters", "roleplay_character_id", id),
+                        campaignIds = readJoin(db, "memory_campaigns", "campaign_id", id),
+                        projectIds = readJoin(db, "memory_projects", "project_id", id),
                         protectionJson = it.getStringOrNull("protection_json"),
                         modeHintsJson = it.getStringOrNull("mode_hints_json") ?: "[]",
                         provenanceSource = it.getStringOrNull("provenance_source"),
@@ -2221,6 +2295,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 db.update("memories", ContentValues().apply { putNull("roleplay_character_id") },
                     "roleplay_character_id = ?", arrayOf(id))
             }
+            // Scrub multi-select links (§2) so the FK to roleplay_characters clears.
+            db.delete("memory_roleplay_characters", "roleplay_character_id = ?", arrayOf(id))
             db.delete("roleplay_characters", "roleplay_character_id = ?", arrayOf(id))
             recordDeletionTx(db, "roleplay_character", id)
             db.setTransactionSuccessful()
@@ -2287,6 +2363,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             // Campaigns anchored to this world lose their anchor but survive.
             db.update("campaigns", ContentValues().apply { putNull("world_id") },
                 "world_id = ?", arrayOf(worldId))
+            // Scrub multi-select links (§2) so the FK to worlds clears.
+            db.delete("memory_worlds", "world_id = ?", arrayOf(worldId))
             db.delete("worlds", "world_id = ?", arrayOf(worldId))
             recordDeletionTx(db, "world", worldId)
             db.setTransactionSuccessful()
@@ -2382,6 +2460,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 db.update("memories", ContentValues().apply { putNull("campaign_id") },
                     "campaign_id = ?", arrayOf(campaignId))
             }
+            // Scrub multi-select links (§2) so the FK to campaigns clears.
+            db.delete("memory_campaigns", "campaign_id = ?", arrayOf(campaignId))
             db.delete("campaigns", "campaign_id = ?", arrayOf(campaignId))
             recordDeletionTx(db, "campaign", campaignId)
             db.setTransactionSuccessful()
@@ -2448,6 +2528,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 db.update("memories", ContentValues().apply { putNull("project_id") },
                     "project_id = ?", arrayOf(projectId))
             }
+            // Scrub multi-select links (§2) so the FK to projects clears.
+            db.delete("memory_projects", "project_id = ?", arrayOf(projectId))
             db.delete("projects", "project_id = ?", arrayOf(projectId))
             recordDeletionTx(db, "project", projectId)
             db.setTransactionSuccessful()
@@ -2457,7 +2539,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
     }
 
     fun memoriesForProject(projectId: String, includeArchived: Boolean): List<MemoryRecord> =
-        readMemoriesWhere("project_id = ?", arrayOf(projectId), includeArchived)
+        memoriesForTarget("memory_projects", "project_id", projectId, includeArchived)
 
     /* -------- memories (full editor CRUD) -------- */
 
@@ -2494,34 +2576,31 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         return out
     }
 
+    // Scoped-browser doors (§2 multi-select): a memory shows under EVERY target
+    // it is linked to, so these read the join tables, not the single columns.
     fun memoriesForWorld(worldId: String, includeArchived: Boolean): List<MemoryRecord> =
-        readMemoriesWhere("world_id = ?", arrayOf(worldId), includeArchived)
+        memoriesForTarget("memory_worlds", "world_id", worldId, includeArchived)
 
     fun memoriesForCampaign(campaignId: String, includeArchived: Boolean): List<MemoryRecord> =
-        readMemoriesWhere("campaign_id = ?", arrayOf(campaignId), includeArchived)
+        memoriesForTarget("memory_campaigns", "campaign_id", campaignId, includeArchived)
 
     fun memoriesForRoleplayCharacter(id: String, includeArchived: Boolean): List<MemoryRecord> =
-        readMemoriesWhere("roleplay_character_id = ?", arrayOf(id), includeArchived)
+        memoriesForTarget("memory_roleplay_characters", "roleplay_character_id", id, includeArchived)
 
-    fun memoriesForCompanion(companionId: String, includeArchived: Boolean): List<MemoryRecord> {
+    fun memoriesForCompanion(companionId: String, includeArchived: Boolean): List<MemoryRecord> =
+        memoriesForTarget("memory_companions", "companion_id", companionId, includeArchived)
+
+    private fun memoriesForTarget(
+        joinTable: String, column: String, targetId: String, includeArchived: Boolean
+    ): List<MemoryRecord> {
         val db = readableDatabase
         val statusClause = if (includeArchived) "" else " AND m.status = 'active'"
         val out = ArrayList<MemoryRecord>()
         db.rawQuery(
-            "SELECT m.* FROM memories m JOIN memory_companions mc ON mc.memory_id = m.memory_id " +
-                "WHERE mc.companion_id = ?$statusClause ORDER BY m.updated_at DESC, m.created_at DESC",
-            arrayOf(companionId)
+            "SELECT m.* FROM memories m JOIN $joinTable j ON j.memory_id = m.memory_id " +
+                "WHERE j.$column = ?$statusClause ORDER BY m.updated_at DESC, m.created_at DESC",
+            arrayOf(targetId)
         ).use {
-            while (it.moveToNext()) out.add(readFullMemory(db, it))
-        }
-        return out
-    }
-
-    private fun readMemoriesWhere(where: String, args: Array<String>, includeArchived: Boolean): List<MemoryRecord> {
-        val db = readableDatabase
-        val full = if (includeArchived) where else "$where AND status = 'active'"
-        val out = ArrayList<MemoryRecord>()
-        db.query("memories", null, full, args, null, null, "updated_at DESC, created_at DESC").use {
             while (it.moveToNext()) out.add(readFullMemory(db, it))
         }
         return out
@@ -2538,10 +2617,10 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             embeddingText = it.getStringOrNull("embedding_text"),
             tagsJson = it.getStringOrNull("tags_json") ?: "[]",
             importance = it.getInt(it.getColumnIndexOrThrow("importance")),
-            worldId = it.getStringOrNull("world_id"),
-            roleplayCharacterId = it.getStringOrNull("roleplay_character_id"),
-            campaignId = it.getStringOrNull("campaign_id"),
-            projectId = it.getStringOrNull("project_id"),
+            worldIds = readJoin(db, "memory_worlds", "world_id", id),
+            roleplayCharacterIds = readJoin(db, "memory_roleplay_characters", "roleplay_character_id", id),
+            campaignIds = readJoin(db, "memory_campaigns", "campaign_id", id),
+            projectIds = readJoin(db, "memory_projects", "project_id", id),
             protectionJson = it.getStringOrNull("protection_json"),
             modeHintsJson = it.getStringOrNull("mode_hints_json") ?: "[]",
             provenanceSource = it.getStringOrNull("provenance_source"),
@@ -2568,10 +2647,13 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         put("embedding_text", m.embeddingText)
         put("tags_json", m.tagsJson)
         put("importance", m.importance)
-        put("world_id", m.worldId)
-        put("roleplay_character_id", m.roleplayCharacterId)
-        put("campaign_id", m.campaignId)
-        put("project_id", m.projectId)
+        // Primary-target mirror (§2 multi-select): the first of each target set
+        // is kept in the legacy single column for the Stage-3 retrieval query;
+        // the full set lives in the join tables (writeMemoryLinks).
+        put("world_id", m.worldIds.firstOrNull())
+        put("roleplay_character_id", m.roleplayCharacterIds.firstOrNull())
+        put("campaign_id", m.campaignIds.firstOrNull())
+        put("project_id", m.projectIds.firstOrNull())
         put("protection_json", m.protectionJson)
         put("mode_hints_json", m.modeHintsJson)
         put("provenance_source", m.provenanceSource)
@@ -2586,16 +2668,24 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
     }
 
     private fun writeMemoryLinks(db: SQLiteDatabase, m: MemoryRecord) {
-        db.delete("memory_companions", "memory_id = ?", arrayOf(m.memoryId))
-        for (cid in m.companionIds) {
-            db.insertWithOnConflict("memory_companions", null, ContentValues().apply {
-                put("memory_id", m.memoryId); put("companion_id", cid)
-            }, SQLiteDatabase.CONFLICT_IGNORE)
-        }
-        db.delete("memory_entities", "memory_id = ?", arrayOf(m.memoryId))
-        for (eid in m.entityRefs) {
-            db.insertWithOnConflict("memory_entities", null, ContentValues().apply {
-                put("memory_id", m.memoryId); put("entity_id", eid)
+        writeLinkSet(db, "memory_companions", "companion_id", m.memoryId, m.companionIds)
+        writeLinkSet(db, "memory_entities", "entity_id", m.memoryId, m.entityRefs)
+        // §2 multi-select target sets (mirror kept in the single columns by
+        // memoryValues; these join rows are the full truth).
+        writeLinkSet(db, "memory_worlds", "world_id", m.memoryId, m.worldIds)
+        writeLinkSet(db, "memory_campaigns", "campaign_id", m.memoryId, m.campaignIds)
+        writeLinkSet(db, "memory_roleplay_characters", "roleplay_character_id", m.memoryId, m.roleplayCharacterIds)
+        writeLinkSet(db, "memory_projects", "project_id", m.memoryId, m.projectIds)
+    }
+
+    /** Replace a memory's rows in a (memory_id, target) join table. */
+    private fun writeLinkSet(
+        db: SQLiteDatabase, table: String, column: String, memoryId: String, targets: List<String>
+    ) {
+        db.delete(table, "memory_id = ?", arrayOf(memoryId))
+        for (t in targets) {
+            db.insertWithOnConflict(table, null, ContentValues().apply {
+                put("memory_id", memoryId); put(column, t)
             }, SQLiteDatabase.CONFLICT_IGNORE)
         }
     }

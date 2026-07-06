@@ -138,12 +138,13 @@ class MemorySeedCodecTest {
         val data = MemorySeedCodec.parse(withCampaign)
         assertEquals(1, data.campaigns.size)
         assertEquals("The Long Dark", data.campaigns.first().name)
-        assertEquals("camp-1", data.memories.first().campaignId)
+        // Legacy single "campaign_id" key parses into the multi-select set (§2).
+        assertEquals(listOf("camp-1"), data.memories.first().campaignIds)
 
         // Lossless round-trip including the new columns.
         val back = MemorySeedCodec.parse(MemorySeedCodec.serialize(data))
         assertEquals(data, back)
-        assertEquals("camp-1", back.memories.first().campaignId)
+        assertEquals(listOf("camp-1"), back.memories.first().campaignIds)
         assertEquals("It began in the rain.", back.campaigns.first().storySoFar)
     }
 
