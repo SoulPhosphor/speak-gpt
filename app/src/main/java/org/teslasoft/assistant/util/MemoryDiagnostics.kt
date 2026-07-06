@@ -131,12 +131,12 @@ object MemoryDiagnostics {
      */
     private fun threadCount(): Int {
         try {
-            File("/proc/self/status").forEachLine { line ->
-                if (line.startsWith("Threads:")) {
-                    return line.substringAfter("Threads:").trim().toIntOrNull() ?: -1
-                }
+            val threadsLine = File("/proc/self/status").useLines { seq ->
+                seq.firstOrNull { it.startsWith("Threads:") }
             }
-        } catch (_: Throwable) { /* fall through */ }
+            val parsed = threadsLine?.substringAfter("Threads:")?.trim()?.toIntOrNull()
+            if (parsed != null) return parsed
+        } catch (_: Throwable) { /* fall through to the JVM approximation */ }
         return try { Thread.activeCount() } catch (_: Throwable) { -1 }
     }
 }
