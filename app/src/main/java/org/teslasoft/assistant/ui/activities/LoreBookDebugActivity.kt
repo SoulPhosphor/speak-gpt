@@ -208,14 +208,8 @@ class LoreBookDebugActivity : FragmentActivity() {
             sb.append('\n')
         }
 
-        when (record.packetSource) {
-            "compressed" -> sb.append(getString(R.string.memory_debug_packet_compressed)).append('\n')
-            "raw" -> sb.append(getString(R.string.memory_debug_packet_raw)).append('\n')
-            else -> { /* no packet this turn */ }
-        }
-
-        if (record.modes.isNotEmpty()) {
-            sb.append(getString(R.string.memory_debug_modes_fmt, record.modes.joinToString(", ")))
+        if (record.eligibility != null) {
+            sb.append(getString(R.string.memory_debug_eligibility_fmt, record.eligibility))
             sb.append('\n')
         }
 

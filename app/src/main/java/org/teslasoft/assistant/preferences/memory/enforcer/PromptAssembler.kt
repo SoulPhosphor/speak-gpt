@@ -17,22 +17,20 @@
 package org.teslasoft.assistant.preferences.memory.enforcer
 
 /**
- * Renders `prompt_assembly_template.md` — the literal system-prompt skeleton —
- * from parsed [AssemblyComponents]. Pure Kotlin, unit-tested; the Android side
+ * Renders the enforcer's per-turn memory message from parsed
+ * [AssemblyComponents]. Pure Kotlin, unit-tested; the Android side
  * ([Enforcer]) parses the store's JSON into these inputs.
  *
- * The template's text is intentionally hardcoded here rather than in string
- * resources: it is a protocol artifact the spec requires verbatim, not UI
- * copy — localizing it would change what the model receives.
+ * The section text is intentionally hardcoded here rather than in string
+ * resources: it is a protocol artifact the model receives, not UI copy —
+ * localizing it would change what the model reads.
  *
- * Deviations from the template, decided in the integration plan:
- * - Slot 1 (APP CHARACTER CONFIG) and USER'S STANDING INSTRUCTION are already
- *   the app's stable first system message (prefix caching — never reordered),
- *   and the ACTIVATION PROMPT already rides in chat history by the app's
- *   existing mechanism. This renderer produces only what is NEW: the separate
- *   system message that follows the stable one.
- * - Where a section is empty it is omitted entirely, per the template's rule
- *   that no placeholder text ever reaches the model.
+ * Stage 3.4 layout (owner_approved_rules): retrieved memories ("Things you
+ * know"), Instruction memories rendered as context rules right after them
+ * (law 5 — they activate only because their topic surfaced in retrieval),
+ * the user's hand-written lore notes (which outrank everything above), and
+ * the scene. Empty sections are omitted entirely — no placeholder text ever
+ * reaches the model.
  */
 object PromptAssembler {
 
@@ -44,13 +42,11 @@ object PromptAssembler {
         "(told = they said it; observed = seen over time; guessed = tentative — hold guesses lightly, let them go gracefully if wrong)"
 
     /**
-     * Budget rule from the template's assembly rules: when over budget, cut
-     * retrieved memories from the lowest-scored up — never hard limits, the
-     * standing packet, or protection handling. Always-load memories live in
-     * the standing packet, so everything here is cuttable; lore notes are
+     * Budget rule: when over budget, cut retrieved memories from the
+     * lowest-scored up — never protection handling. Lore notes are
      * user-authored and win, so their size is charged against the budget
      * FIRST and memories absorb the entire squeeze.
-     * Returns (kept, cut) preserving the original (score-descending) order.
+     * Returns (kept, cut) preserving score-descending order.
      */
     fun applyBudget(
         memories: List<AssembledMemory>,
@@ -104,36 +100,24 @@ object PromptAssembler {
     fun render(c: AssemblyComponents): String {
         val sections = ArrayList<String>()
 
-        c.modelNote?.takeIf { it.isNotBlank() }?.let {
-            sections.add("MODEL NOTE: ${it.trim()}")
-        }
+        // One list in, split here (law 5): an Instruction memory is a context
+        // rule the model must follow now that its topic has come up, so it is
+        // rendered as a rule, not filed among the facts. The split living in
+        // the renderer means the enforcer can never route one to the wrong
+        // section.
+        val (rules, known) = c.memories.partition { it.isInstruction }
 
-        if (c.hardLimits.isNotEmpty()) {
-            sections.add(
-                "Hard limits — these never move, regardless of anything below:\n" +
-                    c.hardLimits.joinToString("\n") { it.trim() }
-            )
-        }
-
-        c.standingPacket?.takeIf { it.isNotBlank() }?.let {
-            sections.add("## About the person you're with\n${it.trim()}")
-        }
-
-        for (mode in c.modes.take(2)) {
-            val sb = StringBuilder("## Right now\n")
-            sb.append("This moment calls for ").append(mode.name)
-            mode.purpose?.takeIf { it.isNotBlank() }?.let { sb.append(": ").append(it.trim()) }
-            if (mode.respond.isNotEmpty()) sb.append("\nDo: ").append(mode.respond.joinToString("; "))
-            if (mode.avoid.isNotEmpty()) sb.append("\nDon't: ").append(mode.avoid.joinToString("; "))
+        if (known.isNotEmpty()) {
+            val sb = StringBuilder("## Things you know\n").append(PROVENANCE_LEGEND)
+            for (m in known) sb.append("\n").append(renderMemoryLine(m))
             sections.add(sb.toString())
         }
 
-        if (c.memories.isNotEmpty() || c.entitySummaries.isNotEmpty()) {
-            val sb = StringBuilder("## Things you know\n").append(PROVENANCE_LEGEND)
-            for (m in c.memories) sb.append("\n").append(renderMemoryLine(m))
-            for ((name, summary) in c.entitySummaries) {
-                sb.append("\n- (observed) About ").append(name.trim()).append(": ").append(summary.trim())
-            }
+        if (rules.isNotEmpty()) {
+            val sb = StringBuilder(
+                "## Handling rules from the user\nThese apply because their topic has come up — follow them now:"
+            )
+            for (m in rules) sb.append("\n").append(renderMemoryLine(m))
             sections.add(sb.toString())
         }
 
@@ -164,8 +148,7 @@ object PromptAssembler {
                     c.scene.characterArc?.takeIf { it.isNotBlank() }?.let { sb.append(" Story so far: ").append(it.trim()) }
                 }
                 sb.append(
-                    "\nRemember: the player is still the same person — everything in " +
-                        "\"About the person you're with\" still applies. The character is costume, the fiction stays fiction."
+                    "\nRemember: the player is still the same person — the character is costume, the fiction stays fiction."
                 )
             }
             sections.add(sb.toString())

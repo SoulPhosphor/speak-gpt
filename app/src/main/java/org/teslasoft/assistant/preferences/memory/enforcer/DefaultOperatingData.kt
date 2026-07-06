@@ -27,17 +27,21 @@ package org.teslasoft.assistant.preferences.memory.enforcer
  * stays dormant and empty until the user (or a future Phase 6 proposal they
  * approve) fills it. Existing origin='system' mode rows are purged once at
  * store open (see `MemoryStore.onOpen`).
+ *
+ * Stage 3.4 pruned the `always_include` list and `mode_threshold` from the
+ * default: nothing is always included any more (§10 — the always-load flag,
+ * owner portrait, directives and entity summaries are all retired from
+ * assembly) and no mode is ever detected. Old stores keep their existing
+ * policy JSON — the parser simply ignores keys it no longer reads.
  */
 object DefaultOperatingData {
 
     /** Matches the schema's retrieval_policy object; the enforcer-specific
-     *  knobs (memory_char_budget, mode_threshold) are optional extensions the
-     *  parser falls back on when absent, so imported policies keep working. */
+     *  memory_char_budget knob is an optional extension the parser falls back
+     *  on when absent, so imported policies keep working. */
     const val DEFAULT_POLICY_JSON: String = """{
-  "always_include": ["owner_profile", "directives", "active_companion_record", "always_load_memories"],
   "top_k": 8,
   "weights": {"similarity": 0.6, "importance": 0.3, "recency": 0.1},
-  "memory_char_budget": 6000,
-  "mode_threshold": 0.45
+  "memory_char_budget": 6000
 }"""
 }

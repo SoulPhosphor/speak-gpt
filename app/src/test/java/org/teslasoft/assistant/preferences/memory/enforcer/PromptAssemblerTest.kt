@@ -23,8 +23,9 @@ import org.junit.Test
 
 /**
  * The enforcer's renderer is what stands between a protected memory and a
- * prompt that mishandles it — the template's assembly rules are contractual,
- * so they're pinned here on the JVM (pure Kotlin, no Android).
+ * prompt that mishandles it — the assembly rules are contractual, so they're
+ * pinned here on the JVM (pure Kotlin, no Android). Stage 3.4 shape: memories,
+ * Instruction memories as context rules, lore notes, scene — nothing else.
  */
 class PromptAssemblerTest {
 
@@ -33,11 +34,12 @@ class PromptAssemblerTest {
         score: Float = 1f,
         handling: List<String> = emptyList(),
         neverAssume: List<String> = emptyList(),
-        content: String = "content of $id"
+        content: String = "content of $id",
+        kind: String = "fact"
     ) = AssembledMemory(
         memoryId = id, title = id, content = content,
         provenanceMarker = "told", handling = handling, neverAssume = neverAssume,
-        score = score
+        score = score, kind = kind
     )
 
     @Test
@@ -62,35 +64,78 @@ class PromptAssemblerTest {
     fun emptySectionsAreOmittedEntirely() {
         val out = PromptAssembler.render(AssemblyComponents())
         assertEquals("", out)
-        val onlyLimits = PromptAssembler.render(AssemblyComponents(hardLimits = listOf("Never X.")))
-        assertTrue(onlyLimits.contains("Hard limits"))
-        assertFalse(onlyLimits.contains("## About the person"))
-        assertFalse(onlyLimits.contains("## Things you know"))
-        assertFalse(onlyLimits.contains("## The scene"))
-        assertFalse(onlyLimits.contains("MODEL NOTE"))
+        val onlyLore = PromptAssembler.render(AssemblyComponents(loreNotes = listOf(LoreNote("N", "text"))))
+        assertTrue(onlyLore.contains("## Hand-written notes from the user"))
+        assertFalse(onlyLore.contains("## Things you know"))
+        assertFalse(onlyLore.contains("## Handling rules"))
+        assertFalse(onlyLore.contains("## The scene"))
     }
 
     @Test
-    fun sectionOrderFollowsTheTemplate() {
+    fun retiredSectionsNeverRender() {
+        // Stage 3.4 (owner_approved_rules §15): no standing packet, no modes,
+        // no hard-limits render, no model note, no entity summaries — even a
+        // fully-populated assembly must not contain their headers.
         val out = PromptAssembler.render(
             AssemblyComponents(
-                modelNote = "keep it terse",
-                hardLimits = listOf("Never X."),
-                standingPacket = "They are a whole person.",
-                modes = listOf(ModeBlock("m", "Steady Presence", "be calm", listOf("stay"), listOf("panic"))),
-                memories = listOf(mem("m1")),
+                memories = listOf(mem("m1"), mem("rule", kind = "instruction")),
+                loreNotes = listOf(LoreNote("Note", "hand-written fact")),
+                scene = SceneContext(worldName = "W", worldPremise = "premise")
+            )
+        )
+        assertFalse(out.contains("About the person you're with"))
+        assertFalse(out.contains("Right now"))
+        assertFalse(out.contains("Hard limits"))
+        assertFalse(out.contains("MODEL NOTE"))
+        assertFalse(out.contains("Always know"))
+    }
+
+    @Test
+    fun sectionOrderIsMemoriesRulesLoreScene() {
+        val out = PromptAssembler.render(
+            AssemblyComponents(
+                memories = listOf(mem("m1"), mem("rule", kind = "instruction")),
                 loreNotes = listOf(LoreNote("Note", "hand-written fact")),
                 scene = SceneContext(worldName = "W", worldPremise = "premise")
             )
         )
         val order = listOf(
-            "MODEL NOTE", "Hard limits", "## About the person you're with",
-            "## Right now", "## Things you know",
+            "## Things you know", "## Handling rules from the user",
             "## Hand-written notes from the user", "## The scene"
         )
         val positions = order.map { out.indexOf(it) }
         assertTrue(positions.all { it >= 0 })
         assertEquals(positions, positions.sorted())
+    }
+
+    @Test
+    fun instructionMemoriesRenderAsRulesNotFacts() {
+        val out = PromptAssembler.render(
+            AssemblyComponents(
+                memories = listOf(
+                    mem("fact-mem", content = "a plain fact"),
+                    mem("rule-mem", content = "don't pity her when her mom comes up", kind = "instruction")
+                )
+            )
+        )
+        val factsSection = out.substringAfter("## Things you know").substringBefore("## Handling rules")
+        val rulesSection = out.substringAfter("## Handling rules from the user")
+        assertTrue(factsSection.contains("a plain fact"))
+        assertFalse(factsSection.contains("don't pity her"))
+        assertTrue(rulesSection.contains("don't pity her when her mom comes up"))
+        assertTrue(rulesSection.contains("follow them now"))
+    }
+
+    @Test
+    fun protectedInstructionKeepsItsHandling() {
+        // The single-renderer rule holds for rules too: a protected Instruction
+        // memory can never render without its HANDLE WITH CARE line.
+        val out = PromptAssembler.render(
+            AssemblyComponents(
+                memories = listOf(mem("rule", kind = "instruction", handling = listOf("tread softly")))
+            )
+        )
+        assertTrue(out.contains("HANDLE WITH CARE: tread softly."))
     }
 
     @Test
@@ -107,23 +152,7 @@ class PromptAssemblerTest {
         assertTrue(out.contains("these outrank anything above that disagrees"))
         assertTrue(out.contains("World: Aeldra — a broken realm Rules of play: no resurrection"))
         assertTrue(out.contains("They are playing Mira: a quiet mage Story so far: chapter two"))
-        assertTrue(out.contains("The character is costume, the fiction stays fiction."))
-    }
-
-    @Test
-    fun atMostTwoModeBlocksRender() {
-        val out = PromptAssembler.render(
-            AssemblyComponents(
-                modes = listOf(
-                    ModeBlock("a", "A", null, emptyList(), emptyList()),
-                    ModeBlock("b", "B", null, emptyList(), emptyList()),
-                    ModeBlock("c", "C", null, emptyList(), emptyList())
-                )
-            )
-        )
-        assertTrue(out.contains("This moment calls for A"))
-        assertTrue(out.contains("This moment calls for B"))
-        assertFalse(out.contains("This moment calls for C"))
+        assertTrue(out.contains("the character is costume, the fiction stays fiction"))
     }
 
     @Test
@@ -148,16 +177,5 @@ class PromptAssemblerTest {
         val (kept, cut) = PromptAssembler.applyBudget(listOf(protected1), loreChars = 0, charBudget = 100)
         assertTrue(kept.isEmpty())
         assertEquals(listOf("p"), cut.map { it.memoryId })
-    }
-
-    @Test
-    fun entitySummariesRenderOnceInsideThingsYouKnow() {
-        val out = PromptAssembler.render(
-            AssemblyComponents(
-                memories = listOf(mem("m1")),
-                entitySummaries = linkedMapOf("Project X" to "a long-running build")
-            )
-        )
-        assertTrue(out.contains("- (observed) About Project X: a long-running build"))
     }
 }
