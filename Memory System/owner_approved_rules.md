@@ -104,6 +104,11 @@ real-life memory for a brief tangent.
   marker degrades to the safe default: blocked.
 - Global-scoped memories remain eligible inside roleplay (that is what
   Global means), subject to being active and relevant.
+- **During RP/campaign mode, companion memories are blocked unless the
+  chat is explicitly using that companion as the active narrator/GM/
+  context.** (Owner's wording. The relationship history belongs to the
+  narrator at the table, not to the fiction — a companion merely voicing
+  characters does not drag the real relationship into the story.)
 
 ## 4. Folders / Projects
 
@@ -247,6 +252,15 @@ deterministic, in app code:
 3. Within the same scope level: relevance, importance, recency, tag hints —
    exact weights are implementation detail and must never change the meaning
    of the rules above.
+4. **The ladder must not become rigid in a stupid way. The rule is: active
+   context first, then specificity.** Eligibility (§1, §3) decides which
+   scopes are in the room at all — if a campaign is active, campaign/world/
+   RP entries matter; if a project is active, project entries matter. The
+   ladder only orders what is already in the room, and specificity is a
+   strong preference among comparably relevant entries — never a trump
+   card that lets a weakly-relevant specific entry beat a strongly-relevant
+   broader one. Relevance gates first; global ordering never overrides the
+   actual room you're standing in.
 
 ## 13. Roleplay cards and Archivist suggestions
 

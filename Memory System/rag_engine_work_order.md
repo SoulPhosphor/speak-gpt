@@ -25,21 +25,28 @@ message. Never two competing memory messages.
   project is selected in Quick Settings).
 - Roleplay context (any of world/campaign/RP-character selected):
   eligible = Global, the selected World(s), Campaign, RP character,
-  Project (if selected), Companion (active persona's). **Real life is
-  BLOCKED — the fiction wall (§3), no exceptions in this stage** (the
-  Off/OOC-only/Always setting is future work, not yours).
-- ⚠ STOP AND ASK: the rules ladder places Companion between Project and
-  Real life, implying companion memories stay eligible inside roleplay.
-  Confirm that reading with the owner before shipping 3.1.
+  Project (if selected). **Real life is BLOCKED — the fiction wall (§3),
+  no exceptions in this stage** (the Off/OOC-only/Always setting is
+  future work, not yours). **Companion memories are ALSO blocked in RP
+  unless the chat is explicitly using that companion as the active
+  narrator/GM/context** (rules §3, owner-decided): use the campaign's
+  DM/narrator assignment as the signal; if the data model has no such
+  linkage for the chat's RP mode, stop and ask the owner what the
+  explicit signal should be rather than inventing one.
 - Draft/Archived/Superseded never eligible (§9). Companion draft gate
   and participation levels keep working.
 
-**3.2 Priority ladder** (§12). Deterministic ranking:
-lorebook notes outrank memories (unchanged, they render inside the same
-message, above); then scope specificity Campaign → RP character → World →
-Project → Companion → Real life → Global; within a level: relevance,
-importance, recency, tag hints. Tags are soft bonuses only — never
-gatekeepers (§6).
+**3.2 Priority ladder** (§12, INCLUDING §12.4 — not rigid). Deterministic
+ranking: lorebook notes outrank memories (unchanged, they render inside
+the same message, above); then scope specificity Campaign → RP character →
+World → Project → Companion → Real life → Global; within a level:
+relevance, importance, recency, tag hints. Tags are soft bonuses only —
+never gatekeepers (§6). Per §12.4: eligibility defines the room first;
+specificity is a strong scoring preference among comparably relevant
+entries (implement as a weight/boost blended with relevance), NOT a hard
+sort tier — a weakly-relevant specific entry must not beat a
+strongly-relevant broader one, and the min-similarity floor still gates
+everything.
 
 **3.3 Freshness cooldown** (§10 — the exact approved text governs).
 Track per chat, per entry, when each entry was last injected (persist it —
