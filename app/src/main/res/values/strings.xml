@@ -1055,28 +1055,6 @@
     <string name="mem_comp_participation_picker_title">Memory participation</string>
     <string name="mem_comp_participation_hint">Full: keeps this companion\'s own relationship history and global memory. Global only: a throwaway companion that keeps no relationship history, only shared facts. None: bypass the memory system entirely for this companion.</string>
 
-    <!-- essence -->
-    <string name="mem_comp_essence_section">Essence</string>
-    <string name="mem_comp_essence_hint">Your own short description of who this companion is. You edit this directly; nothing is generated for you.</string>
-    <string name="mem_comp_essence_field_hint">Essence</string>
-    <string name="mem_comp_essence_required">Please enter an essence.</string>
-
-    <!-- relationship notes -->
-    <string name="mem_comp_relationship_section">Relationship notes</string>
-    <string name="mem_comp_relationship_hint">Optional notes about your relationship with this companion.</string>
-    <string name="mem_comp_relationship_field_hint">Relationship notes</string>
-
-    <!-- hard limits -->
-    <string name="mem_comp_limits_section">Hard limits</string>
-    <string name="mem_comp_limits_hint">Lines the companion must never cross. One limit per line.</string>
-    <string name="mem_comp_limits_field_hint">One hard limit per line</string>
-
-    <!-- model adaptations (read-only list) -->
-    <string name="mem_comp_adaptations_section">Model adaptations</string>
-    <string name="mem_comp_adaptations_hint">Notes the memory system keeps about how this companion behaves on specific models. Read-only here.</string>
-    <string name="mem_comp_adaptations_empty">None yet.</string>
-    <string name="mem_comp_adaptation_row_fmt">%1$s: %2$s</string>
-
     <!-- Save -->
     <string name="mem_comp_save">Save</string>
     <string name="mem_comp_saved_toast">Companion saved.</string>

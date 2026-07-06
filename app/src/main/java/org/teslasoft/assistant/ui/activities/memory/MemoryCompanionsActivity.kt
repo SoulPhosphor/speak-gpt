@@ -51,9 +51,9 @@ class MemoryCompanionsActivity : MemoryScreenActivity() {
     }
 
     private fun rowFor(c: CompanionRecord): MemoryRow {
-        val participation = participationLabel(c.memoryParticipation)
-        val essence = c.essence.trim()
-        val subtitle = if (essence.isEmpty()) participation else "$essence · $participation"
+        // Essence is no longer surfaced on the companion page (owner decision
+        // July 2026); the row shows only the participation label.
+        val subtitle = participationLabel(c.memoryParticipation)
         val badge = when {
             c.status == "draft" -> getString(R.string.mem_comp_badge_draft)
             c.status != "active" -> c.status

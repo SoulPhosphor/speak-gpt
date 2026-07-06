@@ -1865,6 +1865,16 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         }, "companion_id = ?", arrayOf(companionId))
     }
 
+    /** The companion detail page now writes only memory_participation — the
+     *  essence/relationship/limits/adaptation columns stay but nothing edits
+     *  them (owner decision July 2026: companion cards are author-only). */
+    fun updateCompanionParticipation(companionId: String, memoryParticipation: String) {
+        writableDatabase.update(
+            "companions", ContentValues().apply { put("memory_participation", memoryParticipation) },
+            "companion_id = ?", arrayOf(companionId)
+        )
+    }
+
     /** Draft -> active is the approve action; also used to rest/retire. */
     fun setCompanionStatus(companionId: String, status: String) {
         writableDatabase.update(

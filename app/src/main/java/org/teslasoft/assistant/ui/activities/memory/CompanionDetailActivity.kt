@@ -34,9 +34,6 @@ import androidx.fragment.app.FragmentActivity
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.elevation.SurfaceColors
-import com.google.android.material.textfield.TextInputEditText
-import org.json.JSONArray
-import org.json.JSONObject
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.memory.CompanionRecord
@@ -47,17 +44,17 @@ import org.teslasoft.assistant.theme.ThemeManager
  * Phase 5 companion detail/edit page (app_adaptation_notes §Characters area).
  * A companion IS the memory-system continuity file for one of the app's
  * personas: identity (the name) is app-owned and therefore READ-ONLY here — you
- * rename a companion by renaming its persona, never here. The user directly
- * edits essence, relationship notes, hard limits and memory_participation; the
- * Archivist's own essence/limit changes are proposal-bound instead, so this
- * screen never generates anything.
+ * rename a companion by renaming its persona, never here.
+ *
+ * The page keeps only: the read-only name, the draft badge + Approve action,
+ * and the memory-participation selector (Save persists that one field). The
+ * essence / relationship-notes / hard-limits / model-adaptations sections were
+ * removed (owner decision July 2026 — companion cards are author-only and the
+ * relationship lives in the memories, not on the card). The underlying columns
+ * stay in the store but nothing on this screen writes to them.
  *
  * A draft companion's memories never inject (the real draft gate lives in
  * `activeMemoriesForScope`); the approve button promotes draft -> active.
- *
- * Model adaptations are rendered read-only — they are notes the memory system
- * keeps about how the companion behaves on specific models, and are preserved
- * verbatim on save (see the note in [save]).
  *
  * All store work runs off the main thread; every failure degrades to a toast,
  * never a crash — the memory-UI contract.
@@ -76,14 +73,9 @@ class CompanionDetailActivity : FragmentActivity() {
     private var btnApprove: MaterialButton? = null
     private var rowParticipation: LinearLayout? = null
     private var textParticipationValue: TextView? = null
-    private var fieldEssence: TextInputEditText? = null
-    private var fieldRelationship: TextInputEditText? = null
-    private var fieldLimits: TextInputEditText? = null
-    private var textAdaptations: TextView? = null
     private var btnSave: MaterialButton? = null
 
-    // The loaded record. modelAdaptationsJson is preserved untouched on save
-    // (this screen doesn't edit it); status drives the draft/approve section.
+    // The loaded record; status drives the draft/approve section.
     private var record: CompanionRecord? = null
 
     // full | global_only | none — the participation currently selected in the UI.
@@ -117,10 +109,6 @@ class CompanionDetailActivity : FragmentActivity() {
         btnApprove = findViewById(R.id.btn_approve)
         rowParticipation = findViewById(R.id.row_participation)
         textParticipationValue = findViewById(R.id.text_participation_value)
-        fieldEssence = findViewById(R.id.field_essence)
-        fieldRelationship = findViewById(R.id.field_relationship)
-        fieldLimits = findViewById(R.id.field_limits)
-        textAdaptations = findViewById(R.id.text_adaptations)
         btnSave = findViewById(R.id.btn_save)
     }
 
@@ -147,11 +135,6 @@ class CompanionDetailActivity : FragmentActivity() {
         textName?.text = c.currentName
         participation = c.memoryParticipation
         refreshParticipationRow()
-
-        fieldEssence?.setText(c.essence)
-        fieldRelationship?.setText(c.relationshipNotes ?: "")
-        fieldLimits?.setText(limitsJsonToText(c.hardLimitsJson))
-        textAdaptations?.text = adaptationsToText(c.modelAdaptationsJson)
 
         draftContainer?.visibility = if (c.status == "draft") View.VISIBLE else View.GONE
     }
@@ -201,59 +184,19 @@ class CompanionDetailActivity : FragmentActivity() {
     }
 
     private fun save() {
-        val essence = fieldEssence?.text?.toString()?.trim().orEmpty()
-        if (essence.isEmpty()) {
-            Toast.makeText(this, R.string.mem_comp_essence_required, Toast.LENGTH_SHORT).show()
-            return
-        }
-        val relationship = fieldRelationship?.text?.toString()?.trim().orEmpty()
-        val limitsJson = limitsTextToJson(fieldLimits?.text?.toString().orEmpty())
-        // Model adaptations aren't editable here — persist whatever was loaded,
-        // unchanged, so a round-trip through this screen never drops them.
-        val adaptationsJson = record?.modelAdaptationsJson ?: "[]"
+        // Participation is the only field this screen still writes; the
+        // essence/relationship/limits/adaptations columns stay untouched.
         val id = companionId
         val part = participation
 
         runOffThread {
-            MemoryStore.getInstance(this).updateCompanionFields(
-                id, essence, relationship.ifEmpty { null }, part, limitsJson, adaptationsJson
-            )
+            MemoryStore.getInstance(this).updateCompanionParticipation(id, part)
             runOnUiThread {
                 Toast.makeText(this, R.string.mem_comp_saved_toast, Toast.LENGTH_SHORT).show()
                 finish()
             }
         }
     }
-
-    /* ------------------------------ json helpers ------------------------------ */
-
-    private fun limitsJsonToText(json: String?): String = try {
-        if (json.isNullOrBlank()) "" else {
-            val arr = JSONArray(json)
-            (0 until arr.length()).joinToString("\n") { arr.getString(it) }
-        }
-    } catch (_: Exception) { "" }
-
-    private fun limitsTextToJson(text: String): String {
-        val arr = JSONArray()
-        text.split("\n").map { it.trim() }.filter { it.isNotEmpty() }.forEach { arr.put(it) }
-        return arr.toString()
-    }
-
-    private fun adaptationsToText(json: String?): String = try {
-        if (json.isNullOrBlank()) getString(R.string.mem_comp_adaptations_empty) else {
-            val arr = JSONArray(json)
-            if (arr.length() == 0) getString(R.string.mem_comp_adaptations_empty)
-            else (0 until arr.length()).joinToString("\n") { i ->
-                val obj = arr.optJSONObject(i) ?: JSONObject()
-                getString(
-                    R.string.mem_comp_adaptation_row_fmt,
-                    obj.optString("model_tag"),
-                    obj.optString("notes")
-                )
-            }
-        }
-    } catch (_: Exception) { getString(R.string.mem_comp_adaptations_empty) }
 
     /* ------------------------------ off-thread ------------------------------ */
 
