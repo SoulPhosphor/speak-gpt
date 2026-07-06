@@ -219,6 +219,16 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="24dp"
                 android:text="@string/mem_edit_btn_save" />
+
+            <!-- Shown only when editing a draft (§14): accept = save + activate. -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_mem_accept"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:visibility="gone"
+                android:text="@string/mem_edit_accept" />
         </LinearLayout>
     </ScrollView>
 </androidx.constraintlayout.widget.ConstraintLayout>

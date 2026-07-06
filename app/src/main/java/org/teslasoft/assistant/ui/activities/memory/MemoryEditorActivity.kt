@@ -84,6 +84,7 @@ class MemoryEditorActivity : FragmentActivity() {
     private var chipsTargets: ChipGroup? = null
     private var btnAddTarget: MaterialButton? = null
     private var btnSave: MaterialButton? = null
+    private var btnAccept: MaterialButton? = null
 
     // Current selections.
     private var currentType: String = "fact"
@@ -129,6 +130,7 @@ class MemoryEditorActivity : FragmentActivity() {
         chipsTargets = findViewById(R.id.chips_targets)
         btnAddTarget = findViewById(R.id.btn_add_target)
         btnSave = findViewById(R.id.btn_mem_save)
+        btnAccept = findViewById(R.id.btn_mem_accept)
 
         titleView?.setText(if (memoryId == null) R.string.mem_edit_title_new else R.string.mem_edit_title_edit)
 
@@ -139,7 +141,8 @@ class MemoryEditorActivity : FragmentActivity() {
         btnImportance?.setOnClickListener { showImportancePicker() }
         btnScope?.setOnClickListener { showScopePicker() }
         btnAddTarget?.setOnClickListener { showTargetPicker() }
-        btnSave?.setOnClickListener { save() }
+        btnSave?.setOnClickListener { save(activate = false) }
+        btnAccept?.setOnClickListener { save(activate = true) }
 
         // Preset scope/target for a new memory opened from a scoped browser door.
         intent.getStringExtra("presetScope")?.takeIf { it in SCOPE_KEYS }?.let { currentScope = it }
@@ -182,6 +185,8 @@ class MemoryEditorActivity : FragmentActivity() {
                     }
                     refreshType()
                     refreshImportance()
+                    // A draft can be accepted (save + activate) right from here (§14).
+                    if (record.status == "draft") btnAccept?.visibility = View.VISIBLE
                 } else {
                     // New memory: a single preset target from a scoped door.
                     val presetTarget = intent.getStringExtra("presetTargetId")
@@ -404,7 +409,7 @@ class MemoryEditorActivity : FragmentActivity() {
 
     /* ------------------------------ save ------------------------------ */
 
-    private fun save() {
+    private fun save(activate: Boolean) {
         if (!ready) {
             Toast.makeText(this, R.string.mem_edit_still_loading, Toast.LENGTH_SHORT).show()
             return
@@ -448,7 +453,9 @@ class MemoryEditorActivity : FragmentActivity() {
                     scope = currentScope, kind = currentType, title = title, content = content,
                     importance = currentImportance, tagsJson = tagsJson,
                     worldIds = worldIds, roleplayCharacterIds = rpIds, campaignIds = campaignIds,
-                    projectIds = projectIds, companionIds = companionIds
+                    projectIds = projectIds, companionIds = companionIds,
+                    // Save keeps a draft a draft (§14); Accept activates it.
+                    status = if (activate) "active" else prior.status
                 )
                 store.updateMemory(updated, getString(R.string.memory_change_edited))
                 Librarian.getInstance(this).reindexMemory(prior.memoryId)

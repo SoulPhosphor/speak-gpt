@@ -2550,6 +2550,23 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         }
     }
 
+    /** Draft memories (§9), for the Pending screen. Newest first. */
+    fun draftMemories(): List<MemoryRecord> {
+        val db = readableDatabase
+        val out = ArrayList<MemoryRecord>()
+        db.query("memories", null, "status = 'draft'", null, null, null, "created_at DESC").use {
+            while (it.moveToNext()) out.add(readFullMemory(db, it))
+        }
+        return out
+    }
+
+    /** Count of draft memories, for the Pending banner. */
+    fun countDrafts(): Int {
+        readableDatabase.rawQuery("SELECT COUNT(*) FROM memories WHERE status = 'draft'", null).use {
+            return if (it.moveToFirst()) it.getInt(0) else 0
+        }
+    }
+
     /** Text browser (title/content LIKE, else most-recent). Archived rows are
      *  hidden unless [includeArchived]. */
     fun browseMemories(query: String?, includeArchived: Boolean, limit: Int): List<MemoryRecord> {

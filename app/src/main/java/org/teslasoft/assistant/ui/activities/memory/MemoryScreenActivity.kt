@@ -68,6 +68,7 @@ abstract class MemoryScreenActivity : FragmentActivity(), MemoryRowAdapter.OnRow
     private var btnAdd: ExtendedFloatingActionButton? = null
     private var filterBar: HorizontalScrollView? = null
     private var filterChips: ChipGroup? = null
+    private var pendingBanner: com.google.android.material.button.MaterialButton? = null
 
     protected var searchQuery: String = ""
 
@@ -105,6 +106,21 @@ abstract class MemoryScreenActivity : FragmentActivity(), MemoryRowAdapter.OnRow
     /** The filter chip row, for screens that populate it. */
     protected fun filterChipGroup(): ChipGroup? = filterChips
 
+    /** Called on the UI thread after each list load, so a screen can refresh
+     *  chrome that depends on the data (e.g. the browser's Pending banner). */
+    protected open fun onRowsRendered() {}
+
+    /** Show or hide the pinned Pending-memories banner (Stage 2.4). */
+    protected fun setPendingBanner(text: String?, onClick: (() -> Unit)?) {
+        if (text == null) {
+            pendingBanner?.visibility = View.GONE
+        } else {
+            pendingBanner?.visibility = View.VISIBLE
+            pendingBanner?.text = text
+            pendingBanner?.setOnClickListener { onClick?.invoke() }
+        }
+    }
+
     /* ------------------------------ event hooks ------------------------------ */
 
     protected open fun onAddClick() {}
@@ -133,6 +149,7 @@ abstract class MemoryScreenActivity : FragmentActivity(), MemoryRowAdapter.OnRow
         btnAdd = findViewById(R.id.btn_add)
         filterBar = findViewById(R.id.filter_bar)
         filterChips = findViewById(R.id.chips_filter)
+        pendingBanner = findViewById(R.id.pending_banner)
 
         titleView?.text = screenTitle()
 
@@ -208,6 +225,7 @@ abstract class MemoryScreenActivity : FragmentActivity(), MemoryRowAdapter.OnRow
                 adapter.setOnRowListener(this)
                 listView?.adapter = adapter
                 emptyView?.visibility = if (rows.isEmpty()) View.VISIBLE else View.GONE
+                onRowsRendered()
             }
         }.start()
     }

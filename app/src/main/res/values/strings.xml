@@ -1056,6 +1056,25 @@
     <string name="mem_source_hand">Entered by hand</string>
     <string name="mem_source_learned">Learned from chat</string>
 
+    <!-- Pending screen (Stage 2.4) -->
+    <string name="mem_pending_banner">Pending memories (%1$d) ›</string>
+    <string name="mem_pending_title">Pending memories</string>
+    <string name="mem_pending_select_all">Select all</string>
+    <string name="mem_pending_select_none">Select none</string>
+    <string name="mem_pending_accept">Accept</string>
+    <string name="mem_pending_delete">Delete</string>
+    <string name="mem_pending_empty">No pending memories.</string>
+    <string name="mem_pending_group">%1$s (%2$d)</string>
+    <string name="mem_pending_dest">%1$s · %2$s</string>
+    <string name="mem_pending_none_checked">Nothing selected.</string>
+    <string name="mem_pending_accept_title">Accept memories?</string>
+    <string name="mem_pending_accept_confirm">Accept %1$d memories?</string>
+    <string name="mem_pending_delete_title">Delete memories?</string>
+    <string name="mem_pending_delete_confirm">Delete %1$d memories? This cannot be undone.</string>
+    <string name="mem_pending_accepted_note">Accepted from Pending</string>
+    <string name="mem_pending_done">Done</string>
+    <string name="mem_edit_accept">Accept</string>
+
     <!-- Row action menu -->
     <string name="action_edit">Edit</string>
     <string name="action_protect">Protect</string>

@@ -61,6 +61,10 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
     /** Distinct tags across the loaded set, for the tag filter dialog. */
     @Volatile private var availableTags: List<String> = emptyList()
 
+    /** Draft count in the current (global or scoped) view, for the Pending
+     *  banner (§2.4). */
+    @Volatile private var pendingCount: Int = 0
+
     private var presetCompanionId: String? = null
     private var presetWorldId: String? = null
     private var presetCampaignId: String? = null
@@ -72,6 +76,27 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
     override fun addButtonText(): String = getString(R.string.btn_new_memory)
     override fun showFilterBar(): Boolean = true
     override fun renderFilterBar() { buildFilterChips() }
+
+    // Pending banner (§2.4): shown when the current view has drafts; opens the
+    // Pending screen pre-filtered to the same scope a scoped browser is showing.
+    override fun onRowsRendered() {
+        if (pendingCount > 0) {
+            setPendingBanner(getString(R.string.mem_pending_banner, pendingCount)) { openPending() }
+        } else {
+            setPendingBanner(null, null)
+        }
+    }
+
+    private fun openPending() {
+        startActivity(
+            android.content.Intent(this, MemoryPendingActivity::class.java)
+                .putExtra("chatId", chatId)
+                .putExtra("companionId", presetCompanionId)
+                .putExtra("worldId", presetWorldId)
+                .putExtra("campaignId", presetCampaignId)
+                .putExtra("roleplayCharacterId", presetRoleplayCharacterId)
+        )
+    }
 
     // The action bar's Companions link (only in the unscoped, global browser —
     // a scoped view is already about one thing, so the jump would be confusing).
@@ -116,6 +141,7 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
             else -> store.browseMemories(null, true, 1000)
         }
         availableTags = base.flatMap { parseTags(it.tagsJson) }.distinct().sortedBy { it.lowercase() }
+        pendingCount = base.count { it.status == "draft" }
 
         val q = query.trim().lowercase()
         var list = base
