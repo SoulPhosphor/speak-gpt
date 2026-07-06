@@ -350,6 +350,25 @@ Everything is on-device. No cloud sync, no accounts.
   source, modes). Pure logic (PromptAssembler, ModeSelection, NearDuplicate)
   is unit-tested. Read `memory-system-integration-plan.md` before
   touching `preferences/memory/`.
+  Phase 5 (the hand-editor UI) is built in `ui/activities/memory/`: a
+  **Memory manager** hub (`MemoryManagerActivity`, opened from a "Browse &
+  edit" button in Memory settings) over ten areas, all on a shared framework
+  — `MemoryScreenActivity` (abstract themed list scaffold) + `MemoryRowAdapter`
+  + `activity_memory_list`/`view_memory_row`. Areas: Memories browser/editor
+  (search/add/edit/protect/archive/delete + per-memory change-log, openable
+  scoped to a world/campaign/roleplay-character), Companions list + detail
+  (draft approve, participation, essence/hard-limits — **"Personas" is renamed
+  "Companions" in UI strings**; the app's Personas tile still opens the persona
+  editor, the memory-side companion view lives in the hub), My Personas,
+  Roleplay Characters (arc read-only), Worlds + Campaigns (pages, scoped memory
+  browsers, archive/delete teardown), Entities/Modes/Directives editors, and an
+  Owner-profile form. All CRUD is in `MemoryStore` (per-record upsert/delete
+  with tombstones; memory edits log prior state + drop stale vectors). The
+  detail pages are plain `FragmentActivity` forms (copying MemorySettings'
+  theme boilerplate); the list screens subclass `MemoryScreenActivity` and only
+  supply data + row actions. Follow-ups deferred (see the plan's Phase 5 note):
+  merge tooling, an abilities/spells column, and campaign→Quick-Settings live
+  wiring.
 - Markdown/LaTeX rendering, partial text selection, message edit/delete/copy/
   share, bulk select, image attach + DALL·E-style generation, in-app
   translator, playground, logit bias editor, AMOLED theme, onboarding flow.

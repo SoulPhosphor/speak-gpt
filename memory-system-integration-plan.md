@@ -561,7 +561,42 @@ coexistence, essence guardrail, failure behavior); D7 (compressor), D8.
 - **Visible result:** with tier 2 on, a companion demonstrably knows seeded
   facts; the debug view shows the exact assembled packet.
 
-### ☐ Phase 5 — Memory editor + companions/worlds/personas UI
+### ☑ Phase 5 — Memory editor + companions/worlds/personas UI
+**Landed July 2026.** What shipped: a **Memory manager** hub
+(`ui/activities/memory/MemoryManagerActivity`, reached from a "Browse & edit"
+button in Memory settings) linking ten areas, all on a shared framework —
+`MemoryScreenActivity` (abstract themed list scaffold: back/AMOLED/insets/
+search + off-thread row loading) + `MemoryRowAdapter`/`view_memory_row`/
+`activity_memory_list`. Areas: **Memories** browser/editor (search, add,
+edit via `EditMemoryDialogFragment`, protect/unprotect with handling notes,
+archive/restore, delete, per-memory change-log; can open scoped to a
+world/campaign/roleplay-character); **Companions** list + detail (draft badge
++ approve, memory_participation, essence/hard-limits/relationship-notes,
+read-only model-adaptations — identity stays app-owned, "Personas" renamed
+"Companions" in UI strings); **My Personas**; **Roleplay Characters**
+(definition editable, arc read-only); **Worlds** (page + world-scoped memory
+browser + archive/delete teardown with "keep character memories");
+**Campaigns** (cards + world/character/DM pickers + campaign-scoped browser +
+teardown); **Entities**, **Modes**, **Directives** editors; **Owner-profile**
+form. All store CRUD is in `MemoryStore` (Phase 5 foundation commit): per-record
+upsert/delete with `deleted_ids` tombstones; memory edits snapshot prior state
+into `change_log` and drop stale embeddings so a rebuild re-embeds; mode/
+directive edits preserve fields the form doesn't touch (scope/overrides/
+applies-to/origin) so a default record can't be wiped. The bulk of the
+per-area screens were built by parallel subagents against the framework, then
+integrated centrally (strings folded into `strings.xml`, activities registered
+in the manifest). DB v3 migration (campaigns table + `memories.campaign_id`)
+landed with the foundation; `activeMemoriesForScope`/`Librarian.search` gained
+a `campaignId` param (ordinary chat still can't see campaign-scoped rows).
+**Deferred to a follow-up (need a store/schema pass, not blocking the phase):**
+(1) merge tooling for duplicate worlds/characters/campaigns (needs
+`MemoryStore` merge methods); (2) a dedicated roleplay `abilities/spells`
+column (currently folded into the character description); (3) wiring an active
+campaign into live generation via Quick Settings (`MemoryStore.campaignScope`
+already resolves world/character/DM from a campaign — only the selector +
+`regularGPTResponse` plumbing remains); (4) scrubbing deleted user-persona /
+roleplay-character ids from per-chat Quick-Settings selectors (degrades
+gracefully today — a dangling id reads as "no scope").
 Specs: app_adaptation_notes §Tab structure, §Worlds UI, §Characters area,
 §New areas, §Required memory UI; `enforcer_librarian_spec.md` §Manual
 authority.
