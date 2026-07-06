@@ -218,22 +218,22 @@ class MemoryPendingActivity : FragmentActivity() {
                 groupBox.isChecked = groupRows.all { checked.contains(it.memoryId) }
             }
         }
-        val text = LinearLayout(this).apply {
+        val col = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
             setOnClickListener { openEditor(m.memoryId) }
         }
-        text.addView(TextView(this).apply {
+        col.addView(TextView(this).apply {
             text = m.title
             textSize = 16f
             setTextColor(resources.getColor(R.color.text_title, theme))
         })
-        text.addView(TextView(this).apply {
+        col.addView(TextView(this).apply {
             text = getString(R.string.mem_pending_dest, scopeLabel(m.scope), typeLabel(m.kind))
             textSize = 12f
             setTextColor(resources.getColor(R.color.text_subtitle, theme))
         })
-        text.addView(TextView(this).apply {
+        col.addView(TextView(this).apply {
             text = m.content.substringBefore('\n').trim()
             textSize = 13f
             maxLines = 1
@@ -241,7 +241,7 @@ class MemoryPendingActivity : FragmentActivity() {
             setTextColor(resources.getColor(R.color.text_subtitle, theme))
         })
         row.addView(box)
-        row.addView(text)
+        row.addView(col)
         return row
     }
 
