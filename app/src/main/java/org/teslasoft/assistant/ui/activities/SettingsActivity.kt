@@ -66,6 +66,8 @@ class SettingsActivity : FragmentActivity() {
 
     private var tileAccountFragment: TileFragment? = null
     private var tileCharacters: TileFragment? = null
+    private var tileMemorySystem: TileFragment? = null
+    private var tileRoleplay: TileFragment? = null
     private var tileVoiceSettings: TileFragment? = null
     private var tileImageModel: TileFragment? = null
     private var tileImageResolution: TileFragment? = null
@@ -187,6 +189,8 @@ class SettingsActivity : FragmentActivity() {
         transition.excludeTarget(R.id.btn_back, true)
         transition.excludeTarget(R.id.tile_account, true)
         transition.excludeTarget(R.id.tile_characters, true)
+        transition.excludeTarget(R.id.tile_memory_system, true)
+        transition.excludeTarget(R.id.tile_roleplay, true)
         transition.excludeTarget(R.id.tile_autosend, true)
         transition.excludeTarget(R.id.tile_voice, true)
         transition.excludeTarget(R.id.tile_voice_language, true)
@@ -241,6 +245,8 @@ class SettingsActivity : FragmentActivity() {
         transition2.excludeTarget(R.id.constraintLayout167, true)
         transition2.excludeTarget(R.id.tile_account, true)
         transition2.excludeTarget(R.id.tile_characters, true)
+        transition2.excludeTarget(R.id.tile_memory_system, true)
+        transition2.excludeTarget(R.id.tile_roleplay, true)
         transition2.excludeTarget(R.id.tile_autosend, true)
         transition2.excludeTarget(R.id.tile_voice, true)
         transition2.excludeTarget(R.id.tile_voice_language, true)
@@ -408,6 +414,34 @@ class SettingsActivity : FragmentActivity() {
                 chatId = chatId,
                 functionDesc = getString(R.string.tile_characters_desc),
                 transitionName = "expand_characters"
+            )
+
+            tileMemorySystem = TileFragment.newInstance(
+                checked = false,
+                checkable = false,
+                enabledText = getString(R.string.tile_memory_system_title),
+                disabledText = null,
+                enabledDesc = getString(R.string.tile_memory_system_desc),
+                disabledDesc = null,
+                icon = R.drawable.ic_storage,
+                disabled = false,
+                chatId = chatId,
+                functionDesc = getString(R.string.tile_memory_system_desc),
+                transitionName = null
+            )
+
+            tileRoleplay = TileFragment.newInstance(
+                checked = false,
+                checkable = false,
+                enabledText = getString(R.string.tile_roleplay_title),
+                disabledText = null,
+                enabledDesc = getString(R.string.tile_roleplay_desc),
+                disabledDesc = null,
+                icon = R.drawable.ic_book,
+                disabled = false,
+                chatId = chatId,
+                functionDesc = getString(R.string.tile_roleplay_desc),
+                transitionName = null
             )
 
             tileVoiceSettings = TileFragment.newInstance(
@@ -724,6 +758,8 @@ class SettingsActivity : FragmentActivity() {
     private fun placeFragments() : FragmentTransaction {
         val operation = supportFragmentManager.beginTransaction().replace(R.id.tile_account, tileAccountFragment!!)
             .replace(R.id.tile_characters, tileCharacters!!)
+            .replace(R.id.tile_memory_system, tileMemorySystem!!)
+            .replace(R.id.tile_roleplay, tileRoleplay!!)
             .replace(R.id.tile_voice_settings, tileVoiceSettings!!)
             .replace(R.id.tile_image_model, tileImageModel!!)
             .replace(R.id.tile_image_resolution, tileImageResolution!!)
@@ -773,6 +809,14 @@ class SettingsActivity : FragmentActivity() {
 
         tileCharacters?.setOnTileClickListener {
             startActivity(Intent(this, CharactersActivity::class.java).putExtra("chatId", chatId))
+        }
+
+        tileMemorySystem?.setOnTileClickListener {
+            startActivity(Intent(this, MemorySettingsActivity::class.java).putExtra("chatId", chatId))
+        }
+
+        tileRoleplay?.setOnTileClickListener {
+            startActivity(Intent(this, org.teslasoft.assistant.ui.activities.memory.RoleplayHubActivity::class.java).putExtra("chatId", chatId))
         }
 
         tileVoiceSettings?.setOnTileClickListener {

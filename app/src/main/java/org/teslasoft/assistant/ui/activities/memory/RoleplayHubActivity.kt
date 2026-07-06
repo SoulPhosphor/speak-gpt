@@ -21,32 +21,25 @@ import org.teslasoft.assistant.R
 import org.teslasoft.assistant.ui.adapters.memory.MemoryRow
 
 /**
- * The hub of the Phase 5 memory manager: a plain list of every area the user
- * can browse and edit by hand (memories, companions, personas, roleplay
- * characters, worlds, campaigns, entities, modes, directives, owner profile).
- * Reuses the shared list scaffold with search and the add-FAB off — each row
- * just opens its area, forwarding the chat id so scoped screens can read
- * per-chat context.
+ * The Roleplay hub: reached from the "Roleplay" card on the main Settings
+ * page. Groups the three roleplay-continuity areas — Worlds, Campaigns and
+ * Roleplay Characters — each opening its own editor. Kept separate from the
+ * Memory manager so fiction/game state never mixes with the companion memory
+ * surfaces.
  */
-class MemoryManagerActivity : MemoryScreenActivity() {
+class RoleplayHubActivity : MemoryScreenActivity() {
 
     private data class Area(val target: Class<*>, val titleRes: Int, val descRes: Int)
 
     private val areas by lazy {
         listOf(
-            Area(MemoryBrowserActivity::class.java, R.string.title_memories, R.string.mm_memories_desc),
-            Area(MemoryCompanionsActivity::class.java, R.string.mem_comp_title, R.string.mm_companions_desc),
-            Area(MemoryUserPersonasActivity::class.java, R.string.mem_pers_title_user_personas, R.string.mm_user_personas_desc),
-            // Worlds / Campaigns / Roleplay Characters live under the separate
-            // "Roleplay" card on the Settings page (RoleplayHubActivity).
-            Area(MemoryEntitiesActivity::class.java, R.string.mem_admin_title_entities, R.string.mm_entities_desc),
-            Area(MemoryModesActivity::class.java, R.string.mem_admin_title_modes, R.string.mm_modes_desc),
-            Area(MemoryDirectivesActivity::class.java, R.string.mem_admin_title_directives, R.string.mm_directives_desc),
-            Area(OwnerProfileActivity::class.java, R.string.mem_admin_title_owner_profile, R.string.mm_owner_desc)
+            Area(MemoryWorldsActivity::class.java, R.string.mem_world_title, R.string.mm_worlds_desc),
+            Area(MemoryCampaignsActivity::class.java, R.string.mem_world_campaigns_title, R.string.mm_campaigns_desc),
+            Area(MemoryRoleplayCharactersActivity::class.java, R.string.mem_pers_title_roleplay_characters, R.string.mm_roleplay_desc)
         )
     }
 
-    override fun screenTitle(): String = getString(R.string.title_memory_manager)
+    override fun screenTitle(): String = getString(R.string.title_roleplay)
     override fun showSearch(): Boolean = false
 
     override fun loadRows(query: String): List<MemoryRow> =

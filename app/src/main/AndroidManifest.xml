@@ -245,6 +245,12 @@
         </activity>
 
         <activity
+            android:name=".ui.activities.memory.RoleplayHubActivity"
+            android:exported="false"
+            android:label="@string/title_roleplay">
+        </activity>
+
+        <activity
             android:name=".ui.activities.memory.MemoryCompanionsActivity"
             android:exported="false"
             android:label="@string/mem_comp_title" />

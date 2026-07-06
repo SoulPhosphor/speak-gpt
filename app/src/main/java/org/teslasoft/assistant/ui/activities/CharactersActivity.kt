@@ -50,7 +50,6 @@ class CharactersActivity : FragmentActivity() {
     private var tileActivationPrompts: TileFragment? = null
     private var tileSystemMessage: TileFragment? = null
     private var tileLoreBooks: TileFragment? = null
-    private var tileMemory: TileFragment? = null
 
     private var personasActivityResultLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
@@ -182,26 +181,11 @@ class CharactersActivity : FragmentActivity() {
             transitionName = null
         )
 
-        tileMemory = TileFragment.newInstance(
-            checked = false,
-            checkable = false,
-            enabledText = getString(R.string.tile_memory_title),
-            disabledText = null,
-            enabledDesc = getString(R.string.tile_memory_desc),
-            disabledDesc = null,
-            icon = R.drawable.ic_storage,
-            disabled = false,
-            chatId = chatId,
-            functionDesc = getString(R.string.tile_memory_desc),
-            transitionName = null
-        )
-
         supportFragmentManager.beginTransaction()
             .replace(R.id.tile_personas_entry, tilePersonas!!)
             .replace(R.id.tile_activation_prompts_entry, tileActivationPrompts!!)
             .replace(R.id.tile_system_message_entry, tileSystemMessage!!)
             .replace(R.id.tile_lorebooks_entry, tileLoreBooks!!)
-            .replace(R.id.tile_memory_entry, tileMemory!!)
             .commit()
 
         tilePersonas?.setOnTileClickListener {
@@ -222,10 +206,6 @@ class CharactersActivity : FragmentActivity() {
 
         tileLoreBooks?.setOnTileClickListener {
             startActivity(Intent(this, LoreBooksListActivity::class.java))
-        }
-
-        tileMemory?.setOnTileClickListener {
-            startActivity(Intent(this, MemorySettingsActivity::class.java).putExtra("chatId", chatId))
         }
     }
 

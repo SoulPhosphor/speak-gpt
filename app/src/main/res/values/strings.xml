@@ -1084,7 +1084,7 @@
 
     <!-- ============ Phase 5 area screens: My personas & roleplay characters ============ -->
     <!-- My Personas (ui/activities/memory/MemoryUserPersonasActivity) -->
-    <string name="mem_pers_title_user_personas">My personas</string>
+    <string name="mem_pers_title_user_personas">My Personas</string>
     <string name="mem_pers_fab_add_persona">New persona</string>
     <string name="mem_pers_field_name">Name</string>
     <string name="mem_pers_field_presentation">Presentation</string>
@@ -1098,7 +1098,7 @@
     <string name="mem_pers_delete_persona_msg">Delete \"%1$s\"? This can\'t be undone.</string>
 
     <!-- Roleplay Characters (ui/activities/memory/MemoryRoleplayCharactersActivity) -->
-    <string name="mem_pers_title_roleplay_characters">Roleplay characters</string>
+    <string name="mem_pers_title_roleplay_characters">Roleplay Characters</string>
     <string name="mem_pers_fab_add_character">New character</string>
     <string name="mem_pers_field_description">Description</string>
     <string name="mem_pers_field_description_hint">Traits, appearance, voice — you can also list abilities or spells here for now; there isn\'t a separate field for those yet.</string>
@@ -1122,7 +1122,7 @@
     <string name="mem_admin_title_entities">Entities</string>
     <string name="mem_admin_title_modes">Modes</string>
     <string name="mem_admin_title_directives">Directives</string>
-    <string name="mem_admin_title_owner_profile">Owner profile</string>
+    <string name="mem_admin_title_owner_profile">Owner Profile</string>
 
     <!-- ============ FAB / add button labels ============ -->
     <string name="mem_admin_btn_new_entity">New entity</string>
@@ -1265,7 +1265,7 @@
     <string name="mem_world_op_failed">Something went wrong: %1$s</string>
 
     <!-- ============ Phase 5: memory manager hub ============ -->
-    <string name="title_memory_manager">Memory manager</string>
+    <string name="title_memory_manager">Memory Manager</string>
     <string name="mm_memories_desc">Facts, preferences and events your companions remember.</string>
     <string name="mm_companions_desc">Your companions and how they use memory.</string>
     <string name="mm_user_personas_desc">How you present yourself to the model.</string>
@@ -1276,4 +1276,11 @@
     <string name="mm_modes_desc">How companions shift tone in different moments.</string>
     <string name="mm_directives_desc">Standing instructions that always apply.</string>
     <string name="mm_owner_desc">Who you are, in the memory system\'s words.</string>
+
+    <!-- ============ Phase 5: Settings-page cards (Memory System / Roleplay) ============ -->
+    <string name="tile_memory_system_title">Memory System</string>
+    <string name="tile_memory_system_desc">Everything your companions remember — memories, companions, personas and more.</string>
+    <string name="tile_roleplay_title">Roleplay</string>
+    <string name="tile_roleplay_desc">Worlds, campaigns and the characters you play.</string>
+    <string name="title_roleplay">Roleplay</string>
 </resources>
