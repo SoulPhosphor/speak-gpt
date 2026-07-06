@@ -226,6 +226,15 @@ reference and call-site before pushing; update this file's checkbox + a
 one-line landing note, and CLAUDE.md's feature/storage sections, in the same
 PR that lands the phase.
 
+> **July 6 2026 — the Phase 5 rework comes before any further phase.**
+> Two work orders in `Memory System/` sequence it:
+> `phase5_rework_work_order.md` (stages 1–2: trust repairs + the new
+> memory structure/browser/pending flow) and `rag_engine_work_order.md`
+> (stages 3–4: retrieval engine + model rules). Complete them in order
+> before touching Phase 6. Where any phase text below conflicts with
+> `owner_approved_rules.md`, the rules win — Phase 6's original text has
+> known conflicts, flagged in a block inside that phase.
+
 ### ☑ Phase 0 — Repo hygiene (landed with this plan)
 - `.gitignore`: `example_seed*.json`, `*.db`, `memory-export*.json`,
   `transcripts-export*` — per the package README's "never commit a personal
@@ -492,6 +501,12 @@ machinery; NPC relationship facts are campaign-scoped memories referencing
 them.
 
 ### ☑ Phase 4 — Enforcer: tiers + prompt assembly
+**Note (July 6 2026):** parts of what landed here are retired or reworked
+by the owner rules — default modes deleted, directives and always-load
+retired, mode detection dormant, hard-limits render removed, scope
+eligibility and ranking rewritten, freshness cooldown added. The bullets
+below describe what was built THEN; `rag_engine_work_order.md` stage 3
+describes what it becomes.
 **Landed July 2026.** What shipped, in `preferences/memory/enforcer/`:
 `Enforcer` (orchestrator singleton; `assembleTurn` returns the ONE extra
 system message or null), `PromptAssembler` (pure renderer of the template —
@@ -636,6 +651,36 @@ authority.
 ### ☐ Phase 6 — Archivist pipeline + proposals + run reports
 Specs: `archivist_spec.md`, `archivist_prompt.md` (send verbatim with
 injections), `enforcer_librarian_spec.md` §Applying change-sets; D7.
+
+> **⚠ OWNER RULES OVERRIDE (July 6 2026) — the bullets below predate
+> `owner_approved_rules.md` and several are now WRONG. Binding
+> corrections:**
+> - **Nothing is ever auto-applied.** "Auto-applied changes with one-tap
+>   undo" is dead. Every Archivist output is a DRAFT: memory drafts into
+>   the Pending screen (rules §14), roleplay card-update suggestions with
+>   the four-way choice (§13, behind the on-by-default toggle — build
+>   that toggle in this phase), model-rule drafts into Model rules /
+>   Needs review (§11). The run report lists what was *proposed*, not
+>   what was changed; undo machinery for auto-applies is unnecessary.
+> - **No personality proposals. None.** Companion cards and user
+>   personas have one author (rules law 3). The Archivist never proposes
+>   companion/persona card content, not even as paste-ready text.
+> - **No directive or mode proposals.** Directives are retired (a
+>   context rule is an Instruction memory draft); modes are dormant
+>   until the owner designs their return.
+> - **No always_load anywhere** — the flag is dead (§10). "Tentative
+>   quarantine" reduces to: tentative provenance marker + dampened
+>   retrieval + draft status.
+> - **Sensitive inferences about the user** (emotional patterns, mood
+>   correlations) may not be stored at all without an approved proposal.
+> - **The Archivist never creates companions** (they mirror the app's
+>   personas only). The emergence ops for worlds/campaigns/RP characters
+>   survive ONLY as proposals requiring user naming + approval before
+>   anything exists — consistent with the amendment bullet below.
+> - The autonomy dials from `archivist_spec.md` collapse to the toggles
+>   the rules define; do not build dials that grant auto-apply.
+> - Read `archivist_spec.md`/`archivist_prompt.md` through this filter —
+>   they are pre-rules documents; where they conflict, the rules win.
 - Archivist settings screen (global): endpoint profile + model, autonomy
   dials, harvest generosity, run trigger (manual per spec).
 - "Process conversations" button with pending count. Run: build inputs
@@ -667,7 +712,10 @@ injections), `enforcer_librarian_spec.md` §Applying change-sets; D7.
 
 ### ☐ Phase 7 — Hardening + docs
 - End-to-end pass over `troubleshooting_guide.md`: every symptom's "where to
-  look / how to fix" must actually exist in the UI.
+  look / how to fix" must actually exist in the UI — but the guide is a
+  pre-rules document: check each workflow against `owner_approved_rules.md`
+  first and skip/flag the ones the rules removed (modes, directives,
+  always-load, autonomy dials).
 - Failure-mode sweep: mid-conversation degradation (store locked, model
   missing, embedding load failure) never blocks generation — tier drops to
   lore-books-only for that turn with an Event-log line.
@@ -682,7 +730,10 @@ Specs: D10; old roadmap Phase 8 merge rules.
   tombstones; conflicts surfaced, never silently overwritten.
 - Windows-side is a separate future project reading the same export format
   with its own (higher-quality) embedding model — nothing to build here
-  beyond keeping the export format documented and stable.
+  beyond keeping the export format documented and stable. Note: the stage-2
+  restructure (scope categories, six types, projects) changes the backup
+  JSON shape; document the post-restructure format as the stable one. A
+  converter for pre-restructure backups is built only if the owner asks.
 
 ## Sizing and delegation guidance
 

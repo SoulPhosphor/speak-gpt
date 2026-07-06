@@ -389,8 +389,10 @@ roleplay-suggestions toggle or stays a per-campaign opt-in.
 
 ## Deferred / to revisit with the owner
 
-- **World and campaign card sections** — the owner is designing these next
-  (§13). Includes the campaign story-so-far toggle question.
+- **World and campaign card sections** — the owner will return to these
+  when ready (§13; includes the campaign story-so-far toggle question).
+  Agents: do not prompt the owner about this, do not design ahead, do not
+  build. It waits as long as it waits.
 - The "Real-life memory in roleplay" per-chat setting (§3) — later, with
   the owner.
 - A converter for pre-restructure backup files — only if the owner asks.
