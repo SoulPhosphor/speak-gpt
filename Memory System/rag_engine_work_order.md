@@ -63,15 +63,19 @@ Every suppression is visible in the AssemblyLog debug view.
 - REMOVE from assembly: the directives section (retired), always-load
   memories (flag dead), the modes section and mode detection
   (machinery dormant — no mode ever renders until the owner designs
-  their return), suggested_mode handling, and the companion
-  hard-limits render (hard limits are card text the user writes; the
-  store columns are dormant).
-- KEEP: the owner-portrait line (the Owner profile form survives under
-  Advanced), retrieved memories with provenance markers and HANDLE WITH
-  CARE handling, entity summaries, lorebook notes rendered above
-  memories, near-duplicate suppression, the one-soft-toast degradation
-  contract (ANY failure → classic lorebook message, never blocks
-  generation).
+  their return), suggested_mode handling, the companion hard-limits
+  render (hard limits are card text the user writes; the store columns
+  are dormant), **the entire standing packet — the owner-portrait line
+  and entity summaries are DEAD** (owner ruling July 6 2026: what the
+  system knows about the user is Preference/Fact memories retrieved by
+  relevance, and people in the user's life are ordinary memories, not
+  "entities"; no special always-injected sections). Prune the
+  retrieval-policy `always_include` machinery accordingly — nothing is
+  always included.
+- KEEP: retrieved memories with provenance markers and HANDLE WITH
+  CARE handling, lorebook notes rendered above memories, near-duplicate
+  suppression, the one-soft-toast degradation contract (ANY failure →
+  classic lorebook message, never blocks generation).
 - Instruction-type memories render as handling rules when retrieved —
   same retrieval, distinct render so the model reads them as rules.
 - Update AssemblyLog for everything removed/added (cooldown suppressions,

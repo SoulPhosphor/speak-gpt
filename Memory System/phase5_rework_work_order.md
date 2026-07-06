@@ -79,22 +79,43 @@ memories". After delete, finish back to the list and refresh.
   it must tolerate their absence (do not delete the recognition code in
   stage 1 — just make absence safe).
 
-**1.4 Retire the Modes and Directives screens.**
-Remove `MemoryModesActivity`, `MemoryDirectivesActivity`, their edit
-dialogs, layouts, strings, and manifest entries, and their tiles from the
-hub. Tables and store CRUD stay (dormant). Do not remove Entities.
+**1.4 Retire the Modes, Directives, Entities, and Owner profile screens.**
+Remove `MemoryModesActivity`, `MemoryDirectivesActivity`,
+`MemoryEntitiesActivity`, `OwnerProfileActivity`, their edit dialogs,
+layouts, strings, and manifest entries, and their tiles from the hub.
+Tables and store CRUD stay (dormant). Owner ruling (July 6 2026): people
+in the user's life are real-world information — ordinary memories under
+the scope/type system — NOT "entities" with their own cards; and what the
+system knows about the user is Preference/Fact memories, NOT a profile
+form. Neither concept exists in this app's memory system.
 
-**1.5 Collapse the hub.**
-`MemoryManagerActivity` is replaced as the entry point: the "Browse &
-edit" button in Memory settings opens the Memories browser directly.
-The browser's action bar gains a link to **Companions**. Everything else
-(Entities, Worlds, Campaigns, Roleplay characters, Owner profile) moves
-behind a single "Advanced" entry reachable from the browser (one plain
-screen listing them). "My Personas" LEAVES the memory area entirely: its
-tile moves to the Characters hub (`CharactersActivity`), sitting with the
-other identity tiles. Roleplay-related entries stay where the Roleplay
-hub already surfaces them if it does; do not build new navigation beyond
-the above.
+**1.5 Collapse the hub.** *(Corrected twice July 6 2026 by the owner —
+this version is authoritative; there is NO "Advanced" screen.)*
+- **The Memories browser is the single GLOBAL browser over ALL scopes and
+  ALL types — roleplay included.** No memory anywhere is unreachable from
+  it. (Its full filter/sort rebuild is stage 2.3; stage 1 only rewires
+  navigation.)
+- `MemoryManagerActivity` is removed. The "Browse & edit" button in
+  Memory settings opens the Memories browser directly. The browser's
+  action bar gains a link to **Companions**. (In stage 2.4 the Pending
+  banner is pinned at the very top of the browser — pending first, then
+  browsing.)
+- **ONE Roleplay card on Settings** (the existing `RoleplayHubActivity`)
+  holds ALL roleplay areas — Worlds, Campaigns, Roleplay characters. Do
+  not duplicate them anywhere else, and do not scatter them.
+- **Every individual page links into the main browser**: the companion
+  detail page gets a **Memories** section/button at its bottom opening
+  the browser pre-filtered to that companion; each world page, campaign
+  page, and RP character page likewise has its Memories button into the
+  SAME central browser pre-filtered (Phase 5 built scoped browser
+  openings — keep them, but they must all be the one browser, and every
+  page must have its button).
+- Entities and Owner profile are REMOVED in task 1.4 — they get no rows,
+  no home, nothing. Memory settings gains no new navigation.
+- "My Personas" LEAVES the memory area entirely: its tile moves to the
+  Characters hub (`CharactersActivity`), sitting with the other identity
+  tiles.
+- Do not build any navigation beyond the above.
 
 **1.6 Update the docs.**
 Update CLAUDE.md's memory bullets and the integration plan's Phase 5
@@ -146,14 +167,16 @@ dropdown ("1 Low importance / 2 Minor / 3 Notable / 4 High /
 5 Critical"); title required. Protection/handling editing stays as is.
 
 **2.3 The browser rebuild.**
-Per the approved browser design: search + sort (newest/oldest) + filters
-(scope, type, tag, source, status) at the top; active sort/filter state
-always visible; state remembered when entering a memory and coming back
-and when leaving/returning; a Reset control returning to defaults
-(newest, no filters). Row layout, top to bottom: title → status → tags →
-first line of the content that would be injected. Scoped doors keep
-working (browser opened pre-filtered for a companion/world/campaign/RP
-character).
+Per the approved browser design — the FULL filtering system, not a
+subset: search + sort (newest/oldest) + filters for **scope, type, tag,
+source, AND status**, all at the top; active sort/filter state always
+visible; state remembered when entering a memory and coming back and
+when leaving/returning; a Reset control returning to defaults (newest,
+no filters). The browser is global over ALL scopes and types (roleplay
+included). Row layout, top to bottom: title → status → tags → first line
+of the content that would be injected. Scoped doors keep working
+(browser opened pre-filtered for a companion/world/campaign/RP
+character — the buttons wired in 1.5).
 
 **2.4 The Pending screen.**
 Per §14 in full: pinned banner ("Pending memories (N) ›", only when N>0)
