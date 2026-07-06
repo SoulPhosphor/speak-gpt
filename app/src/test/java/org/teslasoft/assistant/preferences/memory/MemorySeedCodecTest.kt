@@ -112,6 +112,42 @@ class MemorySeedCodecTest {
     }
 
     @Test
+    fun campaignLayerRoundTrips() {
+        // The 📌 campaign amendment adds a campaigns array and a memory
+        // campaign_id; both must survive a backup/restore cycle intact.
+        val withCampaign = """
+            {
+              "schema_version": "1.11.0",
+              "companions": [], "entities": [], "modes": [], "directives": [],
+              "worlds": [], "user_personas": [], "roleplay_characters": [], "proposals": [],
+              "campaigns": [
+                { "campaign_id": "camp-1", "name": "The Long Dark", "world_id": "w-1",
+                  "roleplay_character_id": "rc-1", "companion_id": "c-1",
+                  "status": "active", "story_so_far": "It began in the rain.",
+                  "created_at": "2026-07-06T00:00:00Z" }
+              ],
+              "memories": [
+                { "memory_id": "m-camp", "scope": "global", "kind": "state",
+                  "title": "Inventory", "content": "One silver key.",
+                  "campaign_id": "camp-1", "importance": 3, "always_load": false,
+                  "created_at": "2026-07-06T00:00:00Z", "status": "active" }
+              ]
+            }
+        """.trimIndent()
+
+        val data = MemorySeedCodec.parse(withCampaign)
+        assertEquals(1, data.campaigns.size)
+        assertEquals("The Long Dark", data.campaigns.first().name)
+        assertEquals("camp-1", data.memories.first().campaignId)
+
+        // Lossless round-trip including the new columns.
+        val back = MemorySeedCodec.parse(MemorySeedCodec.serialize(data))
+        assertEquals(data, back)
+        assertEquals("camp-1", back.memories.first().campaignId)
+        assertEquals("It began in the rain.", back.campaigns.first().storySoFar)
+    }
+
+    @Test
     fun exportEnvelopeCarriesChatsAndMeta() {
         val data = MemorySeedCodec.parse(fixtureJson())
         val chats = JSONArray().put(

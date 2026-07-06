@@ -49,7 +49,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
 
     companion object {
         const val DATABASE_NAME = "companion_memory.db"
-        private const val DATABASE_VERSION = 2
+        private const val DATABASE_VERSION = 3
 
         // meta keys
         const val META_SCHEMA_VERSION = "schema_version"
@@ -194,6 +194,21 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 "created_at TEXT)"
         )
 
+        // Campaign (roleplay continuity) layer — integration plan 📌 amendment.
+        // Created before `memories` so the memories.campaign_id foreign key
+        // resolves. Additive for existing installs (onUpgrade v3).
+        db.execSQL(
+            "CREATE TABLE campaigns (" +
+                "campaign_id TEXT PRIMARY KEY, " +
+                "name TEXT NOT NULL, " +
+                "world_id TEXT REFERENCES worlds(world_id), " +
+                "roleplay_character_id TEXT REFERENCES roleplay_characters(roleplay_character_id), " +
+                "companion_id TEXT REFERENCES companions(companion_id), " +
+                "status TEXT NOT NULL CHECK (status IN ('active','paused','ended','archived')), " +
+                "story_so_far TEXT, " +
+                "created_at TEXT)"
+        )
+
         db.execSQL(
             "CREATE TABLE memories (" +
                 "memory_id TEXT PRIMARY KEY, " +
@@ -207,6 +222,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 "always_load INTEGER NOT NULL DEFAULT 0, " +
                 "world_id TEXT REFERENCES worlds(world_id), " +
                 "roleplay_character_id TEXT REFERENCES roleplay_characters(roleplay_character_id), " +
+                "campaign_id TEXT REFERENCES campaigns(campaign_id), " +
                 "protection_json TEXT, " +
                 "mode_hints_json TEXT DEFAULT '[]', " +
                 "provenance_source TEXT, " +
@@ -337,6 +353,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         db.execSQL("CREATE INDEX idx_memories_always_load ON memories(always_load) WHERE always_load = 1")
         db.execSQL("CREATE INDEX idx_memories_world ON memories(world_id)")
         db.execSQL("CREATE INDEX idx_memories_rp_character ON memories(roleplay_character_id)")
+        db.execSQL("CREATE INDEX idx_memories_campaign ON memories(campaign_id)")
         db.execSQL("CREATE INDEX idx_memcomp_companion ON memory_companions(companion_id)")
         db.execSQL("CREATE INDEX idx_changelog_memory ON change_log(memory_id)")
         db.execSQL("CREATE INDEX idx_transcripts_queue ON transcripts(review_status) WHERE review_status = 'pending'")
@@ -345,7 +362,9 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
 
         val now = nowIso()
         db.execSQL("INSERT INTO meta (key, value) VALUES (?, ?)", arrayOf(META_SCHEMA_VERSION, "1.11.0"))
-        db.execSQL("INSERT INTO meta (key, value) VALUES (?, ?)", arrayOf(META_DB_MIGRATION, "1"))
+        // A fresh install is created at the latest schema, so db_migration
+        // starts at the current DATABASE_VERSION (never re-runs onUpgrade steps).
+        db.execSQL("INSERT INTO meta (key, value) VALUES (?, ?)", arrayOf(META_DB_MIGRATION, DATABASE_VERSION.toString()))
         db.execSQL("INSERT INTO app_state (id) VALUES (1)")
         // Archivist defaults mirror the public template: memory work automatic,
         // anything touching rules or identity proposed.
@@ -378,6 +397,29 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             db.execSQL(
                 "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                 arrayOf(META_DB_MIGRATION, "2")
+            )
+        }
+        if (oldVersion < 3) {
+            // v3 (July 2026, Phase 5): the Campaign (roleplay continuity) layer.
+            // A new campaigns table plus a nullable memories.campaign_id so
+            // game-state facts key to one playthrough. Additive; existing
+            // memories default to campaign_id NULL (real-life / non-campaign).
+            db.execSQL(
+                "CREATE TABLE campaigns (" +
+                    "campaign_id TEXT PRIMARY KEY, " +
+                    "name TEXT NOT NULL, " +
+                    "world_id TEXT REFERENCES worlds(world_id), " +
+                    "roleplay_character_id TEXT REFERENCES roleplay_characters(roleplay_character_id), " +
+                    "companion_id TEXT REFERENCES companions(companion_id), " +
+                    "status TEXT NOT NULL CHECK (status IN ('active','paused','ended','archived')), " +
+                    "story_so_far TEXT, " +
+                    "created_at TEXT)"
+            )
+            db.execSQL("ALTER TABLE memories ADD COLUMN campaign_id TEXT REFERENCES campaigns(campaign_id)")
+            db.execSQL("CREATE INDEX idx_memories_campaign ON memories(campaign_id)")
+            db.execSQL(
+                "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                arrayOf(META_DB_MIGRATION, "3")
             )
         }
     }
@@ -424,6 +466,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             "worlds" to "worlds",
             "user_personas" to "user_personas",
             "roleplay_characters" to "roleplay_characters",
+            "campaigns" to "campaigns",
             "proposals" to "proposals",
             "transcripts" to "transcripts"
         )
@@ -747,6 +790,15 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 report.addAdded("roleplay characters")
             }
 
+            // Campaigns before memories: memories.campaign_id foreign-keys here.
+            for (c in data.campaigns) {
+                if (rowExists(db, "campaigns", "campaign_id", c.campaignId)) {
+                    report.addSkipped("campaigns"); continue
+                }
+                db.insert("campaigns", null, campaignValues(c))
+                report.addAdded("campaigns")
+            }
+
             for (m in data.memories) {
                 if (rowExists(db, "memories", "memory_id", m.memoryId)) {
                     report.addSkipped("memories"); continue
@@ -763,6 +815,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                     put("always_load", if (m.alwaysLoad) 1 else 0)
                     put("world_id", m.worldId)
                     put("roleplay_character_id", m.roleplayCharacterId)
+                    put("campaign_id", m.campaignId)
                     put("protection_json", m.protectionJson)
                     put("mode_hints_json", m.modeHintsJson)
                     put("provenance_source", m.provenanceSource)
@@ -993,6 +1046,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                         alwaysLoad = it.getInt(it.getColumnIndexOrThrow("always_load")) == 1,
                         worldId = it.getStringOrNull("world_id"),
                         roleplayCharacterId = it.getStringOrNull("roleplay_character_id"),
+                        campaignId = it.getStringOrNull("campaign_id"),
                         protectionJson = it.getStringOrNull("protection_json"),
                         modeHintsJson = it.getStringOrNull("mode_hints_json") ?: "[]",
                         provenanceSource = it.getStringOrNull("provenance_source"),
@@ -1109,6 +1163,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             }
         }
 
+        val campaigns = readCampaigns(null, null)
+
         return MemoryStoreData(
             schemaVersion = getMeta(META_SCHEMA_VERSION) ?: "1.11.0",
             ownerProfile = owner,
@@ -1123,7 +1179,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             archivistSettings = archivist,
             proposals = proposals,
             retrievalPolicyJson = retrievalPolicy,
-            transcripts = transcripts
+            transcripts = transcripts,
+            campaigns = campaigns
         )
     }
 
@@ -1496,7 +1553,11 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
      * (a draft companion's memories must never reach a live prompt; that gate
      * is what keeps an unapproved companion's records out of injection).
      */
-    fun activeMemoriesForScope(companionId: String?, worldId: String?): List<RetrievableMemory> {
+    fun activeMemoriesForScope(
+        companionId: String?,
+        worldId: String?,
+        campaignId: String? = null
+    ): List<RetrievableMemory> {
         val out = ArrayList<RetrievableMemory>()
         val args = ArrayList<String>()
         val sb = StringBuilder(
@@ -1519,6 +1580,16 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         } else {
             sb.append(" AND (m.world_id IS NULL OR m.world_id = ?)")
             args.add(worldId)
+        }
+        // Campaign isolation (📌 amendment #4): ordinary conversation
+        // (campaignId null) never sees campaign-scoped rows, and those rows are
+        // invisible to OTHER campaigns; only when a campaign is active do its
+        // game-state facts join the mix alongside the non-campaign rows above.
+        if (campaignId == null) {
+            sb.append(" AND m.campaign_id IS NULL")
+        } else {
+            sb.append(" AND (m.campaign_id IS NULL OR m.campaign_id = ?)")
+            args.add(campaignId)
         }
         readableDatabase.rawQuery(sb.toString(), args.toTypedArray()).use {
             while (it.moveToNext()) out.add(readRetrievable(it))
@@ -1745,6 +1816,698 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             }
         }
         return out
+    }
+
+    /* ---------------------------------------------------------------------- */
+    /* Phase 5 editor CRUD                                                     */
+    /*                                                                         */
+    /* Hand-editing surface for every record type. Deletions of synced record */
+    /* types leave a deleted_ids tombstone (D10). Memory edits snapshot prior  */
+    /* state into change_log and drop stale embeddings so the librarian never  */
+    /* matches on out-of-date vectors (the index-rebuild hint then surfaces).  */
+    /* ---------------------------------------------------------------------- */
+
+    /* -------- owner profile -------- */
+
+    fun upsertOwnerProfile(portrait: String, standingContext: String?) {
+        writableDatabase.execSQL(
+            "INSERT INTO owner_profile (id, portrait, standing_context, updated_at) VALUES (1, ?, ?, ?) " +
+                "ON CONFLICT(id) DO UPDATE SET portrait = excluded.portrait, " +
+                "standing_context = excluded.standing_context, updated_at = excluded.updated_at",
+            arrayOf(portrait, standingContext, nowIso())
+        )
+    }
+
+    /* -------- companions (user-editable fields; identity stays app-owned) -------- */
+
+    fun getCompanion(companionId: String): CompanionRecord? {
+        readableDatabase.query("companions", null, "companion_id = ?", arrayOf(companionId), null, null, null).use {
+            return if (it.moveToFirst()) readCompanion(it, includeHistory = true) else null
+        }
+    }
+
+    /** User edits are direct (the Archivist's essence/limit changes are
+     *  proposal-bound instead). Never touches identity/mirror columns. */
+    fun updateCompanionFields(
+        companionId: String,
+        essence: String,
+        relationshipNotes: String?,
+        memoryParticipation: String,
+        hardLimitsJson: String,
+        modelAdaptationsJson: String
+    ) {
+        writableDatabase.update("companions", ContentValues().apply {
+            put("essence", essence)
+            put("relationship_notes", relationshipNotes)
+            put("memory_participation", memoryParticipation)
+            put("hard_limits_json", hardLimitsJson)
+            put("model_adaptations_json", modelAdaptationsJson)
+        }, "companion_id = ?", arrayOf(companionId))
+    }
+
+    /** Draft -> active is the approve action; also used to rest/retire. */
+    fun setCompanionStatus(companionId: String, status: String) {
+        writableDatabase.update(
+            "companions", ContentValues().apply { put("status", status) },
+            "companion_id = ?", arrayOf(companionId)
+        )
+    }
+
+    /* -------- entities -------- */
+
+    fun getEntities(): List<EntityRecord> = readEntities(null, null)
+
+    fun getEntity(entityId: String): EntityRecord? = readEntities("entity_id = ?", arrayOf(entityId)).firstOrNull()
+
+    private fun readEntities(selection: String?, args: Array<String>?): List<EntityRecord> {
+        val out = ArrayList<EntityRecord>()
+        readableDatabase.query("entities", null, selection, args, null, null, "name ASC").use {
+            while (it.moveToNext()) {
+                out.add(
+                    EntityRecord(
+                        entityId = it.getString(it.getColumnIndexOrThrow("entity_id")),
+                        kind = it.getString(it.getColumnIndexOrThrow("kind")),
+                        name = it.getString(it.getColumnIndexOrThrow("name")),
+                        aliasesJson = it.getStringOrNull("aliases_json") ?: "[]",
+                        summary = it.getString(it.getColumnIndexOrThrow("summary")),
+                        status = it.getStringOrNull("status"),
+                        importance = it.getInt(it.getColumnIndexOrThrow("importance")),
+                        lastTouched = it.getStringOrNull("last_touched"),
+                        origin = it.getStringOrNull("origin") ?: "user"
+                    )
+                )
+            }
+        }
+        return out
+    }
+
+    fun upsertEntity(e: EntityRecord) {
+        writableDatabase.insertWithOnConflict("entities", null, ContentValues().apply {
+            put("entity_id", e.entityId)
+            put("kind", e.kind)
+            put("name", e.name)
+            put("aliases_json", e.aliasesJson)
+            put("summary", e.summary)
+            put("status", e.status)
+            put("importance", e.importance)
+            put("last_touched", e.lastTouched ?: nowIso())
+            put("origin", e.origin)
+        }, SQLiteDatabase.CONFLICT_REPLACE)
+    }
+
+    fun deleteEntity(entityId: String) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            // memory_entities has no ON DELETE for the entity side — scrub links first.
+            db.delete("memory_entities", "entity_id = ?", arrayOf(entityId))
+            db.delete("entities", "entity_id = ?", arrayOf(entityId))
+            recordDeletionTx(db, "entity", entityId)
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    /* -------- modes -------- */
+
+    fun getMode(modeId: String): ModeRecord? = getModes().firstOrNull { it.modeId == modeId }
+
+    fun upsertMode(m: ModeRecord) {
+        writableDatabase.insertWithOnConflict("modes", null, ContentValues().apply {
+            put("mode_id", m.modeId)
+            put("name", m.name)
+            put("purpose", m.purpose)
+            put("signals_json", m.signalsJson)
+            put("respond_json", m.respondJson)
+            put("avoid_json", m.avoidJson)
+            put("transition_note", m.transitionNote)
+            put("overrides_json", m.overridesJson)
+            put("scope", m.scope)
+            put("companion_ids_json", m.companionIdsJson)
+            put("origin", m.origin)
+        }, SQLiteDatabase.CONFLICT_REPLACE)
+    }
+
+    fun deleteMode(modeId: String) {
+        writableDatabase.delete("modes", "mode_id = ?", arrayOf(modeId))
+        recordDeletion("mode", modeId)
+    }
+
+    /* -------- directives -------- */
+
+    fun getDirective(directiveId: String): DirectiveRecord? =
+        getDirectives().firstOrNull { it.directiveId == directiveId }
+
+    fun upsertDirective(d: DirectiveRecord) {
+        writableDatabase.insertWithOnConflict("directives", null, ContentValues().apply {
+            put("directive_id", d.directiveId)
+            put("text", d.text)
+            put("rationale", d.rationale)
+            put("applies_to_json", d.appliesToJson)
+            put("priority", d.priority)
+            put("origin", d.origin)
+        }, SQLiteDatabase.CONFLICT_REPLACE)
+    }
+
+    fun deleteDirective(directiveId: String) {
+        writableDatabase.delete("directives", "directive_id = ?", arrayOf(directiveId))
+        recordDeletion("directive", directiveId)
+    }
+
+    /* -------- user personas -------- */
+
+    fun getAllUserPersonas(): List<UserPersonaRecord> = readUserPersonas(null, null)
+
+    fun upsertUserPersona(p: UserPersonaRecord) {
+        writableDatabase.insertWithOnConflict("user_personas", null, ContentValues().apply {
+            put("persona_id", p.personaId)
+            put("name", p.name)
+            put("presentation", p.presentation)
+            put("status", p.status)
+            put("created_at", p.createdAt ?: nowIso())
+        }, SQLiteDatabase.CONFLICT_REPLACE)
+    }
+
+    fun setUserPersonaStatus(personaId: String, status: String) {
+        writableDatabase.update(
+            "user_personas", ContentValues().apply { put("status", status) },
+            "persona_id = ?", arrayOf(personaId)
+        )
+    }
+
+    fun deleteUserPersona(personaId: String) {
+        writableDatabase.delete("user_personas", "persona_id = ?", arrayOf(personaId))
+        recordDeletion("user_persona", personaId)
+    }
+
+    /* -------- roleplay characters (definition user-editable; arc read-only in UI) -------- */
+
+    fun getAllRoleplayCharacters(): List<RoleplayCharacterRecord> = readRoleplayCharacters(null, null)
+
+    fun upsertRoleplayCharacter(r: RoleplayCharacterRecord) {
+        writableDatabase.insertWithOnConflict("roleplay_characters", null, ContentValues().apply {
+            put("roleplay_character_id", r.roleplayCharacterId)
+            put("name", r.name)
+            put("played_by", r.playedBy)
+            put("description", r.description)
+            put("arc", r.arc)
+            put("worlds_played_json", r.worldsPlayedJson)
+            put("status", r.status)
+            put("created_at", r.createdAt ?: nowIso())
+        }, SQLiteDatabase.CONFLICT_REPLACE)
+    }
+
+    fun setRoleplayCharacterStatus(id: String, status: String) {
+        writableDatabase.update(
+            "roleplay_characters", ContentValues().apply { put("status", status) },
+            "roleplay_character_id = ?", arrayOf(id)
+        )
+    }
+
+    /** Teardown: delete the character; its memories are either removed (their
+     *  embeddings cascade) or freed by nulling the link. Tombstone left. */
+    fun deleteRoleplayCharacter(id: String, deleteMemories: Boolean) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            if (deleteMemories) {
+                deleteMemoriesWhere(db, "roleplay_character_id = ?", arrayOf(id))
+            } else {
+                db.update("memories", ContentValues().apply { putNull("roleplay_character_id") },
+                    "roleplay_character_id = ?", arrayOf(id))
+            }
+            db.delete("roleplay_characters", "roleplay_character_id = ?", arrayOf(id))
+            recordDeletionTx(db, "roleplay_character", id)
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    /* -------- worlds -------- */
+
+    fun getAllWorlds(): List<WorldRecord> = readWorlds(null, null)
+
+    fun upsertWorld(w: WorldRecord) {
+        writableDatabase.insertWithOnConflict("worlds", null, ContentValues().apply {
+            put("world_id", w.worldId)
+            put("name", w.name)
+            put("premise", w.premise)
+            put("rules", w.rules)
+            put("companion_ids_json", w.companionIdsJson)
+            put("status", w.status)
+            put("created_at", w.createdAt ?: nowIso())
+        }, SQLiteDatabase.CONFLICT_REPLACE)
+    }
+
+    /** Archive-all teardown: the world is marked ended and its still-active
+     *  memories archived (vectors dropped, per the archive rule). Reversible by
+     *  re-activating the memories from the memory editor. */
+    fun archiveWorld(worldId: String) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.update("worlds", ContentValues().apply { put("status", "ended") },
+                "world_id = ?", arrayOf(worldId))
+            archiveMemoriesWhere(db, "world_id = ? AND status = 'active'", arrayOf(worldId))
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    /**
+     * Delete-all teardown for a world. [keepCharacterMemories] honours the
+     * table plan's option: memories that ALSO belong to a roleplay character
+     * are kept (their world link nulled) so the character walks away clean;
+     * pure world memories are removed. When false, every world-scoped memory
+     * is deleted.
+     */
+    fun deleteWorld(worldId: String, deleteMemories: Boolean, keepCharacterMemories: Boolean) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            if (deleteMemories) {
+                if (keepCharacterMemories) {
+                    db.update("memories", ContentValues().apply { putNull("world_id") },
+                        "world_id = ? AND roleplay_character_id IS NOT NULL", arrayOf(worldId))
+                    deleteMemoriesWhere(db, "world_id = ? AND roleplay_character_id IS NULL", arrayOf(worldId))
+                } else {
+                    deleteMemoriesWhere(db, "world_id = ?", arrayOf(worldId))
+                }
+            } else {
+                db.update("memories", ContentValues().apply { putNull("world_id") },
+                    "world_id = ?", arrayOf(worldId))
+            }
+            // Campaigns anchored to this world lose their anchor but survive.
+            db.update("campaigns", ContentValues().apply { putNull("world_id") },
+                "world_id = ?", arrayOf(worldId))
+            db.delete("worlds", "world_id = ?", arrayOf(worldId))
+            recordDeletionTx(db, "world", worldId)
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    /* -------- campaigns (📌 amendment) -------- */
+
+    fun getCampaigns(): List<CampaignRecord> = readCampaigns(null, null)
+
+    fun getActiveCampaigns(): List<CampaignRecord> = readCampaigns("status = 'active'", null)
+
+    fun getCampaign(campaignId: String): CampaignRecord? =
+        readCampaigns("campaign_id = ?", arrayOf(campaignId)).firstOrNull()
+
+    private fun readCampaigns(selection: String?, args: Array<String>?): List<CampaignRecord> {
+        val out = ArrayList<CampaignRecord>()
+        readableDatabase.query("campaigns", null, selection, args, null, null, "created_at ASC, name ASC").use {
+            while (it.moveToNext()) {
+                out.add(
+                    CampaignRecord(
+                        campaignId = it.getString(it.getColumnIndexOrThrow("campaign_id")),
+                        name = it.getString(it.getColumnIndexOrThrow("name")),
+                        worldId = it.getStringOrNull("world_id"),
+                        roleplayCharacterId = it.getStringOrNull("roleplay_character_id"),
+                        companionId = it.getStringOrNull("companion_id"),
+                        status = it.getString(it.getColumnIndexOrThrow("status")),
+                        storySoFar = it.getStringOrNull("story_so_far"),
+                        createdAt = it.getStringOrNull("created_at")
+                    )
+                )
+            }
+        }
+        return out
+    }
+
+    private fun campaignValues(c: CampaignRecord) = ContentValues().apply {
+        put("campaign_id", c.campaignId)
+        put("name", c.name)
+        put("world_id", c.worldId)
+        put("roleplay_character_id", c.roleplayCharacterId)
+        put("companion_id", c.companionId)
+        put("status", c.status)
+        put("story_so_far", c.storySoFar)
+        put("created_at", c.createdAt ?: nowIso())
+    }
+
+    fun upsertCampaign(c: CampaignRecord) {
+        writableDatabase.insertWithOnConflict("campaigns", null, campaignValues(c), SQLiteDatabase.CONFLICT_REPLACE)
+    }
+
+    fun setCampaignStatus(campaignId: String, status: String) {
+        writableDatabase.update(
+            "campaigns", ContentValues().apply { put("status", status) },
+            "campaign_id = ?", arrayOf(campaignId)
+        )
+    }
+
+    /** One selection implies the rest (📌 amendment #5): the active campaign's
+     *  world, user character and DM companion, so Quick Settings needs one
+     *  control, not three. Null id -> all null. */
+    fun campaignScope(campaignId: String?): Triple<String?, String?, String?> {
+        if (campaignId.isNullOrBlank()) return Triple(null, null, null)
+        val c = getCampaign(campaignId) ?: return Triple(null, null, null)
+        return Triple(c.worldId, c.roleplayCharacterId, c.companionId)
+    }
+
+    /** Archive-all teardown: campaign archived, its active memories archived. */
+    fun archiveCampaign(campaignId: String) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.update("campaigns", ContentValues().apply { put("status", "archived") },
+                "campaign_id = ?", arrayOf(campaignId))
+            archiveMemoriesWhere(db, "campaign_id = ? AND status = 'active'", arrayOf(campaignId))
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    /** Delete-all teardown: the world and character walk away clean — only the
+     *  campaign and (optionally) its campaign-scoped memories go. */
+    fun deleteCampaign(campaignId: String, deleteMemories: Boolean) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            if (deleteMemories) {
+                deleteMemoriesWhere(db, "campaign_id = ?", arrayOf(campaignId))
+            } else {
+                db.update("memories", ContentValues().apply { putNull("campaign_id") },
+                    "campaign_id = ?", arrayOf(campaignId))
+            }
+            db.delete("campaigns", "campaign_id = ?", arrayOf(campaignId))
+            recordDeletionTx(db, "campaign", campaignId)
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    /* -------- memories (full editor CRUD) -------- */
+
+    fun getMemory(memoryId: String): MemoryRecord? {
+        val db = readableDatabase
+        db.query("memories", null, "memory_id = ?", arrayOf(memoryId), null, null, null).use {
+            return if (it.moveToFirst()) readFullMemory(db, it) else null
+        }
+    }
+
+    /** Text browser (title/content LIKE, else most-recent). Archived rows are
+     *  hidden unless [includeArchived]. */
+    fun browseMemories(query: String?, includeArchived: Boolean, limit: Int): List<MemoryRecord> {
+        val db = readableDatabase
+        val where = StringBuilder()
+        val args = ArrayList<String>()
+        val q = query?.trim().orEmpty()
+        if (q.isNotEmpty()) {
+            val like = "%${q.replace("%", "").replace("_", "")}%"
+            where.append("(title LIKE ? OR content LIKE ?)")
+            args.add(like); args.add(like)
+        }
+        if (!includeArchived) {
+            if (where.isNotEmpty()) where.append(" AND ")
+            where.append("status = 'active'")
+        }
+        val out = ArrayList<MemoryRecord>()
+        db.query(
+            "memories", null, where.toString().ifEmpty { null }, if (args.isEmpty()) null else args.toTypedArray(),
+            null, null, "updated_at DESC, created_at DESC", limit.toString()
+        ).use {
+            while (it.moveToNext()) out.add(readFullMemory(db, it))
+        }
+        return out
+    }
+
+    fun memoriesForWorld(worldId: String, includeArchived: Boolean): List<MemoryRecord> =
+        readMemoriesWhere("world_id = ?", arrayOf(worldId), includeArchived)
+
+    fun memoriesForCampaign(campaignId: String, includeArchived: Boolean): List<MemoryRecord> =
+        readMemoriesWhere("campaign_id = ?", arrayOf(campaignId), includeArchived)
+
+    fun memoriesForRoleplayCharacter(id: String, includeArchived: Boolean): List<MemoryRecord> =
+        readMemoriesWhere("roleplay_character_id = ?", arrayOf(id), includeArchived)
+
+    fun memoriesForCompanion(companionId: String, includeArchived: Boolean): List<MemoryRecord> {
+        val db = readableDatabase
+        val statusClause = if (includeArchived) "" else " AND m.status = 'active'"
+        val out = ArrayList<MemoryRecord>()
+        db.rawQuery(
+            "SELECT m.* FROM memories m JOIN memory_companions mc ON mc.memory_id = m.memory_id " +
+                "WHERE mc.companion_id = ?$statusClause ORDER BY m.updated_at DESC, m.created_at DESC",
+            arrayOf(companionId)
+        ).use {
+            while (it.moveToNext()) out.add(readFullMemory(db, it))
+        }
+        return out
+    }
+
+    private fun readMemoriesWhere(where: String, args: Array<String>, includeArchived: Boolean): List<MemoryRecord> {
+        val db = readableDatabase
+        val full = if (includeArchived) where else "$where AND status = 'active'"
+        val out = ArrayList<MemoryRecord>()
+        db.query("memories", null, full, args, null, null, "updated_at DESC, created_at DESC").use {
+            while (it.moveToNext()) out.add(readFullMemory(db, it))
+        }
+        return out
+    }
+
+    private fun readFullMemory(db: SQLiteDatabase, it: Cursor): MemoryRecord {
+        val id = it.getString(it.getColumnIndexOrThrow("memory_id"))
+        return MemoryRecord(
+            memoryId = id,
+            scope = it.getString(it.getColumnIndexOrThrow("scope")),
+            kind = it.getString(it.getColumnIndexOrThrow("kind")),
+            title = it.getString(it.getColumnIndexOrThrow("title")),
+            content = it.getString(it.getColumnIndexOrThrow("content")),
+            embeddingText = it.getStringOrNull("embedding_text"),
+            tagsJson = it.getStringOrNull("tags_json") ?: "[]",
+            importance = it.getInt(it.getColumnIndexOrThrow("importance")),
+            alwaysLoad = it.getInt(it.getColumnIndexOrThrow("always_load")) == 1,
+            worldId = it.getStringOrNull("world_id"),
+            roleplayCharacterId = it.getStringOrNull("roleplay_character_id"),
+            campaignId = it.getStringOrNull("campaign_id"),
+            protectionJson = it.getStringOrNull("protection_json"),
+            modeHintsJson = it.getStringOrNull("mode_hints_json") ?: "[]",
+            provenanceSource = it.getStringOrNull("provenance_source"),
+            provenanceConfidence = it.getStringOrNull("provenance_confidence"),
+            provenanceNotedOn = it.getStringOrNull("provenance_noted_on"),
+            provenanceContext = it.getStringOrNull("provenance_context"),
+            createdAt = it.getString(it.getColumnIndexOrThrow("created_at")) ?: "",
+            updatedAt = it.getStringOrNull("updated_at"),
+            status = it.getString(it.getColumnIndexOrThrow("status")),
+            supersedes = it.getStringOrNull("supersedes"),
+            companionIds = readJoin(db, "memory_companions", "companion_id", id),
+            entityRefs = readJoin(db, "memory_entities", "entity_id", id),
+            changeLog = readChangeLog(db, id),
+            origin = it.getStringOrNull("origin") ?: "user"
+        )
+    }
+
+    private fun memoryValues(m: MemoryRecord) = ContentValues().apply {
+        put("memory_id", m.memoryId)
+        put("scope", m.scope)
+        put("kind", m.kind)
+        put("title", m.title)
+        put("content", m.content)
+        put("embedding_text", m.embeddingText)
+        put("tags_json", m.tagsJson)
+        put("importance", m.importance)
+        put("always_load", if (m.alwaysLoad) 1 else 0)
+        put("world_id", m.worldId)
+        put("roleplay_character_id", m.roleplayCharacterId)
+        put("campaign_id", m.campaignId)
+        put("protection_json", m.protectionJson)
+        put("mode_hints_json", m.modeHintsJson)
+        put("provenance_source", m.provenanceSource)
+        put("provenance_confidence", m.provenanceConfidence)
+        put("provenance_noted_on", m.provenanceNotedOn)
+        put("provenance_context", m.provenanceContext)
+        put("created_at", m.createdAt)
+        put("updated_at", m.updatedAt)
+        put("status", m.status)
+        put("supersedes", m.supersedes)
+        put("origin", m.origin)
+    }
+
+    private fun writeMemoryLinks(db: SQLiteDatabase, m: MemoryRecord) {
+        db.delete("memory_companions", "memory_id = ?", arrayOf(m.memoryId))
+        for (cid in m.companionIds) {
+            db.insertWithOnConflict("memory_companions", null, ContentValues().apply {
+                put("memory_id", m.memoryId); put("companion_id", cid)
+            }, SQLiteDatabase.CONFLICT_IGNORE)
+        }
+        db.delete("memory_entities", "memory_id = ?", arrayOf(m.memoryId))
+        for (eid in m.entityRefs) {
+            db.insertWithOnConflict("memory_entities", null, ContentValues().apply {
+                put("memory_id", m.memoryId); put("entity_id", eid)
+            }, SQLiteDatabase.CONFLICT_IGNORE)
+        }
+    }
+
+    /** Insert a hand-written memory. Records a 'created' change-log entry.
+     *  The new vector is filled in by a later index rebuild (or a targeted
+     *  re-embed), so the caller should refresh the index. */
+    fun insertMemory(m: MemoryRecord) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.insertOrThrow("memories", null, memoryValues(m))
+            writeMemoryLinks(db, m)
+            logChange(db, m.memoryId, "user", "created", null, null)
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    /**
+     * Edit an existing memory. Snapshots the prior state into change_log (undo
+     * source for Phase 6) and drops the memory's embeddings when the embeddable
+     * text changed, so the librarian re-embeds instead of matching a stale
+     * vector. Sets updated_at (D10 sync requirement).
+     */
+    fun updateMemory(m: MemoryRecord, note: String?) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            val prior = getMemory(m.memoryId)
+            val updated = m.copy(updatedAt = nowIso())
+            db.update("memories", memoryValues(updated), "memory_id = ?", arrayOf(m.memoryId))
+            writeMemoryLinks(db, updated)
+            logChange(db, m.memoryId, "user", "edited", note, prior?.let { snapshotMemoryJson(it) })
+            val textChanged = prior == null ||
+                prior.content != m.content || prior.title != m.title ||
+                (prior.embeddingText ?: "") != (m.embeddingText ?: "")
+            if (textChanged) db.delete("embeddings", "memory_id = ?", arrayOf(m.memoryId))
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    /** Archive / activate / supersede a memory. Leaving 'active' drops its
+     *  vectors (archive rule); re-activating clears them too so a rebuild
+     *  re-embeds fresh. */
+    fun setMemoryStatus(memoryId: String, status: String, note: String?) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            val prior = getMemory(memoryId)
+            db.update("memories", ContentValues().apply {
+                put("status", status)
+                put("updated_at", nowIso())
+            }, "memory_id = ?", arrayOf(memoryId))
+            db.delete("embeddings", "memory_id = ?", arrayOf(memoryId))
+            logChange(db, memoryId, "user",
+                if (status == "active") "activated" else status, note,
+                prior?.let { snapshotMemoryJson(it) })
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    /** Set (or clear, when [protectionJson] is null) a memory's protection
+     *  object. Structurally the same edit path; recorded in the change log. */
+    fun setMemoryProtection(memoryId: String, protectionJson: String?, note: String?) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            val prior = getMemory(memoryId)
+            db.update("memories", ContentValues().apply {
+                put("protection_json", protectionJson)
+                put("updated_at", nowIso())
+            }, "memory_id = ?", arrayOf(memoryId))
+            logChange(db, memoryId, "user",
+                if (protectionJson == null) "unprotected" else "protected", note,
+                prior?.let { snapshotMemoryJson(it) })
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    /** Hard delete (user-only action). Change-log rows cascade with the memory;
+     *  a tombstone records the deletion for future cross-device merge. */
+    fun deleteMemory(memoryId: String) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.delete("memories", "memory_id = ?", arrayOf(memoryId))
+            recordDeletionTx(db, "memory", memoryId)
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    fun getMemoryChangeLog(memoryId: String): List<ChangeLogEntry> =
+        readChangeLog(readableDatabase, memoryId)
+
+    private fun logChange(
+        db: SQLiteDatabase, memoryId: String, actor: String, action: String,
+        note: String?, priorStateJson: String?
+    ) {
+        db.insert("change_log", null, ContentValues().apply {
+            put("memory_id", memoryId)
+            put("at", nowIso())
+            put("actor", actor)
+            put("action", action)
+            put("note", note)
+            put("prior_state_json", priorStateJson)
+        })
+    }
+
+    /** Compact snapshot of the editable memory fields for the change-log
+     *  prior_state (device-local; never exported). Enough for a field-level
+     *  undo in Phase 6 and a "before" view in the change-log screen. */
+    private fun snapshotMemoryJson(m: MemoryRecord): String = org.json.JSONObject().apply {
+        put("title", m.title)
+        put("content", m.content)
+        put("scope", m.scope)
+        put("kind", m.kind)
+        put("importance", m.importance)
+        put("always_load", m.alwaysLoad)
+        put("status", m.status)
+        put("tags_json", m.tagsJson)
+        m.protectionJson?.let { put("protection_json", it) }
+    }.toString()
+
+    /* -------- teardown helpers (must run inside an open transaction) -------- */
+
+    private fun deleteMemoriesWhere(db: SQLiteDatabase, where: String, args: Array<String>) {
+        // Tombstone each id first (change_log + embeddings cascade on delete).
+        db.query("memories", arrayOf("memory_id"), where, args, null, null, null).use {
+            while (it.moveToNext()) recordDeletionTx(db, "memory", it.getString(0))
+        }
+        db.delete("memories", where, args)
+    }
+
+    private fun archiveMemoriesWhere(db: SQLiteDatabase, where: String, args: Array<String>) {
+        db.query("memories", arrayOf("memory_id"), where, args, null, null, null).use {
+            while (it.moveToNext()) {
+                val mid = it.getString(0)
+                logChange(db, mid, "user", "archived", "teardown", null)
+                // Vectors of no-longer-active memories go (archive rule). Done
+                // per-id here, BEFORE the status flip below — the [where] clause
+                // usually includes status = 'active', which would match nothing
+                // once the rows are archived.
+                db.delete("embeddings", "memory_id = ?", arrayOf(mid))
+            }
+        }
+        db.update("memories", ContentValues().apply {
+            put("status", "archived"); put("updated_at", nowIso())
+        }, where, args)
+    }
+
+    private fun recordDeletionTx(db: SQLiteDatabase, recordType: String, recordId: String) {
+        db.execSQL(
+            "INSERT OR REPLACE INTO deleted_ids (record_type, record_id, deleted_at) VALUES (?, ?, ?)",
+            arrayOf(recordType, recordId, nowIso())
+        )
     }
 }
 

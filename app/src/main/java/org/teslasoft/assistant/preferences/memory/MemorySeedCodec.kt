@@ -153,6 +153,7 @@ object MemorySeedCodec {
                 alwaysLoad = m.optBoolean("always_load", false),
                 worldId = m.str("world_id"),
                 roleplayCharacterId = m.str("roleplay_character_id"),
+                campaignId = m.str("campaign_id"),
                 protectionJson = m.objText("protection"),
                 modeHintsJson = m.arrText("mode_hints"),
                 provenanceSource = prov?.str("source"),
@@ -266,6 +267,19 @@ object MemorySeedCodec {
             )
         }
 
+        val campaigns = each(root, "campaigns").map { c ->
+            CampaignRecord(
+                campaignId = c.reqStr("campaign_id"),
+                name = c.reqStr("name"),
+                worldId = c.str("world_id"),
+                roleplayCharacterId = c.str("roleplay_character_id"),
+                companionId = c.str("companion_id"),
+                status = c.str("status") ?: "active",
+                storySoFar = c.str("story_so_far"),
+                createdAt = c.str("created_at")
+            )
+        }
+
         val retrievalPolicy = if (root.has("retrieval_policy") && !root.isNull("retrieval_policy"))
             root.getJSONObject("retrieval_policy").toString() else null
 
@@ -302,7 +316,8 @@ object MemorySeedCodec {
             archivistSettings = archivist,
             proposals = proposals,
             retrievalPolicyJson = retrievalPolicy,
-            transcripts = transcripts
+            transcripts = transcripts,
+            campaigns = campaigns
         )
     }
 
@@ -379,6 +394,7 @@ object MemorySeedCodec {
                     if (m.companionIds.isNotEmpty()) put("companion_ids", JSONArray(m.companionIds))
                     putIfNotNull("world_id", m.worldId)
                     putIfNotNull("roleplay_character_id", m.roleplayCharacterId)
+                    putIfNotNull("campaign_id", m.campaignId)
                     put("kind", m.kind)
                     put("title", m.title)
                     put("content", m.content)
@@ -492,6 +508,23 @@ object MemorySeedCodec {
                 })
             }
         })
+
+        if (data.campaigns.isNotEmpty()) {
+            root.put("campaigns", JSONArray().apply {
+                data.campaigns.forEach { c ->
+                    put(JSONObject().apply {
+                        put("campaign_id", c.campaignId)
+                        put("name", c.name)
+                        putIfNotNull("world_id", c.worldId)
+                        putIfNotNull("roleplay_character_id", c.roleplayCharacterId)
+                        putIfNotNull("companion_id", c.companionId)
+                        put("status", c.status)
+                        putIfNotNull("story_so_far", c.storySoFar)
+                        putIfNotNull("created_at", c.createdAt)
+                    })
+                }
+            })
+        }
 
         data.archivistSettings?.let { a ->
             root.put("archivist_settings", JSONObject().apply {

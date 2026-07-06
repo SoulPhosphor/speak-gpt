@@ -102,6 +102,24 @@ data class RoleplayCharacterRecord(
     val createdAt: String?
 )
 
+/**
+ * A campaign: one roleplay continuity (playthrough) inside a world. The same
+ * world can host several campaigns and the same character can live several
+ * separate existences in it, so a campaign is the continuity bucket that keeps
+ * their game-state facts from bleeding together (integration plan 📌 amendment).
+ * `storySoFar` is Archivist-maintained (proposal-bound, like a roleplay arc).
+ */
+data class CampaignRecord(
+    val campaignId: String,
+    val name: String,                     // the user-facing continuity name
+    val worldId: String?,
+    val roleplayCharacterId: String?,     // the user's character in this campaign
+    val companionId: String?,             // the DM/GM companion running it
+    val status: String,                   // active | paused | ended | archived
+    val storySoFar: String?,              // Archivist-maintained summary
+    val createdAt: String?
+)
+
 data class ChangeLogEntry(
     val at: String,
     val actor: String,                    // user | archivist | companion | system
@@ -122,6 +140,10 @@ data class MemoryRecord(
     val alwaysLoad: Boolean,
     val worldId: String?,
     val roleplayCharacterId: String?,
+    /** Campaign (roleplay continuity) scope — nullable. Ordinary conversation
+     *  never retrieves campaign-scoped rows; set only for game-state facts that
+     *  belong to one playthrough (integration plan 📌 campaign amendment). */
+    val campaignId: String?,
     val protectionJson: String?,          // schema protection object, verbatim
     val modeHintsJson: String,            // JSON array of mode ids
     val provenanceSource: String?,
@@ -220,7 +242,8 @@ data class MemoryStoreData(
     val archivistSettings: ArchivistSettingsRecord?,
     val proposals: List<ProposalRecord>,
     val retrievalPolicyJson: String?,     // whole retrieval_policy object, verbatim
-    val transcripts: List<TranscriptRecord>
+    val transcripts: List<TranscriptRecord>,
+    val campaigns: List<CampaignRecord> = emptyList()
 )
 
 /**

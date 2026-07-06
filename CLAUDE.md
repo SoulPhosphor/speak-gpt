@@ -147,7 +147,17 @@ Everything is on-device. No cloud sync, no accounts.
    MemoryStore header). DB v2 (July 2026) adds a machine-readable `origin`
    column ('user' default; 'archivist' reserved for Phase 6 proposals) on
    memories, companions, entities, modes and directives, so later phases can
-   tell user records from archivist-proposed ones. **The app ships and
+   tell user records from archivist-proposed ones. DB v3 (July 2026, Phase 5)
+   adds the **Campaign** (roleplay continuity) layer: a `campaigns` table
+   (world/roleplay-character/companion FKs + status + Archivist-maintained
+   `story_so_far`) and a nullable `memories.campaign_id`. Ordinary
+   conversation never retrieves campaign-scoped rows —
+   `activeMemoriesForScope(companionId, worldId, campaignId=null)` gained a
+   `campaignId` param (null ⇒ campaign rows invisible; set ⇒ that campaign's
+   state joins) and `Librarian.search` threads it through. MemoryStore also
+   grew the Phase-5 hand-editor CRUD (per-record upsert/delete with
+   `deleted_ids` tombstones; memory edits snapshot prior state into
+   `change_log` and drop stale embeddings so a rebuild re-embeds). **The app ships and
    auto-loads NO seed/example memory data** — a fresh store starts empty and
    fills only from real conversations, persona-bootstrapped companions, and
    the user's own imported backups (owner decision July 2026, after a bundled

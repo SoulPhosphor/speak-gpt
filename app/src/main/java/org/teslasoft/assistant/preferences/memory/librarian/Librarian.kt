@@ -167,13 +167,13 @@ class Librarian private constructor(private val appContext: Context) {
      * matching when there's no usable model or no vectors yet. Returns up to
      * [topK] scored memories, best first.
      */
-    fun search(companionId: String?, worldId: String?, query: String, topK: Int): List<ScoredMemory> {
+    fun search(companionId: String?, worldId: String?, query: String, topK: Int, campaignId: String? = null): List<ScoredMemory> {
         if (!MemoryStore.isProvisioned(appContext)) return emptyList()
         val store = MemoryStore.getInstance(appContext)
         // Eligibility gates live in the store query (active status, scope, no
-        // draft-companion memories) — Phase 4 injection consumes this same
-        // method, so it inherits them.
-        val candidates = store.activeMemoriesForScope(companionId, worldId)
+        // draft-companion memories, campaign isolation) — Phase 4 injection
+        // consumes this same method, so it inherits them.
+        val candidates = store.activeMemoriesForScope(companionId, worldId, campaignId)
         if (candidates.isEmpty()) return emptyList()
 
         val m = ensureModel()
