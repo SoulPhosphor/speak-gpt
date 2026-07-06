@@ -60,6 +60,9 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         const val META_LAST_AUTO_EXPORT_AT = "last_auto_export_at"
         const val META_INDEX_MODEL_TAG = "index_model_tag"
         const val META_BACKFILL_DONE = "backfill_done"
+        // Set once the one-time purge of pre-written origin='system' modes has
+        // run (owner_approved_rules.md §15 — the app pre-authors no modes).
+        const val META_SYSTEM_MODES_PURGED = "system_modes_purged"
 
         // A transcript row past this size closes and a new row opens: keeps the
         // per-turn parse-append-write affordable and Archivist inputs bounded.
@@ -101,6 +104,36 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
     override fun onConfigure(db: SQLiteDatabase) {
         super.onConfigure(db)
         db.setForeignKeyConstraintsEnabled(true)
+    }
+
+    override fun onOpen(db: SQLiteDatabase) {
+        super.onOpen(db)
+        purgeSystemModesOnce(db)
+    }
+
+    /**
+     * One-time removal of the five pre-written origin='system' modes that older
+     * builds provisioned (owner_approved_rules.md §15 — no AI pre-authors memory
+     * content; the modes machinery stays dormant and empty until the user fills
+     * it). User-authored modes (origin='user') are untouched. Guarded by a meta
+     * flag so it runs once, and wrapped so a failure never blocks store open —
+     * the flag stays unset and the purge simply retries on the next open.
+     */
+    private fun purgeSystemModesOnce(db: SQLiteDatabase) {
+        try {
+            val alreadyPurged = db.rawQuery(
+                "SELECT 1 FROM meta WHERE key = ?", arrayOf(META_SYSTEM_MODES_PURGED)
+            ).use { it.moveToFirst() }
+            if (alreadyPurged) return
+
+            db.delete("modes", "origin = ?", arrayOf("system"))
+            db.execSQL(
+                "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                arrayOf(META_SYSTEM_MODES_PURGED, nowIso())
+            )
+        } catch (_: Exception) {
+            // Best-effort: leave the flag unset so the next open retries.
+        }
     }
 
     override fun onCreate(db: SQLiteDatabase) {
@@ -1379,9 +1412,11 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
     }
 
     /** One-shot provisioning of the enforcer's operating defaults: only ever
-     *  inserts when the table/row is empty, so user-authored (or imported)
-     *  modes and policy are never mixed with or overwritten by defaults. */
-    fun provisionOperatingDefaults(policyJson: String, defaultModes: List<ModeRecord>): Boolean {
+     *  inserts when the policy row is empty, so a user-authored (or imported)
+     *  policy is never overwritten. No default MODES are provisioned any more —
+     *  the app pre-authors no memory content (owner_approved_rules.md §15); the
+     *  modes table stays empty until the user fills it. */
+    fun provisionOperatingDefaults(policyJson: String): Boolean {
         val db = writableDatabase
         var provisioned = false
         db.beginTransaction()
@@ -1390,26 +1425,6 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 .use { it.moveToFirst() }
             if (!hasPolicy) {
                 db.execSQL("INSERT INTO retrieval_policy (id, policy_json) VALUES (1, ?)", arrayOf(policyJson))
-                provisioned = true
-            }
-            val hasModes = db.rawQuery("SELECT 1 FROM modes LIMIT 1", emptyArray<String>())
-                .use { it.moveToFirst() }
-            if (!hasModes) {
-                for (m in defaultModes) {
-                    db.insert("modes", null, ContentValues().apply {
-                        put("mode_id", m.modeId)
-                        put("name", m.name)
-                        put("purpose", m.purpose)
-                        put("signals_json", m.signalsJson)
-                        put("respond_json", m.respondJson)
-                        put("avoid_json", m.avoidJson)
-                        put("transition_note", m.transitionNote)
-                        put("overrides_json", m.overridesJson)
-                        put("scope", m.scope)
-                        put("companion_ids_json", m.companionIdsJson)
-                        put("origin", m.origin)
-                    })
-                }
                 provisioned = true
             }
             db.setTransactionSuccessful()

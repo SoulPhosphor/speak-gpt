@@ -96,16 +96,13 @@ class Enforcer private constructor(private val appContext: Context) {
         val store = MemoryStore.getInstance(appContext)
         val notes = ArrayList<String>()
 
-        // Operating defaults (retrieval_policy + the protective mode gradient)
-        // provision as origin='system' rows only into EMPTY tables — a fresh
-        // store gets working machinery, imported/user data is never touched.
+        // Operating defaults: only the neutral retrieval_policy, and only into
+        // an EMPTY policy row. No default modes are provisioned — the app
+        // pre-authors no memory content (owner_approved_rules.md §15); the modes
+        // table stays empty until the user fills it.
         try {
-            if (store.provisionOperatingDefaults(
-                    DefaultOperatingData.DEFAULT_POLICY_JSON,
-                    DefaultOperatingData.defaultModes()
-                )
-            ) {
-                MemoryLog.log(appContext, "Enforcer", "info", "Operating defaults provisioned (origin=system)")
+            if (store.provisionOperatingDefaults(DefaultOperatingData.DEFAULT_POLICY_JSON)) {
+                MemoryLog.log(appContext, "Enforcer", "info", "Retrieval policy provisioned")
             }
         } catch (e: Exception) {
             notes.add("defaults provisioning failed: ${e.message}")
