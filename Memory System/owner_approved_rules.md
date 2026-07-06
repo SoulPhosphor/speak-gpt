@@ -347,6 +347,13 @@ World core (premise/vibe + hard cosmology/magic rules) is always-injected
 and kept ruthlessly small. Open sub-question for that conversation:
 whether campaign "story so far" maintenance rides the same
 roleplay-suggestions toggle or stays a per-campaign opt-in.
+*(Rev 3: `rag_engine_work_order.md` now has a pause point right before
+Stage 3.6 where the implementing agent stops and asks the owner, in a
+plain chat message, whether to fold world/campaign card sections into
+that pass — since they'd reuse the exact same pattern. That is the
+"return to this when ready" moment; the agent still may not design or
+build ahead of that ask, and the section list above stays a draft, not
+final, until the owner confirms or amends it word by word at that time.)*
 
 ## 14. The Pending screen (memory approval)
 

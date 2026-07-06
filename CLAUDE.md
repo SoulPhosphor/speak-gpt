@@ -29,6 +29,25 @@ manual: read it before touching code, and **keep it updated** when you change
 anything it describes (storage schema, feature list, fragile areas, workflow).
 Stale onboarding docs are worse than none.
 
+## ⛔ AI session rules — read before spawning agents or asking questions
+
+- **Model tiers: Opus, Sonnet, and Haiku only. Never spawn a Fable model
+  for this project, at any reasoning effort.** When delegating to a
+  subagent or choosing a session model, pick the tier that matches the
+  task's difficulty — Haiku for cheap/mechanical/well-specified work,
+  Sonnet as the default for ordinary feature work, Opus for the hardest
+  or most fragile-area work (anything touching the voice/VAD pipeline,
+  encryption/migrations, or a genuine architecture decision). Don't
+  default to the biggest model out of caution, and don't use a small
+  model just to save cost on something fragile.
+- **Never use the pop-up question tool (e.g. `AskUserQuestion`) in this
+  project.** It errors on the owner's phone client and causes real
+  problems for them. When a decision needs the owner's input — including
+  anything the OWNER APPROVAL GATE above requires asking about — stop
+  work and write a plain chat message asking the question, then wait for
+  their reply as an ordinary conversation turn. Stopping and asking in
+  chat is always fine; the pop-up mechanism specifically is not.
+
 ## App summary
 
 Android voice/chat assistant (fork of TeslaSoft SpeakGPT, now independent —
@@ -547,6 +566,20 @@ Everything is on-device. No cloud sync, no accounts.
   (see `PersonaPreferences.removeLoreBookFromAllPersonas`).
 - Destructive UI actions (delete book/persona/chat) always get a Material
   confirm dialog.
+- **Prefer full-screen activities over dialogs/pop-ups for new or
+  reworked screens.** The app was originally built with ~20
+  `DialogFragment`s/bottom sheets standing in for what are really full
+  editing screens (see `ui-redesign-plan.md`'s inventory) — that pattern
+  wastes screen space, and the owner wants it phased out over time as
+  screens get touched, not necessarily all at once. When building a new
+  screen or substantially reworking an existing one, default to a
+  full-screen `FragmentActivity` (the pattern `MemoryEditorActivity`
+  already established for the memory system) unless the content is
+  genuinely dialog-shaped: a short confirm/destructive-action prompt, a
+  small in-place picker, or something else where a pop-up is the logical
+  fit, not just the historical default. Don't convert an existing dialog
+  to full-screen as a drive-by side effect of unrelated work — that
+  conversion is deliberate, incremental work, not incidental cleanup.
 
 ## Do not touch / fragile
 

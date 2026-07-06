@@ -173,6 +173,28 @@ promises the old "none selected → project memories stay quiet" behavior
 anyway; neutralize any such wording, keeping the label and "None"
 option).
 
+**⛔ PAUSE POINT — before starting 3.6, stop and ask the owner in a plain
+chat message (no pop-up tool — see CLAUDE.md).** World and campaign card
+sections (§13 "DEFERRED BY THE OWNER") use the exact same section-owned/
+trigger-matched pattern 3.6 is about to build for RP characters, and the
+owner wants the option to fold that build into this pass rather than
+retrofit it later. Ask, in these words or close to them: *"I'm about to
+build the RP-character ledger (Stage 3.6) — sections of named entries,
+trigger-matched retrieval. World and campaign cards would reuse this
+exact pattern. Do you want to add world/campaign card sections now, as
+part of this pass, or keep them deferred?"* If the owner says defer, do
+NOT design or build them — proceed with 3.6 as written below and leave
+§13's deferred note alone. If the owner says build them, get the actual
+section list and field shape from the owner in chat first (§13 notes a
+draft list — Regions/Biomes, Settlements, Points of Interest,
+Organizations/Guilds, Religions/Pantheons, Historical Events,
+Species/Races, Languages & Scripts — but it is explicitly marked as a
+draft, not a final approved list; do not build from the draft without
+the owner confirming or amending it word by word, per the OWNER APPROVAL
+GATE in CLAUDE.md), then extend 3.6 additively (same table shape
+generalized to world/campaign, same trigger-matching, same cooldown
+composite key) rather than starting a separate mechanism.
+
 **3.6 RP character card, two zones** (§13). Schema (additive migration):
 ledger sections on roleplay characters — Spells, Skills, Special
 abilities, Items, Special items, Weapons; entries = name (required),
