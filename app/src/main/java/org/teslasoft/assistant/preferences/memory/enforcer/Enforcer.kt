@@ -61,6 +61,23 @@ class Enforcer private constructor(private val appContext: Context) {
         const val RECENT_CONTEXT_TURNS = 4
         const val RECENT_CONTEXT_CHARS_PER_TURN = 200
 
+        /**
+         * Freshness cooldown (rules §10 / Stage 3.3): an entry that reached the
+         * prompt is not re-injected until this many turns pass — the
+         * conversation carries it in the meantime. A tuned constant, NOT a user
+         * setting (§10). First-time entries always inject; an edit resets the
+         * entry's clock (hooked in MemoryStore's edit paths); every suppression
+         * shows in the AssemblyLog debug view.
+         *
+         * The approved rule's second refresh trigger — "when the conversation
+         * outgrows the old mention", i.e. the old injection falling out of the
+         * actually-sent history window — is DEFERRED: TurnInput only carries a
+         * short recent-context digest (~4 turns / 200 chars), never the real
+         * sent window, and widening TurnInput for it is out of scope for this
+         * stage. Only the after-N-turns half ships here.
+         */
+        const val COOLDOWN_TURNS = 10
+
         private const val META_CONTRADICTION_FLAGS = "enforcer.contradiction_flags"
         private const val MAX_CONTRADICTION_FLAGS = 50
         private const val KEYWORD_BONUS_PER_SIGNAL = 0.05
@@ -237,9 +254,46 @@ class Enforcer private constructor(private val appContext: Context) {
             emptyList()
         }
 
+        // Freshness cooldown (§10 / Stage 3.3): entries whose last injection is
+        // still fresh in this chat are suppressed BEFORE the budget, so a
+        // cooling memory never crowds out one that may actually inject. A
+        // clock/store failure skips suppression for the turn (inject rather
+        // than silently starve) and is noted in the log.
+        var turn: Long? = null
+        val cooled = ArrayList<Pair<AssembledMemory, Long>>()
+        try {
+            val thisTurn = store.nextTurnNumber(input.chatId)
+            turn = thisTurn
+            if (retrieved.isNotEmpty()) {
+                val lastTurns = store.lastInjectedTurns(
+                    input.chatId, MemoryStore.COOLDOWN_SOURCE_MEMORY, retrieved.map { it.memoryId }
+                )
+                retrieved = retrieved.filter { m ->
+                    val last = lastTurns[m.memoryId]
+                    if (last != null && thisTurn - last < COOLDOWN_TURNS) {
+                        cooled.add(m to (thisTurn - last))
+                        false
+                    } else true
+                }
+            }
+        } catch (e: Exception) {
+            notes.add("cooldown unavailable this turn: ${e.message}")
+        }
+
         // Budget: policy-driven, lowest-scored retrieved memories cut first;
         // lore (user-authored) charges the budget but is never cut here.
         val (kept, cut) = PromptAssembler.applyBudget(retrieved, loreChars, policy.charBudget)
+
+        // Stamp what actually reached the prompt so the next turns suppress it.
+        if (turn != null && kept.isNotEmpty()) {
+            try {
+                store.recordInjections(
+                    input.chatId, MemoryStore.COOLDOWN_SOURCE_MEMORY, kept.map { it.memoryId }, turn
+                )
+            } catch (e: Exception) {
+                notes.add("cooldown stamp failed: ${e.message}")
+            }
+        }
 
         // Entity-linked expansion for the memories that made it in.
         val entitySummaries = try {
@@ -295,7 +349,10 @@ class Enforcer private constructor(private val appContext: Context) {
                     )
                 },
                 cut = cut.map { AssemblyLog.Line(it.title, "over budget (score %.3f)".format(it.score)) } +
-                    suppressed.map { (m, l) -> AssemblyLog.Line(m.title, "near-duplicate of lore \"${l.label}\" — flagged") },
+                    suppressed.map { (m, l) -> AssemblyLog.Line(m.title, "near-duplicate of lore \"${l.label}\" — flagged") } +
+                    cooled.map { (m, ago) ->
+                        AssemblyLog.Line(m.title, "cooldown — injected $ago turn(s) ago, refreshes after $COOLDOWN_TURNS")
+                    },
                 loreNotes = loreNotes.map { it.label },
                 scene = scene.takeIf { !it.isEmpty }?.let {
                     listOfNotNull(it.worldName?.let { w -> "world $w" },

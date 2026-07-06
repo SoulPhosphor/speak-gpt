@@ -49,7 +49,14 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
 
     companion object {
         const val DATABASE_NAME = "companion_memory.db"
-        private const val DATABASE_VERSION = 5
+        private const val DATABASE_VERSION = 6
+
+        // Freshness-cooldown source types (rules §10 / Stage 3.3): the
+        // composite key (chat_id, source_type, entry_id) keeps ids from
+        // different tables from colliding — 'memory' rows are memories;
+        // 'ledger' is reserved for the Stage 3.6 RP-character ledger.
+        const val COOLDOWN_SOURCE_MEMORY = "memory"
+        const val COOLDOWN_SOURCE_LEDGER = "ledger"
 
         // meta keys
         const val META_SCHEMA_VERSION = "schema_version"
@@ -442,6 +449,27 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 "PRIMARY KEY (record_type, record_id))"
         )
 
+        // Freshness cooldown (rules §10 / Stage 3.3): when each entry was last
+        // injected, per chat, persisted so suppression survives process death.
+        // No FK to memories — entry_id may point at other tables per
+        // source_type (the 3.6 ledger), and a stale row is harmless (the
+        // delete/edit paths clear them anyway). chat_turn_counters is the
+        // per-chat monotonic turn clock the cooldown is measured against.
+        db.execSQL(
+            "CREATE TABLE injection_cooldowns (" +
+                "chat_id TEXT NOT NULL, " +
+                "source_type TEXT NOT NULL, " +
+                "entry_id TEXT NOT NULL, " +
+                "last_injected_turn INTEGER NOT NULL, " +
+                "last_injected_at TEXT, " +
+                "PRIMARY KEY (chat_id, source_type, entry_id))"
+        )
+        db.execSQL(
+            "CREATE TABLE chat_turn_counters (" +
+                "chat_id TEXT PRIMARY KEY, " +
+                "turn INTEGER NOT NULL)"
+        )
+
         db.execSQL("CREATE INDEX idx_memories_status ON memories(status)")
         db.execSQL("CREATE INDEX idx_memories_always_load ON memories(always_load) WHERE always_load = 1")
         db.execSQL("CREATE INDEX idx_memories_world ON memories(world_id)")
@@ -648,6 +676,29 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             db.execSQL(
                 "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                 arrayOf(META_DB_MIGRATION, "5")
+            )
+        }
+        if (oldVersion < 6) {
+            // v6 (July 2026, Stage 3.3): the freshness cooldown — a persisted
+            // record of when each entry last reached a prompt, per chat, plus
+            // the per-chat turn clock it is measured against. Purely additive.
+            db.execSQL(
+                "CREATE TABLE injection_cooldowns (" +
+                    "chat_id TEXT NOT NULL, " +
+                    "source_type TEXT NOT NULL, " +
+                    "entry_id TEXT NOT NULL, " +
+                    "last_injected_turn INTEGER NOT NULL, " +
+                    "last_injected_at TEXT, " +
+                    "PRIMARY KEY (chat_id, source_type, entry_id))"
+            )
+            db.execSQL(
+                "CREATE TABLE chat_turn_counters (" +
+                    "chat_id TEXT PRIMARY KEY, " +
+                    "turn INTEGER NOT NULL)"
+            )
+            db.execSQL(
+                "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                arrayOf(META_DB_MIGRATION, "6")
             )
         }
     }
@@ -1850,6 +1901,79 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         return out
     }
 
+    /* ---------------------------------------------------------------------- */
+    /* freshness cooldown (rules §10 / Stage 3.3)                              */
+    /* ---------------------------------------------------------------------- */
+
+    /** Advance and return this chat's turn clock — one tick per assembled
+     *  turn. Monotonic and persisted, so the cooldown survives process death. */
+    fun nextTurnNumber(chatId: String): Long {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.execSQL(
+                "INSERT INTO chat_turn_counters (chat_id, turn) VALUES (?, 1) " +
+                    "ON CONFLICT(chat_id) DO UPDATE SET turn = turn + 1",
+                arrayOf(chatId)
+            )
+            val turn = db.rawQuery(
+                "SELECT turn FROM chat_turn_counters WHERE chat_id = ?", arrayOf(chatId)
+            ).use { if (it.moveToFirst()) it.getLong(0) else 1L }
+            db.setTransactionSuccessful()
+            return turn
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    /** The turn each entry was last injected on in this chat (absent = never —
+     *  new entries always inject on first relevance, §10). */
+    fun lastInjectedTurns(
+        chatId: String, sourceType: String, entryIds: Collection<String>
+    ): HashMap<String, Long> {
+        val out = HashMap<String, Long>()
+        if (entryIds.isEmpty()) return out
+        val placeholders = entryIds.joinToString(",") { "?" }
+        readableDatabase.rawQuery(
+            "SELECT entry_id, last_injected_turn FROM injection_cooldowns " +
+                "WHERE chat_id = ? AND source_type = ? AND entry_id IN ($placeholders)",
+            (listOf(chatId, sourceType) + entryIds).toTypedArray()
+        ).use {
+            while (it.moveToNext()) out[it.getString(0)] = it.getLong(1)
+        }
+        return out
+    }
+
+    /** Stamp the entries that made it into this turn's prompt. */
+    fun recordInjections(
+        chatId: String, sourceType: String, entryIds: Collection<String>, turn: Long
+    ) {
+        if (entryIds.isEmpty()) return
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            val now = nowIso()
+            for (id in entryIds) {
+                db.execSQL(
+                    "INSERT OR REPLACE INTO injection_cooldowns " +
+                        "(chat_id, source_type, entry_id, last_injected_turn, last_injected_at) " +
+                        "VALUES (?, ?, ?, ?, ?)",
+                    arrayOf(chatId, sourceType, id, turn, now)
+                )
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    /** §10: an edited entry resets its clock and re-injects fresh — clears the
+     *  entry's cooldown rows across every chat. Hooked into the memory edit
+     *  paths below; must run inside their transaction when called from one. */
+    private fun clearEntryCooldownTx(db: SQLiteDatabase, sourceType: String, entryId: String) {
+        db.delete("injection_cooldowns", "source_type = ? AND entry_id = ?", arrayOf(sourceType, entryId))
+    }
+
     /**
      * Debug inspector search (the Memory settings box): a plain LIKE scan
      * across EVERY record type — memories, companions, entities, roleplay
@@ -2036,9 +2160,27 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
      *  them whenever a chat id changes (auto-naming, manual rename). */
     fun repointChat(oldChatId: String, newChatId: String) {
         if (oldChatId == newChatId || oldChatId.isBlank() || newChatId.isBlank()) return
-        writableDatabase.execSQL(
-            "UPDATE transcripts SET chat_id = ? WHERE chat_id = ?", arrayOf(newChatId, oldChatId)
-        )
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.execSQL(
+                "UPDATE transcripts SET chat_id = ? WHERE chat_id = ?", arrayOf(newChatId, oldChatId)
+            )
+            // The cooldown state and turn clock are keyed by chat id too — a
+            // rename must carry them or every memory re-injects and the clock
+            // restarts (OR REPLACE: a pre-existing row under the new id loses).
+            db.execSQL(
+                "UPDATE OR REPLACE injection_cooldowns SET chat_id = ? WHERE chat_id = ?",
+                arrayOf(newChatId, oldChatId)
+            )
+            db.execSQL(
+                "UPDATE OR REPLACE chat_turn_counters SET chat_id = ? WHERE chat_id = ?",
+                arrayOf(newChatId, oldChatId)
+            )
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
     }
 
     /**
@@ -2634,6 +2776,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             db.delete("directives", null, null)
             db.delete("owner_profile", null, null)
             db.delete("deleted_ids", null, null)
+            db.delete("injection_cooldowns", null, null)
+            db.delete("chat_turn_counters", null, null)
             db.update("app_state", ContentValues().apply {
                 putNull("active_companion_id"); putNull("active_world_id")
                 putNull("active_roleplay_character_id"); putNull("active_user_persona_id")
@@ -2820,6 +2964,10 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 prior.content != m.content || prior.title != m.title ||
                 (prior.embeddingText ?: "") != (m.embeddingText ?: "")
             if (textChanged) db.delete("embeddings", "memory_id = ?", arrayOf(m.memoryId))
+            // §10: an edit resets the freshness clock — the corrected version
+            // re-injects on its next relevance instead of waiting out the old
+            // mention's cooldown.
+            clearEntryCooldownTx(db, COOLDOWN_SOURCE_MEMORY, m.memoryId)
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
@@ -2842,6 +2990,9 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             logChange(db, memoryId, "user",
                 if (status == "active") "activated" else status, note,
                 prior?.let { snapshotMemoryJson(it) })
+            // A status flip is an edit for §10 purposes: a re-activated memory
+            // injects fresh instead of inheriting a pre-archive cooldown.
+            clearEntryCooldownTx(db, COOLDOWN_SOURCE_MEMORY, memoryId)
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
@@ -2876,6 +3027,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         try {
             db.delete("memories", "memory_id = ?", arrayOf(memoryId))
             recordDeletionTx(db, "memory", memoryId)
+            clearEntryCooldownTx(db, COOLDOWN_SOURCE_MEMORY, memoryId)
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
