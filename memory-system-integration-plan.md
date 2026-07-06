@@ -587,6 +587,27 @@ coexistence, essence guardrail, failure behavior); D7 (compressor), D8.
   facts; the debug view shows the exact assembled packet.
 
 ### ☑ Phase 5 — Memory editor + companions/worlds/personas UI
+
+> **⚠️ Reworked July 6 2026 (Stage 1 of `Memory System/
+> phase5_rework_work_order.md`, per the owner's rulings).** The description
+> below is the ORIGINAL ship; the current state after Stage 1:
+> - The **Memory manager hub is gone** — "Browse & edit" opens the single
+>   **global Memories browser** directly (all scopes/types; a Companions
+>   link in its action bar; opened pre-filtered from each companion/world/
+>   campaign/RP-character page's Memories button).
+> - **Modes, Directives, Entities, and Owner-profile screens were deleted**
+>   (tables + store CRUD stay dormant): entities/owner-profile are retired
+>   concepts — real people are ordinary scope/type memories, the user is
+>   Preference/Fact memories.
+> - The **companion page** dropped essence/relationship-notes/hard-limits/
+>   model-adaptations (columns stay, unwritten); it keeps name/approve/
+>   participation/Save and gained **Delete** (+ a Memories button).
+> - The five pre-written **modes** were deleted and are purged once at store
+>   open; no default modes ship.
+> - **My Personas moved out** to the Characters hub.
+> Stage 2 (record restructure + full browser filters/sort + Pending flow)
+> is not yet built. Read the work order before touching Phase 5 UI.
+
 **Landed July 2026.** What shipped: a **Memory manager** hub
 (`ui/activities/memory/MemoryManagerActivity`, reached from a "Browse & edit"
 button in Memory settings) linking ten areas, all on a shared framework —

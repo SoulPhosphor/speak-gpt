@@ -365,32 +365,52 @@ Everything is on-device. No cloud sync, no accounts.
   (near-duplicate memories suppressed; pairs flagged to meta
   `enforcer.contradiction_flags` for Phase 6's run report), and the scene
   from three per-chat Quick Settings selectors (world / roleplay character /
-  user persona — ALL in the auto-naming copy block). Operating defaults
-  (retrieval policy + five origin='system' modes) provision only into EMPTY
-  tables. ANY enforcer failure degrades to the classic lorebook message plus
+  user persona — ALL in the auto-naming copy block). Operating defaults are
+  now the retrieval policy ONLY (the five pre-written origin='system' modes
+  were deleted and are purged once at store open — owner ruling, July 6 2026;
+  the enforcer degrades cleanly to no mode section when the modes table is
+  empty). ANY enforcer failure degrades to the classic lorebook message plus
   one soft toast per process — never blocks generation. Tier "none" disables
   lorebook injection too. The lorebook debug screen also renders the
   enforcer's per-turn `AssemblyLog` (injected/cut + why, scores, packet
   source, modes). Pure logic (PromptAssembler, ModeSelection, NearDuplicate)
   is unit-tested. Read `memory-system-integration-plan.md` before
   touching `preferences/memory/`.
-  Phase 5 (the hand-editor UI) is built in `ui/activities/memory/`: a
-  **Memory manager** hub (`MemoryManagerActivity`, opened from a "Browse &
-  edit" button in Memory settings) over ten areas, all on a shared framework
-  — `MemoryScreenActivity` (abstract themed list scaffold) + `MemoryRowAdapter`
-  + `activity_memory_list`/`view_memory_row`. Areas: Memories browser/editor
-  (search/add/edit/protect/archive/delete + per-memory change-log, openable
-  scoped to a world/campaign/roleplay-character), Companions list + detail
-  (draft approve, participation, essence/hard-limits — **"Personas" is renamed
-  "Companions" in UI strings**; the app's Personas tile still opens the persona
-  editor, the memory-side companion view lives in the hub), My Personas,
-  Roleplay Characters (arc read-only), Worlds + Campaigns (pages, scoped memory
-  browsers, archive/delete teardown), Entities/Modes/Directives editors, and an
-  Owner-profile form. All CRUD is in `MemoryStore` (per-record upsert/delete
-  with tombstones; memory edits log prior state + drop stale vectors). The
-  detail pages are plain `FragmentActivity` forms (copying MemorySettings'
-  theme boilerplate); the list screens subclass `MemoryScreenActivity` and only
-  supply data + row actions. Follow-ups deferred (see the plan's Phase 5 note):
+  Phase 5 (the hand-editor UI) is built in `ui/activities/memory/`, on a
+  shared framework — `MemoryScreenActivity` (abstract themed list scaffold,
+  with an optional secondary action-bar slot) + `MemoryRowAdapter` +
+  `activity_memory_list`/`view_memory_row`. **The Stage-1 "trust repairs"
+  reshaped it to the owner's July 6 2026 rulings** (`Memory System/
+  owner_approved_rules.md` + `phase5_rework_work_order.md` — read both before
+  touching this):
+  - **No hub.** `MemoryManagerActivity` was removed; the "Browse & edit"
+    button in Memory settings opens the **Memories browser** directly, and it
+    is the single GLOBAL browser over all scopes/types (world/campaign/
+    roleplay-character/companion scoping via intent extras). It carries a
+    **Companions** link in its action bar (unscoped view only). One browser,
+    many doors: each companion/world/campaign/RP-character page has a
+    **Memories** button/action that opens this same browser pre-filtered.
+  - **Retired screens (deleted; tables + store CRUD stay dormant):** Modes,
+    Directives, **Entities**, and **Owner profile**. People in the user's
+    life are ordinary memories under scope/type, not "entities"; what the
+    system knows about the user is Preference/Fact memories, not a profile
+    form.
+  - **Companion detail page** keeps only: read-only name, draft badge +
+    Approve, memory-participation, Save, **Delete** (per-deletion choice to
+    also delete that companion's memories), and the Memories button. The
+    essence / relationship-notes / hard-limits / model-adaptations fields
+    were removed (columns stay, unwritten). ("Personas" is still shown as
+    "Companions" in the memory-side UI strings.)
+  - **My Personas** left the memory area entirely — its tile now lives in the
+    Characters hub (`CharactersActivity`) with the other identity tiles.
+  - Roleplay areas (Worlds, Campaigns, Roleplay characters) stay under the
+    single **Roleplay card** on Settings (`RoleplayHubActivity`).
+  All CRUD is in `MemoryStore` (per-record upsert/delete with tombstones;
+  memory edits log prior state + drop stale vectors; `deleteCompanion` added).
+  Detail pages are plain `FragmentActivity` forms; the list screens subclass
+  `MemoryScreenActivity`. **Stage 2 (not yet built) restructures the memory
+  record (scope/type/projects/statuses) and rebuilds the browser's full
+  filter/sort + Pending flow** — see the work order. Follow-ups deferred:
   merge tooling, an abilities/spells column, and campaign→Quick-Settings live
   wiring.
 - Markdown/LaTeX rendering, partial text selection, message edit/delete/copy/
