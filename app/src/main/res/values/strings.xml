@@ -1102,38 +1102,11 @@
     <string name="mem_pers_delete_character_keep_memories">Keep memories</string>
     <string name="mem_pers_delete_character_with_memories">Delete memories too</string>
 
-    <!-- ============ Phase 5 area screens: Entities / owner profile ============ -->
-    <!-- ============ Screen titles ============ -->
-    <string name="mem_admin_title_entities">Entities</string>
-    <string name="mem_admin_title_owner_profile">Owner Profile</string>
-
-    <!-- ============ FAB / add button labels ============ -->
-    <string name="mem_admin_btn_new_entity">New entity</string>
-
-    <!-- ============ Row subtitle formats ============ -->
-    <string name="mem_admin_entity_subtitle_fmt">%1$s · %2$s</string>
-
-    <!-- ============ Entity dialog ============ -->
-    <string name="mem_admin_dialog_entity_title_new">New entity</string>
-    <string name="mem_admin_dialog_entity_title_edit">Edit entity</string>
-    <string name="mem_admin_field_name">Name</string>
-    <string name="mem_admin_field_kind">Kind (person, place, project, …)</string>
-    <string name="mem_admin_field_summary">Summary</string>
-    <string name="mem_admin_field_aliases">Aliases (comma-separated)</string>
-    <string name="mem_admin_field_importance">Importance (1-5)</string>
-    <string name="mem_admin_entity_required">A name and summary are both required.</string>
-
-    <!-- ============ Owner profile screen ============ -->
-    <string name="mem_admin_field_portrait">Portrait</string>
-    <string name="mem_admin_field_standing_context">Standing context</string>
-    <string name="mem_admin_owner_portrait_required">A portrait is required.</string>
-    <string name="mem_admin_owner_profile_saved">Owner profile saved.</string>
-
-    <!-- ============ Shared delete confirm / toasts ============ -->
-    <string name="mem_admin_delete_confirm_title">Delete?</string>
-    <string name="mem_admin_delete_confirm_msg">Delete \"%1$s\"? This cannot be undone.</string>
-    <string name="mem_admin_saved">Saved.</string>
-    <string name="mem_admin_deleted">Deleted.</string>
+    <!-- Entities and Owner profile are retired (owner ruling, July 6 2026):
+         people in the user's life are ordinary memories under scope/type, not
+         "entities"; what the system knows about the user is Preference/Fact
+         memories, not a profile form. Their screens and strings were removed;
+         the tables/store CRUD stay dormant. -->
 
     <!-- ============ Phase 5 area screens: Worlds & campaigns ============ -->
     <!-- ============ Worlds list ============ -->
@@ -1231,8 +1204,6 @@
     <string name="mm_roleplay_desc">Fictional characters you play.</string>
     <string name="mm_worlds_desc">Settings your roleplays take place in.</string>
     <string name="mm_campaigns_desc">Ongoing roleplay playthroughs.</string>
-    <string name="mm_entities_desc">People, places and things memory tracks.</string>
-    <string name="mm_owner_desc">Who you are, in the memory system\'s words.</string>
 
     <!-- ============ Phase 5: Settings-page cards (Memory System / Roleplay) ============ -->
     <string name="tile_memory_system_title">Memory System</string>

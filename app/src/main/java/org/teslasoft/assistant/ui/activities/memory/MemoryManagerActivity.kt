@@ -22,14 +22,16 @@ import org.teslasoft.assistant.ui.adapters.memory.MemoryRow
 
 /**
  * The hub of the Phase 5 memory manager: a plain list of every area the user
- * can browse and edit by hand (memories, companions, personas, entities, owner
- * profile). Reuses the shared list scaffold with search and the add-FAB off —
- * each row just opens its area, forwarding the chat id so scoped screens can
- * read per-chat context.
+ * can browse and edit by hand (memories, companions, personas). Reuses the
+ * shared list scaffold with search and the add-FAB off — each row just opens
+ * its area, forwarding the chat id so scoped screens can read per-chat context.
  *
- * The Modes and Directives screens were removed (owner_approved_rules.md §15 /
- * §"Retired machinery"): both concepts are retired from the UI. Their tables
- * and store CRUD stay in place but dormant.
+ * Retired from the UI (owner_approved_rules.md §15 / §"Retired machinery"):
+ * Modes, Directives, Entities, and Owner profile. People in the user's life are
+ * ordinary memories under scope/type, not "entities"; what the system knows
+ * about the user is Preference/Fact memories, not a profile form. Their tables
+ * and store CRUD stay in place but dormant. (Stage 1.5 collapses this hub
+ * entirely — "Browse & edit" will open the Memories browser directly.)
  */
 class MemoryManagerActivity : MemoryScreenActivity() {
 
@@ -39,11 +41,9 @@ class MemoryManagerActivity : MemoryScreenActivity() {
         listOf(
             Area(MemoryBrowserActivity::class.java, R.string.title_memories, R.string.mm_memories_desc),
             Area(MemoryCompanionsActivity::class.java, R.string.mem_comp_title, R.string.mm_companions_desc),
-            Area(MemoryUserPersonasActivity::class.java, R.string.mem_pers_title_user_personas, R.string.mm_user_personas_desc),
+            Area(MemoryUserPersonasActivity::class.java, R.string.mem_pers_title_user_personas, R.string.mm_user_personas_desc)
             // Worlds / Campaigns / Roleplay Characters live under the separate
             // "Roleplay" card on the Settings page (RoleplayHubActivity).
-            Area(MemoryEntitiesActivity::class.java, R.string.mem_admin_title_entities, R.string.mm_entities_desc),
-            Area(OwnerProfileActivity::class.java, R.string.mem_admin_title_owner_profile, R.string.mm_owner_desc)
         )
     }
 
