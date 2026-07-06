@@ -76,8 +76,14 @@ class Enforcer private constructor(private val appContext: Context) {
         val modelTag: String,
         val loreMatches: List<LoreBookMatch>,
         val worldId: String?,
+        /** Quick Settings Campaign selection (Stage 3.0) — the owner-chosen
+         *  explicit signal that this chat is inside that playthrough. */
+        val campaignId: String?,
         val roleplayCharacterId: String?,
-        val userPersonaId: String?
+        val userPersonaId: String?,
+        /** Quick Settings Project selection — a ranking boost, never a gate
+         *  (owner_approved_rules §4 rev 3). */
+        val projectId: String?
     )
 
     /** modelTag|modeId|signalsHash -> signal embedding, per process. */
@@ -124,13 +130,22 @@ class Enforcer private constructor(private val appContext: Context) {
         val scopeCompanionId =
             if (companion != null && companion.memoryParticipation == "full") companion.companionId else null
 
-        val worldId = input.worldId?.takeIf { it.isNotBlank() }
+        // Campaign wiring (Stage 3.0): one Quick Settings selection implies the
+        // rest (MemoryStore.campaignScope) — the campaign's world and the user's
+        // character in it fill in when the chat has no explicit pick of its own;
+        // an explicit pick wins. A dangling campaign id degrades to "none".
+        val campaign = input.campaignId?.takeIf { it.isNotBlank() }?.let {
+            try { store.getCampaign(it) } catch (_: Exception) { null }
+        }
+        val worldId = input.worldId?.takeIf { it.isNotBlank() } ?: campaign?.worldId
+        val roleplayCharacterId =
+            input.roleplayCharacterId?.takeIf { it.isNotBlank() } ?: campaign?.roleplayCharacterId
 
         // D8: prefs are truth, app_state is the derived mirror (best effort).
         try {
             store.updateAppState(
                 companion?.companionId, worldId,
-                input.roleplayCharacterId?.takeIf { it.isNotBlank() },
+                roleplayCharacterId,
                 input.userPersonaId?.takeIf { it.isNotBlank() }
             )
         } catch (_: Exception) { /* mirror only; never blocks a turn */ }
@@ -145,7 +160,7 @@ class Enforcer private constructor(private val appContext: Context) {
             .filter { it.isNotBlank() }.joinToString("\n")
         if (!librarian.hasUsableModel()) notes.add("no embedding model — keyword retrieval")
         val retrievedRaw: List<ScoredMemory> = try {
-            librarian.search(scopeCompanionId, worldId, query, policy.topK)
+            librarian.search(scopeCompanionId, worldId, query, policy.topK, campaign?.campaignId)
         } catch (e: Exception) {
             notes.add("retrieval failed: ${e.message}")
             emptyList()
@@ -230,7 +245,7 @@ class Enforcer private constructor(private val appContext: Context) {
         // Scene (slot 5): user persona presentation in any chat; world +
         // roleplay character during a world session. Missing records degrade
         // to an emptier scene, never an error.
-        val scene = buildScene(store, input, worldId)
+        val scene = buildScene(store, input, worldId, roleplayCharacterId)
 
         val components = AssemblyComponents(
             modelNote = companion?.let { modelNote(it, input.modelTag) },
@@ -381,14 +396,19 @@ class Enforcer private constructor(private val appContext: Context) {
         return Policy(8, PromptAssembler.DEFAULT_CHAR_BUDGET, ModeSelection.DEFAULT_THRESHOLD)
     }
 
-    private fun buildScene(store: MemoryStore, input: TurnInput, worldId: String?): SceneContext {
+    private fun buildScene(
+        store: MemoryStore,
+        input: TurnInput,
+        worldId: String?,
+        roleplayCharacterId: String?
+    ): SceneContext {
         val presentation = input.userPersonaId?.takeIf { it.isNotBlank() }?.let {
             try { store.getUserPersona(it)?.presentation } catch (_: Exception) { null }
         }
         if (worldId == null) return SceneContext(userPersonaPresentation = presentation)
         val world = try { store.getWorld(worldId) } catch (_: Exception) { null }
             ?: return SceneContext(userPersonaPresentation = presentation)
-        val character = input.roleplayCharacterId?.takeIf { it.isNotBlank() }?.let {
+        val character = roleplayCharacterId?.let {
             try { store.getRoleplayCharacter(it) } catch (_: Exception) { null }
         }
         return SceneContext(

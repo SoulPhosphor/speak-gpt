@@ -1609,9 +1609,10 @@ class Preferences private constructor(private var preferences: SharedPreferences
     }
 
     /**
-     * Per-chat Project scope selector (owner_approved_rules §4). Empty = no
-     * project. Like the scene selectors it lives in the auto-naming copy block.
-     * Stage 2.6 only stores it; retrieval wiring is Stage 3.
+     * Per-chat Project scope selector (owner_approved_rules §4, Revision 3).
+     * Empty = no project. Like the scene selectors it lives in the auto-naming
+     * copy block. Selection is a ranking BOOST, never an eligibility gate:
+     * project memories retrieve on relevance even with none selected (Stage 3.5).
      */
     fun getChatProjectId() : String {
         return getString("memory_project_id", "")
@@ -1619,6 +1620,38 @@ class Preferences private constructor(private var preferences: SharedPreferences
 
     fun setChatProjectId(id: String) {
         putString("memory_project_id", id)
+    }
+
+    /**
+     * Per-chat Campaign selector (owner_approved_rules §3/§12 rev 3, Stage 3.0).
+     * Empty = none. Selecting a campaign is the owner-chosen explicit signal
+     * that a chat is inside that playthrough: it makes campaign-scoped memories
+     * eligible, and it defines the narrator/GM path — the campaign's GM
+     * companion being the chat's active companion is what lets companion
+     * memories into roleplay. In the auto-naming copy block like the rest.
+     */
+    fun getChatCampaignId() : String {
+        return getString("memory_campaign_id", "")
+    }
+
+    fun setChatCampaignId(id: String) {
+        putString("memory_campaign_id", id)
+    }
+
+    /**
+     * "Allow active companion memories in roleplay" (owner_approved_rules §3,
+     * rev 3 — owner-added toggle, global, default OFF). OFF: companion memories
+     * do not enter RP/campaign mode beyond the narrator/GM path. ON: the active
+     * chat companion's approved active memories may participate in retrieval
+     * during RP/campaign mode (normal scope/status/relevance/cooldown rules
+     * still apply — participation, never forced injection).
+     */
+    fun getAllowCompanionMemoriesInRoleplay() : Boolean {
+        return getGlobalBoolean("memory_companion_in_roleplay", false)
+    }
+
+    fun setAllowCompanionMemoriesInRoleplay(allowed: Boolean) {
+        putGlobalBoolean("memory_companion_in_roleplay", allowed)
     }
 
     /**

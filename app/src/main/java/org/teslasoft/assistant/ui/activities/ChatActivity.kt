@@ -4218,8 +4218,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                                 modelTag = model,
                                 loreMatches = allLoreMatches,
                                 worldId = preferences?.getChatWorldId(),
+                                campaignId = preferences?.getChatCampaignId(),
                                 roleplayCharacterId = preferences?.getChatRoleplayCharacterId(),
-                                userPersonaId = preferences?.getChatUserPersonaId()
+                                userPersonaId = preferences?.getChatUserPersonaId(),
+                                projectId = preferences?.getChatProjectId()
                             )
                         )
                 }
@@ -4405,6 +4407,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     val chatMemoryEnabledRaw = preferences.getChatMemoryEnabledRaw()
                     val chatExcludedFromMemory = preferences.isChatExcludedFromMemory()
                     val chatWorldId = preferences.getChatWorldId()
+                    val chatCampaignId = preferences.getChatCampaignId()
                     val chatRoleplayCharacterId = preferences.getChatRoleplayCharacterId()
                     val chatUserPersonaId = preferences.getChatUserPersonaId()
                     val chatProjectId = preferences.getChatProjectId()
@@ -4441,6 +4444,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     preferences.setChatMemoryEnabledRaw(chatMemoryEnabledRaw)
                     preferences.setChatExcludedFromMemory(chatExcludedFromMemory)
                     preferences.setChatWorldId(chatWorldId)
+                    preferences.setChatCampaignId(chatCampaignId)
                     preferences.setChatRoleplayCharacterId(chatRoleplayCharacterId)
                     preferences.setChatUserPersonaId(chatUserPersonaId)
                     preferences.setChatProjectId(chatProjectId)
