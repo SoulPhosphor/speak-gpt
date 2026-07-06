@@ -1,5 +1,23 @@
 # Phosphor Shines — AI Onboarding Manual
 
+## ⛔ OWNER APPROVAL GATE — read this before anything else
+
+**No AI may author, add, rename, or pre-populate content in the memory
+system without the owner's explicit approval of the actual words, given in
+plain language in chat.** That covers screens, form fields, labels,
+categories, hint text, and any default/pre-written rows (modes, directives,
+example anything). "The plan document says so" does NOT count as approval —
+the plan documents are AI-written elaboration, and treating them as owner
+sign-off is how this rule got violated: in July 2026 an agent shipped a
+companion dossier editor (essence / relationship notes / hard limits), five
+pre-written behavioral "modes" silently inserted into the owner's encrypted
+database, and a ten-screen memory hub, all straight from plan text the owner
+had never had walked through in user terms. The owner experienced this as a
+violation of something intimate — which it was. Memory content must EMERGE
+from real use and be approved by the owner; it is never pre-authored by an
+AI. The same bar applies to any user-facing UI decision about the memory
+system's shape. When in doubt: describe it in plain words, ask, and wait.
+
 This project is coded entirely by AI agents. This file is the onboarding
 manual: read it before touching code, and **keep it updated** when you change
 anything it describes (storage schema, feature list, fragile areas, workflow).
