@@ -1102,25 +1102,16 @@
     <string name="mem_pers_delete_character_keep_memories">Keep memories</string>
     <string name="mem_pers_delete_character_with_memories">Delete memories too</string>
 
-    <!-- ============ Phase 5 area screens: Entities / modes / directives / owner profile ============ -->
+    <!-- ============ Phase 5 area screens: Entities / owner profile ============ -->
     <!-- ============ Screen titles ============ -->
     <string name="mem_admin_title_entities">Entities</string>
-    <string name="mem_admin_title_modes">Modes</string>
-    <string name="mem_admin_title_directives">Directives</string>
     <string name="mem_admin_title_owner_profile">Owner Profile</string>
 
     <!-- ============ FAB / add button labels ============ -->
     <string name="mem_admin_btn_new_entity">New entity</string>
-    <string name="mem_admin_btn_new_mode">New mode</string>
-    <string name="mem_admin_btn_new_directive">New directive</string>
 
     <!-- ============ Row subtitle formats ============ -->
     <string name="mem_admin_entity_subtitle_fmt">%1$s · %2$s</string>
-    <string name="mem_admin_directive_subtitle_priority">Priority %1$d</string>
-    <string name="mem_admin_directive_subtitle_with_rationale">Priority %1$d · %2$s</string>
-
-    <!-- ============ Badges ============ -->
-    <string name="mem_admin_badge_system">system</string>
 
     <!-- ============ Entity dialog ============ -->
     <string name="mem_admin_dialog_entity_title_new">New entity</string>
@@ -1131,23 +1122,6 @@
     <string name="mem_admin_field_aliases">Aliases (comma-separated)</string>
     <string name="mem_admin_field_importance">Importance (1-5)</string>
     <string name="mem_admin_entity_required">A name and summary are both required.</string>
-
-    <!-- ============ Mode dialog ============ -->
-    <string name="mem_admin_dialog_mode_title_new">New mode</string>
-    <string name="mem_admin_dialog_mode_title_edit">Edit mode</string>
-    <string name="mem_admin_field_purpose">Purpose</string>
-    <string name="mem_admin_field_signals">Signals (one per line)</string>
-    <string name="mem_admin_field_respond">How to respond (one per line)</string>
-    <string name="mem_admin_field_avoid">What to avoid (one per line)</string>
-    <string name="mem_admin_mode_name_required">A name is required.</string>
-
-    <!-- ============ Directive dialog ============ -->
-    <string name="mem_admin_dialog_directive_title_new">New directive</string>
-    <string name="mem_admin_dialog_directive_title_edit">Edit directive</string>
-    <string name="mem_admin_field_directive_text">Directive</string>
-    <string name="mem_admin_field_rationale">Rationale</string>
-    <string name="mem_admin_field_priority">Priority (1-5)</string>
-    <string name="mem_admin_directive_text_required">Directive text is required.</string>
 
     <!-- ============ Owner profile screen ============ -->
     <string name="mem_admin_field_portrait">Portrait</string>
@@ -1258,8 +1232,6 @@
     <string name="mm_worlds_desc">Settings your roleplays take place in.</string>
     <string name="mm_campaigns_desc">Ongoing roleplay playthroughs.</string>
     <string name="mm_entities_desc">People, places and things memory tracks.</string>
-    <string name="mm_modes_desc">How companions shift tone in different moments.</string>
-    <string name="mm_directives_desc">Standing instructions that always apply.</string>
     <string name="mm_owner_desc">Who you are, in the memory system\'s words.</string>
 
     <!-- ============ Phase 5: Settings-page cards (Memory System / Roleplay) ============ -->

@@ -22,11 +22,14 @@ import org.teslasoft.assistant.ui.adapters.memory.MemoryRow
 
 /**
  * The hub of the Phase 5 memory manager: a plain list of every area the user
- * can browse and edit by hand (memories, companions, personas, roleplay
- * characters, worlds, campaigns, entities, modes, directives, owner profile).
- * Reuses the shared list scaffold with search and the add-FAB off — each row
- * just opens its area, forwarding the chat id so scoped screens can read
- * per-chat context.
+ * can browse and edit by hand (memories, companions, personas, entities, owner
+ * profile). Reuses the shared list scaffold with search and the add-FAB off —
+ * each row just opens its area, forwarding the chat id so scoped screens can
+ * read per-chat context.
+ *
+ * The Modes and Directives screens were removed (owner_approved_rules.md §15 /
+ * §"Retired machinery"): both concepts are retired from the UI. Their tables
+ * and store CRUD stay in place but dormant.
  */
 class MemoryManagerActivity : MemoryScreenActivity() {
 
@@ -40,8 +43,6 @@ class MemoryManagerActivity : MemoryScreenActivity() {
             // Worlds / Campaigns / Roleplay Characters live under the separate
             // "Roleplay" card on the Settings page (RoleplayHubActivity).
             Area(MemoryEntitiesActivity::class.java, R.string.mem_admin_title_entities, R.string.mm_entities_desc),
-            Area(MemoryModesActivity::class.java, R.string.mem_admin_title_modes, R.string.mm_modes_desc),
-            Area(MemoryDirectivesActivity::class.java, R.string.mem_admin_title_directives, R.string.mm_directives_desc),
             Area(OwnerProfileActivity::class.java, R.string.mem_admin_title_owner_profile, R.string.mm_owner_desc)
         )
     }

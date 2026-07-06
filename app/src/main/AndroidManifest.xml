@@ -273,14 +273,6 @@
             android:exported="false"
             android:label="@string/mem_admin_title_entities" />
         <activity
-            android:name=".ui.activities.memory.MemoryModesActivity"
-            android:exported="false"
-            android:label="@string/mem_admin_title_modes" />
-        <activity
-            android:name=".ui.activities.memory.MemoryDirectivesActivity"
-            android:exported="false"
-            android:label="@string/mem_admin_title_directives" />
-        <activity
             android:name=".ui.activities.memory.OwnerProfileActivity"
             android:exported="false"
             android:label="@string/mem_admin_title_owner_profile" />
