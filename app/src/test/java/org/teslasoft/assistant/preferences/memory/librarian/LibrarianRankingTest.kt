@@ -32,7 +32,7 @@ class LibrarianRankingTest {
     private fun mem(id: String, importance: Int = 3, confidence: String? = "certain") =
         RetrievableMemory(
             memoryId = id, scope = "global", title = id, content = id,
-            embeddingText = null, importance = importance, alwaysLoad = false,
+            embeddingText = null, importance = importance,
             createdAt = "2026-07-01T00:00:00Z", worldId = null, provenanceConfidence = confidence
         )
 

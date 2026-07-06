@@ -120,6 +120,19 @@ data class CampaignRecord(
     val createdAt: String?
 )
 
+/**
+ * A project (owner_approved_rules §4): a plain user-defined named bucket a
+ * memory can be scoped to. Nothing more elaborate — name it, rename it,
+ * archive it.
+ */
+data class ProjectRecord(
+    val projectId: String,
+    val name: String,
+    val status: String,                   // active | archived
+    val createdAt: String?,
+    val updatedAt: String?
+)
+
 data class ChangeLogEntry(
     val at: String,
     val actor: String,                    // user | archivist | companion | system
@@ -130,20 +143,24 @@ data class ChangeLogEntry(
 
 data class MemoryRecord(
     val memoryId: String,
-    val scope: String,                    // global | companion
-    val kind: String,
+    // Primary scope category (owner_approved_rules §1/§2): global | real_life |
+    // companion | project | world | campaign | rp_character. Targets ride the
+    // link columns below (companion via memory_companions).
+    val scope: String,
+    val kind: String,                     // Type: fact|preference|event|status|instruction|lore
     val title: String,
     val content: String,
     val embeddingText: String?,
     val tagsJson: String,                 // JSON array of strings
     val importance: Int,
-    val alwaysLoad: Boolean,
     val worldId: String?,
     val roleplayCharacterId: String?,
     /** Campaign (roleplay continuity) scope — nullable. Ordinary conversation
      *  never retrieves campaign-scoped rows; set only for game-state facts that
      *  belong to one playthrough (integration plan 📌 campaign amendment). */
     val campaignId: String?,
+    /** Project (§4) scope target — a user-defined named bucket. Nullable. */
+    val projectId: String?,
     val protectionJson: String?,          // schema protection object, verbatim
     val modeHintsJson: String,            // JSON array of mode ids
     val provenanceSource: String?,
@@ -152,7 +169,7 @@ data class MemoryRecord(
     val provenanceContext: String?,
     val createdAt: String,
     val updatedAt: String?,
-    val status: String,                   // active | archived | superseded
+    val status: String,                   // draft | active | archived | superseded
     val supersedes: String?,
     val companionIds: List<String>,       // memory_companions join rows
     val entityRefs: List<String>,         // memory_entities join rows
@@ -243,7 +260,8 @@ data class MemoryStoreData(
     val proposals: List<ProposalRecord>,
     val retrievalPolicyJson: String?,     // whole retrieval_policy object, verbatim
     val transcripts: List<TranscriptRecord>,
-    val campaigns: List<CampaignRecord> = emptyList()
+    val campaigns: List<CampaignRecord> = emptyList(),
+    val projects: List<ProjectRecord> = emptyList()
 )
 
 /**
@@ -259,7 +277,6 @@ data class RetrievableMemory(
     val content: String,
     val embeddingText: String?,
     val importance: Int,
-    val alwaysLoad: Boolean,
     val createdAt: String,
     val worldId: String?,
     val provenanceConfidence: String?,

@@ -39,7 +39,6 @@ data class AssembledMemory(
     /** Librarian score; budget cuts remove the lowest first. */
     val score: Float = 0f,
     val similarity: Float = 0f,
-    val alwaysLoad: Boolean = false,
     /** protection.suggested_mode — activates that mode directly when retrieved. */
     val suggestedMode: String? = null
 ) {

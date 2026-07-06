@@ -49,7 +49,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
 
     companion object {
         const val DATABASE_NAME = "companion_memory.db"
-        private const val DATABASE_VERSION = 3
+        private const val DATABASE_VERSION = 4
 
         // meta keys
         const val META_SCHEMA_VERSION = "schema_version"
@@ -103,11 +103,22 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
 
     override fun onConfigure(db: SQLiteDatabase) {
         super.onConfigure(db)
-        db.setForeignKeyConstraintsEnabled(true)
+        // The v4 migration rebuilds the `memories` table to relax its scope and
+        // status CHECK constraints (SQLite cannot loosen a CHECK with ALTER, so
+        // the table is recreated). Dropping `memories` while foreign keys are ON
+        // would fire ON DELETE CASCADE on its child tables and wipe them; the
+        // PRAGMA can't be toggled inside onUpgrade's transaction, so we disable
+        // enforcement here (onConfigure runs before that transaction) whenever an
+        // older schema is about to be migrated, and re-enable it in onOpen. Fresh
+        // installs (version 0) and already-migrated stores keep FKs on.
+        val migratingOlder = db.version in 1 until DATABASE_VERSION
+        db.setForeignKeyConstraintsEnabled(!migratingOlder)
     }
 
     override fun onOpen(db: SQLiteDatabase) {
         super.onOpen(db)
+        // Restore enforcement after any FK-off migration (see onConfigure).
+        if (!db.isReadOnly) db.setForeignKeyConstraintsEnabled(true)
         purgeSystemModesOnce(db)
     }
 
@@ -242,10 +253,25 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 "created_at TEXT)"
         )
 
+        // Projects (owner_approved_rules §4): user-defined named buckets a memory
+        // can be scoped to. Created before `memories` so the project_id FK
+        // resolves. Additive for existing installs (onUpgrade v4).
+        db.execSQL(
+            "CREATE TABLE projects (" +
+                "project_id TEXT PRIMARY KEY, " +
+                "name TEXT NOT NULL, " +
+                "status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','archived')), " +
+                "created_at TEXT, " +
+                "updated_at TEXT)"
+        )
+
+        // scope holds the primary scope category (§1/§2); status gains 'draft'
+        // (§9). always_load is retired (§10) — the column stays but nothing reads
+        // or writes it. kind holds the Type (§5).
         db.execSQL(
             "CREATE TABLE memories (" +
                 "memory_id TEXT PRIMARY KEY, " +
-                "scope TEXT NOT NULL CHECK (scope IN ('global','companion')), " +
+                "scope TEXT NOT NULL CHECK (scope IN ('global','real_life','companion','project','world','campaign','rp_character')), " +
                 "kind TEXT NOT NULL, " +
                 "title TEXT NOT NULL, " +
                 "content TEXT NOT NULL, " +
@@ -256,6 +282,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 "world_id TEXT REFERENCES worlds(world_id), " +
                 "roleplay_character_id TEXT REFERENCES roleplay_characters(roleplay_character_id), " +
                 "campaign_id TEXT REFERENCES campaigns(campaign_id), " +
+                "project_id TEXT REFERENCES projects(project_id), " +
                 "protection_json TEXT, " +
                 "mode_hints_json TEXT DEFAULT '[]', " +
                 "provenance_source TEXT, " +
@@ -264,7 +291,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 "provenance_context TEXT, " +
                 "created_at TEXT NOT NULL, " +
                 "updated_at TEXT, " +
-                "status TEXT NOT NULL CHECK (status IN ('active','archived','superseded')), " +
+                "status TEXT NOT NULL CHECK (status IN ('draft','active','archived','superseded')), " +
                 "supersedes TEXT REFERENCES memories(memory_id), " +
                 "origin TEXT NOT NULL DEFAULT 'user')"
         )
@@ -387,6 +414,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         db.execSQL("CREATE INDEX idx_memories_world ON memories(world_id)")
         db.execSQL("CREATE INDEX idx_memories_rp_character ON memories(roleplay_character_id)")
         db.execSQL("CREATE INDEX idx_memories_campaign ON memories(campaign_id)")
+        db.execSQL("CREATE INDEX idx_memories_project ON memories(project_id)")
         db.execSQL("CREATE INDEX idx_memcomp_companion ON memory_companions(companion_id)")
         db.execSQL("CREATE INDEX idx_changelog_memory ON change_log(memory_id)")
         db.execSQL("CREATE INDEX idx_transcripts_queue ON transcripts(review_status) WHERE review_status = 'pending'")
@@ -453,6 +481,93 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             db.execSQL(
                 "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                 arrayOf(META_DB_MIGRATION, "3")
+            )
+        }
+        if (oldVersion < 4) {
+            // v4 (July 2026, Phase 5 Stage 2): the memory record restructure —
+            // scope categories, Type, projects, statuses (owner_approved_rules
+            // §§1–9). New scope values and a 'draft' status require loosening the
+            // `memories` CHECK constraints, which SQLite can't do with ALTER, so
+            // the table is rebuilt. Foreign keys are OFF here (see onConfigure),
+            // so dropping `memories` does not cascade-delete its child rows; the
+            // same memory_ids are re-inserted, leaving the children valid.
+            db.execSQL(
+                "CREATE TABLE projects (" +
+                    "project_id TEXT PRIMARY KEY, " +
+                    "name TEXT NOT NULL, " +
+                    "status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','archived')), " +
+                    "created_at TEXT, " +
+                    "updated_at TEXT)"
+            )
+
+            db.execSQL(
+                "CREATE TABLE memories_new (" +
+                    "memory_id TEXT PRIMARY KEY, " +
+                    "scope TEXT NOT NULL CHECK (scope IN ('global','real_life','companion','project','world','campaign','rp_character')), " +
+                    "kind TEXT NOT NULL, " +
+                    "title TEXT NOT NULL, " +
+                    "content TEXT NOT NULL, " +
+                    "embedding_text TEXT, " +
+                    "tags_json TEXT DEFAULT '[]', " +
+                    "importance INTEGER NOT NULL DEFAULT 3, " +
+                    "always_load INTEGER NOT NULL DEFAULT 0, " +
+                    "world_id TEXT REFERENCES worlds(world_id), " +
+                    "roleplay_character_id TEXT REFERENCES roleplay_characters(roleplay_character_id), " +
+                    "campaign_id TEXT REFERENCES campaigns(campaign_id), " +
+                    "project_id TEXT REFERENCES projects(project_id), " +
+                    "protection_json TEXT, " +
+                    "mode_hints_json TEXT DEFAULT '[]', " +
+                    "provenance_source TEXT, " +
+                    "provenance_confidence TEXT, " +
+                    "provenance_noted_on TEXT, " +
+                    "provenance_context TEXT, " +
+                    "created_at TEXT NOT NULL, " +
+                    "updated_at TEXT, " +
+                    "status TEXT NOT NULL CHECK (status IN ('draft','active','archived','superseded')), " +
+                    "supersedes TEXT REFERENCES memories(memory_id), " +
+                    "origin TEXT NOT NULL DEFAULT 'user')"
+            )
+
+            // Migrate rows. Type: unrecognized kind -> 'fact' (single user; owner
+            // approved this lossy simplicity). Scope: companion-scoped rows stay
+            // companion; otherwise a campaign/world/rp link promotes the row to
+            // that specific category; plain global stays global. project_id is
+            // NULL for every pre-existing row (no project scope existed before).
+            db.execSQL(
+                "INSERT INTO memories_new (memory_id, scope, kind, title, content, embedding_text, " +
+                    "tags_json, importance, always_load, world_id, roleplay_character_id, campaign_id, " +
+                    "project_id, protection_json, mode_hints_json, provenance_source, provenance_confidence, " +
+                    "provenance_noted_on, provenance_context, created_at, updated_at, status, supersedes, origin) " +
+                    "SELECT memory_id, " +
+                    "CASE " +
+                    "WHEN scope = 'companion' THEN 'companion' " +
+                    "WHEN campaign_id IS NOT NULL THEN 'campaign' " +
+                    "WHEN roleplay_character_id IS NOT NULL THEN 'rp_character' " +
+                    "WHEN world_id IS NOT NULL THEN 'world' " +
+                    "WHEN scope = 'global' THEN 'global' " +
+                    "ELSE 'global' END, " +
+                    "CASE WHEN kind IN ('fact','preference','event','status','instruction','lore') THEN kind ELSE 'fact' END, " +
+                    "title, content, embedding_text, tags_json, importance, always_load, world_id, " +
+                    "roleplay_character_id, campaign_id, NULL, protection_json, mode_hints_json, " +
+                    "provenance_source, provenance_confidence, provenance_noted_on, provenance_context, " +
+                    "created_at, updated_at, status, supersedes, origin FROM memories"
+            )
+
+            db.execSQL("DROP TABLE memories")
+            db.execSQL("ALTER TABLE memories_new RENAME TO memories")
+
+            // Recreate the indexes that lived on the old memories table, plus the
+            // new project index.
+            db.execSQL("CREATE INDEX idx_memories_status ON memories(status)")
+            db.execSQL("CREATE INDEX idx_memories_always_load ON memories(always_load) WHERE always_load = 1")
+            db.execSQL("CREATE INDEX idx_memories_world ON memories(world_id)")
+            db.execSQL("CREATE INDEX idx_memories_rp_character ON memories(roleplay_character_id)")
+            db.execSQL("CREATE INDEX idx_memories_campaign ON memories(campaign_id)")
+            db.execSQL("CREATE INDEX idx_memories_project ON memories(project_id)")
+
+            db.execSQL(
+                "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                arrayOf(META_DB_MIGRATION, "4")
             )
         }
     }
@@ -832,6 +947,15 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 report.addAdded("campaigns")
             }
 
+            // Projects before memories: memories.project_id foreign-keys here.
+            for (p in data.projects) {
+                if (rowExists(db, "projects", "project_id", p.projectId)) {
+                    report.addSkipped("projects"); continue
+                }
+                db.insert("projects", null, projectValues(p))
+                report.addAdded("projects")
+            }
+
             for (m in data.memories) {
                 if (rowExists(db, "memories", "memory_id", m.memoryId)) {
                     report.addSkipped("memories"); continue
@@ -845,10 +969,10 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                     put("embedding_text", m.embeddingText)
                     put("tags_json", m.tagsJson)
                     put("importance", m.importance)
-                    put("always_load", if (m.alwaysLoad) 1 else 0)
                     put("world_id", m.worldId)
                     put("roleplay_character_id", m.roleplayCharacterId)
                     put("campaign_id", m.campaignId)
+                    put("project_id", m.projectId)
                     put("protection_json", m.protectionJson)
                     put("mode_hints_json", m.modeHintsJson)
                     put("provenance_source", m.provenanceSource)
@@ -1076,10 +1200,10 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                         embeddingText = it.getStringOrNull("embedding_text"),
                         tagsJson = it.getStringOrNull("tags_json") ?: "[]",
                         importance = it.getInt(it.getColumnIndexOrThrow("importance")),
-                        alwaysLoad = it.getInt(it.getColumnIndexOrThrow("always_load")) == 1,
                         worldId = it.getStringOrNull("world_id"),
                         roleplayCharacterId = it.getStringOrNull("roleplay_character_id"),
                         campaignId = it.getStringOrNull("campaign_id"),
+                        projectId = it.getStringOrNull("project_id"),
                         protectionJson = it.getStringOrNull("protection_json"),
                         modeHintsJson = it.getStringOrNull("mode_hints_json") ?: "[]",
                         provenanceSource = it.getStringOrNull("provenance_source"),
@@ -1197,6 +1321,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         }
 
         val campaigns = readCampaigns(null, null)
+        val projects = readProjects(null, null)
 
         return MemoryStoreData(
             schemaVersion = getMeta(META_SCHEMA_VERSION) ?: "1.11.0",
@@ -1213,7 +1338,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             proposals = proposals,
             retrievalPolicyJson = retrievalPolicy,
             transcripts = transcripts,
-            campaigns = campaigns
+            campaigns = campaigns,
+            projects = projects
         )
     }
 
@@ -1577,7 +1703,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         val args = ArrayList<String>()
         val sb = StringBuilder(
             "SELECT DISTINCT m.memory_id, m.scope, m.title, m.content, m.embedding_text, " +
-                "m.importance, m.always_load, m.created_at, m.world_id, m.provenance_confidence, " +
+                "m.importance, m.created_at, m.world_id, m.provenance_confidence, " +
                 "m.protection_json, m.provenance_source " +
                 "FROM memories m LEFT JOIN memory_companions mc ON mc.memory_id = m.memory_id " +
                 "WHERE m.status = 'active' AND (m.scope = 'global'"
@@ -1689,7 +1815,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         readableDatabase.query(
             "memories",
             arrayOf("memory_id", "scope", "title", "content", "embedding_text",
-                "importance", "always_load", "created_at", "world_id", "provenance_confidence",
+                "importance", "created_at", "world_id", "provenance_confidence",
                 "protection_json", "provenance_source"),
             "status = 'active'", null, null, null, "created_at ASC"
         ).use {
@@ -1705,7 +1831,6 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         content = c.getString(c.getColumnIndexOrThrow("content")),
         embeddingText = c.getStringOrNull("embedding_text"),
         importance = c.getInt(c.getColumnIndexOrThrow("importance")),
-        alwaysLoad = c.getInt(c.getColumnIndexOrThrow("always_load")) == 1,
         createdAt = c.getString(c.getColumnIndexOrThrow("created_at")) ?: "",
         worldId = c.getStringOrNull("world_id"),
         provenanceConfidence = c.getStringOrNull("provenance_confidence"),
@@ -2265,6 +2390,75 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         }
     }
 
+    /* -------- projects (§4) -------- */
+
+    fun getProjects(): List<ProjectRecord> = readProjects(null, null)
+
+    fun getActiveProjects(): List<ProjectRecord> = readProjects("status = 'active'", null)
+
+    fun getProject(projectId: String): ProjectRecord? =
+        readProjects("project_id = ?", arrayOf(projectId)).firstOrNull()
+
+    private fun readProjects(selection: String?, args: Array<String>?): List<ProjectRecord> {
+        val out = ArrayList<ProjectRecord>()
+        readableDatabase.query("projects", null, selection, args, null, null, "name ASC").use {
+            while (it.moveToNext()) {
+                out.add(
+                    ProjectRecord(
+                        projectId = it.getString(it.getColumnIndexOrThrow("project_id")),
+                        name = it.getString(it.getColumnIndexOrThrow("name")),
+                        status = it.getString(it.getColumnIndexOrThrow("status")),
+                        createdAt = it.getStringOrNull("created_at"),
+                        updatedAt = it.getStringOrNull("updated_at")
+                    )
+                )
+            }
+        }
+        return out
+    }
+
+    private fun projectValues(p: ProjectRecord) = ContentValues().apply {
+        put("project_id", p.projectId)
+        put("name", p.name)
+        put("status", p.status)
+        put("created_at", p.createdAt ?: nowIso())
+        put("updated_at", p.updatedAt)
+    }
+
+    fun upsertProject(p: ProjectRecord) {
+        writableDatabase.insertWithOnConflict("projects", null, projectValues(p), SQLiteDatabase.CONFLICT_REPLACE)
+    }
+
+    fun setProjectStatus(projectId: String, status: String) {
+        writableDatabase.update(
+            "projects", ContentValues().apply { put("status", status); put("updated_at", nowIso()) },
+            "project_id = ?", arrayOf(projectId)
+        )
+    }
+
+    /** Delete a project; its project-scoped memories are deleted or unlinked
+     *  per the flag (mirrors [deleteCampaign]). */
+    fun deleteProject(projectId: String, deleteMemories: Boolean) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            if (deleteMemories) {
+                deleteMemoriesWhere(db, "project_id = ?", arrayOf(projectId))
+            } else {
+                db.update("memories", ContentValues().apply { putNull("project_id") },
+                    "project_id = ?", arrayOf(projectId))
+            }
+            db.delete("projects", "project_id = ?", arrayOf(projectId))
+            recordDeletionTx(db, "project", projectId)
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    fun memoriesForProject(projectId: String, includeArchived: Boolean): List<MemoryRecord> =
+        readMemoriesWhere("project_id = ?", arrayOf(projectId), includeArchived)
+
     /* -------- memories (full editor CRUD) -------- */
 
     fun getMemory(memoryId: String): MemoryRecord? {
@@ -2344,10 +2538,10 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             embeddingText = it.getStringOrNull("embedding_text"),
             tagsJson = it.getStringOrNull("tags_json") ?: "[]",
             importance = it.getInt(it.getColumnIndexOrThrow("importance")),
-            alwaysLoad = it.getInt(it.getColumnIndexOrThrow("always_load")) == 1,
             worldId = it.getStringOrNull("world_id"),
             roleplayCharacterId = it.getStringOrNull("roleplay_character_id"),
             campaignId = it.getStringOrNull("campaign_id"),
+            projectId = it.getStringOrNull("project_id"),
             protectionJson = it.getStringOrNull("protection_json"),
             modeHintsJson = it.getStringOrNull("mode_hints_json") ?: "[]",
             provenanceSource = it.getStringOrNull("provenance_source"),
@@ -2374,10 +2568,10 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         put("embedding_text", m.embeddingText)
         put("tags_json", m.tagsJson)
         put("importance", m.importance)
-        put("always_load", if (m.alwaysLoad) 1 else 0)
         put("world_id", m.worldId)
         put("roleplay_character_id", m.roleplayCharacterId)
         put("campaign_id", m.campaignId)
+        put("project_id", m.projectId)
         put("protection_json", m.protectionJson)
         put("mode_hints_json", m.modeHintsJson)
         put("provenance_source", m.provenanceSource)
@@ -2529,7 +2723,6 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         put("scope", m.scope)
         put("kind", m.kind)
         put("importance", m.importance)
-        put("always_load", m.alwaysLoad)
         put("status", m.status)
         put("tags_json", m.tagsJson)
         m.protectionJson?.let { put("protection_json", it) }

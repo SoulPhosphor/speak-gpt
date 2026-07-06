@@ -113,7 +113,6 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
             m.status == "archived" -> getString(R.string.memory_badge_archived)
             m.status == "superseded" -> getString(R.string.memory_badge_superseded)
             !m.protectionJson.isNullOrBlank() -> getString(R.string.memory_badge_protected)
-            m.alwaysLoad -> getString(R.string.memory_badge_always)
             else -> null
         }
         val scopeLabel = if (m.scope == "companion") getString(R.string.memory_scope_companion)
@@ -204,7 +203,6 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
                     kind = existing?.kind ?: "note",
                     importance = existing?.importance ?: 3,
                     tags = existing?.let { tagsToText(it.tagsJson) } ?: "",
-                    alwaysLoad = existing?.alwaysLoad ?: false,
                     // A companion-scoped browser defaults new memories to that
                     // companion; existing memories keep their own scope.
                     scope = existing?.scope ?: (if (presetCompanionId != null) "companion" else "global"),
@@ -224,7 +222,7 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
     private val editorListener = object : EditMemoryDialogFragment.Listener {
         override fun onSave(
             memoryId: String, title: String, content: String, kind: String, importance: Int,
-            tags: String, alwaysLoad: Boolean, scope: String, companionId: String?,
+            tags: String, scope: String, companionId: String?,
             presetWorldId: String?, presetCampaignId: String?, presetRoleplayCharacterId: String?
         ) {
             runOffThread {
@@ -236,8 +234,9 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
                         memoryId = MemoryStore.newId("m-"),
                         scope = scope, kind = kind, title = title, content = content,
                         embeddingText = null, tagsJson = tagsJson, importance = importance,
-                        alwaysLoad = alwaysLoad, worldId = presetWorldId,
+                        worldId = presetWorldId,
                         roleplayCharacterId = presetRoleplayCharacterId, campaignId = presetCampaignId,
+                        projectId = null,
                         protectionJson = null, modeHintsJson = "[]",
                         provenanceSource = "user_entered", provenanceConfidence = null,
                         provenanceNotedOn = MemoryStore.nowIso(), provenanceContext = null,
@@ -251,7 +250,7 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
                     val prior = store.getMemory(memoryId) ?: return@runOffThread
                     val updated = prior.copy(
                         scope = scope, kind = kind, title = title, content = content,
-                        importance = importance, alwaysLoad = alwaysLoad, tagsJson = tagsJson,
+                        importance = importance, tagsJson = tagsJson,
                         worldId = presetWorldId, roleplayCharacterId = presetRoleplayCharacterId,
                         campaignId = presetCampaignId, companionIds = companionIds
                     )

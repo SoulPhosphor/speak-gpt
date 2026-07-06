@@ -51,7 +51,6 @@ class EditMemoryDialogFragment : DialogFragment() {
             kind: String,
             importance: Int,
             tags: String,
-            alwaysLoad: Boolean,
             scope: String,
             companionId: String?,
             presetWorldId: String?,
@@ -68,7 +67,6 @@ class EditMemoryDialogFragment : DialogFragment() {
                 putString("kind", kind)
                 putInt("importance", importance)
                 putString("tags", tags)
-                putBoolean("alwaysLoad", alwaysLoad)
                 putString("scope", scope)
                 putString("companionId", companionId)
                 putString("presetWorldId", presetWorldId)
@@ -89,7 +87,6 @@ class EditMemoryDialogFragment : DialogFragment() {
             kind: String,
             importance: Int,
             tags: String,
-            alwaysLoad: Boolean,
             scope: String,
             companionId: String?,
             presetWorldId: String?,
@@ -107,7 +104,6 @@ class EditMemoryDialogFragment : DialogFragment() {
     private var fieldKind: TextInputEditText? = null
     private var fieldImportance: TextInputEditText? = null
     private var fieldTags: TextInputEditText? = null
-    private var checkAlwaysLoad: CheckBox? = null
     private var checkCompanionScoped: CheckBox? = null
     private var btnPickCompanion: MaterialButton? = null
 
@@ -123,7 +119,6 @@ class EditMemoryDialogFragment : DialogFragment() {
         fieldKind = view.findViewById(R.id.field_kind)
         fieldImportance = view.findViewById(R.id.field_importance)
         fieldTags = view.findViewById(R.id.field_tags)
-        checkAlwaysLoad = view.findViewById(R.id.check_always_load)
         checkCompanionScoped = view.findViewById(R.id.check_companion_scoped)
         btnPickCompanion = view.findViewById(R.id.btn_pick_companion)
 
@@ -137,7 +132,6 @@ class EditMemoryDialogFragment : DialogFragment() {
         fieldKind?.setText(args.getString("kind").orEmpty().ifBlank { "note" })
         fieldImportance?.setText(args.getInt("importance", 3).toString())
         fieldTags?.setText(args.getString("tags"))
-        checkAlwaysLoad?.isChecked = args.getBoolean("alwaysLoad", false)
 
         selectedCompanionId = args.getString("companionId")
         val companionScoped = args.getString("scope") == "companion"
@@ -212,7 +206,6 @@ class EditMemoryDialogFragment : DialogFragment() {
             fieldKind?.text?.toString()?.trim()?.ifBlank { "note" } ?: "note",
             importance,
             fieldTags?.text?.toString()?.trim().orEmpty(),
-            checkAlwaysLoad?.isChecked ?: false,
             if (companionScoped) "companion" else "global",
             if (companionScoped) selectedCompanionId else null,
             args.getString("presetWorldId"),

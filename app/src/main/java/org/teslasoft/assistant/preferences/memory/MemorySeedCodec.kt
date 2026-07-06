@@ -150,10 +150,10 @@ object MemorySeedCodec {
                 embeddingText = m.str("embedding_text"),
                 tagsJson = m.arrText("tags"),
                 importance = m.optInt("importance", 3),
-                alwaysLoad = m.optBoolean("always_load", false),
                 worldId = m.str("world_id"),
                 roleplayCharacterId = m.str("roleplay_character_id"),
                 campaignId = m.str("campaign_id"),
+                projectId = m.str("project_id"),
                 protectionJson = m.objText("protection"),
                 modeHintsJson = m.arrText("mode_hints"),
                 provenanceSource = prov?.str("source"),
@@ -280,6 +280,16 @@ object MemorySeedCodec {
             )
         }
 
+        val projects = each(root, "projects").map { p ->
+            ProjectRecord(
+                projectId = p.reqStr("project_id"),
+                name = p.reqStr("name"),
+                status = p.str("status") ?: "active",
+                createdAt = p.str("created_at"),
+                updatedAt = p.str("updated_at")
+            )
+        }
+
         val retrievalPolicy = if (root.has("retrieval_policy") && !root.isNull("retrieval_policy"))
             root.getJSONObject("retrieval_policy").toString() else null
 
@@ -317,7 +327,8 @@ object MemorySeedCodec {
             proposals = proposals,
             retrievalPolicyJson = retrievalPolicy,
             transcripts = transcripts,
-            campaigns = campaigns
+            campaigns = campaigns,
+            projects = projects
         )
     }
 
@@ -395,6 +406,7 @@ object MemorySeedCodec {
                     putIfNotNull("world_id", m.worldId)
                     putIfNotNull("roleplay_character_id", m.roleplayCharacterId)
                     putIfNotNull("campaign_id", m.campaignId)
+                    putIfNotNull("project_id", m.projectId)
                     put("kind", m.kind)
                     put("title", m.title)
                     put("content", m.content)
@@ -402,7 +414,6 @@ object MemorySeedCodec {
                     put("tags", jsonArrayOrEmpty(m.tagsJson))
                     if (m.entityRefs.isNotEmpty()) put("entity_refs", JSONArray(m.entityRefs))
                     put("importance", m.importance)
-                    put("always_load", m.alwaysLoad)
                     m.protectionJson?.let { putJsonText("protection", it) }
                     put("mode_hints", jsonArrayOrEmpty(m.modeHintsJson))
                     if (m.provenanceSource != null || m.provenanceConfidence != null ||
@@ -521,6 +532,20 @@ object MemorySeedCodec {
                         put("status", c.status)
                         putIfNotNull("story_so_far", c.storySoFar)
                         putIfNotNull("created_at", c.createdAt)
+                    })
+                }
+            })
+        }
+
+        if (data.projects.isNotEmpty()) {
+            root.put("projects", JSONArray().apply {
+                data.projects.forEach { p ->
+                    put(JSONObject().apply {
+                        put("project_id", p.projectId)
+                        put("name", p.name)
+                        put("status", p.status)
+                        putIfNotNull("created_at", p.createdAt)
+                        putIfNotNull("updated_at", p.updatedAt)
                     })
                 }
             })

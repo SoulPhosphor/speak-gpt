@@ -136,12 +136,11 @@ class Enforcer private constructor(private val appContext: Context) {
         } catch (_: Exception) { /* mirror only; never blocks a turn */ }
 
         val librarian = Librarian.getInstance(appContext)
-        val candidates = store.activeMemoriesForScope(scopeCompanionId, worldId)
-        val alwaysLoad = candidates.filter { it.alwaysLoad }.map { toAssembled(it, 1f, 1f) }
 
-        // Retrieval: the librarian's search inherits the eligibility gates in
-        // the store query; always-load memories live in the standing packet,
-        // so they're excluded from the retrieved list (never the same fact twice).
+        // Retrieval: the librarian's search inherits the eligibility gates in the
+        // store query. The per-memory always-load flag is retired
+        // (owner_approved_rules §10): nothing is force-injected every turn, so
+        // the standing packet carries no always-load section any more.
         val query = listOf(input.userMessage, input.recentContext)
             .filter { it.isNotBlank() }.joinToString("\n")
         if (!librarian.hasUsableModel()) notes.add("no embedding model — keyword retrieval")
@@ -151,8 +150,7 @@ class Enforcer private constructor(private val appContext: Context) {
             notes.add("retrieval failed: ${e.message}")
             emptyList()
         }
-        var retrieved = retrievedRaw.filter { !it.memory.alwaysLoad }
-            .map { toAssembled(it.memory, it.score, it.similarity) }
+        var retrieved = retrievedRaw.map { toAssembled(it.memory, it.score, it.similarity) }
 
         // Lore notes: the user's hand-written tier, same budget caps as the
         // classic path (core-book-first order is preserved from the caller).
@@ -220,7 +218,7 @@ class Enforcer private constructor(private val appContext: Context) {
                 scopeKey = scopeCompanionId ?: "global",
                 owner = store.getOwnerProfile(),
                 directives = store.getDirectives().filter { appliesTo(it.appliesToJson, companion?.companionId) },
-                alwaysLoad = alwaysLoad,
+                alwaysLoad = emptyList(),
                 archivistEndpointId = prefs.getArchivistEndpointId(),
                 archivistModel = prefs.getArchivistModel()
             )
@@ -429,7 +427,6 @@ class Enforcer private constructor(private val appContext: Context) {
             neverAssume = neverAssume,
             score = score,
             similarity = similarity,
-            alwaysLoad = m.alwaysLoad,
             suggestedMode = suggestedMode
         )
     }
