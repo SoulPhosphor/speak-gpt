@@ -175,7 +175,7 @@ class Enforcer private constructor(private val appContext: Context) {
         // chat's active companion) or the global "Allow active companion
         // memories in roleplay" toggle (default OFF). Two independent paths;
         // the toggle does not require narrator status.
-        val narratorMatch = campaign?.companionId != null &&
+        val narratorMatch = campaign != null && campaign.companionId != null &&
             campaign.companionId == companion?.companionId
         val companionInRoleplayAllowed =
             narratorMatch || prefs.getAllowCompanionMemoriesInRoleplay()

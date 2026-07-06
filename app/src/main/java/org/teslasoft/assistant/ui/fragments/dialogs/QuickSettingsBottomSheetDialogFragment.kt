@@ -836,7 +836,9 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         }
     }
 
-    // §4: stores the per-chat project only; retrieval wiring is Stage 3.
+    // §4 rev 3 (Stage 3.5): selecting a project BOOSTS its memories in
+    // ranking; with none selected, project memories still retrieve on
+    // relevance in ordinary chats. Never an eligibility gate.
     private fun showProjectPicker() {
         val ids = listOf("") + cachedProjects.map { it.projectId }
         val labels = (listOf(getString(R.string.label_project_none)) + cachedProjects.map { it.name }).toTypedArray()

@@ -507,6 +507,56 @@ retired, mode detection dormant, hard-limits render removed, scope
 eligibility and ranking rewritten, freshness cooldown added. The bullets
 below describe what was built THEN; `rag_engine_work_order.md` stage 3
 describes what it becomes.
+
+> **✅ Stage 3 tasks 3.0–3.5 are BUILT (July 2026)** — the paragraphs below
+> this box are history; the CURRENT runtime is:
+> - **3.0 Campaign wiring:** Quick Settings gained a per-chat **Campaign**
+>   selector (active campaigns; per-chat pref in the auto-naming copy
+>   block). One selection implies the rest: the campaign's world and the
+>   user's character fill in when the chat has no explicit pick; explicit
+>   picks win. The selected campaign is ALSO the §3 narrator signal — its
+>   GM companion being the chat's active companion opens the
+>   companion-memories-in-roleplay door.
+> - **3.1 Eligibility:** `activeMemoriesForScope(RetrievalScope)` is the
+>   rewritten single gate (seven categories, §1/§3/§4 rev 3). Ordinary
+>   chat: global + real_life + the active companion's + ALL project
+>   memories. Roleplay (any of world/campaign/RP-character selected):
+>   global + the SELECTED targets' memories via the §2 multi-select join
+>   tables; real-life and project rows BLOCKED; companion rows only via
+>   the narrator match or the global **"Allow active companion memories in
+>   roleplay"** switch in Memory settings (default OFF, owner's wording).
+>   Only status='active'; draft-companion gate intact.
+> - **3.2 Ladder:** scope specificity (campaign → rp_character → world →
+>   project → companion → real_life → global), the selected-project boost
+>   and capped tag hints are bounded additive boosts blended into the
+>   relevance score (`Librarian.retrievalBoost`, unit-tested) — a strong
+>   preference among comparably relevant entries, never a trump card
+>   (§12.4); the 0.30 similarity floor still gates.
+> - **3.3 Cooldown:** DB v6 adds `injection_cooldowns` (keyed chat_id +
+>   source_type + entry_id) and `chat_turn_counters`. Anything injected
+>   within the last 10 turns (constant in code) is suppressed before the
+>   budget; first-time entries always inject; edits/status flips reset the
+>   entry's clock; `repointChat` carries both tables across renames; every
+>   suppression shows in the AssemblyLog. The "old mention fell out of the
+>   sent window" refresh half is deferred (TurnInput carries only a short
+>   digest).
+> - **3.4 Assembly:** the enforcer message is now ONLY retrieved memories
+>   (Instruction-kind rendered as context rules in a distinct section —
+>   law 5), lore notes, and the scene. StandingPacketManager and
+>   ModeSelection are DELETED (the packet's background Archivist
+>   compression call went with it; the Archivist-model *setting* stays for
+>   Phase 6); hard-limits render, model-adaptation note, entity summaries
+>   and `always_include` are gone. Store tables stay dormant. AssemblyLog
+>   shows the eligibility "room" + cut reasons (budget/near-dup/cooldown).
+> - **3.5 Project semantics:** selection boosts, never gates; verified no
+>   UI string promises the old behavior.
+> - **3.6 (RP-character two-zone ledger) is NOT built yet** — the work
+>   order's ⛔ PAUSE POINT requires asking the owner first whether
+>   world/campaign card sections join the same pass. Stage 4 (Model rules)
+>   is not built.
+> - **Prompt-layer contract** (see the work order's top section): stable
+>   prefix → (future model-rules block) → the ONE memory message → history.
+>   Same blocks, same order, same wording every turn.
 **Landed July 2026.** What shipped, in `preferences/memory/enforcer/`:
 `Enforcer` (orchestrator singleton; `assembleTurn` returns the ONE extra
 system message or null), `PromptAssembler` (pure renderer of the template —
@@ -616,7 +666,8 @@ coexistence, essence guardrail, failure behavior); D7 (compressor), D8.
 >   (§10, column dead). Named target scopes are **multi-select** (§2) via join
 >   tables (`memory_worlds`/`memory_campaigns`/`memory_roleplay_characters`/
 >   `memory_projects`, like `memory_companions`); the single columns stay as a
->   primary-target mirror so the Stage-3 retrieval query is untouched.
+>   primary-target mirror (since Stage 3.1 the retrieval query reads the join
+>   tables; the mirror serves only the target teardown paths).
 > - The **editor is a full-screen page** (`MemoryEditorActivity`) with the
 >   §2/§5/§6/§8 fields and a multi-select target picker (removable pills); the
 >   old pop-up editor was removed.
@@ -626,9 +677,11 @@ coexistence, essence guardrail, failure behavior); D7 (compressor), D8.
 > - **Reset memories** (Memory settings) empties every memory-content table with
 >   a backup-first option. **Quick Settings** gained a per-chat **Project**
 >   selector (§4).
-> Stage 2 does NOT touch retrieval; the priority ladder, cooldown, scope-
-> eligibility rewrite and RP-ledger indexing are **Stage 3** (reserved). Read
-> the work order before touching Phase 5 UI.
+> **Stage 3 tasks 3.0–3.5 are built (July 2026)** — the priority ladder,
+> cooldown, scope-eligibility rewrite, campaign wiring and project boost are
+> live (see the Stage 3 box in Phase 4 above). Task 3.6 (the RP-character
+> ledger) waits on the work order's owner pause point; Stage 4 (Model rules)
+> is not built. Read the work order before touching Phase 5 UI.
 
 **Landed July 2026.** What shipped: a **Memory manager** hub
 (`ui/activities/memory/MemoryManagerActivity`, reached from a "Browse & edit"
@@ -662,10 +715,9 @@ a `campaignId` param (ordinary chat still can't see campaign-scoped rows).
 column — **now designed as the §13 two-zone ledger and scheduled in Stage
 3.6 of `Memory System/rag_engine_work_order.md`, no longer deferred**;
 (3) wiring an active campaign into live generation via Quick Settings —
-**promoted July 6 2026 into Stage 3 (task 3.0 of the same work order), no
-longer deferred**: the §3 narrator rule and the §12 Campaign tier both
-need it (`MemoryStore.campaignScope` already resolves world/character/DM;
-only the selector + `regularGPTResponse` plumbing remains); (4) scrubbing
+**promoted July 6 2026 into Stage 3 (task 3.0) and BUILT (July 2026)**: the
+per-chat Campaign selector, the campaign→world/character fill-in and the §3
+narrator signal are live (see the Stage 3 box in Phase 4); (4) scrubbing
 deleted user-persona / roleplay-character ids from per-chat
 Quick-Settings selectors (degrades gracefully today — a dangling id reads
 as "no scope").
