@@ -18,6 +18,12 @@ from real use and be approved by the owner; it is never pre-authored by an
 AI. The same bar applies to any user-facing UI decision about the memory
 system's shape. When in doubt: describe it in plain words, ask, and wait.
 
+The owner-approved memory rules live in
+**`Memory System/owner_approved_rules.md`** (approved word by word in chat,
+July 6 2026). That file outranks every other memory-system document,
+including the integration plan and the spec package. Read it before ANY
+memory work; sections it marks deferred are not to be built.
+
 This project is coded entirely by AI agents. This file is the onboarding
 manual: read it before touching code, and **keep it updated** when you change
 anything it describes (storage schema, feature list, fragile areas, workflow).

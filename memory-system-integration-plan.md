@@ -11,6 +11,16 @@ documents disagree, the specs win; where the specs are silent, this plan
 records the code-level decision so future agents don't re-litigate it.
 Update the checkboxes and notes here as phases land.
 
+> **⛔ July 6 2026 — `Memory System/owner_approved_rules.md` outranks
+> EVERYTHING, including this plan and the specs.** The owner reviewed and
+> corrected those rules word by word in chat after Phase 5 shipped
+> unapproved UI and pre-written content (see the approval gate at the top
+> of CLAUDE.md). Where that document and any other text disagree, the
+> owner's rules win; where it defers a topic (e.g. §10 retrieval mode),
+> do not build that topic. Phase 5 as shipped is being reworked to match
+> it — the ☑ Phase 5 section below describes what EXISTS, not what is
+> approved to remain.
+
 This plan supersedes the phase list in `Memory System Plans June 1 2026` from
 Phase 2 onward — Phase 1 of that older roadmap (the lorebook) is built and
 stays as the low-RAM tier, exactly as the new design intends.
