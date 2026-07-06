@@ -659,12 +659,16 @@ a `campaignId` param (ordinary chat still can't see campaign-scoped rows).
 **Deferred to a follow-up (need a store/schema pass, not blocking the phase):**
 (1) merge tooling for duplicate worlds/characters/campaigns (needs
 `MemoryStore` merge methods); (2) a dedicated roleplay `abilities/spells`
-column (currently folded into the character description); (3) wiring an active
-campaign into live generation via Quick Settings (`MemoryStore.campaignScope`
-already resolves world/character/DM from a campaign — only the selector +
-`regularGPTResponse` plumbing remains); (4) scrubbing deleted user-persona /
-roleplay-character ids from per-chat Quick-Settings selectors (degrades
-gracefully today — a dangling id reads as "no scope").
+column — **now designed as the §13 two-zone ledger and scheduled in Stage
+3.6 of `Memory System/rag_engine_work_order.md`, no longer deferred**;
+(3) wiring an active campaign into live generation via Quick Settings —
+**promoted July 6 2026 into Stage 3 (task 3.0 of the same work order), no
+longer deferred**: the §3 narrator rule and the §12 Campaign tier both
+need it (`MemoryStore.campaignScope` already resolves world/character/DM;
+only the selector + `regularGPTResponse` plumbing remains); (4) scrubbing
+deleted user-persona / roleplay-character ids from per-chat
+Quick-Settings selectors (degrades gracefully today — a dangling id reads
+as "no scope").
 Specs: app_adaptation_notes §Tab structure, §Worlds UI, §Characters area,
 §New areas, §Required memory UI; `enforcer_librarian_spec.md` §Manual
 authority.
@@ -705,6 +709,13 @@ injections), `enforcer_librarian_spec.md` §Applying change-sets; D7.
 >   that toggle in this phase), model-rule drafts into Model rules /
 >   Needs review (§11). The run report lists what was *proposed*, not
 >   what was changed; undo machinery for auto-applies is unnecessary.
+> - **Memory drafts have ONE home: `memories.status='draft'`** (rules
+>   §14, rev 3). The Archivist files memory drafts as draft-status rows
+>   in `memories` so the Stage-2 Pending screen sees them. Do NOT
+>   duplicate normal memory drafts into the `proposals` table — if
+>   `proposals` is used at all it is for something else, clearly defined
+>   later; the Pending UI must never depend on two competing stores for
+>   the same item.
 > - **No personality proposals. None.** Companion cards and user
 >   personas have one author (rules law 3). The Archivist never proposes
 >   companion/persona card content, not even as paste-ready text.

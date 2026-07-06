@@ -33,10 +33,14 @@ code:**
 - Do not touch: the voice/VAD pipeline, lorebook matching, Ktor version,
   the generation funnel's message ordering, anything in the CLAUDE.md
   "Do not touch / fragile" list.
-- Stages 3 (retrieval engine: cooldown, priority ladder, scope
-  eligibility rewrite, RP-ledger indexing, RP character card zones) and 4
-  (Model rules) are RESERVED for another session. Do not start them. Do
-  not "prepare" for them beyond what your tasks say.
+- Stages 3 (retrieval engine: campaign wiring, scope eligibility rewrite,
+  freshness cooldown, the non-rigid active-context-first priority ladder,
+  enforcer rework, project memory eligibility in non-roleplay chats when
+  semantically relevant, RP-ledger trigger indexing, RP character card
+  zones) and 4 (Model rules) are RESERVED for another session — their
+  full spec is `rag_engine_work_order.md`; this line is only a preview.
+  Do not start them. Do not "prepare" for them beyond what your tasks
+  say.
 
 ---
 
@@ -218,3 +222,28 @@ inflated layout; XML well-formed; no `getSharedPreferences` in feature
 code; migration bumps version + fresh-install path matches; per-chat
 settings in the copy block. After push: `Android Checks` green. If CI
 fails, fix forward on the same branch — never force-push.
+
+---
+
+## ⚠ ADDENDUM — July 6 2026 owner rulings made AFTER Stage 1 shipped and
+## while Stage 2 was in flight (deliberately NOT blended into the tasks)
+
+The owner resolved the Stage 3/4 spec conflicts in a second review pass
+(`owner_approved_rules.md` Revision 3; `rag_engine_work_order.md`
+revised). **Nothing above changes; no completed Stage 1/2 task reopens.**
+Everything new lands in Stages 3–4. If you are finishing or auditing
+Stage 2, two notes only:
+
+1. **§4 project semantics were REVERSED** (rules rev 3): project-scoped
+   memories will retrieve by semantic relevance in ordinary chats even
+   with NO project selected; the Quick Settings Project selector becomes
+   a ranking *boost*, and project memories are blocked in roleplay by
+   default. **Task 2.6 stands exactly as written** (build the selector,
+   no retrieval effect yet, code comment) — but verify no user-visible
+   string implies "no project selected = project memories excluded." If
+   such wording exists, neutralize it (keep the label and the "None"
+   option); the semantics live in Stage 3, not the UI.
+2. **Task 2.4's Pending screen is CONFIRMED correct** as built against
+   `memories.status='draft'` — rules rev 3 names that the single store
+   for memory drafts (the `proposals` table is never used for them). No
+   change; just don't "improve" it toward `proposals`.

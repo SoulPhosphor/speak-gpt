@@ -4,6 +4,17 @@
 **Revision 2 — same day, after the owner's section-by-section review and
 redesign of the rules/cards/roleplay structure. This revision supersedes
 revision 1 where they differ.**
+**Revision 3 — same day, the owner's second-pass rulings given in chat
+while resolving the Stage 3/4 spec conflicts. Changes, each marked "rev 3"
+in place: §3 gains the "Allow active companion memories in roleplay"
+toggle; §4 project eligibility is REVERSED (relevant project memories
+retrieve without a selection; selection boosts; blocked in roleplay by
+default); §10/§13 clarify that ledger retrieval is trigger-matched, not
+embedded; §12/§3's campaign scope and narrator signal go live via the
+Stage-3 campaign wiring; §14 names `memories.status='draft'` the single
+store for memory drafts; the deferred list moves campaign→Quick-Settings
+wiring into Stage 3. This revision supersedes revisions 1–2 where they
+differ.**
 
 This document OUTRANKS every other document in this folder and the
 integration plan wherever they disagree. The wording below was reviewed and
@@ -109,15 +120,34 @@ real-life memory for a brief tangent.
   context.** (Owner's wording. The relationship history belongs to the
   narrator at the table, not to the fiction — a companion merely voicing
   characters does not drag the real relationship into the story.)
+  *(Rev 3: the explicit signal is now defined — the per-chat Campaign
+  selector added to Quick Settings in Stage 3; the chat "is using that
+  companion as narrator/GM" exactly when the selected campaign's
+  GM/narrator companion is the chat's active companion.)*
+- **Memory settings toggle (rev 3, owner-added): "Allow active companion
+  memories in roleplay." Default: OFF.** OFF means companion memories do
+  not enter RP/campaign mode (beyond the narrator/GM path above). ON
+  means the active chat companion's approved active memories are eligible
+  during RP/campaign mode, subject to normal scope, status, relevance,
+  cooldown, and retrieval rules. This does not force all companion
+  memories into the prompt — it only allows them to participate in
+  retrieval. It does not require narrator/GM status; narrator/GM remains
+  a separate eligibility path.
 
 ## 4. Folders / Projects
 
 - A **project is a named bucket the user defines**: name it, rename it,
   archive it. Nothing more elaborate.
 - **Project** is a scope category (§1).
-- Quick Settings gets an optional **Project selector** per chat. Project
-  selected → that project's memories join retrieval in that chat. None
-  selected → project memories stay quiet. Per-chat → auto-naming copy block.
+- **(Rev 3 — this REPLACES the earlier "none selected → project memories
+  stay quiet" rule; do not follow the old wording anywhere it survives.)**
+  Project-scoped memories are **eligible in ordinary (non-roleplay) chats
+  whenever they are semantically relevant, even when no project is
+  selected.** The optional per-chat **Project selector** in Quick Settings
+  (per-chat → auto-naming copy block) **boosts** the selected project's
+  memories in ranking — selection is never required for retrieval.
+  **Project memories are blocked during roleplay/campaign mode by
+  default.**
 
 ## 5. Types
 
@@ -192,7 +222,10 @@ Memories have four statuses: **Draft · Active · Archived · Superseded.**
   the same way: talk of lockpicks retrieves the lockpicks entry, not the
   inventory. A section's name acts as a trigger for the whole (bounded)
   section — "what's in my inventory?" injects the full Items list for that
-  turn.
+  turn. *(Rev 3 clarification: "indexed" here means trigger-matched on
+  entry and section names — the name acts as a trigger word, like lorebook
+  triggers. Ledger entries are never embedded; the embeddings index stays
+  memories-only.)*
 - **The freshness cooldown (applies to EVERYTHING delivered by
   relevance — memories, Instruction rules, world entries, ledger items,
   roleplay or not):** an entry is not re-injected while its last injection
@@ -262,6 +295,11 @@ deterministic, in app code:
    broader one. Relevance gates first; global ordering never overrides the
    actual room you're standing in.
 
+*(Rev 3 notes: the Campaign tier becomes live via the Stage-3 per-chat
+Campaign selector in Quick Settings — until then no campaign is ever "in
+the room." A selected project grants its memories a ranking boost within
+this ladder, per §4 as revised.)*
+
 ## 13. Roleplay cards and Archivist suggestions
 
 Roleplay state is volatile and hard to hold by hand — that is why the
@@ -278,7 +316,8 @@ suggestion path exists HERE and nowhere else.
   - **Items, Special items, and Weapons entries carry a quantity
     (number).**
   - Each entry is indexed individually; section names trigger their whole
-    section (§10).
+    section (§10). *(Rev 3: retrieval is trigger-matched on names — "name
+    acts as a trigger word" is literal; ledger entries are not embedded.)*
 
 **Archivist suggestions for roleplay (worlds, campaigns, RP characters):**
 
@@ -343,6 +382,11 @@ roleplay-suggestions toggle or stays a per-campaign opt-in.
   out or leaves and returns, and a **Reset button** clears back to default
   (newest first, no filters) in one tap.
 - Drafts can sit forever (§9); the only pressure is the quiet count.
+- *(Rev 3: memory drafts have ONE home — `memories.status='draft'`. The
+  Pending screen reads that and nothing else; when the Archivist exists
+  (Phase 6) it files memory drafts there too, never duplicated into the
+  `proposals` table. The Pending UI must never depend on two competing
+  stores for the same item.)*
 
 ## 15. Retired machinery
 
@@ -430,6 +474,9 @@ roleplay-suggestions toggle or stays a per-campaign opt-in.
 - The "Real-life memory in roleplay" per-chat setting (§3) — later, with
   the owner.
 - A converter for pre-restructure backup files — only if the owner asks.
-- Merge tooling and campaign→Quick-Settings live wiring (carried over from
-  the Phase 5 deferral list; the abilities/spells column is now designed —
-  §13 — and no longer deferred).
+- Merge tooling (carried over from the Phase 5 deferral list; the
+  abilities/spells column is designed — §13 — and lands in Stage 3.6).
+  *(Rev 3: campaign→Quick-Settings live wiring is NO LONGER deferred — the
+  owner promoted it into Stage 3, task 3.0 of
+  `rag_engine_work_order.md`, because the §3 narrator rule and §12's
+  Campaign tier both need it.)*

@@ -459,11 +459,18 @@ Everything is on-device. No cloud sync, no accounts.
     distinguishable; owner decision).
   - **Quick Settings** gained an optional per-chat **Project** selector (§4;
     `getChatProjectId`/`setChatProjectId`, in the auto-naming copy block; no
-    retrieval effect until Stage 3).
+    retrieval effect until Stage 3 — and per the owner's July 6 second-pass
+    ruling, selecting a project will become a ranking *boost*, not a gate:
+    project memories retrieve on relevance even with none selected).
   Stage 2 does NOT touch retrieval (`activeMemoriesForScope` still reads the
   single primary-target columns); the priority ladder, cooldown, scope-
   eligibility rewrite and RP-ledger indexing are **Stage 3** (reserved).
-  Follow-ups deferred: merge tooling and campaign→Quick-Settings live wiring.
+  **Stages 3–4 (retrieval engine + Model rules) are specced in
+  `Memory System/rag_engine_work_order.md`, revised July 6 2026 after the
+  owner's second-pass rulings (`owner_approved_rules.md` Revision 3):
+  campaign→Quick-Settings wiring and the RP-character two-zone ledger
+  (the old "abilities/spells column" follow-up) are now Stage 3 tasks, no
+  longer deferred.** Still deferred: merge tooling.
 - Markdown/LaTeX rendering, partial text selection, message edit/delete/copy/
   share, bulk select, image attach + DALL·E-style generation, in-app
   translator, playground, logit bias editor, AMOLED theme, onboarding flow.
