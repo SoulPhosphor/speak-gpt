@@ -129,9 +129,26 @@ a foreground service that keeps generation alive in the background.
   management, persona→companion sync, backup exporter.
 - `ui/fragments/dialogs/QuickSettingsBottomSheetDialogFragment.kt` — per-chat
   settings sheet (model, endpoint, persona, activation prompt, lorebook
-  checklist, sampling params).
+  checklist, sampling params, the memory-scene selectors, and the per-chat
+  **Apply Model Rules** toggle).
 - `ui/activities/CharactersActivity.kt` — hub of tiles: Personas, Activation
-  prompts, System message, Lorebooks.
+  prompts, Lorebooks. (The System message tile moved OUT to AI System
+  Settings in Stage 4 — see below.)
+- `ui/activities/AiSystemSettingsActivity.kt` — the **AI System Settings**
+  screen (Stage 4), a new card on the main Settings screen. Plain
+  chevron-rows (not tiles): the chat's **System prompt** (moved here out of
+  Characters; still opens the unchanged `SystemMessageDialogFragment`),
+  **Model Specific Rules** (opens the model-rules browser), and the global
+  **Automatically Apply Model Rules** default toggle, under a top mindfulness
+  hint about rule length / per-turn token cost (owner-approved words).
+- `ui/activities/memory/ModelRules*` — the Model rules manager (Stage 4, §11
+  Revision 5): `ModelRulesActivity` (browser on the MemoryScreenActivity
+  scaffold — filter/sort by sort/model/tag/status, a per-model size readout,
+  a Pending banner that's empty until Phase 6), `ModelRuleEditorActivity`
+  (full-screen: rule text + live char count, model-string chips, tag chips),
+  `ModelRuleTagsActivity` / `ModelRuleTagViewActivity` (the tag index + the
+  tap-a-tag cross view), `ModelRuleTagChips` (the model-rule tag input, its
+  OWN pool — never touches roleplay or memory tags).
 - Root docs: `Memory System Plans June 1 2026` (the lorebook/memory roadmap,
   phased; Phase 1 + multi-book are built), `whisper-local-plan.md`,
   `voice-chat-build-guide(1).md`, `ui-redesign-plan.md` (the approved UI
@@ -265,6 +282,21 @@ Everything is on-device. No cloud sync, no accounts.
    card fields. The §8a addendum also holds the approved 3.6b on-screen
    wording (Zone labels, the right-aligned word count with 300/500-word
    warnings, "Promote to Party Member") — use those words verbatim.
+   DB v10 (July 2026, Stage 4, §11 Revision 5) is the **Model rules** layer.
+   §11 was redesigned in chat: the profile/group concept (a short-lived DB v9,
+   never shipped with a way to hold data) is REPLACED by a model-string-
+   primary model with tags. `model_rules` carries its own `model_strings_json`
+   (the models a rule applies to) and loses `profile_id`; `model_rule_profiles`
+   is dropped; `model_rule_tags` + `model_rule_tag_links` are a SEPARATE tag
+   pool (plain labels, no colors — never the roleplay or memory tag realms).
+   Injection matches by the chat's model string (case-insensitive contains,
+   provider prefix ignored — `enforcer/ModelRuleMatcher`, unit-tested), renders
+   its OWN prompt-layer block, is ON by default and gated by a global
+   `getAutoApplyModelRules()` default + a per-chat `getChatApplyModelRules()`
+   override (in the auto-naming copy block). Matching rules are NEVER truncated
+   (§11). `status='draft'` rows are Phase-6 Archivist suggestions (the Pending
+   UI is built but stays empty until Phase 6). Backups/codec carry rules, tags,
+   and links. UI lives under AI System Settings (see the architecture map).
    Source is DERIVED for
    display (`provenance_source == "user_entered"` ⇒ "Entered by hand", else
    "Learned from chat"); there is no "Imported" bucket — import preserves each
@@ -531,10 +563,12 @@ Everything is on-device. No cloud sync, no accounts.
   Pure logic (PromptAssembler, NearDuplicate, CardRetrieval, the
   Librarian ladder math) is unit-tested. **Prompt-layer contract (fragile):** the per-request
   system blocks are fixed and deterministic — (1) the stable persona/system
-  prefix, byte-identical every turn; (2) the Stage-4 model-rules block once
-  it exists (absent entirely when no profile is selected); (3) the single
-  assembled memory message (ALL turn-variable memory content lives here and
-  only here); (4) chat history + the current turn. Same blocks, same order,
+  prefix, byte-identical every turn; (2) the Stage-4 model-rules block (BUILT
+  — every ACTIVE rule matching the chat's model string, deterministic order;
+  absent entirely when the per-chat "Apply Model Rules" toggle is off or
+  nothing matches); (3) the single assembled memory message (ALL turn-variable
+  memory content lives here and only here); (4) chat history + the current
+  turn. Same blocks, same order,
   same wording every turn; never two competing memory messages. Three or
   more system messages are fine — "a separate second system message" in
   older docs describes the pre-Stage-4 layout. Read
@@ -656,8 +690,16 @@ Everything is on-device. No cloud sync, no accounts.
     per-deletion about the card's memories; surviving references render
     "(archived card)" / "(deleted card)" — never a silent hole. NPC
     death is a status change, never a delete.
-  Stage 4 (Model rules, §11) is specced in the same work order and NOT
-  built. Still deferred: merge tooling.
+  Stage 4 (Model rules, §11) is **BUILT** (July 2026) — §11 was redesigned in
+  chat to Revision 5 (model-string-primary + tags, ON by default; the old
+  profile/group model is gone). Storage is DB v10 (see the storage section);
+  the UI is the **AI System Settings** screen (new Settings card; the System
+  prompt tile moved here out of Characters) + the Model rules browser / editor
+  / tag screens (`ui/activities/memory/ModelRules*`, `ModelRuleTagChips`);
+  injection is the model-rules prompt block gated by the global + per-chat
+  "Apply Model Rules" toggles. The **Pending** UI is built but stays empty
+  until **Phase 6 (Archivist)** files draft rules — that is the next phase and
+  is NOT built. Still deferred: merge tooling.
 - Markdown/LaTeX rendering, partial text selection, message edit/delete/copy/
   share, bulk select, image attach + DALL·E-style generation, in-app
   translator, playground, logit bias editor, AMOLED theme, onboarding flow.
@@ -782,9 +824,10 @@ Everything is on-device. No cloud sync, no accounts.
 - **System-message assembly in `regularGPTResponse`** — the prompt layers are
   FIXED and deterministic every turn: (1) persona prompt + system message
   merged into ONE stable first system message, byte-identical, specifically
-  for provider prefix caching; (2) once Stage 4 lands, the selected
-  model-rules block as its own stable layer (absent entirely when no profile
-  is selected); (3) lorebook matches — or, at the full memory tier, the
+  for provider prefix caching; (2) the Stage-4 model-rules block as its own
+  stable layer — every ACTIVE rule matching the chat's model string, in
+  deterministic order (absent entirely when the per-chat "Apply Model Rules"
+  toggle is off or nothing matches); (3) lorebook matches — or, at the full memory tier, the
   enforcer's single assembled message (which contains the lore notes) — as
   the one turn-variable memory message; (4) chat history + the current turn.
   Never reorder or merge these by convenience, retrieval results, iteration

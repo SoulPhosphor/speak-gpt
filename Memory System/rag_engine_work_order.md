@@ -313,6 +313,21 @@ Note the spec file's build status in its §7.
 ## Stage 4 — Model rules (§11 governs; build storage + UI + injection;
 Archivist FILING arrives in Phase 6)
 
+> **BUILT — July 2026 (branch `claude/stage-4-rescoped-wqib79`). §11 was
+> REDESIGNED in chat to Revision 5 before/during the build, so the shipped
+> shape differs from the pre-Revision-5 bullets below: the model STRING is the
+> primary identity (no profiles/groups), TAGS organize rules (a separate
+> pool), rules apply AUTOMATICALLY and are ON by default (global
+> "Automatically Apply Model Rules" default + per-chat "Apply Model Rules"
+> toggle), and matching rules are NEVER truncated. Storage is DB v10
+> (`model_rules` with its own `model_strings_json`, `model_rule_tags`,
+> `model_rule_tag_links`); UI is the AI System Settings screen + the Model
+> rules browser/editor/tag screens; injection matches by model string
+> (`ModelRuleMatcher`). "Needs review"/Pending is built but empty until Phase
+> 6. See `owner_approved_rules.md` §11 (Revision 5) and CLAUDE.md for the
+> authoritative built shape. The bullets below are the ORIGINAL pre-redesign
+> plan, kept for history.**
+
 - Storage: profiles (id, user nickname, list of model strings, timestamps)
   + rules (id, profile_id nullable — null = Needs review/unassigned,
   text, status draft|active, timestamps). Encrypted store, tombstones on
