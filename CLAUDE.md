@@ -1,5 +1,12 @@
 # Phosphor Shines — AI Onboarding Manual
 
+## ⛔ ACT ONLY FROM FACT, NOT ASSUMPTION
+
+Verify before you act. Read the actual code, the actual file, the actual
+top of the document before you claim anything about it or change it. Never
+delete, move, or "clean up" anything you have not personally read and
+confirmed. If you are inferring instead of checking, stop and check.
+
 ## ⛔ OWNER APPROVAL GATE — read this before anything else
 
 **No AI may author, add, rename, or pre-populate content in the memory
