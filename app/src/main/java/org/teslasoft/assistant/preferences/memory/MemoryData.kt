@@ -76,10 +76,15 @@ data class EntityRecord(
 data class WorldRecord(
     val worldId: String,
     val name: String,
+    // World core (roleplay_cards_and_tags_spec §6c, Zone 1): `premise` backs
+    // the spec's "Premise / Vibe" field and `rules` backs "Magic Rules" — the
+    // pre-3.6 columns kept their names so the owner's existing text carries
+    // straight into the new card without a copy step. `cosmology` is new (v7).
     val premise: String,
     val rules: String?,
+    val cosmology: String? = null,
     val companionIdsJson: String,         // JSON array of companion ids
-    val status: String,                   // active | dormant | ended
+    val status: String,                   // active | dormant | ended | archived (v7)
     val createdAt: String?
 )
 
@@ -95,11 +100,18 @@ data class RoleplayCharacterRecord(
     val roleplayCharacterId: String,
     val name: String,
     val playedBy: String,                 // 'user' or a companion_id
-    val description: String,              // user-owned definition
+    val description: String,              // pre-3.6 free-text definition (kept; the card fields below supersede it)
     val arc: String?,                     // Archivist-maintained story-so-far
     val worldsPlayedJson: String,         // JSON array of world ids
     val status: String,                   // active | archived
-    val createdAt: String?
+    val createdAt: String?,
+    // User RP-character card Zone 1 (roleplay_cards_and_tags_spec §6a, DB v7):
+    // the always-injected core. Multi-line, no length caps (spec §6 ruling).
+    val species: String? = null,
+    val charClass: String? = null,        // column `char_class`; UI label "Class"
+    val corePersonality: String? = null,
+    val physicalDescription: String? = null,
+    val goalsDrives: String? = null
 )
 
 /**
@@ -116,8 +128,21 @@ data class CampaignRecord(
     val roleplayCharacterId: String?,     // the user's character in this campaign
     val companionId: String?,             // the DM/GM companion running it
     val status: String,                   // active | paused | ended | archived
-    val storySoFar: String?,              // Archivist-maintained summary
-    val createdAt: String?
+    val storySoFar: String?,              // pre-3.6 free-text summary (kept; the Plot Ledger card section supersedes it)
+    val createdAt: String?,
+    // Campaign card Zone 1 (roleplay_cards_and_tags_spec §6d, DB v7): "the
+    // bookmark" — Quest Anchor (main objective + optional side-objective
+    // lines, one multi-line field) and Active Scene (location + condition).
+    // User-maintained, session-end updates only (no-mid-conversation-writes
+    // law); never written by any automatic process.
+    val questAnchor: String? = null,
+    val activeScene: String? = null,
+    /** Linked party members (spec §4: campaigns LINK party members — join,
+     *  not ownership). Backed by campaign_party_members; carried on the
+     *  record for export/import only. [MemoryStore.upsertCampaign] does NOT
+     *  write this list (so pre-3.6 save paths can't wipe links) — use the
+     *  dedicated link/unlink methods. */
+    val partyMemberIds: List<String> = emptyList()
 )
 
 /**
@@ -131,6 +156,188 @@ data class ProjectRecord(
     val status: String,                   // active | archived
     val createdAt: String?,
     val updatedAt: String?
+)
+
+/* -------------------------------------------------------------------------
+ * Roleplay cards + tags (Stage 3.6a, roleplay_cards_and_tags_spec.md).
+ * Card content lives in card-owned tables, NEVER in memories rows; retrieval
+ * over it is trigger-matched, never embedded (the embeddings index stays
+ * memories-only). Nothing here ships pre-populated — fresh means empty.
+ * ------------------------------------------------------------------------- */
+
+/** Card types that own Zone 2 entries and can carry roleplay tags. */
+object CardType {
+    const val RP_CHARACTER = "rp_character"   // user roleplay character (spec §6a)
+    const val PARTY_MEMBER = "party_member"   // NPC party member (spec §6b)
+    const val WORLD = "world"                 // spec §6c
+    const val CAMPAIGN = "campaign"           // spec §6d
+}
+
+/**
+ * Canonical Zone 2 section keys (roleplay_cards_and_tags_spec §6). These are
+ * storage keys, not labels — the user-facing section names come from
+ * strings.xml in the card editors (3.6b) and must match the spec word for
+ * word. Section names are the trigger units; the world card's GROUP headers
+ * (Geography, Species & Culture, History & Lore, Organized Groups,
+ * Religions & Pantheons, Notable NPCs) are visual organization only and are
+ * mapped in UI code, never stored and never triggering (owner ruling §6c).
+ */
+object CardSections {
+    // User RP-character + NPC party-member cards (§6a/§6b — same six).
+    const val ABILITIES = "abilities"                    // Type: innate|trained|class_feature|spell|other
+    const val INVENTORY = "inventory"                    // Type: mundane|magical|quest|weapon|armor|other; quantity required
+    const val RELATIONSHIPS = "relationships"            // Relationship: ally|enemy|family|mentor|rival|member|other
+    const val TRAITS = "traits"                          // Type: fear|like|dislike; name is the trigger word
+    const val BACKSTORY = "backstory"                    // Title (required) + Description (required)
+    const val LANGUAGES = "languages"
+
+    // World card (§6c). Geography is parent-chained: settlements carry a
+    // region parent, points of interest a settlement-or-region parent.
+    const val REGIONS = "regions"
+    const val SETTLEMENTS = "settlements"
+    const val POINTS_OF_INTEREST = "points_of_interest"
+    const val RACES_SPECIES = "races_species"
+    const val LANGUAGES_SCRIPTS = "languages_scripts"
+    const val HISTORICAL_EVENTS = "historical_events"
+    const val ARCANE_KNOWLEDGE = "arcane_knowledge"
+    const val ORGANIZATIONS_GUILDS = "organizations_guilds"
+    const val BANDS_THREATS = "bands_threats"
+    const val DEITIES = "deities"
+    const val FAITHS = "faiths"
+    const val SACRED_ARTIFACTS = "sacred_artifacts"
+    const val HISTORICAL_FIGURES = "historical_figures"
+    const val AUTHORITY_FIGURES = "authority_figures"
+    const val SERVICE_NPCS = "service_npcs"
+    const val ALLIES = "allies"
+    const val ANTAGONISTS = "antagonists"
+
+    // Campaign card (§6d).
+    const val CAMPAIGN_CAST = "campaign_cast"            // overlay (worldEntryId set) or campaign-native
+    const val CAMPAIGN_LOCATIONS = "campaign_locations"  // scene-state overlays over world geography
+    const val PLOT_LEDGER = "plot_ledger"                // title is the trigger; recency-boosted
+    const val RELIQUARY = "reliquary"                    // plot items: holder + narrative significance
+    const val NOTES = "notes"                            // freeform don't-forget entries
+
+    val CHARACTER_SECTIONS = listOf(ABILITIES, INVENTORY, RELATIONSHIPS, TRAITS, BACKSTORY, LANGUAGES)
+    val WORLD_SECTIONS = listOf(
+        REGIONS, SETTLEMENTS, POINTS_OF_INTEREST, RACES_SPECIES, LANGUAGES_SCRIPTS,
+        HISTORICAL_EVENTS, ARCANE_KNOWLEDGE, ORGANIZATIONS_GUILDS, BANDS_THREATS,
+        DEITIES, FAITHS, SACRED_ARTIFACTS, HISTORICAL_FIGURES, AUTHORITY_FIGURES,
+        SERVICE_NPCS, ALLIES, ANTAGONISTS
+    )
+    val CAMPAIGN_SECTIONS = listOf(CAMPAIGN_CAST, CAMPAIGN_LOCATIONS, PLOT_LEDGER, RELIQUARY, NOTES)
+
+    fun sectionsFor(cardType: String): List<String> = when (cardType) {
+        CardType.RP_CHARACTER, CardType.PARTY_MEMBER -> CHARACTER_SECTIONS
+        CardType.WORLD -> WORLD_SECTIONS
+        CardType.CAMPAIGN -> CAMPAIGN_SECTIONS
+        else -> emptyList()
+    }
+}
+
+/**
+ * An NPC party member (spec §4/§6b): a top-level roster card, linked into
+ * campaigns via campaign_party_members (join, not ownership — an NPC travels
+ * between campaigns without rebuild). Structurally the user character card
+ * plus Speech Style and the four-state fiction Status; leanness is the
+ * user's choice, never a cap. `status` gates Zone 1 injection (3.6d):
+ * alive/incapacitated inject the full core, dead/enemy drop to the generated
+ * campaign roster line. Death is a status change, NEVER a delete (§4).
+ * `archived` is the separate card-lifecycle flag for the §5 Archive section.
+ */
+data class PartyMemberRecord(
+    val partyMemberId: String,
+    val name: String,
+    val species: String? = null,
+    val charClass: String? = null,
+    val corePersonality: String? = null,
+    val physicalDescription: String? = null,
+    val goalsDrives: String? = null,
+    val speechStyle: String? = null,      // NPC-only Zone 1 field; empty = nothing injected
+    val status: String = "alive",         // alive | incapacitated | dead | enemy
+    val archived: Boolean = false,
+    val createdAt: String,
+    val updatedAt: String? = null
+)
+
+/**
+ * One Zone 2 card entry (spec §6): a named, individually-retrievable row in
+ * a card's section. One polymorphic table serves all four card types — the
+ * retrieval machinery is section-agnostic (named entries in containers).
+ * Only the columns a section defines are used; the rest stay null:
+ *  - entryKind: the per-section Type/Relationship dropdown value (§6a/§6b)
+ *  - quantity: Inventory only (required there, enforced in the editor)
+ *  - parentEntryId: geography parent chain (§6c) — a settlement's region, a
+ *    point of interest's settlement-or-region
+ *  - worldEntryId: campaign overlay link (§6d) — cast/location entries that
+ *    overlay a world card entry (the world holds the timeless definition,
+ *    the campaign holds what this story did to it)
+ *  - partyMemberId: the §6c promotion pointer — a world NPC entry that
+ *    graduated to a party-member card points at it and stays lightweight
+ *    lore (the card is the source of truth, never two competing versions)
+ *  - holder / significance: Reliquary (§6d)
+ *  - castIdentity / castDisposition / castStatus: Campaign Cast (§6d) —
+ *    identity is the one-phrase line on campaign-native NPCs
+ *  - locationCondition / locationChanges: Campaign Locations (§6d)
+ * The reference columns are deliberately soft (no FK): §5 rules that
+ * surviving references to a gone card render "(archived card)" /
+ * "(deleted card)" instead of vanishing, so a dangling id plus its
+ * deleted_ids tombstone is the intended representation, not corruption.
+ */
+data class CardEntryRecord(
+    val entryId: String,
+    val cardType: String,                 // CardType value
+    val cardId: String,
+    val section: String,                  // CardSections key
+    val name: String,                     // the entry name/title — the trigger word
+    val description: String? = null,
+    val entryKind: String? = null,
+    val quantity: Int? = null,
+    val parentEntryId: String? = null,
+    val worldEntryId: String? = null,
+    val partyMemberId: String? = null,
+    val holder: String? = null,
+    val significance: String? = null,
+    val castIdentity: String? = null,
+    val castDisposition: String? = null,
+    val castStatus: String? = null,
+    val locationCondition: String? = null,
+    val locationChanges: String? = null,
+    val createdAt: String,
+    val updatedAt: String? = null
+)
+
+/** Roleplay tag-link target types (spec §3): the polymorphic link table
+ *  reaches card entries, whole cards, and roleplay-scoped memories. */
+object RpTagTargetType {
+    const val CARD_ENTRY = "card_entry"
+    const val RP_CHARACTER = CardType.RP_CHARACTER
+    const val PARTY_MEMBER = CardType.PARTY_MEMBER
+    const val WORLD = CardType.WORLD
+    const val CAMPAIGN = CardType.CAMPAIGN
+    const val MEMORY = "memory"
+
+    val ALL = setOf(CARD_ENTRY, RP_CHARACTER, PARTY_MEMBER, WORLD, CAMPAIGN, MEMORY)
+}
+
+/**
+ * A roleplay-realm tag (spec §3): ONE shared pool across the whole roleplay
+ * module, and ONLY the roleplay module — the REALM WALL is structural.
+ * Real-life memory tags live in memories.tags_json and never enter these
+ * tables; identical words on the two sides never link. `autoTrigger` is the
+ * per-tag switch (default ON): OFF turns the tag browse/organize-only —
+ * message-text matching stops, but the human tag view, the "connected to:"
+ * line and one-hop pull-along all keep working (owner ruling July 7). The
+ * app NEVER auto-flips it. No starter tags ship, ever.
+ */
+data class RpTagRecord(
+    val tagId: String,
+    val name: String,
+    val autoTrigger: Boolean = true,
+    val createdAt: String? = null,
+    /** (targetType, targetId) links — carried for export/import; live link
+     *  edits go through the store's link/unlink methods. */
+    val targets: List<Pair<String, String>> = emptyList()
 )
 
 data class ChangeLogEntry(
@@ -263,7 +470,12 @@ data class MemoryStoreData(
     val retrievalPolicyJson: String?,     // whole retrieval_policy object, verbatim
     val transcripts: List<TranscriptRecord>,
     val campaigns: List<CampaignRecord> = emptyList(),
-    val projects: List<ProjectRecord> = emptyList()
+    val projects: List<ProjectRecord> = emptyList(),
+    // Roleplay cards + tags (Stage 3.6a) — ride every backup so the
+    // Reset-memories "save a backup first" path can never lose a card.
+    val partyMembers: List<PartyMemberRecord> = emptyList(),
+    val cardEntries: List<CardEntryRecord> = emptyList(),
+    val rpTags: List<RpTagRecord> = emptyList()
 )
 
 /**

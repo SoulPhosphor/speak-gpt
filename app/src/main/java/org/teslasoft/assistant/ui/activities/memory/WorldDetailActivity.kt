@@ -152,6 +152,9 @@ class WorldDetailActivity : FragmentActivity() {
             name = name,
             premise = premise,
             rules = rules.ifEmpty { null },
+            // Card field this screen doesn't edit yet (3.6b) — pass through so
+            // saving here can't wipe it.
+            cosmology = prior?.cosmology,
             companionIdsJson = prior?.companionIdsJson ?: "[]",
             status = prior?.status ?: "active",
             createdAt = prior?.createdAt ?: MemoryStore.nowIso()

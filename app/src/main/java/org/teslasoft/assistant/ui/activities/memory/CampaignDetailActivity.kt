@@ -326,7 +326,12 @@ class CampaignDetailActivity : FragmentActivity() {
             companionId = selCompanionId,
             status = status,
             storySoFar = prior?.storySoFar,   // Archivist-owned; never edited here
-            createdAt = prior?.createdAt ?: MemoryStore.nowIso()
+            createdAt = prior?.createdAt ?: MemoryStore.nowIso(),
+            // Card fields this screen doesn't edit yet (3.6b) — pass through
+            // so saving here can't wipe them. (Party links live in the join
+            // table; upsertCampaign never writes them.)
+            questAnchor = prior?.questAnchor,
+            activeScene = prior?.activeScene
         )
 
         runOffThread {

@@ -220,6 +220,7 @@ object MemorySeedCodec {
                 name = w.reqStr("name"),
                 premise = w.reqStr("premise"),
                 rules = w.str("rules"),
+                cosmology = w.str("cosmology"),
                 companionIdsJson = w.arrText("companion_ids"),
                 status = w.reqStr("status"),
                 createdAt = w.str("created_at")
@@ -245,7 +246,12 @@ object MemorySeedCodec {
                 arc = r.str("arc"),
                 worldsPlayedJson = r.arrText("worlds_played"),
                 status = r.reqStr("status"),
-                createdAt = r.str("created_at")
+                createdAt = r.str("created_at"),
+                species = r.str("species"),
+                charClass = r.str("class"),
+                corePersonality = r.str("core_personality"),
+                physicalDescription = r.str("physical_description"),
+                goalsDrives = r.str("goals_drives")
             )
         }
 
@@ -284,7 +290,10 @@ object MemorySeedCodec {
                 companionId = c.str("companion_id"),
                 status = c.str("status") ?: "active",
                 storySoFar = c.str("story_so_far"),
-                createdAt = c.str("created_at")
+                createdAt = c.str("created_at"),
+                questAnchor = c.str("quest_anchor"),
+                activeScene = c.str("active_scene"),
+                partyMemberIds = c.strList("party_member_ids")
             )
         }
 
@@ -295,6 +304,59 @@ object MemorySeedCodec {
                 status = p.str("status") ?: "active",
                 createdAt = p.str("created_at"),
                 updatedAt = p.str("updated_at")
+            )
+        }
+
+        // Roleplay cards + tags (Stage 3.6a) — backups carry the card layer.
+        val partyMembers = each(root, "party_members").map { p ->
+            PartyMemberRecord(
+                partyMemberId = p.reqStr("party_member_id"),
+                name = p.reqStr("name"),
+                species = p.str("species"),
+                charClass = p.str("class"),
+                corePersonality = p.str("core_personality"),
+                physicalDescription = p.str("physical_description"),
+                goalsDrives = p.str("goals_drives"),
+                speechStyle = p.str("speech_style"),
+                status = p.str("status") ?: "alive",
+                archived = p.optBoolean("archived", false),
+                createdAt = p.str("created_at") ?: "",
+                updatedAt = p.str("updated_at")
+            )
+        }
+
+        val cardEntries = each(root, "card_entries").map { e ->
+            CardEntryRecord(
+                entryId = e.reqStr("entry_id"),
+                cardType = e.reqStr("card_type"),
+                cardId = e.reqStr("card_id"),
+                section = e.reqStr("section"),
+                name = e.reqStr("name"),
+                description = e.str("description"),
+                entryKind = e.str("entry_kind"),
+                quantity = if (e.has("quantity") && !e.isNull("quantity")) e.getInt("quantity") else null,
+                parentEntryId = e.str("parent_entry_id"),
+                worldEntryId = e.str("world_entry_id"),
+                partyMemberId = e.str("party_member_id"),
+                holder = e.str("holder"),
+                significance = e.str("significance"),
+                castIdentity = e.str("cast_identity"),
+                castDisposition = e.str("cast_disposition"),
+                castStatus = e.str("cast_status"),
+                locationCondition = e.str("location_condition"),
+                locationChanges = e.str("location_changes"),
+                createdAt = e.str("created_at") ?: "",
+                updatedAt = e.str("updated_at")
+            )
+        }
+
+        val rpTags = each(root, "rp_tags").map { t ->
+            RpTagRecord(
+                tagId = t.reqStr("tag_id"),
+                name = t.reqStr("name"),
+                autoTrigger = t.optBoolean("auto_trigger", true),
+                createdAt = t.str("created_at"),
+                targets = each(t, "targets").map { l -> l.reqStr("type") to l.reqStr("id") }
             )
         }
 
@@ -336,7 +398,10 @@ object MemorySeedCodec {
             retrievalPolicyJson = retrievalPolicy,
             transcripts = transcripts,
             campaigns = campaigns,
-            projects = projects
+            projects = projects,
+            partyMembers = partyMembers,
+            cardEntries = cardEntries,
+            rpTags = rpTags
         )
     }
 
@@ -494,6 +559,7 @@ object MemorySeedCodec {
                     put("name", w.name)
                     put("premise", w.premise)
                     putIfNotNull("rules", w.rules)
+                    putIfNotNull("cosmology", w.cosmology)
                     put("companion_ids", jsonArrayOrEmpty(w.companionIdsJson))
                     put("status", w.status)
                     putIfNotNull("created_at", w.createdAt)
@@ -524,6 +590,11 @@ object MemorySeedCodec {
                     put("worlds_played", jsonArrayOrEmpty(r.worldsPlayedJson))
                     put("status", r.status)
                     putIfNotNull("created_at", r.createdAt)
+                    putIfNotNull("species", r.species)
+                    putIfNotNull("class", r.charClass)
+                    putIfNotNull("core_personality", r.corePersonality)
+                    putIfNotNull("physical_description", r.physicalDescription)
+                    putIfNotNull("goals_drives", r.goalsDrives)
                 })
             }
         })
@@ -540,6 +611,80 @@ object MemorySeedCodec {
                         put("status", c.status)
                         putIfNotNull("story_so_far", c.storySoFar)
                         putIfNotNull("created_at", c.createdAt)
+                        putIfNotNull("quest_anchor", c.questAnchor)
+                        putIfNotNull("active_scene", c.activeScene)
+                        if (c.partyMemberIds.isNotEmpty()) put("party_member_ids", JSONArray(c.partyMemberIds))
+                    })
+                }
+            })
+        }
+
+        // Roleplay cards + tags (Stage 3.6a).
+        if (data.partyMembers.isNotEmpty()) {
+            root.put("party_members", JSONArray().apply {
+                data.partyMembers.forEach { p ->
+                    put(JSONObject().apply {
+                        put("party_member_id", p.partyMemberId)
+                        put("name", p.name)
+                        putIfNotNull("species", p.species)
+                        putIfNotNull("class", p.charClass)
+                        putIfNotNull("core_personality", p.corePersonality)
+                        putIfNotNull("physical_description", p.physicalDescription)
+                        putIfNotNull("goals_drives", p.goalsDrives)
+                        putIfNotNull("speech_style", p.speechStyle)
+                        put("status", p.status)
+                        if (p.archived) put("archived", true)
+                        put("created_at", p.createdAt)
+                        putIfNotNull("updated_at", p.updatedAt)
+                    })
+                }
+            })
+        }
+
+        if (data.cardEntries.isNotEmpty()) {
+            root.put("card_entries", JSONArray().apply {
+                data.cardEntries.forEach { e ->
+                    put(JSONObject().apply {
+                        put("entry_id", e.entryId)
+                        put("card_type", e.cardType)
+                        put("card_id", e.cardId)
+                        put("section", e.section)
+                        put("name", e.name)
+                        putIfNotNull("description", e.description)
+                        putIfNotNull("entry_kind", e.entryKind)
+                        if (e.quantity != null) put("quantity", e.quantity)
+                        putIfNotNull("parent_entry_id", e.parentEntryId)
+                        putIfNotNull("world_entry_id", e.worldEntryId)
+                        putIfNotNull("party_member_id", e.partyMemberId)
+                        putIfNotNull("holder", e.holder)
+                        putIfNotNull("significance", e.significance)
+                        putIfNotNull("cast_identity", e.castIdentity)
+                        putIfNotNull("cast_disposition", e.castDisposition)
+                        putIfNotNull("cast_status", e.castStatus)
+                        putIfNotNull("location_condition", e.locationCondition)
+                        putIfNotNull("location_changes", e.locationChanges)
+                        put("created_at", e.createdAt)
+                        putIfNotNull("updated_at", e.updatedAt)
+                    })
+                }
+            })
+        }
+
+        if (data.rpTags.isNotEmpty()) {
+            root.put("rp_tags", JSONArray().apply {
+                data.rpTags.forEach { t ->
+                    put(JSONObject().apply {
+                        put("tag_id", t.tagId)
+                        put("name", t.name)
+                        put("auto_trigger", t.autoTrigger)
+                        putIfNotNull("created_at", t.createdAt)
+                        if (t.targets.isNotEmpty()) {
+                            put("targets", JSONArray().apply {
+                                t.targets.forEach { (type, id) ->
+                                    put(JSONObject().apply { put("type", type); put("id", id) })
+                                }
+                            })
+                        }
                     })
                 }
             })

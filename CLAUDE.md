@@ -220,10 +220,38 @@ Everything is on-device. No cloud sync, no accounts.
    DB v6 (July 2026, Stage 3.3) adds the **freshness-cooldown** tables:
    `injection_cooldowns` keyed `(chat_id, source_type, entry_id)` — when each
    entry last reached a prompt, per chat, `source_type` separating memories
-   from the future 3.6 ledger — and `chat_turn_counters`, the per-chat
-   monotonic turn clock. Chat renames must carry BOTH (handled inside
-   `MemoryStore.repointChat`); memory edit/status/delete paths clear the
-   entry's cooldown rows so an edited memory re-injects fresh.
+   (`memory`) from the Stage 3.6 card entries (`card_entry`) — and
+   `chat_turn_counters`, the per-chat monotonic turn clock. Chat renames must
+   carry BOTH (handled inside `MemoryStore.repointChat`); memory
+   edit/status/delete paths clear the entry's cooldown rows so an edited
+   memory re-injects fresh.
+   DB v7 (July 2026, Stage 3.6a) adds the **roleplay card + tag layer**
+   (`Memory System/roleplay_cards_and_tags_spec.md` — the authoritative spec;
+   read it plus its §9 agent rules before touching any of this): Zone 1 card
+   columns on the existing tables (`roleplay_characters` gains
+   species/char_class/core_personality/physical_description/goals_drives;
+   `campaigns` gains quest_anchor/active_scene — the "bookmark", user-written
+   at session end; `worlds` gains cosmology and an 'archived' status via a
+   FK-off table rebuild — its existing `premise`/`rules` columns back the
+   spec's Premise-Vibe/Magic-Rules fields), a `party_members` NPC roster
+   (four-state fiction `status` alive/incapacitated/dead/enemy + separate
+   `archived` lifecycle flag) with a `campaign_party_members` join (link, not
+   ownership), one polymorphic `card_entries` table for every card's Zone 2
+   sections (section keys in `CardSections`; per-section fields as nullable
+   columns; parent/overlay/promotion reference columns are deliberately
+   FK-less — a dangling id + `deleted_ids` tombstone is how §5's "(deleted
+   card)" rendering works), and the roleplay-realm tag pool `rp_tags`
+   (per-tag `auto_trigger`, default ON) + polymorphic `rp_tag_links` reaching
+   card entries, whole cards, and memories. THE REALM WALL IS STRUCTURAL:
+   real-life memory tags stay in `memories.tags_json` and never enter the
+   rp_tag tables. Card content lives in card tables, never in memories rows;
+   card retrieval is trigger-matched, never embedded (embeddings stay
+   memories-only). No automatic process writes any card/entry/tag
+   mid-conversation (user-confirmed dialogs are user edits); nothing ships
+   pre-populated. Backups (`MemorySeedCodec`/`exportData`/`importData`) carry
+   the whole card layer; card teardowns scrub entries + tag links and
+   `resetAllMemoryData` empties the new tables. UI/wiring for all of this is
+   Stage 3.6b–f (not yet built at v7).
    Source is DERIVED for
    display (`provenance_source == "user_entered"` ⇒ "Entered by hand", else
    "Learned from chat"); there is no "Imported" bucket — import preserves each
@@ -533,11 +561,16 @@ Everything is on-device. No cloud sync, no accounts.
   freshness cooldown (3.3, DB v6), the enforcer rework to the approved
   rules with Instruction-memory rendering (3.4), and the project-boost
   wiring/verification (3.5) — details in the storage + Phase 4 sections
-  above. **Task 3.6 (the RP-character two-zone ledger, §13) is gated on a
-  work-order PAUSE POINT**: before building it, stop and ask the owner in
-  plain chat whether world/campaign card sections should be folded into the
-  same pass or stay deferred. Stage 4 (Model rules, §11) is specced in the
-  same work order and not yet built. Still deferred: merge tooling.
+  above. **Task 3.6 was RESCOPED July 7 2026** (the old pause point is
+  resolved: the owner designed and approved the full roleplay card + tag
+  system — `Memory System/roleplay_cards_and_tags_spec.md` is the
+  authoritative spec, incorporated into the rules as Revision 4). Its
+  sub-task **3.6a (schema, DB v7 — the card/tag storage layer + store CRUD
+  + backup coverage) is BUILT**; 3.6b–f (card editors/rosters, Quick
+  Settings campaign behavior, injection wiring, tags screens,
+  deletion/archive behavior) are next, in order, per the work order. Stage
+  4 (Model rules, §11) is specced in the same work order and not yet
+  built. Still deferred: merge tooling.
 - Markdown/LaTeX rendering, partial text selection, message edit/delete/copy/
   share, bulk select, image attach + DALL·E-style generation, in-app
   translator, playground, logit bias editor, AMOLED theme, onboarding flow.

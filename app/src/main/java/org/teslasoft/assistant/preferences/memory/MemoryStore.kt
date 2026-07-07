@@ -49,14 +49,18 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
 
     companion object {
         const val DATABASE_NAME = "companion_memory.db"
-        private const val DATABASE_VERSION = 6
+        private const val DATABASE_VERSION = 7
 
         // Freshness-cooldown source types (rules §10 / Stage 3.3): the
         // composite key (chat_id, source_type, entry_id) keeps ids from
         // different tables from colliding — 'memory' rows are memories;
-        // 'ledger' is reserved for the Stage 3.6 RP-character ledger.
+        // 'card_entry' is the Stage 3.6 roleplay-card Zone 2 entries
+        // (card_entries rows; replaces the never-written 'ledger' value the
+        // superseded six-section-ledger plan had reserved). Card CORES are
+        // always-injected and cooldown-exempt (§10), so they never appear
+        // in the cooldown table at all.
         const val COOLDOWN_SOURCE_MEMORY = "memory"
-        const val COOLDOWN_SOURCE_LEDGER = "ledger"
+        const val COOLDOWN_SOURCE_CARD_ENTRY = "card_entry"
 
         // meta keys
         const val META_SCHEMA_VERSION = "schema_version"
@@ -110,14 +114,15 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
 
     override fun onConfigure(db: SQLiteDatabase) {
         super.onConfigure(db)
-        // The v4 migration rebuilds the `memories` table to relax its scope and
-        // status CHECK constraints (SQLite cannot loosen a CHECK with ALTER, so
-        // the table is recreated). Dropping `memories` while foreign keys are ON
-        // would fire ON DELETE CASCADE on its child tables and wipe them; the
-        // PRAGMA can't be toggled inside onUpgrade's transaction, so we disable
-        // enforcement here (onConfigure runs before that transaction) whenever an
-        // older schema is about to be migrated, and re-enable it in onOpen. Fresh
-        // installs (version 0) and already-migrated stores keep FKs on.
+        // The v4 migration rebuilds the `memories` table (and v7 the `worlds`
+        // table) to relax CHECK constraints (SQLite cannot loosen a CHECK with
+        // ALTER, so the table is recreated). Dropping a parent table while
+        // foreign keys are ON would fire ON DELETE CASCADE on its child tables
+        // and wipe them; the PRAGMA can't be toggled inside onUpgrade's
+        // transaction, so we disable enforcement here (onConfigure runs before
+        // that transaction) whenever an older schema is about to be migrated,
+        // and re-enable it in onOpen. Fresh installs (version 0) and
+        // already-migrated stores keep FKs on.
         val migratingOlder = db.version in 1 until DATABASE_VERSION
         db.setForeignKeyConstraintsEnabled(!migratingOlder)
     }
@@ -213,14 +218,19 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 "origin TEXT NOT NULL DEFAULT 'user')"
         )
 
+        // World card Zone 1 (spec §6c): premise = "Premise / Vibe", rules =
+        // "Magic Rules" (pre-3.6 column names kept so existing text carries
+        // over), cosmology added in v7. 'archived' status added in v7 for the
+        // §5 Archive sections.
         db.execSQL(
             "CREATE TABLE worlds (" +
                 "world_id TEXT PRIMARY KEY, " +
                 "name TEXT NOT NULL, " +
                 "premise TEXT NOT NULL, " +
                 "rules TEXT, " +
+                "cosmology TEXT, " +
                 "companion_ids_json TEXT DEFAULT '[]', " +
-                "status TEXT NOT NULL CHECK (status IN ('active','dormant','ended')), " +
+                "status TEXT NOT NULL CHECK (status IN ('active','dormant','ended','archived')), " +
                 "created_at TEXT)"
         )
 
@@ -233,6 +243,9 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 "created_at TEXT)"
         )
 
+        // The five Zone 1 card columns (species..goals_drives) are the spec
+        // §6a user RP-character core (v7); description/arc/played_by predate
+        // the card system and stay for existing data.
         db.execSQL(
             "CREATE TABLE roleplay_characters (" +
                 "roleplay_character_id TEXT PRIMARY KEY, " +
@@ -242,12 +255,19 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 "arc TEXT, " +
                 "worlds_played_json TEXT DEFAULT '[]', " +
                 "status TEXT NOT NULL CHECK (status IN ('active','archived')), " +
-                "created_at TEXT)"
+                "created_at TEXT, " +
+                "species TEXT, " +
+                "char_class TEXT, " +
+                "core_personality TEXT, " +
+                "physical_description TEXT, " +
+                "goals_drives TEXT)"
         )
 
         // Campaign (roleplay continuity) layer — integration plan 📌 amendment.
         // Created before `memories` so the memories.campaign_id foreign key
         // resolves. Additive for existing installs (onUpgrade v3).
+        // quest_anchor + active_scene (v7) are the campaign card's Zone 1
+        // "bookmark" (spec §6d) — user-maintained, session-end updates only.
         db.execSQL(
             "CREATE TABLE campaigns (" +
                 "campaign_id TEXT PRIMARY KEY, " +
@@ -257,7 +277,9 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 "companion_id TEXT REFERENCES companions(companion_id), " +
                 "status TEXT NOT NULL CHECK (status IN ('active','paused','ended','archived')), " +
                 "story_so_far TEXT, " +
-                "created_at TEXT)"
+                "created_at TEXT, " +
+                "quest_anchor TEXT, " +
+                "active_scene TEXT)"
         )
 
         // Projects (owner_approved_rules §4): user-defined named buckets a memory
@@ -470,6 +492,93 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 "turn INTEGER NOT NULL)"
         )
 
+        // Roleplay cards + tags (Stage 3.6a, roleplay_cards_and_tags_spec.md).
+        // Card content lives HERE, never in memories rows; retrieval over it is
+        // trigger-matched, never embedded (the embeddings table stays
+        // memories-only). Nothing ships pre-populated — no sample cards, no
+        // starter tags, ever.
+
+        // NPC party members (spec §4/§6b): a top-level roster; campaigns LINK
+        // members via the join table (join, not ownership). `status` is the
+        // four-state fiction status that gates Zone 1 injection; `archived` is
+        // the separate card-lifecycle flag for the §5 Archive section.
+        db.execSQL(
+            "CREATE TABLE party_members (" +
+                "party_member_id TEXT PRIMARY KEY, " +
+                "name TEXT NOT NULL, " +
+                "species TEXT, " +
+                "char_class TEXT, " +
+                "core_personality TEXT, " +
+                "physical_description TEXT, " +
+                "goals_drives TEXT, " +
+                "speech_style TEXT, " +
+                "status TEXT NOT NULL DEFAULT 'alive' CHECK (status IN ('alive','incapacitated','dead','enemy')), " +
+                "archived INTEGER NOT NULL DEFAULT 0, " +
+                "created_at TEXT NOT NULL, " +
+                "updated_at TEXT)"
+        )
+        db.execSQL(
+            "CREATE TABLE campaign_party_members (" +
+                "campaign_id TEXT NOT NULL REFERENCES campaigns(campaign_id), " +
+                "party_member_id TEXT NOT NULL REFERENCES party_members(party_member_id), " +
+                "PRIMARY KEY (campaign_id, party_member_id))"
+        )
+
+        // Zone 2 card entries (spec §6): one polymorphic table for all four
+        // card types — the retrieval machinery is section-agnostic (named
+        // entries in containers); only the columns a section defines are used
+        // (see CardEntryRecord). The parent/world-entry/party-member reference
+        // columns are deliberately soft (no FK): §5 rules that surviving
+        // references to a gone card render "(archived card)"/"(deleted card)"
+        // instead of vanishing, so a dangling id plus its deleted_ids
+        // tombstone is the intended representation, not corruption.
+        db.execSQL(
+            "CREATE TABLE card_entries (" +
+                "entry_id TEXT PRIMARY KEY, " +
+                "card_type TEXT NOT NULL CHECK (card_type IN ('rp_character','party_member','world','campaign')), " +
+                "card_id TEXT NOT NULL, " +
+                "section TEXT NOT NULL, " +
+                "name TEXT NOT NULL, " +
+                "description TEXT, " +
+                "entry_kind TEXT, " +
+                "quantity INTEGER, " +
+                "parent_entry_id TEXT, " +
+                "world_entry_id TEXT, " +
+                "party_member_id TEXT, " +
+                "holder TEXT, " +
+                "significance TEXT, " +
+                "cast_identity TEXT, " +
+                "cast_disposition TEXT, " +
+                "cast_status TEXT, " +
+                "location_condition TEXT, " +
+                "location_changes TEXT, " +
+                "created_at TEXT NOT NULL, " +
+                "updated_at TEXT)"
+        )
+
+        // The roleplay-realm tag pool (spec §3): ONE pool for the whole
+        // roleplay module and ONLY the roleplay module — real-life memory tags
+        // stay in memories.tags_json; the realm wall is structural. Tag names
+        // are deduplicated case-insensitively in code (getOrCreateRpTag), not
+        // by a UNIQUE constraint, so an import can name-match instead of
+        // failing. auto_trigger defaults ON; OFF = browse/organize-only.
+        db.execSQL(
+            "CREATE TABLE rp_tags (" +
+                "tag_id TEXT PRIMARY KEY, " +
+                "name TEXT NOT NULL, " +
+                "auto_trigger INTEGER NOT NULL DEFAULT 1, " +
+                "created_at TEXT)"
+        )
+        // Polymorphic links: a tag can point at a memory, a card entry, or a
+        // whole card (the bridge between the two storage cabinets).
+        db.execSQL(
+            "CREATE TABLE rp_tag_links (" +
+                "tag_id TEXT NOT NULL REFERENCES rp_tags(tag_id) ON DELETE CASCADE, " +
+                "target_type TEXT NOT NULL CHECK (target_type IN ('card_entry','rp_character','party_member','world','campaign','memory')), " +
+                "target_id TEXT NOT NULL, " +
+                "PRIMARY KEY (tag_id, target_type, target_id))"
+        )
+
         db.execSQL("CREATE INDEX idx_memories_status ON memories(status)")
         db.execSQL("CREATE INDEX idx_memories_always_load ON memories(always_load) WHERE always_load = 1")
         db.execSQL("CREATE INDEX idx_memories_world ON memories(world_id)")
@@ -485,6 +594,9 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         db.execSQL("CREATE INDEX idx_transcripts_queue ON transcripts(review_status) WHERE review_status = 'pending'")
         db.execSQL("CREATE INDEX idx_transcripts_chat ON transcripts(chat_id)")
         db.execSQL("CREATE INDEX idx_proposals_pending ON proposals(status) WHERE status = 'pending'")
+        db.execSQL("CREATE INDEX idx_card_entries_card ON card_entries(card_type, card_id)")
+        db.execSQL("CREATE INDEX idx_cpm_member ON campaign_party_members(party_member_id)")
+        db.execSQL("CREATE INDEX idx_rp_tag_links_target ON rp_tag_links(target_type, target_id)")
 
         val now = nowIso()
         db.execSQL("INSERT INTO meta (key, value) VALUES (?, ?)", arrayOf(META_SCHEMA_VERSION, "1.11.0"))
@@ -699,6 +811,120 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             db.execSQL(
                 "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                 arrayOf(META_DB_MIGRATION, "6")
+            )
+        }
+        if (oldVersion < 7) {
+            // v7 (July 2026, Stage 3.6a): the roleplay card + tag layer
+            // (roleplay_cards_and_tags_spec.md §6, rescoped Stage 3.6 of the
+            // RAG engine work order). Additive except the `worlds` rebuild:
+            // its status CHECK gains 'archived' (for the §5 Archive sections),
+            // which SQLite can't loosen with ALTER — same recipe as v4,
+            // foreign keys are OFF during the migration (onConfigure) so the
+            // drop doesn't cascade into campaigns/memories/memory_worlds/
+            // transcripts; the same world_ids are re-inserted. `premise`
+            // keeps backing the spec's "Premise / Vibe" and `rules` its
+            // "Magic Rules" (existing text carries over); `cosmology` is new.
+            db.execSQL(
+                "CREATE TABLE worlds_new (" +
+                    "world_id TEXT PRIMARY KEY, " +
+                    "name TEXT NOT NULL, " +
+                    "premise TEXT NOT NULL, " +
+                    "rules TEXT, " +
+                    "cosmology TEXT, " +
+                    "companion_ids_json TEXT DEFAULT '[]', " +
+                    "status TEXT NOT NULL CHECK (status IN ('active','dormant','ended','archived')), " +
+                    "created_at TEXT)"
+            )
+            db.execSQL(
+                "INSERT INTO worlds_new (world_id, name, premise, rules, cosmology, companion_ids_json, status, created_at) " +
+                    "SELECT world_id, name, premise, rules, NULL, companion_ids_json, status, created_at FROM worlds"
+            )
+            db.execSQL("DROP TABLE worlds")
+            db.execSQL("ALTER TABLE worlds_new RENAME TO worlds")
+
+            // User RP-character card Zone 1 (spec §6a) — additive columns; the
+            // pre-card description/arc columns stay untouched.
+            for (column in listOf("species", "char_class", "core_personality", "physical_description", "goals_drives")) {
+                db.execSQL("ALTER TABLE roleplay_characters ADD COLUMN $column TEXT")
+            }
+
+            // Campaign card Zone 1 "bookmark" (spec §6d).
+            db.execSQL("ALTER TABLE campaigns ADD COLUMN quest_anchor TEXT")
+            db.execSQL("ALTER TABLE campaigns ADD COLUMN active_scene TEXT")
+
+            // NPC party-member roster + campaign links (spec §4/§6b).
+            db.execSQL(
+                "CREATE TABLE party_members (" +
+                    "party_member_id TEXT PRIMARY KEY, " +
+                    "name TEXT NOT NULL, " +
+                    "species TEXT, " +
+                    "char_class TEXT, " +
+                    "core_personality TEXT, " +
+                    "physical_description TEXT, " +
+                    "goals_drives TEXT, " +
+                    "speech_style TEXT, " +
+                    "status TEXT NOT NULL DEFAULT 'alive' CHECK (status IN ('alive','incapacitated','dead','enemy')), " +
+                    "archived INTEGER NOT NULL DEFAULT 0, " +
+                    "created_at TEXT NOT NULL, " +
+                    "updated_at TEXT)"
+            )
+            db.execSQL(
+                "CREATE TABLE campaign_party_members (" +
+                    "campaign_id TEXT NOT NULL REFERENCES campaigns(campaign_id), " +
+                    "party_member_id TEXT NOT NULL REFERENCES party_members(party_member_id), " +
+                    "PRIMARY KEY (campaign_id, party_member_id))"
+            )
+
+            // Zone 2 card entries — one polymorphic table for all four card
+            // types; reference columns are soft by design (see onCreate).
+            db.execSQL(
+                "CREATE TABLE card_entries (" +
+                    "entry_id TEXT PRIMARY KEY, " +
+                    "card_type TEXT NOT NULL CHECK (card_type IN ('rp_character','party_member','world','campaign')), " +
+                    "card_id TEXT NOT NULL, " +
+                    "section TEXT NOT NULL, " +
+                    "name TEXT NOT NULL, " +
+                    "description TEXT, " +
+                    "entry_kind TEXT, " +
+                    "quantity INTEGER, " +
+                    "parent_entry_id TEXT, " +
+                    "world_entry_id TEXT, " +
+                    "party_member_id TEXT, " +
+                    "holder TEXT, " +
+                    "significance TEXT, " +
+                    "cast_identity TEXT, " +
+                    "cast_disposition TEXT, " +
+                    "cast_status TEXT, " +
+                    "location_condition TEXT, " +
+                    "location_changes TEXT, " +
+                    "created_at TEXT NOT NULL, " +
+                    "updated_at TEXT)"
+            )
+
+            // The roleplay-realm tag pool + polymorphic links (spec §3).
+            // Starts EMPTY — no starter tags, ever.
+            db.execSQL(
+                "CREATE TABLE rp_tags (" +
+                    "tag_id TEXT PRIMARY KEY, " +
+                    "name TEXT NOT NULL, " +
+                    "auto_trigger INTEGER NOT NULL DEFAULT 1, " +
+                    "created_at TEXT)"
+            )
+            db.execSQL(
+                "CREATE TABLE rp_tag_links (" +
+                    "tag_id TEXT NOT NULL REFERENCES rp_tags(tag_id) ON DELETE CASCADE, " +
+                    "target_type TEXT NOT NULL CHECK (target_type IN ('card_entry','rp_character','party_member','world','campaign','memory')), " +
+                    "target_id TEXT NOT NULL, " +
+                    "PRIMARY KEY (tag_id, target_type, target_id))"
+            )
+
+            db.execSQL("CREATE INDEX idx_card_entries_card ON card_entries(card_type, card_id)")
+            db.execSQL("CREATE INDEX idx_cpm_member ON campaign_party_members(party_member_id)")
+            db.execSQL("CREATE INDEX idx_rp_tag_links_target ON rp_tag_links(target_type, target_id)")
+
+            db.execSQL(
+                "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                arrayOf(META_DB_MIGRATION, "7")
             )
         }
     }
@@ -1031,6 +1257,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                     put("name", w.name)
                     put("premise", w.premise)
                     put("rules", w.rules)
+                    put("cosmology", w.cosmology)
                     put("companion_ids_json", w.companionIdsJson)
                     put("status", w.status)
                     put("created_at", w.createdAt)
@@ -1065,8 +1292,36 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                     put("worlds_played_json", r.worldsPlayedJson)
                     put("status", r.status)
                     put("created_at", r.createdAt)
+                    put("species", r.species)
+                    put("char_class", r.charClass)
+                    put("core_personality", r.corePersonality)
+                    put("physical_description", r.physicalDescription)
+                    put("goals_drives", r.goalsDrives)
                 })
                 report.addAdded("roleplay characters")
+            }
+
+            // Party members before campaigns: campaign_party_members
+            // foreign-keys both ways (3.6a).
+            for (p in data.partyMembers) {
+                if (rowExists(db, "party_members", "party_member_id", p.partyMemberId)) {
+                    report.addSkipped("party members"); continue
+                }
+                db.insert("party_members", null, ContentValues().apply {
+                    put("party_member_id", p.partyMemberId)
+                    put("name", p.name)
+                    put("species", p.species)
+                    put("char_class", p.charClass)
+                    put("core_personality", p.corePersonality)
+                    put("physical_description", p.physicalDescription)
+                    put("goals_drives", p.goalsDrives)
+                    put("speech_style", p.speechStyle)
+                    put("status", p.status)
+                    put("archived", if (p.archived) 1 else 0)
+                    put("created_at", p.createdAt)
+                    put("updated_at", p.updatedAt)
+                })
+                report.addAdded("party members")
             }
 
             // Campaigns before memories: memories.campaign_id foreign-keys here.
@@ -1075,6 +1330,17 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                     report.addSkipped("campaigns"); continue
                 }
                 db.insert("campaigns", null, campaignValues(c))
+                // Party links ride the campaign record in the export shape;
+                // only ids the store actually has are linked, so a hand-edited
+                // file can't break the whole import on one dangling id.
+                for (pmId in c.partyMemberIds) {
+                    if (rowExists(db, "party_members", "party_member_id", pmId)) {
+                        db.execSQL(
+                            "INSERT OR IGNORE INTO campaign_party_members (campaign_id, party_member_id) VALUES (?, ?)",
+                            arrayOf(c.campaignId, pmId)
+                        )
+                    }
+                }
                 report.addAdded("campaigns")
             }
 
@@ -1212,6 +1478,54 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 report.addAdded("transcripts")
             }
 
+            // Roleplay card entries (3.6a). Their card/parent references are
+            // soft by design, so entries import cleanly in any order.
+            for (e in data.cardEntries) {
+                if (rowExists(db, "card_entries", "entry_id", e.entryId)) {
+                    report.addSkipped("card entries"); continue
+                }
+                db.insert("card_entries", null, cardEntryValues(e))
+                report.addAdded("card entries")
+            }
+
+            // Roleplay tags (3.6a): matched by id first, then by name
+            // (case-insensitive — the pool's dedup rule), so re-importing a
+            // backup never duplicates a tag; the incoming tag's links are
+            // re-pointed at the matching existing tag.
+            for (t in data.rpTags) {
+                var effectiveId = t.tagId
+                if (rowExists(db, "rp_tags", "tag_id", t.tagId)) {
+                    report.addSkipped("roleplay tags")
+                } else {
+                    var existingByName: String? = null
+                    db.rawQuery(
+                        "SELECT tag_id FROM rp_tags WHERE name = ? COLLATE NOCASE LIMIT 1",
+                        arrayOf(t.name.trim())
+                    ).use { if (it.moveToFirst()) existingByName = it.getString(0) }
+                    if (existingByName != null) {
+                        effectiveId = existingByName!!
+                        report.addSkipped("roleplay tags")
+                    } else {
+                        db.insert("rp_tags", null, ContentValues().apply {
+                            put("tag_id", t.tagId)
+                            put("name", t.name.trim())
+                            put("auto_trigger", if (t.autoTrigger) 1 else 0)
+                            put("created_at", t.createdAt)
+                        })
+                        report.addAdded("roleplay tags")
+                    }
+                }
+                for ((targetType, targetId) in t.targets) {
+                    // Unknown target types (a hand-edited file) would trip the
+                    // CHECK and abort the whole import — skip them instead.
+                    if (targetType !in RpTagTargetType.ALL) continue
+                    db.execSQL(
+                        "INSERT OR IGNORE INTO rp_tag_links (tag_id, target_type, target_id) VALUES (?, ?, ?)",
+                        arrayOf(effectiveId, targetType, targetId)
+                    )
+                }
+            }
+
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
@@ -1271,6 +1585,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                         name = it.getString(it.getColumnIndexOrThrow("name")),
                         premise = it.getString(it.getColumnIndexOrThrow("premise")),
                         rules = it.getStringOrNull("rules"),
+                        cosmology = it.getStringOrNull("cosmology"),
                         companionIdsJson = it.getStringOrNull("companion_ids_json") ?: "[]",
                         status = it.getString(it.getColumnIndexOrThrow("status")),
                         createdAt = it.getStringOrNull("created_at")
@@ -1306,7 +1621,12 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                         arc = it.getStringOrNull("arc"),
                         worldsPlayedJson = it.getStringOrNull("worlds_played_json") ?: "[]",
                         status = it.getString(it.getColumnIndexOrThrow("status")),
-                        createdAt = it.getStringOrNull("created_at")
+                        createdAt = it.getStringOrNull("created_at"),
+                        species = it.getStringOrNull("species"),
+                        charClass = it.getStringOrNull("char_class"),
+                        corePersonality = it.getStringOrNull("core_personality"),
+                        physicalDescription = it.getStringOrNull("physical_description"),
+                        goalsDrives = it.getStringOrNull("goals_drives")
                     )
                 )
             }
@@ -1449,6 +1769,15 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         val campaigns = readCampaigns(null, null)
         val projects = readProjects(null, null)
 
+        // Roleplay cards + tags (3.6a): backups must carry the card layer or
+        // the Reset-memories "save a backup first" path would lose it.
+        val partyMembers = getPartyMembers(includeArchived = true)
+        val cardEntries = ArrayList<CardEntryRecord>()
+        db.query("card_entries", null, null, null, null, null, "card_type ASC, card_id ASC, section ASC, name ASC").use {
+            while (it.moveToNext()) cardEntries.add(readCardEntry(it))
+        }
+        val rpTags = getAllRpTags().map { it.copy(targets = targetsForTag(it.tagId)) }
+
         return MemoryStoreData(
             schemaVersion = getMeta(META_SCHEMA_VERSION) ?: "1.11.0",
             ownerProfile = owner,
@@ -1465,7 +1794,10 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             retrievalPolicyJson = retrievalPolicy,
             transcripts = transcripts,
             campaigns = campaigns,
-            projects = projects
+            projects = projects,
+            partyMembers = partyMembers,
+            cardEntries = cardEntries,
+            rpTags = rpTags
         )
     }
 
@@ -1708,6 +2040,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                         name = it.getString(it.getColumnIndexOrThrow("name")),
                         premise = it.getString(it.getColumnIndexOrThrow("premise")),
                         rules = it.getStringOrNull("rules"),
+                        cosmology = it.getStringOrNull("cosmology"),
                         companionIdsJson = it.getStringOrNull("companion_ids_json") ?: "[]",
                         status = it.getString(it.getColumnIndexOrThrow("status")),
                         createdAt = it.getStringOrNull("created_at")
@@ -1761,7 +2094,12 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                         arc = it.getStringOrNull("arc"),
                         worldsPlayedJson = it.getStringOrNull("worlds_played_json") ?: "[]",
                         status = it.getString(it.getColumnIndexOrThrow("status")),
-                        createdAt = it.getStringOrNull("created_at")
+                        createdAt = it.getStringOrNull("created_at"),
+                        species = it.getStringOrNull("species"),
+                        charClass = it.getStringOrNull("char_class"),
+                        corePersonality = it.getStringOrNull("core_personality"),
+                        physicalDescription = it.getStringOrNull("physical_description"),
+                        goalsDrives = it.getStringOrNull("goals_drives")
                     )
                 )
             }
@@ -2455,6 +2793,11 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             put("worlds_played_json", r.worldsPlayedJson)
             put("status", r.status)
             put("created_at", r.createdAt ?: nowIso())
+            put("species", r.species)
+            put("char_class", r.charClass)
+            put("core_personality", r.corePersonality)
+            put("physical_description", r.physicalDescription)
+            put("goals_drives", r.goalsDrives)
         }, SQLiteDatabase.CONFLICT_REPLACE)
     }
 
@@ -2479,6 +2822,9 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             }
             // Scrub multi-select links (§2) so the FK to roleplay_characters clears.
             db.delete("memory_roleplay_characters", "roleplay_character_id = ?", arrayOf(id))
+            // The card's Zone 2 entries and tag links go with it (3.6a).
+            deleteCardEntriesForCardTx(db, CardType.RP_CHARACTER, id)
+            db.delete("rp_tag_links", "target_type = ? AND target_id = ?", arrayOf(RpTagTargetType.RP_CHARACTER, id))
             db.delete("roleplay_characters", "roleplay_character_id = ?", arrayOf(id))
             recordDeletionTx(db, "roleplay_character", id)
             db.setTransactionSuccessful()
@@ -2497,6 +2843,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             put("name", w.name)
             put("premise", w.premise)
             put("rules", w.rules)
+            put("cosmology", w.cosmology)
             put("companion_ids_json", w.companionIdsJson)
             put("status", w.status)
             put("created_at", w.createdAt ?: nowIso())
@@ -2547,6 +2894,11 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 "world_id = ?", arrayOf(worldId))
             // Scrub multi-select links (§2) so the FK to worlds clears.
             db.delete("memory_worlds", "world_id = ?", arrayOf(worldId))
+            // The card's Zone 2 entries and tag links go with it (3.6a).
+            // Campaign overlays pointing at those entries keep their dangling
+            // world_entry_id on purpose — §5's "(deleted card)" rendering.
+            deleteCardEntriesForCardTx(db, CardType.WORLD, worldId)
+            db.delete("rp_tag_links", "target_type = ? AND target_id = ?", arrayOf(RpTagTargetType.WORLD, worldId))
             db.delete("worlds", "world_id = ?", arrayOf(worldId))
             recordDeletionTx(db, "world", worldId)
             db.setTransactionSuccessful()
@@ -2566,18 +2918,23 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
 
     private fun readCampaigns(selection: String?, args: Array<String>?): List<CampaignRecord> {
         val out = ArrayList<CampaignRecord>()
-        readableDatabase.query("campaigns", null, selection, args, null, null, "created_at ASC, name ASC").use {
+        val db = readableDatabase
+        db.query("campaigns", null, selection, args, null, null, "created_at ASC, name ASC").use {
             while (it.moveToNext()) {
+                val id = it.getString(it.getColumnIndexOrThrow("campaign_id"))
                 out.add(
                     CampaignRecord(
-                        campaignId = it.getString(it.getColumnIndexOrThrow("campaign_id")),
+                        campaignId = id,
                         name = it.getString(it.getColumnIndexOrThrow("name")),
                         worldId = it.getStringOrNull("world_id"),
                         roleplayCharacterId = it.getStringOrNull("roleplay_character_id"),
                         companionId = it.getStringOrNull("companion_id"),
                         status = it.getString(it.getColumnIndexOrThrow("status")),
                         storySoFar = it.getStringOrNull("story_so_far"),
-                        createdAt = it.getStringOrNull("created_at")
+                        createdAt = it.getStringOrNull("created_at"),
+                        questAnchor = it.getStringOrNull("quest_anchor"),
+                        activeScene = it.getStringOrNull("active_scene"),
+                        partyMemberIds = readCampaignPartyIds(db, id)
                     )
                 )
             }
@@ -2585,6 +2942,19 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         return out
     }
 
+    private fun readCampaignPartyIds(db: SQLiteDatabase, campaignId: String): List<String> {
+        val out = ArrayList<String>()
+        db.query(
+            "campaign_party_members", arrayOf("party_member_id"),
+            "campaign_id = ?", arrayOf(campaignId), null, null, "party_member_id ASC"
+        ).use { while (it.moveToNext()) out.add(it.getString(0)) }
+        return out
+    }
+
+    // Deliberately does NOT write partyMemberIds: pre-3.6 save paths rebuild
+    // the record from form fields, and a REPLACE that also rewrote the join
+    // table would silently wipe a campaign's party. Links go through
+    // linkPartyMemberToCampaign/unlinkPartyMemberFromCampaign only.
     private fun campaignValues(c: CampaignRecord) = ContentValues().apply {
         put("campaign_id", c.campaignId)
         put("name", c.name)
@@ -2594,6 +2964,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         put("status", c.status)
         put("story_so_far", c.storySoFar)
         put("created_at", c.createdAt ?: nowIso())
+        put("quest_anchor", c.questAnchor)
+        put("active_scene", c.activeScene)
     }
 
     fun upsertCampaign(c: CampaignRecord) {
@@ -2644,6 +3016,12 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             }
             // Scrub multi-select links (§2) so the FK to campaigns clears.
             db.delete("memory_campaigns", "campaign_id = ?", arrayOf(campaignId))
+            // Party-member links, the card's Zone 2 entries and tag links go
+            // with it (3.6a). The party-member CARDS survive — the join is
+            // link, not ownership (§4).
+            db.delete("campaign_party_members", "campaign_id = ?", arrayOf(campaignId))
+            deleteCardEntriesForCardTx(db, CardType.CAMPAIGN, campaignId)
+            db.delete("rp_tag_links", "target_type = ? AND target_id = ?", arrayOf(RpTagTargetType.CAMPAIGN, campaignId))
             db.delete("campaigns", "campaign_id = ?", arrayOf(campaignId))
             recordDeletionTx(db, "campaign", campaignId)
             db.setTransactionSuccessful()
@@ -2723,6 +3101,362 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
     fun memoriesForProject(projectId: String, includeArchived: Boolean): List<MemoryRecord> =
         memoriesForTarget("memory_projects", "project_id", projectId, includeArchived)
 
+    /* -------- roleplay cards + tags (Stage 3.6a, roleplay_cards_and_tags_spec.md) --------
+     * Everything here is user-edit CRUD: per the no-mid-conversation-writes
+     * law (spec §6d/§9), NO automatic process may call the write methods in
+     * this section during a conversation — cards, entries and tags change
+     * only from the card editors (or an import the user runs). */
+
+    /* ---- NPC party members (spec §4/§6b) ---- */
+
+    fun getPartyMembers(includeArchived: Boolean): List<PartyMemberRecord> {
+        val out = ArrayList<PartyMemberRecord>()
+        val selection = if (includeArchived) null else "archived = 0"
+        readableDatabase.query("party_members", null, selection, null, null, null, "name ASC").use {
+            while (it.moveToNext()) out.add(readPartyMember(it))
+        }
+        return out
+    }
+
+    fun getPartyMember(partyMemberId: String): PartyMemberRecord? {
+        readableDatabase.query(
+            "party_members", null, "party_member_id = ?", arrayOf(partyMemberId), null, null, null
+        ).use { return if (it.moveToFirst()) readPartyMember(it) else null }
+    }
+
+    private fun readPartyMember(c: Cursor): PartyMemberRecord = PartyMemberRecord(
+        partyMemberId = c.getString(c.getColumnIndexOrThrow("party_member_id")),
+        name = c.getString(c.getColumnIndexOrThrow("name")),
+        species = c.getStringOrNull("species"),
+        charClass = c.getStringOrNull("char_class"),
+        corePersonality = c.getStringOrNull("core_personality"),
+        physicalDescription = c.getStringOrNull("physical_description"),
+        goalsDrives = c.getStringOrNull("goals_drives"),
+        speechStyle = c.getStringOrNull("speech_style"),
+        status = c.getString(c.getColumnIndexOrThrow("status")),
+        archived = c.getInt(c.getColumnIndexOrThrow("archived")) == 1,
+        createdAt = c.getString(c.getColumnIndexOrThrow("created_at")) ?: "",
+        updatedAt = c.getStringOrNull("updated_at")
+    )
+
+    fun upsertPartyMember(p: PartyMemberRecord) {
+        writableDatabase.insertWithOnConflict("party_members", null, ContentValues().apply {
+            put("party_member_id", p.partyMemberId)
+            put("name", p.name)
+            put("species", p.species)
+            put("char_class", p.charClass)
+            put("core_personality", p.corePersonality)
+            put("physical_description", p.physicalDescription)
+            put("goals_drives", p.goalsDrives)
+            put("speech_style", p.speechStyle)
+            put("status", p.status)
+            put("archived", if (p.archived) 1 else 0)
+            put("created_at", p.createdAt.ifEmpty { nowIso() })
+            put("updated_at", p.updatedAt)
+        }, SQLiteDatabase.CONFLICT_REPLACE)
+    }
+
+    /** The four-state fiction status (alive|incapacitated|dead|enemy) —
+     *  user-editable at any time (§4). Death is a status change, NEVER a
+     *  delete; the who-they-were summary memory is user-written (3.6f). */
+    fun setPartyMemberStatus(partyMemberId: String, status: String) {
+        writableDatabase.update(
+            "party_members",
+            ContentValues().apply { put("status", status); put("updated_at", nowIso()) },
+            "party_member_id = ?", arrayOf(partyMemberId)
+        )
+    }
+
+    /** Card-lifecycle archive (§5): hidden from active selection, links kept,
+     *  restorable in one tap from the visible Archive section. */
+    fun setPartyMemberArchived(partyMemberId: String, archived: Boolean) {
+        writableDatabase.update(
+            "party_members",
+            ContentValues().apply { put("archived", if (archived) 1 else 0); put("updated_at", nowIso()) },
+            "party_member_id = ?", arrayOf(partyMemberId)
+        )
+    }
+
+    /** True delete (§5): campaign links and the card's own entries/tags are
+     *  scrubbed; world-card NPC entries that point here via party_member_id
+     *  keep the dangling pointer ON PURPOSE — the tombstone lets the UI
+     *  render "(deleted card)" instead of a silent hole. */
+    fun deletePartyMember(partyMemberId: String) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.delete("campaign_party_members", "party_member_id = ?", arrayOf(partyMemberId))
+            deleteCardEntriesForCardTx(db, CardType.PARTY_MEMBER, partyMemberId)
+            db.delete(
+                "rp_tag_links", "target_type = ? AND target_id = ?",
+                arrayOf(RpTagTargetType.PARTY_MEMBER, partyMemberId)
+            )
+            db.delete("party_members", "party_member_id = ?", arrayOf(partyMemberId))
+            recordDeletionTx(db, "party_member", partyMemberId)
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    /* ---- campaign <-> party-member links (join, not ownership — §4) ---- */
+
+    fun linkPartyMemberToCampaign(campaignId: String, partyMemberId: String) {
+        writableDatabase.execSQL(
+            "INSERT OR IGNORE INTO campaign_party_members (campaign_id, party_member_id) VALUES (?, ?)",
+            arrayOf(campaignId, partyMemberId)
+        )
+    }
+
+    fun unlinkPartyMemberFromCampaign(campaignId: String, partyMemberId: String) {
+        writableDatabase.delete(
+            "campaign_party_members", "campaign_id = ? AND party_member_id = ?",
+            arrayOf(campaignId, partyMemberId)
+        )
+    }
+
+    fun campaignIdsForPartyMember(partyMemberId: String): List<String> {
+        val out = ArrayList<String>()
+        readableDatabase.query(
+            "campaign_party_members", arrayOf("campaign_id"),
+            "party_member_id = ?", arrayOf(partyMemberId), null, null, "campaign_id ASC"
+        ).use { while (it.moveToNext()) out.add(it.getString(0)) }
+        return out
+    }
+
+    fun partyMembersForCampaign(campaignId: String): List<PartyMemberRecord> {
+        val out = ArrayList<PartyMemberRecord>()
+        readableDatabase.rawQuery(
+            "SELECT p.* FROM party_members p " +
+                "JOIN campaign_party_members j ON j.party_member_id = p.party_member_id " +
+                "WHERE j.campaign_id = ? ORDER BY p.name ASC",
+            arrayOf(campaignId)
+        ).use { while (it.moveToNext()) out.add(readPartyMember(it)) }
+        return out
+    }
+
+    /* ---- Zone 2 card entries (spec §6) ---- */
+
+    fun getCardEntry(entryId: String): CardEntryRecord? {
+        readableDatabase.query(
+            "card_entries", null, "entry_id = ?", arrayOf(entryId), null, null, null
+        ).use { return if (it.moveToFirst()) readCardEntry(it) else null }
+    }
+
+    fun entriesForCard(cardType: String, cardId: String): List<CardEntryRecord> {
+        val out = ArrayList<CardEntryRecord>()
+        readableDatabase.query(
+            "card_entries", null, "card_type = ? AND card_id = ?", arrayOf(cardType, cardId),
+            null, null, "section ASC, name ASC"
+        ).use { while (it.moveToNext()) out.add(readCardEntry(it)) }
+        return out
+    }
+
+    fun entriesForSection(cardType: String, cardId: String, section: String): List<CardEntryRecord> {
+        val out = ArrayList<CardEntryRecord>()
+        readableDatabase.query(
+            "card_entries", null, "card_type = ? AND card_id = ? AND section = ?",
+            arrayOf(cardType, cardId, section), null, null, "name ASC"
+        ).use { while (it.moveToNext()) out.add(readCardEntry(it)) }
+        return out
+    }
+
+    private fun readCardEntry(c: Cursor): CardEntryRecord = CardEntryRecord(
+        entryId = c.getString(c.getColumnIndexOrThrow("entry_id")),
+        cardType = c.getString(c.getColumnIndexOrThrow("card_type")),
+        cardId = c.getString(c.getColumnIndexOrThrow("card_id")),
+        section = c.getString(c.getColumnIndexOrThrow("section")),
+        name = c.getString(c.getColumnIndexOrThrow("name")),
+        description = c.getStringOrNull("description"),
+        entryKind = c.getStringOrNull("entry_kind"),
+        quantity = c.getColumnIndexOrThrow("quantity").let { i -> if (c.isNull(i)) null else c.getInt(i) },
+        parentEntryId = c.getStringOrNull("parent_entry_id"),
+        worldEntryId = c.getStringOrNull("world_entry_id"),
+        partyMemberId = c.getStringOrNull("party_member_id"),
+        holder = c.getStringOrNull("holder"),
+        significance = c.getStringOrNull("significance"),
+        castIdentity = c.getStringOrNull("cast_identity"),
+        castDisposition = c.getStringOrNull("cast_disposition"),
+        castStatus = c.getStringOrNull("cast_status"),
+        locationCondition = c.getStringOrNull("location_condition"),
+        locationChanges = c.getStringOrNull("location_changes"),
+        createdAt = c.getString(c.getColumnIndexOrThrow("created_at")) ?: "",
+        updatedAt = c.getStringOrNull("updated_at")
+    )
+
+    fun upsertCardEntry(e: CardEntryRecord) {
+        writableDatabase.insertWithOnConflict("card_entries", null, cardEntryValues(e), SQLiteDatabase.CONFLICT_REPLACE)
+    }
+
+    private fun cardEntryValues(e: CardEntryRecord) = ContentValues().apply {
+        put("entry_id", e.entryId)
+        put("card_type", e.cardType)
+        put("card_id", e.cardId)
+        put("section", e.section)
+        put("name", e.name)
+        put("description", e.description)
+        put("entry_kind", e.entryKind)
+        if (e.quantity != null) put("quantity", e.quantity) else putNull("quantity")
+        put("parent_entry_id", e.parentEntryId)
+        put("world_entry_id", e.worldEntryId)
+        put("party_member_id", e.partyMemberId)
+        put("holder", e.holder)
+        put("significance", e.significance)
+        put("cast_identity", e.castIdentity)
+        put("cast_disposition", e.castDisposition)
+        put("cast_status", e.castStatus)
+        put("location_condition", e.locationCondition)
+        put("location_changes", e.locationChanges)
+        put("created_at", e.createdAt.ifEmpty { nowIso() })
+        put("updated_at", e.updatedAt)
+    }
+
+    fun deleteCardEntry(entryId: String) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.delete(
+                "rp_tag_links", "target_type = ? AND target_id = ?",
+                arrayOf(RpTagTargetType.CARD_ENTRY, entryId)
+            )
+            db.delete("card_entries", "entry_id = ?", arrayOf(entryId))
+            recordDeletionTx(db, "card_entry", entryId)
+            // Entries referencing this one (geography children via
+            // parent_entry_id, campaign overlays via world_entry_id) keep
+            // their dangling pointer on purpose — §5's "(deleted card)"
+            // rendering reads the tombstone; references never silently vanish.
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    /** Card teardown helper: removes a card's own Zone 2 entries, their tag
+     *  links, and leaves per-entry tombstones. Must run inside an open
+     *  transaction (like the other teardown helpers). */
+    private fun deleteCardEntriesForCardTx(db: SQLiteDatabase, cardType: String, cardId: String) {
+        val ids = ArrayList<String>()
+        db.query(
+            "card_entries", arrayOf("entry_id"), "card_type = ? AND card_id = ?",
+            arrayOf(cardType, cardId), null, null, null
+        ).use { while (it.moveToNext()) ids.add(it.getString(0)) }
+        for (id in ids) {
+            db.delete("rp_tag_links", "target_type = ? AND target_id = ?", arrayOf(RpTagTargetType.CARD_ENTRY, id))
+            recordDeletionTx(db, "card_entry", id)
+        }
+        db.delete("card_entries", "card_type = ? AND card_id = ?", arrayOf(cardType, cardId))
+    }
+
+    /* ---- the roleplay-realm tag pool (spec §3) ----
+     * REALM WALL: these tables are the roleplay realm and nothing else.
+     * Real-life memory tags live in memories.tags_json, keep the Memories
+     * browser as their only door, and never link here — even for identical
+     * words. No starter tags ship, ever; the pool fills only from the user's
+     * own tag input (and, later, approved Phase 6 suggestions). */
+
+    fun getAllRpTags(): List<RpTagRecord> {
+        val out = ArrayList<RpTagRecord>()
+        readableDatabase.query("rp_tags", null, null, null, null, null, "name ASC").use {
+            while (it.moveToNext()) out.add(readRpTag(it))
+        }
+        return out
+    }
+
+    fun getRpTag(tagId: String): RpTagRecord? {
+        readableDatabase.query("rp_tags", null, "tag_id = ?", arrayOf(tagId), null, null, null).use {
+            return if (it.moveToFirst()) readRpTag(it) else null
+        }
+    }
+
+    /** Case-insensitive name lookup — the pool's dedup rule lives here (and
+     *  in import), not in a UNIQUE constraint, so imports can name-match. */
+    fun findRpTagByName(name: String): RpTagRecord? {
+        readableDatabase.query(
+            "rp_tags", null, "name = ? COLLATE NOCASE", arrayOf(name.trim()), null, null, null
+        ).use { return if (it.moveToFirst()) readRpTag(it) else null }
+    }
+
+    /** Tag input's confirm path (spec §3): reuse the existing tag when the
+     *  name matches (case-insensitive), otherwise create it — auto_trigger
+     *  defaults ON, the app never flips it itself. */
+    fun getOrCreateRpTag(name: String): RpTagRecord {
+        val trimmed = name.trim()
+        findRpTagByName(trimmed)?.let { return it }
+        val tag = RpTagRecord(tagId = newId("tag-"), name = trimmed, autoTrigger = true, createdAt = nowIso())
+        writableDatabase.insert("rp_tags", null, ContentValues().apply {
+            put("tag_id", tag.tagId)
+            put("name", tag.name)
+            put("auto_trigger", 1)
+            put("created_at", tag.createdAt)
+        })
+        return tag
+    }
+
+    private fun readRpTag(c: Cursor): RpTagRecord = RpTagRecord(
+        tagId = c.getString(c.getColumnIndexOrThrow("tag_id")),
+        name = c.getString(c.getColumnIndexOrThrow("name")),
+        autoTrigger = c.getInt(c.getColumnIndexOrThrow("auto_trigger")) == 1,
+        createdAt = c.getStringOrNull("created_at")
+    )
+
+    /** The per-tag browse-only switch (spec §3): OFF silences ONLY the
+     *  message-text trigger path; browsing, the "connected to:" line and
+     *  one-hop pull-along keep working. User-flipped only. */
+    fun setRpTagAutoTrigger(tagId: String, autoTrigger: Boolean) {
+        writableDatabase.update(
+            "rp_tags", ContentValues().apply { put("auto_trigger", if (autoTrigger) 1 else 0) },
+            "tag_id = ?", arrayOf(tagId)
+        )
+    }
+
+    fun deleteRpTag(tagId: String) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            // rp_tag_links rows cascade with the tag (ON DELETE CASCADE).
+            db.delete("rp_tags", "tag_id = ?", arrayOf(tagId))
+            recordDeletionTx(db, "rp_tag", tagId)
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    fun addTagLink(tagId: String, targetType: String, targetId: String) {
+        writableDatabase.execSQL(
+            "INSERT OR IGNORE INTO rp_tag_links (tag_id, target_type, target_id) VALUES (?, ?, ?)",
+            arrayOf(tagId, targetType, targetId)
+        )
+    }
+
+    fun removeTagLink(tagId: String, targetType: String, targetId: String) {
+        writableDatabase.delete(
+            "rp_tag_links", "tag_id = ? AND target_type = ? AND target_id = ?",
+            arrayOf(tagId, targetType, targetId)
+        )
+    }
+
+    fun tagsForTarget(targetType: String, targetId: String): List<RpTagRecord> {
+        val out = ArrayList<RpTagRecord>()
+        readableDatabase.rawQuery(
+            "SELECT t.* FROM rp_tags t JOIN rp_tag_links l ON l.tag_id = t.tag_id " +
+                "WHERE l.target_type = ? AND l.target_id = ? ORDER BY t.name ASC",
+            arrayOf(targetType, targetId)
+        ).use { while (it.moveToNext()) out.add(readRpTag(it)) }
+        return out
+    }
+
+    /** All (targetType, targetId) pairs a tag points at — the cross-card tag
+     *  view (3.6e) groups these by the predefined card/section categories. */
+    fun targetsForTag(tagId: String): List<Pair<String, String>> {
+        val out = ArrayList<Pair<String, String>>()
+        readableDatabase.query(
+            "rp_tag_links", arrayOf("target_type", "target_id"), "tag_id = ?", arrayOf(tagId),
+            null, null, "target_type ASC, target_id ASC"
+        ).use { while (it.moveToNext()) out.add(it.getString(0) to it.getString(1)) }
+        return out
+    }
+
     /* -------- memories (full editor CRUD) -------- */
 
     fun getMemory(memoryId: String): MemoryRecord? {
@@ -2765,6 +3499,12 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             db.delete("memories", null, null) // cascades memory_* joins, change_log, embeddings
             db.delete("transcripts", null, null)
             db.delete("proposals", null, null)
+            // Roleplay cards + tags (3.6a): links and entries before the
+            // tables they reference; rp_tags cascades rp_tag_links.
+            db.delete("card_entries", null, null)
+            db.delete("campaign_party_members", null, null)
+            db.delete("party_members", null, null)
+            db.delete("rp_tags", null, null)
             db.delete("campaigns", null, null)
             db.delete("roleplay_characters", null, null)
             db.delete("worlds", null, null)

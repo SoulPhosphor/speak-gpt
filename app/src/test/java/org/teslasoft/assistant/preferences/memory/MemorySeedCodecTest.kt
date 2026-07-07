@@ -149,6 +149,84 @@ class MemorySeedCodecTest {
     }
 
     @Test
+    fun roleplayCardLayerRoundTrips() {
+        // Stage 3.6a (roleplay_cards_and_tags_spec.md): the card layer —
+        // world core fields, RP-character Zone 1, the campaign bookmark +
+        // party links, NPC party members, polymorphic Zone 2 card entries and
+        // the roleplay tag pool — must survive a backup/restore cycle, or the
+        // Reset-memories "save a backup first" path silently loses cards.
+        val withCards = """
+            {
+              "schema_version": "1.11.0",
+              "companions": [], "entities": [], "memories": [], "modes": [],
+              "directives": [], "user_personas": [], "proposals": [],
+              "worlds": [
+                { "world_id": "w-1", "name": "Duskmere", "premise": "The sun never rises.",
+                  "rules": "Magic causes physical corruption.", "cosmology": "Three moons; stars are dead gods.",
+                  "status": "active", "created_at": "2026-07-07T00:00:00Z" }
+              ],
+              "roleplay_characters": [
+                { "roleplay_character_id": "rc-1", "name": "Vael", "played_by": "user",
+                  "description": "legacy free-text", "status": "active",
+                  "species": "half-elf", "class": "ranger",
+                  "core_personality": "wary, loyal", "physical_description": "scarred hands",
+                  "goals_drives": "sworn grudge against orcs",
+                  "created_at": "2026-07-07T00:00:00Z" }
+              ],
+              "party_members": [
+                { "party_member_id": "pm-1", "name": "Rose", "species": "human",
+                  "class": "cleric", "speech_style": "soft, formal", "status": "dead",
+                  "created_at": "2026-07-07T00:00:00Z" }
+              ],
+              "campaigns": [
+                { "campaign_id": "camp-1", "name": "The Long Dark", "world_id": "w-1",
+                  "roleplay_character_id": "rc-1", "status": "active",
+                  "quest_anchor": "Reach Silver Hills before the eclipse.",
+                  "active_scene": "The Smuggler's Cove - flooded.",
+                  "party_member_ids": ["pm-1"],
+                  "created_at": "2026-07-07T00:00:00Z" }
+              ],
+              "card_entries": [
+                { "entry_id": "ce-1", "card_type": "rp_character", "card_id": "rc-1",
+                  "section": "inventory", "name": "Lockpicks", "entry_kind": "mundane",
+                  "quantity": 3, "created_at": "2026-07-07T00:00:00Z" },
+                { "entry_id": "ce-2", "card_type": "world", "card_id": "w-1",
+                  "section": "settlements", "name": "Eldoria", "description": "A walled river town.",
+                  "parent_entry_id": "ce-3", "created_at": "2026-07-07T00:00:00Z" },
+                { "entry_id": "ce-4", "card_type": "campaign", "card_id": "camp-1",
+                  "section": "reliquary", "name": "The Silver Key",
+                  "description": "Opens the vault.", "holder": "Vael",
+                  "significance": "Only way past the eclipse gate.",
+                  "created_at": "2026-07-07T00:00:00Z" }
+              ],
+              "rp_tags": [
+                { "tag_id": "tag-1", "name": "eclipse", "auto_trigger": true,
+                  "targets": [ { "type": "card_entry", "id": "ce-4" }, { "type": "world", "id": "w-1" } ] },
+                { "tag_id": "tag-2", "name": "magic", "auto_trigger": false }
+              ]
+            }
+        """.trimIndent()
+
+        val data = MemorySeedCodec.parse(withCards)
+        assertEquals("Three moons; stars are dead gods.", data.worlds.first().cosmology)
+        assertEquals("ranger", data.roleplayCharacters.first().charClass)
+        assertEquals("sworn grudge against orcs", data.roleplayCharacters.first().goalsDrives)
+        assertEquals("dead", data.partyMembers.first().status)
+        assertEquals(listOf("pm-1"), data.campaigns.first().partyMemberIds)
+        assertEquals("Reach Silver Hills before the eclipse.", data.campaigns.first().questAnchor)
+        assertEquals(3, data.cardEntries.first().quantity)
+        assertEquals("ce-3", data.cardEntries[1].parentEntryId)
+        assertEquals("Vael", data.cardEntries[2].holder)
+        // The per-tag browse-only switch (spec §3) must survive the trip.
+        assertTrue(data.rpTags[0].autoTrigger)
+        assertEquals(false, data.rpTags[1].autoTrigger)
+        assertEquals(2, data.rpTags[0].targets.size)
+
+        val back = MemorySeedCodec.parse(MemorySeedCodec.serialize(data))
+        assertEquals(data, back)
+    }
+
+    @Test
     fun exportEnvelopeCarriesChatsAndMeta() {
         val data = MemorySeedCodec.parse(fixtureJson())
         val chats = JSONArray().put(

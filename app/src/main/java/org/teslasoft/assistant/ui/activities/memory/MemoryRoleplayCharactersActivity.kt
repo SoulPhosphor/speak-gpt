@@ -159,7 +159,14 @@ class MemoryRoleplayCharactersActivity : MemoryScreenActivity() {
                     arc = prior?.arc,
                     worldsPlayedJson = prior?.worldsPlayedJson ?: "[]",
                     status = prior?.status ?: "active",
-                    createdAt = prior?.createdAt ?: MemoryStore.nowIso()
+                    createdAt = prior?.createdAt ?: MemoryStore.nowIso(),
+                    // Card Zone 1 fields this dialog doesn't edit yet (3.6b) —
+                    // pass through so saving here can't wipe them.
+                    species = prior?.species,
+                    charClass = prior?.charClass,
+                    corePersonality = prior?.corePersonality,
+                    physicalDescription = prior?.physicalDescription,
+                    goalsDrives = prior?.goalsDrives
                 )
                 store.upsertRoleplayCharacter(record)
                 runOnUiThread {
