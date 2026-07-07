@@ -2167,6 +2167,53 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         }
     }
 
+    /**
+     * The Memory Assistant's reading queue (Phase 6): every pending
+     * transcript, oldest first so suggestions land in story order. Excluded
+     * rows are invisible to the assistant by construction — this is one of
+     * the runner's safety laws, held in SQL rather than trusted to a model.
+     */
+    fun listPendingTranscripts(): List<TranscriptRecord> {
+        val out = ArrayList<TranscriptRecord>()
+        readableDatabase.query(
+            "transcripts", null, "review_status = 'pending'", null,
+            null, null, "started_at ASC, transcript_id ASC"
+        ).use {
+            while (it.moveToNext()) {
+                out.add(
+                    TranscriptRecord(
+                        transcriptId = it.getString(it.getColumnIndexOrThrow("transcript_id")),
+                        chatId = it.getStringOrNull("chat_id"),
+                        companionId = it.getStringOrNull("companion_id"),
+                        worldId = it.getStringOrNull("world_id"),
+                        campaignId = it.getStringOrNull("campaign_id"),
+                        roleplayCharacterId = it.getStringOrNull("roleplay_character_id"),
+                        userPersonaId = it.getStringOrNull("user_persona_id"),
+                        source = it.getString(it.getColumnIndexOrThrow("source")),
+                        startedAt = it.getStringOrNull("started_at"),
+                        endedAt = it.getStringOrNull("ended_at"),
+                        content = it.getString(it.getColumnIndexOrThrow("content")),
+                        modelTag = it.getStringOrNull("model_tag"),
+                        quickSettingsJson = it.getStringOrNull("quick_settings_json"),
+                        reviewStatus = it.getString(it.getColumnIndexOrThrow("review_status")),
+                        processedAt = it.getStringOrNull("processed_at")
+                    )
+                )
+            }
+        }
+        return out
+    }
+
+    /** Marks one transcript read by the Memory Assistant. Only called after
+     *  that transcript's drafts were filed successfully — a failed run leaves
+     *  the row pending so nothing is silently skipped. */
+    fun markTranscriptProcessed(transcriptId: String) {
+        writableDatabase.execSQL(
+            "UPDATE transcripts SET review_status = 'processed', processed_at = ? WHERE transcript_id = ?",
+            arrayOf(nowIso(), transcriptId)
+        )
+    }
+
     /* ---------------------------------------------------------------------- */
     /* enforcer (Phase 4): targeted single-purpose readers                     */
     /*                                                                         */
@@ -4148,16 +4195,18 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         }
     }
 
-    /** Insert a hand-written memory. Records a 'created' change-log entry.
-     *  The new vector is filled in by a later index rebuild (or a targeted
-     *  re-embed), so the caller should refresh the index. */
-    fun insertMemory(m: MemoryRecord) {
+    /** Insert a memory. Records a 'created' change-log entry under [actor] —
+     *  "user" for the hand editor, "archivist" for Memory Assistant drafts
+     *  (the change_log CHECK allows both; the log must say who really wrote
+     *  the row). The new vector is filled in by a later index rebuild (or a
+     *  targeted re-embed), so the caller should refresh the index. */
+    fun insertMemory(m: MemoryRecord, actor: String = "user") {
         val db = writableDatabase
         db.beginTransaction()
         try {
             db.insertOrThrow("memories", null, memoryValues(m))
             writeMemoryLinks(db, m)
-            logChange(db, m.memoryId, "user", "created", null, null)
+            logChange(db, m.memoryId, actor, "created", null, null)
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()

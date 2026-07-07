@@ -920,6 +920,34 @@
     <string name="memory_debug_search_result_fmt">%1$.2f  %2$s\n%3$s</string>
     <string name="memory_debug_semantic_header">— Semantic memory matches —</string>
     <string name="memory_debug_all_header">— All records (keyword) —</string>
+    <!-- Memory Assistant (Phase 6). Page title, "Analyze History", the
+         "Advanced Settings" row, the Extraction Prompt helper, "Reset" and
+         the "Restore default extraction prompt?" confirm are the owner's own
+         approved words — never reword without new approval. House style:
+         labels in Title Case, wording concise and professional. -->
+    <string name="memory_assistant_title">Memory Assistant</string>
+    <string name="memory_assistant_hint">Reads finished conversations and suggests memories. Suggestions are drafts — review them under Pending memories in the Memories browser.</string>
+    <string name="memory_assistant_row_subtitle">Suggests memories from finished conversations</string>
+    <string name="memory_assistant_status_fmt">Conversations waiting: %1$d</string>
+    <string name="memory_assistant_analyze">Analyze History</string>
+    <string name="memory_assistant_advanced">Advanced Settings</string>
+    <string name="memory_assistant_progress_fmt">Analyzing conversation %1$d of %2$d…</string>
+    <string name="memory_assistant_done_fmt">%1$d suggestions filed from %2$d conversations.</string>
+    <string name="memory_assistant_done_none">No suggestions filed.</string>
+    <string name="memory_assistant_done_failures_fmt">%1$d conversations could not be read and stay in the queue.</string>
+    <string name="memory_assistant_error_fmt">Run stopped: %1$s</string>
+    <string name="memory_assistant_not_configured">Set the Archivist endpoint and model in Memory settings first.</string>
+    <string name="memory_assistant_nothing_pending">No conversations waiting.</string>
+    <string name="memory_assistant_advanced_hint">For advanced users. Adjust these if your model mishandles memory extraction.</string>
+    <string name="memory_assistant_temperature">Temperature</string>
+    <string name="memory_assistant_temperature_recommended">Recommended: 0.3</string>
+    <string name="memory_assistant_max_suggestions">Maximum Suggestions Per Conversation</string>
+    <string name="memory_assistant_max_suggestions_hint">Suggestion limit</string>
+    <string name="memory_assistant_prompt">Extraction Prompt</string>
+    <string name="memory_assistant_prompt_helper">Instructs AI how to analyze conversation history.</string>
+    <string name="memory_assistant_reset">Reset</string>
+    <string name="memory_assistant_reset_confirm">Restore default extraction prompt?</string>
+    <string name="memory_assistant_saved">Saved.</string>
     <string name="memory_debug_logging_title">Memory diagnostics logging</string>
     <string name="memory_debug_logging_desc">Write what the memory system is doing to the Event log. Off by default; turn on only when investigating a memory problem.</string>
 

@@ -815,7 +815,20 @@ authority.
 - **Visible result:** the whole store inspectable and editable by hand —
   every troubleshooting_guide workflow has a place to happen.
 
-### ☐ Phase 6 — Archivist pipeline + proposals + run reports
+### ◐ Phase 6 — the Memory Assistant (first slice BUILT July 7 2026)
+
+> **The authority for this phase is
+> `Memory System/phase6_memory_assistant_work_order.md`** (owner-directed,
+> July 7 2026) — NOT the bullets below, and NOT the retired specs this
+> section originally named (they now live in
+> `Memory System/OUTDATED_do_not_reference/` and must not be read). The
+> first slice is built: the extraction prompt, the runner filing memory
+> drafts (`status='draft'`, `origin='archivist'`), the Memory Assistant
+> page (Analyze History) and its Advanced Settings. Run reports, roleplay
+> card suggestions, and model-rule drafting are NOT built — the first two
+> are dropped/deferred by owner decision; see the work order.
+
+Original phase text (pre-rules, kept for history):
 Specs: `archivist_spec.md`, `archivist_prompt.md` (send verbatim with
 injections), `enforcer_librarian_spec.md` §Applying change-sets; D7.
 

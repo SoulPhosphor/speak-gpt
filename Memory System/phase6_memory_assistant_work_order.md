@@ -5,6 +5,30 @@ from the owner's own words given in chat. Obey it together with
 `owner_approved_rules.md` (the source of truth). If the two ever disagree, the
 rules win and you STOP and ask the owner in plain chat.
 
+## ✅ STATUS (July 7 2026): tasks 6.1 + 6.2 are BUILT
+
+The first Memory Assistant shipped on branch
+`claude/memory-system-phase-6-j9gg0y` (which carries the prep branch's four
+commits): the extraction prompt (authored in the owner's high-end session,
+approved in chat, including an owner-requested "and" → "&" token trim —
+`MemoryAssistantPrompt.BASELINE`, unloseable by design), the backend runner
+(`preferences/memory/assistant/MemoryAssistantRunner`, safety laws in code,
+law layer unit-tested), the Memory Assistant page + Advanced Settings screen
+(`ui/activities/memory/MemoryAssistant*`), and the entry row in Memory
+settings. Owner wording decisions made during the build (approved in chat,
+July 7 2026, use verbatim): the prompt field label is **"Extraction Prompt"**
+with helper **"Instructs AI how to analyze conversation history."**; the
+reset button is just **"Reset"**; its confirm is **"Restore default
+extraction prompt?"**; the optional read-only prompt-preview screen is
+DROPPED (not wanted); and a general house style now recorded in CLAUDE.md —
+labels in Title Case, wording concise and professional, never wordy. The
+owner also confirmed the temperature shape: keep the 0.0–2.0 range (room to
+make a mistake) with "Recommended: 0.3" always visible (the way back). The
+Deferred section below still stands: no roleplay-card suggestions (the
+Plot Ledger question resolves under that deferral — the ledger is a campaign
+card section, so ledger maintenance is deferred WITH card suggestions) and
+no model-rule drafting yet.
+
 ## ⛔ Read this before touching anything
 
 - **Act only from fact, not assumption** (the rule now at the top of

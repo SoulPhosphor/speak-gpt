@@ -151,7 +151,8 @@ a foreground service that keeps generation alive in the background.
 - `ui/activities/memory/ModelRules*` — the Model rules manager (Stage 4, §11
   Revision 5): `ModelRulesActivity` (browser on the MemoryScreenActivity
   scaffold — filter/sort by sort/model/tag/status, a per-model size readout,
-  a Pending banner that's empty until Phase 6), `ModelRuleEditorActivity`
+  a Pending banner that stays empty — model-rule drafting by the Memory
+  Assistant is deferred by owner decision), `ModelRuleEditorActivity`
   (full-screen: rule text + live char count, model-string chips, tag chips),
   `ModelRuleTagsActivity` / `ModelRuleTagViewActivity` (the tag index + the
   tap-a-tag cross view), `ModelRuleTagChips` (the model-rule tag input, its
@@ -212,7 +213,8 @@ Everything is on-device. No cloud sync, no accounts.
    user_personas, roleplay_characters, transcripts, proposals, change_log,
    embeddings sidecar, deleted_ids tombstones; deviations documented in the
    MemoryStore header). DB v2 (July 2026) adds a machine-readable `origin`
-   column ('user' default; 'archivist' reserved for Phase 6 proposals) on
+   column ('user' default; 'archivist' = Memory Assistant drafts since
+   Phase 6) on
    memories, companions, entities, modes and directives, so later phases can
    tell user records from archivist-proposed ones. DB v3 (July 2026, Phase 5)
    adds the **Campaign** (roleplay continuity) layer: a `campaigns` table
@@ -732,9 +734,44 @@ Everything is on-device. No cloud sync, no accounts.
   prompt tile moved here out of Characters) + the Model rules browser / editor
   / tag screens (`ui/activities/memory/ModelRules*`, `ModelRuleTagChips`);
   injection is the model-rules prompt block gated by the global + per-chat
-  "Apply Model Rules" toggles. The **Pending** UI is built but stays empty
-  until **Phase 6 (Archivist)** files draft rules — that is the next phase and
-  is NOT built. Still deferred: merge tooling.
+  "Apply Model Rules" toggles. The model-rules **Pending** UI is built but
+  stays empty — model-rule drafting by the assistant is deferred (see below).
+  Still deferred: merge tooling.
+  **Phase 6 (the Memory Assistant) first slice is BUILT** (July 7 2026, per
+  `Memory System/phase6_memory_assistant_work_order.md` — the authority for
+  this phase; its prep work was DB v11 scene stamping + the v12 column
+  removals, see storage). ONE feature, user-facing name **"Memory
+  Assistant"** (never "Archivist" on screen): a page reached from a row in
+  Memory settings (next to the Archivist endpoint/model rows it consumes)
+  with a manual **Analyze History** control and an **Advanced Settings**
+  row — nothing runs on its own, and there is no review or report screen
+  (suggestions surface in the existing browser/Pending screen). The backend
+  (`preferences/memory/assistant/MemoryAssistantRunner`) reads PENDING
+  transcripts oldest-first, sends each to the Archivist endpoint/model with
+  the extraction prompt (`MemoryAssistantPrompt.BASELINE` — owner-approved
+  words including the "and"→"&" token trim; the Advanced screen's edits are
+  a pref override and Reset just clears it, so the baseline is unloseable),
+  and files what survives the in-code law layer as drafts
+  (`status='draft'`, `origin='archivist'`, change-log actor 'archivist',
+  provenance shows "Learned from chat"). The law layer (unit-tested in
+  `app/src/test/.../MemoryAssistantRunnerTest`) enforces: drafts only,
+  memory suggestions only (anything else the model emits is dropped — no
+  code path writes to companions/personas/cards), the fiction wall by the
+  transcript's stamped scene columns (real-life scenes can't file
+  world/campaign/rp_character scopes and vice versa; global-only
+  companions file global only), the type whitelist, and the
+  max-suggestions cap. A transcript is marked processed only after its
+  drafts are filed; unparseable replies and transport failures leave rows
+  pending (nothing is ever burned), and an empty result is a success.
+  Advanced Settings: Temperature (real number, 0.0–2.0, clamped on
+  read/save, "Recommended: 0.3" always visible), Maximum Suggestions Per
+  Conversation (ships Off; cap enforced in code), and the editable
+  Extraction Prompt (helper "Instructs AI how to analyze conversation
+  history.", **Reset** button, confirm "Restore default extraction
+  prompt?" — all the owner's exact words). Still NOT built, by owner
+  decision: roleplay-card update suggestions (incl. Plot Ledger
+  maintenance) and model-rule drafting — both deferred as later designed
+  features, so the assistant files memory drafts ONLY.
 - Markdown/LaTeX rendering, partial text selection, message edit/delete/copy/
   share, bulk select, image attach + DALL·E-style generation, in-app
   translator, playground, logit bias editor, AMOLED theme, onboarding flow.
@@ -809,6 +846,16 @@ Everything is on-device. No cloud sync, no accounts.
 
 ## Coding rules
 
+- **Owner's house style for user-facing wording (owner instruction, July 7
+  2026):** labels are treated like titles — every major word capitalized
+  ("Extraction Prompt", "Analyze History", "Maximum Suggestions Per
+  Conversation"). All wording is concise, professional, and plain: short
+  and to the point, easy to understand, never wordy or chatty. Dialogs ask
+  direct questions ("Restore default extraction prompt?" — not "Are you
+  sure you want to…"). Buttons are single words where one word does the
+  job ("Reset", not "Reset to original"). Apply this to every new label,
+  button, hint, and dialog; when retouching an old screen, bring its
+  wording along.
 - Match the existing style: nullable `var` view fields + `findViewById`,
   `DialogFragment.newInstance(Bundle)` pattern, listener interfaces with
   default no-op methods, copyright header on every file, strings ONLY in

@@ -1578,6 +1578,46 @@ class Preferences private constructor(private var preferences: SharedPreferences
     }
 
     /**
+     * Memory Assistant knobs (Phase 6, phase6_memory_assistant_work_order.md —
+     * all global, surfaced on the Advanced Settings screen). Temperature
+     * defaults to 0.3 (steady extraction; "Recommended: 0.3" is always shown
+     * so an experiment can be undone) and is clamped to the owner-approved
+     * 0.0–2.0 range on read, so a bad stored value can't reach the API call.
+     */
+    fun getMemoryAssistantTemperature() : Float {
+        val raw = getGlobalString("memory_assistant_temperature", "0.3")
+        return (raw.toFloatOrNull() ?: 0.3f).coerceIn(0.0f, 2.0f)
+    }
+
+    fun setMemoryAssistantTemperature(value: Float) {
+        putGlobalString("memory_assistant_temperature", value.coerceIn(0.0f, 2.0f).toString())
+    }
+
+    /** Maximum suggestions one conversation may produce. 0 = off (no limit),
+     *  the shipping default. Enforced in runner code, not just the prompt. */
+    fun getMemoryAssistantMaxSuggestions() : Int {
+        return getGlobalString("memory_assistant_max_suggestions", "0").toIntOrNull()?.coerceAtLeast(0) ?: 0
+    }
+
+    fun setMemoryAssistantMaxSuggestions(value: Int) {
+        putGlobalString("memory_assistant_max_suggestions", value.coerceAtLeast(0).toString())
+    }
+
+    /**
+     * The user's edited extraction prompt. Empty = use the baseline in
+     * MemoryAssistantPrompt.BASELINE. The baseline lives in code and is
+     * deliberately unloseable: Reset just clears this override — editing can
+     * never destroy the original (work-order requirement).
+     */
+    fun getMemoryAssistantPromptOverride() : String {
+        return getGlobalString("memory_assistant_prompt_override", "")
+    }
+
+    fun setMemoryAssistantPromptOverride(text: String) {
+        putGlobalString("memory_assistant_prompt_override", text)
+    }
+
+    /**
      * Per-chat scene selection (Phase 4, D8): the active world, roleplay
      * character and user persona for this chat, as memory-store ids; "" =
      * none. Prefs are the source of truth — the enforcer mirrors them into

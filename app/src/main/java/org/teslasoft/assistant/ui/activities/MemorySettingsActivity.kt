@@ -95,6 +95,7 @@ class MemorySettingsActivity : FragmentActivity() {
     private var textArchivistEndpointValue: TextView? = null
     private var rowArchivistModel: LinearLayout? = null
     private var textArchivistModelValue: TextView? = null
+    private var rowMemoryAssistant: LinearLayout? = null
     private var apiEndpointPreferences: ApiEndpointPreferences? = null
 
     private var librarianModels: LinearLayout? = null
@@ -154,6 +155,7 @@ class MemorySettingsActivity : FragmentActivity() {
         textArchivistEndpointValue = findViewById(R.id.text_archivist_endpoint_value)
         rowArchivistModel = findViewById(R.id.row_archivist_model)
         textArchivistModelValue = findViewById(R.id.text_archivist_model_value)
+        rowMemoryAssistant = findViewById(R.id.row_memory_assistant)
         librarianModels = findViewById(R.id.librarian_models)
         btnRebuildIndex = findViewById(R.id.btn_rebuild_index)
         textIndexStatus = findViewById(R.id.text_index_status)
@@ -307,6 +309,12 @@ class MemorySettingsActivity : FragmentActivity() {
         rowMemoryEngine?.setOnClickListener { showMemoryEnginePicker() }
         rowArchivistEndpoint?.setOnClickListener { showArchivistEndpointPicker() }
         rowArchivistModel?.setOnClickListener { showArchivistModelDialog() }
+        rowMemoryAssistant?.setOnClickListener {
+            startActivity(
+                android.content.Intent(this, org.teslasoft.assistant.ui.activities.memory.MemoryAssistantActivity::class.java)
+                    .putExtra("chatId", chatId)
+            )
+        }
     }
 
     private fun engineLabel(engine: String): String = when (engine) {
