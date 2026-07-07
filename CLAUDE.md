@@ -249,8 +249,13 @@ Everything is on-device. No cloud sync, no accounts.
    mid-conversation (user-confirmed dialogs are user edits); nothing ships
    pre-populated. Backups (`MemorySeedCodec`/`exportData`/`importData`) carry
    the whole card layer; card teardowns scrub entries + tag links and
-   `resetAllMemoryData` empties the new tables. UI/wiring for all of this is
-   Stage 3.6b–f (not yet built at v7).
+   `resetAllMemoryData` empties the new tables. The UI/wiring for all of
+   this (Stage 3.6b–f) is BUILT — see the feature list. §5's archive is
+   status-only (`archiveWorld`/`archiveCampaign` flip status, links stay
+   intact; `restoreWorld` + a one-tap Restore row action on the list
+   screens' visible Archive sections undo it); true deletion warns when
+   campaigns link the card, offers archive instead, and asks per-deletion
+   whether to delete the card's memories too.
    DB v8 (July 2026, pre-3.6b) adds FRESH `worlds.premise_vibe` +
    `worlds.magic_rules` columns for the world core: the owner ruled (spec
    §8a addendum) that the new cards must never show, map, or migrate the
@@ -460,9 +465,31 @@ Everything is on-device. No cloud sync, no accounts.
   among the facts), the lorebook matches rendered INSIDE this message as
   "hand-written notes" that outrank memories (near-duplicate memories
   suppressed; pairs flagged to meta `enforcer.contradiction_flags` for
-  Phase 6's run report), and the scene from the per-chat Quick Settings
+  Phase 6's run report), the scene from the per-chat Quick Settings
   selectors (world / **campaign** / roleplay character / user persona —
-  ALL in the auto-naming copy block, like the Project selector).
+  ALL in the auto-naming copy block, like the Project selector), and —
+  since Stage 3.6d — the **roleplay card layer**: the active cards'
+  Zone 1 cores ("## The scene": user-persona presentation, then the
+  world/campaign/character/party cores as labeled fields, plus the party
+  roster line) render FIRST inside the message, before the memories —
+  cores are stable across turns, so putting them ahead of the
+  turn-variable retrieval keeps the cacheable prefix as long as possible
+  (providers cache up to the first divergent token even inside a
+  message). Party status gates the cores: alive/incapacitated members
+  inject their card; dead/enemy members shrink to a one-line "No longer
+  with the party" note. Trigger-matched **Zone 2 card entries**
+  (`CardRetrieval` — pure, unit-tested: an entry fires on its name, its
+  section label, or an auto-trigger tag via `LoreBookTriggerMatcher`
+  semantics; group headers can never fire; one-hop pull-alongs ride on
+  shared tags, browse-only tags counting for the hop) render after the
+  memories as "From the story's cards (user-written; these outrank
+  memories that disagree)" with "connected to:" lines. Card entries
+  charge the injection budget BEFORE memories (user-authored outranks;
+  lore + direct card fires first, memories squeezed, pull-alongs into
+  leftover only — a broad tag can never flood the prompt) and share the
+  10-turn freshness cooldown under `source_type='card_entry'` (cores are
+  exempt — always-on is their contract; card-entry edits clear their
+  cooldown rows).
   **Retired from assembly (Stage 3.4, §15):** the standing packet (owner
   portrait + directives) and `StandingPacketManager` (including its
   background Archivist compression call), mode detection and the modes
@@ -471,11 +498,23 @@ Everything is on-device. No cloud sync, no accounts.
   retrieval policy's `always_include` list — the store tables stay dormant,
   nothing reads them. (The global **Archivist model** setting — endpoint
   profile + model name — stays; Phase 6 uses it.) A selected **campaign**
-  implies the rest of the scene (its world / the user's character fill in
-  when the chat has no explicit pick) and is the §3 narrator signal: the
+  implies the rest of the scene and is the §3 narrator signal: the
   campaign's GM companion being the chat's active companion opens the
   companion-memories-in-roleplay door (the other door is the global §3
-  toggle in Memory settings, default OFF). The **freshness cooldown** (§10,
+  toggle in Memory settings, default OFF). Since 3.6c the campaign's
+  world **outranks** the chat's own world pick in the enforcer
+  (`campaign?.worldId ?: input.worldId` — a stale per-chat pick can't
+  override the campaign; there is no per-chat override, spec §2), and
+  Quick Settings enforces the same model: selecting a campaign turns the
+  world/character selectors into displays, a world change goes through
+  the owner-approved confirmation ("Continue campaign in new world? This
+  will create a permanent history note on the campaign card.", spec §8b)
+  which writes a **Plot Ledger** entry on the campaign ("Started in X" on
+  first assignment, "Moved to Y" after) plus an optional Active Scene
+  update, and the character slot is **locked** while a campaign is
+  selected (dialog: "User characters are linked to campaigns and cannot
+  be changed once assigned." — a dialog, not a toast; standing owner
+  ruling, §8b). The **freshness cooldown** (§10,
   Stage 3.3) suppresses re-injection of anything injected within the last
   10 turns (constant in code, per chat, persisted — see storage); every
   suppression is visible in the debug view. Operating defaults are
@@ -486,9 +525,11 @@ Everything is on-device. No cloud sync, no accounts.
   lorebook injection too. The lorebook debug screen also renders the
   enforcer's per-turn `AssemblyLog` (the "room" the turn stood in —
   ordinary vs roleplay, which targets, which companion-memory door — plus
-  injected/cut lines with scores and cooldown/budget/near-dup reasons).
-  Pure logic (PromptAssembler, NearDuplicate, the Librarian ladder math)
-  is unit-tested. **Prompt-layer contract (fragile):** the per-request
+  injected/cut lines with scores and cooldown/budget/near-dup reasons;
+  since 3.6d also the scene's core summary and per-entry card lines —
+  what fired and why, what a cooldown or the budget suppressed).
+  Pure logic (PromptAssembler, NearDuplicate, CardRetrieval, the
+  Librarian ladder math) is unit-tested. **Prompt-layer contract (fragile):** the per-request
   system blocks are fixed and deterministic — (1) the stable persona/system
   prefix, byte-identical every turn; (2) the Stage-4 model-rules block once
   it exists (absent entirely when no profile is selected); (3) the single
@@ -525,8 +566,9 @@ Everything is on-device. No cloud sync, no accounts.
     "Companions" in the memory-side UI strings.)
   - **My Personas** left the memory area entirely — its tile now lives in the
     Characters hub (`CharactersActivity`) with the other identity tiles.
-  - Roleplay areas (Worlds, Campaigns, Roleplay characters) stay under the
-    single **Roleplay card** on Settings (`RoleplayHubActivity`).
+  - Roleplay areas (Worlds, Campaigns, Roleplay characters, and — since
+    3.6 — Party Members and Tags) stay under the single **Roleplay card**
+    on Settings (`RoleplayHubActivity`).
   All CRUD is in `MemoryStore` (per-record upsert/delete with tombstones;
   memory edits log prior state + drop stale vectors; `deleteCompanion` added).
   Detail pages are plain `FragmentActivity` forms; the list screens subclass
@@ -572,25 +614,50 @@ Everything is on-device. No cloud sync, no accounts.
   above. **Task 3.6 was RESCOPED July 7 2026** (the old pause point is
   resolved: the owner designed and approved the full roleplay card + tag
   system — `Memory System/roleplay_cards_and_tags_spec.md` is the
-  authoritative spec, incorporated into the rules as Revision 4). Its
-  sub-tasks **3.6a (schema, DB v7–v8 — the card/tag storage layer + store
-  CRUD + backup coverage) and 3.6b (the card editors/rosters) are BUILT**:
-  full-screen two-zone cards for RP characters + party members
-  (`CharacterCardActivity`, one screen, party mode adds Speech Style +
-  the four-state status), worlds (`WorldDetailActivity`, grouped §6c
-  sections + geography parents + the Promote-to-Party-Member flow) and
-  campaigns (`CampaignDetailActivity`, bookmark + roster links + overlay
-  sections), all sharing `CardEntryEditorActivity` (section-shaped
-  fields), `CardTagChips` (roleplay-realm tag input) and `CardZoneUi`
-  (the §8a word count, 300/500 thresholds). Zone labels/warnings use the
-  §8a approved words verbatim. Two §5 display details ride with 3.6f:
-  Archive-section grouping on the worlds/campaigns LISTS and the
-  delete-while-linked warning dialogs. **3.6c is PAUSED on an owner
-  question** (the campaign-selector "story moved" confirmation wording +
-  whether the character slot is changeable — ask the owner, do not build
-  from the spec §2 text alone); 3.6d–f follow. Stage 4 (Model rules,
-  §11) is specced in the same work order and not yet built. Still
-  deferred: merge tooling.
+  authoritative spec, incorporated into the rules as Revision 4; its
+  §8a/§8b addenda hold owner rulings made DURING the build and are part
+  of the approved words) **and is FULLY BUILT — all sub-tasks 3.6a–f
+  (July 7 2026). Stage 3 is complete.**
+  - **3.6a (schema, DB v7–v8):** the card/tag storage layer + store CRUD
+    + backup coverage — see the storage section.
+  - **3.6b (card editors/rosters):** full-screen two-zone cards for RP
+    characters + party members (`CharacterCardActivity`, one screen,
+    party mode adds Speech Style + the four-state status), worlds
+    (`WorldDetailActivity`, grouped §6c sections + geography parents +
+    the Promote-to-Party-Member flow — a promoted NPC's button becomes a
+    roster link) and campaigns (`CampaignDetailActivity`, bookmark
+    fields + party roster links + world-overlay sections), all sharing
+    `CardEntryEditorActivity` (section-shaped fields: kind lists,
+    quantity, geography parent picker, campaign cast/location/reliquary
+    fields, world-overlay picker), `CardTagChips` (roleplay-realm tag
+    input: ≥3-char filter dropdown, create-on-confirm, removable chips)
+    and `CardZoneUi` (the §8a right-aligned word count, 300/500
+    thresholds, red pill at 500). Zone labels/warnings use the §8a
+    approved words verbatim. Party roster lives in
+    `MemoryPartyMembersActivity` (status badges + archive section),
+    reached from a Party Members tile in `RoleplayHubActivity`.
+  - **3.6c (Quick Settings campaign behavior):** the campaign selector
+    drives the scene; world change = confirmed Plot Ledger note,
+    character slot locked — details in the Phase 4 section above (§8b
+    approved words; dialogs, never toasts).
+  - **3.6d (injection wiring):** Zone 1 cores render first in the
+    assembled message, trigger-matched Zone 2 entries after the
+    memories, budget-charged before them, cooldown-tracked — details in
+    the Phase 4 section above.
+  - **3.6e (tags screens):** `RpTagsActivity` (Tags tile in the Roleplay
+    hub — the tag index, per-tag auto-trigger/browse-only switch) and
+    `RpTagViewActivity` (tap a tag anywhere → the cross-card view,
+    grouped by card/section categories, reaching card entries, whole
+    cards and roleplay-realm memories via the read-side bridge).
+  - **3.6f (deletion + archive, §5):** delete-while-linked warnings name
+    the campaign(s) and offer Archive; archive is status-only and
+    visible (Archive sections at the bottom of the worlds/campaigns/
+    characters/party lists, one-tap Restore); true delete asks
+    per-deletion about the card's memories; surviving references render
+    "(archived card)" / "(deleted card)" — never a silent hole. NPC
+    death is a status change, never a delete.
+  Stage 4 (Model rules, §11) is specced in the same work order and NOT
+  built. Still deferred: merge tooling.
 - Markdown/LaTeX rendering, partial text selection, message edit/delete/copy/
   share, bulk select, image attach + DALL·E-style generation, in-app
   translator, playground, logit bias editor, AMOLED theme, onboarding flow.
@@ -770,11 +837,13 @@ Everything is on-device. No cloud sync, no accounts.
   real-life/roleplay wall; campaign-as-selector behavior; archive/delete
   link rules; the no-mid-conversation-writes law). It is incorporated
   into `owner_approved_rules.md` as Revision 4 and implemented by the
-  RESCOPED Stage 3.6 of `Memory System/rag_engine_work_order.md`. Stage
-  3.0–3.5 are built on branch `claude/memory-work-stage-3-r13ca4` (merge
-  order for 3.6: that branch → main, then the spec branch
-  `claude/character-card-structure-ypmm8l` → main, then branch for 3.6).
-  Read the spec's §9 agent rules before any roleplay build work.
+  RESCOPED Stage 3.6 of `Memory System/rag_engine_work_order.md` —
+  **fully built July 7 2026 on branch `claude/stage-3-6-rag-engine-9f0gc2`
+  (Stage 3 complete)**. The spec's §8a/§8b addenda record owner rulings
+  made during the build (fresh world-core columns, dormant pre-card
+  fields, campaign-selector wording, the dialogs-not-toasts rule) and
+  are part of the approved words. Read the spec's §9 agent rules before
+  any roleplay work.
 - Whisper/voice work follows `whisper-local-plan.md`.
 
 ## Quick verification checklist before any push

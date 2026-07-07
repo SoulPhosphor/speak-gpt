@@ -519,9 +519,13 @@ Specifically superseded here:
   revised section lists — see spec §6.
 - Item 5's "one selection implies the rest" is now concrete: selecting a
   campaign auto-fills the world/character selectors, which become
-  displays; changing one asks "has the story moved?" and a confirmed
-  answer edits the campaign itself (superseded history + a transition
-  memory). No per-chat override exists.
+  displays; changing the world asks the owner-approved confirmation
+  ("Continue campaign in new world? This will create a permanent history
+  note on the campaign card.", spec §8b — which superseded the spec §2
+  "has the story moved?" sketch) and a confirmed answer edits the
+  campaign itself (a Plot Ledger history note + an optional Active Scene
+  update). The character slot is LOCKED while a campaign is selected
+  (§8b). No per-chat override exists.
 - Item 9's "DM-piloted NPCs = roleplay_characters rows, no new
   machinery": superseded — party NPCs are their own card type per the
   spec.
@@ -534,6 +538,18 @@ Specifically superseded here:
   list, Zone-1-visible-in-UI, prompt-cost warnings instead of caps, and
   the law that **no automatic process writes any card/ledger/memory
   mid-conversation** (Phase 6's Archivist only ever suggests).
+
+**Build status (July 7 2026): the whole amendment is BUILT** — Stage 3.6
+sub-tasks a–f shipped on branch `claude/stage-3-6-rag-engine-9f0gc2`
+(DB v7–v8 schema + store CRUD + backup coverage; the four card editors +
+party roster; the Quick Settings campaign behavior above; injection
+wiring — always-on Zone 1 cores rendered first inside the one memory
+message, trigger-matched Zone 2 entries after the memories; the Tags
+index + cross-card tag view; the §5 deletion/archive behavior). The
+spec's §8a/§8b addenda hold owner rulings made during the build — the
+old pre-card free-text columns (worlds' premise/rules, characters'
+description/arc/played_by, campaigns' story_so_far) are DORMANT, never
+shown or migrated. See the spec + CLAUDE.md for the current state.
 
 ### ☑ Phase 4 — Enforcer: tiers + prompt assembly
 **Note (July 6 2026):** parts of what landed here are retired or reworked
@@ -585,10 +601,19 @@ describes what it becomes.
 >   shows the eligibility "room" + cut reasons (budget/near-dup/cooldown).
 > - **3.5 Project semantics:** selection boosts, never gates; verified no
 >   UI string promises the old behavior.
-> - **3.6 (RP-character two-zone ledger) is NOT built yet** — the work
->   order's ⛔ PAUSE POINT requires asking the owner first whether
->   world/campaign card sections join the same pass. Stage 4 (Model rules)
->   is not built.
+> - **3.6 (roleplay cards + tags) is BUILT (July 7 2026)** — the pause
+>   point resolved into the full owner-approved card/tag system (the 📌
+>   amendment above; `roleplay_cards_and_tags_spec.md` + its §8a/§8b
+>   addenda are authoritative). At the full tier the enforcer runs a card
+>   pass alongside retrieval: the active cards' Zone 1 cores render FIRST
+>   inside the one memory message (stable across turns — cache-aware),
+>   trigger-matched Zone 2 card entries render after the memories as
+>   user-written card notes, charged to the budget before memories, with
+>   the same 10-turn cooldown (source_type='card_entry') and one-hop tag
+>   pull-alongs into leftover budget only. A selected campaign now
+>   OUTRANKS stale per-chat world picks (`campaign?.worldId` first).
+>   AssemblyLog shows card fires/cooldowns/cuts and the scene summary.
+>   Stage 4 (Model rules) is not built.
 > - **Prompt-layer contract** (see the work order's top section): stable
 >   prefix → (future model-rules block) → the ONE memory message → history.
 >   Same blocks, same order, same wording every turn.
@@ -712,11 +737,13 @@ coexistence, essence guardrail, failure behavior); D7 (compressor), D8.
 > - **Reset memories** (Memory settings) empties every memory-content table with
 >   a backup-first option. **Quick Settings** gained a per-chat **Project**
 >   selector (§4).
-> **Stage 3 tasks 3.0–3.5 are built (July 2026)** — the priority ladder,
-> cooldown, scope-eligibility rewrite, campaign wiring and project boost are
-> live (see the Stage 3 box in Phase 4 above). Task 3.6 (the RP-character
-> ledger) waits on the work order's owner pause point; Stage 4 (Model rules)
-> is not built. Read the work order before touching Phase 5 UI.
+> **Stage 3 is COMPLETE (July 7 2026)** — tasks 3.0–3.5 (priority ladder,
+> cooldown, scope-eligibility rewrite, campaign wiring, project boost) plus
+> the rescoped 3.6 roleplay card + tag layer (four two-zone card editors,
+> party roster, Tags screens, campaign selector behavior, injection wiring,
+> §5 deletion/archive rules — see the Stage 3 box in Phase 4 and the 📌
+> amendment above) are all live. Stage 4 (Model rules) is not built. Read
+> the work order + the roleplay spec's §9 before touching Phase 5 UI.
 
 **Landed July 2026.** What shipped: a **Memory manager** hub
 (`ui/activities/memory/MemoryManagerActivity`, reached from a "Browse & edit"
@@ -747,8 +774,9 @@ a `campaignId` param (ordinary chat still can't see campaign-scoped rows).
 **Deferred to a follow-up (need a store/schema pass, not blocking the phase):**
 (1) merge tooling for duplicate worlds/characters/campaigns (needs
 `MemoryStore` merge methods); (2) a dedicated roleplay `abilities/spells`
-column — **now designed as the §13 two-zone ledger and scheduled in Stage
-3.6 of `Memory System/rag_engine_work_order.md`, no longer deferred**;
+column — **superseded by the roleplay card system and BUILT (July 2026)**:
+abilities/spells live as Zone 2 card entries on the RP-character card
+(spec §6a), shipped with Stage 3.6;
 (3) wiring an active campaign into live generation via Quick Settings —
 **promoted July 6 2026 into Stage 3 (task 3.0) and BUILT (July 2026)**: the
 per-chat Campaign selector, the campaign→world/character fill-in and the §3

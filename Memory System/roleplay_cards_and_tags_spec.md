@@ -520,9 +520,13 @@ two-AI combined draft; all AI merges/normalizations approved July 7)
 - Stage 3 retrieval tasks (priority ladder, cooldown, scope rewrite)
   proceed as specced. Status July 7 2026: tasks 3.0–3.5 (plus a 3.7 docs
   pass) are BUILT on branch `claude/memory-work-stage-3-r13ca4`, which
-  honored the pause point before 3.6. Stage 3.6 is now RESCOPED in
-  `rag_engine_work_order.md` to implement this spec and is ready to
-  build once the branches are merged.
+  honored the pause point before 3.6. **Build status update, July 7
+  2026: Stage 3.6 (this spec) is FULLY BUILT — all sub-tasks 3.6a–f —
+  on branch `claude/stage-3-6-rag-engine-9f0gc2`**, per the rescoped
+  Stage 3.6 in `rag_engine_work_order.md` and the §8a/§8b addenda
+  below (which record the owner's mid-build wording/data rulings and
+  are part of the approved words). With the re-run 3.7 docs pass,
+  Stage 3 is complete; Stage 4 (Model rules) has not been started.
 
 ## 8. UI findability — RULED directive (July 7)
 

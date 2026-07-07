@@ -26,6 +26,19 @@ spec/docs branch `claude/character-card-structure-ypmm8l`, then branch
 for 3.6 from the result — 3.6 needs BOTH the built 3.0–3.5 engine and
 these documents.
 
+**Build state, end of July 7 2026: Stage 3 is COMPLETE.** The merge
+order above was carried out, and **the rescoped task 3.6 — all
+sub-tasks 3.6a–f — plus the re-run 3.7 docs pass are BUILT on branch
+`claude/stage-3-6-rag-engine-9f0gc2`** (each sub-task pushed and
+CI-green individually). The spec gained two mid-build addenda holding
+owner rulings that supersede parts of its earlier text — §8a (3.6b
+on-screen wording; the old pre-card free-text columns are DORMANT,
+never shown or migrated; DB v8 added fresh world-core columns) and
+§8b (3.6c campaign-selector wording, the Plot Ledger history note, the
+locked character slot, and the standing dialogs-not-toasts ruling) —
+read both before touching anything 3.6 built. Stage 4 (Model rules,
+below) has NOT been started.
+
 **For the implementing agent (a strong-model session; the owner assigned
 stage 3 to the session that co-wrote the rules).** Prerequisites: stages
 1–2 from `phase5_rework_work_order.md` are merged and CI-green. Read, in
