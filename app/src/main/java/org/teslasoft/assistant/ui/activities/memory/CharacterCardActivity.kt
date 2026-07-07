@@ -21,8 +21,6 @@ import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
-import android.text.Editable
-import android.text.TextWatcher
 import android.view.LayoutInflater
 import android.view.View
 import android.view.WindowInsets
@@ -97,11 +95,6 @@ class CharacterCardActivity : FragmentActivity() {
     private var currentStatus: String = "alive"
 
     companion object {
-        // The §8a word-count thresholds: warning at 300, red count + the
-        // move-to-Zone-2 suggestion at 500.
-        private const val WARN_WORDS = 300
-        private const val ALERT_WORDS = 500
-
         private val STATUS_KEYS = listOf("alive", "incapacitated", "dead", "enemy")
 
         fun statusLabelRes(status: String): Int = when (status) {
@@ -156,7 +149,7 @@ class CharacterCardActivity : FragmentActivity() {
         btnSave?.setOnClickListener { save() }
         btnStatus?.setOnClickListener { showStatusPicker() }
 
-        attachWordCount()
+        CardZoneUi.attachWordCount(this, zone1Fields(), textWordCount, textWarning)
         refreshStatus()
         loadExisting()
     }
@@ -213,42 +206,12 @@ class CharacterCardActivity : FragmentActivity() {
 
     /* ------------------------------ word count (spec §8a) ------------------------------ */
 
+    // Speech Style is included unconditionally: hidden on the user card, it
+    // is always empty there and counts zero.
     private fun zone1Fields(): List<TextInputEditText?> = listOf(
         fieldName, fieldSpecies, fieldClass, fieldCorePersonality,
-        fieldPhysicalDescription, fieldGoalsDrives
-    ) + if (isParty) listOf(fieldSpeechStyle) else emptyList()
-
-    private fun attachWordCount() {
-        val watcher = object : TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
-            override fun afterTextChanged(s: Editable?) = updateWordCount()
-        }
-        zone1Fields().forEach { it?.addTextChangedListener(watcher) }
-        updateWordCount()
-    }
-
-    private fun updateWordCount() {
-        val words = zone1Fields().sumOf { field ->
-            field?.text?.toString()?.trim()?.split(Regex("\\s+"))?.count { it.isNotEmpty() } ?: 0
-        }
-        textWordCount?.text = resources.getQuantityString(R.plurals.card_word_count, words, words)
-        textWordCount?.setTextColor(
-            if (words >= ALERT_WORDS) ResourcesCompat.getColor(resources, R.color.card_count_alert, theme)
-            else ResourcesCompat.getColor(resources, R.color.text_subtitle, theme)
-        )
-        when {
-            words >= ALERT_WORDS -> {
-                textWarning?.visibility = View.VISIBLE
-                textWarning?.setText(R.string.card_warn_very_large)
-            }
-            words >= WARN_WORDS -> {
-                textWarning?.visibility = View.VISIBLE
-                textWarning?.setText(R.string.card_warn_large)
-            }
-            else -> textWarning?.visibility = View.INVISIBLE
-        }
-    }
+        fieldPhysicalDescription, fieldGoalsDrives, fieldSpeechStyle
+    )
 
     /* ------------------------------ status (party members, spec §4) ------------------------------ */
 

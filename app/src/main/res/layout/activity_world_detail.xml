@@ -16,6 +16,12 @@
 * limitations under the License.
 **************************************************************************/
 -->
+<!-- The two-zone world card (roleplay_cards_and_tags_spec §6c): Zone 1 is
+     the world core (Name, Premise/Vibe, Cosmology, Magic Rules — fresh v8
+     storage, the pre-card premise/rules fields are dormant and never shown);
+     Zone 2 renders the grouped sections in code (group headers are visual
+     organization only — sections are the trigger units). Zone labels and the
+     word-count rules are the owner's approved words (spec §8a). -->
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/root"
@@ -78,14 +84,23 @@
             android:orientation="vertical"
             android:paddingHorizontal="20dp">
 
+            <!-- Zone 1 — the world core, visibly labeled (spec §1/§8a). -->
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:paddingTop="24dp"
-                android:text="@string/mem_world_section_details"
+                android:text="@string/card_zone1_title"
                 android:textColor="?attr/colorPrimary"
                 android:textSize="18sp"
                 android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="2dp"
+                android:text="@string/card_zone1_subtext"
+                android:textColor="@color/text_subtitle"
+                android:textSize="13sp" />
 
             <com.google.android.material.textfield.TextInputLayout
                 style="?attr/textInputOutlinedDenseStyle"
@@ -107,15 +122,15 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
-                android:hint="@string/mem_world_hint_premise">
+                android:hint="@string/card_field_premise_vibe">
 
                 <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/field_world_premise"
+                    android:id="@+id/field_world_premise_vibe"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:gravity="top"
                     android:inputType="textMultiLine|textCapSentences"
-                    android:minLines="3" />
+                    android:minLines="2" />
             </com.google.android.material.textfield.TextInputLayout>
 
             <com.google.android.material.textfield.TextInputLayout
@@ -123,30 +138,66 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
-                android:hint="@string/mem_world_hint_rules">
+                android:hint="@string/card_field_cosmology">
 
                 <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/field_world_rules"
+                    android:id="@+id/field_world_cosmology"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:gravity="top"
                     android:inputType="textMultiLine|textCapSentences"
-                    android:minLines="3" />
+                    android:minLines="2" />
             </com.google.android.material.textfield.TextInputLayout>
 
-            <TextView
+            <com.google.android.material.textfield.TextInputLayout
+                style="?attr/textInputOutlinedDenseStyle"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:paddingTop="8dp"
-                android:text="@string/mem_world_details_hint"
-                android:textColor="@color/text_subtitle"
-                android:textSize="13sp" />
+                android:layout_marginTop="12dp"
+                android:hint="@string/card_field_magic_rules">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/field_world_magic_rules"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="top"
+                    android:inputType="textMultiLine|textCapSentences"
+                    android:minLines="2" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <!-- Word count + warnings (spec §8a). -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/text_card_warning"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:textColor="@color/text_subtitle"
+                    android:textSize="13sp"
+                    android:visibility="invisible" />
+
+                <TextView
+                    android:id="@+id/text_card_word_count"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_card_count"
+                    android:paddingHorizontal="10dp"
+                    android:paddingVertical="4dp"
+                    android:textColor="@color/text_subtitle"
+                    android:textSize="13sp" />
+            </LinearLayout>
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_world_save"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="20dp"
+                android:layout_marginTop="16dp"
                 android:text="@string/mem_world_btn_save" />
 
             <com.google.android.material.button.MaterialButton
@@ -167,6 +218,40 @@
                 android:layout_marginTop="8dp"
                 android:visibility="gone"
                 android:text="@string/mem_world_btn_teardown" />
+
+            <!-- Zone 2 -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="28dp"
+                android:text="@string/card_zone2_title"
+                android:textColor="?attr/colorPrimary"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="2dp"
+                android:text="@string/card_zone2_subtext"
+                android:textColor="@color/text_subtitle"
+                android:textSize="13sp" />
+
+            <TextView
+                android:id="@+id/text_save_first"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="12dp"
+                android:text="@string/card_save_first"
+                android:textColor="@color/text_subtitle"
+                android:textSize="14sp"
+                android:visibility="gone" />
+
+            <LinearLayout
+                android:id="@+id/sections_container"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
         </LinearLayout>
     </ScrollView>
 </androidx.constraintlayout.widget.ConstraintLayout>

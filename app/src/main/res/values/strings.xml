@@ -1335,6 +1335,46 @@
     <string name="card_name_required">A name is required.</string>
     <string name="card_save_first">Save the card first to add entries.</string>
 
+    <!-- World card (spec §6c) -->
+    <string name="card_field_premise_vibe">Premise / Vibe</string>
+    <string name="card_field_cosmology">Cosmology</string>
+    <string name="card_field_magic_rules">Magic Rules</string>
+    <string name="card_group_geography">Geography</string>
+    <string name="card_group_species_culture">Species &amp; Culture</string>
+    <string name="card_group_history_lore">History &amp; Lore</string>
+    <string name="card_group_organized_groups">Organized Groups</string>
+    <string name="card_group_religions_pantheons">Religions &amp; Pantheons</string>
+    <string name="card_group_notable_npcs">Notable NPCs</string>
+    <string name="card_section_regions">Regions</string>
+    <string name="card_section_settlements">Settlements</string>
+    <string name="card_section_points_of_interest">Points of Interest</string>
+    <string name="card_section_races_species">Races / Species</string>
+    <string name="card_section_languages_scripts">Languages &amp; Scripts</string>
+    <string name="card_section_historical_events">Historical Events</string>
+    <string name="card_section_arcane_knowledge">Arcane Knowledge</string>
+    <string name="card_section_organizations_guilds">Organizations &amp; Guilds</string>
+    <string name="card_section_bands_threats">Bands &amp; Threats</string>
+    <string name="card_section_deities">Deities</string>
+    <string name="card_section_faiths">Faiths</string>
+    <string name="card_section_sacred_artifacts">Sacred Artifacts</string>
+    <string name="card_section_historical_figures">Historical Figures</string>
+    <string name="card_section_authority_figures">Authority Figures</string>
+    <string name="card_section_service_npcs">Service NPCs</string>
+    <string name="card_section_allies">Allies</string>
+    <string name="card_section_antagonists">Antagonists</string>
+
+    <!-- Campaign card sections (spec §6d; the card itself is a later slice) -->
+    <string name="card_section_campaign_cast">Campaign Cast</string>
+    <string name="card_section_campaign_locations">Campaign Locations</string>
+    <string name="card_section_plot_ledger">Plot Ledger</string>
+    <string name="card_section_reliquary">Reliquary</string>
+
+    <string name="entry_label_parent">Parent</string>
+    <string name="entry_parent_required">A parent is required.</string>
+    <string name="entry_parent_picker_none">None yet — add one first.</string>
+    <!-- Owner-approved wording (spec §8a): only "to" stays lowercase. -->
+    <string name="entry_btn_promote">Promote to Party Member</string>
+
     <string name="card_section_abilities">Abilities</string>
     <string name="card_section_inventory">Inventory</string>
     <string name="card_section_relationships">Relationships</string>

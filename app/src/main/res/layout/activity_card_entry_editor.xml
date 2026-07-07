@@ -134,6 +134,33 @@
                     android:text="@string/entry_kind_other" />
             </LinearLayout>
 
+            <!-- Geography parent (spec §6c): Settlements need a Region,
+                 Points of Interest a Settlement or Region. -->
+            <LinearLayout
+                android:id="@+id/row_entry_parent"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/entry_label_parent"
+                    android:textColor="@color/text_title"
+                    android:textSize="16sp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_entry_parent"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/mem_world_campaign_none" />
+            </LinearLayout>
+
             <com.google.android.material.textfield.TextInputLayout
                 android:id="@+id/layout_entry_quantity"
                 style="?attr/textInputOutlinedDenseStyle"
@@ -204,6 +231,18 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="20dp"
                 android:text="@string/btn_save" />
+
+            <!-- Notable-NPC promotion (spec §6c/§8a): the button disappears
+                 once promoted — the party-member card becomes the source of
+                 truth and this entry stays lightweight lore pointing at it. -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_entry_promote"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/entry_btn_promote"
+                android:visibility="gone" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_entry_delete"

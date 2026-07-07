@@ -41,7 +41,9 @@ import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.memory.CardEntryRecord
 import org.teslasoft.assistant.preferences.memory.CardSections
+import org.teslasoft.assistant.preferences.memory.CardType
 import org.teslasoft.assistant.preferences.memory.MemoryStore
+import org.teslasoft.assistant.preferences.memory.PartyMemberRecord
 import org.teslasoft.assistant.preferences.memory.RpTagTargetType
 import org.teslasoft.assistant.theme.ThemeManager
 
@@ -78,11 +80,18 @@ class CardEntryEditorActivity : FragmentActivity() {
     private var fieldQuantity: TextInputEditText? = null
     private var layoutDescription: TextInputLayout? = null
     private var fieldDescription: TextInputEditText? = null
+    private var rowParent: View? = null
+    private var btnParent: MaterialButton? = null
     private var btnSave: MaterialButton? = null
+    private var btnPromote: MaterialButton? = null
     private var btnDelete: MaterialButton? = null
     private var tagChips: CardTagChips? = null
 
     private var currentKind: String? = null
+
+    /** Geography parent selection (spec §6c), id -> display name. */
+    private var selectedParentId: String? = null
+    private val parentCandidates = LinkedHashMap<String, String>()
 
     companion object {
         // Per-section Type/Relationship value lists — the spec §6a/§6b words,
@@ -97,6 +106,21 @@ class CardEntryEditorActivity : FragmentActivity() {
         // Sections whose entry name is a Title (Backstory, Plot Ledger, Notes).
         private val TITLE_SECTIONS = setOf(CardSections.BACKSTORY, CardSections.PLOT_LEDGER, CardSections.NOTES)
 
+        // Parent-chained geography (spec §6c): the section a parent must come
+        // from. Settlements take a Region; Points of Interest a Settlement or
+        // Region.
+        private val PARENT_CANDIDATE_SECTIONS = mapOf(
+            CardSections.SETTLEMENTS to listOf(CardSections.REGIONS),
+            CardSections.POINTS_OF_INTEREST to listOf(CardSections.SETTLEMENTS, CardSections.REGIONS)
+        )
+
+        // The world-level NPC sections whose entries can graduate to a
+        // party-member card (spec §6c promotion rule).
+        private val NOTABLE_NPC_SECTIONS = setOf(
+            CardSections.HISTORICAL_FIGURES, CardSections.AUTHORITY_FIGURES,
+            CardSections.SERVICE_NPCS, CardSections.ALLIES, CardSections.ANTAGONISTS
+        )
+
         /** The user-facing section names — the spec §6 words. */
         fun sectionLabelRes(section: String): Int = when (section) {
             CardSections.ABILITIES -> R.string.card_section_abilities
@@ -105,6 +129,27 @@ class CardEntryEditorActivity : FragmentActivity() {
             CardSections.TRAITS -> R.string.card_section_traits
             CardSections.BACKSTORY -> R.string.card_section_backstory
             CardSections.LANGUAGES -> R.string.card_section_languages
+            CardSections.REGIONS -> R.string.card_section_regions
+            CardSections.SETTLEMENTS -> R.string.card_section_settlements
+            CardSections.POINTS_OF_INTEREST -> R.string.card_section_points_of_interest
+            CardSections.RACES_SPECIES -> R.string.card_section_races_species
+            CardSections.LANGUAGES_SCRIPTS -> R.string.card_section_languages_scripts
+            CardSections.HISTORICAL_EVENTS -> R.string.card_section_historical_events
+            CardSections.ARCANE_KNOWLEDGE -> R.string.card_section_arcane_knowledge
+            CardSections.ORGANIZATIONS_GUILDS -> R.string.card_section_organizations_guilds
+            CardSections.BANDS_THREATS -> R.string.card_section_bands_threats
+            CardSections.DEITIES -> R.string.card_section_deities
+            CardSections.FAITHS -> R.string.card_section_faiths
+            CardSections.SACRED_ARTIFACTS -> R.string.card_section_sacred_artifacts
+            CardSections.HISTORICAL_FIGURES -> R.string.card_section_historical_figures
+            CardSections.AUTHORITY_FIGURES -> R.string.card_section_authority_figures
+            CardSections.SERVICE_NPCS -> R.string.card_section_service_npcs
+            CardSections.ALLIES -> R.string.card_section_allies
+            CardSections.ANTAGONISTS -> R.string.card_section_antagonists
+            CardSections.CAMPAIGN_CAST -> R.string.card_section_campaign_cast
+            CardSections.CAMPAIGN_LOCATIONS -> R.string.card_section_campaign_locations
+            CardSections.PLOT_LEDGER -> R.string.card_section_plot_ledger
+            CardSections.RELIQUARY -> R.string.card_section_reliquary
             else -> R.string.card_section_notes
         }
 
@@ -162,7 +207,10 @@ class CardEntryEditorActivity : FragmentActivity() {
         fieldQuantity = findViewById(R.id.field_entry_quantity)
         layoutDescription = findViewById(R.id.layout_entry_description)
         fieldDescription = findViewById(R.id.field_entry_description)
+        rowParent = findViewById(R.id.row_entry_parent)
+        btnParent = findViewById(R.id.btn_entry_parent)
         btnSave = findViewById(R.id.btn_entry_save)
+        btnPromote = findViewById(R.id.btn_entry_promote)
         btnDelete = findViewById(R.id.btn_entry_delete)
 
         tagChips = CardTagChips(
@@ -179,9 +227,12 @@ class CardEntryEditorActivity : FragmentActivity() {
 
         btnBack?.setOnClickListener { finish() }
         btnKind?.setOnClickListener { showKindPicker() }
+        btnParent?.setOnClickListener { showParentPicker() }
         btnSave?.setOnClickListener { save() }
+        btnPromote?.setOnClickListener { promoteToPartyMember() }
         btnDelete?.setOnClickListener { confirmDelete() }
 
+        loadParentCandidates()
         loadExisting()
     }
 
@@ -207,6 +258,9 @@ class CardEntryEditorActivity : FragmentActivity() {
 
         layoutQuantity?.visibility =
             if (section == CardSections.INVENTORY) View.VISIBLE else View.GONE
+
+        rowParent?.visibility =
+            if (section in PARENT_CANDIDATE_SECTIONS) View.VISIBLE else View.GONE
 
         layoutDescription?.hint = getString(
             if (descriptionRequired()) R.string.entry_hint_description else R.string.entry_hint_description_optional
@@ -240,6 +294,80 @@ class CardEntryEditorActivity : FragmentActivity() {
             .show()
     }
 
+    /* ------------------------------ geography parent (spec §6c) ------------------------------ */
+
+    private fun loadParentCandidates() {
+        val candidateSections = PARENT_CANDIDATE_SECTIONS[section] ?: return
+        runOffThread {
+            val store = MemoryStore.getInstance(this)
+            val items = LinkedHashMap<String, String>()
+            for (s in candidateSections) {
+                store.entriesForSection(cardType, cardId, s).forEach { items[it.entryId] = it.name }
+            }
+            runOnUiThread {
+                parentCandidates.clear()
+                parentCandidates.putAll(items)
+                refreshParent()
+            }
+        }
+    }
+
+    private fun refreshParent() {
+        btnParent?.text = selectedParentId?.let { parentCandidates[it] }
+            ?: getString(R.string.mem_world_campaign_none)
+    }
+
+    private fun showParentPicker() {
+        if (parentCandidates.isEmpty()) {
+            Toast.makeText(this, R.string.entry_parent_picker_none, Toast.LENGTH_SHORT).show()
+            return
+        }
+        val ids = parentCandidates.keys.toList()
+        val names = ids.map { parentCandidates[it]!! }.toTypedArray()
+        val current = ids.indexOf(selectedParentId)
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.entry_label_parent)
+            .setSingleChoiceItems(names, current) { d, which ->
+                selectedParentId = ids[which]
+                refreshParent()
+                d.dismiss()
+            }
+            .setNegativeButton(R.string.btn_cancel) { _, _ -> }
+            .show()
+    }
+
+    /* ------------------------------ promotion (spec §6c/§8a) ------------------------------ */
+
+    /** A world NPC entry graduates to a full party-member card: the card is
+     *  created from the entry's name, this entry keeps only a pointer and
+     *  stays lightweight lore (never two competing versions), the button goes
+     *  away, and the new card opens for the user to fill in. */
+    private fun promoteToPartyMember() {
+        val record = existing ?: return
+        runOffThread {
+            val store = MemoryStore.getInstance(this)
+            val partyMember = PartyMemberRecord(
+                partyMemberId = MemoryStore.newId("pm-"),
+                name = record.name,
+                createdAt = MemoryStore.nowIso()
+            )
+            store.upsertPartyMember(partyMember)
+            val updated = record.copy(partyMemberId = partyMember.partyMemberId, updatedAt = MemoryStore.nowIso())
+            store.upsertCardEntry(updated)
+            runOnUiThread {
+                existing = updated
+                btnPromote?.visibility = View.GONE
+                startActivity(
+                    android.content.Intent(this, CharacterCardActivity::class.java)
+                        .putExtra("chatId", intent.extras?.getString("chatId", "") ?: "")
+                        .putExtra("cardType", CardType.PARTY_MEMBER)
+                        .putExtra("cardId", partyMember.partyMemberId)
+                )
+                finish()
+            }
+        }
+    }
+
     /* ------------------------------ load ------------------------------ */
 
     private fun loadExisting() {
@@ -257,6 +385,14 @@ class CardEntryEditorActivity : FragmentActivity() {
                     currentKind = record.entryKind
                     refreshKind()
                 }
+                selectedParentId = record.parentEntryId
+                refreshParent()
+                // Promotion is offered on saved notable-NPC entries that
+                // haven't graduated yet; once promoted the button is gone
+                // for good (owner ruling, spec §8a).
+                btnPromote?.visibility =
+                    if (section in NOTABLE_NPC_SECTIONS && record.partyMemberId == null) View.VISIBLE
+                    else View.GONE
                 tagChips?.setInitial(tags)
                 btnDelete?.visibility = View.VISIBLE
             }
@@ -288,6 +424,10 @@ class CardEntryEditorActivity : FragmentActivity() {
                 return
             }
         }
+        if (section in PARENT_CANDIDATE_SECTIONS && selectedParentId == null) {
+            Toast.makeText(this, R.string.entry_parent_required, Toast.LENGTH_SHORT).show()
+            return
+        }
 
         // A typed-but-unconfirmed tag counts as picked.
         tagChips?.confirmText()
@@ -302,6 +442,7 @@ class CardEntryEditorActivity : FragmentActivity() {
             description = description.ifEmpty { null },
             entryKind = if (KIND_OPTIONS.containsKey(section)) currentKind else null,
             quantity = quantity,
+            parentEntryId = if (section in PARENT_CANDIDATE_SECTIONS) selectedParentId else prior?.parentEntryId,
             updatedAt = if (prior != null) MemoryStore.nowIso() else null
         )
 

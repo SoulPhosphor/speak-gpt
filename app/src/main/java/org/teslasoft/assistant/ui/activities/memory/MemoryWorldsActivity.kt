@@ -42,7 +42,9 @@ class MemoryWorldsActivity : MemoryScreenActivity() {
         val q = query.trim().lowercase()
 
         return store.getAllWorlds()
-            .filter { q.isEmpty() || it.name.lowercase().contains(q) || it.premise.lowercase().contains(q) }
+            // Search + subtitle use the card's Premise/Vibe — the dormant
+            // pre-card premise text is never shown (spec §8a).
+            .filter { q.isEmpty() || it.name.lowercase().contains(q) || it.premiseVibe?.lowercase()?.contains(q) == true }
             .map { w ->
                 val badge = when {
                     w.status == "ended" -> getString(R.string.mem_world_badge_ended)
@@ -52,7 +54,7 @@ class MemoryWorldsActivity : MemoryScreenActivity() {
                 MemoryRow(
                     id = w.worldId,
                     title = w.name,
-                    subtitle = w.premise.trim().ifBlank { null },
+                    subtitle = w.premiseVibe?.lineSequence()?.firstOrNull()?.trim()?.ifBlank { null },
                     badge = badge,
                     hasAction = false
                 )
