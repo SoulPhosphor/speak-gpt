@@ -106,7 +106,17 @@ plus the owner's realm ruling.)
 - **Cross-card tag view for the human:** tapping any tag anywhere shows
   every entry sharing it, grouped by card and section. Pure lookup, no AI.
   Browse view is GLOBAL across the roleplay module even though firing is
-  campaign-scoped.
+  campaign-scoped. **The view's group headers come from the PREDEFINED
+  card types and sections in §6 — system-defined, pre-loaded, never
+  user-configured** (owner's requirement July 7: the categories are
+  already defined by the system).
+- **Tag search door — PROPOSED (awaiting owner's yes/no):** a "Tags"
+  entry in the Roleplay hub opens a searchable index of every tag in the
+  roleplay realm (fuzzy search, same as tag input); tapping a tag opens
+  the same cross-card view. Via the tag bridge the view includes
+  roleplay-scoped MEMORIES sharing the tag, not just card entries.
+  Real-life tags keep their existing door (the Memories browser's tag
+  filter); the realm wall (§3) means the two searches never mix.
 - **The tag bridge spans both storage cabinets** (the memory store and the
   card/ledger store): one pool, one link table that can point at a memory,
   a ledger entry, or a whole card. Existing memory tags on
@@ -271,10 +281,11 @@ want to make an entire book, that's their decision"). No hard limits.
     corruption")
 
 - **Zone 2 — retrieved on relevance.** Organized in GROUPS containing
-  SECTIONS. **PROPOSED: section names are the trigger units; group
-  headers are visual organization only** — "geography" firing the whole
-  group would dump every region, settlement and point of interest into
-  the prompt at once; "regions" firing one section is bounded.
+  SECTIONS. **RULED (owner approved July 7): section names are the
+  trigger units; group headers are visual organization only** —
+  "geography" firing the whole group would dump every region, settlement
+  and point of interest into the prompt at once; "regions" firing one
+  section is bounded.
 
   - **Geography** *(hierarchical, parent-tagged)*
     - **Regions** (kingdoms, provinces, wastelands, forests, biomes,
@@ -298,8 +309,8 @@ want to make an entire book, that's their decision"). No hard limits.
       moments) — Name (req), Description (req)
     - **Arcane Knowledge** (magical facts, discoveries, historically
       significant artifacts) — Name (req), Description (req)
-  - **Factions & Groups** *(owner's placeholder name was "People";
-    rename PROPOSED — awaiting owner's yes/no)*
+  - **Organized Groups** *(RULED — owner's name, July 7; replaces the
+    "People" placeholder)*
     - **Organizations & Guilds** — Name (req), Description (req:
       purpose, leadership, territory, whether joinable)
     - **Bands & Threats** (roaming groups, gangs, hostile collectives
@@ -323,11 +334,11 @@ want to make an entire book, that's their decision"). No hard limits.
       (req), Description (req)
     - **Antagonists** (villains, rivals, recurring threats) — Name
       (req), Description (req)
-    - **PROPOSED promotion rule:** world NPC entries are lightweight
-      lore. When an NPC becomes a recurring member of the party, they
-      graduate to a full NPC party-member card (6b) and the world entry
-      links/points to it — the same person is never half-defined in two
-      places.
+    - **RULED promotion rule (owner approved July 7):** world NPC
+      entries are lightweight lore. When an NPC becomes a recurring
+      member of the party, they graduate to a full NPC party-member card
+      (6b) and the world entry links/points to it — the same person is
+      never half-defined in two places.
 
 - Tags are universal on every entry per §3 (normalized — the GLM draft
   listed tags on only some sections). Tags connect entries across
@@ -341,13 +352,14 @@ want to make an entire book, that's their decision"). No hard limits.
 ### 6d. Campaign card — RULED core (owner supplied July 7 2026 via a
 two-AI combined draft; AI merges/normalizations marked PROPOSED)
 
-- **Zone 1 — always injected. PROPOSED framing: this is "the bookmark" —
-  written at session end, read at session start. Mid-session the context
-  window itself tracks the scene; these fields exist for RESUMING.**
+- **Zone 1 — always injected. RULED framing (owner approved July 7):
+  this is "the bookmark" — written at session end, read at session
+  start. Mid-session the context window itself tracks the scene; these
+  fields exist for RESUMING.**
   - Name
   - **Quest Anchor** — current objective and stakes, 2–3 sentences; the
     compass. Replaces the earlier "story so far (short)" Zone 1 field.
-    (PROPOSED: allows a main objective plus optional short
+    (RULED July 7: allows a main objective plus optional short
     side-objective lines, still tiny.)
   - **Active Scene** — current location name + one-sentence condition
     ("The Smuggler's Cove — flooded, bodies floating").
@@ -356,10 +368,13 @@ two-AI combined draft; AI merges/normalizations marked PROPOSED)
     appear only as the generated roster line ("Rose — dead").
   - World + user-character links (their own cards' Zone 1s inject; the
     campaign carries the pointers, with superseded history per §2).
-- **Update cadence (PROPOSED):** Quest Anchor and Active Scene are
-  volatile; they're updated at session end — by hand until Phase 6, then
-  via Archivist suggestions through the §13 approval flow. Nothing edits
-  them live mid-session.
+- **Update cadence — RULED (owner, July 7, stated as a general law):
+  "No memories or ledgers are updated in the middle of a conversation.
+  The only way anything changes is the user going in there"** — or,
+  once Phase 6 exists, an Archivist SUGGESTION the user accepts through
+  the §13 approval flow. Quest Anchor and Active Scene are therefore
+  session-end updates, never live mid-session writes. This law applies
+  to every card, ledger, and memory in the roleplay system.
 - **Zone 2 — retrieved on relevance:**
   - **Campaign Cast** — relationship/disposition state for named NPCs in
     THIS story. Two entry kinds:
@@ -388,9 +403,8 @@ two-AI combined draft; AI merges/normalizations marked PROPOSED)
     is also carried, the character's Inventory entry and the Reliquary
     entry connect by tag/name; the Reliquary owns the narrative
     significance.
-  - **Notes** (PROPOSED: kept from the earlier skeleton; the combined
-    draft dropped it) — freeform user entries for don't-forget material
-    that fits no structure.
+  - **Notes** (RULED July 7: kept) — freeform user entries for
+    don't-forget material that fits no structure.
 - **Links:** world card, user character card, party member cards (joins,
   per §4).
 
@@ -401,17 +415,16 @@ two-AI combined draft; AI merges/normalizations marked PROPOSED)
    fears/likes/dislikes demoted to a Zone 2 Traits section. Awaiting the
    owner's final word-by-word confirm of 6a/6b as written.
 2. ~~World Zone 2 list~~ — RESOLVED July 7: the owner supplied the full
-   world card (6c above). Still awaiting the owner's yes/no on three
-   PROPOSED details: (a) section names trigger, group headers are
-   UI-only; (b) rename the "People" group to "Factions & Groups";
-   (c) the Notable-NPC → party-member-card promotion rule.
+   world card (6c above), then approved all three follow-up details:
+   sections trigger / group headers are UI-only; the "People" group is
+   named **Organized Groups** (owner's own name); the Notable-NPC →
+   party-member-card promotion rule stands.
 3. ~~Campaign Zone 2~~ — RESOLVED July 7: the owner supplied the full
-   campaign card (6d above). Still awaiting the owner's yes/no on four
-   PROPOSED details: (a) the "bookmark" update cadence — Quest Anchor
-   and Active Scene are written at session end, never live mid-session;
-   (b) "party movement" trigger normalized to location-name trigger;
-   (c) the Notes section is kept; (d) Quest Anchor may carry side
-   objectives alongside the main one.
+   campaign card (6d above), then approved all four follow-up details:
+   the bookmark update cadence (elevated to the general
+   no-mid-conversation-writes law), the location-name trigger
+   normalization, the Notes section, and side objectives on the Quest
+   Anchor.
 4. ~~Incapacitated NPCs~~ — RESOLVED July 7 by the finalized 6b: full
    core injects for Alive and Incapacitated; Dead and Enemy drop to the
    campaign roster line.
@@ -425,3 +438,59 @@ two-AI combined draft; AI merges/normalizations marked PROPOSED)
   (law 3); the Archivist path exists only for roleplay cards.
 - Stage 3 retrieval tasks (priority ladder, cooldown, scope rewrite)
   proceed as specced EXCEPT 3.6, which is paused pending this revision.
+
+## 8. UI findability — RULED directive (July 7)
+
+The owner's instruction: **the interface must make things easy for the
+user to FIND.** The roleplay system exists partly so a person can plan
+and look things up when they are NOT talking to the AI; a fact the user
+can't locate might as well not exist. Concrete commitments already ruled
+elsewhere in this document, gathered here so no build loses sight of
+them:
+
+- Zone 1 is visibly labeled on every card — the user always sees exactly
+  what the AI is told every turn (§1).
+- Sections exist FOR the user, not just the model — granular section
+  lists beat consolidated ones so people find things "without scrolling
+  and guessing" (owner's standing July 6 ruling, honored by §6c).
+- Tags are the cross-cutting finder: tap any tag → the cross-card view,
+  grouped by the predefined card/section categories (§3). Parent chains
+  make geography self-locating (§6c).
+- Archive sections are visible at the bottom of every card list —
+  restorable things must have visible evidence they exist (§5).
+- List screens follow the app's established browser conventions: search,
+  visible sort/filter state, one-tap Reset (the §14 patterns from
+  `owner_approved_rules.md`).
+- One browser, many doors (existing law): every card page links to the
+  things connected to it — a campaign reaches its world, party members,
+  and memories in one tap.
+
+## 9. Instructions to implementing agents — DO NOT BECOME THE DESIGNER
+
+The owner's words (July 7): ensure the instructions are clear "so that
+the AI properly organizes them and doesn't decide that it should become
+Captain designer." Binding rules for any agent building from this
+document once it is approved:
+
+1. **This document is a spec, not a suggestion.** Build exactly the
+   fields, sections, names, and behaviors written here. Every field
+   name, type list, and section name was approved by the owner —
+   renaming, merging, splitting, or "improving" any of them is a
+   violation of the OWNER APPROVAL GATE in CLAUDE.md.
+2. **Anything still marked PROPOSED is not buildable.** If it hasn't
+   been flipped to RULED with the owner's chat approval, stop and ask.
+3. **Gaps and ambiguities: stop and ask the owner in a plain chat
+   message** (never the pop-up question tool — it breaks on the owner's
+   phone). Do not fill a gap with your own design judgment, however
+   obvious the answer seems.
+4. **The no-mid-conversation-writes law is absolute:** no card, ledger,
+   tag, or memory is created or updated during a conversation by any
+   automatic process. The user edits by hand; Phase 6's Archivist only
+   SUGGESTS, through drafts the user approves. Never build a live-write
+   path.
+5. **No pre-written content, ever:** no example worlds, sample NPCs,
+   starter tags, or template campaigns ship with the app or auto-load
+   into the store. Fresh means empty (standing owner rule since July
+   2026).
+6. **Respect the realm wall (§3)** in every query, injection path, and
+   UI: real-life and roleplay tags/memories never mix.
