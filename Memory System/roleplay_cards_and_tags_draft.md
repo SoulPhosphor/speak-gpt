@@ -338,22 +338,61 @@ want to make an entire book, that's their decision"). No hard limits.
   entry plus its one-hop tag pull-alongs; a disease tagged onto affected
   entries answers "what regions does the gray rot affect?" via the tag.
 
-### 6d. Campaign card
+### 6d. Campaign card — RULED core (owner supplied July 7 2026 via a
+two-AI combined draft; AI merges/normalizations marked PROPOSED)
 
-- **Zone 1:**
+- **Zone 1 — always injected. PROPOSED framing: this is "the bookmark" —
+  written at session end, read at session start. Mid-session the context
+  window itself tracks the scene; these fields exist for RESUMING.**
   - Name
-  - Current world (link; superseded history kept — see §2)
-  - User's character (link)
-  - Party roster line (names + statuses only, e.g. "Rose (dead), Garrick
-    (alive), Thess (enemy)")
-  - Story so far (short; Archivist-maintained via proposals, per the
-    existing plan)
-- **Zone 2 sections:**
-  - Key events (the story's timeline, entry per event)
-  - Locations visited
-  - Notes (freeform user entries)
-- **Links (not sections):** party members (join to the NPC roster),
-  world, user character.
+  - **Quest Anchor** — current objective and stakes, 2–3 sentences; the
+    compass. Replaces the earlier "story so far (short)" Zone 1 field.
+    (PROPOSED: allows a main objective plus optional short
+    side-objective lines, still tiny.)
+  - **Active Scene** — current location name + one-sentence condition
+    ("The Smuggler's Cove — flooded, bodies floating").
+  - **Active Party Members** — each linked NPC card with status Alive or
+    Incapacitated injects its Zone 1 core (per 6b). Dead/Enemy members
+    appear only as the generated roster line ("Rose — dead").
+  - World + user-character links (their own cards' Zone 1s inject; the
+    campaign carries the pointers, with superseded history per §2).
+- **Update cadence (PROPOSED):** Quest Anchor and Active Scene are
+  volatile; they're updated at session end — by hand until Phase 6, then
+  via Archivist suggestions through the §13 approval flow. Nothing edits
+  them live mid-session.
+- **Zone 2 — retrieved on relevance:**
+  - **Campaign Cast** — relationship/disposition state for named NPCs in
+    THIS story. Two entry kinds:
+    (a) world-NPC overlays: link to the world card's NPC entry + current
+    disposition and status in this campaign — the world card holds the
+    timeless definition, the campaign holds what this story did to them,
+    so the same world NPC can be in different states in different
+    campaigns with zero bleed;
+    (b) campaign-native NPCs: name, one-phrase identity, current status
+    and disposition. Triggered by name.
+  - **Campaign Locations** — scene state for active and recently visited
+    locations: name, current condition, what's changed. Same overlay
+    logic over world geography. Triggered by location name (NORMALIZED
+    from "or party movement" — triggers run on message text, and
+    movement is narrated by name, so name-triggering covers it).
+  - **Plot Ledger** — the story so far: chronological major beats; entry
+    = title (the trigger word) + description + tags; most recent entries
+    get a recency boost in retrieval. Archivist-written after each
+    session in Phase 6 — arriving as DRAFTS per the approval laws —
+    user-written until then. This is the structured evolution of the
+    existing campaigns story-so-far field.
+  - **Reliquary** — plot-relevant items: name, description, current
+    holder, narrative significance. NOT regular inventory — owned gear
+    lives on character/NPC cards; the Reliquary tracks items that matter
+    to the STORY. Triggered by item name. Boundary rule: if a plot item
+    is also carried, the character's Inventory entry and the Reliquary
+    entry connect by tag/name; the Reliquary owns the narrative
+    significance.
+  - **Notes** (PROPOSED: kept from the earlier skeleton; the combined
+    draft dropped it) — freeform user entries for don't-forget material
+    that fits no structure.
+- **Links:** world card, user character card, party member cards (joins,
+  per §4).
 
 ### Open questions for the owner on §6
 
@@ -366,8 +405,13 @@ want to make an entire book, that's their decision"). No hard limits.
    PROPOSED details: (a) section names trigger, group headers are
    UI-only; (b) rename the "People" group to "Factions & Groups";
    (c) the Notable-NPC → party-member-card promotion rule.
-3. Campaign Zone 2 — is "Key events / Locations visited / Notes" right,
-   too much, or missing something?
+3. ~~Campaign Zone 2~~ — RESOLVED July 7: the owner supplied the full
+   campaign card (6d above). Still awaiting the owner's yes/no on four
+   PROPOSED details: (a) the "bookmark" update cadence — Quest Anchor
+   and Active Scene are written at session end, never live mid-session;
+   (b) "party movement" trigger normalized to location-name trigger;
+   (c) the Notes section is kept; (d) Quest Anchor may carry side
+   objectives alongside the main one.
 4. ~~Incapacitated NPCs~~ — RESOLVED July 7 by the finalized 6b: full
    core injects for Alive and Incapacitated; Dead and Enemy drop to the
    campaign roster line.
