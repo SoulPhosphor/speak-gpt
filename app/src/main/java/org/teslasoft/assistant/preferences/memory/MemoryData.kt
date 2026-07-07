@@ -343,35 +343,46 @@ data class RpTagRecord(
 )
 
 /* -------------------------------------------------------------------------
- * Model rules (Stage 4, owner_approved_rules §11): user-created profiles of
- * model-specific patches. A profile = the user's nickname + a list of model
- * strings that count as that model (snapshots can share one profile;
- * endpoints are irrelevant — the same model is the same model from any
- * provider). Rules with no profile are "Needs review" (unassigned) — the
- * system never invents a profile. Injection is user-decided per chat and
- * OFF by default; nothing here is ever auto-applied.
+ * Model rules (Stage 4, owner_approved_rules §11, Revision 5): user-written
+ * patches for a specific AI model's habits. The MODEL STRING is the primary
+ * identity — there are no profiles/groups. Each rule carries its own list of
+ * model strings it applies to (a family string like "glm-5" matches every
+ * snapshot; endpoints/provider prefixes are irrelevant — the same model is
+ * the same model from any provider). Tags organize rules for the human
+ * (tap a tag → every rule that carries it), a separate pool that never
+ * decides what injects — the model strings do that. Injection is automatic
+ * and ON by default; a global default + per-chat toggle gate it. A rule with
+ * status='draft' is a Phase 6 Archivist suggestion awaiting review.
  * ------------------------------------------------------------------------- */
 
-data class ModelRuleProfileRecord(
-    val profileId: String,
-    val nickname: String,                 // the user's name for the model, e.g. "Model 5"
-    val modelStringsJson: String,         // JSON array of model id strings
+data class ModelRuleRecord(
+    val ruleId: String,
+    val text: String,
+    /** JSON array of model id strings this rule applies to. A rule matches a
+     *  chat when any string here matches the chat's model (case-insensitive
+     *  contains, provider prefix ignored — see ModelRuleMatcher). */
+    val modelStringsJson: String,
+    val status: String,                   // draft | active (drafts arrive with Phase 6 filing)
+    /** The model string of the chat a draft was filed from (Phase 6). Seeds
+     *  the model-strings list the user confirms on accept. Null for
+     *  hand-written rules. */
+    val sourceModelString: String? = null,
     val createdAt: String,
     val updatedAt: String? = null
 )
 
-data class ModelRuleRecord(
+/** A model-rule tag — a plain organizing label, no colors. Its own pool,
+ *  distinct from memory tags and the roleplay tag realm. */
+data class ModelRuleTagRecord(
+    val tagId: String,
+    val name: String,
+    val createdAt: String
+)
+
+/** rule ↔ tag link, carried in backups so tagging survives export/import. */
+data class ModelRuleTagLink(
     val ruleId: String,
-    /** null = unassigned → the pinned "Needs review" section (§11). */
-    val profileId: String?,
-    val text: String,
-    val status: String,                   // draft | active (drafts arrive with Phase 6 filing)
-    /** The model string of the chat a draft was filed from (Phase 6) — §11's
-     *  move flow offers to add it to the destination profile so future drafts
-     *  with that string file there automatically. Null for hand-added rules. */
-    val sourceModelString: String? = null,
-    val createdAt: String,
-    val updatedAt: String? = null
+    val tagId: String
 )
 
 data class ChangeLogEntry(
@@ -510,10 +521,11 @@ data class MemoryStoreData(
     val partyMembers: List<PartyMemberRecord> = emptyList(),
     val cardEntries: List<CardEntryRecord> = emptyList(),
     val rpTags: List<RpTagRecord> = emptyList(),
-    // Model rules (Stage 4, rules §11) — user-authored, so they ride every
-    // backup like everything else the user typed in.
-    val modelRuleProfiles: List<ModelRuleProfileRecord> = emptyList(),
-    val modelRules: List<ModelRuleRecord> = emptyList()
+    // Model rules (Stage 4, rules §11 Revision 5) — user-authored, so they
+    // ride every backup like everything else the user typed in.
+    val modelRules: List<ModelRuleRecord> = emptyList(),
+    val modelRuleTags: List<ModelRuleTagRecord> = emptyList(),
+    val modelRuleTagLinks: List<ModelRuleTagLink> = emptyList()
 )
 
 /**

@@ -362,26 +362,32 @@ object MemorySeedCodec {
             )
         }
 
-        // Model rules (Stage 4, rules §11) — user-authored, so backups carry them.
-        val modelRuleProfiles = each(root, "model_rule_profiles").map { p ->
-            ModelRuleProfileRecord(
-                profileId = p.reqStr("profile_id"),
-                nickname = p.reqStr("nickname"),
-                modelStringsJson = p.arrText("model_strings"),
-                createdAt = p.str("created_at") ?: "",
-                updatedAt = p.str("updated_at")
-            )
-        }
-
+        // Model rules (Stage 4, rules §11 Revision 5) — user-authored, so
+        // backups carry the rules, their tag pool, and the links between them.
         val modelRules = each(root, "model_rules").map { r ->
             ModelRuleRecord(
                 ruleId = r.reqStr("rule_id"),
-                profileId = r.str("profile_id"),
                 text = r.reqStr("text"),
+                modelStringsJson = r.arrText("model_strings"),
                 status = r.str("status") ?: "active",
                 sourceModelString = r.str("source_model_string"),
                 createdAt = r.str("created_at") ?: "",
                 updatedAt = r.str("updated_at")
+            )
+        }
+
+        val modelRuleTags = each(root, "model_rule_tags").map { t ->
+            ModelRuleTagRecord(
+                tagId = t.reqStr("tag_id"),
+                name = t.reqStr("name"),
+                createdAt = t.str("created_at") ?: ""
+            )
+        }
+
+        val modelRuleTagLinks = each(root, "model_rule_tag_links").map { l ->
+            ModelRuleTagLink(
+                ruleId = l.reqStr("rule_id"),
+                tagId = l.reqStr("tag_id")
             )
         }
 
@@ -427,8 +433,9 @@ object MemorySeedCodec {
             partyMembers = partyMembers,
             cardEntries = cardEntries,
             rpTags = rpTags,
-            modelRuleProfiles = modelRuleProfiles,
-            modelRules = modelRules
+            modelRules = modelRules,
+            modelRuleTags = modelRuleTags,
+            modelRuleTagLinks = modelRuleTagLinks
         )
     }
 
@@ -719,32 +726,41 @@ object MemorySeedCodec {
             })
         }
 
-        // Model rules (Stage 4, rules §11).
-        if (data.modelRuleProfiles.isNotEmpty()) {
-            root.put("model_rule_profiles", JSONArray().apply {
-                data.modelRuleProfiles.forEach { p ->
-                    put(JSONObject().apply {
-                        put("profile_id", p.profileId)
-                        put("nickname", p.nickname)
-                        put("model_strings", jsonArrayOrEmpty(p.modelStringsJson))
-                        put("created_at", p.createdAt)
-                        putIfNotNull("updated_at", p.updatedAt)
-                    })
-                }
-            })
-        }
-
+        // Model rules (Stage 4, rules §11 Revision 5).
         if (data.modelRules.isNotEmpty()) {
             root.put("model_rules", JSONArray().apply {
                 data.modelRules.forEach { r ->
                     put(JSONObject().apply {
                         put("rule_id", r.ruleId)
-                        putIfNotNull("profile_id", r.profileId)
                         put("text", r.text)
+                        put("model_strings", jsonArrayOrEmpty(r.modelStringsJson))
                         put("status", r.status)
                         putIfNotNull("source_model_string", r.sourceModelString)
                         put("created_at", r.createdAt)
                         putIfNotNull("updated_at", r.updatedAt)
+                    })
+                }
+            })
+        }
+
+        if (data.modelRuleTags.isNotEmpty()) {
+            root.put("model_rule_tags", JSONArray().apply {
+                data.modelRuleTags.forEach { t ->
+                    put(JSONObject().apply {
+                        put("tag_id", t.tagId)
+                        put("name", t.name)
+                        put("created_at", t.createdAt)
+                    })
+                }
+            })
+        }
+
+        if (data.modelRuleTagLinks.isNotEmpty()) {
+            root.put("model_rule_tag_links", JSONArray().apply {
+                data.modelRuleTagLinks.forEach { l ->
+                    put(JSONObject().apply {
+                        put("rule_id", l.ruleId)
+                        put("tag_id", l.tagId)
                     })
                 }
             })

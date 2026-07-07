@@ -4149,23 +4149,25 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             )
         }
 
-        // Model rules (Stage 4, owner_approved_rules §11): the chat's selected
-        // profile renders as its OWN prompt-layer block after the stable
-        // prefix and before the memory message (prompt-layer contract,
-        // block 2). Never appended to the stable first message — that would
-        // mutate the cached prefix — and never placed inside the memory
-        // message. Deterministic and byte-stable: active rules only, fixed
-        // store order, same wording every turn; with no profile selected the
-        // block is absent entirely (zero bytes of the request change).
-        // Independent of the memory-engine tier — model rules are not memory
-        // content. Any failure degrades to "no model rules this turn" and
-        // never blocks generation.
-        val modelRulesProfileId = preferences!!.getChatModelRulesProfileId()
-        if (modelRulesProfileId != "" && MemoryStore.isProvisioned(this)) {
+        // Model rules (Stage 4, owner_approved_rules §11 Revision 5): every
+        // ACTIVE rule whose model string matches this chat's model renders as
+        // its OWN prompt-layer block after the stable prefix and before the
+        // memory message (prompt-layer contract, block 2). Rules apply
+        // automatically and are ON by default; the per-chat "Apply Model
+        // Rules" toggle (which follows the global default) gates them. Never
+        // appended to the stable first message — that would mutate the cached
+        // prefix — and never placed inside the memory message. Deterministic
+        // and byte-stable: matching rules only, fixed store order, same
+        // wording every turn; with the toggle off or nothing matching the
+        // block is absent entirely (zero bytes of the request change). Matches
+        // are never truncated (§11). Independent of the memory-engine tier —
+        // model rules are not memory content. Any failure degrades to "no
+        // model rules this turn" and never blocks generation.
+        if (preferences!!.getChatApplyModelRules() && MemoryStore.isProvisioned(this)) {
             val modelRulesBlock: String? = try {
                 withContext(Dispatchers.IO) {
                     val rules = MemoryStore.getInstance(this@ChatActivity)
-                        .getActiveModelRules(modelRulesProfileId)
+                        .getActiveModelRulesForModel(model)
                     if (rules.isEmpty()) null
                     else rules.joinToString(
                         separator = "\n",
@@ -4450,7 +4452,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     val chatRoleplayCharacterId = preferences.getChatRoleplayCharacterId()
                     val chatUserPersonaId = preferences.getChatUserPersonaId()
                     val chatProjectId = preferences.getChatProjectId()
-                    val chatModelRulesProfileId = preferences.getChatModelRulesProfileId()
+                    val chatApplyModelRules = preferences.getChatApplyModelRules()
 
                     preferences.setPreferences(Hash.hash(newChatName.toString()), this)
                     preferences.setResolution(resolution)
@@ -4488,7 +4490,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     preferences.setChatRoleplayCharacterId(chatRoleplayCharacterId)
                     preferences.setChatUserPersonaId(chatUserPersonaId)
                     preferences.setChatProjectId(chatProjectId)
-                    preferences.setChatModelRulesProfileId(chatModelRulesProfileId)
+                    preferences.setChatApplyModelRules(chatApplyModelRules)
 
                     // The rename changed the chat id; captured transcripts are
                     // keyed by it, so the queue must follow the chat.

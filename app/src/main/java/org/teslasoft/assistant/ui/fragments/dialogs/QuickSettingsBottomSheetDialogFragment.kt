@@ -50,8 +50,6 @@ import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.preferences.dto.PersonaObject
 import org.teslasoft.assistant.preferences.lorebook.LoreBookStore
 import org.teslasoft.assistant.preferences.memory.MemoryStore
-import org.teslasoft.assistant.preferences.memory.ModelRuleProfileRecord
-import org.teslasoft.assistant.preferences.memory.enforcer.ModelRuleMatcher
 import org.teslasoft.assistant.preferences.memory.CampaignRecord
 import org.teslasoft.assistant.preferences.memory.CardEntryRecord
 import org.teslasoft.assistant.preferences.memory.CardSections
@@ -134,12 +132,13 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     private var rowChatProject: LinearLayout? = null
     private var textChatProject: TextView? = null
 
-    // Model rules (Stage 4, owner_approved_rules §11): the optional per-chat
-    // profile dropdown. NOT part of the memory-scene container — model rules
-    // are their own prompt layer and apply at any memory-engine tier. Default
-    // none; never auto-applied.
+    // Model rules (Stage 4, owner_approved_rules §11 Revision 5): the per-chat
+    // "Apply Model Rules" toggle. NOT part of the memory-scene container —
+    // model rules are their own prompt layer and apply at any memory-engine
+    // tier. Follows the global "Automatically Apply Model Rules" default (on);
+    // flipping it overrides that for this chat only.
     private var rowChatModelRules: LinearLayout? = null
-    private var textChatModelRules: TextView? = null
+    private var switchChatModelRules: com.google.android.material.materialswitch.MaterialSwitch? = null
 
     private var textUsage: TextView? = null
     private var textCost: TextView? = null
@@ -170,7 +169,6 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     private var cachedRoleplayCharacters: List<RoleplayCharacterRecord> = emptyList()
     private var cachedUserPersonas: List<UserPersonaRecord> = emptyList()
     private var cachedProjects: List<ProjectRecord> = emptyList()
-    private var cachedModelRuleProfiles: List<ModelRuleProfileRecord> = emptyList()
 
     // Name lookups over ALL worlds/characters (not just active ones) so a
     // selected campaign's links still display when the linked card is
@@ -559,7 +557,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         rowChatProject = view.findViewById(R.id.row_chat_project)
         textChatProject = view.findViewById(R.id.text_chat_project)
         rowChatModelRules = view.findViewById(R.id.row_chat_model_rules)
-        textChatModelRules = view.findViewById(R.id.text_chat_model_rules)
+        switchChatModelRules = view.findViewById(R.id.switch_chat_model_rules)
         setupModelRulesRow()
         switchChatMemory?.isChecked = preferences?.getChatMemoryEnabled() ?: true
         // "Archive this chat": positive framing. Checked = archive (capture on).
@@ -912,65 +910,16 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     /* ------------------------------ model rules (Stage 4, §11) ------------------------------ */
 
     /**
-     * The optional per-chat Model rules dropdown. Unlike the scene rows it is
-     * not gated on the full memory engine — model rules are their own prompt
-     * layer at any tier. Default none; a "(matches this chat's model)" hint
-     * may mark a matching profile but NEVER selects it (§11).
+     * The per-chat "Apply Model Rules" toggle (§11 Revision 5). Unlike the
+     * scene rows it is not gated on the full memory engine — model rules are
+     * their own prompt layer at any tier. Follows the global "Automatically
+     * Apply Model Rules" default (on); flipping it overrides for this chat.
      */
     private fun setupModelRulesRow() {
-        updateChatModelRulesLabel()
-        rowChatModelRules?.setOnClickListener { showModelRulesPicker() }
-        loadModelRuleProfiles()
-    }
-
-    private fun loadModelRuleProfiles() {
-        val appContext = context?.applicationContext ?: return
-        Thread {
-            try {
-                // isProvisioned gate: listing profiles must never CREATE the
-                // memory store as a side effect.
-                if (!MemoryStore.isProvisioned(appContext)) return@Thread
-                val profiles = MemoryStore.getInstance(appContext).getModelRuleProfiles()
-                activity?.runOnUiThread {
-                    if (!isAdded) return@runOnUiThread
-                    cachedModelRuleProfiles = profiles
-                    updateChatModelRulesLabel()
-                }
-            } catch (_: Exception) { /* the row keeps working, just empty until the store is reachable */ }
-        }.start()
-    }
-
-    private fun updateChatModelRulesLabel() {
-        val id = preferences?.getChatModelRulesProfileId().orEmpty()
-        textChatModelRules?.text = if (id.isEmpty()) {
-            getString(R.string.label_model_rules_none)
-        } else {
-            cachedModelRuleProfiles.firstOrNull { it.profileId == id }?.nickname
-                ?: getString(R.string.label_model_rules_none)
+        switchChatModelRules?.isChecked = preferences?.getChatApplyModelRules() ?: true
+        switchChatModelRules?.setOnCheckedChangeListener { _, checked ->
+            preferences?.setChatApplyModelRules(checked)
         }
-    }
-
-    private fun showModelRulesPicker() {
-        val chatModel = preferences?.getModel().orEmpty()
-        val ids = listOf("") + cachedModelRuleProfiles.map { it.profileId }
-        val labels = (listOf(getString(R.string.label_model_rules_none)) + cachedModelRuleProfiles.map { p ->
-            if (ModelRuleMatcher.profileMatchesModel(p.modelStringsJson, chatModel)) {
-                p.nickname + " " + getString(R.string.model_rules_matches_hint)
-            } else {
-                p.nickname
-            }
-        }).toTypedArray()
-        val current = ids.indexOf(preferences?.getChatModelRulesProfileId().orEmpty()).coerceAtLeast(0)
-
-        MaterialAlertDialogBuilder(requireContext(), R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.model_rules_picker_title)
-            .setSingleChoiceItems(labels, current) { dialog, which ->
-                preferences?.setChatModelRulesProfileId(ids[which])
-                updateChatModelRulesLabel()
-                dialog.dismiss()
-            }
-            .setNegativeButton(android.R.string.cancel) { _, _ -> }
-            .show()
     }
 
     private fun showWorldPicker() {

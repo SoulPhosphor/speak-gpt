@@ -49,7 +49,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
 
     companion object {
         const val DATABASE_NAME = "companion_memory.db"
-        private const val DATABASE_VERSION = 9
+        private const val DATABASE_VERSION = 10
 
         // Freshness-cooldown source types (rules §10 / Stage 3.3): the
         // composite key (chat_id, source_type, entry_id) keeps ids from
@@ -583,29 +583,34 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 "PRIMARY KEY (tag_id, target_type, target_id))"
         )
 
-        // Model rules (Stage 4, owner_approved_rules §11): user-created
-        // profiles (nickname + the model strings that count as that model)
-        // and their rules. profile_id NULL = the pinned "Needs review"
-        // section — unassigned drafts the system never files into an
-        // invented profile. Starts EMPTY: the user creates every profile,
-        // and rule drafts only ever arrive via Phase 6 filing.
-        db.execSQL(
-            "CREATE TABLE model_rule_profiles (" +
-                "profile_id TEXT PRIMARY KEY, " +
-                "nickname TEXT NOT NULL, " +
-                "model_strings_json TEXT NOT NULL DEFAULT '[]', " +
-                "created_at TEXT NOT NULL, " +
-                "updated_at TEXT)"
-        )
+        // Model rules (Stage 4, owner_approved_rules §11 Revision 5): user-
+        // written patches for a specific AI model's habits. The model string
+        // is the primary identity — no profiles/groups. Each rule carries its
+        // own model_strings_json (the models it applies to) and any number of
+        // tags (organizing labels, own pool). status='draft' = a Phase 6
+        // Archivist suggestion awaiting review. Starts EMPTY: rules are hand-
+        // written or arrive as Phase 6 drafts; tags are created inline.
         db.execSQL(
             "CREATE TABLE model_rules (" +
                 "rule_id TEXT PRIMARY KEY, " +
-                "profile_id TEXT REFERENCES model_rule_profiles(profile_id), " +
                 "text TEXT NOT NULL, " +
+                "model_strings_json TEXT NOT NULL DEFAULT '[]', " +
                 "status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('draft','active')), " +
                 "source_model_string TEXT, " +
                 "created_at TEXT NOT NULL, " +
                 "updated_at TEXT)"
+        )
+        db.execSQL(
+            "CREATE TABLE model_rule_tags (" +
+                "tag_id TEXT PRIMARY KEY, " +
+                "name TEXT NOT NULL, " +
+                "created_at TEXT NOT NULL)"
+        )
+        db.execSQL(
+            "CREATE TABLE model_rule_tag_links (" +
+                "rule_id TEXT NOT NULL, " +
+                "tag_id TEXT NOT NULL, " +
+                "PRIMARY KEY (rule_id, tag_id))"
         )
 
         db.execSQL("CREATE INDEX idx_memories_status ON memories(status)")
@@ -626,7 +631,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         db.execSQL("CREATE INDEX idx_card_entries_card ON card_entries(card_type, card_id)")
         db.execSQL("CREATE INDEX idx_cpm_member ON campaign_party_members(party_member_id)")
         db.execSQL("CREATE INDEX idx_rp_tag_links_target ON rp_tag_links(target_type, target_id)")
-        db.execSQL("CREATE INDEX idx_model_rules_profile ON model_rules(profile_id)")
+        db.execSQL("CREATE INDEX idx_model_rules_status ON model_rules(status)")
+        db.execSQL("CREATE INDEX idx_model_rule_tag_links_tag ON model_rule_tag_links(tag_id)")
 
         val now = nowIso()
         db.execSQL("INSERT INTO meta (key, value) VALUES (?, ?)", arrayOf(META_SCHEMA_VERSION, "1.11.0"))
@@ -1000,6 +1006,46 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             db.execSQL(
                 "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                 arrayOf(META_DB_MIGRATION, "9")
+            )
+        }
+        if (oldVersion < 10) {
+            // v10 (July 2026, Stage 4 redesign, §11 Revision 5): the owner
+            // replaced the profile/group model with a model-string-primary +
+            // tags model. The v9 tables never shipped a way to create data
+            // (no UI, no Phase 6 filing), so this rebuild simply drops them and
+            // creates the new shape — no data to preserve. model_rules gains
+            // model_strings_json and loses profile_id; model_rule_profiles is
+            // dropped; model_rule_tags + model_rule_tag_links are added.
+            db.execSQL("DROP INDEX IF EXISTS idx_model_rules_profile")
+            db.execSQL("DROP TABLE IF EXISTS model_rules")
+            db.execSQL("DROP TABLE IF EXISTS model_rule_profiles")
+            db.execSQL(
+                "CREATE TABLE model_rules (" +
+                    "rule_id TEXT PRIMARY KEY, " +
+                    "text TEXT NOT NULL, " +
+                    "model_strings_json TEXT NOT NULL DEFAULT '[]', " +
+                    "status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('draft','active')), " +
+                    "source_model_string TEXT, " +
+                    "created_at TEXT NOT NULL, " +
+                    "updated_at TEXT)"
+            )
+            db.execSQL(
+                "CREATE TABLE model_rule_tags (" +
+                    "tag_id TEXT PRIMARY KEY, " +
+                    "name TEXT NOT NULL, " +
+                    "created_at TEXT NOT NULL)"
+            )
+            db.execSQL(
+                "CREATE TABLE model_rule_tag_links (" +
+                    "rule_id TEXT NOT NULL, " +
+                    "tag_id TEXT NOT NULL, " +
+                    "PRIMARY KEY (rule_id, tag_id))"
+            )
+            db.execSQL("CREATE INDEX idx_model_rules_status ON model_rules(status)")
+            db.execSQL("CREATE INDEX idx_model_rule_tag_links_tag ON model_rule_tag_links(tag_id)")
+            db.execSQL(
+                "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                arrayOf(META_DB_MIGRATION, "10")
             )
         }
     }
@@ -1603,26 +1649,35 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 }
             }
 
-            // Model rules (Stage 4). Profiles before rules (FK); a rule whose
-            // profile is missing from both the file and the store imports as
-            // unassigned ("Needs review") instead of tripping the FK and
-            // aborting the whole import.
-            for (p in data.modelRuleProfiles) {
-                if (rowExists(db, "model_rule_profiles", "profile_id", p.profileId)) {
-                    report.addSkipped("model rule profiles"); continue
-                }
-                db.insert("model_rule_profiles", null, modelRuleProfileValues(p))
-                report.addAdded("model rule profiles")
-            }
+            // Model rules (Stage 4, §11 Revision 5): rules, their tags, and the
+            // links between them. Each is id-keyed and de-duped on import.
             for (r in data.modelRules) {
                 if (rowExists(db, "model_rules", "rule_id", r.ruleId)) {
                     report.addSkipped("model rules"); continue
                 }
-                val safeProfileId = r.profileId?.takeIf {
-                    rowExists(db, "model_rule_profiles", "profile_id", it)
-                }
-                db.insert("model_rules", null, modelRuleValues(r.copy(profileId = safeProfileId)))
+                db.insert("model_rules", null, modelRuleValues(r))
                 report.addAdded("model rules")
+            }
+            for (t in data.modelRuleTags) {
+                if (rowExists(db, "model_rule_tags", "tag_id", t.tagId)) {
+                    report.addSkipped("model rule tags"); continue
+                }
+                db.insert("model_rule_tags", null, ContentValues().apply {
+                    put("tag_id", t.tagId)
+                    put("name", t.name)
+                    put("created_at", t.createdAt.ifEmpty { nowIso() })
+                })
+                report.addAdded("model rule tags")
+            }
+            for (link in data.modelRuleTagLinks) {
+                // Only link rows whose rule and tag both exist, so a partial
+                // file can't strand a dangling link.
+                if (!rowExists(db, "model_rules", "rule_id", link.ruleId)) continue
+                if (!rowExists(db, "model_rule_tags", "tag_id", link.tagId)) continue
+                db.execSQL(
+                    "INSERT OR IGNORE INTO model_rule_tag_links (rule_id, tag_id) VALUES (?, ?)",
+                    arrayOf(link.ruleId, link.tagId)
+                )
             }
 
             db.setTransactionSuccessful()
@@ -1880,10 +1935,19 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         val rpTags = getAllRpTags().map { it.copy(targets = targetsForTag(it.tagId)) }
 
         // Model rules (Stage 4): user-authored, so they travel in backups too.
-        val modelRuleProfiles = getModelRuleProfiles()
         val modelRules = ArrayList<ModelRuleRecord>()
         db.query("model_rules", null, null, null, null, null, "created_at ASC, rule_id ASC").use {
             while (it.moveToNext()) modelRules.add(readModelRule(it))
+        }
+        val modelRuleTags = getModelRuleTags()
+        val modelRuleTagLinks = ArrayList<ModelRuleTagLink>()
+        db.query("model_rule_tag_links", null, null, null, null, null, "rule_id ASC, tag_id ASC").use {
+            while (it.moveToNext()) modelRuleTagLinks.add(
+                ModelRuleTagLink(
+                    ruleId = it.getString(it.getColumnIndexOrThrow("rule_id")),
+                    tagId = it.getString(it.getColumnIndexOrThrow("tag_id"))
+                )
+            )
         }
 
         return MemoryStoreData(
@@ -1906,8 +1970,9 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             partyMembers = partyMembers,
             cardEntries = cardEntries,
             rpTags = rpTags,
-            modelRuleProfiles = modelRuleProfiles,
-            modelRules = modelRules
+            modelRules = modelRules,
+            modelRuleTags = modelRuleTags,
+            modelRuleTagLinks = modelRuleTagLinks
         )
     }
 
@@ -3212,125 +3277,52 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
     fun memoriesForProject(projectId: String, includeArchived: Boolean): List<MemoryRecord> =
         memoriesForTarget("memory_projects", "project_id", projectId, includeArchived)
 
-    /* -------- model rules (Stage 4, owner_approved_rules §11) --------
-     * User-created profiles of model-specific patches, and their rules.
-     * Until Phase 6's Archivist files drafts, everything here is user-edit
-     * CRUD. Nothing is ever auto-applied: injection is a per-chat, user-
-     * selected choice that defaults to none, and an unassigned rule
-     * (profile_id NULL) sits in "Needs review" until the user accepts,
-     * deletes, or moves it — the system never invents a profile. */
+    /* -------- model rules (Stage 4, owner_approved_rules §11 Revision 5) --------
+     * User-written patches for a specific AI model's habits. The MODEL STRING
+     * is the primary identity — no profiles/groups. Each rule carries its own
+     * model_strings_json (which models it applies to) and any number of tags
+     * (organizing labels only — a separate pool that never decides injection).
+     * A rule with status='draft' is a Phase 6 Archivist suggestion awaiting
+     * review. Injection matches by model string; the on/off decision is the
+     * global default + per-chat toggle in Preferences, never in this store. */
 
-    fun getModelRuleProfiles(): List<ModelRuleProfileRecord> {
-        val out = ArrayList<ModelRuleProfileRecord>()
-        readableDatabase.query("model_rule_profiles", null, null, null, null, null, "nickname ASC").use {
-            while (it.moveToNext()) out.add(readModelRuleProfile(it))
-        }
-        return out
-    }
-
-    fun getModelRuleProfile(profileId: String): ModelRuleProfileRecord? {
-        readableDatabase.query(
-            "model_rule_profiles", null, "profile_id = ?", arrayOf(profileId), null, null, null
-        ).use { return if (it.moveToFirst()) readModelRuleProfile(it) else null }
-    }
-
-    private fun readModelRuleProfile(c: Cursor) = ModelRuleProfileRecord(
-        profileId = c.getString(c.getColumnIndexOrThrow("profile_id")),
-        nickname = c.getString(c.getColumnIndexOrThrow("nickname")),
-        modelStringsJson = c.getStringOrNull("model_strings_json") ?: "[]",
-        createdAt = c.getString(c.getColumnIndexOrThrow("created_at")) ?: "",
-        updatedAt = c.getStringOrNull("updated_at")
-    )
-
-    private fun modelRuleProfileValues(p: ModelRuleProfileRecord) = ContentValues().apply {
-        put("profile_id", p.profileId)
-        put("nickname", p.nickname)
-        put("model_strings_json", p.modelStringsJson)
-        put("created_at", p.createdAt.ifEmpty { nowIso() })
-        put("updated_at", p.updatedAt)
-    }
-
-    fun upsertModelRuleProfile(p: ModelRuleProfileRecord) {
-        writableDatabase.insertWithOnConflict(
-            "model_rule_profiles", null, modelRuleProfileValues(p), SQLiteDatabase.CONFLICT_REPLACE
-        )
-    }
-
-    /** §11's move flow: add [modelString] to the profile's list (deduped
-     *  case-insensitively) so future drafts carrying that string file there
-     *  automatically. No-op when the string is already on the profile. */
-    fun addModelStringToProfile(profileId: String, modelString: String) {
-        val trimmed = modelString.trim()
-        if (trimmed.isEmpty()) return
-        val profile = getModelRuleProfile(profileId) ?: return
-        val arr = try { org.json.JSONArray(profile.modelStringsJson) } catch (_: Exception) { org.json.JSONArray() }
-        for (i in 0 until arr.length()) {
-            if (arr.getString(i).equals(trimmed, ignoreCase = true)) return
-        }
-        arr.put(trimmed)
-        writableDatabase.update(
-            "model_rule_profiles",
-            ContentValues().apply { put("model_strings_json", arr.toString()); put("updated_at", nowIso()) },
-            "profile_id = ?", arrayOf(profileId)
-        )
-    }
-
-    /** Delete a profile. Its rules are deleted with it or sent back to
-     *  "Needs review" (unassigned) per the flag — the caller's confirm
-     *  dialog decides, mirroring the per-deletion choice pattern. */
-    fun deleteModelRuleProfile(profileId: String, deleteRules: Boolean) {
-        val db = writableDatabase
-        db.beginTransaction()
-        try {
-            if (deleteRules) {
-                val ids = ArrayList<String>()
-                db.query(
-                    "model_rules", arrayOf("rule_id"), "profile_id = ?", arrayOf(profileId), null, null, null
-                ).use { while (it.moveToNext()) ids.add(it.getString(0)) }
-                for (id in ids) recordDeletionTx(db, "model_rule", id)
-                db.delete("model_rules", "profile_id = ?", arrayOf(profileId))
-            } else {
-                db.update(
-                    "model_rules", ContentValues().apply { putNull("profile_id") },
-                    "profile_id = ?", arrayOf(profileId)
-                )
-            }
-            db.delete("model_rule_profiles", "profile_id = ?", arrayOf(profileId))
-            recordDeletionTx(db, "model_rule_profile", profileId)
-            db.setTransactionSuccessful()
-        } finally {
-            db.endTransaction()
-        }
-    }
-
-    /** Rules for one profile, or the unassigned "Needs review" rules when
-     *  [profileId] is null. Deterministic order (oldest first, id tiebreak). */
-    fun getModelRules(profileId: String?): List<ModelRuleRecord> {
+    /** All rules, or only those with [status] ('active' | 'draft'). Oldest
+     *  first, id tiebreak — the browser and Pending screens share this order. */
+    fun getModelRules(status: String? = null): List<ModelRuleRecord> {
         val out = ArrayList<ModelRuleRecord>()
-        val selection = if (profileId == null) "profile_id IS NULL" else "profile_id = ?"
-        val args = if (profileId == null) null else arrayOf(profileId)
+        val selection = if (status == null) null else "status = ?"
+        val args = if (status == null) null else arrayOf(status)
         readableDatabase.query(
             "model_rules", null, selection, args, null, null, "created_at ASC, rule_id ASC"
         ).use { while (it.moveToNext()) out.add(readModelRule(it)) }
         return out
     }
 
-    /** The injection read (Stage 4): a selected profile's ACTIVE rules only,
-     *  in the same deterministic order every turn — the rendered block must
-     *  be byte-identical across turns (prompt-layer contract). */
-    fun getActiveModelRules(profileId: String): List<ModelRuleRecord> {
-        val out = ArrayList<ModelRuleRecord>()
+    fun getModelRule(ruleId: String): ModelRuleRecord? {
         readableDatabase.query(
-            "model_rules", null, "profile_id = ? AND status = 'active'", arrayOf(profileId),
-            null, null, "created_at ASC, rule_id ASC"
-        ).use { while (it.moveToNext()) out.add(readModelRule(it)) }
-        return out
+            "model_rules", null, "rule_id = ?", arrayOf(ruleId), null, null, null
+        ).use { return if (it.moveToFirst()) readModelRule(it) else null }
+    }
+
+    /** The injection read (Stage 4): every ACTIVE rule whose model-strings
+     *  list matches [chatModelId] (case-insensitive contains, provider prefix
+     *  ignored — ModelRuleMatcher). Matching is fuzzy, so it can't live in
+     *  SQL; we pull the active rows in deterministic order and filter in
+     *  Kotlin. The order is fixed (oldest first, id tiebreak) so the rendered
+     *  block is byte-identical across turns (prompt-layer contract). Rules are
+     *  never truncated here — §11 forbids silently dropping matches. */
+    fun getActiveModelRulesForModel(chatModelId: String): List<ModelRuleRecord> {
+        if (chatModelId.isBlank()) return emptyList()
+        return getModelRules("active").filter {
+            org.teslasoft.assistant.preferences.memory.enforcer.ModelRuleMatcher
+                .profileMatchesModel(it.modelStringsJson, chatModelId)
+        }
     }
 
     private fun readModelRule(c: Cursor) = ModelRuleRecord(
         ruleId = c.getString(c.getColumnIndexOrThrow("rule_id")),
-        profileId = c.getStringOrNull("profile_id"),
         text = c.getString(c.getColumnIndexOrThrow("text")),
+        modelStringsJson = c.getStringOrNull("model_strings_json") ?: "[]",
         status = c.getString(c.getColumnIndexOrThrow("status")),
         sourceModelString = c.getStringOrNull("source_model_string"),
         createdAt = c.getString(c.getColumnIndexOrThrow("created_at")) ?: "",
@@ -3339,8 +3331,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
 
     private fun modelRuleValues(r: ModelRuleRecord) = ContentValues().apply {
         put("rule_id", r.ruleId)
-        if (r.profileId != null) put("profile_id", r.profileId) else putNull("profile_id")
         put("text", r.text)
+        put("model_strings_json", r.modelStringsJson)
         put("status", r.status)
         put("source_model_string", r.sourceModelString)
         put("created_at", r.createdAt.ifEmpty { nowIso() })
@@ -3357,6 +3349,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         val db = writableDatabase
         db.beginTransaction()
         try {
+            db.delete("model_rule_tag_links", "rule_id = ?", arrayOf(ruleId))
             db.delete("model_rules", "rule_id = ?", arrayOf(ruleId))
             recordDeletionTx(db, "model_rule", ruleId)
             db.setTransactionSuccessful()
@@ -3365,8 +3358,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         }
     }
 
-    /** Accept a draft (§11): draft -> active. Acceptance never moves the
-     *  rule — where it lives stays the user's separate choice. */
+    /** Accept a draft (§11): draft -> active. The user assigns the model
+     *  strings and tags separately (via the editor) before accepting. */
     fun acceptModelRule(ruleId: String) {
         writableDatabase.update(
             "model_rules", ContentValues().apply { put("status", "active"); put("updated_at", nowIso()) },
@@ -3374,26 +3367,110 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         )
     }
 
-    /** Move a rule to [destinationProfileId] (null = back to Needs review).
-     *  The §11 offer to add the rule's source model string to the destination
-     *  is a separate, user-confirmed call to [addModelStringToProfile]. */
-    fun moveModelRule(ruleId: String, destinationProfileId: String?) {
-        writableDatabase.update(
-            "model_rules",
+    /** Draft rules — what the pinned Pending banner and other pointer rows
+     *  count (§11 / work order). Stays 0 until Phase 6 files drafts. */
+    fun countModelRuleDrafts(): Int {
+        readableDatabase.rawQuery(
+            "SELECT COUNT(*) FROM model_rules WHERE status = 'draft'", null
+        ).use { return if (it.moveToFirst()) it.getInt(0) else 0 }
+    }
+
+    /* ---- model-rule tags (own pool; plain labels, no colors) ---- */
+
+    fun getModelRuleTags(): List<ModelRuleTagRecord> {
+        val out = ArrayList<ModelRuleTagRecord>()
+        readableDatabase.query("model_rule_tags", null, null, null, null, null, "name ASC").use {
+            while (it.moveToNext()) out.add(readModelRuleTag(it))
+        }
+        return out
+    }
+
+    private fun readModelRuleTag(c: Cursor) = ModelRuleTagRecord(
+        tagId = c.getString(c.getColumnIndexOrThrow("tag_id")),
+        name = c.getString(c.getColumnIndexOrThrow("name")),
+        createdAt = c.getString(c.getColumnIndexOrThrow("created_at")) ?: ""
+    )
+
+    fun upsertModelRuleTag(t: ModelRuleTagRecord) {
+        writableDatabase.insertWithOnConflict(
+            "model_rule_tags",
+            null,
             ContentValues().apply {
-                if (destinationProfileId != null) put("profile_id", destinationProfileId) else putNull("profile_id")
-                put("updated_at", nowIso())
+                put("tag_id", t.tagId)
+                put("name", t.name)
+                put("created_at", t.createdAt.ifEmpty { nowIso() })
             },
-            "rule_id = ?", arrayOf(ruleId)
+            SQLiteDatabase.CONFLICT_REPLACE
         )
     }
 
-    /** Drafts + unassigned rules — what the pinned "Needs review" state and
-     *  other surfaces' pointer rows count (§11 / work order). */
-    fun countModelRulesNeedingReview(): Int {
+    /** Inline tag creation: return the existing tag with this name (case-
+     *  insensitive) or create one. Names are the identity users see, so we
+     *  never make a second tag for the same word. */
+    fun findOrCreateModelRuleTag(name: String): ModelRuleTagRecord? {
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) return null
+        readableDatabase.query(
+            "model_rule_tags", null, "name = ? COLLATE NOCASE", arrayOf(trimmed), null, null, null
+        ).use { if (it.moveToFirst()) return readModelRuleTag(it) }
+        val rec = ModelRuleTagRecord(tagId = newId("mrt_"), name = trimmed, createdAt = nowIso())
+        upsertModelRuleTag(rec)
+        return rec
+    }
+
+    /** Delete a tag and scrub its links; the rules themselves are untouched. */
+    fun deleteModelRuleTag(tagId: String) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.delete("model_rule_tag_links", "tag_id = ?", arrayOf(tagId))
+            db.delete("model_rule_tags", "tag_id = ?", arrayOf(tagId))
+            recordDeletionTx(db, "model_rule_tag", tagId)
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    fun getTagsForRule(ruleId: String): List<ModelRuleTagRecord> {
+        val out = ArrayList<ModelRuleTagRecord>()
         readableDatabase.rawQuery(
-            "SELECT COUNT(*) FROM model_rules WHERE profile_id IS NULL OR status = 'draft'", null
-        ).use { return if (it.moveToFirst()) it.getInt(0) else 0 }
+            "SELECT t.tag_id, t.name, t.created_at FROM model_rule_tags t " +
+                "JOIN model_rule_tag_links l ON l.tag_id = t.tag_id " +
+                "WHERE l.rule_id = ? ORDER BY t.name ASC",
+            arrayOf(ruleId)
+        ).use { while (it.moveToNext()) out.add(readModelRuleTag(it)) }
+        return out
+    }
+
+    /** Replace a rule's tag set with [tagIds] (deduped by the join PK). */
+    fun setTagsForRule(ruleId: String, tagIds: List<String>) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.delete("model_rule_tag_links", "rule_id = ?", arrayOf(ruleId))
+            for (tagId in tagIds.distinct()) {
+                db.execSQL(
+                    "INSERT OR IGNORE INTO model_rule_tag_links (rule_id, tag_id) VALUES (?, ?)",
+                    arrayOf(ruleId, tagId)
+                )
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    /** Rules carrying [tagId] (the "tap a tag → everything" view). */
+    fun getModelRulesForTag(tagId: String): List<ModelRuleRecord> {
+        val out = ArrayList<ModelRuleRecord>()
+        readableDatabase.rawQuery(
+            "SELECT r.* FROM model_rules r " +
+                "JOIN model_rule_tag_links l ON l.rule_id = r.rule_id " +
+                "WHERE l.tag_id = ? ORDER BY r.created_at ASC, r.rule_id ASC",
+            arrayOf(tagId)
+        ).use { while (it.moveToNext()) out.add(readModelRule(it)) }
+        return out
     }
 
     /* -------- roleplay cards + tags (Stage 3.6a, roleplay_cards_and_tags_spec.md) --------

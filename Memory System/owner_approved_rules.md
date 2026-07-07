@@ -47,6 +47,16 @@ per-deletion whether memories go too (REPLACING the older
 always-delete teardown language), and surviving references show
 "(archived card)"/"(deleted card)" rather than vanishing. Stage 3.6 of
 `rag_engine_work_order.md` is rescoped to implement the spec.**
+**Revision 5 — July 7 2026: the owner redesigned Model rules (§11) in
+chat and approved it front to back. The profile/group concept is
+REPLACED by a model-string-primary model with tags for organization (the
+group abstraction created the "same model in two groups, which one wins?"
+problem). Model rules now apply automatically to any chat whose model
+string matches, on by default, with an "Automatically Apply Model Rules"
+global default in AI System Settings and a per-chat "Apply Model Rules"
+toggle in Quick Settings — superseding revisions 1–4's "default none, user
+picks a profile per chat." §10's exemption line and §11 are rewritten in
+place; this revision supersedes revisions 1–4 where they differ.**
 
 This document OUTRANKS every other document in this folder and the
 integration plan wherever they disagree. The wording below was reviewed and
@@ -277,7 +287,7 @@ Memories have four statuses: **Draft · Active · Archived · Superseded.**
   automatic, tuned by a constant (not a user setting), and visible in the
   debug/assembly view so misbehavior is diagnosable. Exempt: the always-on
   layer the user deliberately chose — card cores, hand-written
-  system-prompt rules, and a selected model-rules profile — which rides
+  system-prompt rules, and the matching model rules — which rides
   every turn by design.
 - Eligibility is decided by scope rules (§1, §3) first; ranking (§12) only
   orders what is eligible. Selection happens in app code before anything is
@@ -285,30 +295,53 @@ Memories have four statuses: **Draft · Active · Archived · Superseded.**
 
 ## 11. Model-specific patches (Model rules)
 
-- A **Model rules** card in Settings holds **profiles the user creates**. A
-  profile = the user's nickname (e.g. "Model 5") + a **list of model
-  strings** that count as that model (snapshots like `5-0502` and `5-0219`
-  can share one profile). Endpoints are irrelevant — the same model is the
-  same model from any provider.
-- **Filing is automatic by model string.** When the Archivist notices
-  repeated corrections to a model, it files a draft rule into the profile
-  carrying that chat's model string. **No matching profile → the draft goes
-  to "Needs review" (unassigned)** — the system never invents a profile.
-- **"Needs review" is pinned at the top of the Model rules screen, always,
-  whenever any draft exists.** Other surfaces may point to it; this is its
-  home.
-- For every draft the user can **accept, delete, or move** it to another
-  profile. Moving offers to **add that model string to the destination
-  profile**, so future drafts with that string file there automatically.
-- **Injection is user-decided:** Quick Settings gets an optional **Model
-  rules dropdown** per chat. **Default: none — by default no model rules
-  apply.** The dropdown may show a "(matches this chat's model)" hint next
-  to a matching profile; it never auto-applies. Per-chat → auto-naming copy
-  block.
-- Model-rule drafting is **always on** (it touches nothing intimate — the
-  rules are about the machine's own defects). Model rules are the accepted
-  special case of "injected every turn," because the user explicitly
-  selects the profile per chat.
+- **Model rules are short instructions the user writes to correct a
+  specific AI model's habits** ("stop the therapy-speak," "quit ending
+  mid-sentence"). They live under **Settings → AI System Settings → Model
+  rules**, alongside the global system prompt.
+- **The model string is the primary thing — there are no profiles or
+  groups.** Each rule carries **its own list of model strings** it applies
+  to. Matching is case-insensitive contains with the provider prefix
+  ignored — a rule targeting `glm-5` applies to `glm-5-0502`,
+  `openrouter/glm-5-0219`, and every other snapshot; a rule targeting
+  `glm-5-0219` applies to that snapshot only. Broad and narrow rules simply
+  stack when both match. (The group abstraction was dropped because the same
+  model could land in two groups and only one could win — model string as
+  the identity removes that.)
+- **Tags organize rules for the human, not the machine.** A rule can carry
+  any number of tags (plain names, no colors, created inline as you type
+  them). Tapping a tag anywhere shows every rule that carries it — the same
+  "tap a tag, see everything" browsing as the roleplay tags, but a separate
+  pool. Tags never decide what gets injected; the model strings do that.
+- **Injection is automatic and on by default.** Every active rule whose
+  model string matches the chat's current model is injected, in
+  deterministic order (oldest first). A global **"Automatically Apply Model
+  Rules"** toggle in AI System Settings sets the default (on); Quick
+  Settings gets a per-chat **"Apply Model Rules"** toggle that follows that
+  default and overrides it for one chat. Per-chat → auto-naming copy block.
+- **Matching rules are never silently dropped.** Because rules are scoped by
+  model string, only the handful written for the current model ever land in
+  one prompt — the natural limiter. Everything that matches is injected in
+  full; nothing is truncated to fit a budget. The rules browser shows the
+  real character size of what a given model pulls, and warns softly when
+  that gets large, but never blocks the user from saving. (The app runs no
+  AI over the rules, so it does not detect contradictions — writing "use
+  emojis" and "no emojis" is the user's own to manage.)
+- **Injection is its own prompt-layer block** placed after the stable
+  persona/system prefix, never inside the memory message; absent entirely
+  when nothing matches or the chat has rules turned off (see the
+  prompt-layer contract).
+- **Filing is automatic by model string (Phase 6).** When the Archivist
+  notices repeated corrections to a model, it files a **draft** rule
+  carrying that chat's model string (`status='draft'`, `source_model_string`
+  set, no tags yet). Drafts land in a **Pending** area, pinned to the top of
+  the Model rules screen whenever any draft exists. For each draft the user
+  can **edit** it, **accept** it (assigning the model strings and tags it
+  should carry, then it goes active), or **delete** it. Model-rule drafting
+  is **always on** — it touches nothing intimate; the rules are about the
+  machine's own defects. Model rules are the accepted special case of
+  "injected every turn," because the user chose to write them and can switch
+  them off per chat.
 
 ## 12. Priority order
 

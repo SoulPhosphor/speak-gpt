@@ -1639,18 +1639,31 @@ class Preferences private constructor(private var preferences: SharedPreferences
     }
 
     /**
-     * Per-chat Model rules profile (owner_approved_rules §11, Stage 4).
-     * Empty = none — by default NO model rules apply; the user selects a
-     * profile per chat and nothing is ever auto-applied (the picker may hint
-     * "(matches this chat's model)" but never chooses). In the auto-naming
-     * copy block like every other per-chat setting.
+     * Model rules (owner_approved_rules §11, Revision 5). Rules apply
+     * automatically to any chat whose model string matches, ON by default.
+     * Two toggles gate that, mirroring the "Use memory" pattern:
+     *  - a GLOBAL default ("Automatically Apply Model Rules", AI System
+     *    Settings) — default on;
+     *  - a PER-CHAT override ("Apply Model Rules", Quick Settings) that starts
+     *    from the global default and can turn rules off (or on) for one chat.
+     * The per-chat value is in the auto-naming copy block like every other
+     * per-chat setting. No profiles — the model string on each rule decides
+     * what matches (see ModelRuleMatcher / MemoryStore).
      */
-    fun getChatModelRulesProfileId() : String {
-        return getString("model_rules_profile_id", "")
+    fun getAutoApplyModelRules() : Boolean {
+        return getGlobalBoolean("auto_apply_model_rules", true)
     }
 
-    fun setChatModelRulesProfileId(id: String) {
-        putString("model_rules_profile_id", id)
+    fun setAutoApplyModelRules(state: Boolean) {
+        putGlobalBoolean("auto_apply_model_rules", state, true)
+    }
+
+    fun getChatApplyModelRules() : Boolean {
+        return getBoolean("apply_model_rules", getAutoApplyModelRules())
+    }
+
+    fun setChatApplyModelRules(state: Boolean) {
+        putBoolean("apply_model_rules", state, getAutoApplyModelRules())
     }
 
     /**

@@ -968,13 +968,9 @@
     <string name="label_campaign_none">None</string>
     <string name="memory_scene_campaign_picker_title">Choose a campaign</string>
 
-    <!-- Model rules (Stage 4, owner_approved_rules §11): the per-chat dropdown.
-         "Model rules", "None" (the default) and the "(matches this chat's
-         model)" hint are §11's approved words — do not reword. -->
-    <string name="label_chat_model_rules">Model rules</string>
-    <string name="label_model_rules_none">None</string>
-    <string name="model_rules_picker_title">Model rules</string>
-    <string name="model_rules_matches_hint">(matches this chat\'s model)</string>
+    <!-- Model rules (Stage 4, owner_approved_rules §11 Revision 5): the
+         per-chat "Apply Model Rules" toggle label (owner-approved title case). -->
+    <string name="label_chat_model_rules">Apply Model Rules</string>
     <!-- Prompt text: the header line of the model-rules prompt block. Part of
          the byte-stable block 2 of the prompt-layer contract — changing it
          invalidates every chat's cached prefix, so don't reword casually. -->
