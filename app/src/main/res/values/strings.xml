@@ -1363,11 +1363,27 @@
     <string name="card_section_allies">Allies</string>
     <string name="card_section_antagonists">Antagonists</string>
 
-    <!-- Campaign card sections (spec §6d; the card itself is a later slice) -->
+    <!-- Campaign card (spec §6d) -->
+    <string name="card_field_quest_anchor">Quest Anchor</string>
+    <string name="card_field_active_scene">Active Scene</string>
+    <string name="card_campaign_party_label">Active Party Members</string>
+    <string name="card_campaign_party_add">Add Party Member</string>
+    <string name="card_campaign_party_empty">No party members linked yet.</string>
+    <string name="card_campaign_party_unlink">Remove from campaign</string>
+    <string name="card_campaign_party_picker_none">No party members in the roster yet — add one there first.</string>
     <string name="card_section_campaign_cast">Campaign Cast</string>
     <string name="card_section_campaign_locations">Campaign Locations</string>
     <string name="card_section_plot_ledger">Plot Ledger</string>
     <string name="card_section_reliquary">Reliquary</string>
+    <string name="entry_label_world_npc">World NPC</string>
+    <string name="entry_label_world_location">World location</string>
+    <string name="entry_hint_identity">Identity</string>
+    <string name="entry_hint_disposition">Disposition</string>
+    <string name="entry_hint_cast_status">Status</string>
+    <string name="entry_hint_condition">Current condition</string>
+    <string name="entry_hint_changes">What\'s changed</string>
+    <string name="entry_hint_holder">Current holder</string>
+    <string name="entry_hint_significance">Narrative significance</string>
 
     <string name="entry_label_parent">Parent</string>
     <string name="entry_parent_required">A parent is required.</string>

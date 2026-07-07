@@ -273,6 +273,18 @@
                 android:layout_marginTop="16dp"
                 android:text="@string/btn_save" />
 
+            <!-- One browser, many doors (§8): the RP character's memories.
+                 GONE for party members — NPCs aren't a memory scope. -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_card_memories"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:visibility="gone"
+                app:icon="@drawable/ic_storage"
+                android:text="@string/title_memories" />
+
             <!-- Zone 2 -->
             <TextView
                 android:layout_width="match_parent"

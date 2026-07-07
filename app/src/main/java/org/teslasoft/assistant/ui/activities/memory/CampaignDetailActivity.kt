@@ -21,10 +21,12 @@ import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
+import android.view.LayoutInflater
 import android.view.View
 import android.view.WindowInsets
 import android.widget.ImageButton
 import android.widget.LinearLayout
+import android.widget.PopupMenu
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
@@ -40,23 +42,25 @@ import com.google.android.material.textfield.TextInputEditText
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.memory.CampaignRecord
+import org.teslasoft.assistant.preferences.memory.CardEntryRecord
+import org.teslasoft.assistant.preferences.memory.CardSections
+import org.teslasoft.assistant.preferences.memory.CardType
 import org.teslasoft.assistant.preferences.memory.MemoryStore
+import org.teslasoft.assistant.preferences.memory.PartyMemberRecord
 import org.teslasoft.assistant.theme.ThemeManager
 
 /**
- * The Phase 5 campaign page (integration plan 📌 amendment): the card fields for
- * one roleplay continuity — name, status, and the three scope selectors (world,
- * the user's roleplay character, the DM companion). "One selection implies the
- * rest" is enforced downstream by `MemoryStore.campaignScope` when a campaign is
- * wired into Quick Settings (a separate task — see NOTES); here we just persist
- * the three ids. `story_so_far` is Archivist-maintained, so it's shown read-only
- * and only when present. A campaign-scoped memory browser opens
- * [MemoryBrowserActivity] with the "campaignId" extra. Teardown offers archive
- * or delete (delete optionally taking the campaign-scoped memories with it).
- *
- * New/unsaved campaigns hide the memories/teardown controls until saved. All
- * store work is off the main thread; failures degrade to a toast; destructive
- * actions always confirm.
+ * The two-zone campaign card (roleplay_cards_and_tags_spec §6d). Zone 1 is
+ * "the bookmark" — written at session end, read at session start: Name,
+ * Quest Anchor (main objective + optional short side-objective lines, one
+ * multi-line field), Active Scene, the world / user-character / GM-companion
+ * links, and the Active Party Members linked from the roster (join, not
+ * ownership — §4). Per the no-mid-conversation-writes law these fields only
+ * ever change here, by the user's hand. Zone 2 renders Campaign Cast (world
+ * NPC overlays + campaign-native NPCs), Campaign Locations (scene-state
+ * overlays), the Plot Ledger, the Reliquary and Notes. The dormant pre-card
+ * story_so_far text is preserved untouched and never shown (spec §8a).
+ * Teardown gets its §5 link-warning rework in the 3.6f slice.
  */
 class CampaignDetailActivity : FragmentActivity() {
 
@@ -66,17 +70,21 @@ class CampaignDetailActivity : FragmentActivity() {
     private var campaignId: String? = null
     private var existing: CampaignRecord? = null
 
+    /** Guards Save until an existing record has loaded. */
+    private var ready = false
+
     // Working scope selections (nullable ids).
     private var status: String = "active"
     private var selWorldId: String? = null
     private var selCharacterId: String? = null
     private var selCompanionId: String? = null
-    private var storySoFar: String? = null
 
     private var actionBar: ConstraintLayout? = null
     private var btnBack: ImageButton? = null
     private var titleView: TextView? = null
     private var fieldName: TextInputEditText? = null
+    private var fieldQuestAnchor: TextInputEditText? = null
+    private var fieldActiveScene: TextInputEditText? = null
     private var rowStatus: LinearLayout? = null
     private var textStatus: TextView? = null
     private var rowWorld: LinearLayout? = null
@@ -85,11 +93,14 @@ class CampaignDetailActivity : FragmentActivity() {
     private var textCharacter: TextView? = null
     private var rowCompanion: LinearLayout? = null
     private var textCompanion: TextView? = null
-    private var groupStory: LinearLayout? = null
-    private var textStory: TextView? = null
+    private var textPartyEmpty: TextView? = null
+    private var partyContainer: LinearLayout? = null
+    private var btnPartyAdd: MaterialButton? = null
     private var btnSave: MaterialButton? = null
     private var btnMemories: MaterialButton? = null
     private var btnTeardown: MaterialButton? = null
+    private var textSaveFirst: TextView? = null
+    private var sectionsContainer: LinearLayout? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -104,6 +115,8 @@ class CampaignDetailActivity : FragmentActivity() {
         btnBack = findViewById(R.id.btn_back)
         titleView = findViewById(R.id.activity_title)
         fieldName = findViewById(R.id.field_campaign_name)
+        fieldQuestAnchor = findViewById(R.id.field_campaign_quest_anchor)
+        fieldActiveScene = findViewById(R.id.field_campaign_active_scene)
         rowStatus = findViewById(R.id.row_campaign_status)
         textStatus = findViewById(R.id.text_campaign_status_value)
         rowWorld = findViewById(R.id.row_campaign_world)
@@ -112,11 +125,14 @@ class CampaignDetailActivity : FragmentActivity() {
         textCharacter = findViewById(R.id.text_campaign_character_value)
         rowCompanion = findViewById(R.id.row_campaign_companion)
         textCompanion = findViewById(R.id.text_campaign_companion_value)
-        groupStory = findViewById(R.id.group_campaign_story)
-        textStory = findViewById(R.id.text_campaign_story)
+        textPartyEmpty = findViewById(R.id.text_party_empty)
+        partyContainer = findViewById(R.id.party_container)
+        btnPartyAdd = findViewById(R.id.btn_party_add)
         btnSave = findViewById(R.id.btn_campaign_save)
         btnMemories = findViewById(R.id.btn_campaign_memories)
         btnTeardown = findViewById(R.id.btn_campaign_teardown)
+        textSaveFirst = findViewById(R.id.text_save_first)
+        sectionsContainer = findViewById(R.id.sections_container)
 
         titleView?.setText(
             if (campaignId == null) R.string.mem_world_campaign_detail_new_title
@@ -130,19 +146,37 @@ class CampaignDetailActivity : FragmentActivity() {
         rowWorld?.setOnClickListener { showWorldPicker() }
         rowCharacter?.setOnClickListener { showCharacterPicker() }
         rowCompanion?.setOnClickListener { showCompanionPicker() }
+        btnPartyAdd?.setOnClickListener { showPartyPicker() }
         btnSave?.setOnClickListener { save() }
         btnMemories?.setOnClickListener { openMemories() }
         btnTeardown?.setOnClickListener { showTeardownDialog() }
+
+        CardZoneUi.attachWordCount(
+            this,
+            listOf(fieldName, fieldQuestAnchor, fieldActiveScene),
+            findViewById(R.id.text_card_word_count),
+            findViewById(R.id.text_card_warning)
+        )
 
         refreshStatusLabel()
         updateExtraButtons()
         loadIfExisting()
     }
 
+    override fun onResume() {
+        super.onResume()
+        renderParty()
+        renderSections()
+    }
+
     /* ------------------------------ load ------------------------------ */
 
     private fun loadIfExisting() {
-        val id = campaignId ?: return
+        val id = campaignId
+        if (id == null) {
+            ready = true
+            return
+        }
         runOffThread {
             if (!MemoryStore.isProvisioned(this)) return@runOffThread
             val store = MemoryStore.getInstance(this)
@@ -160,29 +194,20 @@ class CampaignDetailActivity : FragmentActivity() {
                 existing = c
                 if (c != null) {
                     fieldName?.setText(c.name)
+                    fieldQuestAnchor?.setText(c.questAnchor ?: "")
+                    fieldActiveScene?.setText(c.activeScene ?: "")
                     status = c.status
                     selWorldId = c.worldId
                     selCharacterId = c.roleplayCharacterId
                     selCompanionId = c.companionId
-                    storySoFar = c.storySoFar
                     refreshStatusLabel()
                     textWorld?.text = worldName ?: getString(R.string.mem_world_campaign_none)
                     textCharacter?.text = characterName ?: getString(R.string.mem_world_campaign_none)
                     textCompanion?.text = companionName ?: getString(R.string.mem_world_campaign_none)
-                    refreshStory()
                 }
+                ready = true
                 updateExtraButtons()
             }
-        }
-    }
-
-    private fun refreshStory() {
-        val s = storySoFar
-        if (s.isNullOrBlank()) {
-            groupStory?.visibility = View.GONE
-        } else {
-            groupStory?.visibility = View.VISIBLE
-            textStory?.text = s
         }
     }
 
@@ -190,6 +215,189 @@ class CampaignDetailActivity : FragmentActivity() {
         val saved = campaignId != null
         btnMemories?.visibility = if (saved) View.VISIBLE else View.GONE
         btnTeardown?.visibility = if (saved) View.VISIBLE else View.GONE
+    }
+
+    /* ------------------------------ party members (spec §4/§6d) ------------------------------ */
+
+    private fun renderParty() {
+        val container = partyContainer ?: return
+        val id = campaignId
+        if (id == null) {
+            textPartyEmpty?.visibility = View.VISIBLE
+            container.removeAllViews()
+            return
+        }
+        runOffThread {
+            val members = MemoryStore.getInstance(this).partyMembersForCampaign(id)
+            runOnUiThread {
+                container.removeAllViews()
+                textPartyEmpty?.visibility = if (members.isEmpty()) View.VISIBLE else View.GONE
+                val inflater = LayoutInflater.from(this)
+                for (m in members) container.addView(partyRow(inflater, container, m))
+            }
+        }
+    }
+
+    private fun partyRow(inflater: LayoutInflater, parent: LinearLayout, m: PartyMemberRecord): View {
+        val row = inflater.inflate(R.layout.view_memory_row, parent, false)
+        row.findViewById<TextView>(R.id.row_title).text = m.name
+
+        val subtitleView = row.findViewById<TextView>(R.id.row_subtitle)
+        val subtitle = listOfNotNull(m.species, m.charClass)
+            .map { it.trim() }.filter { it.isNotEmpty() }.joinToString(" · ")
+        if (subtitle.isEmpty()) subtitleView.visibility = View.GONE
+        else { subtitleView.visibility = View.VISIBLE; subtitleView.text = subtitle }
+
+        // The fiction status decides per-turn injection (§6b gating), so it's
+        // always visible here.
+        val badge = row.findViewById<TextView>(R.id.row_badge)
+        badge.visibility = View.VISIBLE
+        badge.setText(CharacterCardActivity.statusLabelRes(m.status))
+
+        row.findViewById<ImageButton>(R.id.btn_row_action).visibility = View.GONE
+        val ui = row.findViewById<View>(R.id.ui)
+        ui.setOnClickListener {
+            startActivity(
+                Intent(this, CharacterCardActivity::class.java)
+                    .putExtra("chatId", chatId)
+                    .putExtra("cardType", CardType.PARTY_MEMBER)
+                    .putExtra("cardId", m.partyMemberId)
+            )
+        }
+        ui.setOnLongClickListener {
+            val menu = PopupMenu(this, it)
+            menu.menu.add(0, 1, 0, getString(R.string.card_campaign_party_unlink))
+            menu.setOnMenuItemClickListener { item ->
+                if (item.itemId == 1) unlinkPartyMember(m.partyMemberId)
+                true
+            }
+            menu.show()
+            true
+        }
+        return row
+    }
+
+    /** Unlinking is NOT deletion (§4 join, not ownership): the roster card
+     *  survives untouched, it just leaves this campaign. */
+    private fun unlinkPartyMember(partyMemberId: String) {
+        val id = campaignId ?: return
+        runOffThread {
+            MemoryStore.getInstance(this).unlinkPartyMemberFromCampaign(id, partyMemberId)
+            runOnUiThread { renderParty() }
+        }
+    }
+
+    private fun showPartyPicker() {
+        val id = campaignId
+        if (id == null) {
+            Toast.makeText(this, R.string.mem_world_campaign_save_first, Toast.LENGTH_SHORT).show()
+            return
+        }
+        runOffThread {
+            val store = MemoryStore.getInstance(this)
+            val linked = store.partyMembersForCampaign(id).map { it.partyMemberId }.toSet()
+            // Archived cards are hidden from active selection (§5).
+            val candidates = store.getPartyMembers(includeArchived = false)
+                .filter { it.partyMemberId !in linked }
+            runOnUiThread {
+                if (candidates.isEmpty()) {
+                    Toast.makeText(this, R.string.card_campaign_party_picker_none, Toast.LENGTH_SHORT).show()
+                    return@runOnUiThread
+                }
+                val names = candidates.map { it.name }.toTypedArray()
+                MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+                    .setTitle(R.string.card_campaign_party_add)
+                    .setItems(names) { _, which ->
+                        runOffThread {
+                            MemoryStore.getInstance(this)
+                                .linkPartyMemberToCampaign(id, candidates[which].partyMemberId)
+                            runOnUiThread { renderParty() }
+                        }
+                    }
+                    .setNegativeButton(R.string.btn_cancel) { _, _ -> }
+                    .show()
+            }
+        }
+    }
+
+    /* ------------------------------ Zone 2 sections (spec §6d) ------------------------------ */
+
+    private fun renderSections() {
+        val container = sectionsContainer ?: return
+        val id = campaignId
+        if (id == null) {
+            textSaveFirst?.visibility = View.VISIBLE
+            container.removeAllViews()
+            return
+        }
+        textSaveFirst?.visibility = View.GONE
+
+        runOffThread {
+            val entries = MemoryStore.getInstance(this).entriesForCard(CardType.CAMPAIGN, id)
+            val bySection = entries.groupBy { it.section }
+            runOnUiThread {
+                container.removeAllViews()
+                val inflater = LayoutInflater.from(this)
+                for (section in CardSections.CAMPAIGN_SECTIONS) {
+                    val block = inflater.inflate(R.layout.view_card_section, container, false)
+                    block.findViewById<TextView>(R.id.section_title)
+                        .setText(CardEntryEditorActivity.sectionLabelRes(section))
+
+                    val rows = bySection[section].orEmpty()
+                    block.findViewById<TextView>(R.id.section_empty).visibility =
+                        if (rows.isEmpty()) View.VISIBLE else View.GONE
+
+                    val list = block.findViewById<LinearLayout>(R.id.section_entries)
+                    for (entry in rows) list.addView(entryRow(inflater, list, entry))
+
+                    block.findViewById<MaterialButton>(R.id.btn_add_entry).setOnClickListener {
+                        openEntryEditor(section, null)
+                    }
+                    container.addView(block)
+                }
+            }
+        }
+    }
+
+    private fun entryRow(inflater: LayoutInflater, parent: LinearLayout, entry: CardEntryRecord): View {
+        val row = inflater.inflate(R.layout.view_memory_row, parent, false)
+        row.findViewById<TextView>(R.id.row_title).text = entry.name
+
+        // State-shaped sections show their state line; the rest show the
+        // first description line.
+        val subtitleView = row.findViewById<TextView>(R.id.row_subtitle)
+        val subtitle = when (entry.section) {
+            CardSections.CAMPAIGN_CAST ->
+                listOfNotNull(entry.castDisposition, entry.castStatus)
+                    .map { it.trim() }.filter { it.isNotEmpty() }.joinToString(" · ").ifEmpty { null }
+            CardSections.CAMPAIGN_LOCATIONS -> entry.locationCondition?.trim()?.takeIf { it.isNotEmpty() }
+            CardSections.RELIQUARY -> entry.holder?.trim()?.takeIf { it.isNotEmpty() }
+            else -> entry.description?.lineSequence()?.firstOrNull()?.trim()?.takeIf { it.isNotEmpty() }
+        }
+        if (subtitle == null) subtitleView.visibility = View.GONE
+        else { subtitleView.visibility = View.VISIBLE; subtitleView.text = subtitle }
+
+        row.findViewById<TextView>(R.id.row_badge).visibility = View.GONE
+        row.findViewById<ImageButton>(R.id.btn_row_action).visibility = View.GONE
+        row.findViewById<View>(R.id.ui).setOnClickListener {
+            openEntryEditor(entry.section, entry.entryId)
+        }
+        return row
+    }
+
+    private fun openEntryEditor(section: String, entryId: String?) {
+        val id = campaignId ?: run {
+            Toast.makeText(this, R.string.mem_world_campaign_save_first, Toast.LENGTH_SHORT).show()
+            return
+        }
+        startActivity(
+            Intent(this, CardEntryEditorActivity::class.java)
+                .putExtra("chatId", chatId)
+                .putExtra("cardType", CardType.CAMPAIGN)
+                .putExtra("cardId", id)
+                .putExtra("section", section)
+                .putExtra("entryId", entryId ?: "")
+        )
     }
 
     /* ------------------------------ pickers ------------------------------ */
@@ -310,6 +518,7 @@ class CampaignDetailActivity : FragmentActivity() {
     /* ------------------------------ save ------------------------------ */
 
     private fun save() {
+        if (!ready) return
         val name = fieldName?.text?.toString()?.trim().orEmpty()
         if (name.isEmpty()) {
             Toast.makeText(this, R.string.mem_world_campaign_required, Toast.LENGTH_SHORT).show()
@@ -325,13 +534,12 @@ class CampaignDetailActivity : FragmentActivity() {
             roleplayCharacterId = selCharacterId,
             companionId = selCompanionId,
             status = status,
-            storySoFar = prior?.storySoFar,   // Archivist-owned; never edited here
+            // Dormant pre-card text (spec §8a): preserved untouched, never
+            // shown. The Plot Ledger section is its structured replacement.
+            storySoFar = prior?.storySoFar,
             createdAt = prior?.createdAt ?: MemoryStore.nowIso(),
-            // Card fields this screen doesn't edit yet (3.6b) — pass through
-            // so saving here can't wipe them. (Party links live in the join
-            // table; upsertCampaign never writes them.)
-            questAnchor = prior?.questAnchor,
-            activeScene = prior?.activeScene
+            questAnchor = fieldQuestAnchor?.text?.toString()?.trim()?.ifEmpty { null },
+            activeScene = fieldActiveScene?.text?.toString()?.trim()?.ifEmpty { null }
         )
 
         runOffThread {
@@ -342,6 +550,8 @@ class CampaignDetailActivity : FragmentActivity() {
                 titleView?.setText(R.string.mem_world_campaign_detail_title)
                 updateExtraButtons()
                 Toast.makeText(this, R.string.mem_world_campaign_saved, Toast.LENGTH_SHORT).show()
+                renderParty()
+                renderSections()
             }
         }
     }

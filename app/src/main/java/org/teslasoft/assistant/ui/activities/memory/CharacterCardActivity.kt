@@ -89,6 +89,7 @@ class CharacterCardActivity : FragmentActivity() {
     private var textWarning: TextView? = null
     private var textWordCount: TextView? = null
     private var btnSave: MaterialButton? = null
+    private var btnMemories: MaterialButton? = null
     private var textSaveFirst: TextView? = null
     private var sectionsContainer: LinearLayout? = null
 
@@ -134,6 +135,7 @@ class CharacterCardActivity : FragmentActivity() {
         textWarning = findViewById(R.id.text_card_warning)
         textWordCount = findViewById(R.id.text_card_word_count)
         btnSave = findViewById(R.id.btn_card_save)
+        btnMemories = findViewById(R.id.btn_card_memories)
         textSaveFirst = findViewById(R.id.text_save_first)
         sectionsContainer = findViewById(R.id.sections_container)
 
@@ -148,10 +150,29 @@ class CharacterCardActivity : FragmentActivity() {
         btnBack?.setOnClickListener { finish() }
         btnSave?.setOnClickListener { save() }
         btnStatus?.setOnClickListener { showStatusPicker() }
+        btnMemories?.setOnClickListener { openMemories() }
 
         CardZoneUi.attachWordCount(this, zone1Fields(), textWordCount, textWarning)
         refreshStatus()
+        refreshMemoriesButton()
         loadExisting()
+    }
+
+    /** One browser, many doors (§8): pre-filtered to this character. Party
+     *  members aren't a memory scope, so their card has no memories door. */
+    private fun refreshMemoriesButton() {
+        btnMemories?.visibility =
+            if (!isParty && cardId != null) View.VISIBLE else View.GONE
+    }
+
+    private fun openMemories() {
+        val id = cardId ?: return
+        startActivity(
+            Intent(this, MemoryBrowserActivity::class.java)
+                .putExtra("roleplayCharacterId", id)
+                .putExtra("screenTitle", fieldName?.text?.toString()?.trim().orEmpty())
+                .putExtra("chatId", chatId)
+        )
     }
 
     override fun onResume() {
@@ -291,6 +312,7 @@ class CharacterCardActivity : FragmentActivity() {
             runOnUiThread {
                 cardId = id
                 Toast.makeText(this, R.string.card_saved, Toast.LENGTH_SHORT).show()
+                refreshMemoriesButton()
                 renderSections()
             }
         }

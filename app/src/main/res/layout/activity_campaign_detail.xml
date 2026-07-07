@@ -78,14 +78,24 @@
             android:orientation="vertical"
             android:paddingHorizontal="20dp">
 
+            <!-- Zone 1 — "the bookmark" (spec §6d): written at session end,
+                 read at session start. Visibly labeled (spec §1/§8a). -->
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:paddingTop="24dp"
-                android:text="@string/mem_world_campaign_section_details"
+                android:text="@string/card_zone1_title"
                 android:textColor="?attr/colorPrimary"
                 android:textSize="18sp"
                 android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="2dp"
+                android:text="@string/card_zone1_subtext"
+                android:textColor="@color/text_subtitle"
+                android:textSize="13sp" />
 
             <com.google.android.material.textfield.TextInputLayout
                 style="?attr/textInputOutlinedDenseStyle"
@@ -101,6 +111,66 @@
                     android:inputType="textCapSentences"
                     android:singleLine="true" />
             </com.google.android.material.textfield.TextInputLayout>
+
+            <com.google.android.material.textfield.TextInputLayout
+                style="?attr/textInputOutlinedDenseStyle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:hint="@string/card_field_quest_anchor">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/field_campaign_quest_anchor"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="top"
+                    android:inputType="textMultiLine|textCapSentences"
+                    android:minLines="2" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <com.google.android.material.textfield.TextInputLayout
+                style="?attr/textInputOutlinedDenseStyle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:hint="@string/card_field_active_scene">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/field_campaign_active_scene"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="top"
+                    android:inputType="textMultiLine|textCapSentences"
+                    android:minLines="2" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <!-- Word count + warnings for the bookmark fields (spec §8a). -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/text_card_warning"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:textColor="@color/text_subtitle"
+                    android:textSize="13sp"
+                    android:visibility="invisible" />
+
+                <TextView
+                    android:id="@+id/text_card_word_count"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_card_count"
+                    android:paddingHorizontal="10dp"
+                    android:paddingVertical="4dp"
+                    android:textColor="@color/text_subtitle"
+                    android:textSize="13sp" />
+            </LinearLayout>
 
             <!-- Status selector (single-choice dialog). -->
             <LinearLayout
@@ -222,40 +292,41 @@
                     android:textSize="14sp" />
             </LinearLayout>
 
-            <!-- Story so far: Archivist-maintained, read-only, shown only when set. -->
-            <LinearLayout
-                android:id="@+id/group_campaign_story"
+            <!-- Active Party Members (spec §6d Zone 1): linked from the
+                 roster — join, not ownership. Alive/Incapacitated members
+                 inject their core each turn; Dead/Enemy drop to the
+                 generated roster line at injection time (3.6d). -->
+            <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:visibility="gone">
+                android:paddingTop="20dp"
+                android:text="@string/card_campaign_party_label"
+                android:textColor="?attr/colorPrimary"
+                android:textSize="16sp"
+                android:textStyle="bold" />
 
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:paddingTop="24dp"
-                    android:text="@string/mem_world_campaign_story_label"
-                    android:textColor="?attr/colorPrimary"
-                    android:textSize="18sp"
-                    android:textStyle="bold" />
+            <TextView
+                android:id="@+id/text_party_empty"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="4dp"
+                android:text="@string/card_campaign_party_empty"
+                android:textColor="@color/text_subtitle"
+                android:textSize="13sp" />
 
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:paddingTop="4dp"
-                    android:text="@string/mem_world_campaign_story_note"
-                    android:textColor="@color/text_subtitle"
-                    android:textSize="13sp" />
+            <LinearLayout
+                android:id="@+id/party_container"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
 
-                <TextView
-                    android:id="@+id/text_campaign_story"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:paddingTop="12dp"
-                    android:textColor="@color/text"
-                    android:textIsSelectable="true"
-                    android:textSize="15sp" />
-            </LinearLayout>
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_party_add"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/card_campaign_party_add"
+                app:icon="@drawable/ic_add" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_campaign_save"
@@ -282,6 +353,40 @@
                 android:layout_marginTop="8dp"
                 android:visibility="gone"
                 android:text="@string/mem_world_campaign_btn_teardown" />
+
+            <!-- Zone 2 -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="28dp"
+                android:text="@string/card_zone2_title"
+                android:textColor="?attr/colorPrimary"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="2dp"
+                android:text="@string/card_zone2_subtext"
+                android:textColor="@color/text_subtitle"
+                android:textSize="13sp" />
+
+            <TextView
+                android:id="@+id/text_save_first"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="12dp"
+                android:text="@string/card_save_first"
+                android:textColor="@color/text_subtitle"
+                android:textSize="14sp"
+                android:visibility="gone" />
+
+            <LinearLayout
+                android:id="@+id/sections_container"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
         </LinearLayout>
     </ScrollView>
 </androidx.constraintlayout.widget.ConstraintLayout>

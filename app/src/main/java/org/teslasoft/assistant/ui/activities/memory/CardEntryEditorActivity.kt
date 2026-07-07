@@ -82,6 +82,23 @@ class CardEntryEditorActivity : FragmentActivity() {
     private var fieldDescription: TextInputEditText? = null
     private var rowParent: View? = null
     private var btnParent: MaterialButton? = null
+    private var rowWorldLink: View? = null
+    private var labelWorldLink: TextView? = null
+    private var btnWorldLink: MaterialButton? = null
+    private var layoutIdentity: TextInputLayout? = null
+    private var fieldIdentity: TextInputEditText? = null
+    private var layoutDisposition: TextInputLayout? = null
+    private var fieldDisposition: TextInputEditText? = null
+    private var layoutCastStatus: TextInputLayout? = null
+    private var fieldCastStatus: TextInputEditText? = null
+    private var layoutCondition: TextInputLayout? = null
+    private var fieldCondition: TextInputEditText? = null
+    private var layoutChanges: TextInputLayout? = null
+    private var fieldChanges: TextInputEditText? = null
+    private var layoutHolder: TextInputLayout? = null
+    private var fieldHolder: TextInputEditText? = null
+    private var layoutSignificance: TextInputLayout? = null
+    private var fieldSignificance: TextInputEditText? = null
     private var btnSave: MaterialButton? = null
     private var btnPromote: MaterialButton? = null
     private var btnDelete: MaterialButton? = null
@@ -92,6 +109,11 @@ class CardEntryEditorActivity : FragmentActivity() {
     /** Geography parent selection (spec §6c), id -> display name. */
     private var selectedParentId: String? = null
     private val parentCandidates = LinkedHashMap<String, String>()
+
+    /** Campaign overlay link (spec §6d): the world entry this cast/location
+     *  entry overlays, id -> display name. */
+    private var selectedWorldEntryId: String? = null
+    private val worldLinkCandidates = LinkedHashMap<String, String>()
 
     companion object {
         // Per-section Type/Relationship value lists — the spec §6a/§6b words,
@@ -119,6 +141,21 @@ class CardEntryEditorActivity : FragmentActivity() {
         private val NOTABLE_NPC_SECTIONS = setOf(
             CardSections.HISTORICAL_FIGURES, CardSections.AUTHORITY_FIGURES,
             CardSections.SERVICE_NPCS, CardSections.ALLIES, CardSections.ANTAGONISTS
+        )
+
+        // Campaign overlays (spec §6d): which world-card sections an entry may
+        // link to. Cast overlays a world NPC; Locations overlay world geography.
+        private val WORLD_LINK_SECTIONS = mapOf(
+            CardSections.CAMPAIGN_CAST to NOTABLE_NPC_SECTIONS.toList(),
+            CardSections.CAMPAIGN_LOCATIONS to listOf(
+                CardSections.REGIONS, CardSections.SETTLEMENTS, CardSections.POINTS_OF_INTEREST
+            )
+        )
+
+        // Cast and Locations entries carry their own state fields instead of a
+        // free description (spec §6d field lists).
+        private val NO_DESCRIPTION_SECTIONS = setOf(
+            CardSections.CAMPAIGN_CAST, CardSections.CAMPAIGN_LOCATIONS
         )
 
         /** The user-facing section names — the spec §6 words. */
@@ -209,6 +246,23 @@ class CardEntryEditorActivity : FragmentActivity() {
         fieldDescription = findViewById(R.id.field_entry_description)
         rowParent = findViewById(R.id.row_entry_parent)
         btnParent = findViewById(R.id.btn_entry_parent)
+        rowWorldLink = findViewById(R.id.row_entry_world_link)
+        labelWorldLink = findViewById(R.id.label_entry_world_link)
+        btnWorldLink = findViewById(R.id.btn_entry_world_link)
+        layoutIdentity = findViewById(R.id.layout_entry_identity)
+        fieldIdentity = findViewById(R.id.field_entry_identity)
+        layoutDisposition = findViewById(R.id.layout_entry_disposition)
+        fieldDisposition = findViewById(R.id.field_entry_disposition)
+        layoutCastStatus = findViewById(R.id.layout_entry_cast_status)
+        fieldCastStatus = findViewById(R.id.field_entry_cast_status)
+        layoutCondition = findViewById(R.id.layout_entry_condition)
+        fieldCondition = findViewById(R.id.field_entry_condition)
+        layoutChanges = findViewById(R.id.layout_entry_changes)
+        fieldChanges = findViewById(R.id.field_entry_changes)
+        layoutHolder = findViewById(R.id.layout_entry_holder)
+        fieldHolder = findViewById(R.id.field_entry_holder)
+        layoutSignificance = findViewById(R.id.layout_entry_significance)
+        fieldSignificance = findViewById(R.id.field_entry_significance)
         btnSave = findViewById(R.id.btn_entry_save)
         btnPromote = findViewById(R.id.btn_entry_promote)
         btnDelete = findViewById(R.id.btn_entry_delete)
@@ -228,11 +282,13 @@ class CardEntryEditorActivity : FragmentActivity() {
         btnBack?.setOnClickListener { finish() }
         btnKind?.setOnClickListener { showKindPicker() }
         btnParent?.setOnClickListener { showParentPicker() }
+        btnWorldLink?.setOnClickListener { showWorldLinkPicker() }
         btnSave?.setOnClickListener { save() }
         btnPromote?.setOnClickListener { promoteToPartyMember() }
         btnDelete?.setOnClickListener { confirmDelete() }
 
         loadParentCandidates()
+        loadWorldLinkCandidates()
         loadExisting()
     }
 
@@ -262,6 +318,27 @@ class CardEntryEditorActivity : FragmentActivity() {
         rowParent?.visibility =
             if (section in PARENT_CANDIDATE_SECTIONS) View.VISIBLE else View.GONE
 
+        rowWorldLink?.visibility =
+            if (section in WORLD_LINK_SECTIONS) View.VISIBLE else View.GONE
+        labelWorldLink?.setText(
+            if (section == CardSections.CAMPAIGN_LOCATIONS) R.string.entry_label_world_location
+            else R.string.entry_label_world_npc
+        )
+
+        val isCast = section == CardSections.CAMPAIGN_CAST
+        val isLocation = section == CardSections.CAMPAIGN_LOCATIONS
+        layoutIdentity?.visibility = if (isCast) View.VISIBLE else View.GONE
+        layoutDisposition?.visibility = if (isCast) View.VISIBLE else View.GONE
+        layoutCastStatus?.visibility = if (isCast) View.VISIBLE else View.GONE
+        layoutCondition?.visibility = if (isLocation) View.VISIBLE else View.GONE
+        layoutChanges?.visibility = if (isLocation) View.VISIBLE else View.GONE
+
+        val isReliquary = section == CardSections.RELIQUARY
+        layoutHolder?.visibility = if (isReliquary) View.VISIBLE else View.GONE
+        layoutSignificance?.visibility = if (isReliquary) View.VISIBLE else View.GONE
+
+        layoutDescription?.visibility =
+            if (section in NO_DESCRIPTION_SECTIONS) View.GONE else View.VISIBLE
         layoutDescription?.hint = getString(
             if (descriptionRequired()) R.string.entry_hint_description else R.string.entry_hint_description_optional
         )
@@ -336,6 +413,68 @@ class CardEntryEditorActivity : FragmentActivity() {
             .show()
     }
 
+    /* ------------------------------ campaign overlay link (spec §6d) ------------------------------ */
+
+    private fun loadWorldLinkCandidates() {
+        val candidateSections = WORLD_LINK_SECTIONS[section] ?: return
+        runOffThread {
+            val store = MemoryStore.getInstance(this)
+            // The overlay reaches the campaign's linked world; no world linked
+            // means no candidates (the entry stays campaign-native).
+            val worldId = store.getCampaign(cardId)?.worldId ?: return@runOffThread
+            val items = LinkedHashMap<String, String>()
+            for (s in candidateSections) {
+                store.entriesForSection(CardType.WORLD, worldId, s).forEach { items[it.entryId] = it.name }
+            }
+            runOnUiThread {
+                worldLinkCandidates.clear()
+                worldLinkCandidates.putAll(items)
+                refreshWorldLink()
+            }
+        }
+    }
+
+    private fun refreshWorldLink() {
+        btnWorldLink?.text = selectedWorldEntryId?.let { id ->
+            worldLinkCandidates[id]
+                // A link that outlived its world entry (spec §5): shown, never
+                // silently dropped.
+                ?: getString(R.string.mem_world_campaign_none)
+        } ?: getString(R.string.mem_world_campaign_none)
+    }
+
+    private fun showWorldLinkPicker() {
+        if (worldLinkCandidates.isEmpty()) {
+            Toast.makeText(this, R.string.entry_parent_picker_none, Toast.LENGTH_SHORT).show()
+            return
+        }
+        // Leading "None": an overlay link is optional — campaign-native cast
+        // and locations are equally valid (spec §6d).
+        val ids = ArrayList<String?>().apply { add(null); addAll(worldLinkCandidates.keys) }
+        val names = ids.map { it?.let { id -> worldLinkCandidates[id] } ?: getString(R.string.mem_world_campaign_none) }
+            .toTypedArray()
+        val current = ids.indexOf(selectedWorldEntryId).coerceAtLeast(0)
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(
+                if (section == CardSections.CAMPAIGN_LOCATIONS) R.string.entry_label_world_location
+                else R.string.entry_label_world_npc
+            )
+            .setSingleChoiceItems(names, current) { d, which ->
+                selectedWorldEntryId = ids[which]
+                // Linking an overlay prefills the (still editable) name so the
+                // trigger word matches the world entry.
+                selectedWorldEntryId?.let { id ->
+                    if (fieldName?.text?.toString()?.trim().isNullOrEmpty()) {
+                        fieldName?.setText(worldLinkCandidates[id])
+                    }
+                }
+                refreshWorldLink()
+                d.dismiss()
+            }
+            .setNegativeButton(R.string.btn_cancel) { _, _ -> }
+            .show()
+    }
+
     /* ------------------------------ promotion (spec §6c/§8a) ------------------------------ */
 
     /** A world NPC entry graduates to a full party-member card: the card is
@@ -387,6 +526,15 @@ class CardEntryEditorActivity : FragmentActivity() {
                 }
                 selectedParentId = record.parentEntryId
                 refreshParent()
+                selectedWorldEntryId = record.worldEntryId
+                refreshWorldLink()
+                fieldIdentity?.setText(record.castIdentity ?: "")
+                fieldDisposition?.setText(record.castDisposition ?: "")
+                fieldCastStatus?.setText(record.castStatus ?: "")
+                fieldCondition?.setText(record.locationCondition ?: "")
+                fieldChanges?.setText(record.locationChanges ?: "")
+                fieldHolder?.setText(record.holder ?: "")
+                fieldSignificance?.setText(record.significance ?: "")
                 // Promotion is offered on saved notable-NPC entries that
                 // haven't graduated yet; once promoted the button is gone
                 // for good (owner ruling, spec §8a).
@@ -432,6 +580,9 @@ class CardEntryEditorActivity : FragmentActivity() {
         // A typed-but-unconfirmed tag counts as picked.
         tagChips?.confirmText()
 
+        fun text(f: TextInputEditText?): String? =
+            f?.text?.toString()?.trim()?.ifEmpty { null }
+
         val prior = existing
         val id = prior?.entryId ?: MemoryStore.newId("ce-")
         val record = (prior ?: CardEntryRecord(
@@ -443,6 +594,14 @@ class CardEntryEditorActivity : FragmentActivity() {
             entryKind = if (KIND_OPTIONS.containsKey(section)) currentKind else null,
             quantity = quantity,
             parentEntryId = if (section in PARENT_CANDIDATE_SECTIONS) selectedParentId else prior?.parentEntryId,
+            worldEntryId = if (section in WORLD_LINK_SECTIONS) selectedWorldEntryId else prior?.worldEntryId,
+            castIdentity = if (section == CardSections.CAMPAIGN_CAST) text(fieldIdentity) else prior?.castIdentity,
+            castDisposition = if (section == CardSections.CAMPAIGN_CAST) text(fieldDisposition) else prior?.castDisposition,
+            castStatus = if (section == CardSections.CAMPAIGN_CAST) text(fieldCastStatus) else prior?.castStatus,
+            locationCondition = if (section == CardSections.CAMPAIGN_LOCATIONS) text(fieldCondition) else prior?.locationCondition,
+            locationChanges = if (section == CardSections.CAMPAIGN_LOCATIONS) text(fieldChanges) else prior?.locationChanges,
+            holder = if (section == CardSections.RELIQUARY) text(fieldHolder) else prior?.holder,
+            significance = if (section == CardSections.RELIQUARY) text(fieldSignificance) else prior?.significance,
             updatedAt = if (prior != null) MemoryStore.nowIso() else null
         )
 
