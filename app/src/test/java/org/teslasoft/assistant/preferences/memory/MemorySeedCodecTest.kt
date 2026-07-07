@@ -161,8 +161,10 @@ class MemorySeedCodecTest {
               "companions": [], "entities": [], "memories": [], "modes": [],
               "directives": [], "user_personas": [], "proposals": [],
               "worlds": [
-                { "world_id": "w-1", "name": "Duskmere", "premise": "The sun never rises.",
-                  "rules": "Magic causes physical corruption.", "cosmology": "Three moons; stars are dead gods.",
+                { "world_id": "w-1", "name": "Duskmere", "premise": "dormant legacy text",
+                  "cosmology": "Three moons; stars are dead gods.",
+                  "premise_vibe": "The sun never rises.",
+                  "magic_rules": "Magic causes physical corruption.",
                   "status": "active", "created_at": "2026-07-07T00:00:00Z" }
               ],
               "roleplay_characters": [
@@ -209,6 +211,10 @@ class MemorySeedCodecTest {
 
         val data = MemorySeedCodec.parse(withCards)
         assertEquals("Three moons; stars are dead gods.", data.worlds.first().cosmology)
+        // Fresh v8 world-core fields (spec §8a): distinct from the dormant
+        // premise/rules columns, which the cards never reuse.
+        assertEquals("The sun never rises.", data.worlds.first().premiseVibe)
+        assertEquals("Magic causes physical corruption.", data.worlds.first().magicRules)
         assertEquals("ranger", data.roleplayCharacters.first().charClass)
         assertEquals("sworn grudge against orcs", data.roleplayCharacters.first().goalsDrives)
         assertEquals("dead", data.partyMembers.first().status)

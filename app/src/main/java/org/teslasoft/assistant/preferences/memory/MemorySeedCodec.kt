@@ -221,6 +221,8 @@ object MemorySeedCodec {
                 premise = w.reqStr("premise"),
                 rules = w.str("rules"),
                 cosmology = w.str("cosmology"),
+                premiseVibe = w.str("premise_vibe"),
+                magicRules = w.str("magic_rules"),
                 companionIdsJson = w.arrText("companion_ids"),
                 status = w.reqStr("status"),
                 createdAt = w.str("created_at")
@@ -560,6 +562,8 @@ object MemorySeedCodec {
                     put("premise", w.premise)
                     putIfNotNull("rules", w.rules)
                     putIfNotNull("cosmology", w.cosmology)
+                    putIfNotNull("premise_vibe", w.premiseVibe)
+                    putIfNotNull("magic_rules", w.magicRules)
                     put("companion_ids", jsonArrayOrEmpty(w.companionIdsJson))
                     put("status", w.status)
                     putIfNotNull("created_at", w.createdAt)

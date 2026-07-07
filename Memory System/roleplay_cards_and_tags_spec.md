@@ -550,6 +550,52 @@ them:
   things connected to it — a campaign reaches its world, party members,
   and memories in one tap.
 
+## 8a. Addendum — 3.6b on-screen wording & data rulings (RULED, owner in
+chat, July 7 2026, after 3.6a shipped)
+
+The 3.6b agent asked for the connective on-screen texts the spec didn't
+spell out; the owner ruled as follows. These are approved words — use them
+verbatim.
+
+- **Zone labels (exact text, heading + subtext):**
+  - *Zone 1: Always Active* — "Included every time this card is active.
+    Large amounts of text may affect model performance."
+  - *Zone 2: Retrieved When Relevant* — "Used only when it matches the
+    current conversation."
+- **Word count instead of a prompt-cost line:** the word count is listed
+  underneath the Zone 1 box, right-aligned, count only — no "always sent"
+  phrasing (the Zone 1 label already says that). At **300 words** show:
+  *"Warning, content is getting large."* At **500 words** the count turns
+  **red** (a red that stays visible on any client background color) and
+  the warning switches to: *"It's highly suggested to move non-critical
+  information to the Retrieved When Relevant area."* (The owner's message
+  spelled it "Relavent"; rendered with the Zone 2 label's spelling.)
+- **Promotion (§6c):** button text *"Promote to Party Member"* (only "to"
+  lowercase). After promotion the button goes away; the character appears
+  in the party-members area, and tapping the name opens the party-member
+  card.
+- *"Add Entry"* (capitalized); the other §5/§8 structural bits (Archive
+  section, Restore, empty-state lines) approved as proposed.
+- **No reuse of the pre-card fields — RULED.** The old free-text blocks
+  (worlds `premise`/`rules`, roleplay-character `description`/`arc`/
+  `played_by`, campaign `story_so_far`) are NOT shown on, mapped into, or
+  migrated into the new cards — "only follow what the new spec says for
+  what to put on cards." Nobody has used the cards; no backward
+  compatibility. (This supersedes 3.6a's premise/rules → Premise-Vibe/
+  Magic-Rules column mapping: DB v8 gives the world core fresh
+  `premise_vibe` + `magic_rules` columns and the old columns go dormant.)
+- **Notes area on ALL four cards — ruled in principle, mechanism
+  PROPOSED (not yet buildable, §9.2):** the owner wants "an area at the
+  very bottom" of the user-character, party-member, world and campaign
+  cards for miscellaneous don't-fit-anywhere material, and asked whether
+  RAG needs notes added separately (a plus button) so the system knows
+  where each starts and ends. Proposed mechanism awaiting the owner's
+  confirmation: extend §6d's existing Notes section shape to all four
+  cards — each note its own entry (Add Entry), title required (the title
+  is the trigger word, like every other entry), text below, tags as
+  everywhere; retrieved when relevant. No schema change needed (the
+  polymorphic entries table already allows a notes section per card).
+
 ## 9. Instructions to implementing agents — DO NOT BECOME THE DESIGNER
 
 The owner's words (July 7): ensure the instructions are clear "so that

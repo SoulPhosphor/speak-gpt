@@ -76,13 +76,15 @@ data class EntityRecord(
 data class WorldRecord(
     val worldId: String,
     val name: String,
-    // World core (roleplay_cards_and_tags_spec §6c, Zone 1): `premise` backs
-    // the spec's "Premise / Vibe" field and `rules` backs "Magic Rules" — the
-    // pre-3.6 columns kept their names so the owner's existing text carries
-    // straight into the new card without a copy step. `cosmology` is new (v7).
+    // `premise` and `rules` are DORMANT pre-card columns (owner ruling July 7
+    // 2026, spec §8a: the new cards never show, map, or migrate the old
+    // free-text blocks). The world core (spec §6c, Zone 1) lives in the
+    // fresh v7/v8 columns below: cosmology + premiseVibe + magicRules.
     val premise: String,
     val rules: String?,
     val cosmology: String? = null,
+    val premiseVibe: String? = null,
+    val magicRules: String? = null,
     val companionIdsJson: String,         // JSON array of companion ids
     val status: String,                   // active | dormant | ended | archived (v7)
     val createdAt: String?

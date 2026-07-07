@@ -232,8 +232,7 @@ Everything is on-device. No cloud sync, no accounts.
    species/char_class/core_personality/physical_description/goals_drives;
    `campaigns` gains quest_anchor/active_scene — the "bookmark", user-written
    at session end; `worlds` gains cosmology and an 'archived' status via a
-   FK-off table rebuild — its existing `premise`/`rules` columns back the
-   spec's Premise-Vibe/Magic-Rules fields), a `party_members` NPC roster
+   FK-off table rebuild), a `party_members` NPC roster
    (four-state fiction `status` alive/incapacitated/dead/enemy + separate
    `archived` lifecycle flag) with a `campaign_party_members` join (link, not
    ownership), one polymorphic `card_entries` table for every card's Zone 2
@@ -252,6 +251,15 @@ Everything is on-device. No cloud sync, no accounts.
    the whole card layer; card teardowns scrub entries + tag links and
    `resetAllMemoryData` empties the new tables. UI/wiring for all of this is
    Stage 3.6b–f (not yet built at v7).
+   DB v8 (July 2026, pre-3.6b) adds FRESH `worlds.premise_vibe` +
+   `worlds.magic_rules` columns for the world core: the owner ruled (spec
+   §8a addendum) that the new cards must never show, map, or migrate the
+   old free-text blocks — worlds' `premise`/`rules`, roleplay characters'
+   `description`/`arc`/`played_by`, campaigns' `story_so_far` are all
+   DORMANT (kept only so old backups import); no data is copied into the
+   card fields. The §8a addendum also holds the approved 3.6b on-screen
+   wording (Zone labels, the right-aligned word count with 300/500-word
+   warnings, "Promote to Party Member") — use those words verbatim.
    Source is DERIVED for
    display (`provenance_source == "user_entered"` ⇒ "Entered by hand", else
    "Learned from chat"); there is no "Imported" bucket — import preserves each

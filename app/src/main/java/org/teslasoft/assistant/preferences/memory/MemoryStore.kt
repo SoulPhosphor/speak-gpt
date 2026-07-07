@@ -49,7 +49,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
 
     companion object {
         const val DATABASE_NAME = "companion_memory.db"
-        private const val DATABASE_VERSION = 7
+        private const val DATABASE_VERSION = 8
 
         // Freshness-cooldown source types (rules §10 / Stage 3.3): the
         // composite key (chat_id, source_type, entry_id) keeps ids from
@@ -218,10 +218,12 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 "origin TEXT NOT NULL DEFAULT 'user')"
         )
 
-        // World card Zone 1 (spec §6c): premise = "Premise / Vibe", rules =
-        // "Magic Rules" (pre-3.6 column names kept so existing text carries
-        // over), cosmology added in v7. 'archived' status added in v7 for the
-        // §5 Archive sections.
+        // World card Zone 1 (spec §6c) lives in cosmology (v7) +
+        // premise_vibe + magic_rules (v8, FRESH per the owner's July 7
+        // ruling, spec §8a: cards never reuse the old free-text blocks).
+        // premise/rules are dormant pre-card columns kept only so old
+        // backups still import. 'archived' status added in v7 for the §5
+        // Archive sections.
         db.execSQL(
             "CREATE TABLE worlds (" +
                 "world_id TEXT PRIMARY KEY, " +
@@ -229,6 +231,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 "premise TEXT NOT NULL, " +
                 "rules TEXT, " +
                 "cosmology TEXT, " +
+                "premise_vibe TEXT, " +
+                "magic_rules TEXT, " +
                 "companion_ids_json TEXT DEFAULT '[]', " +
                 "status TEXT NOT NULL CHECK (status IN ('active','dormant','ended','archived')), " +
                 "created_at TEXT)"
@@ -821,9 +825,11 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             // which SQLite can't loosen with ALTER — same recipe as v4,
             // foreign keys are OFF during the migration (onConfigure) so the
             // drop doesn't cascade into campaigns/memories/memory_worlds/
-            // transcripts; the same world_ids are re-inserted. `premise`
-            // keeps backing the spec's "Premise / Vibe" and `rules` its
-            // "Magic Rules" (existing text carries over); `cosmology` is new.
+            // transcripts; the same world_ids are re-inserted. (v7 originally
+            // mapped premise/rules onto the spec's Premise-Vibe/Magic-Rules
+            // fields — SUPERSEDED by the owner's July 7 ruling, spec §8a:
+            // v8 adds fresh premise_vibe/magic_rules columns and the old
+            // columns go dormant. The SQL below is unchanged history.)
             db.execSQL(
                 "CREATE TABLE worlds_new (" +
                     "world_id TEXT PRIMARY KEY, " +
@@ -925,6 +931,20 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             db.execSQL(
                 "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                 arrayOf(META_DB_MIGRATION, "7")
+            )
+        }
+        if (oldVersion < 8) {
+            // v8 (July 2026, pre-3.6b): fresh world-core columns. The owner
+            // ruled (spec §8a) that the new cards must NOT reuse or migrate
+            // the old free-text blocks, superseding v7's premise/rules
+            // mapping — so Premise/Vibe and Magic Rules get their own empty
+            // columns and the old premise/rules go dormant (kept only so old
+            // backups still import). Deliberately NO data copy.
+            db.execSQL("ALTER TABLE worlds ADD COLUMN premise_vibe TEXT")
+            db.execSQL("ALTER TABLE worlds ADD COLUMN magic_rules TEXT")
+            db.execSQL(
+                "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                arrayOf(META_DB_MIGRATION, "8")
             )
         }
     }
@@ -1258,6 +1278,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                     put("premise", w.premise)
                     put("rules", w.rules)
                     put("cosmology", w.cosmology)
+                    put("premise_vibe", w.premiseVibe)
+                    put("magic_rules", w.magicRules)
                     put("companion_ids_json", w.companionIdsJson)
                     put("status", w.status)
                     put("created_at", w.createdAt)
@@ -1586,6 +1608,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                         premise = it.getString(it.getColumnIndexOrThrow("premise")),
                         rules = it.getStringOrNull("rules"),
                         cosmology = it.getStringOrNull("cosmology"),
+                        premiseVibe = it.getStringOrNull("premise_vibe"),
+                        magicRules = it.getStringOrNull("magic_rules"),
                         companionIdsJson = it.getStringOrNull("companion_ids_json") ?: "[]",
                         status = it.getString(it.getColumnIndexOrThrow("status")),
                         createdAt = it.getStringOrNull("created_at")
@@ -2041,6 +2065,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                         premise = it.getString(it.getColumnIndexOrThrow("premise")),
                         rules = it.getStringOrNull("rules"),
                         cosmology = it.getStringOrNull("cosmology"),
+                        premiseVibe = it.getStringOrNull("premise_vibe"),
+                        magicRules = it.getStringOrNull("magic_rules"),
                         companionIdsJson = it.getStringOrNull("companion_ids_json") ?: "[]",
                         status = it.getString(it.getColumnIndexOrThrow("status")),
                         createdAt = it.getStringOrNull("created_at")
@@ -2844,6 +2870,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             put("premise", w.premise)
             put("rules", w.rules)
             put("cosmology", w.cosmology)
+            put("premise_vibe", w.premiseVibe)
+            put("magic_rules", w.magicRules)
             put("companion_ids_json", w.companionIdsJson)
             put("status", w.status)
             put("created_at", w.createdAt ?: nowIso())
