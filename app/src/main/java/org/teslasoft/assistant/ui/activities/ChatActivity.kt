@@ -4411,6 +4411,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     val chatRoleplayCharacterId = preferences.getChatRoleplayCharacterId()
                     val chatUserPersonaId = preferences.getChatUserPersonaId()
                     val chatProjectId = preferences.getChatProjectId()
+                    val chatModelRulesProfileId = preferences.getChatModelRulesProfileId()
 
                     preferences.setPreferences(Hash.hash(newChatName.toString()), this)
                     preferences.setResolution(resolution)
@@ -4448,6 +4449,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     preferences.setChatRoleplayCharacterId(chatRoleplayCharacterId)
                     preferences.setChatUserPersonaId(chatUserPersonaId)
                     preferences.setChatProjectId(chatProjectId)
+                    preferences.setChatModelRulesProfileId(chatModelRulesProfileId)
 
                     // The rename changed the chat id; captured transcripts are
                     // keyed by it, so the queue must follow the chat.

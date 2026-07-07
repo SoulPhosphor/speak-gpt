@@ -1639,6 +1639,21 @@ class Preferences private constructor(private var preferences: SharedPreferences
     }
 
     /**
+     * Per-chat Model rules profile (owner_approved_rules §11, Stage 4).
+     * Empty = none — by default NO model rules apply; the user selects a
+     * profile per chat and nothing is ever auto-applied (the picker may hint
+     * "(matches this chat's model)" but never chooses). In the auto-naming
+     * copy block like every other per-chat setting.
+     */
+    fun getChatModelRulesProfileId() : String {
+        return getString("model_rules_profile_id", "")
+    }
+
+    fun setChatModelRulesProfileId(id: String) {
+        putString("model_rules_profile_id", id)
+    }
+
+    /**
      * "Allow active companion memories in roleplay" (owner_approved_rules §3,
      * rev 3 — owner-added toggle, global, default OFF). OFF: companion memories
      * do not enter RP/campaign mode beyond the narrator/GM path. ON: the active

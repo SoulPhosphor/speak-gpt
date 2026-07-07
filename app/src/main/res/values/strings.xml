@@ -968,6 +968,14 @@
     <string name="label_campaign_none">None</string>
     <string name="memory_scene_campaign_picker_title">Choose a campaign</string>
 
+    <!-- Model rules (Stage 4, owner_approved_rules §11): the per-chat dropdown.
+         "Model rules", "None" (the default) and the "(matches this chat's
+         model)" hint are §11's approved words — do not reword. -->
+    <string name="label_chat_model_rules">Model rules</string>
+    <string name="label_model_rules_none">None</string>
+    <string name="model_rules_picker_title">Model rules</string>
+    <string name="model_rules_matches_hint">(matches this chat\'s model)</string>
+
     <!-- Memory system Phase 4: enforcer assembly debug view (shown above the lorebook debug log) -->
     <string name="memory_debug_assembly_header">Memory assembly (full engine)</string>
     <string name="lorebook_debug_records_header">Lore book injections</string>
