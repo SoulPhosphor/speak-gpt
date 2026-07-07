@@ -37,7 +37,10 @@ data class MemoryRow(
     val title: String,
     val subtitle: String? = null,
     val badge: String? = null,
-    val hasAction: Boolean = false
+    val hasAction: Boolean = false,
+    /** Non-tappable section header inside the list — the visible Archive
+     *  section at the bottom of the roleplay card lists (spec §5). */
+    val isHeader: Boolean = false
 )
 
 class MemoryRowAdapter(
@@ -58,7 +61,20 @@ class MemoryRowAdapter(
     override fun getItem(position: Int): Any = rows[position]
     override fun getItemId(position: Int): Long = position.toLong()
 
+    // Headers use their own layout; two view types keep ListView recycling
+    // from handing a header view to a normal row bind (and vice versa).
+    override fun getViewTypeCount(): Int = 2
+    override fun getItemViewType(position: Int): Int = if (rows[position].isHeader) 1 else 0
+    override fun isEnabled(position: Int): Boolean = !rows[position].isHeader
+
     override fun getView(position: Int, convertView: View?, parent: ViewGroup?): View {
+        if (rows[position].isHeader) {
+            val header = convertView
+                ?: LayoutInflater.from(context).inflate(R.layout.view_memory_section_header, parent, false)
+            header.findViewById<TextView>(R.id.row_header).text = rows[position].title
+            return header
+        }
+
         val view = convertView ?: LayoutInflater.from(context).inflate(R.layout.view_memory_row, parent, false)
 
         val title = view.findViewById<TextView>(R.id.row_title)

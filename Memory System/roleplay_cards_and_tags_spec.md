@@ -584,17 +584,15 @@ verbatim.
   compatibility. (This supersedes 3.6a's premise/rules → Premise-Vibe/
   Magic-Rules column mapping: DB v8 gives the world core fresh
   `premise_vibe` + `magic_rules` columns and the old columns go dormant.)
-- **Notes area on ALL four cards — ruled in principle, mechanism
-  PROPOSED (not yet buildable, §9.2):** the owner wants "an area at the
-  very bottom" of the user-character, party-member, world and campaign
-  cards for miscellaneous don't-fit-anywhere material, and asked whether
-  RAG needs notes added separately (a plus button) so the system knows
-  where each starts and ends. Proposed mechanism awaiting the owner's
-  confirmation: extend §6d's existing Notes section shape to all four
-  cards — each note its own entry (Add Entry), title required (the title
-  is the trigger word, like every other entry), text below, tags as
-  everywhere; retrieved when relevant. No schema change needed (the
-  polymorphic entries table already allows a notes section per card).
+- **Notes area on ALL four cards — RULED (owner confirmed the mechanism
+  in chat, July 7 2026: "sounds good"):** an area at the very bottom of
+  the user-character, party-member, world and campaign cards for
+  miscellaneous don't-fit-anywhere material. Mechanism: §6d's existing
+  Notes section shape extends to all four cards — each note its own
+  entry (Add Entry), title required (the title is the trigger word, like
+  every other entry), text below, tags as everywhere; retrieved when
+  relevant. No schema change needed (the polymorphic entries table
+  already allows a notes section per card).
 
 ## 9. Instructions to implementing agents — DO NOT BECOME THE DESIGNER
 

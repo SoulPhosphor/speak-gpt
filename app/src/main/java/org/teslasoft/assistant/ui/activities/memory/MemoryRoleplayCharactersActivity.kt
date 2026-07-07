@@ -16,25 +16,25 @@
 
 package org.teslasoft.assistant.ui.activities.memory
 
+import android.content.Intent
 import android.view.View
 import android.widget.PopupMenu
 import android.widget.Toast
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.preferences.memory.CardType
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.memory.RoleplayCharacterRecord
 import org.teslasoft.assistant.ui.adapters.memory.MemoryRow
-import org.teslasoft.assistant.ui.fragments.dialogs.EditRoleplayCharacterDialogFragment
 
 /**
- * "Roleplay Characters" (Phase 5, app_adaptation_notes.md §Tab structure):
- * user-played fictional characters (the Mage, the Druid) — kept separate from
- * My Personas so fiction never mixes with the primary user's own presentation
- * variants. Each card shows the **definition** (name/description/played-by,
- * user-editable) and the **arc** (story-so-far, Archivist-maintained,
- * read-only — memory-system-integration-plan.md 📌 campaign amendment).
- * Characters the Archivist registers retroactively (emergence) appear here
- * exactly the same as user-created ones.
+ * "Roleplay Characters": user-played fictional characters (the Mage, the
+ * Druid) — kept separate from My Personas so fiction never mixes with the
+ * primary user's own presentation variants. Since Stage 3.6b each character
+ * IS a two-zone card (roleplay_cards_and_tags_spec §6a): rows open
+ * [CharacterCardActivity]; the pre-card description/arc fields are dormant
+ * and never shown (spec §8a). Archived characters sit under the visible
+ * Archive section at the bottom of the list (spec §5).
  */
 class MemoryRoleplayCharactersActivity : MemoryScreenActivity() {
 
@@ -51,19 +51,30 @@ class MemoryRoleplayCharactersActivity : MemoryScreenActivity() {
 
         val q = query.trim().lowercase()
         val filtered = if (q.isEmpty()) records else records.filter {
-            it.name.lowercase().contains(q) || it.description.lowercase().contains(q)
+            it.name.lowercase().contains(q) ||
+                it.species?.lowercase()?.contains(q) == true ||
+                it.charClass?.lowercase()?.contains(q) == true
         }
 
-        return filtered.map { rowFor(it) }
+        // Visible Archive section at the bottom (spec §5): active cards
+        // first, then a header, then the archived ones.
+        val active = filtered.filter { it.status != "archived" }.map { rowFor(it) }
+        val archived = filtered.filter { it.status == "archived" }.map { rowFor(it) }
+        if (archived.isEmpty()) return active
+        return active +
+            MemoryRow(id = "", title = getString(R.string.card_archive_header), isHeader = true) +
+            archived
     }
 
     private fun rowFor(r: RoleplayCharacterRecord): MemoryRow {
-        val badge = if (r.status == "archived") getString(R.string.memory_badge_archived) else null
+        val subtitle = listOfNotNull(r.species, r.charClass)
+            .map { it.trim() }.filter { it.isNotEmpty() }
+            .joinToString(" · ").ifEmpty { null }
         return MemoryRow(
             id = r.roleplayCharacterId,
             title = r.name,
-            subtitle = r.description.trim(),
-            badge = badge,
+            subtitle = subtitle,
+            badge = null,
             hasAction = true
         )
     }
@@ -75,13 +86,14 @@ class MemoryRoleplayCharactersActivity : MemoryScreenActivity() {
             Toast.makeText(this, R.string.memory_not_provisioned_toast, Toast.LENGTH_SHORT).show()
             return
         }
-        openEditor(null)
+        openCard(null)
     }
 
     /* ------------------------------ rows ------------------------------ */
 
     override fun onClick(row: MemoryRow) {
-        openEditor(row.id)
+        if (row.isHeader) return
+        openCard(row.id)
     }
 
     override fun onAction(row: MemoryRow, anchor: View) {
@@ -104,7 +116,7 @@ class MemoryRoleplayCharactersActivity : MemoryScreenActivity() {
         menu.menu.add(0, 4, 0, getString(R.string.action_delete))
         menu.setOnMenuItemClickListener { item ->
             when (item.itemId) {
-                1 -> openEditor(r.roleplayCharacterId)
+                1 -> openCard(r.roleplayCharacterId)
                 2 -> setStatus(r.roleplayCharacterId, "archived")
                 3 -> setStatus(r.roleplayCharacterId, "active")
                 4 -> confirmDelete(r)
@@ -126,59 +138,17 @@ class MemoryRoleplayCharactersActivity : MemoryScreenActivity() {
         )
     }
 
-    /* ------------------------------ editor ------------------------------ */
+    /* ------------------------------ card ------------------------------ */
 
-    private fun openEditor(roleplayCharacterId: String?) {
-        runOffThread {
-            val existing = roleplayCharacterId?.let { MemoryStore.getInstance(this).getRoleplayCharacter(it) }
-            runOnUiThread {
-                val dialog = EditRoleplayCharacterDialogFragment.newInstance(
-                    roleplayCharacterId = existing?.roleplayCharacterId ?: "",
-                    name = existing?.name ?: "",
-                    description = existing?.description ?: "",
-                    playedBy = existing?.playedBy ?: "user",
-                    arc = existing?.arc
-                )
-                dialog.setListener(editorListener)
-                dialog.show(supportFragmentManager, "EditRoleplayCharacterDialogFragment")
-            }
-        }
-    }
-
-    private val editorListener = object : EditRoleplayCharacterDialogFragment.Listener {
-        override fun onSave(roleplayCharacterId: String, name: String, description: String, playedBy: String) {
-            runOffThread {
-                val store = MemoryStore.getInstance(this@MemoryRoleplayCharactersActivity)
-                val prior = if (roleplayCharacterId.isNotEmpty()) store.getRoleplayCharacter(roleplayCharacterId) else null
-                val record = RoleplayCharacterRecord(
-                    roleplayCharacterId = prior?.roleplayCharacterId ?: MemoryStore.newId("rc-"),
-                    name = name,
-                    playedBy = playedBy,
-                    description = description,
-                    // The arc is Archivist-maintained; this editor never touches it.
-                    arc = prior?.arc,
-                    worldsPlayedJson = prior?.worldsPlayedJson ?: "[]",
-                    status = prior?.status ?: "active",
-                    createdAt = prior?.createdAt ?: MemoryStore.nowIso(),
-                    // Card Zone 1 fields this dialog doesn't edit yet (3.6b) —
-                    // pass through so saving here can't wipe them.
-                    species = prior?.species,
-                    charClass = prior?.charClass,
-                    corePersonality = prior?.corePersonality,
-                    physicalDescription = prior?.physicalDescription,
-                    goalsDrives = prior?.goalsDrives
-                )
-                store.upsertRoleplayCharacter(record)
-                runOnUiThread {
-                    Toast.makeText(this@MemoryRoleplayCharactersActivity, R.string.mem_pers_character_saved, Toast.LENGTH_SHORT).show()
-                    reload()
-                }
-            }
-        }
-
-        override fun onError(message: String) {
-            Toast.makeText(this@MemoryRoleplayCharactersActivity, message, Toast.LENGTH_LONG).show()
-        }
+    /** The full-screen two-zone card replaced the old edit dialog (spec §6a;
+     *  full-screen over pop-up per the coding rules). */
+    private fun openCard(roleplayCharacterId: String?) {
+        startActivity(
+            Intent(this, CharacterCardActivity::class.java)
+                .putExtra("chatId", chatId)
+                .putExtra("cardType", CardType.RP_CHARACTER)
+                .putExtra("cardId", roleplayCharacterId ?: "")
+        )
     }
 
     /* ------------------------------ actions ------------------------------ */

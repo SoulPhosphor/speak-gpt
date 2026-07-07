@@ -1303,6 +1303,92 @@
     <!-- Shared failure toast for these screens. -->
     <string name="mem_world_op_failed">Something went wrong: %1$s</string>
 
+    <!-- ============ Roleplay cards (Stage 3.6b) ============
+         Zone labels, warnings and button texts are the owner's approved words
+         (roleplay_cards_and_tags_spec.md §8a, July 7 2026); field, section and
+         dropdown names are the spec §6 lists verbatim. Do not reword. -->
+    <string name="card_zone1_title">Zone 1: Always Active</string>
+    <string name="card_zone1_subtext">Included every time this card is active. Large amounts of text may affect model performance.</string>
+    <string name="card_zone2_title">Zone 2: Retrieved When Relevant</string>
+    <string name="card_zone2_subtext">Used only when it matches the current conversation.</string>
+    <plurals name="card_word_count">
+        <item quantity="one">%1$d word</item>
+        <item quantity="other">%1$d words</item>
+    </plurals>
+    <string name="card_warn_large">Warning, content is getting large.</string>
+    <string name="card_warn_very_large">It\'s highly suggested to move non-critical information to the Retrieved When Relevant area.</string>
+
+    <string name="card_title_character">Roleplay Character</string>
+    <string name="card_title_party_member">Party Member</string>
+    <string name="card_field_species">Species</string>
+    <string name="card_field_class">Class</string>
+    <string name="card_field_core_personality">Core Personality</string>
+    <string name="card_field_physical_description">Physical Description</string>
+    <string name="card_field_goals_drives">Goals &amp; Drives</string>
+    <string name="card_field_speech_style">Speech Style (optional)</string>
+    <string name="card_field_status">Status</string>
+    <string name="card_status_alive">Alive</string>
+    <string name="card_status_incapacitated">Incapacitated</string>
+    <string name="card_status_dead">Dead</string>
+    <string name="card_status_enemy">Enemy</string>
+    <string name="card_saved">Card saved.</string>
+    <string name="card_name_required">A name is required.</string>
+    <string name="card_save_first">Save the card first to add entries.</string>
+
+    <string name="card_section_abilities">Abilities</string>
+    <string name="card_section_inventory">Inventory</string>
+    <string name="card_section_relationships">Relationships</string>
+    <string name="card_section_traits">Traits</string>
+    <string name="card_section_backstory">Backstory</string>
+    <string name="card_section_languages">Languages</string>
+    <string name="card_section_notes">Notes</string>
+    <string name="card_btn_add_entry">Add Entry</string>
+    <string name="card_no_entries">No entries yet.</string>
+    <string name="card_archive_header">Archive</string>
+
+    <!-- Zone 2 entry editor -->
+    <string name="entry_title_new">New Entry</string>
+    <string name="entry_title_edit">Edit Entry</string>
+    <string name="entry_hint_name">Name</string>
+    <string name="entry_hint_title">Title</string>
+    <string name="entry_hint_description">Description</string>
+    <string name="entry_hint_description_optional">Description (optional)</string>
+    <string name="entry_hint_quantity">Quantity</string>
+    <string name="entry_label_type">Type</string>
+    <string name="entry_label_relationship">Relationship</string>
+    <string name="entry_kind_innate">Innate</string>
+    <string name="entry_kind_trained">Trained</string>
+    <string name="entry_kind_class_feature">Class feature</string>
+    <string name="entry_kind_spell">Spell</string>
+    <string name="entry_kind_mundane">Mundane</string>
+    <string name="entry_kind_magical">Magical</string>
+    <string name="entry_kind_quest">Quest</string>
+    <string name="entry_kind_weapon">Weapon</string>
+    <string name="entry_kind_armor">Armor</string>
+    <string name="entry_kind_ally">Ally</string>
+    <string name="entry_kind_enemy">Enemy</string>
+    <string name="entry_kind_family">Family</string>
+    <string name="entry_kind_mentor">Mentor</string>
+    <string name="entry_kind_rival">Rival</string>
+    <string name="entry_kind_member">Member</string>
+    <string name="entry_kind_fear">Fear</string>
+    <string name="entry_kind_like">Like</string>
+    <string name="entry_kind_dislike">Dislike</string>
+    <string name="entry_kind_other">Other</string>
+    <string name="entry_name_required">A name is required.</string>
+    <string name="entry_title_required">A title is required.</string>
+    <string name="entry_description_required">A description is required.</string>
+    <string name="entry_quantity_required">A quantity is required.</string>
+    <string name="entry_saved">Entry saved.</string>
+    <string name="entry_deleted">Entry deleted.</string>
+    <string name="entry_delete_title">Delete entry?</string>
+    <string name="entry_delete_msg">Delete \"%1$s\"? This can\'t be undone.</string>
+    <string name="entry_quantity_fmt">×%1$d</string>
+
+    <!-- Roleplay tags on entries (spec §3) -->
+    <string name="card_tags_label">Tags</string>
+    <string name="card_tags_hint">Add a tag</string>
+
     <!-- ============ Phase 5: memory-area tile descriptions ============ -->
     <!-- The memory-manager hub was removed (owner ruling, July 6 2026): "Browse
          & edit" opens the Memories browser directly. mm_user_personas_desc is

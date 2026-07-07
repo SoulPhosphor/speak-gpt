@@ -213,4 +213,10 @@
     <color name="harmonized_blur_background">#C9E5FF</color>
     <color name="harmonized_blur_foreground1">#FF6B25</color>
     <color name="harmonized_blur_foreground2">#EB023B</color>
+
+    <!-- Roleplay cards (3.6b): the 500-word Zone 1 count. A saturated red
+         that stays readable on both light and dark surface containers — the
+         count sits on a surface-container pill so a themed window background
+         can never hide it (owner ruling, spec §8a). -->
+    <color name="card_count_alert">#E53935</color>
 </resources>
