@@ -1389,6 +1389,14 @@
     <string name="card_tags_label">Tags</string>
     <string name="card_tags_hint">Add a tag</string>
 
+    <!-- Party members roster (spec §4) -->
+    <string name="mem_party_title">Party Members</string>
+    <string name="mem_party_fab_add">New party member</string>
+    <string name="mm_party_desc">NPCs who travel with the party — one card each, linked into campaigns.</string>
+    <string name="mem_party_deleted">Party member deleted.</string>
+    <string name="mem_party_delete_title">Delete party member?</string>
+    <string name="mem_party_delete_msg">Delete \"%1$s\"? This can\'t be undone.</string>
+
     <!-- ============ Phase 5: memory-area tile descriptions ============ -->
     <!-- The memory-manager hub was removed (owner ruling, July 6 2026): "Browse
          & edit" opens the Memories browser directly. mm_user_personas_desc is

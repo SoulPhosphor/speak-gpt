@@ -35,7 +35,10 @@ class RoleplayHubActivity : MemoryScreenActivity() {
         listOf(
             Area(MemoryWorldsActivity::class.java, R.string.mem_world_title, R.string.mm_worlds_desc),
             Area(MemoryCampaignsActivity::class.java, R.string.mem_world_campaigns_title, R.string.mm_campaigns_desc),
-            Area(MemoryRoleplayCharactersActivity::class.java, R.string.mem_pers_title_roleplay_characters, R.string.mm_roleplay_desc)
+            Area(MemoryRoleplayCharactersActivity::class.java, R.string.mem_pers_title_roleplay_characters, R.string.mm_roleplay_desc),
+            // The top-level NPC roster (spec §4): campaigns link members from
+            // here — join, not ownership.
+            Area(MemoryPartyMembersActivity::class.java, R.string.mem_party_title, R.string.mm_party_desc)
         )
     }
 

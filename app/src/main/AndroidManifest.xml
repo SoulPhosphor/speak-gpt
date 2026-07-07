@@ -276,6 +276,10 @@
             android:exported="false"
             android:label="@string/card_title_character" />
         <activity
+            android:name=".ui.activities.memory.MemoryPartyMembersActivity"
+            android:exported="false"
+            android:label="@string/mem_party_title" />
+        <activity
             android:name=".ui.activities.memory.CardEntryEditorActivity"
             android:exported="false"
             android:label="@string/entry_title_edit" />
