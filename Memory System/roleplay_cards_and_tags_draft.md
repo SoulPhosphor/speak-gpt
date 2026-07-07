@@ -124,13 +124,19 @@ plus the owner's realm ruling.)
   card types and sections in §6 — system-defined, pre-loaded, never
   user-configured** (owner's requirement July 7: the categories are
   already defined by the system).
-- **Tag search door — PROPOSED (awaiting owner's yes/no):** a "Tags"
-  entry in the Roleplay hub opens a searchable index of every tag in the
-  roleplay realm (fuzzy search, same as tag input); tapping a tag opens
-  the same cross-card view. Via the tag bridge the view includes
-  roleplay-scoped MEMORIES sharing the tag, not just card entries.
-  Real-life tags keep their existing door (the Memories browser's tag
-  filter); the realm wall (§3) means the two searches never mix.
+- **Tag search door — RULED (owner approved July 7, final wording):**
+  a "Tags" entry in the Roleplay hub opens a searchable index of all
+  existing roleplay-realm tags (fuzzy search, same as tag input). It
+  searches roleplay tags ONLY, never real-life tags. It shows only tags
+  the user has created or approved — no starter tags, sample tags, or
+  preloaded tags, ever. Tapping a tag opens the already-defined
+  cross-card view, grouped by the predefined system card/section
+  categories; via the tag bridge that view includes roleplay-scoped
+  MEMORIES sharing the tag, not just card entries. Each tag visibly
+  shows whether auto-trigger is ON or it is browse-only. **This is a
+  human findability tool, not a new retrieval path and not a design
+  expansion.** Real-life tags keep their existing door (the Memories
+  browser's tag filter); the realm wall means the two searches never mix.
 - **The tag bridge spans both storage cabinets** (the memory store and the
   card/ledger store): one pool, one link table that can point at a memory,
   a ledger entry, or a whole card. Existing memory tags on
@@ -162,7 +168,22 @@ plus the owner's realm ruling.)
   the external review flagged that tags like "magic," "king," "fire,"
   or "home" would trigger constantly).** Default for every tag is
   auto-trigger ON; the switch turns a tag into a browse/organize-only
-  connector.
+  connector. **Guidance (not automation): broad/common words — "king,"
+  "magic," "fire," "city," "home" — are intended to be flipped to
+  browse-only by the user; the app NEVER auto-detects or auto-flips
+  "common" words itself** (in someone's world, "Fire" may be a person —
+  the app doesn't judge vocabulary).
+  **What browse-only does and does not silence (RULED July 7, answering
+  the owner's retrieval question):** browse-only turns off exactly ONE
+  path — the tag's name appearing in message text no longer fires its
+  entries. Everything else still works: the human tag view, the
+  "connected to:" line on injected entries, and **one-hop pull-along**
+  (when an entry fires by its own name, siblings sharing its tags —
+  browse-only or not — remain ride-along candidates, importance-ranked
+  and budget-capped). Entry names, section names, and parent chains
+  trigger regardless of any tag's mode, so retrieval never goes blind —
+  flipping a common word to browse-only removes only the false-positive
+  path.
 - **Archivist tag suggestions** (proper nouns, places, names detected in
   conversations) arrive with Phase 6, through the normal approval flow.
 
@@ -220,12 +241,12 @@ plus the owner's realm ruling.)
 
 ## 6. Card skeletons — PROPOSED (awaiting word-by-word approval)
 
-> Label status after the July 7 cleanup pass: every card structure in
-> this section is **RULED** — supplied or approved by the owner in chat.
-> The ONLY remaining PROPOSED item in this entire document is the **Tag
-> search door** in §3 (a "Tags" index screen in the Roleplay hub) —
-> DO NOT BUILD that one item until the owner flips it. Everything else
-> marked RULED is decided; nothing else is open.
+> Label status: every card structure in this section is **RULED** —
+> supplied or approved by the owner in chat. As of the owner's July 7
+> approval of the Tag search door (§3), **NOTHING in this document
+> remains PROPOSED — every design item is RULED.** The document as a
+> whole still awaits the owner's final front-to-back approval before
+> being merged into `owner_approved_rules.md`.
 
 Shared rules for all Zone 2 sections: every entry carries **tags**; entry
 names and section names are trigger words; entries are individually
@@ -475,13 +496,15 @@ two-AI combined draft; all AI merges/normalizations approved July 7)
 4. ~~Incapacitated NPCs~~ — RESOLVED July 7 by the finalized 6b: full
    core injects for Alive and Incapacitated; Dead and Enemy drop to the
    campaign roster line.
-5. **Tag search door (§3) — THE ONE ITEM STILL PROPOSED / DO NOT
-   BUILD:** a "Tags" index screen in the Roleplay hub (searchable list
-   of all roleplay-realm tags → the cross-card view). Awaiting the
-   owner's yes/no.
+5. ~~Tag search door (§3)~~ — RESOLVED July 7: the owner approved it
+   with the final wording now in §3 (roleplay realm only; user-created
+   tags only, nothing preloaded; grouped by the predefined categories;
+   per-tag trigger mode visible; a findability tool, not a new
+   retrieval path).
 6. After the owner's final front-to-back approval of this document, its
    contents get merged into `owner_approved_rules.md` and
-   `rag_engine_work_order.md`, and this file is retired.
+   `rag_engine_work_order.md`, and this file is retired. **This is the
+   only step left.**
 
 ## 7. What stays untouched
 
