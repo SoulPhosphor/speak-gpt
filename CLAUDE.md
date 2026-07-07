@@ -297,6 +297,15 @@ Everything is on-device. No cloud sync, no accounts.
    (§11). `status='draft'` rows are Phase-6 Archivist suggestions (the Pending
    UI is built but stays empty until Phase 6). Backups/codec carry rules, tags,
    and links. UI lives under AI System Settings (see the architecture map).
+   DB v11 (July 2026, Phase 6 prep) adds `transcripts.campaign_id`, and
+   transcript capture now stamps the turn's resolved scene (world / campaign /
+   RP character / user persona) onto the open row — a selected campaign's own
+   links outrank the chat's world/character picks, mirroring the enforcer, and
+   stale ids degrade to null. A scene change closes the open transcript row
+   just like a model or companion change, so each row's scene columns stay
+   truthful — the Archivist reads them per ROW to hold the fiction firewall
+   (rules §3) and attribute campaign state to the right continuity; pre-v11
+   rows simply have a null scene and read as ordinary conversation.
    Source is DERIVED for
    display (`provenance_source == "user_entered"` ⇒ "Entered by hand", else
    "Learned from chat"); there is no "Imported" bucket — import preserves each

@@ -487,6 +487,7 @@ data class TranscriptRecord(
     val chatId: String?,
     val companionId: String?,             // nullable: chats can run with no persona selected
     val worldId: String?,
+    val campaignId: String?,              // campaign amendment item 5: the Archivist attributes captured turns to the right continuity
     val roleplayCharacterId: String?,
     val userPersonaId: String?,
     val source: String,                   // live | imported

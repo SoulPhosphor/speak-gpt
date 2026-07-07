@@ -400,6 +400,7 @@ object MemorySeedCodec {
                 chatId = t.str("chat_id"),
                 companionId = t.str("companion_id"),
                 worldId = t.str("world_id"),
+                campaignId = t.str("campaign_id"),
                 roleplayCharacterId = t.str("roleplay_character_id"),
                 userPersonaId = t.str("user_persona_id"),
                 source = t.str("source") ?: "live",
@@ -815,6 +816,7 @@ object MemorySeedCodec {
                         putIfNotNull("chat_id", t.chatId)
                         putIfNotNull("companion_id", t.companionId)
                         putIfNotNull("world_id", t.worldId)
+                        putIfNotNull("campaign_id", t.campaignId)
                         putIfNotNull("roleplay_character_id", t.roleplayCharacterId)
                         putIfNotNull("user_persona_id", t.userPersonaId)
                         put("source", t.source)

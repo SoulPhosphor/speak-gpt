@@ -3731,6 +3731,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             val turnModel = model
             val memoryEnabled = preferences?.getChatMemoryEnabled() ?: true
             val excluded = preferences?.isChatExcludedFromMemory() ?: false
+            // The turn's scene selections (Quick Settings), stamped onto the
+            // transcript row so the Archivist knows which turns were fiction
+            // and which continuity they belong to. Raw picks; the recorder
+            // resolves campaign links (which outrank) and stale ids.
+            val turnWorldId = preferences?.getChatWorldId().orEmpty()
+            val turnCampaignId = preferences?.getChatCampaignId().orEmpty()
+            val turnRoleplayCharacterId = preferences?.getChatRoleplayCharacterId().orEmpty()
+            val turnUserPersonaId = preferences?.getChatUserPersonaId().orEmpty()
             val quickSettings = try {
                 org.json.JSONObject()
                     .put("model", turnModel)
@@ -3745,7 +3753,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             Thread {
                 TranscriptRecorder.recordTurn(
                     appContext, turnChatId, turnPersonaId, request, reply,
-                    turnModel, quickSettings, memoryEnabled, excluded
+                    turnModel, quickSettings, memoryEnabled, excluded,
+                    turnWorldId, turnCampaignId, turnRoleplayCharacterId, turnUserPersonaId
                 )
             }.start()
         } catch (e: Exception) {

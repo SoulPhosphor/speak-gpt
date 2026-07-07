@@ -233,6 +233,42 @@ class MemorySeedCodecTest {
     }
 
     @Test
+    fun transcriptSceneRoundTrips() {
+        // Phase 6 prep (DB v11): capture stamps the turn's scene — world,
+        // campaign, RP character, user persona — onto the transcript row so
+        // the Archivist can hold the fiction firewall and attribute campaign
+        // state to the right continuity. A backup must carry all four (and a
+        // pre-v11 row with no scene must still parse).
+        val withScene = """
+            {
+              "schema_version": "1.11.0",
+              "companions": [], "entities": [], "memories": [], "modes": [],
+              "directives": [], "worlds": [], "user_personas": [],
+              "roleplay_characters": [], "proposals": [],
+              "transcripts": [
+                { "transcript_id": "t-1", "chat_id": "chat-a", "companion_id": "c-1",
+                  "world_id": "w-1", "campaign_id": "camp-1",
+                  "roleplay_character_id": "rc-1", "user_persona_id": "up-1",
+                  "source": "live", "content": "[]", "review_status": "pending" },
+                { "transcript_id": "t-2", "chat_id": "chat-b",
+                  "source": "live", "content": "[]", "review_status": "pending" }
+              ]
+            }
+        """.trimIndent()
+
+        val data = MemorySeedCodec.parse(withScene)
+        assertEquals("camp-1", data.transcripts[0].campaignId)
+        assertEquals("w-1", data.transcripts[0].worldId)
+        assertEquals("rc-1", data.transcripts[0].roleplayCharacterId)
+        assertEquals("up-1", data.transcripts[0].userPersonaId)
+        // Pre-v11 rows have no scene at all — that must stay legal.
+        assertEquals(null, data.transcripts[1].campaignId)
+
+        val back = MemorySeedCodec.parse(MemorySeedCodec.serialize(data))
+        assertEquals(data, back)
+    }
+
+    @Test
     fun modelRulesRoundTrip() {
         // Stage 4 (owner_approved_rules §11 Revision 5): model rules are user-
         // authored, so backups must carry the rules (with their own model-
