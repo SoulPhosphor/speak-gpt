@@ -178,36 +178,64 @@ plus the owner's realm ruling.)
 > Everything in this section is the AI's draft for the owner to approve,
 > amend, or strike, field by field. Nothing here is decided.
 
-Shared rules for all Zone 2 sections: every entry = **name (required) +
-description (optional) + tags**; entry names and section names are
-trigger words; entries are individually retrievable; sections fire whole.
+Shared rules for all Zone 2 sections: every entry carries **tags**; entry
+names and section names are trigger words; entries are individually
+retrievable; sections fire whole.
 
 ### 6a. User roleplay character card
+
+Revised July 7 2026 from the owner's GLM-assisted draft, with the owner's
+two amendments: fears/likes/dislikes/speech-style are NOT always-injected
+(they work as trigger-fired Zone 2 traits — a fear of spiders fires when
+"spiders" appears), and **Goals & Drives joins Zone 1** because goals and
+grudges must influence what the AI writes BEFORE any trigger word appears
+(the AI decides whether an orc walks into the tavern; a sworn grudge
+against orcs has to already be in its head at that moment). This card
+REPLACES the six-section ledger from the July 6 ruling.
 
 - **Zone 1 (always given to the AI while selected — labeled openly in UI):**
   - Name
   - Species
   - Class
-  - Core personality (short prose paragraph)
-- **Zone 2 sections** (carried over from the July 6 ruling unless the
-  owner replaces them):
-  - Spells
-  - Skills
-  - Special abilities
-  - Items *(with quantity)*
-  - Special items *(with quantity)*
-  - Weapons *(with quantity)*
+  - Core Personality — who they are at a glance
+  - Physical Description — short; what they look like
+  - Goals & Drives — what they want and what they've sworn, including
+    grudges; campaign-independent
+- **Zone 2 sections:**
+  - **Abilities** (spells, skills, special abilities unified) — Name
+    (required), Type (innate / trained / class feature / spell / other),
+    Description (optional)
+  - **Inventory** (items, weapons, armor unified) — Name (required),
+    Type (mundane / magical / quest / weapon / armor / other),
+    Quantity (required), Description (optional)
+  - **Relationships** (people, organizations, factions) — Name (required),
+    Relationship (ally / enemy / family / mentor / rival / member /
+    other), Description (optional)
+  - **Traits** (fears, likes, dislikes in one section) — Name (required;
+    the trigger word, e.g. "spiders"), Type (fear / like / dislike),
+    Description (optional)
+  - **Backstory** — Title (required), Description (required); fires when
+    history or personal context comes up
+  - **Languages** — Name (required), Description (optional)
+
+Known, accepted limitation: Zone 2 triggers run on the USER's message, so
+if the AI introduces spiders first, the fear entry fires one turn late
+(when the user responds). Cost of keeping retrieval cheap and predictable.
 
 ### 6b. Party member (NPC) card
 
-Mirrors the user character card, plus status.
+Mirrors the user character card's Zone 2 exactly, plus status.
 
-- **Zone 1 (deliberately leaner — roughly two lines):**
+- **Zone 1 (deliberately leaner):**
   - Name
   - Species & class (one line)
   - Essence (one phrase, e.g. "gruff dwarven healer, secretly soft")
+  - Speech style (one phrase, e.g. "thick northern accent, never uses
+    contractions") — on the NPC card but NOT the user card, because the
+    AI voices NPCs every turn while the user writes their own dialogue
   - Status (Alive / Incapacitated / Dead / Enemy)
-- **Zone 2 sections:** same six as the user character card.
+- **Zone 2 sections:** same six as the user character card (Abilities,
+  Inventory, Relationships, Traits, Backstory, Languages).
 
 ### 6c. World card
 
@@ -247,9 +275,10 @@ Mirrors the user character card, plus status.
 
 ### Open questions for the owner on §6
 
-1. Do the six character-card sections survive as-is, or is this where
-   your "card suggestion structure changes" land? (You mentioned having
-   changes queued; the skeletons above start from the July 6 list.)
+1. ~~Character-card sections~~ — RESOLVED July 7: the owner supplied the
+   revised structure (6a above) with Goals & Drives promoted to Zone 1 and
+   fears/likes/dislikes demoted to a Zone 2 Traits section. Awaiting the
+   owner's final word-by-word confirm of 6a/6b as written.
 2. World Zone 2 list — confirm/amend the eight sections word by word
    (your earlier ruling explicitly required this at build time).
 3. Campaign Zone 2 — is "Key events / Locations visited / Notes" right,
