@@ -49,7 +49,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
 
     companion object {
         const val DATABASE_NAME = "companion_memory.db"
-        private const val DATABASE_VERSION = 10
+        private const val DATABASE_VERSION = 12
 
         // Freshness-cooldown source types (rules §10 / Stage 3.3): the
         // composite key (chat_id, source_type, entry_id) keeps ids from
@@ -248,15 +248,16 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         )
 
         // The five Zone 1 card columns (species..goals_drives) are the spec
-        // §6a user RP-character core (v7); description/arc/played_by predate
-        // the card system and stay for existing data.
+        // §6a user RP-character core (v7); description/played_by predate the
+        // card system and stay for existing data. The former "arc" column (an
+        // Archivist story-so-far) was removed in v12 — a character's history
+        // lives in the Backstory Zone 2 section, never a per-card arc.
         db.execSQL(
             "CREATE TABLE roleplay_characters (" +
                 "roleplay_character_id TEXT PRIMARY KEY, " +
                 "name TEXT NOT NULL, " +
                 "played_by TEXT NOT NULL, " +
                 "description TEXT NOT NULL, " +
-                "arc TEXT, " +
                 "worlds_played_json TEXT DEFAULT '[]', " +
                 "status TEXT NOT NULL CHECK (status IN ('active','archived')), " +
                 "created_at TEXT, " +
@@ -272,6 +273,9 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         // resolves. Additive for existing installs (onUpgrade v3).
         // quest_anchor + active_scene (v7) are the campaign card's Zone 1
         // "bookmark" (spec §6d) — user-maintained, session-end updates only.
+        // active_scene displays as "Current Plot" in the UI and prompt (v12);
+        // the former "story_so_far" free-text column was removed in v12 (the
+        // Plot Ledger Zone 2 section is the campaign's story record).
         db.execSQL(
             "CREATE TABLE campaigns (" +
                 "campaign_id TEXT PRIMARY KEY, " +
@@ -280,7 +284,6 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 "roleplay_character_id TEXT REFERENCES roleplay_characters(roleplay_character_id), " +
                 "companion_id TEXT REFERENCES companions(companion_id), " +
                 "status TEXT NOT NULL CHECK (status IN ('active','paused','ended','archived')), " +
-                "story_so_far TEXT, " +
                 "created_at TEXT, " +
                 "quest_anchor TEXT, " +
                 "active_scene TEXT)"
@@ -440,6 +443,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 "chat_id TEXT, " +
                 "companion_id TEXT REFERENCES companions(companion_id), " +
                 "world_id TEXT REFERENCES worlds(world_id), " +
+                "campaign_id TEXT REFERENCES campaigns(campaign_id), " +
                 "roleplay_character_id TEXT REFERENCES roleplay_characters(roleplay_character_id), " +
                 "user_persona_id TEXT REFERENCES user_personas(persona_id), " +
                 "source TEXT NOT NULL DEFAULT 'live' CHECK (source IN ('live','imported')), " +
@@ -1048,6 +1052,44 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 arrayOf(META_DB_MIGRATION, "10")
             )
         }
+        if (oldVersion < 11) {
+            // v11 (July 2026, Phase 6 prep): transcripts gain campaign_id — the
+            // campaign amendment (integration plan, item 5) requires captured
+            // turns to carry the active continuity so the Archivist can hold
+            // the fiction firewall (rules §3) and file campaign state under
+            // the right campaign. The sibling scene columns (world_id,
+            // roleplay_character_id, user_persona_id) existed since v1 but
+            // were never written; capture stamps all four from this version on
+            // (see appendTranscriptTurn). Rows captured before v11 simply have
+            // a null scene — the Archivist treats those as ordinary chats.
+            db.execSQL("ALTER TABLE transcripts ADD COLUMN campaign_id TEXT REFERENCES campaigns(campaign_id)")
+            db.execSQL(
+                "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                arrayOf(META_DB_MIGRATION, "11")
+            )
+        }
+        if (oldVersion < 12) {
+            // v12 (July 2026): remove the two dead "story so far" columns —
+            // campaigns.story_so_far and roleplay_characters.arc. Both were
+            // pre-card free-text leftovers that nothing displayed, injected, or
+            // read (a campaign's story record is the Plot Ledger Zone 2
+            // section; a character's history is the Backstory section). They
+            // are plain TEXT columns with no index, no foreign key and no CHECK,
+            // so a single-column DROP touches only that column and no other
+            // table (no rebuild, no cascade). Each drop is best-effort: if it
+            // ever failed the column would simply linger unused (exactly its
+            // prior state), never blocking the store from opening.
+            try {
+                db.execSQL("ALTER TABLE campaigns DROP COLUMN story_so_far")
+            } catch (_: Exception) { /* column already gone or drop unsupported: harmless, it was unused */ }
+            try {
+                db.execSQL("ALTER TABLE roleplay_characters DROP COLUMN arc")
+            } catch (_: Exception) { /* column already gone or drop unsupported: harmless, it was unused */ }
+            db.execSQL(
+                "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                arrayOf(META_DB_MIGRATION, "12")
+            )
+        }
     }
 
     /* ---------------------------------------------------------------------- */
@@ -1411,7 +1453,6 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                     put("name", r.name)
                     put("played_by", r.playedBy)
                     put("description", r.description)
-                    put("arc", r.arc)
                     put("worlds_played_json", r.worldsPlayedJson)
                     put("status", r.status)
                     put("created_at", r.createdAt)
@@ -1587,6 +1628,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                     put("chat_id", t.chatId)
                     put("companion_id", t.companionId)
                     put("world_id", t.worldId)
+                    put("campaign_id", t.campaignId)
                     put("roleplay_character_id", t.roleplayCharacterId)
                     put("user_persona_id", t.userPersonaId)
                     put("source", t.source)
@@ -1774,7 +1816,6 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                         name = it.getString(it.getColumnIndexOrThrow("name")),
                         playedBy = it.getString(it.getColumnIndexOrThrow("played_by")),
                         description = it.getString(it.getColumnIndexOrThrow("description")),
-                        arc = it.getStringOrNull("arc"),
                         worldsPlayedJson = it.getStringOrNull("worlds_played_json") ?: "[]",
                         status = it.getString(it.getColumnIndexOrThrow("status")),
                         createdAt = it.getStringOrNull("created_at"),
@@ -1907,6 +1948,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                         chatId = it.getStringOrNull("chat_id"),
                         companionId = it.getStringOrNull("companion_id"),
                         worldId = it.getStringOrNull("world_id"),
+                        campaignId = it.getStringOrNull("campaign_id"),
                         roleplayCharacterId = it.getStringOrNull("roleplay_character_id"),
                         userPersonaId = it.getStringOrNull("user_persona_id"),
                         source = it.getString(it.getColumnIndexOrThrow("source")),
@@ -2009,9 +2051,11 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
     /**
      * Appends one completed turn to the chat's open transcript row (creating
      * one when needed). "Open" = the chat's newest unprocessed row, still
-     * served by the same model and companion and under the size cap — a change
-     * of model or companion, or an oversized row, starts a new row so each
-     * transcript's model_tag/companion_id stay truthful for the Archivist.
+     * served by the same model, companion AND scene (world/campaign/RP
+     * character/user persona) and under the size cap — a change of any of
+     * those starts a new row so each transcript's model_tag/companion_id/
+     * scene columns stay truthful for the Archivist (the fiction firewall
+     * and campaign attribution both read them per row, never per turn).
      * [markExcluded] implements the memory kill switch: content is still
      * captured (so exclusion is reversible and the experiment can be
      * recovered) but the row is marked do-not-review.
@@ -2025,7 +2069,11 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         assistantMessage: String,
         modelTag: String,
         quickSettingsJson: String?,
-        markExcluded: Boolean
+        markExcluded: Boolean,
+        worldId: String? = null,
+        campaignId: String? = null,
+        roleplayCharacterId: String? = null,
+        userPersonaId: String? = null
     ): String {
         val now = nowIso()
         val db = writableDatabase
@@ -2034,15 +2082,23 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             var rowId: String? = null
             var content = "[]"
             db.query(
-                "transcripts", arrayOf("transcript_id", "content", "model_tag", "companion_id", "review_status"),
+                "transcripts",
+                arrayOf(
+                    "transcript_id", "content", "model_tag", "companion_id", "review_status",
+                    "world_id", "campaign_id", "roleplay_character_id", "user_persona_id"
+                ),
                 "chat_id = ? AND processed_at IS NULL", arrayOf(chatId),
                 null, null, "started_at DESC", "1"
             ).use {
                 if (it.moveToFirst()) {
                     val sameModel = it.getStringOrNull("model_tag") == modelTag
                     val sameCompanion = it.getStringOrNull("companion_id") == companionId
+                    val sameScene = it.getStringOrNull("world_id") == worldId &&
+                        it.getStringOrNull("campaign_id") == campaignId &&
+                        it.getStringOrNull("roleplay_character_id") == roleplayCharacterId &&
+                        it.getStringOrNull("user_persona_id") == userPersonaId
                     val existing = it.getString(it.getColumnIndexOrThrow("content"))
-                    if (sameModel && sameCompanion && existing.length < MAX_TRANSCRIPT_CHARS) {
+                    if (sameModel && sameCompanion && sameScene && existing.length < MAX_TRANSCRIPT_CHARS) {
                         rowId = it.getString(0)
                         content = existing
                     }
@@ -2063,6 +2119,10 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                     put("transcript_id", newRowId)
                     put("chat_id", chatId)
                     put("companion_id", companionId)
+                    put("world_id", worldId)
+                    put("campaign_id", campaignId)
+                    put("roleplay_character_id", roleplayCharacterId)
+                    put("user_persona_id", userPersonaId)
                     put("source", "live")
                     put("started_at", now)
                     put("ended_at", now)
@@ -2268,7 +2328,6 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                         name = it.getString(it.getColumnIndexOrThrow("name")),
                         playedBy = it.getString(it.getColumnIndexOrThrow("played_by")),
                         description = it.getString(it.getColumnIndexOrThrow("description")),
-                        arc = it.getStringOrNull("arc"),
                         worldsPlayedJson = it.getStringOrNull("worlds_played_json") ?: "[]",
                         status = it.getString(it.getColumnIndexOrThrow("status")),
                         createdAt = it.getStringOrNull("created_at"),
@@ -2966,7 +3025,6 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             put("name", r.name)
             put("played_by", r.playedBy)
             put("description", r.description)
-            put("arc", r.arc)
             put("worlds_played_json", r.worldsPlayedJson)
             put("status", r.status)
             put("created_at", r.createdAt ?: nowIso())
@@ -3111,7 +3169,6 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                         roleplayCharacterId = it.getStringOrNull("roleplay_character_id"),
                         companionId = it.getStringOrNull("companion_id"),
                         status = it.getString(it.getColumnIndexOrThrow("status")),
-                        storySoFar = it.getStringOrNull("story_so_far"),
                         createdAt = it.getStringOrNull("created_at"),
                         questAnchor = it.getStringOrNull("quest_anchor"),
                         activeScene = it.getStringOrNull("active_scene"),
@@ -3143,7 +3200,6 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         put("roleplay_character_id", c.roleplayCharacterId)
         put("companion_id", c.companionId)
         put("status", c.status)
-        put("story_so_far", c.storySoFar)
         put("created_at", c.createdAt ?: nowIso())
         put("quest_anchor", c.questAnchor)
         put("active_scene", c.activeScene)

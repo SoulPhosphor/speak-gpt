@@ -245,7 +245,6 @@ object MemorySeedCodec {
                 name = r.reqStr("name"),
                 playedBy = r.reqStr("played_by"),
                 description = r.reqStr("description"),
-                arc = r.str("arc"),
                 worldsPlayedJson = r.arrText("worlds_played"),
                 status = r.reqStr("status"),
                 createdAt = r.str("created_at"),
@@ -291,7 +290,6 @@ object MemorySeedCodec {
                 roleplayCharacterId = c.str("roleplay_character_id"),
                 companionId = c.str("companion_id"),
                 status = c.str("status") ?: "active",
-                storySoFar = c.str("story_so_far"),
                 createdAt = c.str("created_at"),
                 questAnchor = c.str("quest_anchor"),
                 activeScene = c.str("active_scene"),
@@ -400,6 +398,7 @@ object MemorySeedCodec {
                 chatId = t.str("chat_id"),
                 companionId = t.str("companion_id"),
                 worldId = t.str("world_id"),
+                campaignId = t.str("campaign_id"),
                 roleplayCharacterId = t.str("roleplay_character_id"),
                 userPersonaId = t.str("user_persona_id"),
                 source = t.str("source") ?: "live",
@@ -622,7 +621,6 @@ object MemorySeedCodec {
                     put("name", r.name)
                     put("played_by", r.playedBy)
                     put("description", r.description)
-                    putIfNotNull("arc", r.arc)
                     put("worlds_played", jsonArrayOrEmpty(r.worldsPlayedJson))
                     put("status", r.status)
                     putIfNotNull("created_at", r.createdAt)
@@ -645,7 +643,6 @@ object MemorySeedCodec {
                         putIfNotNull("roleplay_character_id", c.roleplayCharacterId)
                         putIfNotNull("companion_id", c.companionId)
                         put("status", c.status)
-                        putIfNotNull("story_so_far", c.storySoFar)
                         putIfNotNull("created_at", c.createdAt)
                         putIfNotNull("quest_anchor", c.questAnchor)
                         putIfNotNull("active_scene", c.activeScene)
@@ -815,6 +812,7 @@ object MemorySeedCodec {
                         putIfNotNull("chat_id", t.chatId)
                         putIfNotNull("companion_id", t.companionId)
                         putIfNotNull("world_id", t.worldId)
+                        putIfNotNull("campaign_id", t.campaignId)
                         putIfNotNull("roleplay_character_id", t.roleplayCharacterId)
                         putIfNotNull("user_persona_id", t.userPersonaId)
                         put("source", t.source)

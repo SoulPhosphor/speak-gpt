@@ -961,7 +961,8 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
 
     /** The owner-worded 3.6c dialog (spec §8b): optional "what happened?"
      *  reason, and the prompted choice of whether the move is told to the AI
-     *  every turn (by updating the campaign's Active Scene). */
+     *  every turn (by updating the campaign's Current Plot — the active_scene
+     *  column). */
     private fun confirmWorldMove(campaign: CampaignRecord, newWorldId: String) {
         val ctx = context ?: return
         val reasonInput = TextInputEditText(ctx).apply {
@@ -1029,8 +1030,8 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
                     campaign.copy(
                         worldId = newWorldId,
                         // The prompted "send to the AI every turn" choice: the
-                        // Active Scene is the bookmark line that already rides
-                        // every message.
+                        // Current Plot (active_scene) is the bookmark line that
+                        // already rides every message.
                         activeScene = if (updateScene) {
                             if (reason.isNotEmpty()) appContext.getString(R.string.rp_scene_fmt, newName, reason)
                             else newName

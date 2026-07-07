@@ -51,7 +51,11 @@ object TranscriptRecorder {
         modelTag: String,
         quickSettingsJson: String?,
         memoryEnabled: Boolean,
-        excludedByUser: Boolean
+        excludedByUser: Boolean,
+        worldId: String? = null,
+        campaignId: String? = null,
+        roleplayCharacterId: String? = null,
+        userPersonaId: String? = null
     ) {
         try {
             // Diagnostic breadcrumbs: capture is otherwise invisible, so each
@@ -87,6 +91,34 @@ object TranscriptRecorder {
                 }
             }
 
+            // Scene attribution (Phase 6 prep; campaign amendment item 5 +
+            // rules §3): stamp the turn's roleplay scene onto the transcript
+            // row so the Archivist can hold the fiction firewall and file
+            // campaign state under the right continuity. Resolution mirrors
+            // the enforcer (spec §2/§8b): a selected campaign's OWN links
+            // outrank the chat's world/character picks — there is no per-chat
+            // override. Ids that no longer resolve degrade to null rather
+            // than fail the insert (the transcript columns carry FKs, and a
+            // capture failure must never disturb a turn).
+            // A resolution failure degrades to a null scene, never a lost
+            // capture (the row is still worth keeping without attribution).
+            var campaign: CampaignRecord? = null
+            var sceneWorldId: String? = null
+            var sceneCharacterId: String? = null
+            var scenePersonaId: String? = null
+            try {
+                campaign = campaignId?.takeIf { it.isNotBlank() }?.let { store.getCampaign(it) }
+                sceneWorldId = (campaign?.worldId ?: worldId?.takeIf { it.isNotBlank() })
+                    ?.takeIf { store.getWorld(it) != null }
+                sceneCharacterId = (campaign?.roleplayCharacterId
+                    ?: roleplayCharacterId?.takeIf { it.isNotBlank() })
+                    ?.takeIf { store.getRoleplayCharacter(it) != null }
+                scenePersonaId = userPersonaId?.takeIf { it.isNotBlank() }
+                    ?.takeIf { store.getUserPersona(it) != null }
+            } catch (e: Exception) {
+                MemoryLog.log(context, "Transcript", "error", "Scene resolution failed (capturing without scene): ${e.message}")
+            }
+
             val markExcluded = !memoryEnabled || participation == "none"
             val outcome = store.appendTranscriptTurn(
                 chatId = chatId,
@@ -95,10 +127,18 @@ object TranscriptRecorder {
                 assistantMessage = assistantMessage,
                 modelTag = modelTag,
                 quickSettingsJson = quickSettingsJson,
-                markExcluded = markExcluded
+                markExcluded = markExcluded,
+                worldId = sceneWorldId,
+                campaignId = campaign?.campaignId,
+                roleplayCharacterId = sceneCharacterId,
+                userPersonaId = scenePersonaId
             )
+            val sceneNote = if (campaign == null && sceneWorldId == null && sceneCharacterId == null && scenePersonaId == null)
+                "none"
+            else
+                "w=${sceneWorldId ?: "-"} c=${campaign?.campaignId ?: "-"} rp=${sceneCharacterId ?: "-"} up=${scenePersonaId ?: "-"}"
             MemoryLog.log(context, "Transcript", "info",
-                "captured chat=$chatId companion=${companionId ?: "none"} memOn=$memoryEnabled -> $outcome")
+                "captured chat=$chatId companion=${companionId ?: "none"} memOn=$memoryEnabled scene=$sceneNote -> $outcome")
         } catch (e: Exception) {
             MemoryLog.log(context, "Transcript", "error", "Turn capture failed: ${e.message}")
         }
