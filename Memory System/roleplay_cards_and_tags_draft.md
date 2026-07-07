@@ -222,20 +222,34 @@ Known, accepted limitation: Zone 2 triggers run on the USER's message, so
 if the AI introduces spiders first, the fear entry fires one turn late
 (when the user responds). Cost of keeping retrieval cheap and predictable.
 
-### 6b. Party member (NPC) card
+### 6b. Party member (NPC) card — RULED (owner finalized July 7 2026)
 
-Mirrors the user character card's Zone 2 exactly, plus status.
+Identical in structure to the user character card, plus two NPC-only
+Zone 1 fields. The earlier "deliberately leaner NPC core" idea is
+DROPPED: leanness is the user's choice, not a structural cap — the fields
+match the user card and the user decides how much goes in each ("if they
+want to make an entire book, that's their decision"). No hard limits.
 
-- **Zone 1 (deliberately leaner):**
+- **Zone 1 (always given to the AI while this NPC is in the active
+  campaign's party):**
   - Name
-  - Species & class (one line)
-  - Essence (one phrase, e.g. "gruff dwarven healer, secretly soft")
-  - Speech style (one phrase, e.g. "thick northern accent, never uses
-    contractions") — on the NPC card but NOT the user card, because the
-    AI voices NPCs every turn while the user writes their own dialogue
-  - Status (Alive / Incapacitated / Dead / Enemy)
+  - Species
+  - Class
+  - Core Personality
+  - Physical Description
+  - Goals & Drives
+  - Speech Style (optional; empty = nothing injected) — NPC-only because
+    the AI voices NPCs while the user writes their own dialogue; exists
+    for the orc with a southern drawl
+  - Status (Alive / Incapacitated / Dead / Enemy) — always injected so
+    the narrator knows how to treat the character
 - **Zone 2 sections:** same six as the user character card (Abilities,
   Inventory, Relationships, Traits, Backstory, Languages).
+- **Status gating (stands as proposed):** Alive and Incapacitated party
+  members inject their full core each turn; Dead and Enemy members drop
+  out of per-turn injection and are represented by the campaign card's
+  party roster line (e.g. "Rose (dead)"), with their full card still
+  reachable through Zone 2 retrieval, tags, and browsing.
 
 ### 6c. World card
 
@@ -283,8 +297,9 @@ Mirrors the user character card's Zone 2 exactly, plus status.
    (your earlier ruling explicitly required this at build time).
 3. Campaign Zone 2 — is "Key events / Locations visited / Notes" right,
    too much, or missing something?
-4. Should Incapacitated NPCs keep their full core in Zone 1 (as drafted)
-   or drop to one line like Dead/Enemy?
+4. ~~Incapacitated NPCs~~ — RESOLVED July 7 by the finalized 6b: full
+   core injects for Alive and Incapacitated; Dead and Enemy drop to the
+   campaign roster line.
 
 ## 7. What stays untouched
 
