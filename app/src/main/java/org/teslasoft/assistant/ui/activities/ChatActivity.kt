@@ -4149,6 +4149,45 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             )
         }
 
+        // Model rules (Stage 4, owner_approved_rules §11): the chat's selected
+        // profile renders as its OWN prompt-layer block after the stable
+        // prefix and before the memory message (prompt-layer contract,
+        // block 2). Never appended to the stable first message — that would
+        // mutate the cached prefix — and never placed inside the memory
+        // message. Deterministic and byte-stable: active rules only, fixed
+        // store order, same wording every turn; with no profile selected the
+        // block is absent entirely (zero bytes of the request change).
+        // Independent of the memory-engine tier — model rules are not memory
+        // content. Any failure degrades to "no model rules this turn" and
+        // never blocks generation.
+        val modelRulesProfileId = preferences!!.getChatModelRulesProfileId()
+        if (modelRulesProfileId != "" && MemoryStore.isProvisioned(this)) {
+            val modelRulesBlock: String? = try {
+                withContext(Dispatchers.IO) {
+                    val rules = MemoryStore.getInstance(this@ChatActivity)
+                        .getActiveModelRules(modelRulesProfileId)
+                    if (rules.isEmpty()) null
+                    else rules.joinToString(
+                        separator = "\n",
+                        prefix = getString(R.string.model_rules_injection_header) + "\n"
+                    ) { "- " + it.text }
+                }
+            } catch (e: Exception) {
+                org.teslasoft.assistant.preferences.memory.MemoryLog.log(
+                    this, "ModelRules", "error", "Model rules unavailable this turn: ${e.message}"
+                )
+                null
+            }
+            if (modelRulesBlock != null) {
+                msgs.add(
+                    ChatMessage(
+                        role = ChatRole.System,
+                        content = modelRulesBlock
+                    )
+                )
+            }
+        }
+
         // Memory engine tier (Phase 4): "none" = no injected memory of either
         // kind, "lorebooks" = the classic tier below, "full" = the enforcer
         // assembly (which renders the lore matches inside its own message).

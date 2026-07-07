@@ -975,6 +975,10 @@
     <string name="label_model_rules_none">None</string>
     <string name="model_rules_picker_title">Model rules</string>
     <string name="model_rules_matches_hint">(matches this chat\'s model)</string>
+    <!-- Prompt text: the header line of the model-rules prompt block. Part of
+         the byte-stable block 2 of the prompt-layer contract — changing it
+         invalidates every chat's cached prefix, so don't reword casually. -->
+    <string name="model_rules_injection_header">Model rules (user-written handling rules for this model):</string>
 
     <!-- Memory system Phase 4: enforcer assembly debug view (shown above the lorebook debug log) -->
     <string name="memory_debug_assembly_header">Memory assembly (full engine)</string>
