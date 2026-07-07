@@ -1,5 +1,13 @@
 # Archivist Operational Prompt (for schema v1.11)
 
+> **⚠️ PRE-REVISION DOCUMENT.** This prompt predates the owner's
+> July 6–7 2026 rulings and must be REWRITTEN before Phase 6 ships —
+> its pass structure references retired machinery (modes, directives,
+> entities, owner profile) and the old roleplay model.
+> `owner_approved_rules.md` (Revision 4) and
+> `roleplay_cards_and_tags_spec.md` govern what the Archivist may
+> propose. Do not send this prompt to a model as-is.
+
 This is the literal system prompt sent to the Archivist model each run, with {braces} marking what the code injects. It is the executable distillation of archivist_spec.md; where this prompt is silent, that spec governs.
 
 ---

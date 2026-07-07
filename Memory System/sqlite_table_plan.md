@@ -1,5 +1,16 @@
 # SQLite Table Plan — Companion Memory System (schema v1.11)
 
+> **⚠️ PRE-REVISION DOCUMENT — the live schema has moved on.** This file
+> is the v1.11 baseline; the shipped database is at DB v6 (v4–v6
+> documented in CLAUDE.md and the `MemoryStore` header: seven-category
+> scope, projects, multi-select target join tables, cooldown tables) and
+> the rescoped Stage 3.6 (`rag_engine_work_order.md`) adds the roleplay
+> card + tag tables per `roleplay_cards_and_tags_spec.md`. Note
+> especially: the world/character TEARDOWN recipe below (memories always
+> archived/deleted with the card) is SUPERSEDED by the per-deletion
+> choice and archive/link rules in the spec §5. `owner_approved_rules.md`
+> (Revision 4) outranks this file wherever they disagree.
+
 This translates the JSON schema (v1.11) into concrete SQLite tables for Android. Same concepts, normalized where querying demands it, JSON columns where it doesn't. The JSON schema remains the canonical *export/import format*; these tables are its storage shape. No new behavior is introduced here.
 
 ## Design decisions

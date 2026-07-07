@@ -2,7 +2,22 @@
 
 A layered, model-agnostic memory system for AI companions: global and per-companion memories, protected topics with handling instructions, communication modes, roleplay worlds and characters, and an AI "Archivist" that maintains it all under user-controlled autonomy dials. Design is complete; this package is the full specification for the coding phase.
 
-## The documents, in reading order
+> **⚠️ DOCUMENT HIERARCHY (July 2026 — read this before anything else in
+> this folder).** The eleven v1.11 package documents below are the
+> ORIGINAL design and are now pre-revision in places. The current
+> authority order is:
+> 1. **`owner_approved_rules.md`** (Revision 4) — outranks everything.
+> 2. **`roleplay_cards_and_tags_spec.md`** — authoritative roleplay
+>    card + tag detail, incorporated into the rules as Revision 4.
+> 3. **`phase5_rework_work_order.md`** and **`rag_engine_work_order.md`**
+>    — the build paths (stages 1–2 built; 3.0–3.5 built; 3.6 rescoped).
+> 4. The v1.11 package below — background and still-valid mechanics,
+>    each file carrying its own ⚠️ banner naming what's superseded.
+>    (`companion_memory_schema.json` / `seed_public_template.json` are
+>    the v1.11 export shape — the codec still reads schema-shaped JSON,
+>    but retired concepts inside them — modes, directives, entities,
+>    owner_profile, always_load — are dormant fields, not features to
+>    build.)
 
 1. **README.md** (this file) — orientation and glossary.
 2. **memory_system_guide.md** — plain-language tour of the concepts.

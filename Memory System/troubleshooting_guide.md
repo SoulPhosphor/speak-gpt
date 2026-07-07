@@ -1,5 +1,12 @@
 # Troubleshooting Guide (for schema v1.11)
 
+> **⚠️ PRE-REVISION DOCUMENT.** Some workflows below reference screens
+> and machinery retired July 6–7 2026 (modes, directives, entities,
+> owner profile, the memory hub). The current screens are the Memories
+> browser + Pending flow (rules §14) and the roleplay areas in
+> `roleplay_cards_and_tags_spec.md`. Symptom-level advice still applies
+> where the screens still exist.
+
 Written for the system's owner, not the coder. You've only used frontier models with built-in memory, so here is what problems actually look like in a system you own — symptom first, then where to look, then the fix. None of this requires reading code; everything routes through the memory editor, run reports, and settings.
 
 ## The two habits that prevent most problems

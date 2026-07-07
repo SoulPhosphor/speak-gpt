@@ -1,5 +1,15 @@
 # Prompt Assembly Template (for schema v1.11)
 
+> **⚠️ PRE-REVISION DOCUMENT — this skeleton is SUPERSEDED.** The
+> standing packet, model note, hard-limits render, mode block, and
+> always-load material below were retired by the owner's rulings
+> (July 6–7 2026) and removed from the built enforcer in Stage 3.4.
+> The current prompt-layer contract lives at the top of
+> `rag_engine_work_order.md`; the current rules are
+> `owner_approved_rules.md` (Revision 4) + `roleplay_cards_and_tags_spec.md`.
+> Still valid here: the HANDLE WITH CARE inline rendering pattern and
+> the hand-written-notes-outrank-memories rule.
+
 The literal system-prompt skeleton the enforcer fills every turn. {braces} = injected by code; [brackets] = include only when applicable; ordering is mandatory (identity → rules → mode → knowledge → scene → user's explicit choice). Where a section is empty, omit it and its header entirely — no placeholder text ever reaches the model.
 
 ---

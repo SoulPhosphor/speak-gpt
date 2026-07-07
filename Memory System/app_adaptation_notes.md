@@ -1,5 +1,14 @@
 # App Adaptation Notes (schema v1.11)
 
+> **⚠️ PRE-REVISION DOCUMENT.** The UI areas sketched below predate the
+> owner's July 6–7 2026 rulings — the memory hub, entities/modes/
+> directives/owner-profile screens are retired, and the roleplay areas
+> are redesigned as the four-card system. Current UI truth:
+> `owner_approved_rules.md` (Revision 4), `roleplay_cards_and_tags_spec.md`
+> (§6, §8), and `phase5_rework_work_order.md` for what was actually
+> built. Still valid: transcript capture, sync hooks, and any section
+> the later documents don't contradict.
+
 Changes the existing app needs so the memory system can plug in. This is the app-side companion to the enforcer/librarian spec; it is repo-safe. Sections marked (user-specified) record UI decisions made by the app's owner and are not up for reinterpretation by the coding AI.
 
 ## Terminology mapping (from the real app UI)

@@ -1,5 +1,13 @@
 # Companion Memory System — Plain-Language Guide
 
+> **⚠️ PRE-REVISION DOCUMENT.** This guide describes the original v1.11
+> design. The owner has since retired several concepts described below
+> as if live (July 6–7 2026): seeded modes, directives, entities, the
+> owner portrait, always-load, and the old roleplay model. The current
+> plain-language truth is `owner_approved_rules.md` (Revision 4) plus
+> `roleplay_cards_and_tags_spec.md`; read those, not this, to know what
+> the system does today.
+
 You don't code, so this explains the design the way I'd explain it to a collaborator, not a programmer. Hand this guide plus the two JSON files to any AI or developer and they'll know exactly what to build.
 
 ## The two files

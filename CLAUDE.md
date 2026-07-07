@@ -649,7 +649,10 @@ Everything is on-device. No cloud sync, no accounts.
   of `lorebook.db`. Lorebooks stay untouched as the independent low-RAM tier
   (user-authored lore outranks system memories at injection). All eleven
   package documents are present; `enforcer_librarian_spec.md` and
-  `prompt_assembly_template.md` are the authoritative runtime/prompt specs.
+  `prompt_assembly_template.md` were the original runtime/prompt specs but
+  are now PRE-REVISION (each carries a ⚠️ banner): `owner_approved_rules.md`
+  + the work orders describe the actual runtime since the July 2026
+  rulings and the Stage 3.4 enforcer rework.
 - **The roleplay layer (cards + tags) was redesigned and owner-approved
   July 6–7 2026.** `Memory System/roleplay_cards_and_tags_spec.md` is the
   authoritative spec (four two-zone cards: user RP character, NPC party

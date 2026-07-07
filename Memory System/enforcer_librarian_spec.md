@@ -1,5 +1,18 @@
 # The Enforcer & Librarian — Runtime Specification v1.1 (for schema v1.11)
 
+> **⚠️ PRE-REVISION DOCUMENT — DO NOT BUILD FROM THIS FILE WITHOUT
+> CHECKING THE CURRENT RULES FIRST.** Much of the runtime below was
+> retired or redesigned by the owner (July 6–7 2026): the standing
+> packet, owner portrait, entity summaries, always-load memories, mode
+> detection, directives, the model-adaptation note, the old prompt
+> assembly order, and the old roleplay/card handling are ALL superseded.
+> `owner_approved_rules.md` (Revision 4) and
+> `roleplay_cards_and_tags_spec.md` outrank this file wherever they
+> disagree; `rag_engine_work_order.md` is the current build path, and
+> Stage 3.4's enforcer rework (built) is the actual runtime. Still valid
+> here: the librarian mechanics, protection-inseparability, change-set
+> safety, and undo.
+
 This is the sixth and final design document. It defines the runtime: how a conversation turn actually works, how the system prompt is assembled from the memory store, how the Archivist's change-sets get applied safely, and how all of this integrates with the app that already exists (character definitions, activation prompts, lore books, multi-API switching). The coding phase consumes this document plus the schema, seed, guide, Archivist spec, and SQLite plan.
 
 One runtime, two hats:
