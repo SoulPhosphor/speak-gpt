@@ -573,12 +573,24 @@ Everything is on-device. No cloud sync, no accounts.
   resolved: the owner designed and approved the full roleplay card + tag
   system — `Memory System/roleplay_cards_and_tags_spec.md` is the
   authoritative spec, incorporated into the rules as Revision 4). Its
-  sub-task **3.6a (schema, DB v7 — the card/tag storage layer + store CRUD
-  + backup coverage) is BUILT**; 3.6b–f (card editors/rosters, Quick
-  Settings campaign behavior, injection wiring, tags screens,
-  deletion/archive behavior) are next, in order, per the work order. Stage
-  4 (Model rules, §11) is specced in the same work order and not yet
-  built. Still deferred: merge tooling.
+  sub-tasks **3.6a (schema, DB v7–v8 — the card/tag storage layer + store
+  CRUD + backup coverage) and 3.6b (the card editors/rosters) are BUILT**:
+  full-screen two-zone cards for RP characters + party members
+  (`CharacterCardActivity`, one screen, party mode adds Speech Style +
+  the four-state status), worlds (`WorldDetailActivity`, grouped §6c
+  sections + geography parents + the Promote-to-Party-Member flow) and
+  campaigns (`CampaignDetailActivity`, bookmark + roster links + overlay
+  sections), all sharing `CardEntryEditorActivity` (section-shaped
+  fields), `CardTagChips` (roleplay-realm tag input) and `CardZoneUi`
+  (the §8a word count, 300/500 thresholds). Zone labels/warnings use the
+  §8a approved words verbatim. Two §5 display details ride with 3.6f:
+  Archive-section grouping on the worlds/campaigns LISTS and the
+  delete-while-linked warning dialogs. **3.6c is PAUSED on an owner
+  question** (the campaign-selector "story moved" confirmation wording +
+  whether the character slot is changeable — ask the owner, do not build
+  from the spec §2 text alone); 3.6d–f follow. Stage 4 (Model rules,
+  §11) is specced in the same work order and not yet built. Still
+  deferred: merge tooling.
 - Markdown/LaTeX rendering, partial text selection, message edit/delete/copy/
   share, bulk select, image attach + DALL·E-style generation, in-app
   translator, playground, logit bias editor, AMOLED theme, onboarding flow.
