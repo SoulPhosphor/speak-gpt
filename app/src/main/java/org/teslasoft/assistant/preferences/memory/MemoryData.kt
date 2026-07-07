@@ -342,6 +342,38 @@ data class RpTagRecord(
     val targets: List<Pair<String, String>> = emptyList()
 )
 
+/* -------------------------------------------------------------------------
+ * Model rules (Stage 4, owner_approved_rules §11): user-created profiles of
+ * model-specific patches. A profile = the user's nickname + a list of model
+ * strings that count as that model (snapshots can share one profile;
+ * endpoints are irrelevant — the same model is the same model from any
+ * provider). Rules with no profile are "Needs review" (unassigned) — the
+ * system never invents a profile. Injection is user-decided per chat and
+ * OFF by default; nothing here is ever auto-applied.
+ * ------------------------------------------------------------------------- */
+
+data class ModelRuleProfileRecord(
+    val profileId: String,
+    val nickname: String,                 // the user's name for the model, e.g. "Model 5"
+    val modelStringsJson: String,         // JSON array of model id strings
+    val createdAt: String,
+    val updatedAt: String? = null
+)
+
+data class ModelRuleRecord(
+    val ruleId: String,
+    /** null = unassigned → the pinned "Needs review" section (§11). */
+    val profileId: String?,
+    val text: String,
+    val status: String,                   // draft | active (drafts arrive with Phase 6 filing)
+    /** The model string of the chat a draft was filed from (Phase 6) — §11's
+     *  move flow offers to add it to the destination profile so future drafts
+     *  with that string file there automatically. Null for hand-added rules. */
+    val sourceModelString: String? = null,
+    val createdAt: String,
+    val updatedAt: String? = null
+)
+
 data class ChangeLogEntry(
     val at: String,
     val actor: String,                    // user | archivist | companion | system
@@ -477,7 +509,11 @@ data class MemoryStoreData(
     // Reset-memories "save a backup first" path can never lose a card.
     val partyMembers: List<PartyMemberRecord> = emptyList(),
     val cardEntries: List<CardEntryRecord> = emptyList(),
-    val rpTags: List<RpTagRecord> = emptyList()
+    val rpTags: List<RpTagRecord> = emptyList(),
+    // Model rules (Stage 4, rules §11) — user-authored, so they ride every
+    // backup like everything else the user typed in.
+    val modelRuleProfiles: List<ModelRuleProfileRecord> = emptyList(),
+    val modelRules: List<ModelRuleRecord> = emptyList()
 )
 
 /**

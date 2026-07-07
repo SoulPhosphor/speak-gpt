@@ -362,6 +362,29 @@ object MemorySeedCodec {
             )
         }
 
+        // Model rules (Stage 4, rules §11) — user-authored, so backups carry them.
+        val modelRuleProfiles = each(root, "model_rule_profiles").map { p ->
+            ModelRuleProfileRecord(
+                profileId = p.reqStr("profile_id"),
+                nickname = p.reqStr("nickname"),
+                modelStringsJson = p.arrText("model_strings"),
+                createdAt = p.str("created_at") ?: "",
+                updatedAt = p.str("updated_at")
+            )
+        }
+
+        val modelRules = each(root, "model_rules").map { r ->
+            ModelRuleRecord(
+                ruleId = r.reqStr("rule_id"),
+                profileId = r.str("profile_id"),
+                text = r.reqStr("text"),
+                status = r.str("status") ?: "active",
+                sourceModelString = r.str("source_model_string"),
+                createdAt = r.str("created_at") ?: "",
+                updatedAt = r.str("updated_at")
+            )
+        }
+
         val retrievalPolicy = if (root.has("retrieval_policy") && !root.isNull("retrieval_policy"))
             root.getJSONObject("retrieval_policy").toString() else null
 
@@ -403,7 +426,9 @@ object MemorySeedCodec {
             projects = projects,
             partyMembers = partyMembers,
             cardEntries = cardEntries,
-            rpTags = rpTags
+            rpTags = rpTags,
+            modelRuleProfiles = modelRuleProfiles,
+            modelRules = modelRules
         )
     }
 
@@ -689,6 +714,37 @@ object MemorySeedCodec {
                                 }
                             })
                         }
+                    })
+                }
+            })
+        }
+
+        // Model rules (Stage 4, rules §11).
+        if (data.modelRuleProfiles.isNotEmpty()) {
+            root.put("model_rule_profiles", JSONArray().apply {
+                data.modelRuleProfiles.forEach { p ->
+                    put(JSONObject().apply {
+                        put("profile_id", p.profileId)
+                        put("nickname", p.nickname)
+                        put("model_strings", jsonArrayOrEmpty(p.modelStringsJson))
+                        put("created_at", p.createdAt)
+                        putIfNotNull("updated_at", p.updatedAt)
+                    })
+                }
+            })
+        }
+
+        if (data.modelRules.isNotEmpty()) {
+            root.put("model_rules", JSONArray().apply {
+                data.modelRules.forEach { r ->
+                    put(JSONObject().apply {
+                        put("rule_id", r.ruleId)
+                        putIfNotNull("profile_id", r.profileId)
+                        put("text", r.text)
+                        put("status", r.status)
+                        putIfNotNull("source_model_string", r.sourceModelString)
+                        put("created_at", r.createdAt)
+                        putIfNotNull("updated_at", r.updatedAt)
                     })
                 }
             })

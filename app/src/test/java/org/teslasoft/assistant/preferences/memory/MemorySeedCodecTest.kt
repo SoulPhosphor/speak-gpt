@@ -233,6 +233,48 @@ class MemorySeedCodecTest {
     }
 
     @Test
+    fun modelRulesRoundTrip() {
+        // Stage 4 (owner_approved_rules §11): model-rule profiles and rules are
+        // user-authored, so backups must carry them — including an unassigned
+        // ("Needs review") draft with its source model string.
+        val withModelRules = """
+            {
+              "schema_version": "1.11.0",
+              "companions": [], "entities": [], "memories": [], "modes": [],
+              "directives": [], "worlds": [], "user_personas": [],
+              "roleplay_characters": [], "proposals": [],
+              "model_rule_profiles": [
+                { "profile_id": "mrp-1", "nickname": "Model 5",
+                  "model_strings": ["glm-5-0502", "glm-5-0219"],
+                  "created_at": "2026-07-07T00:00:00Z" }
+              ],
+              "model_rules": [
+                { "rule_id": "mr-1", "profile_id": "mrp-1",
+                  "text": "Never open with an apology.", "status": "active",
+                  "created_at": "2026-07-07T00:00:00Z" },
+                { "rule_id": "mr-2", "text": "Stop repeating the question back.",
+                  "status": "draft", "source_model_string": "glm-experimental",
+                  "created_at": "2026-07-07T00:00:00Z" }
+              ]
+            }
+        """.trimIndent()
+
+        val data = MemorySeedCodec.parse(withModelRules)
+        assertEquals(1, data.modelRuleProfiles.size)
+        assertEquals("Model 5", data.modelRuleProfiles.first().nickname)
+        assertEquals(2, JSONArray(data.modelRuleProfiles.first().modelStringsJson).length())
+        assertEquals(2, data.modelRules.size)
+        // The unassigned draft (profile_id absent -> null = Needs review) and
+        // its source model string must survive the trip.
+        assertEquals(null, data.modelRules[1].profileId)
+        assertEquals("draft", data.modelRules[1].status)
+        assertEquals("glm-experimental", data.modelRules[1].sourceModelString)
+
+        val back = MemorySeedCodec.parse(MemorySeedCodec.serialize(data))
+        assertEquals(data, back)
+    }
+
+    @Test
     fun exportEnvelopeCarriesChatsAndMeta() {
         val data = MemorySeedCodec.parse(fixtureJson())
         val chats = JSONArray().put(
