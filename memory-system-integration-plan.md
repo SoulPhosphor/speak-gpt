@@ -500,6 +500,41 @@ game-state facts (unchanged essence guardrail). DM-piloted NPCs are
 machinery; NPC relationship facts are campaign-scoped memories referencing
 them.
 
+### 📌 Roleplay cards + tags amendment (owner-approved, July 6–7 2026)
+
+The owner redesigned and approved the full roleplay card + tag layer in
+chat: **`Memory System/roleplay_cards_and_tags_spec.md` is the
+authoritative spec** (incorporated into `owner_approved_rules.md` as
+Revision 4), and **Stage 3.6 of `Memory System/rag_engine_work_order.md`
+was rescoped to implement it** — read both before any roleplay work.
+Where THIS plan's older text disagrees, the spec supersedes it.
+Specifically superseded here:
+
+- The campaign amendment's character-card sketch (item 3's "abilities/
+  spells core list") and the Phase 5 deferral item about "a dedicated
+  roleplay abilities/spells column → the §13 two-zone ledger": the
+  approved system is FOUR two-zone cards (user RP character, **NPC party
+  member — a new card type with an Alive/Incapacitated/Dead/Enemy status
+  and a top-level roster campaigns link into**, world, campaign), with
+  revised section lists — see spec §6.
+- Item 5's "one selection implies the rest" is now concrete: selecting a
+  campaign auto-fills the world/character selectors, which become
+  displays; changing one asks "has the story moved?" and a confirmed
+  answer edits the campaign itself (superseded history + a transition
+  memory). No per-chat override exists.
+- Item 9's "DM-piloted NPCs = roleplay_characters rows, no new
+  machinery": superseded — party NPCs are their own card type per the
+  spec.
+- Any teardown language implying a card's memories always die with it:
+  superseded by the per-deletion choice + archive/link rules (spec §5).
+- New cross-cutting machinery the spec adds: the roleplay-realm TAG pool
+  (tags as trigger words, per-tag browse-only switch, one-hop
+  pull-along, a Tags index screen, and a hard realm wall — real-life and
+  roleplay tags never link), visible Archive sections on every roleplay
+  list, Zone-1-visible-in-UI, prompt-cost warnings instead of caps, and
+  the law that **no automatic process writes any card/ledger/memory
+  mid-conversation** (Phase 6's Archivist only ever suggests).
+
 ### ☑ Phase 4 — Enforcer: tiers + prompt assembly
 **Note (July 6 2026):** parts of what landed here are retired or reworked
 by the owner rules — default modes deleted, directives and always-load

@@ -15,6 +15,38 @@ Stage-3 campaign wiring; §14 names `memories.status='draft'` the single
 store for memory drafts; the deferred list moves campaign→Quick-Settings
 wiring into Stage 3. This revision supersedes revisions 1–2 where they
 differ.**
+**Revision 4 — July 7 2026 (conversation began the evening of July 6 in
+the owner's timezone): the owner redesigned the roleplay layer in chat
+and approved it front to back. The full ruling text lives in
+`roleplay_cards_and_tags_spec.md` — Revision 4 incorporates that file by
+reference as the authoritative detail for roleplay cards and tags; the
+spec's own words were approved item by item and are NOT paraphrased
+here. Summary of what changed, each superseding revisions 1–3 where they
+differ: §13's card structure is SUPERSEDED — the six-section ledger is
+replaced by a four-card system (user RP character / NPC party member /
+world / campaign, each two-zone, with revised owner-approved section
+lists; NPC party members are a new card type with Alive / Incapacitated
+/ Dead / Enemy statuses and a top-level roster campaigns link into).
+World and campaign card sections are DESIGNED AND APPROVED — no longer
+deferred. A roleplay-wide TAG system is approved: one shared pool, two
+REALMS (real-life and roleplay tags never link, even for identical
+words), tags act as trigger words with a per-tag browse-only switch
+built up front, one-hop budget-capped pull-along, and a Tags index
+screen in the Roleplay hub. Quick Settings: selecting a campaign
+auto-fills the world/character selectors; changing one asks "has the
+story moved?" — confirming edits the campaign itself (superseded
+history kept, the transition recorded as a campaign memory); there is
+deliberately no per-chat override. New general laws: no card, ledger,
+or memory is written by any automatic process mid-conversation (a
+user-confirmed dialog is a user edit); user-entered fields are
+multi-line with no hard caps (prompt-cost warnings instead of limits);
+Zone 1 (always-injected card material) is always visibly labeled in the
+UI; every archivable roleplay list has a visible Archive section;
+deleting a linked card warns and offers archive, true delete asks
+per-deletion whether memories go too (REPLACING the older
+always-delete teardown language), and surviving references show
+"(archived card)"/"(deleted card)" rather than vanishing. Stage 3.6 of
+`rag_engine_work_order.md` is rescoped to implement the spec.**
 
 This document OUTRANKS every other document in this folder and the
 integration plan wherever they disagree. The wording below was reviewed and
@@ -177,6 +209,13 @@ a model.
   override scope/type and do not force injection by themselves. Tags are
   like softer lorebook trigger words: useful hints, not absolute rules.**
   (Owner's wording, kept verbatim.)
+- *(Rev 4: the roleplay module gains its own tag system — one shared
+  roleplay-realm pool spanning card entries, whole cards, and
+  roleplay-scoped memories, with tag names acting as trigger words
+  (per-tag browse-only switch), one-hop pull-along, and a hard REALM
+  WALL between real-life and roleplay tags. Full rules in
+  `roleplay_cards_and_tags_spec.md` §3. This section continues to govern
+  real-life memory tags.)*
 
 ## 7. Source
 
@@ -302,6 +341,16 @@ this ladder, per §4 as revised.)*
 
 ## 13. Roleplay cards and Archivist suggestions
 
+*(Rev 4, July 7 2026: the CARD STRUCTURE below — the two-zone character
+card with its six-section ledger, and the deferred world/campaign
+sections at the end — is SUPERSEDED by the four-card system the owner
+approved in `roleplay_cards_and_tags_spec.md` §6. The PRINCIPLES of this
+section stand unchanged: two zones, core always injected, body retrieved
+by name/section trigger-matching, quantity tracking on inventory, the
+card/memory split, and the entire Archivist suggestion path below —
+including its toggle and the four-way choice. Read the spec for the
+actual card fields and sections.)*
+
 Roleplay state is volatile and hard to hold by hand — that is why the
 suggestion path exists HERE and nowhere else.
 
@@ -333,8 +382,13 @@ suggestion path exists HERE and nowhere else.
 - This path exists ONLY for roleplay cards. Companion cards and user
   personas remain untouchable (law 3), always.
 
-**World and campaign card sections: ⏸ DEFERRED BY THE OWNER — safe to add
-later.** The retrieval machinery is section-agnostic (named entries in
+**World and campaign card sections: ~~⏸ DEFERRED~~ → RESOLVED (Rev 4,
+July 7 2026).** The "return to this when ready" moment happened: the
+owner supplied and approved the full world and campaign cards in
+`roleplay_cards_and_tags_spec.md` §6c/§6d (the world card's section list
+was confirmed by the owner, superseding the draft list below — note the
+final list groups sections differently and the "People" group is named
+**Organized Groups**). The paragraph below is kept for history only: The retrieval machinery is section-agnostic (named entries in
 containers), so world/campaign cards plug into the same engine additively
 with no rework; deferring them blocks nothing. Directions already given by
 the owner for when they ARE built: use the FULL granular section list
@@ -474,15 +528,20 @@ final, until the owner confirms or amends it word by word at that time.)*
 
 ## Deferred / to revisit with the owner
 
-- **World and campaign card sections** — the owner will return to these
-  when ready (§13; includes the campaign story-so-far toggle question).
-  Agents: do not prompt the owner about this, do not design ahead, do not
-  build. It waits as long as it waits.
+- ~~**World and campaign card sections**~~ — RESOLVED (Rev 4, July 7
+  2026): designed and approved in `roleplay_cards_and_tags_spec.md`
+  §6c/§6d. One sub-question stays open for Phase 6: whether campaign
+  story-so-far (Plot Ledger) maintenance rides the same
+  roleplay-suggestions toggle as card updates or is a per-campaign
+  opt-in — ask the owner when building the Archivist, not before.
 - The "Real-life memory in roleplay" per-chat setting (§3) — later, with
-  the owner.
+  the owner. *(Rev 4 adds the reconciliation: when designed, that toggle
+  is the ONLY door real-life memories may enter roleplay through — the
+  tag system never bypasses it; see the spec §3.)*
 - A converter for pre-restructure backup files — only if the owner asks.
 - Merge tooling (carried over from the Phase 5 deferral list; the
-  abilities/spells column is designed — §13 — and lands in Stage 3.6).
+  roleplay card system — Rev 4's replacement for the old
+  abilities/spells column — lands in the rescoped Stage 3.6).
   *(Rev 3: campaign→Quick-Settings live wiring is NO LONGER deferred — the
   owner promoted it into Stage 3, task 3.0 of
   `rag_engine_work_order.md`, because the §3 narrator rule and §12's

@@ -650,6 +650,18 @@ Everything is on-device. No cloud sync, no accounts.
   (user-authored lore outranks system memories at injection). All eleven
   package documents are present; `enforcer_librarian_spec.md` and
   `prompt_assembly_template.md` are the authoritative runtime/prompt specs.
+- **The roleplay layer (cards + tags) was redesigned and owner-approved
+  July 6–7 2026.** `Memory System/roleplay_cards_and_tags_spec.md` is the
+  authoritative spec (four two-zone cards: user RP character, NPC party
+  member, world, campaign; a roleplay-realm tag system with a hard
+  real-life/roleplay wall; campaign-as-selector behavior; archive/delete
+  link rules; the no-mid-conversation-writes law). It is incorporated
+  into `owner_approved_rules.md` as Revision 4 and implemented by the
+  RESCOPED Stage 3.6 of `Memory System/rag_engine_work_order.md`. Stage
+  3.0–3.5 are built on branch `claude/memory-work-stage-3-r13ca4` (merge
+  order for 3.6: that branch → main, then the spec branch
+  `claude/character-card-structure-ypmm8l` → main, then branch for 3.6).
+  Read the spec's §9 agent rules before any roleplay build work.
 - Whisper/voice work follows `whisper-local-plan.md`.
 
 ## Quick verification checklist before any push

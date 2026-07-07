@@ -11,6 +11,21 @@ rebuilt global browser + Pending flow, and the Quick Settings Project
 selector (per-chat, in the auto-naming copy block, no retrieval effect
 yet).
 
+**Revised again July 7 2026 (Revision 4 of the rules).** Build state at
+this revision: **tasks 3.0–3.5 plus a 3.7 docs pass are BUILT on branch
+`claude/memory-work-stage-3-r13ca4`** (commits `afa192e`→`e1aa873`; not
+yet merged to `main`), which honored the pause point before 3.6. That
+pause is now RESOLVED: the owner designed and approved the complete
+roleplay card + tag system — **`roleplay_cards_and_tags_spec.md`, which
+is the authoritative spec for everything 3.6 builds; read it in full,
+including its §9 agent rules, before starting.** Task 3.6 below is
+RESCOPED to implement that spec (the old six-section-ledger 3.6 is
+superseded); 3.7 must be re-run after it. **Merge order for the 3.6
+agent's base:** the stage-3 branch merges to `main` first, then the
+spec/docs branch `claude/character-card-structure-ypmm8l`, then branch
+for 3.6 from the result — 3.6 needs BOTH the built 3.0–3.5 engine and
+these documents.
+
 **For the implementing agent (a strong-model session; the owner assigned
 stage 3 to the session that co-wrote the rules).** Prerequisites: stages
 1–2 from `phase5_rework_work_order.md` are merged and CI-green. Read, in
@@ -173,50 +188,114 @@ promises the old "none selected → project memories stay quiet" behavior
 anyway; neutralize any such wording, keeping the label and "None"
 option).
 
-**⛔ PAUSE POINT — before starting 3.6, stop and ask the owner in a plain
-chat message (no pop-up tool — see CLAUDE.md).** World and campaign card
-sections (§13 "DEFERRED BY THE OWNER") use the exact same section-owned/
-trigger-matched pattern 3.6 is about to build for RP characters, and the
-owner wants the option to fold that build into this pass rather than
-retrofit it later. Ask, in these words or close to them: *"I'm about to
-build the RP-character ledger (Stage 3.6) — sections of named entries,
-trigger-matched retrieval. World and campaign cards would reuse this
-exact pattern. Do you want to add world/campaign card sections now, as
-part of this pass, or keep them deferred?"* If the owner says defer, do
-NOT design or build them — proceed with 3.6 as written below and leave
-§13's deferred note alone. If the owner says build them, get the actual
-section list and field shape from the owner in chat first (§13 notes a
-draft list — Regions/Biomes, Settlements, Points of Interest,
-Organizations/Guilds, Religions/Pantheons, Historical Events,
-Species/Races, Languages & Scripts — but it is explicitly marked as a
-draft, not a final approved list; do not build from the draft without
-the owner confirming or amending it word by word, per the OWNER APPROVAL
-GATE in CLAUDE.md), then extend 3.6 additively (same table shape
-generalized to world/campaign, same trigger-matching, same cooldown
-composite key) rather than starting a separate mechanism.
+**~~⛔ PAUSE POINT~~ — RESOLVED July 6–7 2026.** The ask this pause
+existed for happened: the owner designed the full roleplay layer —
+world and campaign cards included — and approved it front to back.
+`roleplay_cards_and_tags_spec.md` is the result and the authority. The
+old 3.6 text (six-section ledger on RP characters only) is superseded by
+the rescoped 3.6 below.
 
-**3.6 RP character card, two zones** (§13). Schema (additive migration):
-ledger sections on roleplay characters — Spells, Skills, Special
-abilities, Items, Special items, Weapons; entries = name (required),
-description (optional); Items/Special items/Weapons entries carry a
-quantity number. **The ledger is its own card-owned table** (§13's
-card/memory split stays intact — ledger entries are NOT memories rows).
-Editor UI: core fields (name, species, class, core personality) + the six
-sections as add/edit/delete lists. Retrieval: core always injected while
-that RP character is selected; **ledger entries are retrieved by
-TRIGGER-MATCHING, not embeddings** (owner decision July 6 2026 — matches
-§13's own "name acts as a trigger word" language): reuse
-`LoreBookTriggerMatcher` against entry names, and a section's name
-triggers the whole bounded section for that turn. **No change to the
-`embeddings` schema; the Librarian stays memories-only.** The freshness
-cooldown applies via 3.3's composite key (source_type = ledger). NO
-Archivist suggestions yet (Phase 6) — do not build the
-roleplay-suggestions toggle in this stage.
+**3.6 Roleplay cards + tag system (RESCOPED July 7 2026 — implements
+`roleplay_cards_and_tags_spec.md` in full).** Read the spec first, all
+of it, especially §9 (binding agent rules: build exactly what's written;
+no new fields/sections/renames; gaps = stop and ask in plain chat; no
+pre-written content; no live-write paths). What carries over unchanged
+from the old task: **card/ledger retrieval is TRIGGER-MATCHED
+(`LoreBookTriggerMatcher`), never embedded — the embeddings schema and
+the Librarian stay memories-only**; card content lives in card-owned
+tables, NOT memories rows; the freshness cooldown rides 3.3's composite
+key with a distinct `source_type` per entry table; **NO Archivist
+anything yet** (suggestions, auto-summaries, the roleplay-suggestions
+toggle — all Phase 6); every per-chat selection goes in the auto-naming
+copy block. Two laws bind every sub-task: **no automatic process writes
+any card/ledger/tag/memory mid-conversation** (a user-confirmed dialog
+is a user edit and is fine), and **nothing ships pre-populated** — no
+sample cards, no starter tags. Sub-tasks, each bounded and
+push-and-green in order:
 
-**3.7 Docs.** CLAUDE.md + integration plan updated to the new engine
-behavior, including the prompt-layer contract above (fix CLAUDE.md's
-"separate second system message" phrasing). AssemblyLog/debug screen
-documented.
+- **3.6a Schema (additive migrations).** Four card shapes per spec §6:
+  the REVISED user RP-character card (Zone 1: name, species, class, core
+  personality, physical description, goals & drives; Zone 2 sections:
+  Abilities / Inventory / Relationships / Traits / Backstory / Languages,
+  with the spec's per-section type lists; Inventory entries carry
+  quantity); **NPC party-member cards** — same shape plus speech style
+  (optional) and status `alive|incapacitated|dead|enemy` — as a
+  top-level roster with a campaign↔NPC join table; the world card
+  (Zone 1: premise/vibe, cosmology, magic rules; grouped Zone 2 sections
+  per §6c including parent-chained geography — Settlements carry a
+  Region parent, Points of Interest a Settlement-or-Region parent); the
+  campaign card (quest anchor with side objectives, active scene, plot
+  ledger, campaign cast overlays — world-NPC link + this-campaign
+  disposition — campaign locations, reliquary, notes). Tag storage: one
+  roleplay-realm tag pool + a polymorphic link table
+  (`tag_id, target_type, target_id`) reaching card entries, whole cards,
+  and roleplay-scoped memories (the bridge between the two stores), plus
+  a per-tag `auto_trigger` flag defaulting ON. Tombstones on delete,
+  same store patterns as everything else. All user-entered fields
+  multi-line, no length caps.
+- **3.6b Card editors + rosters (UI).** Full-screen activities (the
+  `MemoryEditorActivity` pattern). On EVERY card: Zone 1 visibly labeled
+  as what the AI is told every turn (spec §1), a prompt-cost estimate
+  with a large-core warning (never a limit), and tag chips on every
+  entry (≥3-char fuzzy dropdown, create-on-confirm). Party-members
+  roster + visible Archive sections at the bottom of every roleplay card
+  list; NPC status control (user-editable anytime); the world-NPC →
+  party-member promotion flow (party card becomes source of truth, the
+  world entry becomes lightweight lore pointing at it). Findability per
+  spec §8.
+- **3.6c Quick Settings campaign behavior.** Selecting a campaign
+  auto-fills the world/character selectors from its links — visibly,
+  and they become displays while the campaign is selected. Changing one
+  asks: "Has the story moved? Update this campaign's world to X?"
+  Confirm = edit the campaign itself (an explicit user edit): supersede
+  the old fact, keep it as history, record the transition as a campaign
+  memory. Cancel = nothing. **There is no just-this-chat override — do
+  not add one.** All-optional selectors stay: any combination including
+  none is valid (organic roleplay needs no setup; structure arrives
+  later via Phase 6 proposals).
+- **3.6d Injection wiring.** Everything renders inside the enforcer's
+  SINGLE memory message (the prompt-layer contract above governs;
+  deterministic order, byte-stable rendering). Zone 1 cores render in a
+  FIXED order ahead of lore notes and retrieved content: world core →
+  campaign bookmark (quest anchor + active scene) → user character core
+  → active party-member cores → the generated roster line for
+  dead/enemy members ("Rose — dead"). Cores are cooldown-exempt (§10);
+  **status gates NPC cores** (alive/incapacitated inject; dead/enemy get
+  the roster line only). Zone 2 retrieval: entry names and SECTION names
+  trigger-match the latest user message (**group headers do NOT
+  trigger**); tag names with `auto_trigger` ON fire their tagged entries
+  — active campaign's material only; **one-hop pull-along**: entries
+  sharing a fired entry's tags join as importance-ranked, budget-capped
+  candidates (browse-only tags still count for pull-along and for the
+  "connected to:" line rendered with every injected entry — browse-only
+  silences ONLY message-text matching, spec §3). Cooldown applies per
+  `source_type`; AssemblyLog records every fire, suppression, and
+  pull-along so retrieval is diagnosable.
+- **3.6e Tags screens.** The per-tag browse-only switch (built NOW, not
+  future — owner promotion July 7); the Tags index screen in the
+  Roleplay hub (roleplay realm only; user-created tags only, nothing
+  preloaded; per-tag trigger mode visible); the cross-card tag view
+  grouped by the PREDEFINED card/section categories, including
+  roleplay-scoped memories via the link table. **REALM WALL everywhere:**
+  roleplay tag machinery never touches real-life memories or their tags,
+  and vice versa — real-life tags keep the Memories browser as their
+  only door.
+- **3.6f Deletion + archive behavior.** Deleting anything linked to a
+  campaign warns, names the campaign(s), offers archive. True delete
+  asks per-deletion: "delete their memories too? yes/no". Archive keeps
+  links intact (card hidden from active selectors); delete scrubs links;
+  any surviving reference renders "(archived card)" / "(deleted card)" —
+  never a silent hole. NPC death is a status change, never a delete;
+  its summary memory is user-written (or later an approved Phase 6
+  draft), never auto-inserted.
+
+**3.7 Docs (RE-RUN after 3.6 — the first pass on the stage-3 branch
+covered only 3.0–3.5).** CLAUDE.md + integration plan updated to the
+built roleplay layer (cards, tags, campaign behavior, injection order,
+new DB version), including the prompt-layer contract above (fix
+CLAUDE.md's "separate second system message" phrasing if the stage-3
+branch pass hasn't already). AssemblyLog/debug additions documented.
+Note the spec file's build status in its §7.
 
 ## Stage 4 — Model rules (§11 governs; build storage + UI + injection;
 Archivist FILING arrives in Phase 6)

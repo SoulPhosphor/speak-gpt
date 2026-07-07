@@ -1,28 +1,27 @@
-# Roleplay Cards & Tags — Design Draft (July 6–7 2026)
+# Roleplay Cards & Tags — Approved Specification (July 6–7 2026)
 
 *(Dating note: timestamps in this file say "July 7" from the build
 system's UTC clock; in the owner's timezone the conversation began the
 evening of July 6. Same conversation, one date label — this is not a
 future-dated artifact.)*
 
-> **STATUS: DRAFT — NOT YET OWNER-APPROVED. DO NOT BUILD FROM THIS FILE.**
+> **STATUS: APPROVED — the owner gave front-to-back approval in chat on
+> July 7 2026 (including two final label-only consistency fixes the owner
+> requested). This file is the authoritative detailed specification for
+> the roleplay card + tag system, incorporated by reference into
+> `owner_approved_rules.md` as Revision 4.** Where the two files overlap,
+> `owner_approved_rules.md` still outranks; for roleplay card/tag detail
+> not covered there, THIS file is the ruling text — preserved verbatim
+> rather than paraphrased into other documents, so the approved words
+> cannot drift.
 >
-> This document captures a design conversation between the owner and the AI
-> on July 7 2026 so that nothing is lost to context limits. It does NOT
-> outrank `owner_approved_rules.md`. It has two kinds of content, marked
-> throughout:
->
-> - **RULED** — the owner said it, in plain language, in chat on July 7 2026.
->   These are real decisions, but they still need to be folded into
->   `owner_approved_rules.md` once the whole package is approved together.
-> - **PROPOSED** — the AI's draft, awaiting the owner's word-by-word
->   approval in chat. Not approved. Not buildable.
->
-> When the owner approves the package, this file's contents get merged into
-> `owner_approved_rules.md` / `rag_engine_work_order.md` and this file is
-> retired. Until then, Stage 3.6 of the RAG work order (the six-section
-> ledger build) stays PAUSED — the owner explicitly said not to build it
-> from the earlier plan while this revision is in progress.
+> Every design item below is **RULED** — said or approved by the owner in
+> plain language in chat, July 6–7 2026. The RULED markers throughout
+> show what was decided when; nothing in this file is open design space.
+> Implementing agents: read §9 (do not become the designer) before
+> building, and take the build sequence from `rag_engine_work_order.md`
+> Stage 3.6, rescoped July 7 to implement this spec (the old
+> six-section-ledger 3.6 is superseded).
 
 ---
 
@@ -200,10 +199,11 @@ plus the owner's realm ruling.)
     and inventory stay logged.
   - The Archivist may SUGGEST status changes later (Phase 6) for things
     the user didn't catch; the user is always able to change them by hand.
-- **Status gates Zone 1** (PROPOSED, follows from the owner's lean-core
-  instruction): Alive (and Incapacitated) party members inject their core
+- **Status gates Zone 1** (RULED — §6b rules this: Alive/Incapacitated
+  NPCs inject their full core; Dead/Enemy drop to the campaign roster
+  line): Alive (and Incapacitated) party members inject their core
   every turn; Dead and Enemy drop to a single line ("Rose — dead, session
-  12") or out of Zone 1 entirely, with everything still reachable through
+  12") in the campaign roster, with everything still reachable through
   Zone 2 retrieval and tags.
 - **Death handling:** the card is never deleted by death. Status → Dead;
   a short summary of who they were and how they died is filed as a
@@ -239,7 +239,7 @@ plus the owner's realm ruling.)
     "(archived card)" / "(deleted card)" — links never silently vanish.
     No ghost references, no unexplained holes in a campaign.
 
-## 6. Card skeletons — PROPOSED (awaiting word-by-word approval)
+## 6. Card skeletons — RULED (owner-approved word by word, July 7 2026)
 
 > Label status: every card structure in this section is **RULED** —
 > supplied or approved by the owner in chat. As of the owner's July 7
@@ -501,10 +501,14 @@ two-AI combined draft; all AI merges/normalizations approved July 7)
    tags only, nothing preloaded; grouped by the predefined categories;
    per-tag trigger mode visible; a findability tool, not a new
    retrieval path).
-6. After the owner's final front-to-back approval of this document, its
-   contents get merged into `owner_approved_rules.md` and
-   `rag_engine_work_order.md`, and this file is retired. **This is the
-   only step left.**
+6. ~~Merge step~~ — DONE July 7 2026: the owner approved the document
+   front to back and authorized the merge. `owner_approved_rules.md`
+   gained Revision 4 (incorporating this file by reference), and
+   `rag_engine_work_order.md` Stage 3.6 was rescoped to implement this
+   spec. One deliberate change from the plan written above: this file is
+   NOT retired — it stays as the permanent authoritative spec, because
+   keeping the owner's word-by-word approved text in one intact file is
+   safer than paraphrasing it into two others.
 
 ## 7. What stays untouched
 
@@ -514,7 +518,11 @@ two-AI combined draft; all AI merges/normalizations approved July 7)
 - Companion cards and user personas remain untouchable by suggestions
   (law 3); the Archivist path exists only for roleplay cards.
 - Stage 3 retrieval tasks (priority ladder, cooldown, scope rewrite)
-  proceed as specced EXCEPT 3.6, which is paused pending this revision.
+  proceed as specced. Status July 7 2026: tasks 3.0–3.5 (plus a 3.7 docs
+  pass) are BUILT on branch `claude/memory-work-stage-3-r13ca4`, which
+  honored the pause point before 3.6. Stage 3.6 is now RESCOPED in
+  `rag_engine_work_order.md` to implement this spec and is ready to
+  build once the branches are merged.
 
 ## 8. UI findability — RULED directive (July 7)
 
