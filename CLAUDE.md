@@ -194,10 +194,9 @@ Everything is on-device. No cloud sync, no accounts.
    adds the **Campaign** (roleplay continuity) layer: a `campaigns` table
    (world/roleplay-character/companion FKs + status + Archivist-maintained
    `story_so_far`) and a nullable `memories.campaign_id`. Ordinary
-   conversation never retrieves campaign-scoped rows —
-   `activeMemoriesForScope(companionId, worldId, campaignId=null)` gained a
-   `campaignId` param (null ⇒ campaign rows invisible; set ⇒ that campaign's
-   state joins) and `Librarian.search` threads it through. DB v4 (July 2026,
+   conversation never retrieves campaign-scoped rows (since Stage 3 the
+   isolation lives in the seven-category eligibility query — see below).
+   DB v4 (July 2026,
    Phase 5 Stage 2) restructures the memory record to the owner-approved rules:
    `memories.scope` now holds the **primary scope category** (global | real_life
    | companion | project | world | campaign | rp_character), `kind` is the
@@ -208,15 +207,24 @@ Everything is on-device. No cloud sync, no accounts.
    migration (`onConfigure` gates FK-off on the pending version, `onOpen`
    restores them) so the drop doesn't cascade-delete the children. The
    per-memory `always_load` flag is **retired** (§10): the column stays but
-   nothing reads or writes it, so the enforcer's standing packet has no
-   always-load section. DB v5 makes the named target scopes **multi-select**
+   nothing reads or writes it — nothing is ever always-injected.
+   DB v5 makes the named target scopes **multi-select**
    (§2): join tables `memory_worlds`/`memory_campaigns`/
    `memory_roleplay_characters`/`memory_projects` mirror `memory_companions`, so
    a memory can belong to several worlds/campaigns/RP-characters/projects
-   without being duplicated. The legacy single columns are kept as a
-   **primary-target mirror** (first selected) so the Stage-3-owned
-   `activeMemoriesForScope` query is untouched; the scoped-browser doors read
-   the join tables and the target-delete paths scrub them. Source is DERIVED for
+   without being duplicated. Since Stage 3.1 the retrieval eligibility query
+   reads these join tables too (a memory linked to several targets is eligible
+   under each); the legacy single columns remain as a **primary-target mirror**
+   (first selected) used only by the target teardown paths. The scoped-browser
+   doors read the join tables and the target-delete paths scrub them.
+   DB v6 (July 2026, Stage 3.3) adds the **freshness-cooldown** tables:
+   `injection_cooldowns` keyed `(chat_id, source_type, entry_id)` — when each
+   entry last reached a prompt, per chat, `source_type` separating memories
+   from the future 3.6 ledger — and `chat_turn_counters`, the per-chat
+   monotonic turn clock. Chat renames must carry BOTH (handled inside
+   `MemoryStore.repointChat`); memory edit/status/delete paths clear the
+   entry's cooldown rows so an edited memory re-injects fresh.
+   Source is DERIVED for
    display (`provenance_source == "user_entered"` ⇒ "Entered by hand", else
    "Learned from chat"); there is no "Imported" bucket — import preserves each
    row's original source (owner decision). MemoryStore also
@@ -228,11 +236,25 @@ Everything is on-device. No cloud sync, no accounts.
    the user's own imported backups (owner decision July 2026, after a bundled
    example companion caused confusion; the old "Load starter template" button,
    the seed-purge button, the seed-testing switch and the bundled
-   `memory_seed_template.json` were all removed). `activeMemoriesForScope` is
-   the SINGLE eligibility gate Phase 4 injection must also consume: active
-   status, scope match, and the companion-scoped branch requires the companion
-   to be past 'draft' (an unapproved companion's memories never inject — this
-   is the real protection). The Librarian applies a min-similarity floor
+   `memory_seed_template.json` were all removed). `activeMemoriesForScope`
+   (now taking a `RetrievalScope`) is the SINGLE eligibility gate injection
+   consumes, rewritten in Stage 3.1 to the owner's seven-category model:
+   ordinary chat sees global + real-life + the active companion's memories +
+   ALL project memories (project selection boosts ranking, never gates);
+   roleplay context (any of world/campaign/RP-character selected) sees global
+   plus the SELECTED targets' memories, real-life and project memories are
+   BLOCKED (the fiction wall, §3), and companion memories enter roleplay only
+   via the narrator/GM match (the selected campaign's GM companion == the
+   chat's active companion) or the global "Allow active companion memories in
+   roleplay" switch in Memory settings (default OFF). Only status='active'
+   rows are ever eligible, and the companion-scoped branch requires the
+   companion to be past 'draft' (an unapproved companion's memories never
+   inject — this is the real protection). Ranking (Stage 3.2, §12) blends
+   scope-specificity boosts (campaign → RP character → world → project →
+   companion → real life → global), a selected-project boost and capped tag
+   hints into the relevance score — a strong preference among comparably
+   relevant entries, never a trump card (§12.4). The Librarian applies a
+   min-similarity floor
    (0.30) so top-k can't surface weak matches from a small store; debug-search
    labels show status/origin/provenance and include non-active memories.
    Created lazily — `MemoryStore.isProvisioned()` gates
@@ -387,37 +409,59 @@ Everything is on-device. No cloud sync, no accounts.
   needs on-device bring-up on the Pixel (URLs + real-graph tensor names) —
   see the Phase 3 note in the plan.
   Phase 4 (enforcer — memory now influences conversations) is built, in
-  `preferences/memory/enforcer/`: a global **Memory engine** setting in
+  `preferences/memory/enforcer/`, and was **reworked by Stage 3.4 to the
+  owner-approved rules**: a global **Memory engine** setting in
   Memory settings — none / lore books (default = classic behavior) / full
   (selectable only with an embedding model installed). At "full",
   `Enforcer.assembleTurn` builds ONE extra system message per turn on
   Dispatchers.IO in `regularGPTResponse`, after the stable first message
-  (never reordered — prefix caching): model-adaptation note, companion hard
-  limits, the **standing packet** (owner portrait + directives; the per-memory
-  always-load section is retired as of Stage 2 — §10 — so it is now empty;
-  the raw render serves the turn while a background call to the
-  global **Archivist model** setting — endpoint profile + model name, shared
-  with Phase 6 — compresses it into the store's meta cache), ≤2 detected
-  **modes** (signal-embedding scores + keyword bonus; protective tie-break
-  steady > emotional > presence; stickiness with exit phrases; suggested_mode
-  from retrieved protected memories), retrieved memories with provenance
-  markers and inline HANDLE WITH CARE handling (one render function —
-  structurally inseparable), entity summaries, the lorebook matches rendered
-  INSIDE this message as "hand-written notes" that outrank memories
-  (near-duplicate memories suppressed; pairs flagged to meta
-  `enforcer.contradiction_flags` for Phase 6's run report), and the scene
-  from three per-chat Quick Settings selectors (world / roleplay character /
-  user persona — ALL in the auto-naming copy block). Operating defaults are
-  now the retrieval policy ONLY (the five pre-written origin='system' modes
-  were deleted and are purged once at store open — owner ruling, July 6 2026;
-  the enforcer degrades cleanly to no mode section when the modes table is
-  empty). ANY enforcer failure degrades to the classic lorebook message plus
+  (never reordered — prefix caching). That message now contains ONLY what
+  the rules allow: retrieved memories with provenance markers and inline
+  HANDLE WITH CARE handling (one render function — structurally
+  inseparable), **Instruction-type memories rendered as context rules** in
+  their own "Handling rules" section (law 5 — same retrieval, distinct
+  render; the split lives in `PromptAssembler` so a rule can't be filed
+  among the facts), the lorebook matches rendered INSIDE this message as
+  "hand-written notes" that outrank memories (near-duplicate memories
+  suppressed; pairs flagged to meta `enforcer.contradiction_flags` for
+  Phase 6's run report), and the scene from the per-chat Quick Settings
+  selectors (world / **campaign** / roleplay character / user persona —
+  ALL in the auto-naming copy block, like the Project selector).
+  **Retired from assembly (Stage 3.4, §15):** the standing packet (owner
+  portrait + directives) and `StandingPacketManager` (including its
+  background Archivist compression call), mode detection and the modes
+  render (`ModeSelection` deleted), suggested_mode, the companion
+  hard-limits render, the model-adaptation note, entity summaries, and the
+  retrieval policy's `always_include` list — the store tables stay dormant,
+  nothing reads them. (The global **Archivist model** setting — endpoint
+  profile + model name — stays; Phase 6 uses it.) A selected **campaign**
+  implies the rest of the scene (its world / the user's character fill in
+  when the chat has no explicit pick) and is the §3 narrator signal: the
+  campaign's GM companion being the chat's active companion opens the
+  companion-memories-in-roleplay door (the other door is the global §3
+  toggle in Memory settings, default OFF). The **freshness cooldown** (§10,
+  Stage 3.3) suppresses re-injection of anything injected within the last
+  10 turns (constant in code, per chat, persisted — see storage); every
+  suppression is visible in the debug view. Operating defaults are
+  the retrieval policy ONLY (the five pre-written origin='system' modes
+  were deleted and are purged once at store open — owner ruling, July 6 2026).
+  ANY enforcer failure degrades to the classic lorebook message plus
   one soft toast per process — never blocks generation. Tier "none" disables
   lorebook injection too. The lorebook debug screen also renders the
-  enforcer's per-turn `AssemblyLog` (injected/cut + why, scores, packet
-  source, modes). Pure logic (PromptAssembler, ModeSelection, NearDuplicate)
-  is unit-tested. Read `memory-system-integration-plan.md` before
-  touching `preferences/memory/`.
+  enforcer's per-turn `AssemblyLog` (the "room" the turn stood in —
+  ordinary vs roleplay, which targets, which companion-memory door — plus
+  injected/cut lines with scores and cooldown/budget/near-dup reasons).
+  Pure logic (PromptAssembler, NearDuplicate, the Librarian ladder math)
+  is unit-tested. **Prompt-layer contract (fragile):** the per-request
+  system blocks are fixed and deterministic — (1) the stable persona/system
+  prefix, byte-identical every turn; (2) the Stage-4 model-rules block once
+  it exists (absent entirely when no profile is selected); (3) the single
+  assembled memory message (ALL turn-variable memory content lives here and
+  only here); (4) chat history + the current turn. Same blocks, same order,
+  same wording every turn; never two competing memory messages. Three or
+  more system messages are fine — "a separate second system message" in
+  older docs describes the pre-Stage-4 layout. Read
+  `memory-system-integration-plan.md` before touching `preferences/memory/`.
   Phase 5 (the hand-editor UI) is built in `ui/activities/memory/`, on a
   shared framework — `MemoryScreenActivity` (abstract themed list scaffold,
   with an optional secondary action-bar slot) + `MemoryRowAdapter` +
@@ -477,19 +521,23 @@ Everything is on-device. No cloud sync, no accounts.
     everything imported" was intentionally NOT built (imported rows aren't
     distinguishable; owner decision).
   - **Quick Settings** gained an optional per-chat **Project** selector (§4;
-    `getChatProjectId`/`setChatProjectId`, in the auto-naming copy block; no
-    retrieval effect until Stage 3 — and per the owner's July 6 second-pass
-    ruling, selecting a project will become a ranking *boost*, not a gate:
-    project memories retrieve on relevance even with none selected).
-  Stage 2 does NOT touch retrieval (`activeMemoriesForScope` still reads the
-  single primary-target columns); the priority ladder, cooldown, scope-
-  eligibility rewrite and RP-ledger indexing are **Stage 3** (reserved).
-  **Stages 3–4 (retrieval engine + Model rules) are specced in
-  `Memory System/rag_engine_work_order.md`, revised July 6 2026 after the
-  owner's second-pass rulings (`owner_approved_rules.md` Revision 3):
-  campaign→Quick-Settings wiring and the RP-character two-zone ledger
-  (the old "abilities/spells column" follow-up) are now Stage 3 tasks, no
-  longer deferred.** Still deferred: merge tooling.
+    `getChatProjectId`/`setChatProjectId`, in the auto-naming copy block).
+    Since Stage 3 the selection is live as a ranking *boost*, not a gate:
+    project memories retrieve on relevance even with none selected (owner's
+    July 6 second-pass ruling).
+  **Stage 3 (retrieval engine) tasks 3.0–3.5 are BUILT (July 2026)** per
+  `Memory System/rag_engine_work_order.md`: campaign→Quick-Settings wiring
+  with the narrator signal (3.0), the seven-category scope eligibility
+  rewrite + the "Allow active companion memories in roleplay" toggle (3.1),
+  the §12 priority ladder as blended ranking boosts (3.2), the persisted
+  freshness cooldown (3.3, DB v6), the enforcer rework to the approved
+  rules with Instruction-memory rendering (3.4), and the project-boost
+  wiring/verification (3.5) — details in the storage + Phase 4 sections
+  above. **Task 3.6 (the RP-character two-zone ledger, §13) is gated on a
+  work-order PAUSE POINT**: before building it, stop and ask the owner in
+  plain chat whether world/campaign card sections should be folded into the
+  same pass or stay deferred. Stage 4 (Model rules, §11) is specced in the
+  same work order and not yet built. Still deferred: merge tooling.
 - Markdown/LaTeX rendering, partial text selection, message edit/delete/copy/
   share, bulk select, image attach + DALL·E-style generation, in-app
   translator, playground, logit bias editor, AMOLED theme, onboarding flow.
@@ -611,13 +659,22 @@ Everything is on-device. No cloud sync, no accounts.
   hard-won fixes (mic re-arm, audio-time VAD windows, barge-in prevention,
   watchdogs). Don't refactor it incidentally; change it only when the task is
   about it, and read the commit history of the file first.
-- **System-message assembly in `regularGPTResponse`**: persona prompt + system
-  message are merged into ONE stable first system message specifically for
-  provider prefix caching; lorebook matches — or, at the full memory tier, the
-  enforcer's single assembled message (which contains the lore notes) — go in
-  a SEPARATE system message after it. Don't reorder or merge these, and never
-  inject two competing memory messages (the enforcer path and the classic lore
-  path are strictly either/or per turn).
+- **System-message assembly in `regularGPTResponse`** — the prompt layers are
+  FIXED and deterministic every turn: (1) persona prompt + system message
+  merged into ONE stable first system message, byte-identical, specifically
+  for provider prefix caching; (2) once Stage 4 lands, the selected
+  model-rules block as its own stable layer (absent entirely when no profile
+  is selected); (3) lorebook matches — or, at the full memory tier, the
+  enforcer's single assembled message (which contains the lore notes) — as
+  the one turn-variable memory message; (4) chat history + the current turn.
+  Never reorder or merge these by convenience, retrieval results, iteration
+  order or timestamps; never inject two competing memory messages (the
+  enforcer path and the classic lore path are strictly either/or per turn).
+  Three or more system messages are fine — the memory message being "the
+  second" is just the pre-Stage-4 layout, position is not the invariant;
+  order and byte-stability are. (Explicit cache breakpoints are
+  Anthropic-API-only; OpenAI-compatible endpoints auto-cache the longest
+  identical prefix — the ordering discipline is what earns the caching.)
 - **`ChatPreferences` parse-failure handling**: chat data must be preserved,
   never wiped, on JSON parse errors (regression fixed in c72853a).
 - **Native layer** (`app/src/main/cpp`, CPU gating in `NativeCpuSupport`):

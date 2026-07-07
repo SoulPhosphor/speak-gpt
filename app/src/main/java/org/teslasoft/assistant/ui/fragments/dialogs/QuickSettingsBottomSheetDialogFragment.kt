@@ -50,6 +50,7 @@ import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.preferences.dto.PersonaObject
 import org.teslasoft.assistant.preferences.lorebook.LoreBookStore
 import org.teslasoft.assistant.preferences.memory.MemoryStore
+import org.teslasoft.assistant.preferences.memory.CampaignRecord
 import org.teslasoft.assistant.preferences.memory.ProjectRecord
 import org.teslasoft.assistant.preferences.memory.RoleplayCharacterRecord
 import org.teslasoft.assistant.preferences.memory.UserPersonaRecord
@@ -119,6 +120,8 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     private var containerMemoryScene: LinearLayout? = null
     private var rowChatWorld: LinearLayout? = null
     private var textChatWorld: TextView? = null
+    private var rowChatCampaign: LinearLayout? = null
+    private var textChatCampaign: TextView? = null
     private var rowChatRoleplayCharacter: LinearLayout? = null
     private var textChatRoleplayCharacter: TextView? = null
     private var rowChatUserPersona: LinearLayout? = null
@@ -151,6 +154,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     // Cached from a background load (see loadMemorySceneLists) so the picker
     // dialogs don't touch the encrypted store from the click handler.
     private var cachedWorlds: List<WorldRecord> = emptyList()
+    private var cachedCampaigns: List<CampaignRecord> = emptyList()
     private var cachedRoleplayCharacters: List<RoleplayCharacterRecord> = emptyList()
     private var cachedUserPersonas: List<UserPersonaRecord> = emptyList()
     private var cachedProjects: List<ProjectRecord> = emptyList()
@@ -527,6 +531,8 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         containerMemoryScene = view.findViewById(R.id.container_memory_scene)
         rowChatWorld = view.findViewById(R.id.row_chat_world)
         textChatWorld = view.findViewById(R.id.text_chat_world)
+        rowChatCampaign = view.findViewById(R.id.row_chat_campaign)
+        textChatCampaign = view.findViewById(R.id.text_chat_campaign)
         rowChatRoleplayCharacter = view.findViewById(R.id.row_chat_roleplay_character)
         textChatRoleplayCharacter = view.findViewById(R.id.text_chat_roleplay_character)
         rowChatUserPersona = view.findViewById(R.id.row_chat_user_persona)
@@ -720,11 +726,13 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         if (!visible) return
 
         updateChatWorldLabel()
+        updateChatCampaignLabel()
         updateChatRoleplayCharacterLabel()
         updateChatUserPersonaLabel()
         updateChatProjectLabel()
 
         rowChatWorld?.setOnClickListener { showWorldPicker() }
+        rowChatCampaign?.setOnClickListener { showCampaignPicker() }
         rowChatRoleplayCharacter?.setOnClickListener { showRoleplayCharacterPicker() }
         rowChatUserPersona?.setOnClickListener { showUserPersonaPicker() }
         rowChatProject?.setOnClickListener { showProjectPicker() }
@@ -738,6 +746,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
             try {
                 val store = MemoryStore.getInstance(appContext)
                 val worlds = store.getActiveWorlds()
+                val campaigns = store.getActiveCampaigns()
                 // Only characters played by the user belong here — companion-played
                 // characters are the Storyteller/companion's own cast, not a chat scene pick.
                 val roleplayCharacters = store.getActiveRoleplayCharacters().filter { it.playedBy == "user" }
@@ -746,10 +755,12 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
                 activity?.runOnUiThread {
                     if (!isAdded) return@runOnUiThread
                     cachedWorlds = worlds
+                    cachedCampaigns = campaigns
                     cachedRoleplayCharacters = roleplayCharacters
                     cachedUserPersonas = userPersonas
                     cachedProjects = projects
                     updateChatWorldLabel()
+                    updateChatCampaignLabel()
                     updateChatRoleplayCharacterLabel()
                     updateChatUserPersonaLabel()
                     updateChatProjectLabel()
@@ -765,6 +776,35 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         } else {
             cachedWorlds.firstOrNull { it.worldId == id }?.name ?: getString(R.string.label_world_none)
         }
+    }
+
+    private fun updateChatCampaignLabel() {
+        val id = preferences?.getChatCampaignId().orEmpty()
+        textChatCampaign?.text = if (id.isEmpty()) {
+            getString(R.string.label_campaign_none)
+        } else {
+            cachedCampaigns.firstOrNull { it.campaignId == id }?.name ?: getString(R.string.label_campaign_none)
+        }
+    }
+
+    // Stage 3.0 (owner_approved_rules §3/§12 rev 3): selecting a campaign is
+    // the explicit "this chat is inside that playthrough" signal the retrieval
+    // engine reads — campaign memories join, and the campaign's GM companion
+    // defines the narrator path for companion memories in roleplay.
+    private fun showCampaignPicker() {
+        val ids = listOf("") + cachedCampaigns.map { it.campaignId }
+        val labels = (listOf(getString(R.string.label_campaign_none)) + cachedCampaigns.map { it.name }).toTypedArray()
+        val current = ids.indexOf(preferences?.getChatCampaignId().orEmpty()).coerceAtLeast(0)
+
+        MaterialAlertDialogBuilder(requireContext(), R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.memory_scene_campaign_picker_title)
+            .setSingleChoiceItems(labels, current) { dialog, which ->
+                preferences?.setChatCampaignId(ids[which])
+                updateChatCampaignLabel()
+                dialog.dismiss()
+            }
+            .setNegativeButton(android.R.string.cancel) { _, _ -> }
+            .show()
     }
 
     private fun updateChatRoleplayCharacterLabel() {
@@ -796,7 +836,9 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         }
     }
 
-    // §4: stores the per-chat project only; retrieval wiring is Stage 3.
+    // §4 rev 3 (Stage 3.5): selecting a project BOOSTS its memories in
+    // ranking; with none selected, project memories still retrieve on
+    // relevance in ordinary chats. Never an eligibility gate.
     private fun showProjectPicker() {
         val ids = listOf("") + cachedProjects.map { it.projectId }
         val labels = (listOf(getString(R.string.label_project_none)) + cachedProjects.map { it.name }).toTypedArray()

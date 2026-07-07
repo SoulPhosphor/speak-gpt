@@ -87,6 +87,7 @@ class MemorySettingsActivity : FragmentActivity() {
     private var btnReset: MaterialButton? = null
     private var switchAutoBackup: MaterialSwitch? = null
     private var switchDefaultMemory: MaterialSwitch? = null
+    private var switchCompanionInRoleplay: MaterialSwitch? = null
 
     private var rowMemoryEngine: LinearLayout? = null
     private var textMemoryEngineValue: TextView? = null
@@ -146,6 +147,7 @@ class MemorySettingsActivity : FragmentActivity() {
         btnReset = findViewById(R.id.btn_memory_reset)
         switchAutoBackup = findViewById(R.id.switch_auto_backup)
         switchDefaultMemory = findViewById(R.id.switch_default_memory)
+        switchCompanionInRoleplay = findViewById(R.id.switch_companion_in_roleplay)
         rowMemoryEngine = findViewById(R.id.row_memory_engine)
         textMemoryEngineValue = findViewById(R.id.text_memory_engine_value)
         rowArchivistEndpoint = findViewById(R.id.row_archivist_endpoint)
@@ -236,6 +238,15 @@ class MemorySettingsActivity : FragmentActivity() {
         switchDefaultMemory?.isChecked = preferences?.getDefaultMemoryEnabled() ?: true
         switchDefaultMemory?.setOnCheckedChangeListener { _, checked ->
             preferences?.setDefaultMemoryEnabled(checked)
+        }
+
+        // "Allow active companion memories in roleplay" (owner_approved_rules
+        // §3 rev 3, owner-added; global, default OFF). Participation in
+        // retrieval only — never forced injection, and the narrator/GM path
+        // stays open regardless of this switch.
+        switchCompanionInRoleplay?.isChecked = preferences?.getAllowCompanionMemoriesInRoleplay() ?: false
+        switchCompanionInRoleplay?.setOnCheckedChangeListener { _, checked ->
+            preferences?.setAllowCompanionMemoriesInRoleplay(checked)
         }
 
         setupMemoryEngineSection()
@@ -557,7 +568,9 @@ class MemorySettingsActivity : FragmentActivity() {
                     // runs so the user can still find anything they stored.
                     val librarian = Librarian.getInstance(this)
                     if (librarian.hasUsableModel()) {
-                        val hits = librarian.search(null, null, query, 10)
+                        val hits = librarian.search(
+                            org.teslasoft.assistant.preferences.memory.RetrievalScope.NONE, query, 10
+                        )
                         if (hits.isNotEmpty()) {
                             sb.append(getString(R.string.memory_debug_semantic_header)).append("\n")
                             hits.forEach {

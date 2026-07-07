@@ -26,21 +26,30 @@ import org.teslasoft.assistant.preferences.memory.CompanionRecord
 import org.teslasoft.assistant.preferences.memory.MemoryCompanionSync
 import org.teslasoft.assistant.preferences.memory.MemoryLog
 import org.teslasoft.assistant.preferences.memory.MemoryStore
-import org.teslasoft.assistant.preferences.memory.ModeRecord
 import org.teslasoft.assistant.preferences.memory.RetrievableMemory
+import org.teslasoft.assistant.preferences.memory.RetrievalScope
 import org.teslasoft.assistant.preferences.memory.ScoredMemory
 import org.teslasoft.assistant.preferences.memory.librarian.Librarian
 import org.teslasoft.assistant.preferences.memory.librarian.VectorMath
-import java.util.concurrent.ConcurrentHashMap
 
 /**
- * The guarding half of the runtime (enforcer_librarian_spec.md): assembles
- * the per-turn memory system message — standing packet, active modes,
- * retrieved memories with protection handling attached, lore notes, scene —
- * behind the app's single generation funnel. The caller (ChatActivity) gates
- * on the memory engine tier, the per-chat kill switch, and store existence;
- * everything in here may throw, and the caller degrades to the classic
- * lorebook path (never block generation).
+ * The guarding half of the runtime: assembles the per-turn memory system
+ * message behind the app's single generation funnel. The caller (ChatActivity)
+ * gates on the memory engine tier, the per-chat kill switch, and store
+ * existence; everything in here may throw, and the caller degrades to the
+ * classic lorebook path (never block generation).
+ *
+ * Stage 3.4 (owner_approved_rules, July 6 2026) reduced assembly to what the
+ * rules allow into a prompt: memories retrieved by relevance — with Instruction
+ * memories rendered as context rules — the user's hand-written lore notes
+ * (which outrank memories), and the scene. The retired machinery (standing
+ * packet with owner portrait and directives, modes and mode detection,
+ * per-companion hard-limits and model-adaptation renders, entity summaries,
+ * always-load memories) is GONE from assembly: always-on material is card /
+ * system-prompt text the user writes (law 4), what the system knows about the
+ * user is Preference/Fact memories retrieved like everything else, and people
+ * in the user's life are ordinary memories, not entities (§15). The store
+ * tables underneath stay dormant; nothing here reads them any more.
  *
  * Returns the FULL extra system message including the lore notes section, so
  * the caller injects exactly one of {enforcer message, classic lore message}.
@@ -60,10 +69,25 @@ class Enforcer private constructor(private val appContext: Context) {
         const val RECENT_CONTEXT_TURNS = 4
         const val RECENT_CONTEXT_CHARS_PER_TURN = 200
 
+        /**
+         * Freshness cooldown (rules §10 / Stage 3.3): an entry that reached the
+         * prompt is not re-injected until this many turns pass — the
+         * conversation carries it in the meantime. A tuned constant, NOT a user
+         * setting (§10). First-time entries always inject; an edit resets the
+         * entry's clock (hooked in MemoryStore's edit paths); every suppression
+         * shows in the AssemblyLog debug view.
+         *
+         * The approved rule's second refresh trigger — "when the conversation
+         * outgrows the old mention", i.e. the old injection falling out of the
+         * actually-sent history window — is DEFERRED: TurnInput only carries a
+         * short recent-context digest (~4 turns / 200 chars), never the real
+         * sent window, and widening TurnInput for it is out of scope for this
+         * stage. Only the after-N-turns half ships here.
+         */
+        const val COOLDOWN_TURNS = 10
+
         private const val META_CONTRADICTION_FLAGS = "enforcer.contradiction_flags"
         private const val MAX_CONTRADICTION_FLAGS = 50
-        private const val KEYWORD_BONUS_PER_SIGNAL = 0.05
-        private const val KEYWORD_BONUS_CAP = 0.15
     }
 
     data class TurnInput(
@@ -76,16 +100,15 @@ class Enforcer private constructor(private val appContext: Context) {
         val modelTag: String,
         val loreMatches: List<LoreBookMatch>,
         val worldId: String?,
+        /** Quick Settings Campaign selection (Stage 3.0) — the owner-chosen
+         *  explicit signal that this chat is inside that playthrough. */
+        val campaignId: String?,
         val roleplayCharacterId: String?,
-        val userPersonaId: String?
+        val userPersonaId: String?,
+        /** Quick Settings Project selection — a ranking boost, never a gate
+         *  (owner_approved_rules §4 rev 3). */
+        val projectId: String?
     )
-
-    /** modelTag|modeId|signalsHash -> signal embedding, per process. */
-    private val signalVectors = ConcurrentHashMap<String, FloatArray>()
-
-    /** chatId -> protective-mode stickiness across turns (process lifetime,
-     *  same as a conversation session in practice). */
-    private val stickyStates = ConcurrentHashMap<String, ModeSelection.StickyState>()
 
     /**
      * Assemble this turn's memory system message, or null when the memory
@@ -98,8 +121,7 @@ class Enforcer private constructor(private val appContext: Context) {
 
         // Operating defaults: only the neutral retrieval_policy, and only into
         // an EMPTY policy row. No default modes are provisioned — the app
-        // pre-authors no memory content (owner_approved_rules.md §15); the modes
-        // table stays empty until the user fills it.
+        // pre-authors no memory content (owner_approved_rules.md §15).
         try {
             if (store.provisionOperatingDefaults(DefaultOperatingData.DEFAULT_POLICY_JSON)) {
                 MemoryLog.log(appContext, "Enforcer", "info", "Retrieval policy provisioned")
@@ -113,9 +135,10 @@ class Enforcer private constructor(private val appContext: Context) {
         // Companion resolution — auto-creating the record when the persona has
         // none yet, so a chat with a persona ALWAYS resolves to a companion.
         // Draft companions are never assembled (the memory query enforces it
-        // for memories; this enforces it for hard limits / adaptations /
-        // packet scope). memory_participation: 'none' -> the store contributes
-        // nothing for this companion; 'global_only' -> global memories only.
+        // for memories; this enforces it for the scope anchor).
+        // memory_participation: 'none' -> the store contributes nothing for
+        // this companion; 'global_only' -> the companion branch stays out of
+        // the eligibility query.
         var companion: CompanionRecord? = input.personaId.takeIf { it.isNotEmpty() }?.let {
             MemoryCompanionSync.ensureCompanionForPersona(appContext, it)
         }
@@ -124,28 +147,57 @@ class Enforcer private constructor(private val appContext: Context) {
         val scopeCompanionId =
             if (companion != null && companion.memoryParticipation == "full") companion.companionId else null
 
-        val worldId = input.worldId?.takeIf { it.isNotBlank() }
+        // Campaign wiring (Stage 3.0): one Quick Settings selection implies the
+        // rest — the campaign's world and the user's character in it fill in
+        // when the chat has no explicit pick of its own; an explicit pick wins.
+        // A dangling campaign id degrades to "none".
+        val campaign = input.campaignId?.takeIf { it.isNotBlank() }?.let {
+            try { store.getCampaign(it) } catch (_: Exception) { null }
+        }
+        val worldId = input.worldId?.takeIf { it.isNotBlank() } ?: campaign?.worldId
+        val roleplayCharacterId =
+            input.roleplayCharacterId?.takeIf { it.isNotBlank() } ?: campaign?.roleplayCharacterId
 
         // D8: prefs are truth, app_state is the derived mirror (best effort).
         try {
             store.updateAppState(
                 companion?.companionId, worldId,
-                input.roleplayCharacterId?.takeIf { it.isNotBlank() },
+                roleplayCharacterId,
                 input.userPersonaId?.takeIf { it.isNotBlank() }
             )
         } catch (_: Exception) { /* mirror only; never blocks a turn */ }
 
         val librarian = Librarian.getInstance(appContext)
+        val prefs = Preferences.getPreferences(appContext, input.chatId)
+
+        // §3 (rev 3): companion memories in roleplay need an explicit door —
+        // the narrator/GM match (the selected campaign's GM companion IS the
+        // chat's active companion) or the global "Allow active companion
+        // memories in roleplay" toggle (default OFF). Two independent paths;
+        // the toggle does not require narrator status.
+        val narratorMatch = campaign != null && campaign.companionId != null &&
+            campaign.companionId == companion?.companionId
+        val companionInRoleplayAllowed =
+            narratorMatch || prefs.getAllowCompanionMemoriesInRoleplay()
+
+        // The seven-category eligibility context (Stage 3.1) — the store query
+        // is the single gate; ranking (Stage 3.2) only orders what's eligible.
+        val retrievalScope = RetrievalScope(
+            companionId = scopeCompanionId,
+            worldId = worldId,
+            campaignId = campaign?.campaignId,
+            roleplayCharacterId = roleplayCharacterId,
+            allowCompanionInRoleplay = companionInRoleplayAllowed
+        )
 
         // Retrieval: the librarian's search inherits the eligibility gates in the
         // store query. The per-memory always-load flag is retired
-        // (owner_approved_rules §10): nothing is force-injected every turn, so
-        // the standing packet carries no always-load section any more.
+        // (owner_approved_rules §10): nothing is force-injected every turn.
         val query = listOf(input.userMessage, input.recentContext)
             .filter { it.isNotBlank() }.joinToString("\n")
         if (!librarian.hasUsableModel()) notes.add("no embedding model — keyword retrieval")
         val retrievedRaw: List<ScoredMemory> = try {
-            librarian.search(scopeCompanionId, worldId, query, policy.topK)
+            librarian.search(retrievalScope, query, policy.topK, input.projectId?.takeIf { it.isNotBlank() })
         } catch (e: Exception) {
             notes.add("retrieval failed: ${e.message}")
             emptyList()
@@ -190,77 +242,102 @@ class Enforcer private constructor(private val appContext: Context) {
             if (suppressed.isNotEmpty()) flagContradictions(store, suppressed)
         }
 
-        // Mode detection: embedding similarity vs each mode's joined signals
-        // (cached per process), keyword cues as a bonus, suggested_mode from
-        // retrieved protected memories activating directly, protective
-        // stickiness across turns.
-        val modes = try {
-            detectModes(store, librarian, companion, input, policy, retrieved)
+        // Freshness cooldown (§10 / Stage 3.3): entries whose last injection is
+        // still fresh in this chat are suppressed BEFORE the budget, so a
+        // cooling memory never crowds out one that may actually inject. A
+        // clock/store failure skips suppression for the turn (inject rather
+        // than silently starve) and is noted in the log.
+        var turn: Long? = null
+        val cooled = ArrayList<Pair<AssembledMemory, Long>>()
+        try {
+            val thisTurn = store.nextTurnNumber(input.chatId)
+            turn = thisTurn
+            if (retrieved.isNotEmpty()) {
+                val lastTurns = store.lastInjectedTurns(
+                    input.chatId, MemoryStore.COOLDOWN_SOURCE_MEMORY, retrieved.map { it.memoryId }
+                )
+                retrieved = retrieved.filter { m ->
+                    val last = lastTurns[m.memoryId]
+                    if (last != null && thisTurn - last < COOLDOWN_TURNS) {
+                        cooled.add(m to (thisTurn - last))
+                        false
+                    } else true
+                }
+            }
         } catch (e: Exception) {
-            notes.add("mode detection failed: ${e.message}")
-            emptyList()
+            notes.add("cooldown unavailable this turn: ${e.message}")
         }
 
         // Budget: policy-driven, lowest-scored retrieved memories cut first;
         // lore (user-authored) charges the budget but is never cut here.
         val (kept, cut) = PromptAssembler.applyBudget(retrieved, loreChars, policy.charBudget)
 
-        // Entity-linked expansion for the memories that made it in.
-        val entitySummaries = try {
-            store.entitySummariesForMemories(kept.map { it.memoryId })
-        } catch (_: Exception) { LinkedHashMap() }
-
-        // Standing packet (slot 2): compressed & cached, raw records fallback.
-        val prefs = Preferences.getPreferences(appContext, input.chatId)
-        val packet = try {
-            StandingPacketManager.get(
-                appContext, store,
-                scopeKey = scopeCompanionId ?: "global",
-                owner = store.getOwnerProfile(),
-                directives = store.getDirectives().filter { appliesTo(it.appliesToJson, companion?.companionId) },
-                alwaysLoad = emptyList(),
-                archivistEndpointId = prefs.getArchivistEndpointId(),
-                archivistModel = prefs.getArchivistModel()
-            )
-        } catch (e: Exception) {
-            notes.add("standing packet failed: ${e.message}")
-            StandingPacketManager.Packet(null, null)
+        // Stamp what actually reached the prompt so the next turns suppress it.
+        if (turn != null && kept.isNotEmpty()) {
+            try {
+                store.recordInjections(
+                    input.chatId, MemoryStore.COOLDOWN_SOURCE_MEMORY, kept.map { it.memoryId }, turn
+                )
+            } catch (e: Exception) {
+                notes.add("cooldown stamp failed: ${e.message}")
+            }
         }
 
-        // Scene (slot 5): user persona presentation in any chat; world +
-        // roleplay character during a world session. Missing records degrade
-        // to an emptier scene, never an error.
-        val scene = buildScene(store, input, worldId)
+        // Scene: user persona presentation in any chat; world + roleplay
+        // character during a world session. Missing records degrade to an
+        // emptier scene, never an error.
+        val scene = buildScene(store, input, worldId, roleplayCharacterId)
 
         val components = AssemblyComponents(
-            modelNote = companion?.let { modelNote(it, input.modelTag) },
-            hardLimits = companion?.let { parseStringArray(it.hardLimitsJson) } ?: emptyList(),
-            standingPacket = packet.text,
-            modes = modes.map { it.toBlock() },
             memories = kept,
-            entitySummaries = entitySummaries,
             loreNotes = loreNotes,
             scene = scene
         )
         val rendered = PromptAssembler.render(components)
+
+        // The room this turn stood in, for the debug view (§12.4: eligibility
+        // defines the room; the ladder only orders what is in it).
+        val eligibility = if (retrievalScope.isRoleplay) {
+            val companionDoor = when {
+                scopeCompanionId == null -> "no companion"
+                narratorMatch -> "companion memories via narrator/GM"
+                companionInRoleplayAllowed -> "companion memories via global toggle"
+                else -> "companion memories blocked"
+            }
+            listOfNotNull(
+                "roleplay",
+                worldId?.let { "world" },
+                campaign?.let { "campaign \"${it.name}\"" },
+                roleplayCharacterId?.let { "rp character" },
+                companionDoor
+            ).joinToString(", ")
+        } else {
+            "ordinary chat" +
+                (if (scopeCompanionId != null) ", companion" else "") +
+                (input.projectId?.takeIf { it.isNotBlank() }?.let { ", project boost" } ?: "")
+        }
 
         AssemblyLog.record(
             AssemblyLog.Record(
                 timestamp = System.currentTimeMillis(),
                 userMessage = input.userMessage,
                 companionName = companion?.currentName,
-                packetSource = packet.source,
-                modes = modes.map { it.name },
+                eligibility = eligibility,
                 injected = kept.map {
                     AssemblyLog.Line(
                         it.title,
-                        "(${it.provenanceMarker}) score %.3f sim %.3f%s".format(
-                            it.score, it.similarity, if (it.isProtected) " [protected]" else ""
+                        "(${it.provenanceMarker}) score %.3f sim %.3f%s%s".format(
+                            it.score, it.similarity,
+                            if (it.isProtected) " [protected]" else "",
+                            if (it.isInstruction) " [instruction rule]" else ""
                         )
                     )
                 },
                 cut = cut.map { AssemblyLog.Line(it.title, "over budget (score %.3f)".format(it.score)) } +
-                    suppressed.map { (m, l) -> AssemblyLog.Line(m.title, "near-duplicate of lore \"${l.label}\" — flagged") },
+                    suppressed.map { (m, l) -> AssemblyLog.Line(m.title, "near-duplicate of lore \"${l.label}\" — flagged") } +
+                    cooled.map { (m, ago) ->
+                        AssemblyLog.Line(m.title, "cooldown — injected $ago turn(s) ago, refreshes after $COOLDOWN_TURNS")
+                    },
                 loreNotes = loreNotes.map { it.label },
                 scene = scene.takeIf { !it.isEmpty }?.let {
                     listOfNotNull(it.worldName?.let { w -> "world $w" },
@@ -274,97 +351,10 @@ class Enforcer private constructor(private val appContext: Context) {
     }
 
     /* ------------------------------------------------------------------ */
-    /* mode detection                                                      */
-    /* ------------------------------------------------------------------ */
-
-    private fun detectModes(
-        store: MemoryStore,
-        librarian: Librarian,
-        companion: CompanionRecord?,
-        input: TurnInput,
-        policy: Policy,
-        retrieved: List<AssembledMemory>
-    ): List<ModeRecord> {
-        val all = store.getModes()
-        if (all.isEmpty()) return emptyList()
-        val applicable = all.filter {
-            it.scope == "global" ||
-                (companion != null && parseStringArray(it.companionIdsJson).contains(companion.companionId))
-        }
-        if (applicable.isEmpty()) return emptyList()
-
-        val msgVec = librarian.embedOrNull(input.userMessage, true)
-        val msgLower = input.userMessage.lowercase()
-
-        val candidates = applicable.map { mode ->
-            val signals = parseStringArray(mode.signalsJson)
-            var score = 0.0
-            if (msgVec != null) {
-                signalVector(librarian, mode, signals)?.let { score = VectorMath.cosine(msgVec, it).toDouble() }
-            }
-            // Keyword cues: a signal whose words appear in the message adds a
-            // small bonus (and is the whole signal when there's no model).
-            var bonus = 0.0
-            for (signal in signals) {
-                val words = NearDuplicate.tokens(signal)
-                if (words.isNotEmpty() && words.count { msgLower.contains(it) } >= 2) {
-                    bonus += KEYWORD_BONUS_PER_SIGNAL
-                }
-            }
-            score += bonus.coerceAtMost(KEYWORD_BONUS_CAP)
-            if (msgVec == null && bonus >= 2 * KEYWORD_BONUS_PER_SIGNAL) {
-                // No embeddings: two matched signals count as a clear trigger.
-                score = policy.modeThreshold + 0.01
-            }
-            ModeSelection.Candidate(mode.modeId, mode.name, score, parseStringArray(mode.overridesJson))
-        }
-
-        val suggested = retrieved.mapNotNull { it.suggestedMode }.toSet()
-        // suggested_mode may name a mode by id or (seed convention) by name.
-        val suggestedIds = applicable.filter {
-            suggested.contains(it.modeId) || suggested.any { s -> s.equals(it.name, ignoreCase = true) }
-        }.map { it.modeId }.toSet()
-
-        val sticky = stickyStates[input.chatId] ?: ModeSelection.StickyState()
-        val selected = ModeSelection.select(candidates, policy.modeThreshold, suggestedIds, sticky.modeIds)
-
-        // Advance stickiness: protective modes persist until a clear exit.
-        val byId = candidates.associateBy { it.modeId }
-        val activeProtective = selected.filter { ModeSelection.isProtective(it.name) }.map { it.modeId }.toSet()
-        val retriggered = sticky.modeIds.any { (byId[it]?.score ?: 0.0) >= policy.modeThreshold } ||
-            activeProtective.any { it !in sticky.modeIds }
-        val taskCleared = candidates.any { !ModeSelection.isProtective(it.name) && it.score >= policy.modeThreshold }
-        stickyStates[input.chatId] = ModeSelection.updateSticky(
-            sticky, activeProtective, retriggered, taskCleared, ModeSelection.isExitSignal(input.userMessage)
-        )
-
-        // Preserve the selector's order (protective first).
-        return selected.mapNotNull { s -> applicable.firstOrNull { it.modeId == s.modeId } }
-    }
-
-    private fun signalVector(librarian: Librarian, mode: ModeRecord, signals: List<String>): FloatArray? {
-        if (signals.isEmpty()) return null
-        val text = signals.joinToString("; ")
-        val key = "${librarian.activeTag()}|${mode.modeId}|${text.hashCode()}"
-        signalVectors[key]?.let { return it }
-        val vec = librarian.embedOrNull(text, false) ?: return null
-        signalVectors[key] = vec
-        return vec
-    }
-
-    private fun ModeRecord.toBlock(): ModeBlock = ModeBlock(
-        modeId = modeId,
-        name = name,
-        purpose = purpose,
-        respond = parseStringArray(respondJson),
-        avoid = parseStringArray(avoidJson)
-    )
-
-    /* ------------------------------------------------------------------ */
     /* helpers                                                             */
     /* ------------------------------------------------------------------ */
 
-    private data class Policy(val topK: Int, val charBudget: Int, val modeThreshold: Double)
+    private data class Policy(val topK: Int, val charBudget: Int)
 
     private fun parsePolicy(store: MemoryStore): Policy {
         val json = try { store.getRetrievalPolicyJson() } catch (_: Exception) { null }
@@ -373,22 +363,26 @@ class Enforcer private constructor(private val appContext: Context) {
                 val obj = JSONObject(json)
                 return Policy(
                     topK = obj.optInt("top_k", 8),
-                    charBudget = obj.optInt("memory_char_budget", PromptAssembler.DEFAULT_CHAR_BUDGET),
-                    modeThreshold = obj.optDouble("mode_threshold", ModeSelection.DEFAULT_THRESHOLD)
+                    charBudget = obj.optInt("memory_char_budget", PromptAssembler.DEFAULT_CHAR_BUDGET)
                 )
             } catch (_: Exception) { /* fall through to defaults */ }
         }
-        return Policy(8, PromptAssembler.DEFAULT_CHAR_BUDGET, ModeSelection.DEFAULT_THRESHOLD)
+        return Policy(8, PromptAssembler.DEFAULT_CHAR_BUDGET)
     }
 
-    private fun buildScene(store: MemoryStore, input: TurnInput, worldId: String?): SceneContext {
+    private fun buildScene(
+        store: MemoryStore,
+        input: TurnInput,
+        worldId: String?,
+        roleplayCharacterId: String?
+    ): SceneContext {
         val presentation = input.userPersonaId?.takeIf { it.isNotBlank() }?.let {
             try { store.getUserPersona(it)?.presentation } catch (_: Exception) { null }
         }
         if (worldId == null) return SceneContext(userPersonaPresentation = presentation)
         val world = try { store.getWorld(worldId) } catch (_: Exception) { null }
             ?: return SceneContext(userPersonaPresentation = presentation)
-        val character = input.roleplayCharacterId?.takeIf { it.isNotBlank() }?.let {
+        val character = roleplayCharacterId?.let {
             try { store.getRoleplayCharacter(it) } catch (_: Exception) { null }
         }
         return SceneContext(
@@ -405,7 +399,6 @@ class Enforcer private constructor(private val appContext: Context) {
     private fun toAssembled(m: RetrievableMemory, score: Float, similarity: Float): AssembledMemory {
         var handling: List<String> = emptyList()
         var neverAssume: List<String> = emptyList()
-        var suggestedMode: String? = null
         m.protectionJson?.takeIf { it.isNotBlank() }?.let {
             try {
                 val p = JSONObject(it)
@@ -414,7 +407,6 @@ class Enforcer private constructor(private val appContext: Context) {
                 ) {
                     handling = jsonToList(p.optJSONArray("handling"))
                     neverAssume = jsonToList(p.optJSONArray("never_assume"))
-                    suggestedMode = p.optString("suggested_mode").takeIf { s -> s.isNotBlank() }
                 }
             } catch (_: Exception) { /* unparseable protection: memory still renders, unprotected fields empty */ }
         }
@@ -427,7 +419,7 @@ class Enforcer private constructor(private val appContext: Context) {
             neverAssume = neverAssume,
             score = score,
             similarity = similarity,
-            suggestedMode = suggestedMode
+            kind = m.kind
         )
     }
 
@@ -438,31 +430,6 @@ class Enforcer private constructor(private val appContext: Context) {
         source.equals("inferred", ignoreCase = true) -> "guessed"
         else -> "observed"
     }
-
-    private fun modelNote(companion: CompanionRecord, modelTag: String): String? {
-        return try {
-            val arr = JSONArray(companion.modelAdaptationsJson)
-            for (i in 0 until arr.length()) {
-                val o = arr.optJSONObject(i) ?: continue
-                val tag = o.optString("model_tag")
-                if (tag.isNotBlank() &&
-                    (tag.equals(modelTag, ignoreCase = true) || modelTag.contains(tag, ignoreCase = true))
-                ) {
-                    return o.optString("notes").takeIf { it.isNotBlank() }
-                }
-            }
-            null
-        } catch (_: Exception) { null }
-    }
-
-    private fun appliesTo(appliesToJson: String, companionId: String?): Boolean {
-        val list = parseStringArray(appliesToJson)
-        return list.isEmpty() || (companionId != null && list.contains(companionId))
-    }
-
-    private fun parseStringArray(json: String): List<String> = try {
-        jsonToList(JSONArray(json))
-    } catch (_: Exception) { emptyList() }
 
     private fun jsonToList(arr: JSONArray?): List<String> {
         if (arr == null) return emptyList()

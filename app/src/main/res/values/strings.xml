@@ -892,6 +892,8 @@
     <string name="memory_marker_excluded">Memory: excluded</string>
     <string name="memory_default_enabled">Use memory in new chats</string>
     <string name="memory_default_enabled_hint">The default for the per-chat "Use memory" switch in Quick Settings. With memory off, nothing is injected and the chat\'s recording is marked excluded — the content is still captured, so you can un-exclude it later if the experiment turned out to matter. Turning off "Archive this chat" in Quick Settings stops recording entirely.</string>
+    <string name="memory_companion_in_roleplay">Allow active companion memories in roleplay</string>
+    <string name="memory_companion_in_roleplay_hint">Off: companion memories do not enter roleplay or campaign chats (a campaign\'s narrator/GM companion still brings theirs). On: the active companion\'s approved active memories can come up during roleplay when relevant — this never forces them into the conversation.</string>
 
     <!-- Memory system Phase 3: librarian (embedding model + semantic search) -->
     <string name="memory_section_librarian">Librarian (semantic memory)</string>
@@ -962,14 +964,15 @@
     <string name="label_chat_project">Project</string>
     <string name="label_project_none">None</string>
     <string name="memory_scene_project_picker_title">Choose a project</string>
+    <string name="label_chat_campaign">Campaign</string>
+    <string name="label_campaign_none">None</string>
+    <string name="memory_scene_campaign_picker_title">Choose a campaign</string>
 
     <!-- Memory system Phase 4: enforcer assembly debug view (shown above the lorebook debug log) -->
     <string name="memory_debug_assembly_header">Memory assembly (full engine)</string>
     <string name="lorebook_debug_records_header">Lore book injections</string>
     <string name="memory_debug_companion_fmt">Companion: %1$s</string>
-    <string name="memory_debug_packet_compressed">Packet: compressed</string>
-    <string name="memory_debug_packet_raw">Packet: raw</string>
-    <string name="memory_debug_modes_fmt">Modes: %1$s</string>
+    <string name="memory_debug_eligibility_fmt">Room: %1$s</string>
     <string name="memory_debug_injected_header">Injected:</string>
     <string name="memory_debug_cut_header">Cut:</string>
     <string name="memory_debug_lore_notes_header">Lore notes:</string>

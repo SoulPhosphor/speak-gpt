@@ -24,7 +24,7 @@ package org.teslasoft.assistant.preferences.memory.enforcer
  */
 object AssemblyLog {
 
-    /** One labelled line of the assembly ("memory", "cut", "mode", ...). */
+    /** One labelled line of the assembly ("memory", "cut", ...). */
     data class Line(
         val label: String,
         val detail: String
@@ -34,14 +34,17 @@ object AssemblyLog {
         val timestamp: Long,
         val userMessage: String,
         val companionName: String?,
-        /** "compressed" | "raw" | null (no packet). */
-        val packetSource: String?,
-        val modes: List<String>,
+        /** The room this turn stood in (Stage 3.1): ordinary vs roleplay, which
+         *  targets were selected, and which door companion memories came
+         *  through — so a "why didn't X inject?" is answerable from the log. */
+        val eligibility: String?,
         val injected: List<Line>,
+        /** Everything that did NOT inject and why: over budget, near-duplicate
+         *  of a lore note, or freshness cooldown (§10). */
         val cut: List<Line>,
         val loreNotes: List<String>,
         val scene: String?,
-        /** Degradations worth seeing: keyword fallback, packet failures, ... */
+        /** Degradations worth seeing: keyword fallback, cooldown failures, ... */
         val notes: List<String>
     )
 

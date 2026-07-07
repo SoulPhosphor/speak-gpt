@@ -49,7 +49,14 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
 
     companion object {
         const val DATABASE_NAME = "companion_memory.db"
-        private const val DATABASE_VERSION = 5
+        private const val DATABASE_VERSION = 6
+
+        // Freshness-cooldown source types (rules §10 / Stage 3.3): the
+        // composite key (chat_id, source_type, entry_id) keeps ids from
+        // different tables from colliding — 'memory' rows are memories;
+        // 'ledger' is reserved for the Stage 3.6 RP-character ledger.
+        const val COOLDOWN_SOURCE_MEMORY = "memory"
+        const val COOLDOWN_SOURCE_LEDGER = "ledger"
 
         // meta keys
         const val META_SCHEMA_VERSION = "schema_version"
@@ -312,11 +319,12 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
 
         // Named target scopes are multi-select (owner_approved_rules §2): a memory
         // may belong to several worlds/campaigns/RP characters/projects at once,
-        // mirroring memory_companions. The single memories.world_id/campaign_id/
-        // roleplay_character_id/project_id columns are kept as a "primary target"
-        // mirror (the first selected) so the Stage-3-owned retrieval query keeps
-        // working unchanged; these join tables are the full multi-target truth
-        // that the editor and the scoped-browser doors read.
+        // mirroring memory_companions. These join tables are the full multi-target
+        // truth — the editor, the scoped-browser doors AND (since Stage 3.1) the
+        // retrieval eligibility query all read them. The single memories.world_id/
+        // campaign_id/roleplay_character_id/project_id columns remain as a
+        // "primary target" mirror (the first selected) used only by the target
+        // teardown paths (deleteCampaign/deleteProject) and legacy consumers.
         db.execSQL(
             "CREATE TABLE memory_worlds (" +
                 "memory_id TEXT NOT NULL REFERENCES memories(memory_id) ON DELETE CASCADE, " +
@@ -439,6 +447,27 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 "record_id TEXT NOT NULL, " +
                 "deleted_at TEXT NOT NULL, " +
                 "PRIMARY KEY (record_type, record_id))"
+        )
+
+        // Freshness cooldown (rules §10 / Stage 3.3): when each entry was last
+        // injected, per chat, persisted so suppression survives process death.
+        // No FK to memories — entry_id may point at other tables per
+        // source_type (the 3.6 ledger), and a stale row is harmless (the
+        // delete/edit paths clear them anyway). chat_turn_counters is the
+        // per-chat monotonic turn clock the cooldown is measured against.
+        db.execSQL(
+            "CREATE TABLE injection_cooldowns (" +
+                "chat_id TEXT NOT NULL, " +
+                "source_type TEXT NOT NULL, " +
+                "entry_id TEXT NOT NULL, " +
+                "last_injected_turn INTEGER NOT NULL, " +
+                "last_injected_at TEXT, " +
+                "PRIMARY KEY (chat_id, source_type, entry_id))"
+        )
+        db.execSQL(
+            "CREATE TABLE chat_turn_counters (" +
+                "chat_id TEXT PRIMARY KEY, " +
+                "turn INTEGER NOT NULL)"
         )
 
         db.execSQL("CREATE INDEX idx_memories_status ON memories(status)")
@@ -647,6 +676,29 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             db.execSQL(
                 "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                 arrayOf(META_DB_MIGRATION, "5")
+            )
+        }
+        if (oldVersion < 6) {
+            // v6 (July 2026, Stage 3.3): the freshness cooldown — a persisted
+            // record of when each entry last reached a prompt, per chat, plus
+            // the per-chat turn clock it is measured against. Purely additive.
+            db.execSQL(
+                "CREATE TABLE injection_cooldowns (" +
+                    "chat_id TEXT NOT NULL, " +
+                    "source_type TEXT NOT NULL, " +
+                    "entry_id TEXT NOT NULL, " +
+                    "last_injected_turn INTEGER NOT NULL, " +
+                    "last_injected_at TEXT, " +
+                    "PRIMARY KEY (chat_id, source_type, entry_id))"
+            )
+            db.execSQL(
+                "CREATE TABLE chat_turn_counters (" +
+                    "chat_id TEXT PRIMARY KEY, " +
+                    "turn INTEGER NOT NULL)"
+            )
+            db.execSQL(
+                "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                arrayOf(META_DB_MIGRATION, "6")
             )
         }
     }
@@ -1754,62 +1806,172 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
     /* ---------------------------------------------------------------------- */
 
     /**
-     * Active memories visible to a conversation, with scope isolation enforced
-     * IN THE QUERY (not by convention, per the spec's non-negotiable): global
-     * memories plus those scoped to [companionId], and — for world sessions —
-     * only memories with no world or this world; real-life (world-less)
-     * memories remain available inside a world. [worldId] null = ordinary chat
-     * (world-tagged fiction is excluded).
+     * The single eligibility gate every retrieval (and Phase 4 injection) goes
+     * through, rewritten in Stage 3.1 to the owner-approved seven-category
+     * scope model (rules §1, §3, §4 rev 3). Scope isolation is enforced IN THE
+     * QUERY (not by convention, per the spec's non-negotiable), and named
+     * targets are read from the §2 multi-select join tables — a memory linked
+     * to several worlds/campaigns/RP characters is eligible under each of them.
+     *
+     * Ordinary (non-roleplay) chat — no world/campaign/RP character selected:
+     *  - global and real_life memories;
+     *  - companion memories of the chat's active companion (and only when that
+     *    companion is past 'draft' — an unapproved companion's memories never
+     *    reach a live prompt);
+     *  - ALL project memories: eligible on semantic relevance even with no
+     *    project selected (§4 rev 3 — selection is a ranking boost upstream,
+     *    never a gate here).
+     *
+     * Roleplay context — any of world/campaign/RP character selected:
+     *  - global memories (that is what Global means, §3);
+     *  - world/campaign/rp_character memories linked to the SELECTED targets;
+     *  - real_life memories are BLOCKED — the fiction wall (§3, no exceptions;
+     *    the Off/OOC-only/Always per-chat setting is future work);
+     *  - project memories are BLOCKED by default (§4 rev 3);
+     *  - companion memories only when [RetrievalScope.allowCompanionInRoleplay]
+     *    — the narrator/GM match from Stage 3.0 or the global §3 toggle.
+     *
+     * Draft/archived/superseded rows are never eligible (§9): status='active'.
      */
-    /**
-     * The eligibility gate every retrieval (and later, Phase 4 injection)
-     * goes through: active status, scope match, and — for the
-     * companion-scoped branch — the companion itself must be past 'draft'
-     * (a draft companion's memories must never reach a live prompt; that gate
-     * is what keeps an unapproved companion's records out of injection).
-     */
-    fun activeMemoriesForScope(
-        companionId: String?,
-        worldId: String?,
-        campaignId: String? = null
-    ): List<RetrievableMemory> {
+    fun activeMemoriesForScope(scope: RetrievalScope): List<RetrievableMemory> {
         val out = ArrayList<RetrievableMemory>()
         val args = ArrayList<String>()
-        val sb = StringBuilder(
-            "SELECT DISTINCT m.memory_id, m.scope, m.title, m.content, m.embedding_text, " +
-                "m.importance, m.created_at, m.world_id, m.provenance_confidence, " +
-                "m.protection_json, m.provenance_source " +
-                "FROM memories m LEFT JOIN memory_companions mc ON mc.memory_id = m.memory_id " +
-                "WHERE m.status = 'active' AND (m.scope = 'global'"
-        )
-        if (companionId != null) {
-            sb.append(
-                " OR (mc.companion_id = ? AND EXISTS (SELECT 1 FROM companions c " +
-                    "WHERE c.companion_id = mc.companion_id AND c.status != 'draft'))"
+        val branches = ArrayList<String>()
+
+        branches.add("m.scope = 'global'")
+
+        val companionBranchAllowed =
+            scope.companionId != null && (!scope.isRoleplay || scope.allowCompanionInRoleplay)
+        if (companionBranchAllowed) {
+            branches.add(
+                "(m.scope = 'companion' AND EXISTS (SELECT 1 FROM memory_companions mc " +
+                    "JOIN companions c ON c.companion_id = mc.companion_id " +
+                    "WHERE mc.memory_id = m.memory_id AND mc.companion_id = ? AND c.status != 'draft'))"
             )
-            args.add(companionId)
+            args.add(scope.companionId!!)
         }
-        sb.append(")")
-        if (worldId == null) {
-            sb.append(" AND m.world_id IS NULL")
+
+        if (scope.isRoleplay) {
+            if (scope.worldId != null) {
+                branches.add(
+                    "(m.scope = 'world' AND EXISTS (SELECT 1 FROM memory_worlds mw " +
+                        "WHERE mw.memory_id = m.memory_id AND mw.world_id = ?))"
+                )
+                args.add(scope.worldId)
+            }
+            if (scope.campaignId != null) {
+                branches.add(
+                    "(m.scope = 'campaign' AND EXISTS (SELECT 1 FROM memory_campaigns mcam " +
+                        "WHERE mcam.memory_id = m.memory_id AND mcam.campaign_id = ?))"
+                )
+                args.add(scope.campaignId)
+            }
+            if (scope.roleplayCharacterId != null) {
+                branches.add(
+                    "(m.scope = 'rp_character' AND EXISTS (SELECT 1 FROM memory_roleplay_characters mrc " +
+                        "WHERE mrc.memory_id = m.memory_id AND mrc.roleplay_character_id = ?))"
+                )
+                args.add(scope.roleplayCharacterId)
+            }
         } else {
-            sb.append(" AND (m.world_id IS NULL OR m.world_id = ?)")
-            args.add(worldId)
+            branches.add("m.scope = 'real_life'")
+            branches.add("m.scope = 'project'")
         }
-        // Campaign isolation (📌 amendment #4): ordinary conversation
-        // (campaignId null) never sees campaign-scoped rows, and those rows are
-        // invisible to OTHER campaigns; only when a campaign is active do its
-        // game-state facts join the mix alongside the non-campaign rows above.
-        if (campaignId == null) {
-            sb.append(" AND m.campaign_id IS NULL")
-        } else {
-            sb.append(" AND (m.campaign_id IS NULL OR m.campaign_id = ?)")
-            args.add(campaignId)
-        }
-        readableDatabase.rawQuery(sb.toString(), args.toTypedArray()).use {
+
+        val sql = "SELECT m.memory_id, m.scope, m.title, m.content, m.embedding_text, " +
+            "m.importance, m.created_at, m.world_id, m.provenance_confidence, " +
+            "m.protection_json, m.provenance_source, m.kind, m.tags_json " +
+            "FROM memories m WHERE m.status = 'active' AND (" +
+            branches.joinToString(" OR ") + ")"
+        readableDatabase.rawQuery(sql, args.toTypedArray()).use {
             while (it.moveToNext()) out.add(readRetrievable(it))
         }
         return out
+    }
+
+    /** Memory ids linked to a project via the §2 multi-select join table — the
+     *  Stage 3.2 ranking boost for the chat's selected project reads this. */
+    fun memoryIdsForProject(projectId: String): HashSet<String> {
+        val out = HashSet<String>()
+        readableDatabase.rawQuery(
+            "SELECT memory_id FROM memory_projects WHERE project_id = ?", arrayOf(projectId)
+        ).use {
+            while (it.moveToNext()) out.add(it.getString(0))
+        }
+        return out
+    }
+
+    /* ---------------------------------------------------------------------- */
+    /* freshness cooldown (rules §10 / Stage 3.3)                              */
+    /* ---------------------------------------------------------------------- */
+
+    /** Advance and return this chat's turn clock — one tick per assembled
+     *  turn. Monotonic and persisted, so the cooldown survives process death. */
+    fun nextTurnNumber(chatId: String): Long {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.execSQL(
+                "INSERT INTO chat_turn_counters (chat_id, turn) VALUES (?, 1) " +
+                    "ON CONFLICT(chat_id) DO UPDATE SET turn = turn + 1",
+                arrayOf(chatId)
+            )
+            val turn = db.rawQuery(
+                "SELECT turn FROM chat_turn_counters WHERE chat_id = ?", arrayOf(chatId)
+            ).use { if (it.moveToFirst()) it.getLong(0) else 1L }
+            db.setTransactionSuccessful()
+            return turn
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    /** The turn each entry was last injected on in this chat (absent = never —
+     *  new entries always inject on first relevance, §10). */
+    fun lastInjectedTurns(
+        chatId: String, sourceType: String, entryIds: Collection<String>
+    ): HashMap<String, Long> {
+        val out = HashMap<String, Long>()
+        if (entryIds.isEmpty()) return out
+        val placeholders = entryIds.joinToString(",") { "?" }
+        readableDatabase.rawQuery(
+            "SELECT entry_id, last_injected_turn FROM injection_cooldowns " +
+                "WHERE chat_id = ? AND source_type = ? AND entry_id IN ($placeholders)",
+            (listOf(chatId, sourceType) + entryIds).toTypedArray()
+        ).use {
+            while (it.moveToNext()) out[it.getString(0)] = it.getLong(1)
+        }
+        return out
+    }
+
+    /** Stamp the entries that made it into this turn's prompt. */
+    fun recordInjections(
+        chatId: String, sourceType: String, entryIds: Collection<String>, turn: Long
+    ) {
+        if (entryIds.isEmpty()) return
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            val now = nowIso()
+            for (id in entryIds) {
+                db.execSQL(
+                    "INSERT OR REPLACE INTO injection_cooldowns " +
+                        "(chat_id, source_type, entry_id, last_injected_turn, last_injected_at) " +
+                        "VALUES (?, ?, ?, ?, ?)",
+                    arrayOf(chatId, sourceType, id, turn, now)
+                )
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    /** §10: an edited entry resets its clock and re-injects fresh — clears the
+     *  entry's cooldown rows across every chat. Hooked into the memory edit
+     *  paths below; must run inside their transaction when called from one. */
+    private fun clearEntryCooldownTx(db: SQLiteDatabase, sourceType: String, entryId: String) {
+        db.delete("injection_cooldowns", "source_type = ? AND entry_id = ?", arrayOf(sourceType, entryId))
     }
 
     /**
@@ -1890,7 +2052,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             "memories",
             arrayOf("memory_id", "scope", "title", "content", "embedding_text",
                 "importance", "created_at", "world_id", "provenance_confidence",
-                "protection_json", "provenance_source"),
+                "protection_json", "provenance_source", "kind", "tags_json"),
             "status = 'active'", null, null, null, "created_at ASC"
         ).use {
             while (it.moveToNext()) out.add(readRetrievable(it))
@@ -1909,7 +2071,9 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         worldId = c.getStringOrNull("world_id"),
         provenanceConfidence = c.getStringOrNull("provenance_confidence"),
         protectionJson = c.getStringOrNull("protection_json"),
-        provenanceSource = c.getStringOrNull("provenance_source")
+        provenanceSource = c.getStringOrNull("provenance_source"),
+        kind = c.getStringOrNull("kind") ?: "fact",
+        tagsJson = c.getStringOrNull("tags_json") ?: "[]"
     )
 
     /** Stored vectors for [embeddingModel] over the active memories, keyed by
@@ -1996,9 +2160,27 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
      *  them whenever a chat id changes (auto-naming, manual rename). */
     fun repointChat(oldChatId: String, newChatId: String) {
         if (oldChatId == newChatId || oldChatId.isBlank() || newChatId.isBlank()) return
-        writableDatabase.execSQL(
-            "UPDATE transcripts SET chat_id = ? WHERE chat_id = ?", arrayOf(newChatId, oldChatId)
-        )
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.execSQL(
+                "UPDATE transcripts SET chat_id = ? WHERE chat_id = ?", arrayOf(newChatId, oldChatId)
+            )
+            // The cooldown state and turn clock are keyed by chat id too — a
+            // rename must carry them or every memory re-injects and the clock
+            // restarts (OR REPLACE: a pre-existing row under the new id loses).
+            db.execSQL(
+                "UPDATE OR REPLACE injection_cooldowns SET chat_id = ? WHERE chat_id = ?",
+                arrayOf(newChatId, oldChatId)
+            )
+            db.execSQL(
+                "UPDATE OR REPLACE chat_turn_counters SET chat_id = ? WHERE chat_id = ?",
+                arrayOf(newChatId, oldChatId)
+            )
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
     }
 
     /**
@@ -2594,6 +2776,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             db.delete("directives", null, null)
             db.delete("owner_profile", null, null)
             db.delete("deleted_ids", null, null)
+            db.delete("injection_cooldowns", null, null)
+            db.delete("chat_turn_counters", null, null)
             db.update("app_state", ContentValues().apply {
                 putNull("active_companion_id"); putNull("active_world_id")
                 putNull("active_roleplay_character_id"); putNull("active_user_persona_id")
@@ -2702,8 +2886,9 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         put("tags_json", m.tagsJson)
         put("importance", m.importance)
         // Primary-target mirror (§2 multi-select): the first of each target set
-        // is kept in the legacy single column for the Stage-3 retrieval query;
-        // the full set lives in the join tables (writeMemoryLinks).
+        // is kept in the legacy single column for the teardown paths; the full
+        // set lives in the join tables (writeMemoryLinks), which is what the
+        // Stage-3.1 retrieval eligibility query reads.
         put("world_id", m.worldIds.firstOrNull())
         put("roleplay_character_id", m.roleplayCharacterIds.firstOrNull())
         put("campaign_id", m.campaignIds.firstOrNull())
@@ -2779,6 +2964,10 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 prior.content != m.content || prior.title != m.title ||
                 (prior.embeddingText ?: "") != (m.embeddingText ?: "")
             if (textChanged) db.delete("embeddings", "memory_id = ?", arrayOf(m.memoryId))
+            // §10: an edit resets the freshness clock — the corrected version
+            // re-injects on its next relevance instead of waiting out the old
+            // mention's cooldown.
+            clearEntryCooldownTx(db, COOLDOWN_SOURCE_MEMORY, m.memoryId)
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
@@ -2801,6 +2990,9 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             logChange(db, memoryId, "user",
                 if (status == "active") "activated" else status, note,
                 prior?.let { snapshotMemoryJson(it) })
+            // A status flip is an edit for §10 purposes: a re-activated memory
+            // injects fresh instead of inheriting a pre-archive cooldown.
+            clearEntryCooldownTx(db, COOLDOWN_SOURCE_MEMORY, memoryId)
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
@@ -2835,6 +3027,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         try {
             db.delete("memories", "memory_id = ?", arrayOf(memoryId))
             recordDeletionTx(db, "memory", memoryId)
+            clearEntryCooldownTx(db, COOLDOWN_SOURCE_MEMORY, memoryId)
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
