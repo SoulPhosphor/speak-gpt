@@ -96,9 +96,37 @@ object PromptAssembler {
         return sb.toString()
     }
 
-    /** Renders the enforcer's system message. Empty string = nothing to inject. */
+    /** Renders the enforcer's system message. Empty string = nothing to inject.
+     *
+     *  Section order (3.6d, cache-aware): the scene — persona presentation +
+     *  the always-active Zone 1 cores — renders FIRST because it is the
+     *  stable part of this turn-variable message (providers cache up to the
+     *  first divergent token, so stable-first extends the reusable prefix);
+     *  retrieved memories, rules, lore notes and fired card entries follow. */
     fun render(c: AssemblyComponents): String {
         val sections = ArrayList<String>()
+
+        if (!c.scene.isEmpty) {
+            val sb = StringBuilder("## The scene")
+            c.scene.userPersonaPresentation?.takeIf { it.isNotBlank() }?.let {
+                sb.append("\nYou are appearing to them as they've chosen: ").append(it.trim())
+            }
+            // Zone 1 cores in the FIXED work-order sequence (the Enforcer
+            // builds the list in that order; this renderer never reorders).
+            for (core in c.scene.cores) {
+                sb.append("\n").append(core.heading)
+                for (f in core.fields) {
+                    sb.append("\n  ").append(f.label).append(": ").append(f.value.trim())
+                }
+            }
+            c.scene.rosterLine?.takeIf { it.isNotBlank() }?.let { sb.append("\n").append(it) }
+            if (c.scene.hasRoleplayCards) {
+                sb.append(
+                    "\nRemember: the player is still the same person — the character is costume, the fiction stays fiction."
+                )
+            }
+            sections.add(sb.toString())
+        }
 
         // One list in, split here (law 5): an Instruction memory is a context
         // rule the model must follow now that its topic has come up, so it is
@@ -133,23 +161,16 @@ object PromptAssembler {
             sections.add(sb.toString())
         }
 
-        if (!c.scene.isEmpty) {
-            val sb = StringBuilder("## The scene")
-            c.scene.userPersonaPresentation?.takeIf { it.isNotBlank() }?.let {
-                sb.append("\nYou are appearing to them as they've chosen: ").append(it.trim())
-            }
-            if (!c.scene.worldName.isNullOrBlank()) {
-                sb.append("\nWorld: ").append(c.scene.worldName.trim())
-                c.scene.worldPremise?.takeIf { it.isNotBlank() }?.let { sb.append(" — ").append(it.trim()) }
-                c.scene.worldRules?.takeIf { it.isNotBlank() }?.let { sb.append(" Rules of play: ").append(it.trim()) }
-                if (!c.scene.characterName.isNullOrBlank()) {
-                    sb.append("\nThey are playing ").append(c.scene.characterName.trim())
-                    c.scene.characterDescription?.takeIf { it.isNotBlank() }?.let { sb.append(": ").append(it.trim()) }
-                    c.scene.characterArc?.takeIf { it.isNotBlank() }?.let { sb.append(" Story so far: ").append(it.trim()) }
+        if (c.cardEntries.isNotEmpty()) {
+            val sb = StringBuilder(
+                "## From the story's cards (user-written; these outrank memories that disagree)"
+            )
+            for (e in c.cardEntries) {
+                sb.append("\n- ").append(e.sectionLabel).append(" — ").append(e.name.trim())
+                if (e.body.isNotBlank()) sb.append(": ").append(e.body.trim())
+                if (e.connectedTo.isNotEmpty()) {
+                    sb.append("\n  connected to: ").append(e.connectedTo.joinToString(", "))
                 }
-                sb.append(
-                    "\nRemember: the player is still the same person — the character is costume, the fiction stays fiction."
-                )
             }
             sections.add(sb.toString())
         }

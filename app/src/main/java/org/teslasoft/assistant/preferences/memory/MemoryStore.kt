@@ -3313,7 +3313,17 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
     )
 
     fun upsertCardEntry(e: CardEntryRecord) {
-        writableDatabase.insertWithOnConflict("card_entries", null, cardEntryValues(e), SQLiteDatabase.CONFLICT_REPLACE)
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.insertWithOnConflict("card_entries", null, cardEntryValues(e), SQLiteDatabase.CONFLICT_REPLACE)
+            // An edited entry resets its freshness clock and re-injects fresh
+            // (§10) — same contract as memory edits.
+            clearEntryCooldownTx(db, COOLDOWN_SOURCE_CARD_ENTRY, e.entryId)
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
     }
 
     private fun cardEntryValues(e: CardEntryRecord) = ContentValues().apply {
@@ -3348,6 +3358,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 arrayOf(RpTagTargetType.CARD_ENTRY, entryId)
             )
             db.delete("card_entries", "entry_id = ?", arrayOf(entryId))
+            clearEntryCooldownTx(db, COOLDOWN_SOURCE_CARD_ENTRY, entryId)
             recordDeletionTx(db, "card_entry", entryId)
             // Entries referencing this one (geography children via
             // parent_entry_id, campaign overlays via world_entry_id) keep
@@ -3471,6 +3482,20 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 "WHERE l.target_type = ? AND l.target_id = ? ORDER BY t.name ASC",
             arrayOf(targetType, targetId)
         ).use { while (it.moveToNext()) out.add(readRpTag(it)) }
+        return out
+    }
+
+    /** Every card-entry tag link in one query (entryId -> tagIds) — the 3.6d
+     *  retrieval pass filters to the active cards' entries in memory rather
+     *  than issuing one query per entry every turn. */
+    fun cardEntryTagLinks(): HashMap<String, ArrayList<String>> {
+        val out = HashMap<String, ArrayList<String>>()
+        readableDatabase.query(
+            "rp_tag_links", arrayOf("target_id", "tag_id"), "target_type = ?",
+            arrayOf(RpTagTargetType.CARD_ENTRY), null, null, null
+        ).use {
+            while (it.moveToNext()) out.getOrPut(it.getString(0)) { ArrayList() }.add(it.getString(1))
+        }
         return out
     }
 

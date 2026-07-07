@@ -22,13 +22,19 @@ import org.json.JSONObject
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.lorebook.LoreBookMatch
 import org.teslasoft.assistant.preferences.lorebook.LoreBookStore
+import org.teslasoft.assistant.preferences.memory.CampaignRecord
+import org.teslasoft.assistant.preferences.memory.CardEntryRecord
+import org.teslasoft.assistant.preferences.memory.CardType
 import org.teslasoft.assistant.preferences.memory.CompanionRecord
 import org.teslasoft.assistant.preferences.memory.MemoryCompanionSync
 import org.teslasoft.assistant.preferences.memory.MemoryLog
 import org.teslasoft.assistant.preferences.memory.MemoryStore
+import org.teslasoft.assistant.preferences.memory.PartyMemberRecord
 import org.teslasoft.assistant.preferences.memory.RetrievableMemory
 import org.teslasoft.assistant.preferences.memory.RetrievalScope
+import org.teslasoft.assistant.preferences.memory.RoleplayCharacterRecord
 import org.teslasoft.assistant.preferences.memory.ScoredMemory
+import org.teslasoft.assistant.preferences.memory.WorldRecord
 import org.teslasoft.assistant.preferences.memory.librarian.Librarian
 import org.teslasoft.assistant.preferences.memory.librarian.VectorMath
 
@@ -271,9 +277,125 @@ class Enforcer private constructor(private val appContext: Context) {
             notes.add("cooldown unavailable this turn: ${e.message}")
         }
 
-        // Budget: policy-driven, lowest-scored retrieved memories cut first;
-        // lore (user-authored) charges the budget but is never cut here.
-        val (kept, cut) = PromptAssembler.applyBudget(retrieved, loreChars, policy.charBudget)
+        // The active cards this turn (3.6d): the resolved world, campaign,
+        // user character, and the campaign's linked party members. Fetched
+        // once and shared by the cores (Zone 1) and the retrieval pass
+        // (Zone 2). Any failure degrades to "no cards this turn", never an
+        // error — same contract as everything else here.
+        val world = worldId?.let { try { store.getWorld(it) } catch (_: Exception) { null } }
+        val character = roleplayCharacterId?.let {
+            try { store.getRoleplayCharacter(it) } catch (_: Exception) { null }
+        }
+        val party: List<PartyMemberRecord> = campaign?.let {
+            try { store.partyMembersForCampaign(it.campaignId) } catch (_: Exception) { emptyList() }
+        } ?: emptyList()
+
+        // Zone 2 card retrieval (3.6d): trigger-matched, never embedded.
+        // Entry names, section names and auto-trigger tag names fire against
+        // the user message; tag-sharing siblings become one-hop pull-along
+        // candidates. Dead/enemy party members' entries stay reachable here
+        // even though their cores don't inject (§4).
+        var cardDirect: List<CardRetrieval.Fired> = emptyList()
+        var cardPull: List<CardRetrieval.Fired> = emptyList()
+        var cardEntriesById: Map<String, CardEntryRecord> = emptyMap()
+        var entryTags: Map<String, List<String>> = emptyMap()
+        val cardCooled = ArrayList<Pair<String, Long>>()
+        try {
+            val activeCards = ArrayList<Pair<String, String>>()
+            world?.let { activeCards.add(CardType.WORLD to it.worldId) }
+            campaign?.let { activeCards.add(CardType.CAMPAIGN to it.campaignId) }
+            character?.let { activeCards.add(CardType.RP_CHARACTER to it.roleplayCharacterId) }
+            party.forEach { activeCards.add(CardType.PARTY_MEMBER to it.partyMemberId) }
+            if (activeCards.isNotEmpty()) {
+                val entries = activeCards.flatMap { (type, id) -> store.entriesForCard(type, id) }
+                if (entries.isNotEmpty()) {
+                    cardEntriesById = entries.associateBy { it.entryId }
+                    val allLinks = store.cardEntryTagLinks()
+                    entryTags = entries.associate { it.entryId to (allLinks[it.entryId] ?: emptyList()) }
+                    val tagsById = store.getAllRpTags().associateBy { it.tagId }
+                    val fired = CardRetrieval.fire(input.userMessage, entries, tagsById, entryTags)
+                    cardDirect = fired.direct
+                    cardPull = fired.pullAlong
+                    // Freshness cooldown, per source_type (§10): fired entries
+                    // whose last injection is still fresh sit this turn out.
+                    val thisTurn = turn
+                    if (thisTurn != null && (cardDirect.isNotEmpty() || cardPull.isNotEmpty())) {
+                        val lastTurns = store.lastInjectedTurns(
+                            input.chatId, MemoryStore.COOLDOWN_SOURCE_CARD_ENTRY,
+                            (cardDirect + cardPull).map { it.entry.entryId }
+                        )
+                        fun fresh(f: CardRetrieval.Fired): Boolean {
+                            val last = lastTurns[f.entry.entryId] ?: return true
+                            val ago = thisTurn - last
+                            return if (ago < COOLDOWN_TURNS) {
+                                cardCooled.add(f.entry.name to ago)
+                                false
+                            } else true
+                        }
+                        cardDirect = cardDirect.filter { fresh(it) }
+                        cardPull = cardPull.filter { fresh(it) }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            notes.add("card retrieval failed: ${e.message}")
+            cardDirect = emptyList()
+            cardPull = emptyList()
+        }
+
+        fun assembleCard(f: CardRetrieval.Fired): AssembledCardEntry = AssembledCardEntry(
+            entryId = f.entry.entryId,
+            sectionLabel = CardRetrieval.SECTION_LABELS[f.entry.section] ?: f.entry.section,
+            name = f.entry.name,
+            body = CardRetrieval.composeBody(f.entry, cardEntriesById),
+            connectedTo = CardRetrieval.connectedNames(f.entry, cardEntriesById.values.toList(), entryTags)
+        )
+
+        fun cardCost(a: AssembledCardEntry): Int =
+            a.name.length + a.body.length + a.connectedTo.sumOf { it.length }
+
+        // Budget (3.6d): user-authored material outranks system memories
+        // (§12.1) — lore notes and DIRECTLY fired card entries charge the
+        // budget first and memories absorb the squeeze; speculative
+        // pull-alongs come last, into whatever the kept memories left over,
+        // so a broad tag can never flood the prompt (§3). Every cut is logged.
+        val cardCut = ArrayList<Pair<String, String>>()
+        val directKept = ArrayList<Pair<AssembledCardEntry, String>>()
+        var directChars = 0
+        val directAvailable = (policy.charBudget - loreChars).coerceAtLeast(0)
+        for (f in cardDirect) {
+            val a = assembleCard(f)
+            val cost = cardCost(a)
+            if (directChars + cost > directAvailable && directKept.isNotEmpty()) {
+                cardCut.add(a.name to "over budget (fired by ${f.reason})")
+            } else if (cost > directAvailable) {
+                cardCut.add(a.name to "over budget (fired by ${f.reason})")
+            } else {
+                directKept.add(a to f.reason)
+                directChars += cost
+            }
+        }
+
+        val (kept, cut) = PromptAssembler.applyBudget(retrieved, loreChars + directChars, policy.charBudget)
+
+        val keptMemoryChars = kept.sumOf {
+            it.title.length + it.content.length +
+                it.handling.sumOf { h -> h.length } + it.neverAssume.sumOf { n -> n.length }
+        }
+        var pullRemaining =
+            (policy.charBudget - loreChars - directChars - keptMemoryChars).coerceAtLeast(0)
+        val pullKept = ArrayList<Pair<AssembledCardEntry, String>>()
+        for (f in cardPull) {
+            val a = assembleCard(f)
+            val cost = cardCost(a)
+            if (cost <= pullRemaining) {
+                pullKept.add(a to f.reason)
+                pullRemaining -= cost
+            } else {
+                cardCut.add(a.name to "over budget (${f.reason})")
+            }
+        }
+        val cardsFinal = directKept + pullKept
 
         // Stamp what actually reached the prompt so the next turns suppress it.
         if (turn != null && kept.isNotEmpty()) {
@@ -285,16 +407,29 @@ class Enforcer private constructor(private val appContext: Context) {
                 notes.add("cooldown stamp failed: ${e.message}")
             }
         }
+        if (turn != null && cardsFinal.isNotEmpty()) {
+            try {
+                store.recordInjections(
+                    input.chatId, MemoryStore.COOLDOWN_SOURCE_CARD_ENTRY,
+                    cardsFinal.map { it.first.entryId }, turn
+                )
+            } catch (e: Exception) {
+                notes.add("card cooldown stamp failed: ${e.message}")
+            }
+        }
 
-        // Scene: user persona presentation in any chat; world + roleplay
-        // character during a world session. Missing records degrade to an
+        // Scene (3.6d): user persona presentation plus the Zone 1 cores in
+        // the FIXED order — world core → campaign bookmark → user character
+        // core → alive/incapacitated party cores → the dead/enemy roster
+        // line. Cores are cooldown-exempt. Missing records degrade to an
         // emptier scene, never an error.
-        val scene = buildScene(store, input, worldId, roleplayCharacterId)
+        val scene = buildScene(store, input, world, campaign, character, party)
 
         val components = AssemblyComponents(
             memories = kept,
             loreNotes = loreNotes,
-            scene = scene
+            scene = scene,
+            cardEntries = cardsFinal.map { it.first }
         )
         val rendered = PromptAssembler.render(components)
 
@@ -335,17 +470,27 @@ class Enforcer private constructor(private val appContext: Context) {
                             if (it.isInstruction) " [instruction rule]" else ""
                         )
                     )
+                } + cardsFinal.map { (a, reason) ->
+                    AssemblyLog.Line("card: ${a.name}", "§${a.sectionLabel} — fired by $reason")
                 },
                 cut = cut.map { AssemblyLog.Line(it.title, "over budget (score %.3f)".format(it.score)) } +
                     suppressed.map { (m, l) -> AssemblyLog.Line(m.title, "near-duplicate of lore \"${l.label}\" — flagged") } +
                     cooled.map { (m, ago) ->
                         AssemblyLog.Line(m.title, "cooldown — injected $ago turn(s) ago, refreshes after $COOLDOWN_TURNS")
-                    },
+                    } +
+                    cardCooled.map { (name, ago) ->
+                        AssemblyLog.Line("card: $name", "cooldown — injected $ago turn(s) ago, refreshes after $COOLDOWN_TURNS")
+                    } +
+                    cardCut.map { (name, why) -> AssemblyLog.Line("card: $name", why) },
                 loreNotes = loreNotes.map { it.label },
-                scene = scene.takeIf { !it.isEmpty }?.let {
-                    listOfNotNull(it.worldName?.let { w -> "world $w" },
-                        it.characterName?.let { c -> "as $c" },
-                        it.userPersonaPresentation?.let { "persona set" }).joinToString(", ")
+                scene = scene.takeIf { !it.isEmpty }?.let { s ->
+                    listOfNotNull(
+                        s.cores.takeIf { it.isNotEmpty() }?.let { cores ->
+                            "cores: " + cores.joinToString("; ") { it.heading }
+                        },
+                        s.rosterLine,
+                        s.userPersonaPresentation?.let { "persona set" }
+                    ).joinToString(", ")
                 },
                 notes = notes
             )
@@ -373,29 +518,97 @@ class Enforcer private constructor(private val appContext: Context) {
         return Policy(8, PromptAssembler.DEFAULT_CHAR_BUDGET)
     }
 
+    /**
+     * The Zone 1 cores in the work order's FIXED sequence (3.6d): world core
+     * → campaign bookmark → user character core → alive/incapacitated
+     * party-member cores, then the generated §6b roster line for dead/enemy
+     * members. Field labels are the spec §6 names; ONLY card fields render —
+     * the dormant pre-card premise/rules/description/arc text never reaches
+     * a prompt (owner ruling, spec §8a). Blank fields are omitted, so a lean
+     * core stays lean.
+     */
     private fun buildScene(
         store: MemoryStore,
         input: TurnInput,
-        worldId: String?,
-        roleplayCharacterId: String?
+        world: WorldRecord?,
+        campaign: CampaignRecord?,
+        character: RoleplayCharacterRecord?,
+        party: List<PartyMemberRecord>
     ): SceneContext {
         val presentation = input.userPersonaId?.takeIf { it.isNotBlank() }?.let {
             try { store.getUserPersona(it)?.presentation } catch (_: Exception) { null }
         }
-        if (worldId == null) return SceneContext(userPersonaPresentation = presentation)
-        val world = try { store.getWorld(worldId) } catch (_: Exception) { null }
-            ?: return SceneContext(userPersonaPresentation = presentation)
-        val character = roleplayCharacterId?.let {
-            try { store.getRoleplayCharacter(it) } catch (_: Exception) { null }
+
+        fun field(label: String, value: String?): CoreField? =
+            value?.trim()?.takeIf { it.isNotEmpty() }?.let { CoreField(label, it) }
+
+        val cores = ArrayList<CardCore>()
+        world?.let {
+            cores.add(
+                CardCore(
+                    "World: ${it.name}",
+                    listOfNotNull(
+                        field("Premise / Vibe", it.premiseVibe),
+                        field("Cosmology", it.cosmology),
+                        field("Magic Rules", it.magicRules)
+                    )
+                )
+            )
         }
+        campaign?.let {
+            cores.add(
+                CardCore(
+                    "Campaign: ${it.name}",
+                    listOfNotNull(
+                        field("Quest Anchor", it.questAnchor),
+                        field("Active Scene", it.activeScene)
+                    )
+                )
+            )
+        }
+        character?.let {
+            cores.add(
+                CardCore(
+                    "They are playing: ${it.name}",
+                    listOfNotNull(
+                        field("Species", it.species),
+                        field("Class", it.charClass),
+                        field("Core Personality", it.corePersonality),
+                        field("Physical Description", it.physicalDescription),
+                        field("Goals & Drives", it.goalsDrives)
+                    )
+                )
+            )
+        }
+        // Status gates NPC cores (§6b): alive/incapacitated inject in full;
+        // dead/enemy drop to the roster line but stay reachable via Zone 2.
+        for (m in party.filter { it.status == "alive" || it.status == "incapacitated" }) {
+            cores.add(
+                CardCore(
+                    "Party member: ${m.name}",
+                    listOfNotNull(
+                        field("Species", m.species),
+                        field("Class", m.charClass),
+                        field("Core Personality", m.corePersonality),
+                        field("Physical Description", m.physicalDescription),
+                        field("Goals & Drives", m.goalsDrives),
+                        field("Speech Style", m.speechStyle),
+                        // Always injected so the narrator knows how to treat
+                        // the character (§6b).
+                        field("Status", m.status.replaceFirstChar { it.uppercase() })
+                    )
+                )
+            )
+        }
+        val gone = party.filter { it.status == "dead" || it.status == "enemy" }
+        val rosterLine = gone.takeIf { it.isNotEmpty() }
+            ?.joinToString("; ") { "${it.name} — ${it.status}" }
+            ?.let { "No longer with the party: $it" }
+
         return SceneContext(
             userPersonaPresentation = presentation,
-            worldName = world.name,
-            worldPremise = world.premise,
-            worldRules = world.rules,
-            characterName = character?.name,
-            characterDescription = character?.description,
-            characterArc = character?.arc
+            cores = cores,
+            rosterLine = rosterLine
         )
     }
 

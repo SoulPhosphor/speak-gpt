@@ -61,19 +61,53 @@ data class LoreNote(
     val content: String
 )
 
-/** The scene: user persona presentation (any chat) + world session context. */
+/** One labeled Zone 1 field of a card core, e.g. "Magic Rules" -> text. */
+data class CoreField(
+    val label: String,
+    val value: String
+)
+
+/** One always-active card core: a heading line ("World: Duskmere",
+ *  "Party member: Rose") plus its Zone 1 fields in fixed order. */
+data class CardCore(
+    val heading: String,
+    val fields: List<CoreField> = emptyList()
+)
+
+/**
+ * The scene (3.6d): user persona presentation (any chat) plus the Zone 1
+ * card cores in the work order's FIXED injection order — world core →
+ * campaign bookmark → user character core → alive/incapacitated
+ * party-member cores — and the generated §6b roster line for dead/enemy
+ * members. Cores are built by the Enforcer from CARD fields only (the
+ * dormant pre-card premise/rules/description/arc text never renders —
+ * spec §8a) and are cooldown-exempt by construction (§10).
+ */
 data class SceneContext(
     val userPersonaPresentation: String? = null,
-    val worldName: String? = null,
-    val worldPremise: String? = null,
-    val worldRules: String? = null,
-    val characterName: String? = null,
-    val characterDescription: String? = null,
-    val characterArc: String? = null
+    val cores: List<CardCore> = emptyList(),
+    val rosterLine: String? = null
 ) {
     val isEmpty: Boolean
-        get() = userPersonaPresentation.isNullOrBlank() && worldName.isNullOrBlank()
+        get() = userPersonaPresentation.isNullOrBlank() && cores.isEmpty() && rosterLine.isNullOrBlank()
+
+    /** True when any roleplay card core is active this turn. */
+    val hasRoleplayCards: Boolean get() = cores.isNotEmpty()
 }
+
+/**
+ * One fired Zone 2 card entry as it renders into the cards section:
+ * section label + name + a pre-composed body, plus the §3 "connected to:"
+ * line — the names of tag-sharing siblings, so the model knows a
+ * connection exists even when the budget didn't pull the related entry.
+ */
+data class AssembledCardEntry(
+    val entryId: String,
+    val sectionLabel: String,
+    val name: String,
+    val body: String,
+    val connectedTo: List<String> = emptyList()
+)
 
 /**
  * Everything the renderer needs for one turn. Slots already owned by the app
@@ -89,5 +123,8 @@ data class SceneContext(
 data class AssemblyComponents(
     val memories: List<AssembledMemory> = emptyList(),
     val loreNotes: List<LoreNote> = emptyList(),
-    val scene: SceneContext = SceneContext()
+    val scene: SceneContext = SceneContext(),
+    /** Fired Zone 2 card entries (3.6d) — already cooldown-filtered and
+     *  budget-capped by the Enforcer. */
+    val cardEntries: List<AssembledCardEntry> = emptyList()
 )

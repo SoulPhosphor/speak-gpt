@@ -80,7 +80,7 @@ class PromptAssemblerTest {
             AssemblyComponents(
                 memories = listOf(mem("m1"), mem("rule", kind = "instruction")),
                 loreNotes = listOf(LoreNote("Note", "hand-written fact")),
-                scene = SceneContext(worldName = "W", worldPremise = "premise")
+                scene = SceneContext(cores = listOf(CardCore("World: W", listOf(CoreField("Premise / Vibe", "premise")))))
             )
         )
         assertFalse(out.contains("About the person you're with"))
@@ -91,17 +91,20 @@ class PromptAssemblerTest {
     }
 
     @Test
-    fun sectionOrderIsMemoriesRulesLoreScene() {
+    fun sectionOrderIsSceneMemoriesRulesLoreCards() {
+        // 3.6d, cache-aware: the stable scene/cores render FIRST; the
+        // turn-variable material follows; fired card entries close the message.
         val out = PromptAssembler.render(
             AssemblyComponents(
                 memories = listOf(mem("m1"), mem("rule", kind = "instruction")),
                 loreNotes = listOf(LoreNote("Note", "hand-written fact")),
-                scene = SceneContext(worldName = "W", worldPremise = "premise")
+                scene = SceneContext(cores = listOf(CardCore("World: W", listOf(CoreField("Premise / Vibe", "premise"))))),
+                cardEntries = listOf(AssembledCardEntry("ce-1", "Regions", "Verdant Kingdom", "rolling farmland"))
             )
         )
         val order = listOf(
-            "## Things you know", "## Handling rules from the user",
-            "## Hand-written notes from the user", "## The scene"
+            "## The scene", "## Things you know", "## Handling rules from the user",
+            "## Hand-written notes from the user", "## From the story's cards"
         )
         val positions = order.map { out.indexOf(it) }
         assertTrue(positions.all { it >= 0 })
@@ -140,19 +143,51 @@ class PromptAssemblerTest {
 
     @Test
     fun loreNotesOutrankAndSceneKeepsThePersonReal() {
+        // 3.6d: the scene carries card CORES (Zone 1, spec field labels) —
+        // the dormant pre-card premise/rules/description/arc never render.
         val out = PromptAssembler.render(
             AssemblyComponents(
                 loreNotes = listOf(LoreNote("Fact", "the truth")),
                 scene = SceneContext(
-                    worldName = "Aeldra", worldPremise = "a broken realm", worldRules = "no resurrection",
-                    characterName = "Mira", characterDescription = "a quiet mage", characterArc = "chapter two"
+                    cores = listOf(
+                        CardCore("World: Aeldra", listOf(
+                            CoreField("Premise / Vibe", "a broken realm"),
+                            CoreField("Magic Rules", "no resurrection")
+                        )),
+                        CardCore("They are playing: Mira", listOf(
+                            CoreField("Class", "mage"),
+                            CoreField("Goals & Drives", "reach chapter two")
+                        ))
+                    ),
+                    rosterLine = "No longer with the party: Rose — dead"
                 )
             )
         )
         assertTrue(out.contains("these outrank anything above that disagrees"))
-        assertTrue(out.contains("World: Aeldra — a broken realm Rules of play: no resurrection"))
-        assertTrue(out.contains("They are playing Mira: a quiet mage Story so far: chapter two"))
+        assertTrue(out.contains("World: Aeldra"))
+        assertTrue(out.contains("  Premise / Vibe: a broken realm"))
+        assertTrue(out.contains("  Magic Rules: no resurrection"))
+        assertTrue(out.contains("They are playing: Mira"))
+        assertTrue(out.contains("No longer with the party: Rose — dead"))
         assertTrue(out.contains("the character is costume, the fiction stays fiction"))
+    }
+
+    @Test
+    fun cardEntriesRenderWithConnectedToLine() {
+        val out = PromptAssembler.render(
+            AssemblyComponents(
+                cardEntries = listOf(
+                    AssembledCardEntry(
+                        "ce-1", "Reliquary", "The Silver Key",
+                        "held by: Vael; Opens the vault.",
+                        connectedTo = listOf("Eclipse Gate", "The Long Dark")
+                    )
+                )
+            )
+        )
+        assertTrue(out.contains("## From the story's cards"))
+        assertTrue(out.contains("- Reliquary — The Silver Key: held by: Vael; Opens the vault."))
+        assertTrue(out.contains("  connected to: Eclipse Gate, The Long Dark"))
     }
 
     @Test
