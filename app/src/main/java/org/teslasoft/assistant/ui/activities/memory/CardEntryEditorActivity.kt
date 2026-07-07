@@ -115,6 +115,11 @@ class CardEntryEditorActivity : FragmentActivity() {
     private var selectedWorldEntryId: String? = null
     private val worldLinkCandidates = LinkedHashMap<String, String>()
 
+    /** The linked entry's name resolved directly from the store — survives the
+     *  link outliving the candidate list (campaign changed worlds, or the
+     *  entry was archived away). Null when the target is truly gone. */
+    private var resolvedWorldLinkName: String? = null
+
     companion object {
         // Per-section Type/Relationship value lists — the spec §6a/§6b words,
         // stored as snake_case keys, shown via the entry_kind_* strings.
@@ -436,10 +441,9 @@ class CardEntryEditorActivity : FragmentActivity() {
 
     private fun refreshWorldLink() {
         btnWorldLink?.text = selectedWorldEntryId?.let { id ->
-            worldLinkCandidates[id]
-                // A link that outlived its world entry (spec §5): shown, never
-                // silently dropped.
-                ?: getString(R.string.mem_world_campaign_none)
+            // A link that outlived its world entry shows it explicitly —
+            // "(deleted card)" — never a silent hole (spec §5).
+            worldLinkCandidates[id] ?: resolvedWorldLinkName ?: getString(R.string.rp_ref_deleted)
         } ?: getString(R.string.mem_world_campaign_none)
     }
 
@@ -515,7 +519,9 @@ class CardEntryEditorActivity : FragmentActivity() {
             val store = MemoryStore.getInstance(this)
             val record = store.getCardEntry(id) ?: return@runOffThread
             val tags = store.tagsForTarget(RpTagTargetType.CARD_ENTRY, id)
+            val linkedName = record.worldEntryId?.let { store.getCardEntry(it)?.name }
             runOnUiThread {
+                resolvedWorldLinkName = linkedName
                 existing = record
                 fieldName?.setText(record.name)
                 fieldDescription?.setText(record.description ?: "")

@@ -1238,9 +1238,9 @@
 
     <!-- Teardown: one action, always a confirm. -->
     <string name="mem_world_teardown_title">Tear down world</string>
-    <string name="mem_world_teardown_msg">How should this world be torn down? Archiving keeps everything but marks it ended; deleting removes the world for good.</string>
-    <string name="mem_world_teardown_archive">Archive everything</string>
-    <string name="mem_world_teardown_delete">Delete everything</string>
+    <string name="mem_world_teardown_msg">Archiving hides the world from the active lists — its links and memories stay, and it can be restored any time. Deleting removes the world for good.</string>
+    <string name="mem_world_teardown_archive">Archive</string>
+    <string name="mem_world_teardown_delete">Delete</string>
     <string name="mem_world_archived">World archived.</string>
     <string name="mem_world_deleted">World deleted.</string>
     <string name="mem_world_delete_title">Delete world</string>
@@ -1289,7 +1289,7 @@
 
     <!-- Teardown. -->
     <string name="mem_world_campaign_teardown_title">Tear down campaign</string>
-    <string name="mem_world_campaign_teardown_msg">Archiving keeps the campaign but marks it archived; deleting removes it. The world and characters are left untouched either way.</string>
+    <string name="mem_world_campaign_teardown_msg">Archiving hides the campaign from the active lists — its links and memories stay, and it can be restored any time. Deleting removes it; the world and characters are left untouched either way.</string>
     <string name="mem_world_campaign_teardown_archive">Archive</string>
     <string name="mem_world_campaign_teardown_delete">Delete</string>
     <string name="mem_world_campaign_archived">Campaign archived.</string>
@@ -1462,6 +1462,13 @@
     <string name="rp_tag_make_auto">Auto-trigger</string>
     <string name="rp_tag_group_fmt">%1$s — %2$s</string>
     <string name="rp_tag_group_cards">Cards</string>
+
+    <!-- Deletion protection + archives (3.6f, spec §5) -->
+    <string name="rp_ref_deleted">(deleted card)</string>
+    <string name="rp_ref_archived_fmt">%1$s (archived card)</string>
+    <string name="rp_delete_linked_msg">This is linked to: %1$s.\n\nYou can archive it instead — links stay and it just leaves the active lists.</string>
+    <string name="rp_delete_scope_title">Also delete its memories?</string>
+    <string name="rp_delete_scope_msg">Keep the memories linked to \"%1$s\" (they stay in the store, unlinked) or delete them together with it.</string>
 
     <string name="rp_move_ledger_title">Moved to %1$s</string>
     <string name="rp_move_ledger_started_title">Started in %1$s</string>

@@ -145,20 +145,40 @@ class MemoryPartyMembersActivity : MemoryScreenActivity() {
         }
     }
 
+    /** §5 (3.6f): an NPC linked to campaigns gets a warning NAMING them and
+     *  an archive-instead option. Party members aren't a memory scope, so
+     *  there is no memories question here — and death is a STATUS on the
+     *  card, never a reason to delete. */
     private fun confirmDelete(p: PartyMemberRecord) {
-        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.mem_party_delete_title)
-            .setMessage(getString(R.string.mem_party_delete_msg, p.name))
-            .setPositiveButton(R.string.btn_delete) { _, _ ->
-                runOffThread {
-                    MemoryStore.getInstance(this).deletePartyMember(p.partyMemberId)
-                    runOnUiThread {
-                        Toast.makeText(this, R.string.mem_party_deleted, Toast.LENGTH_SHORT).show()
-                        reload()
+        runOffThread {
+            val store = MemoryStore.getInstance(this)
+            val campaignNames = store.getCampaigns().associate { it.campaignId to it.name }
+            val linked = store.campaignIdsForPartyMember(p.partyMemberId)
+                .mapNotNull { campaignNames[it] }
+            runOnUiThread {
+                val message =
+                    if (linked.isEmpty()) getString(R.string.mem_party_delete_msg, p.name)
+                    else getString(R.string.rp_delete_linked_msg, linked.joinToString(", "))
+                val builder = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+                    .setTitle(R.string.mem_party_delete_title)
+                    .setMessage(message)
+                    .setPositiveButton(R.string.btn_delete) { _, _ ->
+                        runOffThread {
+                            MemoryStore.getInstance(this).deletePartyMember(p.partyMemberId)
+                            runOnUiThread {
+                                Toast.makeText(this, R.string.mem_party_deleted, Toast.LENGTH_SHORT).show()
+                                reload()
+                            }
+                        }
+                    }
+                    .setNegativeButton(R.string.btn_cancel) { _, _ -> }
+                if (linked.isNotEmpty()) {
+                    builder.setNeutralButton(R.string.action_archive) { _, _ ->
+                        setArchived(p.partyMemberId, true)
                     }
                 }
+                builder.show()
             }
-            .setNegativeButton(R.string.btn_cancel) { _, _ -> }
-            .show()
+        }
     }
 }

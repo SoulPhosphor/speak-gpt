@@ -2878,20 +2878,22 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         }, SQLiteDatabase.CONFLICT_REPLACE)
     }
 
-    /** Archive-all teardown: the world is marked ended and its still-active
-     *  memories archived (vectors dropped, per the archive rule). Reversible by
-     *  re-activating the memories from the memory editor. */
+    /** Archive (3.6f, spec §5 — REPLACES the old archive-all teardown):
+     *  archiving only hides the card from active selectors. Every link stays
+     *  intact and NO memory is touched — "archiving or deleting a card does
+     *  not erase what the campaign remembers". Restorable in one tap. */
     fun archiveWorld(worldId: String) {
-        val db = writableDatabase
-        db.beginTransaction()
-        try {
-            db.update("worlds", ContentValues().apply { put("status", "ended") },
-                "world_id = ?", arrayOf(worldId))
-            archiveMemoriesWhere(db, "world_id = ? AND status = 'active'", arrayOf(worldId))
-            db.setTransactionSuccessful()
-        } finally {
-            db.endTransaction()
-        }
+        writableDatabase.update(
+            "worlds", ContentValues().apply { put("status", "archived") },
+            "world_id = ?", arrayOf(worldId)
+        )
+    }
+
+    fun restoreWorld(worldId: String) {
+        writableDatabase.update(
+            "worlds", ContentValues().apply { put("status", "active") },
+            "world_id = ?", arrayOf(worldId)
+        )
     }
 
     /**
@@ -3016,18 +3018,13 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         return Triple(c.worldId, c.roleplayCharacterId, c.companionId)
     }
 
-    /** Archive-all teardown: campaign archived, its active memories archived. */
+    /** Archive (3.6f, spec §5 — REPLACES the old archive-all teardown):
+     *  status only; links and memories untouched. */
     fun archiveCampaign(campaignId: String) {
-        val db = writableDatabase
-        db.beginTransaction()
-        try {
-            db.update("campaigns", ContentValues().apply { put("status", "archived") },
-                "campaign_id = ?", arrayOf(campaignId))
-            archiveMemoriesWhere(db, "campaign_id = ? AND status = 'active'", arrayOf(campaignId))
-            db.setTransactionSuccessful()
-        } finally {
-            db.endTransaction()
-        }
+        writableDatabase.update(
+            "campaigns", ContentValues().apply { put("status", "archived") },
+            "campaign_id = ?", arrayOf(campaignId)
+        )
     }
 
     /** Delete-all teardown: the world and character walk away clean — only the

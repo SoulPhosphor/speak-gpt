@@ -34,7 +34,6 @@ import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
 import androidx.fragment.app.FragmentActivity
 import com.google.android.material.button.MaterialButton
-import com.google.android.material.checkbox.MaterialCheckBox
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.textfield.TextInputEditText
@@ -251,9 +250,15 @@ class WorldDetailActivity : FragmentActivity() {
         textSaveFirst?.visibility = View.GONE
 
         runOffThread {
-            val entries = MemoryStore.getInstance(this).entriesForCard(CardType.WORLD, id)
+            val store = MemoryStore.getInstance(this)
+            val entries = store.entriesForCard(CardType.WORLD, id)
             val bySection = entries.groupBy { it.section }
             val nameById = entries.associate { it.entryId to it.name }
+            // §5 (3.6f): promotion pointers to a gone party-member card must
+            // say so — collect the living roster ids once.
+            val partyIds = try {
+                store.getPartyMembers(includeArchived = true).map { it.partyMemberId }.toHashSet()
+            } catch (_: Exception) { HashSet() }
             runOnUiThread {
                 container.removeAllViews()
                 val inflater = LayoutInflater.from(this)
@@ -269,12 +274,12 @@ class WorldDetailActivity : FragmentActivity() {
                     }
                     container.addView(header)
                     for (section in sections) {
-                        container.addView(sectionBlock(inflater, container, section, bySection, nameById))
+                        container.addView(sectionBlock(inflater, container, section, bySection, nameById, partyIds))
                     }
                 }
                 // The owner-added Notes section (spec §8a), no group.
                 container.addView(
-                    sectionBlock(inflater, container, CardSections.NOTES, bySection, nameById)
+                    sectionBlock(inflater, container, CardSections.NOTES, bySection, nameById, partyIds)
                 )
             }
         }
@@ -285,7 +290,8 @@ class WorldDetailActivity : FragmentActivity() {
         container: LinearLayout,
         section: String,
         bySection: Map<String, List<CardEntryRecord>>,
-        nameById: Map<String, String>
+        nameById: Map<String, String>,
+        partyIds: Set<String>
     ): View {
         val block = inflater.inflate(R.layout.view_card_section, container, false)
         block.findViewById<TextView>(R.id.section_title)
@@ -296,7 +302,7 @@ class WorldDetailActivity : FragmentActivity() {
             if (rows.isEmpty()) View.VISIBLE else View.GONE
 
         val list = block.findViewById<LinearLayout>(R.id.section_entries)
-        for (entry in rows) list.addView(entryRow(inflater, list, entry, nameById))
+        for (entry in rows) list.addView(entryRow(inflater, list, entry, nameById, partyIds))
 
         block.findViewById<MaterialButton>(R.id.btn_add_entry).setOnClickListener {
             openEntryEditor(section, null)
@@ -308,7 +314,8 @@ class WorldDetailActivity : FragmentActivity() {
         inflater: LayoutInflater,
         parent: LinearLayout,
         entry: CardEntryRecord,
-        nameById: Map<String, String>
+        nameById: Map<String, String>,
+        partyIds: Set<String>
     ): View {
         val row = inflater.inflate(R.layout.view_memory_row, parent, false)
         row.findViewById<TextView>(R.id.row_title).text = entry.name
@@ -330,9 +337,11 @@ class WorldDetailActivity : FragmentActivity() {
         // the lightweight lore entry. Badge marks the promoted state.
         val badge = row.findViewById<TextView>(R.id.row_badge)
         val promotedTo = entry.partyMemberId
+        val promotedExists = promotedTo != null && promotedTo in partyIds
         if (promotedTo != null) {
             badge.visibility = View.VISIBLE
-            badge.setText(R.string.card_title_party_member)
+            // §5: a pointer to a deleted card says so instead of vanishing.
+            badge.setText(if (promotedExists) R.string.card_title_party_member else R.string.rp_ref_deleted)
         } else {
             badge.visibility = View.GONE
         }
@@ -340,7 +349,7 @@ class WorldDetailActivity : FragmentActivity() {
         row.findViewById<ImageButton>(R.id.btn_row_action).visibility = View.GONE
         val ui = row.findViewById<View>(R.id.ui)
         ui.setOnClickListener {
-            if (promotedTo != null) openPartyMemberCard(promotedTo)
+            if (promotedExists) openPartyMemberCard(promotedTo!!)
             else openEntryEditor(entry.section, entry.entryId)
         }
         ui.setOnLongClickListener {
@@ -392,15 +401,27 @@ class WorldDetailActivity : FragmentActivity() {
 
     /* ------------------------------ teardown ------------------------------ */
 
+    /** §5 (3.6f): deleting anything linked to a campaign warns, NAMES the
+     *  campaign(s), and offers archive instead. Archive is status-only —
+     *  links and memories stay; restorable from the worlds list. */
     private fun showTeardownDialog() {
         val id = worldId ?: return
-        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.mem_world_teardown_title)
-            .setMessage(R.string.mem_world_teardown_msg)
-            .setPositiveButton(R.string.mem_world_teardown_delete) { _, _ -> showDeleteDialog(id) }
-            .setNeutralButton(R.string.mem_world_teardown_archive) { _, _ -> archive(id) }
-            .setNegativeButton(R.string.mem_world_cancel) { _, _ -> }
-            .show()
+        runOffThread {
+            val linked = MemoryStore.getInstance(this).getCampaigns()
+                .filter { it.worldId == id }.map { it.name }
+            runOnUiThread {
+                val message =
+                    if (linked.isEmpty()) getString(R.string.mem_world_teardown_msg)
+                    else getString(R.string.rp_delete_linked_msg, linked.joinToString(", "))
+                MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+                    .setTitle(R.string.mem_world_teardown_title)
+                    .setMessage(message)
+                    .setPositiveButton(R.string.mem_world_teardown_delete) { _, _ -> showDeleteScopeDialog(id) }
+                    .setNeutralButton(R.string.mem_world_teardown_archive) { _, _ -> archive(id) }
+                    .setNegativeButton(R.string.mem_world_cancel) { _, _ -> }
+                    .show()
+            }
+        }
     }
 
     private fun archive(id: String) {
@@ -413,33 +434,31 @@ class WorldDetailActivity : FragmentActivity() {
         }
     }
 
-    private fun showDeleteDialog(id: String) {
-        val keepBox = MaterialCheckBox(this).apply {
-            setText(R.string.mem_world_delete_keep_characters)
-            isChecked = true
-        }
-        val pad = (20 * resources.displayMetrics.density).toInt()
-        val container = android.widget.LinearLayout(this).apply {
-            orientation = android.widget.LinearLayout.VERTICAL
-            setPadding(pad, pad, pad, 0)
-            addView(keepBox)
-        }
+    /** True delete asks per-deletion whether the memories go too (§5).
+     *  Memories that also belong to a character walk away clean either way —
+     *  cards and memories are separate. */
+    private fun showDeleteScopeDialog(id: String) {
+        val name = fieldName?.text?.toString()?.trim().orEmpty()
         MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.mem_world_delete_title)
-            .setMessage(R.string.mem_world_delete_msg)
-            .setView(container)
-            .setPositiveButton(R.string.mem_world_delete_confirm) { _, _ ->
-                val keep = keepBox.isChecked
-                runOffThread {
-                    MemoryStore.getInstance(this).deleteWorld(id, deleteMemories = true, keepCharacterMemories = keep)
-                    runOnUiThread {
-                        Toast.makeText(this, R.string.mem_world_deleted, Toast.LENGTH_SHORT).show()
-                        finish()
-                    }
-                }
+            .setTitle(R.string.rp_delete_scope_title)
+            .setMessage(getString(R.string.rp_delete_scope_msg, name))
+            .setPositiveButton(R.string.mem_pers_delete_character_with_memories) { _, _ ->
+                delete(id, deleteMemories = true)
             }
-            .setNegativeButton(R.string.mem_world_cancel) { _, _ -> }
+            .setNegativeButton(R.string.mem_pers_delete_character_keep_memories) { _, _ ->
+                delete(id, deleteMemories = false)
+            }
             .show()
+    }
+
+    private fun delete(id: String, deleteMemories: Boolean) {
+        runOffThread {
+            MemoryStore.getInstance(this).deleteWorld(id, deleteMemories, keepCharacterMemories = true)
+            runOnUiThread {
+                Toast.makeText(this, R.string.mem_world_deleted, Toast.LENGTH_SHORT).show()
+                finish()
+            }
+        }
     }
 
     /* ------------------------------ off-thread ------------------------------ */

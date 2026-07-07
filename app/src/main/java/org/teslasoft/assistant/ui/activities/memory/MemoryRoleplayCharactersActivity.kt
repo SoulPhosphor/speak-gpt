@@ -160,16 +160,30 @@ class MemoryRoleplayCharactersActivity : MemoryScreenActivity() {
         }
     }
 
-    /** Two-step delete: first a plain confirm, then — only if the user
-     *  confirms — a second choice for whether the character's memories go
-     *  with it (kept as unlinked global memories, or removed together). */
+    /** Two-step delete, §5-aware (3.6f): a character linked to campaigns gets
+     *  a warning NAMING them and an archive-instead option; confirming moves
+     *  on to the per-deletion choice of whether the memories go too. */
     private fun confirmDelete(r: RoleplayCharacterRecord) {
-        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.mem_pers_delete_character_title)
-            .setMessage(getString(R.string.mem_pers_delete_character_msg, r.name))
-            .setPositiveButton(R.string.btn_delete) { _, _ -> showDeleteScopeDialog(r) }
-            .setNegativeButton(R.string.btn_cancel) { _, _ -> }
-            .show()
+        runOffThread {
+            val linked = MemoryStore.getInstance(this).getCampaigns()
+                .filter { it.roleplayCharacterId == r.roleplayCharacterId }.map { it.name }
+            runOnUiThread {
+                val message =
+                    if (linked.isEmpty()) getString(R.string.mem_pers_delete_character_msg, r.name)
+                    else getString(R.string.rp_delete_linked_msg, linked.joinToString(", "))
+                val builder = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+                    .setTitle(R.string.mem_pers_delete_character_title)
+                    .setMessage(message)
+                    .setPositiveButton(R.string.btn_delete) { _, _ -> showDeleteScopeDialog(r) }
+                    .setNegativeButton(R.string.btn_cancel) { _, _ -> }
+                if (linked.isNotEmpty()) {
+                    builder.setNeutralButton(R.string.action_archive) { _, _ ->
+                        setStatus(r.roleplayCharacterId, "archived")
+                    }
+                }
+                builder.show()
+            }
+        }
     }
 
     private fun showDeleteScopeDialog(r: RoleplayCharacterRecord) {

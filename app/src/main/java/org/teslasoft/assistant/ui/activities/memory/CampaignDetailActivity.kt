@@ -183,12 +183,22 @@ class CampaignDetailActivity : FragmentActivity() {
             val c = store.getCampaign(id)
             // Resolve the display labels for the three scope selections up front
             // so the UI thread just paints strings (no store calls on main).
-            val worldName = c?.worldId?.let { store.getWorld(it)?.name }
+            // §5 (3.6f): a surviving reference to a gone card shows it
+            // explicitly — "(archived card)" / "(deleted card)" — never a
+            // silent hole or a fake "None".
+            val worldName = c?.worldId?.let { wid ->
+                store.getWorld(wid)?.let { w ->
+                    if (w.status == "archived") getString(R.string.rp_ref_archived_fmt, w.name) else w.name
+                } ?: getString(R.string.rp_ref_deleted)
+            }
             val characterName = c?.roleplayCharacterId?.let { rid ->
-                store.getActiveRoleplayCharacters().firstOrNull { it.roleplayCharacterId == rid }?.name
+                store.getRoleplayCharacter(rid)?.let { r ->
+                    if (r.status == "archived") getString(R.string.rp_ref_archived_fmt, r.name) else r.name
+                } ?: getString(R.string.rp_ref_deleted)
             }
             val companionName = c?.companionId?.let { cid ->
                 store.getCompanions().firstOrNull { it.companionId == cid }?.currentName
+                    ?: getString(R.string.rp_ref_deleted)
             }
             runOnUiThread {
                 existing = c

@@ -42,19 +42,44 @@ class MemoryCampaignsActivity : MemoryScreenActivity() {
         // Cache world names for the subtitle without re-querying per row.
         val worldNames = store.getAllWorlds().associate { it.worldId to it.name }
 
-        return store.getCampaigns()
-            .filter { q.isEmpty() || it.name.lowercase().contains(q) }
-            .map { c ->
-                val worldName = c.worldId?.let { worldNames[it] } ?: getString(R.string.mem_world_campaign_no_world)
-                val subtitle = getString(R.string.mem_world_campaign_subtitle_fmt, statusLabel(c.status), worldName)
-                MemoryRow(
-                    id = c.campaignId,
-                    title = c.name,
-                    subtitle = subtitle,
-                    badge = if (c.status != "active") statusLabel(c.status) else null,
-                    hasAction = false
-                )
+        val all = store.getCampaigns().filter { q.isEmpty() || it.name.lowercase().contains(q) }
+
+        fun rowFor(c: org.teslasoft.assistant.preferences.memory.CampaignRecord): MemoryRow {
+            val worldName = c.worldId?.let { worldNames[it] } ?: getString(R.string.mem_world_campaign_no_world)
+            val subtitle = getString(R.string.mem_world_campaign_subtitle_fmt, statusLabel(c.status), worldName)
+            return MemoryRow(
+                id = c.campaignId,
+                title = c.name,
+                subtitle = subtitle,
+                badge = if (c.status != "active" && c.status != "archived") statusLabel(c.status) else null,
+                hasAction = c.status == "archived"
+            )
+        }
+
+        // Visible Archive section at the bottom (spec §5, 3.6f): archived
+        // campaigns are hidden from active selection but stay evident and
+        // restorable in one tap (the row action).
+        val active = all.filter { it.status != "archived" }.map { rowFor(it) }
+        val archived = all.filter { it.status == "archived" }.map { rowFor(it) }
+        if (archived.isEmpty()) return active
+        return active +
+            MemoryRow(id = "", title = getString(R.string.card_archive_header), isHeader = true) +
+            archived
+    }
+
+    override fun onAction(row: MemoryRow, anchor: android.view.View) {
+        val menu = android.widget.PopupMenu(this, anchor)
+        menu.menu.add(0, 1, 0, getString(R.string.action_restore))
+        menu.setOnMenuItemClickListener { item ->
+            if (item.itemId == 1) {
+                runOffThread {
+                    MemoryStore.getInstance(this).setCampaignStatus(row.id, "active")
+                    runOnUiThread { reload() }
+                }
             }
+            true
+        }
+        menu.show()
     }
 
     private fun statusLabel(status: String): String = when (status) {

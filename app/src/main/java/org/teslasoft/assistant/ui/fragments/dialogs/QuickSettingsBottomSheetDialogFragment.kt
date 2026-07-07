@@ -795,7 +795,8 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         // world — auto-filled from its links, visibly (spec §2/§8b).
         val campaignWorldId = selectedCampaign()?.worldId
         if (campaignWorldId != null) {
-            textChatWorld?.text = worldNames[campaignWorldId] ?: getString(R.string.label_world_none)
+            // §5: a campaign link to a gone world says so — never a fake "None".
+            textChatWorld?.text = worldNames[campaignWorldId] ?: getString(R.string.rp_ref_deleted)
             return
         }
         val id = preferences?.getChatWorldId().orEmpty()
@@ -843,8 +844,9 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         // A campaign's character fills the slot as a display (spec §2/§8b).
         val campaignCharacterId = selectedCampaign()?.roleplayCharacterId
         if (campaignCharacterId != null) {
+            // §5: a campaign link to a gone character says so.
             textChatRoleplayCharacter?.text =
-                roleplayCharacterNames[campaignCharacterId] ?: getString(R.string.label_roleplay_character_none)
+                roleplayCharacterNames[campaignCharacterId] ?: getString(R.string.rp_ref_deleted)
             return
         }
         val id = preferences?.getChatRoleplayCharacterId().orEmpty()
