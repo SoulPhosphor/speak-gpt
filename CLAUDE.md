@@ -209,8 +209,11 @@ Everything is on-device. No cloud sync, no accounts.
    memories, companions, entities, modes and directives, so later phases can
    tell user records from archivist-proposed ones. DB v3 (July 2026, Phase 5)
    adds the **Campaign** (roleplay continuity) layer: a `campaigns` table
-   (world/roleplay-character/companion FKs + status + Archivist-maintained
-   `story_so_far`) and a nullable `memories.campaign_id`. Ordinary
+   (world/roleplay-character/companion FKs + status) and a nullable
+   `memories.campaign_id`. (v3 also created a `campaigns.story_so_far`
+   free-text column; it was **removed in DB v12** — see below — do not
+   reintroduce it. A campaign's story record is the Plot Ledger Zone 2
+   section, not a summary column.) Ordinary
    conversation never retrieves campaign-scoped rows (since Stage 3 the
    isolation lives in the seven-category eligibility query — see below).
    DB v4 (July 2026,
@@ -248,7 +251,8 @@ Everything is on-device. No cloud sync, no accounts.
    columns on the existing tables (`roleplay_characters` gains
    species/char_class/core_personality/physical_description/goals_drives;
    `campaigns` gains quest_anchor/active_scene — the "bookmark", user-written
-   at session end; `worlds` gains cosmology and an 'archived' status via a
+   at session end (the `active_scene` column displays as **"Current Plot"** in
+   the UI and prompt since v12); `worlds` gains cosmology and an 'archived' status via a
    FK-off table rebuild), a `party_members` NPC roster
    (four-state fiction `status` alive/incapacitated/dead/enemy + separate
    `archived` lifecycle flag) with a `campaign_party_members` join (link, not
@@ -274,14 +278,17 @@ Everything is on-device. No cloud sync, no accounts.
    campaigns link the card, offers archive instead, and asks per-deletion
    whether to delete the card's memories too.
    DB v8 (July 2026, pre-3.6b) adds FRESH `worlds.premise_vibe` +
-   `worlds.magic_rules` columns for the world core: the owner ruled (spec
-   §8a addendum) that the new cards must never show, map, or migrate the
-   old free-text blocks — worlds' `premise`/`rules`, roleplay characters'
-   `description`/`arc`/`played_by`, campaigns' `story_so_far` are all
-   DORMANT (kept only so old backups import); no data is copied into the
-   card fields. The §8a addendum also holds the approved 3.6b on-screen
-   wording (Zone labels, the right-aligned word count with 300/500-word
-   warnings, "Promote to Party Member") — use those words verbatim.
+   `worlds.magic_rules` columns for the world core: the new cards must never
+   show, map, or migrate the old free-text blocks — worlds' `premise`/`rules`
+   and roleplay characters' `description`/`played_by` are DORMANT (kept only so
+   old backups import); no data is copied into the card fields. The two
+   "story so far" leftovers — roleplay characters' `arc` and campaigns'
+   `story_so_far` — were **fully removed in DB v12** (owner instruction,
+   July 2026): do NOT reintroduce either. A character's history is the
+   **Backstory** Zone 2 section; a campaign's story record is the **Plot
+   Ledger** Zone 2 section. The §8a addendum also holds the approved 3.6b
+   on-screen wording (Zone labels, the right-aligned word count with
+   300/500-word warnings, "Promote to Party Member") — use those words verbatim.
    DB v10 (July 2026, Stage 4, §11 Revision 5) is the **Model rules** layer.
    §11 was redesigned in chat: the profile/group concept (a short-lived DB v9,
    never shipped with a way to hold data) is REPLACED by a model-string-
@@ -306,6 +313,18 @@ Everything is on-device. No cloud sync, no accounts.
    truthful — the Archivist reads them per ROW to hold the fiction firewall
    (rules §3) and attribute campaign state to the right continuity; pre-v11
    rows simply have a null scene and read as ordinary conversation.
+   DB v12 (July 2026, owner instruction) **removes the two "story so far"
+   leftovers** — `campaigns.story_so_far` and `roleplay_characters.arc` —
+   via plain single-column `ALTER TABLE … DROP COLUMN` (both were
+   unconstrained TEXT with no index/FK/CHECK, so the drop touches no other
+   table; each drop is best-effort so a failure leaves the unused column
+   rather than blocking store open). Nothing displayed, injected, or read
+   either column; the record fields, codec lines, and dead UI strings went
+   with them. A character's history lives in the **Backstory** Zone 2
+   section, a campaign's story in the **Plot Ledger** Zone 2 section — do
+   NOT add a per-card story/arc/summary field back. The same migration is
+   also when `campaigns.active_scene` began displaying as **"Current Plot"**
+   (label only; the column name stays `active_scene`).
    Source is DERIVED for
    display (`provenance_source == "user_entered"` ⇒ "Entered by hand", else
    "Learned from chat"); there is no "Imported" bucket — import preserves each

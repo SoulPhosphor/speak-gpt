@@ -53,13 +53,12 @@ import org.teslasoft.assistant.theme.ThemeManager
  * The two-zone campaign card (roleplay_cards_and_tags_spec §6d). Zone 1 is
  * "the bookmark" — written at session end, read at session start: Name,
  * Quest Anchor (main objective + optional short side-objective lines, one
- * multi-line field), Active Scene, the world / user-character / GM-companion
- * links, and the Active Party Members linked from the roster (join, not
- * ownership — §4). Per the no-mid-conversation-writes law these fields only
- * ever change here, by the user's hand. Zone 2 renders Campaign Cast (world
- * NPC overlays + campaign-native NPCs), Campaign Locations (scene-state
- * overlays), the Plot Ledger, the Reliquary and Notes. The dormant pre-card
- * story_so_far text is preserved untouched and never shown (spec §8a).
+ * multi-line field), Current Plot (the active_scene column), the world /
+ * user-character / GM-companion links, and the Active Party Members linked
+ * from the roster (join, not ownership — §4). Per the no-mid-conversation-writes
+ * law these fields only ever change here, by the user's hand. Zone 2 renders
+ * Campaign Cast (world NPC overlays + campaign-native NPCs), Campaign Locations
+ * (scene-state overlays), the Plot Ledger, the Reliquary and Notes.
  * Teardown gets its §5 link-warning rework in the 3.6f slice.
  */
 class CampaignDetailActivity : FragmentActivity() {
@@ -544,9 +543,6 @@ class CampaignDetailActivity : FragmentActivity() {
             roleplayCharacterId = selCharacterId,
             companionId = selCompanionId,
             status = status,
-            // Dormant pre-card text (spec §8a): preserved untouched, never
-            // shown. The Plot Ledger section is its structured replacement.
-            storySoFar = prior?.storySoFar,
             createdAt = prior?.createdAt ?: MemoryStore.nowIso(),
             questAnchor = fieldQuestAnchor?.text?.toString()?.trim()?.ifEmpty { null },
             activeScene = fieldActiveScene?.text?.toString()?.trim()?.ifEmpty { null }

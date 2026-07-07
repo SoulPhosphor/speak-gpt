@@ -561,7 +561,7 @@ class Enforcer private constructor(private val appContext: Context) {
                     "Campaign: ${it.name}",
                     listOfNotNull(
                         field("Quest Anchor", it.questAnchor),
-                        field("Active Scene", it.activeScene)
+                        field("Current Plot", it.activeScene)
                     )
                 )
             )

@@ -103,7 +103,6 @@ data class RoleplayCharacterRecord(
     val name: String,
     val playedBy: String,                 // 'user' or a companion_id
     val description: String,              // pre-3.6 free-text definition (kept; the card fields below supersede it)
-    val arc: String?,                     // Archivist-maintained story-so-far
     val worldsPlayedJson: String,         // JSON array of world ids
     val status: String,                   // active | archived
     val createdAt: String?,
@@ -121,7 +120,8 @@ data class RoleplayCharacterRecord(
  * world can host several campaigns and the same character can live several
  * separate existences in it, so a campaign is the continuity bucket that keeps
  * their game-state facts from bleeding together (integration plan 📌 amendment).
- * `storySoFar` is Archivist-maintained (proposal-bound, like a roleplay arc).
+ * A campaign's story record is the Plot Ledger Zone 2 section, not a per-campaign
+ * summary field.
  */
 data class CampaignRecord(
     val campaignId: String,
@@ -130,13 +130,12 @@ data class CampaignRecord(
     val roleplayCharacterId: String?,     // the user's character in this campaign
     val companionId: String?,             // the DM/GM companion running it
     val status: String,                   // active | paused | ended | archived
-    val storySoFar: String?,              // pre-3.6 free-text summary (kept; the Plot Ledger card section supersedes it)
     val createdAt: String?,
     // Campaign card Zone 1 (roleplay_cards_and_tags_spec §6d, DB v7): "the
     // bookmark" — Quest Anchor (main objective + optional side-objective
-    // lines, one multi-line field) and Active Scene (location + condition).
-    // User-maintained, session-end updates only (no-mid-conversation-writes
-    // law); never written by any automatic process.
+    // lines, one multi-line field) and the Current Plot (column `active_scene`;
+    // location + condition). User-maintained, session-end updates only
+    // (no-mid-conversation-writes law); never written by any automatic process.
     val questAnchor: String? = null,
     val activeScene: String? = null,
     /** Linked party members (spec §4: campaigns LINK party members — join,

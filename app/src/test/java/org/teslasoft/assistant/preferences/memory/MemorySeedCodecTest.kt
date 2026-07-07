@@ -123,7 +123,7 @@ class MemorySeedCodecTest {
               "campaigns": [
                 { "campaign_id": "camp-1", "name": "The Long Dark", "world_id": "w-1",
                   "roleplay_character_id": "rc-1", "companion_id": "c-1",
-                  "status": "active", "story_so_far": "It began in the rain.",
+                  "status": "active",
                   "created_at": "2026-07-06T00:00:00Z" }
               ],
               "memories": [
@@ -145,7 +145,6 @@ class MemorySeedCodecTest {
         val back = MemorySeedCodec.parse(MemorySeedCodec.serialize(data))
         assertEquals(data, back)
         assertEquals(listOf("camp-1"), back.memories.first().campaignIds)
-        assertEquals("It began in the rain.", back.campaigns.first().storySoFar)
     }
 
     @Test

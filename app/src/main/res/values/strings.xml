@@ -1252,8 +1252,6 @@
     <string name="mem_pers_field_description">Description</string>
     <string name="mem_pers_field_description_hint">Traits, appearance, voice — you can also list abilities or spells here for now; there isn\'t a separate field for those yet.</string>
     <string name="mem_pers_field_played_by">Played by</string>
-    <string name="mem_pers_field_arc_label">Arc (story so far)</string>
-    <string name="mem_pers_arc_empty">No arc recorded yet. The Archivist fills this in as the story unfolds — it isn\'t editable here.</string>
     <string name="mem_pers_dialog_title_new_character">New roleplay character</string>
     <string name="mem_pers_dialog_title_edit_character">Edit roleplay character</string>
     <string name="mem_pers_validation_character_required">A name and a description are both required.</string>
@@ -1323,8 +1321,6 @@
     <string name="mem_world_campaign_row_character">Your roleplay character</string>
     <string name="mem_world_campaign_row_companion">DM companion</string>
     <string name="mem_world_campaign_none">None</string>
-    <string name="mem_world_campaign_story_label">Story so far</string>
-    <string name="mem_world_campaign_story_note">Maintained automatically by the Archivist.</string>
     <string name="mem_world_campaign_btn_memories">Campaign memories</string>
     <string name="mem_world_campaign_btn_save">Save</string>
     <string name="mem_world_campaign_btn_teardown">Tear down campaign</string>
@@ -1422,7 +1418,7 @@
 
     <!-- Campaign card (spec §6d) -->
     <string name="card_field_quest_anchor">Quest Anchor</string>
-    <string name="card_field_active_scene">Active Scene</string>
+    <string name="card_field_active_scene">Current Plot</string>
     <string name="card_campaign_party_label">Active Party Members</string>
     <string name="card_campaign_party_add">Add Party Member</string>
     <string name="card_campaign_party_empty">No party members linked yet.</string>
@@ -1507,7 +1503,7 @@
     <string name="rp_continue_title">Continue campaign in new world?</string>
     <string name="rp_continue_msg">This will create a permanent history note on the campaign card.</string>
     <string name="rp_continue_reason_hint">What happened?</string>
-    <string name="rp_continue_scene_check">Also update the Active Scene (sent to the AI every turn)</string>
+    <string name="rp_continue_scene_check">Also update the Current Plot (sent to the AI every turn)</string>
     <string name="rp_character_locked_msg">User characters are linked to campaigns and cannot be changed once assigned.</string>
     <!-- Tags screens (3.6e, spec §3): the roleplay-realm findability tool.
          "Browse only, don't auto-trigger" is the spec's own phrase. -->

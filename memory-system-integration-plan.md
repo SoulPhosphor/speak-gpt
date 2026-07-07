@@ -443,8 +443,10 @@ when built):** `campaign_id` PK, user-facing `name` (the variable that holds
 a continuity together; campaigns are selected and archived by name),
 `world_id` FK, `roleplay_character_id` FK (the user's character),
 `companion_id` FK (the DM/GM running it), `status`
-('active'/'paused'/'ended'/'archived'), `created_at`, and `story_so_far`
-(Archivist-maintained summary, proposal-bound like `arc`).
+('active'/'paused'/'ended'/'archived'), and `created_at`. (This early sketch
+also listed a `story_so_far` summary column; it shipped in DB v3 but was
+**removed in DB v12** — a campaign's story record is the Plot Ledger Zone 2
+section, not a summary column. Do not reintroduce it.)
 
 **2. Memories gain a nullable `campaign_id` column** (additive). All
 game-state facts key here: current inventory, injuries/curses/blessings,
@@ -548,8 +550,11 @@ message, trigger-matched Zone 2 entries after the memories; the Tags
 index + cross-card tag view; the §5 deletion/archive behavior). The
 spec's §8a/§8b addenda hold owner rulings made during the build — the
 old pre-card free-text columns (worlds' premise/rules, characters'
-description/arc/played_by, campaigns' story_so_far) are DORMANT, never
-shown or migrated. See the spec + CLAUDE.md for the current state.
+description/played_by) are DORMANT, never shown or migrated. The two
+"story so far" leftovers (characters' `arc`, campaigns' `story_so_far`)
+were **fully removed in DB v12** (owner instruction, July 2026) — do not
+reintroduce them; history lives in the Backstory / Plot Ledger Zone 2
+sections. See the spec + CLAUDE.md for the current state.
 
 ### ☑ Phase 4 — Enforcer: tiers + prompt assembly
 **Note (July 6 2026):** parts of what landed here are retired or reworked

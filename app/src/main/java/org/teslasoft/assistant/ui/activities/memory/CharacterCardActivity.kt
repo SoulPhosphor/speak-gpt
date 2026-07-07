@@ -297,7 +297,6 @@ class CharacterCardActivity : FragmentActivity() {
                         // untouched, never shown, never reused.
                         playedBy = priorCharacter?.playedBy ?: "user",
                         description = priorCharacter?.description ?: "",
-                        arc = priorCharacter?.arc,
                         worldsPlayedJson = priorCharacter?.worldsPlayedJson ?: "[]",
                         status = priorCharacter?.status ?: "active",
                         createdAt = priorCharacter?.createdAt ?: MemoryStore.nowIso(),
