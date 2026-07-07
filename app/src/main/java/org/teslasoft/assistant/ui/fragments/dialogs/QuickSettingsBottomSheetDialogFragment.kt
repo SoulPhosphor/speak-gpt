@@ -51,6 +51,9 @@ import org.teslasoft.assistant.preferences.dto.PersonaObject
 import org.teslasoft.assistant.preferences.lorebook.LoreBookStore
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.memory.CampaignRecord
+import org.teslasoft.assistant.preferences.memory.CardEntryRecord
+import org.teslasoft.assistant.preferences.memory.CardSections
+import org.teslasoft.assistant.preferences.memory.CardType
 import org.teslasoft.assistant.preferences.memory.ProjectRecord
 import org.teslasoft.assistant.preferences.memory.RoleplayCharacterRecord
 import org.teslasoft.assistant.preferences.memory.UserPersonaRecord
@@ -158,6 +161,12 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     private var cachedRoleplayCharacters: List<RoleplayCharacterRecord> = emptyList()
     private var cachedUserPersonas: List<UserPersonaRecord> = emptyList()
     private var cachedProjects: List<ProjectRecord> = emptyList()
+
+    // Name lookups over ALL worlds/characters (not just active ones) so a
+    // selected campaign's links still display when the linked card is
+    // dormant or archived (3.6c).
+    private var worldNames: Map<String, String> = emptyMap()
+    private var roleplayCharacterNames: Map<String, String> = emptyMap()
 
     private var requestNetwork: RequestNetwork? = null
 
@@ -752,6 +761,9 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
                 val roleplayCharacters = store.getActiveRoleplayCharacters().filter { it.playedBy == "user" }
                 val userPersonas = store.getActiveUserPersonas()
                 val projects = store.getActiveProjects()
+                val allWorldNames = store.getAllWorlds().associate { it.worldId to it.name }
+                val allCharacterNames = store.getAllRoleplayCharacters()
+                    .associate { it.roleplayCharacterId to it.name }
                 activity?.runOnUiThread {
                     if (!isAdded) return@runOnUiThread
                     cachedWorlds = worlds
@@ -759,6 +771,8 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
                     cachedRoleplayCharacters = roleplayCharacters
                     cachedUserPersonas = userPersonas
                     cachedProjects = projects
+                    worldNames = allWorldNames
+                    roleplayCharacterNames = allCharacterNames
                     updateChatWorldLabel()
                     updateChatCampaignLabel()
                     updateChatRoleplayCharacterLabel()
@@ -769,7 +783,21 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         }.start()
     }
 
+    /** The chat's selected campaign, resolved from the active-campaign cache. */
+    private fun selectedCampaign(): CampaignRecord? {
+        val id = preferences?.getChatCampaignId().orEmpty()
+        if (id.isEmpty()) return null
+        return cachedCampaigns.firstOrNull { it.campaignId == id }
+    }
+
     private fun updateChatWorldLabel() {
+        // While a campaign is selected the world slot displays the CAMPAIGN's
+        // world — auto-filled from its links, visibly (spec §2/§8b).
+        val campaignWorldId = selectedCampaign()?.worldId
+        if (campaignWorldId != null) {
+            textChatWorld?.text = worldNames[campaignWorldId] ?: getString(R.string.label_world_none)
+            return
+        }
         val id = preferences?.getChatWorldId().orEmpty()
         textChatWorld?.text = if (id.isEmpty()) {
             getString(R.string.label_world_none)
@@ -801,6 +829,10 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
             .setSingleChoiceItems(labels, current) { dialog, which ->
                 preferences?.setChatCampaignId(ids[which])
                 updateChatCampaignLabel()
+                // Auto-fill the world/character slots from the campaign's
+                // links, visibly (3.6c, spec §2/§8b).
+                updateChatWorldLabel()
+                updateChatRoleplayCharacterLabel()
                 dialog.dismiss()
             }
             .setNegativeButton(android.R.string.cancel) { _, _ -> }
@@ -808,6 +840,13 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     }
 
     private fun updateChatRoleplayCharacterLabel() {
+        // A campaign's character fills the slot as a display (spec §2/§8b).
+        val campaignCharacterId = selectedCampaign()?.roleplayCharacterId
+        if (campaignCharacterId != null) {
+            textChatRoleplayCharacter?.text =
+                roleplayCharacterNames[campaignCharacterId] ?: getString(R.string.label_roleplay_character_none)
+            return
+        }
         val id = preferences?.getChatRoleplayCharacterId().orEmpty()
         textChatRoleplayCharacter?.text = if (id.isEmpty()) {
             getString(R.string.label_roleplay_character_none)
@@ -856,6 +895,27 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     }
 
     private fun showWorldPicker() {
+        // 3.6c (spec §2/§8b): while a campaign is selected there is no
+        // per-chat world override — the slot is the campaign's fact. Picking
+        // a different world asks the owner-worded continue-in-new-world
+        // question and, on confirm, edits the campaign itself.
+        val campaign = selectedCampaign()
+        if (campaign != null) {
+            val ids = cachedWorlds.map { it.worldId }
+            val labels = cachedWorlds.map { it.name }.toTypedArray()
+            if (ids.isEmpty()) return
+            MaterialAlertDialogBuilder(requireContext(), R.style.App_MaterialAlertDialog)
+                .setTitle(R.string.memory_scene_world_picker_title)
+                .setSingleChoiceItems(labels, ids.indexOf(campaign.worldId)) { dialog, which ->
+                    dialog.dismiss()
+                    val picked = ids[which]
+                    if (picked != campaign.worldId) confirmWorldMove(campaign, picked)
+                }
+                .setNegativeButton(android.R.string.cancel) { _, _ -> }
+                .show()
+            return
+        }
+
         val ids = listOf("") + cachedWorlds.map { it.worldId }
         val labels = (listOf(getString(R.string.label_world_none)) + cachedWorlds.map { it.name }).toTypedArray()
         val current = ids.indexOf(preferences?.getChatWorldId().orEmpty()).coerceAtLeast(0)
@@ -871,7 +931,114 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
             .show()
     }
 
+    /** The owner-worded 3.6c dialog (spec §8b): optional "what happened?"
+     *  reason, and the prompted choice of whether the move is told to the AI
+     *  every turn (by updating the campaign's Active Scene). */
+    private fun confirmWorldMove(campaign: CampaignRecord, newWorldId: String) {
+        val ctx = context ?: return
+        val reasonInput = TextInputEditText(ctx).apply {
+            hint = getString(R.string.rp_continue_reason_hint)
+        }
+        val sceneBox = MaterialCheckBox(ctx).apply {
+            text = getString(R.string.rp_continue_scene_check)
+            isChecked = true
+        }
+        val pad = (20 * resources.displayMetrics.density).toInt()
+        val container = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(pad, 0, pad, 0)
+            addView(reasonInput)
+            addView(sceneBox)
+        }
+        MaterialAlertDialogBuilder(ctx, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.rp_continue_title)
+            .setMessage(R.string.rp_continue_msg)
+            .setView(container)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                applyWorldMove(
+                    campaign, newWorldId,
+                    reasonInput.text?.toString()?.trim().orEmpty(),
+                    sceneBox.isChecked
+                )
+            }
+            .setNegativeButton(android.R.string.cancel) { _, _ -> }
+            .show()
+    }
+
+    /** The user just confirmed the dialog, so this is an explicit user edit —
+     *  the no-mid-conversation-writes law is satisfied (spec §2/§8b). The
+     *  permanent history note is a Plot Ledger entry ON the campaign card
+     *  (started in X → moved to Y → …), per the owner's ruling. */
+    private fun applyWorldMove(campaign: CampaignRecord, newWorldId: String, reason: String, updateScene: Boolean) {
+        val appContext = context?.applicationContext ?: return
+        val newName = worldNames[newWorldId] ?: newWorldId
+        val oldName = campaign.worldId?.let { worldNames[it] }
+        Thread {
+            try {
+                val store = MemoryStore.getInstance(appContext)
+                val descParts = ArrayList<String>()
+                if (oldName != null) descParts.add(appContext.getString(R.string.rp_move_ledger_from, oldName))
+                if (reason.isNotEmpty()) descParts.add(reason)
+                store.upsertCardEntry(
+                    CardEntryRecord(
+                        entryId = MemoryStore.newId("ce-"),
+                        cardType = CardType.CAMPAIGN,
+                        cardId = campaign.campaignId,
+                        section = CardSections.PLOT_LEDGER,
+                        // The owner's progression reads "started in X → moved
+                        // to Y → …": the campaign's first world is a start,
+                        // every later change a move.
+                        name = if (oldName == null) {
+                            appContext.getString(R.string.rp_move_ledger_started_title, newName)
+                        } else {
+                            appContext.getString(R.string.rp_move_ledger_title, newName)
+                        },
+                        description = descParts.joinToString(" ").ifEmpty { null },
+                        createdAt = MemoryStore.nowIso()
+                    )
+                )
+                store.upsertCampaign(
+                    campaign.copy(
+                        worldId = newWorldId,
+                        // The prompted "send to the AI every turn" choice: the
+                        // Active Scene is the bookmark line that already rides
+                        // every message.
+                        activeScene = if (updateScene) {
+                            if (reason.isNotEmpty()) appContext.getString(R.string.rp_scene_fmt, newName, reason)
+                            else newName
+                        } else campaign.activeScene
+                    )
+                )
+                activity?.runOnUiThread {
+                    if (!isAdded) return@runOnUiThread
+                    loadMemorySceneLists()
+                }
+            } catch (e: Exception) {
+                activity?.runOnUiThread {
+                    if (!isAdded) return@runOnUiThread
+                    // A failed move must be READABLE — dialog, not toast
+                    // (owner ruling, spec §8b).
+                    MaterialAlertDialogBuilder(requireContext(), R.style.App_MaterialAlertDialog)
+                        .setMessage(getString(R.string.memory_operation_failed, e.message ?: e.javaClass.simpleName))
+                        .setPositiveButton(android.R.string.ok) { _, _ -> }
+                        .show()
+                }
+            }
+        }.start()
+    }
+
     private fun showRoleplayCharacterPicker() {
+        // 3.6c (spec §8b): a campaign's character is not changeable from the
+        // chat — the owner-worded explanation shows as a DIALOG (readable),
+        // never a toast.
+        if (selectedCampaign()?.roleplayCharacterId != null) {
+            MaterialAlertDialogBuilder(requireContext(), R.style.App_MaterialAlertDialog)
+                .setMessage(R.string.rp_character_locked_msg)
+                .setPositiveButton(android.R.string.ok) { _, _ -> }
+                .show()
+            return
+        }
+
         val ids = listOf("") + cachedRoleplayCharacters.map { it.roleplayCharacterId }
         val labels = (listOf(getString(R.string.label_roleplay_character_none)) + cachedRoleplayCharacters.map { it.name }).toTypedArray()
         val current = ids.indexOf(preferences?.getChatRoleplayCharacterId().orEmpty()).coerceAtLeast(0)

@@ -147,16 +147,19 @@ class Enforcer private constructor(private val appContext: Context) {
         val scopeCompanionId =
             if (companion != null && companion.memoryParticipation == "full") companion.companionId else null
 
-        // Campaign wiring (Stage 3.0): one Quick Settings selection implies the
-        // rest — the campaign's world and the user's character in it fill in
-        // when the chat has no explicit pick of its own; an explicit pick wins.
+        // Campaign wiring (Stage 3.0, precedence re-ruled in 3.6c — spec
+        // §2/§8b): a selected campaign's OWN links are the facts; there is no
+        // per-chat override, so the campaign's world/character take precedence
+        // over any leftover chat-level pick (which Quick Settings now shows as
+        // a display, not a selector). Chat-level picks apply only where the
+        // campaign has no link of its own — or when no campaign is selected.
         // A dangling campaign id degrades to "none".
         val campaign = input.campaignId?.takeIf { it.isNotBlank() }?.let {
             try { store.getCampaign(it) } catch (_: Exception) { null }
         }
-        val worldId = input.worldId?.takeIf { it.isNotBlank() } ?: campaign?.worldId
+        val worldId = campaign?.worldId ?: input.worldId?.takeIf { it.isNotBlank() }
         val roleplayCharacterId =
-            input.roleplayCharacterId?.takeIf { it.isNotBlank() } ?: campaign?.roleplayCharacterId
+            campaign?.roleplayCharacterId ?: input.roleplayCharacterId?.takeIf { it.isNotBlank() }
 
         // D8: prefs are truth, app_state is the derived mirror (best effort).
         try {

@@ -1445,6 +1445,18 @@
     <string name="card_tags_label">Tags</string>
     <string name="card_tags_hint">Add a tag</string>
 
+    <!-- Quick Settings campaign behavior (3.6c; wording owner-approved
+         July 7 2026 — spec §8b. Do not reword.) -->
+    <string name="rp_continue_title">Continue campaign in new world?</string>
+    <string name="rp_continue_msg">This will create a permanent history note on the campaign card.</string>
+    <string name="rp_continue_reason_hint">What happened?</string>
+    <string name="rp_continue_scene_check">Also update the Active Scene (sent to the AI every turn)</string>
+    <string name="rp_character_locked_msg">User characters are linked to campaigns and cannot be changed once assigned.</string>
+    <string name="rp_move_ledger_title">Moved to %1$s</string>
+    <string name="rp_move_ledger_started_title">Started in %1$s</string>
+    <string name="rp_move_ledger_from">From %1$s.</string>
+    <string name="rp_scene_fmt">%1$s — %2$s</string>
+
     <!-- Party members roster (spec §4) -->
     <string name="mem_party_title">Party Members</string>
     <string name="mem_party_fab_add">New party member</string>

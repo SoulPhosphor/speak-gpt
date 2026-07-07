@@ -594,6 +594,40 @@ verbatim.
   relevant. No schema change needed (the polymorphic entries table
   already allows a notes section per card).
 
+## 8b. Addendum — 3.6c campaign-selector rulings (RULED, owner in chat,
+July 7 2026, superseding §2's dialog where they differ)
+
+The owner reviewed §2's "Has the story moved?" flow before it was built,
+found the recorded wording poor, and re-ruled it:
+
+- **Changing the WORLD while a campaign is selected** asks a dialog with
+  the owner's exact words: *"Continue campaign in new world? This will
+  create a permanent history note on the campaign card."* The dialog
+  carries an optional text box, hint *"What happened?"* (the short reason
+  for the move), and a checkbox *"Also update the Active Scene (sent to
+  the AI every turn)"*, checked by default.
+- **On confirm:** the campaign's world link updates (old value preserved
+  in the note); a **Plot Ledger entry** is written — the permanent
+  history note lives VISIBLY on the campaign card, in story order
+  (started in X → moved to Y → …), retrieved when relevant with the
+  ledger's recency boost. This supersedes §2's
+  "recorded as a campaign memory" wording — the owner chose the
+  card-visible ledger. If the checkbox is on, the campaign's **Active
+  Scene** (already the every-turn bookmark line) is set to the new
+  location plus the reason — the owner's "prompted to choose if that's
+  sent to the AI" method. Cancel = nothing changes anywhere.
+- **Changing the ROLEPLAY CHARACTER while a campaign is selected is NOT
+  allowed.** A dialog (owner's exact words) explains why: *"User
+  characters are linked to campaigns and cannot be changed once
+  assigned."* The character is set by creating/editing the campaign card
+  itself. (This narrows §2, which had treated the character like the
+  world.)
+- **Dialogs, not toasts (RULED):** the owner cannot read toasts before
+  they vanish (especially using the voice system). Messages the user
+  actually needs to read in the roleplay/memory UI are dialog boxes;
+  toasts stay only for glanceable confirmations of an action the user
+  just took.
+
 ## 9. Instructions to implementing agents — DO NOT BECOME THE DESIGNER
 
 The owner's words (July 7): ensure the instructions are clear "so that
