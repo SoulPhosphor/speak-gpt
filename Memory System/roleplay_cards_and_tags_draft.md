@@ -182,6 +182,12 @@ Shared rules for all Zone 2 sections: every entry carries **tags**; entry
 names and section names are trigger words; entries are individually
 retrievable; sections fire whole.
 
+**RULED (July 7): all user-entered card fields are multi-line with no
+hard length caps.** Leanness is guidance, never enforcement — users may
+write a book into a field; it's their context window and their decision.
+Any "one line" phrasing in this document refers to app-GENERATED summary
+text (e.g. the campaign roster line), never to a limit on user input.
+
 ### 6a. User roleplay character card
 
 Revised July 7 2026 from the owner's GLM-assisted draft, with the owner's
@@ -251,24 +257,86 @@ want to make an entire book, that's their decision"). No hard limits.
   party roster line (e.g. "Rose (dead)"), with their full card still
   reachable through Zone 2 retrieval, tags, and browsing.
 
-### 6c. World card
+### 6c. World card — RULED (owner supplied the full structure July 7
+2026, via a GLM-assisted draft; AI normalizations marked PROPOSED)
 
-- **Zone 1 (kept ruthlessly small):**
+- **Zone 1 — World Core (always injected; small, permanent, never
+  retrieved — the lens everything else passes through):**
   - Name
-  - Premise & vibe (short prose — what this world IS)
-  - Hard rules (the never-get-this-wrong facts: cosmology, how magic
-    works, "the sun never rises," tone constraints)
-- **Zone 2 sections** (the owner's earlier draft list from the July 6
-  deferral, now surfaced for the word-by-word confirmation that ruling
-  required):
-  - Regions & Biomes
-  - Settlements
-  - Points of Interest
-  - Organizations & Guilds
-  - Religions & Pantheons
-  - Historical Events
-  - Species & Races
-  - Languages & Scripts
+  - Premise / Vibe — tone, setting feel, core atmosphere ("a gritty
+    low-magic world where the sun never rises")
+  - Cosmology — physical reality (three moons; no sun; stars are dead
+    gods)
+  - Magic Rules — hard laws that never change ("magic causes physical
+    corruption")
+
+- **Zone 2 — retrieved on relevance.** Organized in GROUPS containing
+  SECTIONS. **PROPOSED: section names are the trigger units; group
+  headers are visual organization only** — "geography" firing the whole
+  group would dump every region, settlement and point of interest into
+  the prompt at once; "regions" firing one section is bounded.
+
+  - **Geography** *(hierarchical, parent-tagged)*
+    - **Regions** (kingdoms, provinces, wastelands, forests, biomes,
+      climate zones) — Name (req), Description (req), Parent: none
+    - **Settlements** (cities, towns, villages, outposts) — Name (req),
+      Description (req), Parent: a Region (req)
+    - **Points of Interest** (nameable locations in or near settlements,
+      or out in the wild) — Name (req), Description (req), Parent: a
+      Settlement or Region (req)
+    - Every entry carries its full parent chain (Red Dragon Tavern →
+      Eldoria → Verdant Kingdom). Parent chains behave like built-in
+      tags: retrieval never guesses where something is, and "what
+      settlements are in the Verdant Kingdom" is answerable by parent.
+  - **Species & Culture**
+    - **Races / Species** — Name (req), Description (req: physical
+      traits, cultural traits, how they differ from expectations)
+    - **Languages & Scripts** — Name (req), Description (req:
+      spoken/written, who speaks it, rarity)
+  - **History & Lore**
+    - **Historical Events** (wars, cataclysms, discoveries, founding
+      moments) — Name (req), Description (req)
+    - **Arcane Knowledge** (magical facts, discoveries, historically
+      significant artifacts) — Name (req), Description (req)
+  - **Factions & Groups** *(owner's placeholder name was "People";
+    rename PROPOSED — awaiting owner's yes/no)*
+    - **Organizations & Guilds** — Name (req), Description (req:
+      purpose, leadership, territory, whether joinable)
+    - **Bands & Threats** (roaming groups, gangs, hostile collectives
+      that aren't formal organizations) — Name (req), Description (req:
+      what they are, where they operate, threat level)
+  - **Religions & Pantheons**
+    - **Deities** — Name (req), Description (req: portfolio, appearance,
+      what they demand from followers)
+    - **Faiths** — Name (req), Description (req: practices, followers,
+      regions, relationship to other faiths)
+    - **Sacred Artifacts** — Name (req), Description (req: what it does,
+      where it is, who's protecting it)
+  - **Notable NPCs** *(world-level, NOT party members)*
+    - **Historical Figures** (dead or legendary) — Name (req),
+      Description (req)
+    - **Authority Figures** (kings, mayors, guardsmen — institutional
+      power) — Name (req), Description (req)
+    - **Service NPCs** (barkeeps, shopkeepers, regulars) — Name (req),
+      Description (req)
+    - **Allies** (help the party but don't travel with them) — Name
+      (req), Description (req)
+    - **Antagonists** (villains, rivals, recurring threats) — Name
+      (req), Description (req)
+    - **PROPOSED promotion rule:** world NPC entries are lightweight
+      lore. When an NPC becomes a recurring member of the party, they
+      graduate to a full NPC party-member card (6b) and the world entry
+      links/points to it — the same person is never half-defined in two
+      places.
+
+- Tags are universal on every entry per §3 (normalized — the GLM draft
+  listed tags on only some sections). Tags connect entries across
+  sections, across cards, and to campaign memories, all inside the
+  roleplay realm.
+- Retrieval examples (owner's own): "what cities are there?" fires the
+  Settlements section whole; "tell me about Silver City" fires that one
+  entry plus its one-hop tag pull-alongs; a disease tagged onto affected
+  entries answers "what regions does the gray rot affect?" via the tag.
 
 ### 6d. Campaign card
 
@@ -293,8 +361,11 @@ want to make an entire book, that's their decision"). No hard limits.
    revised structure (6a above) with Goals & Drives promoted to Zone 1 and
    fears/likes/dislikes demoted to a Zone 2 Traits section. Awaiting the
    owner's final word-by-word confirm of 6a/6b as written.
-2. World Zone 2 list — confirm/amend the eight sections word by word
-   (your earlier ruling explicitly required this at build time).
+2. ~~World Zone 2 list~~ — RESOLVED July 7: the owner supplied the full
+   world card (6c above). Still awaiting the owner's yes/no on three
+   PROPOSED details: (a) section names trigger, group headers are
+   UI-only; (b) rename the "People" group to "Factions & Groups";
+   (c) the Notable-NPC → party-member-card promotion rule.
 3. Campaign Zone 2 — is "Key events / Locations visited / Notes" right,
    too much, or missing something?
 4. ~~Incapacitated NPCs~~ — RESOLVED July 7 by the finalized 6b: full
