@@ -1,4 +1,9 @@
-# Roleplay Cards & Tags — Design Draft (July 7 2026)
+# Roleplay Cards & Tags — Design Draft (July 6–7 2026)
+
+*(Dating note: timestamps in this file say "July 7" from the build
+system's UTC clock; in the owner's timezone the conversation began the
+evening of July 6. Same conversation, one date label — this is not a
+future-dated artifact.)*
 
 > **STATUS: DRAFT — NOT YET OWNER-APPROVED. DO NOT BUILD FROM THIS FILE.**
 >
@@ -39,10 +44,14 @@ world, campaign — has the same two-zone shape:
 openly shows which part is given to the AI every turn. The user must be
 able to see exactly what the AI always knows. No hidden always-on text.
 
-**RULED (implicitly, owner cautioned "smaller or more lean" for party
-members):** Zone 1 sizes are budgeted per card type — a running campaign
-injects the world core + user character core + party member cores every
-turn, so cores multiply. Party member cores are the leanest.
+**Zone 1 multiplies** — a running campaign injects the world core + user
+character core + every active party member's core, every turn. The
+original "structurally leaner NPC core" idea was DROPPED by the owner
+(see 6b): leanness is the user's choice, never a cap. **RULED (July 7,
+adopted from the external design review):** instead of caps, the UI must
+show an estimated prompt-cost indicator for always-injected material and
+warn when cores grow large — dashboard lights before the engine smokes,
+never enforcement.
 
 A world is treated as its own entity even though it isn't a person —
 same card machinery, same zones.
@@ -67,6 +76,11 @@ same card machinery, same zones.
   character) while a campaign is active asks one question: "Has the story
   moved? Update this campaign's world to X?" Yes = the campaign itself is
   edited (the change is real, logged, and part of the story). No = cancel.
+  **Clarification (July 7): a user-confirmed Quick Settings change is an
+  EXPLICIT USER EDIT** — it does not conflict with the
+  no-mid-conversation-writes law (§6d / §9), which bans AUTOMATIC
+  processes writing to cards, ledgers, or memories. The app applies the
+  campaign update only after the user confirms the dialog.
   There is deliberately no "just for this chat" option — that would create
   two versions of the truth. Want the same setup run differently? That's a
   new campaign.
@@ -134,9 +148,21 @@ plus the owner's realm ruling.)
   "user loves DMing sci-fi" is a real-life preference about the hobby —
   files real-side. The wall separates fiction from fact, not the topic of
   roleplay from everything else.
-- **Common-word false triggers:** survivable via the budget cap for now; a
-  per-tag "browse only, don't auto-trigger" switch is noted as a FUTURE
-  option, not built up front.
+  **Reconciliation with the deferred "real-life memory in roleplay"
+  per-chat setting** (the §3 deferred item in `owner_approved_rules.md`):
+  if and when that toggle is designed with the owner, it is the ONLY door
+  through which real-life memories may enter a roleplay conversation.
+  Roleplay tags, roleplay retrieval, and fiction-side records never pull
+  real-life memories by tag or fiction association — toggle or no toggle.
+  The realm wall does not ban that future setting; it guarantees the
+  toggle is the single, explicit, user-held key.
+- **Common-word false triggers — the per-tag "browse only, don't
+  auto-trigger" switch is BUILT WITH THE INITIAL TAG SYSTEM (RULED
+  July 7: the owner promoted it from future option to build-now, after
+  the external review flagged that tags like "magic," "king," "fire,"
+  or "home" would trigger constantly).** Default for every tag is
+  auto-trigger ON; the switch turns a tag into a browse/organize-only
+  connector.
 - **Archivist tag suggestions** (proper nouns, places, names detected in
   conversations) arrive with Phase 6, through the normal approval flow.
 
@@ -182,11 +208,24 @@ plus the owner's realm ruling.)
   memories too" at delete time. (This supersedes the older teardown
   language in the schema docs that said deleting a character always
   deletes its memories — per-deletion choice replaces it.)
+- **Link behavior on archive/delete (RULED July 7, adopted from the
+  external design review):**
+  - **Archive** keeps every link intact; the card is only hidden from
+    active selectors.
+  - **Delete** removes the card's links from campaigns and other cards;
+    memories survive unless the user chose to delete them too.
+  - **Anything still referencing a gone card shows it explicitly** —
+    "(archived card)" / "(deleted card)" — links never silently vanish.
+    No ghost references, no unexplained holes in a campaign.
 
 ## 6. Card skeletons — PROPOSED (awaiting word-by-word approval)
 
-> Everything in this section is the AI's draft for the owner to approve,
-> amend, or strike, field by field. Nothing here is decided.
+> Label status after the July 7 cleanup pass: every card structure in
+> this section is **RULED** — supplied or approved by the owner in chat.
+> The ONLY remaining PROPOSED item in this entire document is the **Tag
+> search door** in §3 (a "Tags" index screen in the Roleplay hub) —
+> DO NOT BUILD that one item until the owner flips it. Everything else
+> marked RULED is decided; nothing else is open.
 
 Shared rules for all Zone 2 sections: every entry carries **tags**; entry
 names and section names are trigger words; entries are individually
@@ -261,14 +300,14 @@ want to make an entire book, that's their decision"). No hard limits.
     the narrator knows how to treat the character
 - **Zone 2 sections:** same six as the user character card (Abilities,
   Inventory, Relationships, Traits, Backstory, Languages).
-- **Status gating (stands as proposed):** Alive and Incapacitated party
+- **Status gating (RULED):** Alive and Incapacitated party
   members inject their full core each turn; Dead and Enemy members drop
   out of per-turn injection and are represented by the campaign card's
   party roster line (e.g. "Rose (dead)"), with their full card still
   reachable through Zone 2 retrieval, tags, and browsing.
 
 ### 6c. World card — RULED (owner supplied the full structure July 7
-2026, via a GLM-assisted draft; AI normalizations marked PROPOSED)
+2026 via a GLM-assisted draft; all AI normalizations approved July 7)
 
 - **Zone 1 — World Core (always injected; small, permanent, never
   retrieved — the lens everything else passes through):**
@@ -338,7 +377,10 @@ want to make an entire book, that's their decision"). No hard limits.
       entries are lightweight lore. When an NPC becomes a recurring
       member of the party, they graduate to a full NPC party-member card
       (6b) and the world entry links/points to it — the same person is
-      never half-defined in two places.
+      never half-defined in two places. **After promotion, the
+      party-member card is the SOURCE OF TRUTH for the character; the
+      world entry stays lightweight lore pointing at the card. Never two
+      competing versions.**
 
 - Tags are universal on every entry per §3 (normalized — the GLM draft
   listed tags on only some sections). Tags connect entries across
@@ -349,8 +391,8 @@ want to make an entire book, that's their decision"). No hard limits.
   entry plus its one-hop tag pull-alongs; a disease tagged onto affected
   entries answers "what regions does the gray rot affect?" via the tag.
 
-### 6d. Campaign card — RULED core (owner supplied July 7 2026 via a
-two-AI combined draft; AI merges/normalizations marked PROPOSED)
+### 6d. Campaign card — RULED (owner supplied July 7 2026 via a
+two-AI combined draft; all AI merges/normalizations approved July 7)
 
 - **Zone 1 — always injected. RULED framing (owner approved July 7):
   this is "the bookmark" — written at session end, read at session
@@ -375,6 +417,11 @@ two-AI combined draft; AI merges/normalizations marked PROPOSED)
   the §13 approval flow. Quest Anchor and Active Scene are therefore
   session-end updates, never live mid-session writes. This law applies
   to every card, ledger, and memory in the roleplay system.
+  **Ownership until Phase 6: the USER manually maintains all campaign
+  state — Quest Anchor, Active Scene, Plot Ledger, Campaign Cast,
+  Campaign Locations, Reliquary.** No auto-summarize-at-session-end
+  exists or may be built before the Archivist, and even then it only
+  SUGGESTS.
 - **Zone 2 — retrieved on relevance:**
   - **Campaign Cast** — relationship/disposition state for named NPCs in
     THIS story. Two entry kinds:
@@ -412,8 +459,8 @@ two-AI combined draft; AI merges/normalizations marked PROPOSED)
 
 1. ~~Character-card sections~~ — RESOLVED July 7: the owner supplied the
    revised structure (6a above) with Goals & Drives promoted to Zone 1 and
-   fears/likes/dislikes demoted to a Zone 2 Traits section. Awaiting the
-   owner's final word-by-word confirm of 6a/6b as written.
+   fears/likes/dislikes demoted to a Zone 2 Traits section; 6b finalized
+   by the owner the same day.
 2. ~~World Zone 2 list~~ — RESOLVED July 7: the owner supplied the full
    world card (6c above), then approved all three follow-up details:
    sections trigger / group headers are UI-only; the "People" group is
@@ -428,6 +475,13 @@ two-AI combined draft; AI merges/normalizations marked PROPOSED)
 4. ~~Incapacitated NPCs~~ — RESOLVED July 7 by the finalized 6b: full
    core injects for Alive and Incapacitated; Dead and Enemy drop to the
    campaign roster line.
+5. **Tag search door (§3) — THE ONE ITEM STILL PROPOSED / DO NOT
+   BUILD:** a "Tags" index screen in the Roleplay hub (searchable list
+   of all roleplay-realm tags → the cross-card view). Awaiting the
+   owner's yes/no.
+6. After the owner's final front-to-back approval of this document, its
+   contents get merged into `owner_approved_rules.md` and
+   `rag_engine_work_order.md`, and this file is retired.
 
 ## 7. What stays untouched
 
