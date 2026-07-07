@@ -280,6 +280,14 @@
             android:exported="false"
             android:label="@string/mem_party_title" />
         <activity
+            android:name=".ui.activities.memory.RpTagsActivity"
+            android:exported="false"
+            android:label="@string/rp_tags_title" />
+        <activity
+            android:name=".ui.activities.memory.RpTagViewActivity"
+            android:exported="false"
+            android:label="@string/rp_tags_title" />
+        <activity
             android:name=".ui.activities.memory.CardEntryEditorActivity"
             android:exported="false"
             android:label="@string/entry_title_edit" />

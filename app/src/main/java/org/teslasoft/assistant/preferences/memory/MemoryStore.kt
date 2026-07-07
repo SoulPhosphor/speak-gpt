@@ -3499,6 +3499,32 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         return out
     }
 
+    /** The read side of the §3 tag bridge for the cross-card view (3.6e):
+     *  roleplay-scoped memories whose tag list carries [tagName]. THE REALM
+     *  WALL HOLDS — only world/campaign/rp_character-scoped memories are
+     *  searched, never real-life ones (their tags keep the Memories browser
+     *  as their only door). LIKE narrows the scan; the JSON parse is the
+     *  actual case-insensitive match. */
+    fun roleplayMemoriesWithTag(tagName: String): List<MemoryRecord> {
+        val db = readableDatabase
+        val out = ArrayList<MemoryRecord>()
+        db.query(
+            "memories", null,
+            "scope IN ('world','campaign','rp_character') AND tags_json LIKE ?",
+            arrayOf("%$tagName%"), null, null, "created_at DESC"
+        ).use {
+            while (it.moveToNext()) {
+                val record = readFullMemory(db, it)
+                val match = try {
+                    val arr = org.json.JSONArray(record.tagsJson)
+                    (0 until arr.length()).any { i -> arr.getString(i).equals(tagName, ignoreCase = true) }
+                } catch (_: Exception) { false }
+                if (match) out.add(record)
+            }
+        }
+        return out
+    }
+
     /** All (targetType, targetId) pairs a tag points at — the cross-card tag
      *  view (3.6e) groups these by the predefined card/section categories. */
     fun targetsForTag(tagId: String): List<Pair<String, String>> {

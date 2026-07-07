@@ -38,7 +38,9 @@ class RoleplayHubActivity : MemoryScreenActivity() {
             Area(MemoryRoleplayCharactersActivity::class.java, R.string.mem_pers_title_roleplay_characters, R.string.mm_roleplay_desc),
             // The top-level NPC roster (spec §4): campaigns link members from
             // here — join, not ownership.
-            Area(MemoryPartyMembersActivity::class.java, R.string.mem_party_title, R.string.mm_party_desc)
+            Area(MemoryPartyMembersActivity::class.java, R.string.mem_party_title, R.string.mm_party_desc),
+            // The Tags index (spec §3): the roleplay realm's findability tool.
+            Area(RpTagsActivity::class.java, R.string.rp_tags_title, R.string.mm_rp_tags_desc)
         )
     }
 

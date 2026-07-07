@@ -1452,6 +1452,17 @@
     <string name="rp_continue_reason_hint">What happened?</string>
     <string name="rp_continue_scene_check">Also update the Active Scene (sent to the AI every turn)</string>
     <string name="rp_character_locked_msg">User characters are linked to campaigns and cannot be changed once assigned.</string>
+    <!-- Tags screens (3.6e, spec §3): the roleplay-realm findability tool.
+         "Browse only, don't auto-trigger" is the spec's own phrase. -->
+    <string name="rp_tags_title">Tags</string>
+    <string name="mm_rp_tags_desc">Every roleplay tag in one place — tap one to see everything it connects.</string>
+    <string name="rp_tag_badge_auto">Auto-trigger</string>
+    <string name="rp_tag_badge_browse">Browse only</string>
+    <string name="rp_tag_make_browse">Browse only — don\'t auto-trigger</string>
+    <string name="rp_tag_make_auto">Auto-trigger</string>
+    <string name="rp_tag_group_fmt">%1$s — %2$s</string>
+    <string name="rp_tag_group_cards">Cards</string>
+
     <string name="rp_move_ledger_title">Moved to %1$s</string>
     <string name="rp_move_ledger_started_title">Started in %1$s</string>
     <string name="rp_move_ledger_from">From %1$s.</string>
