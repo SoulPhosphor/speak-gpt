@@ -66,6 +66,7 @@ class SettingsActivity : FragmentActivity() {
 
     private var tileAccountFragment: TileFragment? = null
     private var tileCharacters: TileFragment? = null
+    private var tileAiSystemSettings: TileFragment? = null
     private var tileMemorySystem: TileFragment? = null
     private var tileRoleplay: TileFragment? = null
     private var tileVoiceSettings: TileFragment? = null
@@ -189,6 +190,7 @@ class SettingsActivity : FragmentActivity() {
         transition.excludeTarget(R.id.btn_back, true)
         transition.excludeTarget(R.id.tile_account, true)
         transition.excludeTarget(R.id.tile_characters, true)
+        transition.excludeTarget(R.id.tile_ai_system_settings, true)
         transition.excludeTarget(R.id.tile_memory_system, true)
         transition.excludeTarget(R.id.tile_roleplay, true)
         transition.excludeTarget(R.id.tile_autosend, true)
@@ -245,6 +247,7 @@ class SettingsActivity : FragmentActivity() {
         transition2.excludeTarget(R.id.constraintLayout167, true)
         transition2.excludeTarget(R.id.tile_account, true)
         transition2.excludeTarget(R.id.tile_characters, true)
+        transition2.excludeTarget(R.id.tile_ai_system_settings, true)
         transition2.excludeTarget(R.id.tile_memory_system, true)
         transition2.excludeTarget(R.id.tile_roleplay, true)
         transition2.excludeTarget(R.id.tile_autosend, true)
@@ -414,6 +417,20 @@ class SettingsActivity : FragmentActivity() {
                 chatId = chatId,
                 functionDesc = getString(R.string.tile_characters_desc),
                 transitionName = "expand_characters"
+            )
+
+            tileAiSystemSettings = TileFragment.newInstance(
+                checked = false,
+                checkable = false,
+                enabledText = getString(R.string.tile_ai_system_settings_title),
+                disabledText = null,
+                enabledDesc = getString(R.string.tile_ai_system_settings_desc),
+                disabledDesc = null,
+                icon = R.drawable.ic_chat,
+                disabled = false,
+                chatId = chatId,
+                functionDesc = getString(R.string.tile_ai_system_settings_desc),
+                transitionName = null
             )
 
             tileMemorySystem = TileFragment.newInstance(
@@ -758,6 +775,7 @@ class SettingsActivity : FragmentActivity() {
     private fun placeFragments() : FragmentTransaction {
         val operation = supportFragmentManager.beginTransaction().replace(R.id.tile_account, tileAccountFragment!!)
             .replace(R.id.tile_characters, tileCharacters!!)
+            .replace(R.id.tile_ai_system_settings, tileAiSystemSettings!!)
             .replace(R.id.tile_memory_system, tileMemorySystem!!)
             .replace(R.id.tile_roleplay, tileRoleplay!!)
             .replace(R.id.tile_voice_settings, tileVoiceSettings!!)
@@ -809,6 +827,10 @@ class SettingsActivity : FragmentActivity() {
 
         tileCharacters?.setOnTileClickListener {
             startActivity(Intent(this, CharactersActivity::class.java).putExtra("chatId", chatId))
+        }
+
+        tileAiSystemSettings?.setOnTileClickListener {
+            startActivity(Intent(this, AiSystemSettingsActivity::class.java).putExtra("chatId", chatId))
         }
 
         tileMemorySystem?.setOnTileClickListener {

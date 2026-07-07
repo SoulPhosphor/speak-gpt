@@ -233,6 +233,33 @@
         </activity>
 
         <activity
+            android:name=".ui.activities.AiSystemSettingsActivity"
+            android:exported="false"
+            android:label="@string/title_ai_system_settings"
+            android:launchMode="singleTask">
+        </activity>
+
+        <activity
+            android:name=".ui.activities.memory.ModelRulesActivity"
+            android:exported="false"
+            android:label="@string/row_model_rules_title" />
+
+        <activity
+            android:name=".ui.activities.memory.ModelRuleEditorActivity"
+            android:exported="false"
+            android:label="@string/model_rule_edit_title_new" />
+
+        <activity
+            android:name=".ui.activities.memory.ModelRuleTagsActivity"
+            android:exported="false"
+            android:label="@string/model_rule_tags_title" />
+
+        <activity
+            android:name=".ui.activities.memory.ModelRuleTagViewActivity"
+            android:exported="false"
+            android:label="@string/model_rule_tags_title" />
+
+        <activity
             android:name=".ui.activities.memory.MemoryBrowserActivity"
             android:exported="false"
             android:label="@string/title_memories">

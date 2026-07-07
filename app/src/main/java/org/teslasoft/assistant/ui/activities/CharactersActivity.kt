@@ -35,7 +35,6 @@ import org.teslasoft.assistant.preferences.PersonaPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.fragments.TileFragment
-import org.teslasoft.assistant.ui.fragments.dialogs.SystemMessageDialogFragment
 
 class CharactersActivity : FragmentActivity() {
 
@@ -49,7 +48,6 @@ class CharactersActivity : FragmentActivity() {
     private var tilePersonas: TileFragment? = null
     private var tileMyPersonas: TileFragment? = null
     private var tileActivationPrompts: TileFragment? = null
-    private var tileSystemMessage: TileFragment? = null
     private var tileLoreBooks: TileFragment? = null
 
     private var personasActivityResultLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -69,17 +67,6 @@ class CharactersActivity : FragmentActivity() {
         val label = personaPreferences?.getPersona(personaId)?.label ?: ""
         return if (label != "") label else getString(R.string.label_tap_to_set)
     }
-
-    private fun getSystemMessagePreview(): String {
-        val message = preferences?.getSystemMessage() ?: ""
-        return if (message.isBlank()) getString(R.string.label_tap_to_set) else message
-    }
-
-    private var systemChangedListener: SystemMessageDialogFragment.StateChangesListener =
-        SystemMessageDialogFragment.StateChangesListener { prompt ->
-            preferences?.setSystemMessage(prompt)
-            tileSystemMessage?.updateSubtitle(getSystemMessagePreview())
-        }
 
     @Suppress("DEPRECATION")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -168,20 +155,6 @@ class CharactersActivity : FragmentActivity() {
             transitionName = "expand_activation_list"
         )
 
-        tileSystemMessage = TileFragment.newInstance(
-            checked = false,
-            checkable = false,
-            enabledText = getString(R.string.tile_system_message_title),
-            disabledText = null,
-            enabledDesc = getSystemMessagePreview(),
-            disabledDesc = null,
-            icon = R.drawable.ic_chat,
-            disabled = false,
-            chatId = chatId,
-            functionDesc = getString(R.string.tile_system_message_desc),
-            transitionName = null
-        )
-
         tileLoreBooks = TileFragment.newInstance(
             checked = false,
             checkable = false,
@@ -200,7 +173,6 @@ class CharactersActivity : FragmentActivity() {
             .replace(R.id.tile_personas_entry, tilePersonas!!)
             .replace(R.id.tile_my_personas_entry, tileMyPersonas!!)
             .replace(R.id.tile_activation_prompts_entry, tileActivationPrompts!!)
-            .replace(R.id.tile_system_message_entry, tileSystemMessage!!)
             .replace(R.id.tile_lorebooks_entry, tileLoreBooks!!)
             .commit()
 
@@ -219,12 +191,6 @@ class CharactersActivity : FragmentActivity() {
 
         tileActivationPrompts?.setOnTileClickListener {
             startActivity(Intent(this, ActivationPromptsListActivity::class.java))
-        }
-
-        tileSystemMessage?.setOnTileClickListener {
-            val dialog = SystemMessageDialogFragment.newInstance(preferences?.getSystemMessage() ?: "")
-            dialog.setStateChangedListener(systemChangedListener)
-            dialog.show(supportFragmentManager, "SystemMessageDialogFragment")
         }
 
         tileLoreBooks?.setOnTileClickListener {

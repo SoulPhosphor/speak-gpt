@@ -976,6 +976,55 @@
          invalidates every chat's cached prefix, so don't reword casually. -->
     <string name="model_rules_injection_header">Model rules (user-written handling rules for this model):</string>
 
+    <!-- ===== AI System Settings + Model rules UI (Stage 4, §11 Revision 5) =====
+         "AI System Settings", "Model Specific Rules", the explanation line, the
+         two toggle labels and the mindfulness hint are owner-approved words —
+         do not reword. -->
+    <string name="title_ai_system_settings">AI System Settings</string>
+    <string name="tile_ai_system_settings_title">AI System Settings</string>
+    <string name="tile_ai_system_settings_desc">System prompt and model rules</string>
+    <string name="ai_system_settings_hint">Be mindful of longer rules as they take up more context space and are sent every turn, which may negatively affect smaller model performance. These count toward token usage, but caching may help with the cost.</string>
+    <string name="row_model_rules_title">Model Specific Rules</string>
+    <string name="row_model_rules_subtitle">Allows custom rules to be sent to specific AI models based on their string ID, not provider. Rules may be assigned to multiple AIs.</string>
+    <string name="label_auto_apply_model_rules_title">Automatically Apply Model Rules</string>
+    <string name="label_auto_apply_model_rules_desc">When on, model rules apply to any chat whose model matches. You can still turn them off for a single chat.</string>
+
+    <!-- Model rules browser -->
+    <string name="model_rules_btn_new">New rule</string>
+    <string name="model_rules_pending_title">Pending model rules</string>
+    <string name="model_rules_pending_banner">Pending model rules (%1$d) ›</string>
+    <string name="model_rules_filter_model">Model</string>
+    <string name="model_rules_no_models">(no models set)</string>
+    <string name="model_rules_size_header">≈ %2$d characters sent for %1$s</string>
+    <string name="model_rules_size_header_warn">≈ %2$d characters sent for %1$s — a lot; smaller models may struggle</string>
+    <string name="model_rules_delete_confirm_title">Delete rule?</string>
+    <string name="model_rules_delete_confirm_msg">Delete this rule?\n\n%1$s</string>
+
+    <!-- Model rule editor -->
+    <string name="model_rule_edit_title_new">New rule</string>
+    <string name="model_rule_edit_title_edit">Edit rule</string>
+    <string name="model_rule_edit_hint_text">Rule for the AI model</string>
+    <string name="model_rule_edit_label_models">Applies to models</string>
+    <string name="model_rule_edit_models_hint">Use a family name like \"glm-5\" to cover every snapshot, or a full model id for just one.</string>
+    <string name="model_rule_edit_add_model">Add model</string>
+    <string name="model_rule_edit_add_model_hint">Model id string</string>
+    <string name="model_rule_edit_add_model_msg">Enter a model id string. A family name like \"glm-5\" matches every snapshot; the provider prefix is ignored.</string>
+    <string name="model_rule_edit_label_tags">Tags</string>
+    <string name="model_rule_edit_hint_tag_input">Add a tag</string>
+    <string name="model_rule_edit_required">Add the rule text first.</string>
+    <string name="model_rule_size_count">%1$d characters</string>
+    <string name="model_rule_size_warn">%1$d characters — long rules use more of the model\'s memory every turn</string>
+
+    <!-- Model rule tags -->
+    <string name="model_rule_tags_title">Tags</string>
+    <string name="model_rule_tag_rename">Rename tag</string>
+    <string name="model_rule_tag_delete_confirm_title">Delete tag?</string>
+    <string name="model_rule_tag_delete_confirm_msg">Delete the tag \"%1$s\"? The rules keep their text; they just lose this tag.</string>
+    <plurals name="model_rule_tag_rule_count">
+        <item quantity="one">%d rule</item>
+        <item quantity="other">%d rules</item>
+    </plurals>
+
     <!-- Memory system Phase 4: enforcer assembly debug view (shown above the lorebook debug log) -->
     <string name="memory_debug_assembly_header">Memory assembly (full engine)</string>
     <string name="lorebook_debug_records_header">Lore book injections</string>
