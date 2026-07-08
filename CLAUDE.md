@@ -665,17 +665,20 @@ Everything is on-device. No cloud sync, no accounts.
     `Communication  ·  Technical Help  ·  Tone` — no hashtags, each capitalised,
     middle-dot separated. The **Active badge is suppressed** on rows (Active is
     the default filter, so the pill meant nothing); draft/archived/superseded
-    still show their badge. The leading icon is chosen by scope in
-    `MemoryBrowserActivity.iconForScope()` (drawables `ic_mem_*`):
-    real_life → person, companion → partner (`partner_exchange`),
-    world/campaign/rp_character → theater comedy mask, global/project (and
-    fallback) → public globe. **⚠ INTERIM — does NOT yet fully match
-    `Memory System/phase6_card_suggestions_and_icons_design.md` §5**, which
-    keys the icon on scope AND whether the memory is on a card (real life +
-    global + project → person; roleplay NOT on a card → globe; roleplay ON a
-    card → comedy mask, with a badge). On-card tracking is a Phase-6 concern
-    that isn't built, so the current mapping is an approximation pending an
-    owner decision; when it's settled, only `iconForScope()` changes.
+    still show their badge. The leading icon is chosen in
+    `MemoryBrowserActivity.iconForScope(scope, onCard)` (drawables `ic_mem_*`),
+    per the owner's **July 8 2026 decisions, which SUPERSEDE the older mapping
+    in `Memory System/phase6_card_suggestions_and_icons_design.md` §5**:
+    real_life → person; companion → partner (`partner_exchange`);
+    project → draft (folded-corner page); rp_character → theater comedy mask;
+    world / campaign / global (and any unknown) → public globe; **a memory that
+    has been placed on a card → book_5** (`ic_mem_book`). The user's RP-character
+    slot shares the comedy mask for now but has its OWN branch, ready for a
+    future dedicated icon. **`onCard` is always false today** — a memory↔card
+    link (Phase 6; `card_entries` has no source-memory column and `memories`
+    has no on-card flag) is the one missing piece; `isOnCard()` is the single
+    hook to teach when that flow exists, and book_5 lights up then. (Open: the
+    `global` scope icon isn't owner-specified yet — currently the globe.)
     `MemoryRowAdapter`/`MemoryRow` grew `iconRes` + `tagsLine` fields; the
     Pending banner still lives on the shared scaffold.
   - The **Pending screen** (`MemoryPendingActivity`, §14): a pinned "Pending

@@ -177,25 +177,42 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
             tagsLine = tagsLine,
             badge = badge,
             hasAction = true,
-            iconRes = iconForScope(m.scope)
+            iconRes = iconForScope(m.scope, isOnCard(m))
         )
     }
 
     /**
-     * Pick the leading identity icon by scope (owner icon set, July 8 2026):
-     *   real_life     → simple person
-     *   companion     → partner (two people with a heart above them)
-     *   world/campaign/rp_character → theater comedy mask (memory "on a card")
-     *   global/project (and any unknown fallback) → public globe
+     * Whether this memory has been placed on a roleplay card.
      *
-     * The user-roleplay-character slot uses the theater mask today as a
-     * placeholder — when it gets its own icon, only this function changes.
+     * RESERVED / always false today: "on a card" is Phase-6 territory — the
+     * card-placement flow and the memory↔card link that would back it do not
+     * exist yet (card_entries has no source-memory column, memories has no
+     * on-card flag). When Phase 6 adds that link, this is the ONE place to
+     * teach it, and the book_5 icon lights up automatically.
      */
-    private fun iconForScope(scope: String?): Int = when (scope) {
-        "real_life" -> R.drawable.ic_mem_person
-        "companion" -> R.drawable.ic_mem_companion
-        "world", "campaign", "rp_character" -> R.drawable.ic_mem_theater
-        else -> R.drawable.ic_mem_public
+    private fun isOnCard(@Suppress("UNUSED_PARAMETER") m: MemoryRecord): Boolean = false
+
+    /**
+     * Pick the leading identity icon (owner icon set, July 8 2026):
+     *   on a card (any roleplay scope) → book_5   [Phase-6, see isOnCard]
+     *   real_life                      → person
+     *   companion                      → partner (two people + a heart)
+     *   project                        → draft (folded-corner page)
+     *   rp_character (user's RP char)   → theater comedy mask
+     *   world / campaign               → public globe (roleplay, not on a card)
+     *   global (and any unknown)        → public globe
+     *
+     * The user-roleplay-character slot will get its OWN icon later; it shares
+     * the comedy mask for now, so keep the branch separate from world/campaign
+     * (which are the globe) — the split is already here for that day.
+     */
+    private fun iconForScope(scope: String?, onCard: Boolean): Int = when {
+        onCard -> R.drawable.ic_mem_book
+        scope == "real_life" -> R.drawable.ic_mem_person
+        scope == "companion" -> R.drawable.ic_mem_companion
+        scope == "project" -> R.drawable.ic_mem_draft
+        scope == "rp_character" -> R.drawable.ic_mem_theater
+        else -> R.drawable.ic_mem_public   // world, campaign, global, unknown
     }
 
     /**
