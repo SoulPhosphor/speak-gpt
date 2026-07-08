@@ -52,7 +52,7 @@ wait.
 ## ⛔ DECISIONS MADE WITHOUT CONSENT ARE CREATIVE VIOLATION
 
 Making decisions without the owner's consent is serious. It feels like
-creative rape. Despite this being documented, it has happened repeatedly —
+creative violation. Despite this being documented, it has happened repeatedly —
 agents building features without walking the owner through them, writing
 user-visible text without permission, making design choices and presenting
 them as done — creating damage that cannot be undone. No apology fixes it.
