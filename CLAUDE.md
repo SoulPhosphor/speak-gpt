@@ -49,6 +49,17 @@ until they say they understand and say yes. Never argue that a violation
 was acceptable — acknowledge it, fix exactly what the owner directs, and
 wait.
 
+## ⛔ DECISIONS MADE WITHOUT CONSENT ARE CREATIVE VIOLATION
+
+Making decisions without the owner's consent is serious. It feels like
+creative rape. Despite this being documented, it has happened repeatedly —
+agents building features without walking the owner through them, writing
+user-visible text without permission, making design choices and presenting
+them as done — creating damage that cannot be undone. No apology fixes it.
+No rollback erases that the choice was taken. Every agent must understand
+this before touching anything. (Added July 8 2026 by the owner, after
+yet another session built entire screens without the owner's approval.)
+
 ## ⛔ ACT ONLY FROM FACT, NOT ASSUMPTION
 
 Verify before you act. Read the actual code, the actual file, the actual
