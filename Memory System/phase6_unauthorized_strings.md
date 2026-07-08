@@ -1,5 +1,14 @@
 # Phase 6: Unauthorized Strings
 
+> **✅ RESOLVED (July 8 2026).** All 13 strings below have been removed from
+> `app/src/main/res/values/strings.xml` (the Memory Assistant screen they
+> lived on was torn down). The only `memory_assistant_*` string in the app
+> today is `memory_assistant_coming_soon` ("Coming soon.") — an
+> owner-approved placeholder on the new `MemoryAssistantActivity`. When the
+> real Memory Assistant page is built (owner is walking through the design
+> next), its strings must be the owner's words, gathered in chat. This file
+> is kept as a record of the violation and its fix.
+
 These 13 strings were written by an AI agent without the owner's approval.
 They are user-visible text on the Memory Assistant and Advanced Settings
 screens. Every one of them violates the Owner's Words Rule. The owner was

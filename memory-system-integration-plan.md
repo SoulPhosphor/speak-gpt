@@ -698,13 +698,36 @@ coexistence, essence guardrail, failure behavior); D7 (compressor), D8.
 
 ### ☑ Phase 5 — Memory editor + companions/worlds/personas UI
 
+> **⚠️ UI restructure July 8 2026 (owner-directed, in chat).** The memory
+> surface is being reshaped one chunk at a time. Landed so far (branch
+> `claude/memory-manager-ui-restructure-6xqoyt`, CLAUDE.md has the detail):
+> - A NEW, lightweight **Memory Manager** hub (`ui/activities/
+>   MemoryManagerActivity`) is reached from the renamed **Memory Manager**
+>   tile on the main Settings screen. It is a four-row chevron hub: **Memory
+>   Browser**, **Memory Assistant** (a "Coming soon" placeholder — the future
+>   Phase-6 Archivist surface, owner to design next), **Lorebooks** (moved
+>   here out of the Characters hub; screens unchanged), **Memory Settings**.
+>   This is NOT the old ten-area `ui/activities/memory/MemoryManagerActivity`
+>   (still deleted); the name is reused for a different, smaller hub.
+> - The old **"Memory (experimental)"** screen is now **Memory Settings**
+>   (`MemorySettingsActivity`) — everything it had except the browser (which
+>   is the hub's top row).
+> - **Memory Browser** filters were reworked: the chip row is retired in
+>   favour of a three-dots button + a **Memory Filters** slide-out panel
+>   (`MemoryFilterPanelActivity`; Sort/Scope/Type/Status/Source/Tags, pills,
+>   auto-apply, Status defaults to Active). Rows got a leading scope icon,
+>   dot-joined capitalised tags, edit-square action, and the Active badge is
+>   suppressed. Icon mapping is INTERIM vs `phase6_card_suggestions_and_icons_
+>   design.md` §5 (on-card comedy-mask distinction is a Phase-6 dependency).
+>
 > **⚠️ Reworked July 6 2026 (Stage 1 of `Memory System/
 > phase5_rework_work_order.md`, per the owner's rulings).** The description
 > below is the ORIGINAL ship; the current state after Stage 1:
-> - The **Memory manager hub is gone** — "Browse & edit" opens the single
->   **global Memories browser** directly (all scopes/types; a Companions
->   link in its action bar; opened pre-filtered from each companion/world/
->   campaign/RP-character page's Memories button).
+> - The old ten-area **Memory manager hub is gone** — the **global Memories
+>   browser** is opened directly (all scopes/types; a Companions link in its
+>   action bar; opened pre-filtered from each companion/world/campaign/
+>   RP-character page's Memories button). (Since July 8 2026 it is reached
+>   from the new Memory Manager hub's top row — see the box above.)
 > - **Modes, Directives, Entities, and Owner-profile screens were deleted**
 >   (tables + store CRUD stay dormant): entities/owner-profile are retired
 >   concepts — real people are ordinary scope/type memories, the user is

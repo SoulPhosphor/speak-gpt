@@ -107,6 +107,28 @@ Both Accept-all buttons show a count confirm ("Accept 12 memories?" /
 
 ## 5. Memory icon system
 
+> **⚠️ IMPLEMENTATION STATUS (July 8 2026) — INTERIM, does not yet match this
+> section.** Memory rows now show a **leading** identity icon (owner moved it
+> to the left of the row, not the far right). The shipped mapping is
+> scope-only, in `MemoryBrowserActivity.iconForScope()`:
+> real_life → person; companion → partner (`partner_exchange`);
+> world/campaign/rp_character → theater comedy mask; global/project (and
+> fallback) → public globe. This differs from the design below in two ways
+> that are OPEN and awaiting an owner decision:
+> 1. This doc puts **global + project** on the User (person) icon; the build
+>    currently gives them the globe.
+> 2. This doc keys the roleplay icon on **whether the memory is on a card**
+>    (globe if not, comedy mask + badge if so). On-card tracking for memories
+>    is a Phase-6 concern that isn't built, so the build uses comedy mask for
+>    all roleplay-scope memories as a placeholder. There are no badge variants
+>    yet. When Phase 6 adds card linkage, `iconForScope()` is the single place
+>    to change. The `mood` / "Your RP Character" separate icon is also not
+>    built — the user RP character currently shares the comedy mask (a future
+>    split is anticipated in the code comments).
+>
+> The design intent below stands as the target; the interim build is the
+> approximation until the owner confirms the final mapping.
+
 Every memory row in the browser and Pending screen shows a small icon on
 the far right indicating what kind of memory it is. Five base icons, with
 badge variants on two of them:

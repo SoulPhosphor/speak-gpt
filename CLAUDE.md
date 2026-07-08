@@ -131,9 +131,27 @@ a foreground service that keeps generation alive in the background.
   settings sheet (model, endpoint, persona, activation prompt, lorebook
   checklist, sampling params, the memory-scene selectors, and the per-chat
   **Apply Model Rules** toggle).
-- `ui/activities/CharactersActivity.kt` — hub of tiles: Personas, Activation
-  prompts, Lorebooks. (The System message tile moved OUT to AI System
-  Settings in Stage 4 — see below.)
+- `ui/activities/CharactersActivity.kt` — hub of tiles: Personas, My Personas,
+  Activation prompts. (The System message tile moved OUT to AI System Settings
+  in Stage 4; the **Lorebooks** tile moved OUT to the Memory Manager, July 8
+  2026 — see below.)
+- `ui/activities/MemoryManagerActivity.kt` — the **Memory Manager** (July 8
+  2026), reached from the renamed **Memory Manager** tile on the main Settings
+  screen. A plain chevron-row hub (house style: rows, not cards) with four
+  doors: **Memory Browser** → the global memories browser; **Memory Assistant**
+  → `MemoryAssistantActivity` (a "Coming soon" placeholder — the future
+  Archivist/Phase 6 surface, owner to design); **Lorebooks** →
+  `LoreBooksListActivity` (moved here out of Characters — the lorebook screens
+  themselves are unchanged, only the access point moved); **Memory Settings**
+  → `MemorySettingsActivity`. NOTE: this is a NEW, lightweight navigation hub —
+  NOT the old ten-area `ui/activities/memory/MemoryManagerActivity`, which was
+  removed in the Phase-5 rework and stays removed.
+- `ui/activities/MemorySettingsActivity.kt` — the **Memory Settings** screen
+  (was the "Memory (experimental)" screen). Everything the old screen had
+  EXCEPT the browser (which is now the hub's top row): store status, import
+  backup / export, persona bootstrap, Reset memories, the Memory engine
+  picker, Archivist endpoint/model, and the Librarian (embedding models,
+  rebuild index, debug search).
 - `ui/activities/AiSystemSettingsActivity.kt` — the **AI System Settings**
   screen (Stage 4), a new card on the main Settings screen. Plain
   chevron-rows (not tiles): the chat's **System prompt** (moved here out of
@@ -353,8 +371,10 @@ Everything is on-device. No cloud sync, no accounts.
    it. Persona edits sync one-way into linked companion records via the hook
    in `PersonaPreferences` (`MemoryCompanionSync`) — renames re-point
    `app_character_id` under the OLD id; keep that when touching persona save
-   paths. UI: "Memory system" tile in the Characters hub →
-   `MemorySettingsActivity` (status, import backup, export, persona bootstrap).
+   paths. UI: the **Memory Manager** tile on the main Settings screen (renamed
+   from "Memory System", July 8 2026) → `MemoryManagerActivity` (the row hub)
+   → **Memory Settings** row → `MemorySettingsActivity` (status, import backup,
+   export, persona bootstrap, engine/librarian/reset).
 4. **Files** — images in `getExternalFilesDir("images")`, whisper models via
    `LocalWhisperStorage`, rotating memory backups in
    `getExternalFilesDir("memory_backups")`.
@@ -443,7 +463,7 @@ Everything is on-device. No cloud sync, no accounts.
 - Companion memory store, Phases 1–2 (storage + capture): encrypted `companion_memory.db`,
   user backup import (own exported file, no bundled example data), rotating +
   manual JSON export, persona→companion bootstrap and edit-sync (surface:
-  Characters → Memory system). Every completed turn is captured into the transcripts queue from
+  Settings → Memory Manager → Memory Settings). Every completed turn is captured into the transcripts queue from
   the `finally` of `generateResponse` (single funnel; best-effort, never
   disturbs a turn) via `TranscriptRecorder`. Quick Settings has two per-chat
   memory controls (both in the auto-naming copy block): "Use memory" (kill
@@ -580,13 +600,17 @@ Everything is on-device. No cloud sync, no accounts.
   reshaped it to the owner's July 6 2026 rulings** (`Memory System/
   owner_approved_rules.md` + `phase5_rework_work_order.md` — read both before
   touching this):
-  - **No hub.** `MemoryManagerActivity` was removed; the "Browse & edit"
-    button in Memory settings opens the **Memories browser** directly, and it
-    is the single GLOBAL browser over all scopes/types (world/campaign/
-    roleplay-character/companion scoping via intent extras). It carries a
-    **Companions** link in its action bar (unscoped view only). One browser,
-    many doors: each companion/world/campaign/RP-character page has a
-    **Memories** button/action that opens this same browser pre-filtered.
+  - **The old ten-area hub is gone; a new lightweight hub exists.** The
+    Phase-5 rework deleted `ui/activities/memory/MemoryManagerActivity` (the
+    ten-area hub) and stays deleted. The **Memories browser** is the single
+    GLOBAL browser over all scopes/types (world/campaign/roleplay-character/
+    companion scoping via intent extras); it carries a **Companions** link in
+    its action bar (unscoped view only). One browser, many doors: each
+    companion/world/campaign/RP-character page has a **Memories** button that
+    opens this same browser pre-filtered. Since July 8 2026 the browser is
+    reached from the top row of the NEW `ui/activities/MemoryManagerActivity`
+    (a different, four-row navigation hub — see the architecture map); the old
+    "Browse & edit" button in Memory settings is gone.
   - **Retired screens (deleted; tables + store CRUD stay dormant):** Modes,
     Directives, **Entities**, and **Owner profile**. People in the user's
     life are ordinary memories under scope/type, not "entities"; what the
@@ -617,11 +641,43 @@ Everything is on-device. No cloud sync, no accounts.
     be created from that picker (no other creation surface yet). Protection
     editing stays on the browser row menu. The old `EditMemoryDialogFragment`
     was removed.
-  - The **browser** gained the full filter/sort chip row (sort + scope / type /
-    status / source / tag + Reset), filtered in memory over all statuses; state
-    is held statically so it survives leaving to the editor and back. Row =
-    title → status → tags → first content line. The chip bar + Pending banner
-    live on the shared list scaffold, hidden unless the browser turns them on.
+  - The **browser** filters (reworked July 8 2026): the old horizontal chip
+    row is RETIRED (the `filter_bar` container stays in the shared scaffold,
+    hidden, in case another list screen wants chips). A **three-dots
+    (`ic_more_vert`) button** sits to the right of the search field and opens
+    the **Memory Filters** slide-out panel (`MemoryFilterPanelActivity`, slides
+    in from the right, paired slide animations). Six sections — **Sort, Scope,
+    Type, Status, Source, Tags** (Title-Case labels). Sort and Source are
+    single-value pickers (Source has only two real options → the owner's "if
+    only two options, no multi" rule); Scope/Type/Status/Tags are multi-select:
+    each selection becomes a `Chip` pill (10dp corners) with a small × to
+    remove. **Reset Filters** at the bottom. Filter state is the process-wide
+    `MemoryBrowserFilterState` (Sort/Source strings, the rest `MutableSet`s) so
+    the panel edits it in place and the browser reloads on resume — auto-apply,
+    no OK/Cancel. **Status defaults to just `active`** (fresh view shows only
+    active memories; "draft" surfaces to the user as **Pending** and is one tap
+    away). The search hint reads **"Search Memories"** in a softer color token
+    (`memory_hint_soft`, light+dark) for the eventual theme swap.
+  - The browser **row** was redesigned (July 8 2026): a **leading identity
+    icon** (spans the row height) + title (17sp bold) / tags line (11sp) /
+    first content line (13sp), and the trailing action is the **edit-square**
+    (`ic_edit_square`, replaced the cog). Tags render as
+    `Communication  ·  Technical Help  ·  Tone` — no hashtags, each capitalised,
+    middle-dot separated. The **Active badge is suppressed** on rows (Active is
+    the default filter, so the pill meant nothing); draft/archived/superseded
+    still show their badge. The leading icon is chosen by scope in
+    `MemoryBrowserActivity.iconForScope()` (drawables `ic_mem_*`):
+    real_life → person, companion → partner (`partner_exchange`),
+    world/campaign/rp_character → theater comedy mask, global/project (and
+    fallback) → public globe. **⚠ INTERIM — does NOT yet fully match
+    `Memory System/phase6_card_suggestions_and_icons_design.md` §5**, which
+    keys the icon on scope AND whether the memory is on a card (real life +
+    global + project → person; roleplay NOT on a card → globe; roleplay ON a
+    card → comedy mask, with a badge). On-card tracking is a Phase-6 concern
+    that isn't built, so the current mapping is an approximation pending an
+    owner decision; when it's settled, only `iconForScope()` changes.
+    `MemoryRowAdapter`/`MemoryRow` grew `iconRes` + `tagsLine` fields; the
+    Pending banner still lives on the shared scaffold.
   - The **Pending screen** (`MemoryPendingActivity`, §14): a pinned "Pending
     memories (N) ›" banner on the browser opens draft memories grouped under
     collapsible destination-scope headers with per-group select-all, checkboxes,
