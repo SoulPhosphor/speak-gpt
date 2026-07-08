@@ -945,6 +945,15 @@ Everything is on-device. No cloud sync, no accounts.
   are now PRE-REVISION (each carries a ⚠️ banner): `owner_approved_rules.md`
   + the work orders describe the actual runtime since the July 2026
   rulings and the Stage 3.4 enforcer rework.
+- **Phase 6 (Archivist + Memory Assistant) is the NEXT phase and is NOT
+  built.** Before touching it, read the **"Addendum — modifications approved
+  in chat, July 8 2026"** at the end of `owner_approved_rules.md` (written for
+  the Phase 6 builder: Protected retired, scope definitions tightened, the
+  memory-UI restructure, the final row-icon system, and the confirmation that
+  no Archivist pipeline exists yet). The Memory Assistant screen — this phase's
+  user-facing surface — has an owner-approved layout/wording + plumbing notes
+  in **`Memory System/memory_assistant_design.md`**. Both outrank the older
+  Phase 6 text wherever they disagree.
 - **The roleplay layer (cards + tags) was redesigned and owner-approved
   July 6–7 2026.** `Memory System/roleplay_cards_and_tags_spec.md` is the
   authoritative spec (four two-zone cards: user RP character, NPC party

@@ -843,6 +843,18 @@ authority.
   every troubleshooting_guide workflow has a place to happen.
 
 ### ☐ Phase 6 — Archivist pipeline + proposals + run reports
+
+> **⚠ READ FIRST (July 8 2026): current authority for this phase.** Before
+> anything else, read the **"Addendum — modifications approved in chat,
+> July 8 2026"** at the end of `owner_approved_rules.md` — it is written for
+> the Phase 6 builder and states what is retired and what changed (Protected
+> retired; scope definitions tightened; the memory UI restructure; the final
+> icon system; and that the Archivist/Memory Assistant is NOT built). The
+> **Memory Assistant screen** (this phase's user-facing surface) is fully
+> specced with the owner's approved wording + the plumbing it implies in
+> **`Memory System/memory_assistant_design.md`**. Where those disagree with
+> anything below or in the pre-revision specs, they WIN.
+
 Specs: `archivist_spec.md`, `archivist_prompt.md` (send verbatim with
 injections), `enforcer_librarian_spec.md` §Applying change-sets; D7.
 
