@@ -1,15 +1,30 @@
 # Fix: roleplay memory deletion cleanup (join tables vs mirror columns)
 
 *Owner-relayed fix, worked through with another AI; verified against the code
-by reading `MemoryStore.kt` on **July 8 2026**. This is a **spec for the fix,
-not the fix itself** — nothing is built here.*
+by reading `MemoryStore.kt` on **July 8 2026**.*
 
 ## Status / scope
 
-This is a **real bug in already-shipped code** (Stage 3.6f card teardown). It
-could be fixed independently at any time, but the **owner assigned it to
-Phase 6 (July 8 2026)** so it is tracked and taken care of there — see the
-Phase 6 section of `memory-system-integration-plan.md`.
+**✅ BUILT (Phase 6, July 8 2026).** The fix below is implemented:
+`deleteWorld`/`deleteCampaign`/`deleteRoleplayCharacter`/`deleteProject` all
+route their memory handling through `MemoryStore.teardownTargetMemoriesTx`,
+which reads ownership from the join table and executes a plan computed by the
+pure `TargetTeardownPlanner` (`preferences/memory/TargetTeardownPlanner.kt`).
+The required tests below run in `app/src/test/.../TargetTeardownPlannerTest.kt`
+(each owner case × world/campaign/RP-character, plus the mirror-reassignment
+and join-based `keepCharacterMemories` cases). Two safety sweeps ensure no
+join row or mirror value survives pointing at the deleted target. The rest of
+this file is kept as the spec/history of the bug.
+
+This was a **real bug in already-shipped code** (Stage 3.6f card teardown),
+**owner-assigned to Phase 6 (July 8 2026)** — see the Phase 6 section of
+`memory-system-integration-plan.md`.
+
+Noted during the build, NOT changed (needs an owner decision — same shape,
+different scope): `deleteCompanion` is already join-based but its
+delete-memories option hard-deletes every linked memory even when the memory
+is also linked to another companion. Whether companions should get the same
+sole-owned-only rule is an open question for the owner.
 
 ## Implementation checklist (owner-confirmed, July 8 2026)
 

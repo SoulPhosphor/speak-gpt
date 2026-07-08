@@ -676,6 +676,7 @@ one, it is stale — follow this addendum and fix the stale text.
    **`Memory System/roleplay_memory_deletion_fix.md`**. Confirmed behavior: the
    two-option UI **keeps shared memories** — "also delete this card's memories"
    deletes only memories owned SOLELY by the deleted card; no "delete shared
-   too" option is built now (future UI decision only). Present bug in shipped
-   Stage 3.6 code; **owner-assigned to Phase 6** so it's tracked (may be fixed
-   sooner).
+   too" option is built now (future UI decision only). Was a present bug in
+   shipped Stage 3.6 code; **owner-assigned to Phase 6** so it's tracked.
+   *(Status note, not a rule change: FIXED per this ruling in Phase 6,
+   July 8 2026 — see the fix doc's status section.)*

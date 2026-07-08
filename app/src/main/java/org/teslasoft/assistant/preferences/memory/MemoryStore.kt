@@ -345,12 +345,14 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
 
         // Named target scopes are multi-select (owner_approved_rules §2): a memory
         // may belong to several worlds/campaigns/RP characters/projects at once,
-        // mirroring memory_companions. These join tables are the full multi-target
-        // truth — the editor, the scoped-browser doors AND (since Stage 3.1) the
-        // retrieval eligibility query all read them. The single memories.world_id/
-        // campaign_id/roleplay_character_id/project_id columns remain as a
-        // "primary target" mirror (the first selected) used only by the target
-        // teardown paths (deleteCampaign/deleteProject) and legacy consumers.
+        // mirroring memory_companions. These join tables are the SOURCE OF TRUTH
+        // for ownership — the editor, the scoped-browser doors, the retrieval
+        // eligibility query (Stage 3.1) AND (since the July 8 2026 owner ruling,
+        // `roleplay_memory_deletion_fix.md`) the target teardown paths all read
+        // them. The single memories.world_id/campaign_id/roleplay_character_id/
+        // project_id columns remain as a "primary target" mirror (the first
+        // selected), display-only; teardowns reassign it to a surviving owner
+        // and never trust it to decide what gets deleted.
         db.execSQL(
             "CREATE TABLE memory_worlds (" +
                 "memory_id TEXT NOT NULL REFERENCES memories(memory_id) ON DELETE CASCADE, " +
@@ -2985,20 +2987,17 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         )
     }
 
-    /** Teardown: delete the character; its memories are either removed (their
-     *  embeddings cascade) or freed by nulling the link. Tombstone left. */
+    /** Teardown: delete the character. Its memories are handled join-first
+     *  (owner ruling July 8 2026, `roleplay_memory_deletion_fix.md`): shared
+     *  memories always survive with their link removed and mirror reassigned;
+     *  [deleteMemories] removes only the card's sole-owned ones. */
     fun deleteRoleplayCharacter(id: String, deleteMemories: Boolean) {
         val db = writableDatabase
         db.beginTransaction()
         try {
-            if (deleteMemories) {
-                deleteMemoriesWhere(db, "roleplay_character_id = ?", arrayOf(id))
-            } else {
-                db.update("memories", ContentValues().apply { putNull("roleplay_character_id") },
-                    "roleplay_character_id = ?", arrayOf(id))
-            }
-            // Scrub multi-select links (§2) so the FK to roleplay_characters clears.
-            db.delete("memory_roleplay_characters", "roleplay_character_id = ?", arrayOf(id))
+            teardownTargetMemoriesTx(
+                db, "memory_roleplay_characters", "roleplay_character_id", id, deleteMemories
+            )
             // The card's Zone 2 entries and tag links go with it (3.6a).
             deleteCardEntriesForCardTx(db, CardType.RP_CHARACTER, id)
             db.delete("rp_tag_links", "target_type = ? AND target_id = ?", arrayOf(RpTagTargetType.RP_CHARACTER, id))
@@ -3048,33 +3047,24 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
     }
 
     /**
-     * Delete-all teardown for a world. [keepCharacterMemories] honours the
-     * table plan's option: memories that ALSO belong to a roleplay character
-     * are kept (their world link nulled) so the character walks away clean;
-     * pure world memories are removed. When false, every world-scoped memory
-     * is deleted.
+     * Delete-all teardown for a world, join-first (owner ruling July 8 2026,
+     * `roleplay_memory_deletion_fix.md`): memories shared with another world
+     * always survive. [keepCharacterMemories] honours the table plan's
+     * option — a memory that ALSO belongs to a roleplay character (any row in
+     * memory_roleplay_characters, not the old mirror-column read) is kept so
+     * the character walks away clean; pure sole-owned world memories are
+     * removed when [deleteMemories] is set.
      */
     fun deleteWorld(worldId: String, deleteMemories: Boolean, keepCharacterMemories: Boolean) {
         val db = writableDatabase
         db.beginTransaction()
         try {
-            if (deleteMemories) {
-                if (keepCharacterMemories) {
-                    db.update("memories", ContentValues().apply { putNull("world_id") },
-                        "world_id = ? AND roleplay_character_id IS NOT NULL", arrayOf(worldId))
-                    deleteMemoriesWhere(db, "world_id = ? AND roleplay_character_id IS NULL", arrayOf(worldId))
-                } else {
-                    deleteMemoriesWhere(db, "world_id = ?", arrayOf(worldId))
-                }
-            } else {
-                db.update("memories", ContentValues().apply { putNull("world_id") },
-                    "world_id = ?", arrayOf(worldId))
-            }
+            teardownTargetMemoriesTx(
+                db, "memory_worlds", "world_id", worldId, deleteMemories, keepCharacterMemories
+            )
             // Campaigns anchored to this world lose their anchor but survive.
             db.update("campaigns", ContentValues().apply { putNull("world_id") },
                 "world_id = ?", arrayOf(worldId))
-            // Scrub multi-select links (§2) so the FK to worlds clears.
-            db.delete("memory_worlds", "world_id = ?", arrayOf(worldId))
             // The card's Zone 2 entries and tag links go with it (3.6a).
             // Campaign overlays pointing at those entries keep their dangling
             // world_entry_id on purpose — §5's "(deleted card)" rendering.
@@ -3179,19 +3169,15 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
     }
 
     /** Delete-all teardown: the world and character walk away clean — only the
-     *  campaign and (optionally) its campaign-scoped memories go. */
+     *  campaign and (optionally) its sole-owned campaign memories go, join-first
+     *  (owner ruling July 8 2026, `roleplay_memory_deletion_fix.md`). */
     fun deleteCampaign(campaignId: String, deleteMemories: Boolean) {
         val db = writableDatabase
         db.beginTransaction()
         try {
-            if (deleteMemories) {
-                deleteMemoriesWhere(db, "campaign_id = ?", arrayOf(campaignId))
-            } else {
-                db.update("memories", ContentValues().apply { putNull("campaign_id") },
-                    "campaign_id = ?", arrayOf(campaignId))
-            }
-            // Scrub multi-select links (§2) so the FK to campaigns clears.
-            db.delete("memory_campaigns", "campaign_id = ?", arrayOf(campaignId))
+            teardownTargetMemoriesTx(
+                db, "memory_campaigns", "campaign_id", campaignId, deleteMemories
+            )
             // Party-member links, the card's Zone 2 entries and tag links go
             // with it (3.6a). The party-member CARDS survive — the join is
             // link, not ownership (§4).
@@ -3252,20 +3238,17 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         )
     }
 
-    /** Delete a project; its project-scoped memories are deleted or unlinked
-     *  per the flag (mirrors [deleteCampaign]). */
+    /** Delete a project; its memories are handled join-first per the same
+     *  owner ruling as the roleplay teardowns ("projects share the shape",
+     *  `roleplay_memory_deletion_fix.md`): shared memories survive, only
+     *  sole-owned ones go when [deleteMemories] is set. */
     fun deleteProject(projectId: String, deleteMemories: Boolean) {
         val db = writableDatabase
         db.beginTransaction()
         try {
-            if (deleteMemories) {
-                deleteMemoriesWhere(db, "project_id = ?", arrayOf(projectId))
-            } else {
-                db.update("memories", ContentValues().apply { putNull("project_id") },
-                    "project_id = ?", arrayOf(projectId))
-            }
-            // Scrub multi-select links (§2) so the FK to projects clears.
-            db.delete("memory_projects", "project_id = ?", arrayOf(projectId))
+            teardownTargetMemoriesTx(
+                db, "memory_projects", "project_id", projectId, deleteMemories
+            )
             db.delete("projects", "project_id = ?", arrayOf(projectId))
             recordDeletionTx(db, "project", projectId)
             db.setTransactionSuccessful()
@@ -4230,10 +4213,86 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
 
     /* -------- teardown helpers (must run inside an open transaction) -------- */
 
+    /**
+     * Handles a deleted target's memories per the owner's July 8 2026 ruling
+     * (`Memory System/roleplay_memory_deletion_fix.md`): ownership is read
+     * from the JOIN table, never the mirror column. Shared memories are always
+     * kept (their link to the dead target removed, mirror reassigned to a
+     * surviving owner); [deleteMemories] hard-deletes only sole-owned ones.
+     * [keepCharacterMemories] (worlds only) keeps memories that have any
+     * memory_roleplay_characters row — the join-based reading of "a
+     * character's memory too". Ends with two safety sweeps so neither a join
+     * row nor a mirror value can survive pointing at the deleted target
+     * (a leftover mirror would break the FK when the target row goes).
+     */
+    private fun teardownTargetMemoriesTx(
+        db: SQLiteDatabase,
+        joinTable: String,
+        idColumn: String,
+        targetId: String,
+        deleteMemories: Boolean,
+        keepCharacterMemories: Boolean = false
+    ) {
+        val owned = ArrayList<TargetTeardownPlanner.OwnedMemory>()
+        db.query(
+            joinTable, arrayOf("memory_id"), "$idColumn = ?", arrayOf(targetId),
+            null, null, "memory_id ASC"
+        ).use { c ->
+            while (c.moveToNext()) {
+                val memoryId = c.getString(0)
+                val others = ArrayList<String>()
+                db.query(
+                    joinTable, arrayOf(idColumn), "memory_id = ? AND $idColumn != ?",
+                    arrayOf(memoryId, targetId), null, null, "$idColumn ASC"
+                ).use { oc -> while (oc.moveToNext()) others.add(oc.getString(0)) }
+                var mirror: String? = null
+                db.query(
+                    "memories", arrayOf(idColumn), "memory_id = ?", arrayOf(memoryId),
+                    null, null, null
+                ).use { mc -> if (mc.moveToNext() && !mc.isNull(0)) mirror = mc.getString(0) }
+                var hasCharacterLink = false
+                if (keepCharacterMemories) {
+                    db.query(
+                        "memory_roleplay_characters", arrayOf("memory_id"),
+                        "memory_id = ?", arrayOf(memoryId), null, null, null
+                    ).use { rc -> hasCharacterLink = rc.moveToNext() }
+                }
+                owned.add(TargetTeardownPlanner.OwnedMemory(memoryId, others, mirror, hasCharacterLink))
+            }
+        }
+        val plan = TargetTeardownPlanner.plan(targetId, owned, deleteMemories, keepCharacterMemories)
+        for (memoryId in plan.deleteMemoryIds) {
+            deleteMemoriesWhere(db, "memory_id = ?", arrayOf(memoryId))
+        }
+        for (memoryId in plan.unlinkMemoryIds) {
+            db.delete(joinTable, "memory_id = ? AND $idColumn = ?", arrayOf(memoryId, targetId))
+        }
+        for ((memoryId, newMirror) in plan.mirrorReassignments) {
+            db.update("memories", ContentValues().apply {
+                if (newMirror == null) putNull(idColumn) else put(idColumn, newMirror)
+            }, "memory_id = ?", arrayOf(memoryId))
+        }
+        // Safety sweeps: harmless after the plan ran; they also catch rows the
+        // join-driven plan can't see (a mirror-only memory with no join row —
+        // join-as-truth says it isn't owned, so it survives with the mirror
+        // cleared rather than dangling at a deleted card).
+        db.delete(joinTable, "$idColumn = ?", arrayOf(targetId))
+        db.update(
+            "memories", ContentValues().apply { putNull(idColumn) },
+            "$idColumn = ?", arrayOf(targetId)
+        )
+    }
+
     private fun deleteMemoriesWhere(db: SQLiteDatabase, where: String, args: Array<String>) {
         // Tombstone each id first (change_log + embeddings cascade on delete).
+        // Cooldown rows have no FK, so they're cleared per id here — same
+        // contract as the single-memory deleteMemory path.
         db.query("memories", arrayOf("memory_id"), where, args, null, null, null).use {
-            while (it.moveToNext()) recordDeletionTx(db, "memory", it.getString(0))
+            while (it.moveToNext()) {
+                val memoryId = it.getString(0)
+                recordDeletionTx(db, "memory", memoryId)
+                clearEntryCooldownTx(db, COOLDOWN_SOURCE_MEMORY, memoryId)
+            }
         }
         db.delete("memories", where, args)
     }

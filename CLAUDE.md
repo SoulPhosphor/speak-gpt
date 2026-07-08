@@ -250,15 +250,17 @@ Everything is on-device. No cloud sync, no accounts.
    without being duplicated. Since Stage 3.1 the retrieval eligibility query
    reads these join tables too (a memory linked to several targets is eligible
    under each); the legacy single columns remain as a **primary-target mirror**
-   (first selected) used only by the target teardown paths. The scoped-browser
-   doors read the join tables. ⚠️ **KNOWN BUG (verified July 8 2026):** the
-   world/campaign/RP-character teardown paths (`deleteWorld`/`deleteCampaign`/
-   `deleteRoleplayCharacter`) still decide which memories to delete/keep from
-   the **mirror column**, not the join table — so a multi-target memory can be
-   wrongly hard-deleted (or a join-only-owned one mishandled) and the mirror
-   left stale. The join tables are the source of truth; the fix logic +
-   required tests are written up in
-   `Memory System/roleplay_memory_deletion_fix.md` (not yet built).
+   (first selected), display-only. The scoped-browser doors read the join
+   tables. The July 8 2026 teardown bug (delete/keep decided by the mirror
+   column, so a multi-target memory could be wrongly hard-deleted) is **FIXED**
+   (Phase 6, July 8 2026): `deleteWorld`/`deleteCampaign`/
+   `deleteRoleplayCharacter`/`deleteProject` now run join-first through
+   `teardownTargetMemoriesTx` + the pure `TargetTeardownPlanner` (unit-tested
+   in `app/src/test` with the owner's required cases) — shared memories always
+   survive with the dead link removed and the mirror reassigned to a surviving
+   owner; "also delete this card's memories" removes only sole-owned ones;
+   `keepCharacterMemories` reads the character JOIN, not the mirror. Spec +
+   history in `Memory System/roleplay_memory_deletion_fix.md`.
    DB v6 (July 2026, Stage 3.3) adds the **freshness-cooldown** tables:
    `injection_cooldowns` keyed `(chat_id, source_type, entry_id)` — when each
    entry last reached a prompt, per chat, `source_type` separating memories
