@@ -107,53 +107,36 @@ Both Accept-all buttons show a count confirm ("Accept 12 memories?" /
 
 ## 5. Memory icon system
 
-Every memory row in the browser and Pending screen shows a small icon on
-the far right indicating what kind of memory it is. Five base icons, with
-badge variants on two of them:
+> **⚠️ REPLACED July 8 2026.** The original scheme in this section (a "User"
+> icon covering real life + global + project, two "roleplay" icons, and
+> corner-badge variants for card-linked memories) is **dead** — do not build
+> it. The old text has been removed to avoid confusing future agents. The
+> authoritative icon system now lives in `owner_approved_rules.md` (Addendum,
+> July 8 2026, items 5–6). Summary of what shipped:
 
-### Base icons (4 scope categories)
+Every memory row shows a **leading** icon (left of the row), chosen by scope
+in `MemoryBrowserActivity.iconForScope(scope, onCard)`:
 
-| Icon | Scope | Notes |
-|------|-------|-------|
-| **User** | Real life, global, project | Things about the actual human |
-| **Companion** | Companion-scoped memories | Things about the AI persona. No badge variant (companion cards are off-limits to the Archivist per section 13) |
-| **Your RP Character** | User's roleplay character | Personal in a fictional context -- the user's choices, arc, personality in the story |
-| **Roleplay** | World, campaign, plot ledger, party members | The story's setting, events, and cast |
+| Memory | Icon (Material Symbol) |
+|--------|------------------------|
+| Real life | `person` |
+| Global | `borg` (its own icon — global is NOT real life) |
+| Companion | `partner_exchange` (two people + heart) |
+| Project | `draft` (folded-corner page) |
+| User roleplay character (`rp_character`) | `theater_comedy` (comedy mask) |
+| World / Campaign (and any unknown) | `public` (globe) |
+| **Any memory placed on a card** | `book_5` (overrides the scope icon) |
 
-### Badge variants (card-linked memories)
-
-The two roleplay icons (**Your RP Character** and **Roleplay**) each have a
-badged variant. The badge is a small indicator in the lower-right corner of
-the icon (e.g. an open book or shield) that overlaps the base icon slightly.
-
-- **Base icon without badge** = this memory is in the backend only, not on
-  any card.
-- **Base icon with badge** = this memory is linked to a card entry.
-
-The badge is the same whether the memory is pending approval or already
-approved. The badge means one thing: "this memory lives on a card." Pending
-vs approved state is communicated by:
-- Being on the Pending screen (context)
-- The suggestion outline treatment on the memory row (visual)
-- The draft status
-
-Using different badges for pending vs approved would force the user to
-remember which badge variant means what -- one badge, one meaning is
-cleaner.
-
-### Total visual states
-
-| State | Icon shown |
-|-------|------------|
-| User memory | User icon |
-| Companion memory | Companion icon |
-| Your RP character, backend only | Character icon (plain) |
-| Your RP character, on a card | Character icon + badge |
-| Roleplay, backend only | Roleplay icon (plain) |
-| Roleplay, on a card | Roleplay icon + badge |
-
-Six visual states. The user learns four shapes and one concept ("badge
-means it's on a card").
+- There are **no corner-badge variants** — a card-linked memory swaps to the
+  whole `book_5` icon.
+- **`book_5` / "on a card" is RESERVED and not reachable yet.** No
+  memory↔card link exists in the data (`card_entries` has no source-memory
+  column; `memories` has no on-card flag), so `isOnCard()` returns false.
+  Building that link + the placement flow is a Phase-6 task (see §6, which is
+  only partially built); when done, `isOnCard()` is the single hook.
+- The `rp_character` comedy mask is a placeholder for a future dedicated
+  icon; its code branch is kept separate from world/campaign so the split is
+  cheap.
 
 ## 6. Placing and removing memories from cards
 

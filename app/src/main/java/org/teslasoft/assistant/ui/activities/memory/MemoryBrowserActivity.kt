@@ -16,14 +16,12 @@
 
 package org.teslasoft.assistant.ui.activities.memory
 
+import android.content.Intent
 import android.view.View
-import android.widget.EditText
-import android.widget.LinearLayout
 import android.widget.PopupMenu
 import android.widget.Toast
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import org.json.JSONArray
-import org.json.JSONObject
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.memory.MemoryRecord
 import org.teslasoft.assistant.preferences.memory.MemoryStore
@@ -31,34 +29,25 @@ import org.teslasoft.assistant.preferences.memory.librarian.Librarian
 import org.teslasoft.assistant.ui.adapters.memory.MemoryRow
 
 /**
- * The memory browser/editor (Phase 5, app_adaptation_notes §Required memory UI):
- * search (semantic when a model is installed, plus a text scan), add, edit,
- * protect/unprotect, archive/restore, delete (user-only, Material confirm), and
- * a per-memory change-log view. Every store read/write runs off the main
- * thread; failures degrade to a toast. This is the single GLOBAL browser over
- * all scopes and types; it can also be opened pre-filtered to a companion /
- * world / campaign / roleplay character (each of those pages passes its id so
- * the list and its "new memory" are confined to that scope). A Companions link
- * sits in the action bar. A filter/sort chip row (sort, scope, type, status,
- * source, tag + reset; §2.3) filters the list in memory; its state is held
- * statically so it survives leaving to the editor and back.
+ * The memory browser/editor: search (semantic when a model is installed, plus
+ * a text scan), add, edit, protect/unprotect, archive/restore, delete
+ * (user-only, Material confirm), and a per-memory change-log view. Every store
+ * read/write runs off the main thread; failures degrade to a toast. This is
+ * the single GLOBAL browser over all scopes and types; it can also be opened
+ * pre-filtered to a companion / world / campaign / roleplay character (each
+ * of those pages passes its id so the list and its "new memory" are confined
+ * to that scope). A Companions link sits in the action bar.
+ *
+ * Filter surface (owner ruling, July 8 2026): the chip row is retired.
+ * Instead the search bar carries a three-dots button that opens the "Memory
+ * Filters" slide-out ([MemoryFilterPanelActivity]). All filter state lives in
+ * [MemoryBrowserFilterState] so the panel edits it directly; the browser
+ * reloads on resume and reflects the changes. Sort and Source are single-
+ * value, everything else is multi-select. Status defaults to just "active".
  */
 class MemoryBrowserActivity : MemoryScreenActivity() {
 
-    /** Filter/sort state, held statically so it survives leaving to the editor
-     *  and coming back, and leaving and returning (§14 / approved browser
-     *  design). Reset returns to defaults (newest, no filters). */
-    private object F {
-        var sort = "newest"    // newest | oldest
-        var scope = "all"      // all | <scope key>
-        var type = "all"       // all | <type key>
-        var status = "all"     // all | active | draft | archived | superseded
-        var source = "all"     // all | hand | learned
-        var tag = "all"        // all | <tag text>
-        fun reset() { sort = "newest"; scope = "all"; type = "all"; status = "all"; source = "all"; tag = "all" }
-    }
-
-    /** Distinct tags across the loaded set, for the tag filter dialog. */
+    /** Distinct tags across the loaded set, for the filter panel's Tags picker. */
     @Volatile private var availableTags: List<String> = emptyList()
 
     /** Draft count in the current (global or scoped) view, for the Pending
@@ -74,11 +63,23 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
     override fun screenTitle(): String = titleOverride ?: getString(R.string.title_memories)
     override fun showSearch(): Boolean = true
     override fun addButtonText(): String = getString(R.string.btn_new_memory)
-    override fun showFilterBar(): Boolean = true
-    override fun renderFilterBar() { buildFilterChips() }
 
-    // Pending banner (§2.4): shown when the current view has drafts; opens the
-    // Pending screen pre-filtered to the same scope a scoped browser is showing.
+    /** The old chip bar is retired; the slide-out panel is opened via the
+     *  three-dots button beside the search field (owner ruling, July 8 2026). */
+    override fun showFilterBar(): Boolean = false
+    override fun showFilterButton(): Boolean = true
+
+    override fun onFilterButtonClick() {
+        val intent = Intent(this, MemoryFilterPanelActivity::class.java)
+            .putExtra("chatId", chatId)
+            .putExtra(MemoryFilterPanelActivity.EXTRA_AVAILABLE_TAGS, availableTags.toTypedArray())
+        startActivity(intent)
+        // Pair with the panel's slide-out on close so the transition matches.
+        @Suppress("DEPRECATION")
+        overridePendingTransition(R.anim.slide_in_right, R.anim.anim_hold)
+    }
+
+    // Pending banner (§2.4).
     override fun onRowsRendered() {
         if (pendingCount > 0) {
             setPendingBanner(getString(R.string.mem_pending_banner, pendingCount)) { openPending() }
@@ -89,7 +90,7 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
 
     private fun openPending() {
         startActivity(
-            android.content.Intent(this, MemoryPendingActivity::class.java)
+            Intent(this, MemoryPendingActivity::class.java)
                 .putExtra("chatId", chatId)
                 .putExtra("companionId", presetCompanionId)
                 .putExtra("worldId", presetWorldId)
@@ -98,16 +99,12 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
         )
     }
 
-    // The action bar's Companions link (only in the unscoped, global browser —
-    // a scoped view is already about one thing, so the jump would be confusing).
+    // Companions link (unscoped browser only).
     override fun secondaryActionIcon(): Int? =
         if (isScoped()) null else R.drawable.ic_user
     override fun secondaryActionLabel(): String? = getString(R.string.mem_comp_title)
     override fun onSecondaryActionClick() {
-        startActivity(
-            android.content.Intent(this, MemoryCompanionsActivity::class.java)
-                .putExtra("chatId", chatId)
-        )
+        startActivity(Intent(this, MemoryCompanionsActivity::class.java).putExtra("chatId", chatId))
     }
 
     private fun isScoped(): Boolean =
@@ -130,8 +127,8 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
         val store = MemoryStore.getInstance(this)
 
         // Fetch the base set (all statuses), then apply the filters/sort in
-        // memory — the browser is global over all scopes and types, and a scoped
-        // door pre-narrows to one target while the filters still apply.
+        // memory — the browser is global over all scopes and types, and a
+        // scoped door pre-narrows to one target while the filters still apply.
         val base: List<MemoryRecord> = when {
             presetCompanionId != null -> store.memoriesForCompanion(presetCompanionId!!, true)
             presetWorldId != null -> store.memoriesForWorld(presetWorldId!!, true)
@@ -143,30 +140,101 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
         availableTags = base.flatMap { parseTags(it.tagsJson) }.distinct().sortedBy { it.lowercase() }
         pendingCount = base.count { it.status == "draft" }
 
+        val f = MemoryBrowserFilterState
         val q = query.trim().lowercase()
         var list = base
         if (q.isNotEmpty()) list = list.filter { it.title.lowercase().contains(q) || it.content.lowercase().contains(q) }
-        if (!isScoped() && F.scope != "all") list = list.filter { it.scope == F.scope }
-        if (F.type != "all") list = list.filter { it.kind == F.type }
-        if (F.status != "all") list = list.filter { it.status == F.status }
-        if (F.source != "all") list = list.filter { sourceKey(it.provenanceSource) == F.source }
-        if (F.tag != "all") list = list.filter { parseTags(it.tagsJson).any { t -> t.equals(F.tag, true) } }
-        list = if (F.sort == "oldest") list.sortedBy { it.createdAt } else list.sortedByDescending { it.createdAt }
+        if (!isScoped() && f.scope.isNotEmpty()) list = list.filter { it.scope in f.scope }
+        if (f.type.isNotEmpty()) list = list.filter { it.kind in f.type }
+        if (f.status.isNotEmpty()) list = list.filter { it.status in f.status }
+        if (f.source != "all") list = list.filter { sourceKey(it.provenanceSource) == f.source }
+        if (f.tags.isNotEmpty()) {
+            val lowered = f.tags.map { it.lowercase() }.toSet()
+            list = list.filter { parseTags(it.tagsJson).any { t -> t.lowercase() in lowered } }
+        }
+        list = if (f.sort == "oldest") list.sortedBy { it.createdAt } else list.sortedByDescending { it.createdAt }
 
         return list.map { rowFor(it) }
     }
 
-    // Row layout (§2.3): title -> status -> tags -> first line of the content.
+    // Row layout: title / tags line / first line of content, with a leading
+    // identity icon picked from the memory's scope (owner icon set, July 8
+    // 2026). Badge is intentionally suppressed for "active" — the Active
+    // pill added visual noise on the row that meant nothing (the browser
+    // filters to Active by default).
     private fun rowFor(m: MemoryRecord): MemoryRow {
         val tags = parseTags(m.tagsJson)
         val firstLine = m.content.substringBefore('\n').trim()
-        val subtitle = if (tags.isEmpty()) firstLine
-        else tags.joinToString(" ") { "#$it" } + "\n" + firstLine
-        return MemoryRow(id = m.memoryId, title = m.title, subtitle = subtitle, badge = statusLabel(m.status), hasAction = true)
+        val tagsLine = if (tags.isEmpty()) null else formatTagsLine(tags)
+        val badge = if (m.status == "active") null else statusLabel(m.status)
+        return MemoryRow(
+            id = m.memoryId,
+            title = m.title,
+            subtitle = firstLine.ifEmpty { null },
+            tagsLine = tagsLine,
+            badge = badge,
+            hasAction = true,
+            iconRes = iconForScope(m.scope, isOnCard(m))
+        )
     }
 
-    /** "Learned from chat" once the Archivist exists; everything the user typed
-     *  (including legacy rows with no provenance) reads as entered by hand. */
+    /**
+     * Whether this memory has been placed on a roleplay card.
+     *
+     * RESERVED / always false today: "on a card" is Phase-6 territory — the
+     * card-placement flow and the memory↔card link that would back it do not
+     * exist yet (card_entries has no source-memory column, memories has no
+     * on-card flag). When Phase 6 adds that link, this is the ONE place to
+     * teach it, and the book_5 icon lights up automatically.
+     */
+    private fun isOnCard(@Suppress("UNUSED_PARAMETER") m: MemoryRecord): Boolean = false
+
+    /**
+     * Pick the leading identity icon (owner icon set, July 8 2026):
+     *   on a card (any roleplay scope) → book_5   [Phase-6, see isOnCard]
+     *   real_life                      → person
+     *   global                         → borg (its OWN icon — global is a
+     *                                    distinct scope from real life: it
+     *                                    crosses into roleplay, §3)
+     *   companion                      → partner (two people + a heart)
+     *   project                        → draft (folded-corner page)
+     *   rp_character (user's RP char)   → theater comedy mask
+     *   world / campaign               → public globe (roleplay, not on a card)
+     *   unknown / fallback              → public globe
+     *
+     * The user-roleplay-character slot will get its OWN icon later; it shares
+     * the comedy mask for now, so keep the branch separate from world/campaign
+     * (which are the globe) — the split is already here for that day.
+     */
+    private fun iconForScope(scope: String?, onCard: Boolean): Int = when {
+        onCard -> R.drawable.ic_mem_book
+        scope == "real_life" -> R.drawable.ic_mem_person
+        scope == "global" -> R.drawable.ic_mem_global
+        scope == "companion" -> R.drawable.ic_mem_companion
+        scope == "project" -> R.drawable.ic_mem_draft
+        scope == "rp_character" -> R.drawable.ic_mem_theater
+        else -> R.drawable.ic_mem_public   // world, campaign, unknown
+    }
+
+    /**
+     * Format the tag list as "Communication · Technical Help · Tone" (owner
+     * ruling, July 8 2026): first letter of each tag capitalised, joined by
+     * a middle dot with a space each side. No hashtags.
+     */
+    private fun formatTagsLine(tags: List<String>): String =
+        tags.joinToString("  ·  ") { capitalise(it) }
+
+    private fun capitalise(s: String): String {
+        val trimmed = s.trim()
+        if (trimmed.isEmpty()) return trimmed
+        return trimmed.split(" ").joinToString(" ") { w ->
+            if (w.isEmpty()) w
+            else w[0].uppercaseChar() + w.substring(1)
+        }
+    }
+
+    /** "Learned from chat" once the Archivist exists; everything the user
+     *  typed (including legacy rows with no provenance) reads as by hand. */
     private fun sourceKey(provenanceSource: String?): String =
         if (provenanceSource == null || provenanceSource == "user_entered" || provenanceSource == "user_stated") "hand" else "learned"
 
@@ -177,127 +245,14 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
         }
     } catch (_: Exception) { emptyList() }
 
-    /* ------------------------------ filter chips ------------------------------ */
-
-    private fun buildFilterChips() {
-        val group = filterChipGroup() ?: return
-        group.removeAllViews()
-        addFilterChip(group, getString(R.string.mem_filter_sort), sortLabel()) { showSortDialog() }
-        if (!isScoped()) addFilterChip(group, getString(R.string.mem_edit_label_scope), scopeFilterLabel()) { showScopeDialog() }
-        addFilterChip(group, getString(R.string.mem_edit_label_type), typeFilterLabel()) { showTypeDialog() }
-        addFilterChip(group, getString(R.string.mem_filter_status), statusFilterLabel()) { showStatusDialog() }
-        addFilterChip(group, getString(R.string.mem_filter_source), sourceFilterLabel()) { showSourceDialog() }
-        addFilterChip(group, getString(R.string.mem_filter_tag), tagFilterLabel()) { showTagDialog() }
-        val reset = com.google.android.material.chip.Chip(this).apply {
-            text = getString(R.string.mem_filter_reset)
-            setOnClickListener { F.reset(); buildFilterChips(); reload() }
-        }
-        group.addView(reset)
-    }
-
-    private fun addFilterChip(group: android.view.ViewGroup, label: String, value: String, onClick: () -> Unit) {
-        val chip = com.google.android.material.chip.Chip(this).apply {
-            text = getString(R.string.mem_filter_chip, label, value)
-            setOnClickListener { onClick() }
-        }
-        group.addView(chip)
-    }
-
-    private fun pickFilter(titleRes: Int, labels: Array<String>, keys: List<String>, current: String, apply: (String) -> Unit) {
-        val idx = keys.indexOf(current).coerceAtLeast(0)
-        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-            .setTitle(titleRes)
-            .setSingleChoiceItems(labels, idx) { d, which ->
-                apply(keys[which]); buildFilterChips(); reload(); d.dismiss()
-            }
-            .setNegativeButton(R.string.btn_cancel) { _, _ -> }
-            .show()
-    }
-
-    private val scopeKeys = listOf("all", "global", "real_life", "companion", "project", "world", "campaign", "rp_character")
-    private val typeKeys = listOf("all", "fact", "preference", "event", "status", "instruction", "lore")
-    private val statusKeys = listOf("all", "active", "draft", "archived", "superseded")
-    private val sourceKeys = listOf("all", "hand", "learned")
-
-    private fun allLabel() = getString(R.string.mem_filter_all)
-    private fun sortLabel() = getString(if (F.sort == "oldest") R.string.mem_filter_sort_oldest else R.string.mem_filter_sort_newest)
-    private fun scopeFilterLabel() = if (F.scope == "all") allLabel() else scopeLabel(F.scope)
-    private fun typeFilterLabel() = if (F.type == "all") allLabel() else typeLabel(F.type)
-    private fun statusFilterLabel() = if (F.status == "all") allLabel() else statusLabel(F.status)
-    private fun sourceFilterLabel() = if (F.source == "all") allLabel() else sourceLabel(F.source)
-    private fun tagFilterLabel() = if (F.tag == "all") allLabel() else F.tag
-
-    private fun scopeLabel(key: String) = getString(
-        when (key) {
-            "global" -> R.string.mem_scope_global
-            "real_life" -> R.string.mem_scope_real_life
-            "companion" -> R.string.mem_scope_companion
-            "project" -> R.string.mem_scope_project
-            "world" -> R.string.mem_scope_world
-            "campaign" -> R.string.mem_scope_campaign
-            else -> R.string.mem_scope_rp_character
-        }
-    )
-
-    private fun typeLabel(key: String) = getString(
-        when (key) {
-            "fact" -> R.string.mem_type_fact
-            "preference" -> R.string.mem_type_preference
-            "event" -> R.string.mem_type_event
-            "status" -> R.string.mem_type_status
-            "instruction" -> R.string.mem_type_instruction
-            else -> R.string.mem_type_lore
-        }
-    )
-
     private fun statusLabel(key: String) = getString(
         when (key) {
-            "draft" -> R.string.mem_status_draft
+            "draft" -> R.string.mem_filter_pending
             "archived" -> R.string.mem_status_archived
             "superseded" -> R.string.mem_status_superseded
             else -> R.string.mem_status_active
         }
     )
-
-    private fun sourceLabel(key: String) = getString(
-        if (key == "learned") R.string.mem_source_learned else R.string.mem_source_hand
-    )
-
-    private fun showSortDialog() = pickFilter(
-        R.string.mem_filter_sort,
-        arrayOf(getString(R.string.mem_filter_sort_newest), getString(R.string.mem_filter_sort_oldest)),
-        listOf("newest", "oldest"), F.sort
-    ) { F.sort = it }
-
-    private fun showScopeDialog() = pickFilter(
-        R.string.mem_edit_label_scope,
-        scopeKeys.map { if (it == "all") allLabel() else scopeLabel(it) }.toTypedArray(),
-        scopeKeys, F.scope
-    ) { F.scope = it }
-
-    private fun showTypeDialog() = pickFilter(
-        R.string.mem_edit_label_type,
-        typeKeys.map { if (it == "all") allLabel() else typeLabel(it) }.toTypedArray(),
-        typeKeys, F.type
-    ) { F.type = it }
-
-    private fun showStatusDialog() = pickFilter(
-        R.string.mem_filter_status,
-        statusKeys.map { if (it == "all") allLabel() else statusLabel(it) }.toTypedArray(),
-        statusKeys, F.status
-    ) { F.status = it }
-
-    private fun showSourceDialog() = pickFilter(
-        R.string.mem_filter_source,
-        sourceKeys.map { if (it == "all") allLabel() else sourceLabel(it) }.toTypedArray(),
-        sourceKeys, F.source
-    ) { F.source = it }
-
-    private fun showTagDialog() {
-        val keys = listOf("all") + availableTags
-        val labels = (listOf(allLabel()) + availableTags).toTypedArray()
-        pickFilter(R.string.mem_filter_tag, labels, keys, F.tag) { F.tag = it }
-    }
 
     override fun onAddClick() {
         if (!MemoryStore.isProvisioned(this)) {
@@ -321,14 +276,14 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
         }
     }
 
+    // Protect/Unprotect is retired (owner ruling, July 8 2026): "protection"
+    // was a handling concern, not a memory concept. Rule-like protections are
+    // now ordinary Global memories; a sensitive fact keeps its care-note in
+    // its own text (memories inject whole, so the note can't be sheared off).
+    // The DB protection column stays dormant for backup/import compatibility.
     private fun showRowMenu(anchor: View, m: MemoryRecord) {
         val menu = PopupMenu(this, anchor)
         menu.menu.add(0, 1, 0, getString(R.string.action_edit))
-        if (m.protectionJson.isNullOrBlank()) {
-            menu.menu.add(0, 2, 0, getString(R.string.action_protect))
-        } else {
-            menu.menu.add(0, 3, 0, getString(R.string.action_unprotect))
-        }
         if (m.status == "active") {
             menu.menu.add(0, 4, 0, getString(R.string.action_archive))
         } else {
@@ -339,8 +294,6 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
         menu.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 1 -> openEditor(m.memoryId)
-                2 -> showProtectDialog(m)
-                3 -> applyProtection(m.memoryId, null)
                 4 -> setStatus(m.memoryId, "archived")
                 5 -> setStatus(m.memoryId, "active")
                 6 -> showHistory(m.memoryId)
@@ -353,12 +306,12 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
 
     /* ------------------------------ editor ------------------------------ */
 
-    // The editor is a full-screen activity now (owner: no pop-ups for big
-    // forms). A scoped browser pre-selects its scope + target for a NEW memory;
-    // an existing memory carries its own scope/targets, so no preset is sent.
-    // The browser reloads on resume, so returning refreshes the list.
+    // The editor is a full-screen activity. A scoped browser pre-selects its
+    // scope + target for a NEW memory; an existing memory carries its own
+    // scope/targets, so no preset is sent. The browser reloads on resume, so
+    // returning refreshes the list.
     private fun openEditor(memoryId: String?) {
-        val intent = android.content.Intent(this, MemoryEditorActivity::class.java)
+        val intent = Intent(this, MemoryEditorActivity::class.java)
             .putExtra("chatId", chatId)
         if (memoryId != null) {
             intent.putExtra("memoryId", memoryId)
@@ -403,46 +356,6 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
             .show()
     }
 
-    /** Protect: capture the HANDLE WITH CARE handling lines (one per line). The
-     *  enforcer renders these inseparably from the memory when it injects. */
-    private fun showProtectDialog(m: MemoryRecord) {
-        val field = EditText(this).apply {
-            hint = getString(R.string.memory_protect_handling_hint)
-            setText(existingHandling(m.protectionJson))
-            minLines = 3
-            gravity = android.view.Gravity.TOP
-        }
-        val pad = (20 * resources.displayMetrics.density).toInt()
-        val container = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(pad, pad, pad, 0)
-            addView(field)
-        }
-        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.action_protect)
-            .setMessage(R.string.memory_protect_dialog_msg)
-            .setView(container)
-            .setPositiveButton(R.string.btn_save) { _, _ ->
-                val handling = field.text.toString().split("\n").map { it.trim() }.filter { it.isNotEmpty() }
-                val json = JSONObject().apply {
-                    put("is_protected", true)
-                    put("handling", JSONArray(handling))
-                }.toString()
-                applyProtection(m.memoryId, json)
-            }
-            .setNegativeButton(R.string.btn_cancel) { _, _ -> }
-            .show()
-    }
-
-    private fun applyProtection(memoryId: String, protectionJson: String?) {
-        runOffThread {
-            MemoryStore.getInstance(this).setMemoryProtection(
-                memoryId, protectionJson, getString(R.string.memory_change_protection)
-            )
-            runOnUiThread { reload() }
-        }
-    }
-
     private fun showHistory(memoryId: String) {
         runOffThread {
             val log = MemoryStore.getInstance(this).getMemoryChangeLog(memoryId)
@@ -462,12 +375,4 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
         }
     }
 
-    /* ------------------------------ json helpers ------------------------------ */
-
-    private fun existingHandling(protectionJson: String?): String = try {
-        if (protectionJson.isNullOrBlank()) "" else {
-            val arr = JSONObject(protectionJson).optJSONArray("handling") ?: JSONArray()
-            (0 until arr.length()).joinToString("\n") { arr.getString(it) }
-        }
-    } catch (_: Exception) { "" }
 }

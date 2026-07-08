@@ -848,8 +848,25 @@
     <string name="adv_section_diag_caption">With any of these on, every hands-free decision (mic opened/closed and why, readback, failures, stop reasons) is written to the Event log, plus detailed per-frame detector state to logcat. This is what to turn on before reporting a voice bug.</string>
     <string name="adv_open_event_log">Open Event log</string>
 
+    <!-- Memory Manager hub (rows) — the entry point that groups the memory
+         browser, the (coming-soon) memory assistant, lorebooks and the memory
+         settings/plumbing screen. Owner-approved wording, July 8 2026. -->
+    <string name="title_memory_manager">Memory Manager</string>
+    <string name="row_memory_browser_title">Memory Browser</string>
+    <string name="row_memory_browser_subtitle">View, search, edit, approve, or remove saved and pending memories.</string>
+    <string name="row_memory_assistant_title">Memory Assistant</string>
+    <string name="row_memory_assistant_subtitle">Analyze conversation history and review pending memories.</string>
+    <string name="row_lorebooks_subtitle">Simple memory notes triggered invisibly by keywords for your companion.</string>
+    <string name="row_memory_settings_title">Memory Settings</string>
+    <string name="row_memory_settings_subtitle">Control how memory is saved, processed, backed up, and restored.</string>
+
+    <!-- Memory Assistant placeholder (to be designed later; ships with a
+         plain "Coming soon" until the real screen is approved). -->
+    <string name="title_memory_assistant">Memory Assistant</string>
+    <string name="memory_assistant_coming_soon">Coming soon.</string>
+
     <!-- Companion memory system (Phase 1: store, seed, backups) -->
-    <string name="title_memory_settings">Memory (experimental)</string>
+    <string name="title_memory_settings">Memory Settings</string>
     <string name="tile_memory_title">Memory system</string>
     <string name="tile_memory_desc">Long-term companion memory: status, starter seed, backups (experimental)</string>
     <string name="memory_settings_intro">The long-term memory store for your companions. This early version sets up the encrypted database, loads a starter seed, links your personas, and keeps backups. Memory doesn\'t influence conversations yet — that arrives in a later update.</string>
@@ -1050,7 +1067,7 @@
     <string name="memory_manage_hint">View, add and edit everything the memory system stores.</string>
     <!-- Memory browser -->
     <string name="title_memories">Memories</string>
-    <string name="memory_search_hint">Search memories</string>
+    <string name="memory_search_hint">Search Memories</string>
     <string name="memory_scope_global">Global</string>
     <string name="memory_scope_companion">Companion</string>
     <string name="memory_badge_archived">Archived</string>
@@ -1127,6 +1144,22 @@
     <string name="mem_status_superseded">Superseded</string>
     <string name="mem_source_hand">Entered by hand</string>
     <string name="mem_source_learned">Learned from chat</string>
+
+    <!-- Memory Filters slide-out panel (owner-approved wording, July 8 2026).
+         Category labels reuse the existing "Sort/Scope/Type/Status/Source"
+         strings above; the Tags label is plural here. Options render with their
+         first letter capitalised, per the style guide. -->
+    <string name="title_memory_filters">Memory Filters</string>
+    <string name="mem_filter_tags">Tags</string>
+    <string name="mem_filter_reset_full">Reset Filters</string>
+    <string name="mem_filter_open">Open Memory Filters</string>
+    <string name="mem_filter_close">Close Memory Filters</string>
+    <string name="mem_filter_remove">Remove filter</string>
+    <string name="mem_filter_option_all">All</string>
+    <string name="mem_filter_option_any">Any</string>
+    <string name="mem_filter_pending">Pending</string>
+    <string name="mem_row_icon">Memory type icon</string>
+    <string name="mem_row_edit">Edit memory</string>
 
     <!-- Pending screen (Stage 2.4) -->
     <string name="mem_pending_banner">Pending memories (%1$d) ›</string>
@@ -1551,7 +1584,7 @@
     <string name="mm_campaigns_desc">Ongoing roleplay playthroughs.</string>
 
     <!-- ============ Phase 5: Settings-page cards (Memory System / Roleplay) ============ -->
-    <string name="tile_memory_system_title">Memory System</string>
+    <string name="tile_memory_system_title">Memory Manager</string>
     <string name="tile_memory_system_desc">Everything your companions remember — memories, companions, personas and more.</string>
     <string name="tile_roleplay_title">Roleplay</string>
     <string name="tile_roleplay_desc">Worlds, campaigns and the characters you play.</string>

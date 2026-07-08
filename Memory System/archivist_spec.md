@@ -9,9 +9,12 @@
 > `owner_approved_rules.md` §13 + `roleplay_cards_and_tags_spec.md`
 > (card/ledger updates, NPC statuses, plot-ledger entries, tag
 > suggestions — each user-approved, four-way choice); and NOTHING writes
-> mid-conversation. `owner_approved_rules.md` (Revision 4) outranks this
-> file wherever they disagree. Still valid: the disposition, the
-> queue/exclusion model, corrections-first, and the
+> mid-conversation. `owner_approved_rules.md` (Revision 4) **and its
+> July 8 2026 addendum** outrank this file wherever they disagree. Note
+> (July 8 2026): **"Protected" is retired — the Archivist must NEVER emit a
+> protection/handling field or propose "protected" memories**; a sensitive
+> fact's care-note goes into the memory's own text. Still valid: the
+> disposition, the queue/exclusion model, corrections-first, and the
 > proposes-never-decides law.
 
 The Archivist is the memory system's historian. It never talks to the user. After conversations are finished, it reads the transcripts, updates the memory store, and keeps the whole brain coherent so the user never has to manage it by hand. Its voice exists only in the memories it writes, the change logs it keeps, and the proposals it files.

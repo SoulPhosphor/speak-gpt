@@ -120,8 +120,8 @@ Every memory has a scope. The scopes are:
 
 | Scope | Meaning |
 |---|---|
-| **Global** | Allowed everywhere, including inside roleplay — but still only shows up when it is active and relevant. |
-| **Real life** | Ordinary conversation only. Never enters fiction (see §3). |
+| **Global** | Standing rules and etiquette for how the AI should treat you — preferences, boundaries, and conduct that apply in every context, roleplay included (shown only when active and relevant). Not facts about your life; those are Real life. |
+| **Real life** | Facts about your actual life and world: people, places, your history, your body, your circumstances. Ordinary conversation only; never crosses into fiction (see §3). |
 | **Companion: _name_** | Tied to the relationship with a specific companion. Companion implies real life — never stack "real life + companion". |
 | **Project: _name_** | Belongs to a named project bucket (see §4). |
 | **World: _name_** | True in that fictional world, across its campaigns. |
@@ -579,3 +579,103 @@ final, until the owner confirms or amends it word by word at that time.)*
   owner promoted it into Stage 3, task 3.0 of
   `rag_engine_work_order.md`, because the §3 narrator rule and §12's
   Campaign tier both need it.)*
+
+---
+
+## Addendum — modifications approved in chat, July 8 2026
+
+**Read this first if you are building Phase 6 (the Archivist / Memory
+Assistant).** These decisions were approved in conversation on **July 8
+2026**, AFTER the Phase 5 ship and the Rev 4 roleplay work. They are
+modifications after the fact. Where they differ from ANYTHING earlier in this
+file or in any other memory-system document, **these win.** Old directions
+that contradict them have been removed from the docs; if you find a lingering
+one, it is stale — follow this addendum and fix the stale text.
+
+1. **Scope definitions tightened (§1).** Global = *standing rules and
+   etiquette for how the AI should treat the user* (preferences, boundaries,
+   conduct) that apply in every context, roleplay included. Real life =
+   *facts about the user's actual life and world* (people, places, history,
+   body, circumstances), ordinary conversation only, never crosses into
+   fiction. They stay SEPARATE scopes — the one real difference is that
+   Global may cross into roleplay and Real life may not (§3).
+
+2. **"Protected" is RETIRED as a user-facing concept.** It was a *handling*
+   concern, never a scope or type. Rule-like "protections" are now ordinary
+   **Global** memories (Instruction/Preference type); a sensitive fact stays
+   in its real scope with any care-note written **directly into the memory's
+   text**. The enforcer injects each memory whole or not at all (it never
+   truncates a memory's content), so a care-note in the text can never be
+   sheared off — the old separate handling field is unnecessary. The
+   Protect/Unprotect UI is removed. The DB `protection` column, the backup
+   codec field, and the inert `HANDLE WITH CARE` render stay DORMANT for
+   backup/import compatibility. **The Archivist must NOT propose "protected"
+   memories or emit any protection/handling field** — this overrides the
+   protection/handling machinery described in `archivist_spec.md`,
+   `enforcer_librarian_spec.md`, and `phase6_card_suggestions_and_icons_
+   design.md`.
+
+3. **Memory UI was restructured (chunked, owner-directed).** A new,
+   lightweight **Memory Manager** hub (`ui/activities/MemoryManagerActivity`,
+   reached from the renamed **Memory Manager** tile on the main Settings
+   screen) with four rows: **Memory Browser**, **Memory Assistant**,
+   **Lorebooks** (moved here out of Characters), **Memory Settings**. The old
+   "Memory (experimental)" screen is now **Memory Settings**. This is NOT the
+   deleted ten-area `ui/activities/memory/MemoryManagerActivity`.
+
+4. **Memory browser filters** are now a slide-out **Memory Filters** panel
+   (`MemoryFilterPanelActivity`) opened by a three-dots button beside the
+   search field — the old chip row is retired. Six sections: Sort, Scope,
+   Type, Status, Source, Tags. Sort/Source single-select; Scope/Type/Status/
+   Tags multi-select (pills, 10dp corners). **Status defaults to Active**;
+   `draft` status is shown to the user as **"Pending"**. Rows: a leading
+   scope icon, title, a dot-joined capitalised tag line (no hashtags), and a
+   content line; the **Active badge is suppressed** (draft/archived/
+   superseded still badge); the trailing action is an **edit-square** (not a
+   cog).
+
+5. **Memory-row icon system (FINAL — supersedes §5 of
+   `phase6_card_suggestions_and_icons_design.md`).** By scope:
+   real_life → `person`; **global → `borg`** (its own icon); companion →
+   `partner_exchange`; project → `draft`; rp_character → `theater_comedy`
+   (comedy mask); world/campaign (and unknown) → `public` (globe); **a memory
+   placed on a card → `book_5`** (overrides the scope icon). There are NO
+   corner-badge variants — an on-card memory swaps to the whole book_5 icon.
+   The rp_character (comedy mask) icon is a placeholder for a future dedicated
+   icon; the code keeps its branch separate so the split is cheap.
+
+6. **`book_5` / "on a card" is RESERVED and not reachable yet.** There is NO
+   link between a memory and a card in the data (card_entries has no
+   source-memory column; memories has no on-card flag). `isOnCard()` returns
+   false. **Building the memory→card placement flow and whatever marks a
+   memory as card-linked is a Phase 6 task** — section 6 of
+   `phase6_card_suggestions_and_icons_design.md` is only partially built (the
+   card tables exist; the placement flow and linkage do not). When you build
+   it, `isOnCard()` is the single hook and book_5 lights up.
+
+7. **The Memory Assistant page is the Phase 6 Archivist surface, and it is
+   NOT built.** Only a "Coming soon" placeholder (`MemoryAssistantActivity`)
+   exists. There is NO Archivist pipeline in code. The `proposals` table, the
+   `origin='archivist'` column, and the Archivist endpoint/model settings are
+   dormant storage only — nothing reads or writes them. Design the Memory
+   Assistant with the owner from scratch (a fresh conversation is planned
+   before it is built, because the injection/prompt plumbing is fragile). The
+   owner's approved layout, wording, and behavior for the page — plus the
+   backend plumbing it implies and the open questions still to settle — are
+   written up in **`Memory System/memory_assistant_design.md`** (July 8 2026).
+   Read it before building the screen.
+
+8. **Roleplay memory deletion cleanup is BUGGED (verified July 8 2026) — the
+   join tables are the source of truth for roleplay memory ownership.** The
+   world/campaign/RP-character teardown paths still select memories to
+   delete/keep by the single mirror column instead of the join table, so a
+   memory linked to several targets can be wrongly hard-deleted or
+   mishandled, and the mirror left stale. The verified diagnosis, the exact
+   fix logic (query the join table; keep vs delete; reassign the mirror), and
+   the required tests are in
+   **`Memory System/roleplay_memory_deletion_fix.md`**. Confirmed behavior: the
+   two-option UI **keeps shared memories** — "also delete this card's memories"
+   deletes only memories owned SOLELY by the deleted card; no "delete shared
+   too" option is built now (future UI decision only). Present bug in shipped
+   Stage 3.6 code; **owner-assigned to Phase 6** so it's tracked (may be fixed
+   sooner).

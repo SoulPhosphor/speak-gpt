@@ -288,6 +288,8 @@ Specs: `sqlite_table_plan.md`, `companion_memory_schema.json`,
   tombstone writes.
 - Settings entry: a "Memory (experimental)" screen showing store status,
   seed import, export now, auto-export toggle, and the companion records.
+  *(Historical: renamed **Memory Settings** and moved under the new Memory
+  Manager hub, July 8 2026 — see §1 addendum in `owner_approved_rules.md`.)*
 - **Visible result:** import the template seed, see companions/memories in
   the status screen, export a JSON and open it in a file manager.
 
@@ -698,13 +700,36 @@ coexistence, essence guardrail, failure behavior); D7 (compressor), D8.
 
 ### ☑ Phase 5 — Memory editor + companions/worlds/personas UI
 
+> **⚠️ UI restructure July 8 2026 (owner-directed, in chat).** The memory
+> surface is being reshaped one chunk at a time. Landed so far (branch
+> `claude/memory-manager-ui-restructure-6xqoyt`, CLAUDE.md has the detail):
+> - A NEW, lightweight **Memory Manager** hub (`ui/activities/
+>   MemoryManagerActivity`) is reached from the renamed **Memory Manager**
+>   tile on the main Settings screen. It is a four-row chevron hub: **Memory
+>   Browser**, **Memory Assistant** (a "Coming soon" placeholder — the future
+>   Phase-6 Archivist surface, owner to design next), **Lorebooks** (moved
+>   here out of the Characters hub; screens unchanged), **Memory Settings**.
+>   This is NOT the old ten-area `ui/activities/memory/MemoryManagerActivity`
+>   (still deleted); the name is reused for a different, smaller hub.
+> - The old **"Memory (experimental)"** screen is now **Memory Settings**
+>   (`MemorySettingsActivity`) — everything it had except the browser (which
+>   is the hub's top row).
+> - **Memory Browser** filters were reworked: the chip row is retired in
+>   favour of a three-dots button + a **Memory Filters** slide-out panel
+>   (`MemoryFilterPanelActivity`; Sort/Scope/Type/Status/Source/Tags, pills,
+>   auto-apply, Status defaults to Active). Rows got a leading scope icon,
+>   dot-joined capitalised tags, edit-square action, and the Active badge is
+>   suppressed. Icon mapping is INTERIM vs `phase6_card_suggestions_and_icons_
+>   design.md` §5 (on-card comedy-mask distinction is a Phase-6 dependency).
+>
 > **⚠️ Reworked July 6 2026 (Stage 1 of `Memory System/
 > phase5_rework_work_order.md`, per the owner's rulings).** The description
 > below is the ORIGINAL ship; the current state after Stage 1:
-> - The **Memory manager hub is gone** — "Browse & edit" opens the single
->   **global Memories browser** directly (all scopes/types; a Companions
->   link in its action bar; opened pre-filtered from each companion/world/
->   campaign/RP-character page's Memories button).
+> - The old ten-area **Memory manager hub is gone** — the **global Memories
+>   browser** is opened directly (all scopes/types; a Companions link in its
+>   action bar; opened pre-filtered from each companion/world/campaign/
+>   RP-character page's Memories button). (Since July 8 2026 it is reached
+>   from the new Memory Manager hub's top row — see the box above.)
 > - **Modes, Directives, Entities, and Owner-profile screens were deleted**
 >   (tables + store CRUD stay dormant): entities/owner-profile are retired
 >   concepts — real people are ordinary scope/type memories, the user is
@@ -733,7 +758,9 @@ coexistence, essence guardrail, failure behavior); D7 (compressor), D8.
 >   old pop-up editor was removed.
 > - The **browser** got the full filter/sort chip row (scope/type/status/
 >   source/tag + sort + Reset), and a pinned **Pending** banner opening the
->   **Pending screen** (`MemoryPendingActivity`, §14).
+>   **Pending screen** (`MemoryPendingActivity`, §14). *(The chip row was
+>   RETIRED July 8 2026 — replaced by the slide-out Memory Filters panel; see
+>   the July 8 note at the top of this phase.)*
 > - **Reset memories** (Memory settings) empties every memory-content table with
 >   a backup-first option. **Quick Settings** gained a per-chat **Project**
 >   selector (§4).
@@ -745,7 +772,12 @@ coexistence, essence guardrail, failure behavior); D7 (compressor), D8.
 > amendment above) are all live. Stage 4 (Model rules) is not built. Read
 > the work order + the roleplay spec's §9 before touching Phase 5 UI.
 
-**Landed July 2026.** What shipped: a **Memory manager** hub
+**Landed July 2026.** *(Historical — this original ten-area hub
+`ui/activities/memory/MemoryManagerActivity` was REMOVED in the Phase-5
+rework and stays removed; a new, different four-row Memory Manager hub
+`ui/activities/MemoryManagerActivity` exists as of July 8 2026. See the boxes
+at the top of this phase + the addendum in `owner_approved_rules.md`.)* What
+shipped originally: a **Memory manager** hub
 (`ui/activities/memory/MemoryManagerActivity`, reached from a "Browse & edit"
 button in Memory settings) linking ten areas, all on a shared framework —
 `MemoryScreenActivity` (abstract themed list scaffold: back/AMOLED/insets/
@@ -811,6 +843,27 @@ authority.
   every troubleshooting_guide workflow has a place to happen.
 
 ### ☐ Phase 6 — Archivist pipeline + proposals + run reports
+
+> **⚠ READ FIRST (July 8 2026): current authority for this phase.** Before
+> anything else, read the **"Addendum — modifications approved in chat,
+> July 8 2026"** at the end of `owner_approved_rules.md` — it is written for
+> the Phase 6 builder and states what is retired and what changed (Protected
+> retired; scope definitions tightened; the memory UI restructure; the final
+> icon system; and that the Archivist/Memory Assistant is NOT built). The
+> **Memory Assistant screen** (this phase's user-facing surface) is fully
+> specced with the owner's approved wording + the plumbing it implies in
+> **`Memory System/memory_assistant_design.md`**. Where those disagree with
+> anything below or in the pre-revision specs, they WIN.
+>
+> **Phase 6 also OWNS this bug fix (owner-assigned July 8 2026):** roleplay
+> memory deletion cleanup must use the join tables as the source of truth, not
+> the mirror columns (`deleteWorld`/`deleteCampaign`/`deleteRoleplayCharacter`
+> currently mis-handle multi-target memories). Full diagnosis, fix logic, the
+> owner-confirmed keep-shared behavior, and the required tests are in
+> **`Memory System/roleplay_memory_deletion_fix.md`**. (It is a present
+> Stage-3.6 bug and may be fixed sooner, but it is tracked here so it isn't
+> lost.)
+
 Specs: `archivist_spec.md`, `archivist_prompt.md` (send verbatim with
 injections), `enforcer_librarian_spec.md` §Applying change-sets; D7.
 

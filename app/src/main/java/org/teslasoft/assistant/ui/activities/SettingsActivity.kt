@@ -834,7 +834,7 @@ class SettingsActivity : FragmentActivity() {
         }
 
         tileMemorySystem?.setOnTileClickListener {
-            startActivity(Intent(this, MemorySettingsActivity::class.java).putExtra("chatId", chatId))
+            startActivity(Intent(this, MemoryManagerActivity::class.java).putExtra("chatId", chatId))
         }
 
         tileRoleplay?.setOnTileClickListener {

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- No-op animation used as the paired anim while the slide-in/out plays,
+     so the underlying browser doesn't jump around. -->
+<translate xmlns:android="http://schemas.android.com/apk/res/android"
+    android:duration="220"
+    android:fromXDelta="0"
+    android:toXDelta="0" />
