@@ -48,7 +48,8 @@ class CharactersActivity : FragmentActivity() {
     private var tilePersonas: TileFragment? = null
     private var tileMyPersonas: TileFragment? = null
     private var tileActivationPrompts: TileFragment? = null
-    private var tileLoreBooks: TileFragment? = null
+    // Lorebooks moved to the Memory Manager (owner ruling, July 8 2026): they
+    // are memory notes, so they belong with the rest of the memory system.
 
     private var personasActivityResultLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
@@ -155,25 +156,10 @@ class CharactersActivity : FragmentActivity() {
             transitionName = "expand_activation_list"
         )
 
-        tileLoreBooks = TileFragment.newInstance(
-            checked = false,
-            checkable = false,
-            enabledText = getString(R.string.tile_lorebooks_title),
-            disabledText = null,
-            enabledDesc = getString(R.string.tile_lorebooks_desc),
-            disabledDesc = null,
-            icon = R.drawable.ic_book,
-            disabled = false,
-            chatId = chatId,
-            functionDesc = getString(R.string.tile_lorebooks_desc),
-            transitionName = null
-        )
-
         supportFragmentManager.beginTransaction()
             .replace(R.id.tile_personas_entry, tilePersonas!!)
             .replace(R.id.tile_my_personas_entry, tileMyPersonas!!)
             .replace(R.id.tile_activation_prompts_entry, tileActivationPrompts!!)
-            .replace(R.id.tile_lorebooks_entry, tileLoreBooks!!)
             .commit()
 
         tilePersonas?.setOnTileClickListener {
@@ -191,10 +177,6 @@ class CharactersActivity : FragmentActivity() {
 
         tileActivationPrompts?.setOnTileClickListener {
             startActivity(Intent(this, ActivationPromptsListActivity::class.java))
-        }
-
-        tileLoreBooks?.setOnTileClickListener {
-            startActivity(Intent(this, LoreBooksListActivity::class.java))
         }
     }
 

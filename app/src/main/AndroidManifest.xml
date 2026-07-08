@@ -240,6 +240,20 @@
         </activity>
 
         <activity
+            android:name=".ui.activities.MemoryManagerActivity"
+            android:exported="false"
+            android:label="@string/title_memory_manager"
+            android:launchMode="singleTask">
+        </activity>
+
+        <activity
+            android:name=".ui.activities.MemoryAssistantActivity"
+            android:exported="false"
+            android:label="@string/title_memory_assistant"
+            android:launchMode="singleTask">
+        </activity>
+
+        <activity
             android:name=".ui.activities.memory.ModelRulesActivity"
             android:exported="false"
             android:label="@string/row_model_rules_title" />

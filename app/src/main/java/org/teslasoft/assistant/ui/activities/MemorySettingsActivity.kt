@@ -80,7 +80,6 @@ class MemorySettingsActivity : FragmentActivity() {
     private var btnBack: ImageButton? = null
 
     private var textStatus: TextView? = null
-    private var btnMemoryBrowser: MaterialButton? = null
     private var btnImport: MaterialButton? = null
     private var btnExport: MaterialButton? = null
     private var btnBootstrap: MaterialButton? = null
@@ -140,7 +139,6 @@ class MemorySettingsActivity : FragmentActivity() {
         actionBar = findViewById(R.id.action_bar)
         btnBack = findViewById(R.id.btn_back)
         textStatus = findViewById(R.id.text_memory_status)
-        btnMemoryBrowser = findViewById(R.id.btn_memory_browser)
         btnImport = findViewById(R.id.btn_memory_import)
         btnExport = findViewById(R.id.btn_memory_export)
         btnBootstrap = findViewById(R.id.btn_memory_bootstrap)
@@ -188,14 +186,8 @@ class MemorySettingsActivity : FragmentActivity() {
     private fun initLogic() {
         btnBack?.setOnClickListener { finish() }
 
-        // "Browse & edit" opens the single global Memories browser directly (the
-        // memory-manager hub was removed — owner_approved_rules.md, July 6 2026).
-        btnMemoryBrowser?.setOnClickListener {
-            startActivity(
-                android.content.Intent(this, org.teslasoft.assistant.ui.activities.memory.MemoryBrowserActivity::class.java)
-                    .putExtra("chatId", chatId)
-            )
-        }
+        // The Memories browser now lives as the top row of the Memory Manager
+        // hub (owner ruling, July 8 2026); this screen keeps only the plumbing.
 
         // Import restores the user's OWN exported memory file (SAF picker →
         // the encrypted store). The app ships no example/default memory data.
