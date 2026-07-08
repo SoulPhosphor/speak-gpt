@@ -659,4 +659,8 @@ one, it is stale — follow this addendum and fix the stale text.
    `origin='archivist'` column, and the Archivist endpoint/model settings are
    dormant storage only — nothing reads or writes them. Design the Memory
    Assistant with the owner from scratch (a fresh conversation is planned
-   before it is built, because the injection/prompt plumbing is fragile).
+   before it is built, because the injection/prompt plumbing is fragile). The
+   owner's approved layout, wording, and behavior for the page — plus the
+   backend plumbing it implies and the open questions still to settle — are
+   written up in **`Memory System/memory_assistant_design.md`** (July 8 2026).
+   Read it before building the screen.
