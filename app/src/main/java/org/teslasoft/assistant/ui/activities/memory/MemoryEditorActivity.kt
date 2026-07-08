@@ -96,6 +96,8 @@ class MemoryEditorActivity : FragmentActivity() {
 
     // Loaded pick lists (id -> name), populated off-thread once.
     private val companionItems = LinkedHashMap<String, String>()
+    /** ALL companions (drafts included) for id→name display only. */
+    private val companionNames = LinkedHashMap<String, String>()
     private val projectItems = LinkedHashMap<String, String>()
     private val worldItems = LinkedHashMap<String, String>()
     private val campaignItems = LinkedHashMap<String, String>()
@@ -163,6 +165,12 @@ class MemoryEditorActivity : FragmentActivity() {
                 return@runOffThread
             }
             val store = MemoryStore.getInstance(this)
+            // The PICKER offers approved companions only, but name display
+            // must resolve every id — the owner's rule (July 8 2026): the
+            // internal identifier is never shown; always the current name.
+            // A memory can point at a draft companion (auto-created on first
+            // contact), and its pill used to leak the raw id.
+            store.getCompanions().forEach { companionNames[it.companionId] = it.currentName }
             store.getCompanions().filter { it.status != "draft" }.forEach { companionItems[it.companionId] = it.currentName }
             store.getProjects().forEach { projectItems[it.projectId] = it.name }
             store.getAllWorlds().forEach { worldItems[it.worldId] = it.name }
@@ -218,7 +226,10 @@ class MemoryEditorActivity : FragmentActivity() {
         else -> LinkedHashMap()
     }
 
-    private fun nameFor(scope: String, id: String): String = itemsForScope(scope)[id] ?: id
+    private fun nameFor(scope: String, id: String): String =
+        itemsForScope(scope)[id]
+            ?: (if (scope == "companion") companionNames[id] else null)
+            ?: id
 
     /* ------------------------------ type ------------------------------ */
 
