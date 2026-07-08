@@ -183,6 +183,25 @@ class TargetTeardownPlannerTest {
     }
 
     @Test
+    fun companion_sharedMemorySurvives_soleOwnedDeleted() {
+        // Owner answer 5 (July 8 2026): "if the other companion that it's
+        // linked to is still active or existing then the memory should not be
+        // deleted." Companions have no mirror column, so mirrorId is null and
+        // no mirror writes may be planned.
+        val plan = TargetTeardownPlanner.plan(
+            targetId = "comp-a",
+            owned = listOf(
+                OwnedMemory("shared", otherOwnerIds = listOf("comp-b"), mirrorId = null),
+                OwnedMemory("sole", otherOwnerIds = emptyList(), mirrorId = null)
+            ),
+            deleteMemories = true
+        )
+        assertEquals(listOf("sole"), plan.deleteMemoryIds)
+        assertEquals(listOf("shared"), plan.unlinkMemoryIds)
+        assertTrue(plan.mirrorReassignments.isEmpty())
+    }
+
+    @Test
     fun multipleSurvivingOwners_mirrorGetsOneOfThem() {
         val plan = TargetTeardownPlanner.plan(
             targetId = "campaign-c",

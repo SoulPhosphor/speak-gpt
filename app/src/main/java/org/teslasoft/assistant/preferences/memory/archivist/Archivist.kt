@@ -86,6 +86,21 @@ object Archivist {
     )
 
     /**
+     * Live progress for the Memory Assistant's running state (owner answer 4,
+     * July 8 2026). One batch → the screen shows the plain "Conversation
+     * x of x"; several → the owner's batch wording ("Conversations will be
+     * batched due to size. / Batch One / x of x Conversations"). Batching is
+     * display grouping only — every conversation still gets its own model
+     * call(s); see [ArchivistBatchPlanner].
+     */
+    data class Progress(
+        val batchIndex: Int,            // 1-based
+        val batchCount: Int,
+        val conversationInBatch: Int,   // 1-based, within the current batch
+        val conversationsInBatch: Int
+    )
+
+    /**
      * Live eligibility (owner rules: a query on CURRENT state, never a stored
      * watermark): pending, unprocessed, and belonging to a chat that still
      * exists. Deleted conversations don't count; a chat re-included after
@@ -107,16 +122,16 @@ object Archivist {
      *  would analyze next), NOT anything keyed to backups. */
     fun eligibleConversationCount(context: Context): Int = eligibleConversations(context).size
 
-    /** Analyze every currently-eligible conversation in one batch (the
-     *  design's "Conversation N of M" model). */
-    suspend fun analyze(context: Context, onProgress: (current: Int, total: Int) -> Unit): RunOutcome =
+    /** Analyze every currently-eligible conversation (the user may queue any
+     *  number — owner answer 4; size batching happens inside). */
+    suspend fun analyze(context: Context, onProgress: (Progress) -> Unit): RunOutcome =
         run(context, eligibleConversations(context), markProcessed = true, onProgress = onProgress)
 
     /** Re-analyze a past run's conversations (the Rerun row action): re-feeds
      *  exactly the transcript rows that run stored, for chats that still
      *  exist. Files any NEW findings as drafts (existing identical drafts are
      *  deduplicated); records a fresh run row. */
-    suspend fun rerun(context: Context, runId: String, onProgress: (current: Int, total: Int) -> Unit): RunOutcome {
+    suspend fun rerun(context: Context, runId: String, onProgress: (Progress) -> Unit): RunOutcome {
         val store = MemoryStore.getInstance(context)
         val past = store.getArchivistRun(runId)
             ?: return RunOutcome(null, 0, 0, 0, emptyList(), error = "run not found")
@@ -133,7 +148,7 @@ object Archivist {
         context: Context,
         conversations: List<Conversation>,
         markProcessed: Boolean,
-        onProgress: (current: Int, total: Int) -> Unit
+        onProgress: (Progress) -> Unit
     ): RunOutcome {
         val prefs = Preferences.getPreferences(context, "")
         val endpointId = prefs.getArchivistEndpointId()
@@ -159,46 +174,68 @@ object Archivist {
         var runError: String? = null
 
         try {
-            val total = conversations.size
-            for ((index, conversation) in conversations.withIndex()) {
-                onProgress(index + 1, total)
-                try {
-                    val companionName = conversation.transcripts
-                        .firstNotNullOfOrNull { it.companionId }
-                        ?.let { store.getCompanion(it)?.currentName }
-                    val response = ai.chatCompletion(
-                        ChatCompletionRequest(
-                            model = ModelId(model),
-                            messages = listOf(
-                                ChatMessage(role = ChatRole.System, content = ArchivistPrompt.SYSTEM),
-                                ChatMessage(
-                                    role = ChatRole.User,
-                                    content = ArchivistPrompt.userMessage(
-                                        conversation.chatName, companionName, conversation.transcripts
+            // Display batches (owner answer 4): size-grouped, presentation
+            // only — requests stay per conversation (or per chunk below).
+            val batches = ArchivistBatchPlanner.planBatches(
+                conversations.map { c -> c.transcripts.sumOf { it.content.length } }
+            )
+            for ((batchIndex, range) in batches.withIndex()) {
+                val batch = conversations.slice(range)
+                for ((posInBatch, conversation) in batch.withIndex()) {
+                    onProgress(Progress(batchIndex + 1, batches.size, posInBatch + 1, batch.size))
+                    try {
+                        val companionName = conversation.transcripts
+                            .firstNotNullOfOrNull { it.companionId }
+                            ?.let { store.getCompanion(it)?.currentName }
+                        // A single oversized conversation (the "30 pages" case)
+                        // is split across several calls, whole rows at a time,
+                        // so one request never overruns the model's context.
+                        val chunks = ArchivistBatchPlanner.splitIntoRequests(
+                            conversation.transcripts.map { it.content.length }
+                        )
+                        if (chunks.size > 1) {
+                            MemoryLog.log(context, "Archivist", "info",
+                                "chat=${conversation.chatId}: oversized conversation split into ${chunks.size} requests")
+                        }
+                        for (chunk in chunks) {
+                            val rows = chunk.map { conversation.transcripts[it] }
+                            val response = ai.chatCompletion(
+                                ChatCompletionRequest(
+                                    model = ModelId(model),
+                                    messages = listOf(
+                                        ChatMessage(role = ChatRole.System, content = ArchivistPrompt.SYSTEM),
+                                        ChatMessage(
+                                            role = ChatRole.User,
+                                            content = ArchivistPrompt.userMessage(
+                                                conversation.chatName, companionName, rows
+                                            )
+                                        )
                                     )
                                 )
                             )
-                        )
-                    )
-                    val raw = response.choices.firstOrNull()?.message?.content.orEmpty()
-                    val parsed = ArchivistResponseParser.parse(raw)
-                    if (parsed.dropped > 0) {
-                        MemoryLog.log(context, "Archivist", "warn",
-                            "chat=${conversation.chatId}: ${parsed.dropped} proposal(s) failed validation and were dropped")
+                            val raw = response.choices.firstOrNull()?.message?.content.orEmpty()
+                            val parsed = ArchivistResponseParser.parse(raw)
+                            if (parsed.dropped > 0) {
+                                MemoryLog.log(context, "Archivist", "warn",
+                                    "chat=${conversation.chatId}: ${parsed.dropped} proposal(s) failed validation and were dropped")
+                            }
+                            fileMemoryDrafts(context, store, conversation, parsed.memories, memoryIds)
+                            fileRuleDrafts(context, store, conversation, parsed.rules, ruleIds)
+                        }
+                        if (markProcessed) {
+                            store.markTranscriptsProcessed(conversation.transcripts.map { it.transcriptId })
+                        }
+                        analyzedChatIds.add(conversation.chatId)
+                        fedTranscriptIds.addAll(conversation.transcripts.map { it.transcriptId })
+                    } catch (e: Exception) {
+                        // One conversation failing must not sink the run: its
+                        // rows stay pending for the next run (drafts a partial
+                        // chunk already filed stay pending drafts; the text
+                        // dedup stops identical refiling on the retry).
+                        failedChats.add(conversation.chatId)
+                        MemoryLog.log(context, "Archivist", "error",
+                            "chat=${conversation.chatId} failed: ${e.message}")
                     }
-                    fileMemoryDrafts(context, store, conversation, parsed.memories, memoryIds)
-                    fileRuleDrafts(context, store, conversation, parsed.rules, ruleIds)
-                    if (markProcessed) {
-                        store.markTranscriptsProcessed(conversation.transcripts.map { it.transcriptId })
-                    }
-                    analyzedChatIds.add(conversation.chatId)
-                    fedTranscriptIds.addAll(conversation.transcripts.map { it.transcriptId })
-                } catch (e: Exception) {
-                    // One conversation failing must not sink the run: its rows
-                    // stay pending for the next run.
-                    failedChats.add(conversation.chatId)
-                    MemoryLog.log(context, "Archivist", "error",
-                        "chat=${conversation.chatId} failed: ${e.message}")
                 }
             }
         } catch (e: Exception) {

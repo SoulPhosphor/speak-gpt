@@ -20,11 +20,13 @@ This was a **real bug in already-shipped code** (Stage 3.6f card teardown),
 **owner-assigned to Phase 6 (July 8 2026)** — see the Phase 6 section of
 `memory-system-integration-plan.md`.
 
-Noted during the build, NOT changed (needs an owner decision — same shape,
-different scope): `deleteCompanion` is already join-based but its
-delete-memories option hard-deletes every linked memory even when the memory
-is also linked to another companion. Whether companions should get the same
-sole-owned-only rule is an open question for the owner.
+Companion deletion was flagged during the build as the same bug shape, and
+the owner ruled the same day (answer 5, `phase6_owner_answers_2026-07-08.md`):
+companions follow the sole-owner rule too. **✅ Fixed:** `deleteCompanion`
+now plans through `TargetTeardownPlanner` — "also delete its memories"
+removes only sole-owned memories; a memory shared with another companion
+survives with the dead link removed (companions have no mirror column, so no
+mirror handling applies).
 
 ## Implementation checklist (owner-confirmed, July 8 2026)
 

@@ -3009,29 +3009,45 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
 
     /**
      * Removes a companion from the memory system (its persona/character card is
-     * app-owned and untouched — only the memory-side record goes). Follows the
-     * [deleteRoleplayCharacter] pattern: tombstone for future cross-device
-     * merge; [deleteMemories] decides whether this companion's memories go with
-     * it or stay. memory_companions has ON DELETE CASCADE on the memory side but
-     * nothing on the companion side, so its links to this companion are scrubbed
-     * explicitly first (a dangling FK would block the companion delete).
+     * app-owned and untouched — only the memory-side record goes). Tombstone
+     * for future cross-device merge. Memories follow the owner's sole-owner
+     * rule (answer 5, `phase6_owner_answers_2026-07-08.md`): [deleteMemories]
+     * removes only memories owned SOLELY by this companion — "if the other
+     * companion that it's linked to is still active or existing then the
+     * memory should not be deleted." Shared memories keep, with this
+     * companion's link removed. memory_companions has ON DELETE CASCADE on the
+     * memory side but nothing on the companion side, so surviving links are
+     * scrubbed explicitly (a dangling FK would block the companion delete).
+     * Companions have no mirror column on memories, so the planner's mirror
+     * reassignments are always empty here.
      */
     fun deleteCompanion(companionId: String, deleteMemories: Boolean) {
         val db = writableDatabase
         db.beginTransaction()
         try {
-            if (deleteMemories) {
-                // Every memory linked to this companion is removed; deleting the
-                // memory rows cascades their memory_companions links away.
-                deleteMemoriesWhere(
-                    db,
-                    "memory_id IN (SELECT memory_id FROM memory_companions WHERE companion_id = ?)",
-                    arrayOf(companionId)
-                )
+            val owned = ArrayList<TargetTeardownPlanner.OwnedMemory>()
+            db.query(
+                "memory_companions", arrayOf("memory_id"), "companion_id = ?",
+                arrayOf(companionId), null, null, "memory_id ASC"
+            ).use { c ->
+                while (c.moveToNext()) {
+                    val memoryId = c.getString(0)
+                    val others = ArrayList<String>()
+                    db.query(
+                        "memory_companions", arrayOf("companion_id"),
+                        "memory_id = ? AND companion_id != ?", arrayOf(memoryId, companionId),
+                        null, null, "companion_id ASC"
+                    ).use { oc -> while (oc.moveToNext()) others.add(oc.getString(0)) }
+                    owned.add(TargetTeardownPlanner.OwnedMemory(memoryId, others, mirrorId = null))
+                }
             }
-            // Scrub any surviving links to this companion (the whole set when
-            // memories are kept; a no-op safety net when they were deleted) so
-            // no memory references a companion that no longer exists.
+            val plan = TargetTeardownPlanner.plan(companionId, owned, deleteMemories)
+            for (memoryId in plan.deleteMemoryIds) {
+                deleteMemoriesWhere(db, "memory_id = ?", arrayOf(memoryId))
+            }
+            // Scrub every remaining link to this companion (the kept/shared
+            // memories' rows plus any stragglers) so no memory references a
+            // companion that no longer exists.
             db.delete("memory_companions", "companion_id = ?", arrayOf(companionId))
             db.delete("companions", "companion_id = ?", arrayOf(companionId))
             recordDeletionTx(db, "companion", companionId)
