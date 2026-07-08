@@ -671,7 +671,11 @@ one, it is stale — follow this addendum and fix the stale text.
    delete/keep by the single mirror column instead of the join table, so a
    memory linked to several targets can be wrongly hard-deleted or
    mishandled, and the mirror left stale. The verified diagnosis, the exact
-   fix logic (query the join table; keep vs delete vs shared; reassign the
-   mirror), and the required tests are in
-   **`Memory System/roleplay_memory_deletion_fix.md`**. This is a present bug
-   in shipped Stage 3.6 code, fixable independently of Phase 6.
+   fix logic (query the join table; keep vs delete; reassign the mirror), and
+   the required tests are in
+   **`Memory System/roleplay_memory_deletion_fix.md`**. Confirmed behavior: the
+   two-option UI **keeps shared memories** — "also delete this card's memories"
+   deletes only memories owned SOLELY by the deleted card; no "delete shared
+   too" option is built now (future UI decision only). Present bug in shipped
+   Stage 3.6 code; **owner-assigned to Phase 6** so it's tracked (may be fixed
+   sooner).

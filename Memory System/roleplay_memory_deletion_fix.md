@@ -6,9 +6,24 @@ not the fix itself** — nothing is built here.*
 
 ## Status / scope
 
-This is a **real bug in already-shipped code** (Stage 3.6f card teardown), not
-a Phase-6-only concern — it can be fixed independently, any time. It is filed
-with the Phase 6 material because it lives in the same memory/roleplay tables.
+This is a **real bug in already-shipped code** (Stage 3.6f card teardown). It
+could be fixed independently at any time, but the **owner assigned it to
+Phase 6 (July 8 2026)** so it is tracked and taken care of there — see the
+Phase 6 section of `memory-system-integration-plan.md`.
+
+## Implementation checklist (owner-confirmed, July 8 2026)
+
+- Use the **join tables** as the source of truth for ownership.
+- **Unlink** the deleted target from shared memories (memories also linked to
+  other valid cards).
+- When the user chose **delete memories**, delete **only** memories whose
+  **only** owner is the deleted target ("also delete this card's memories"
+  means the card's *sole-owned* memories — never ones still linked elsewhere).
+- **Reassign or clear** the mirror column after unlinking.
+- **Prevent orphaned** roleplay memories (scope set but no valid owner left).
+- Add the tests listed below.
+- **Do NOT add a "delete shared memories too" option now** — the two-option UI
+  keeps shared memories. A third option is a **future UI decision only**.
 
 ## What I verified in the code (evidence)
 
@@ -113,11 +128,10 @@ Run each for **World, Campaign, and RP character**:
 4. (Added) Memory linked to A and B with mirror = B; delete B + keep → mirror
    reassigned to A (not left null).
 
-## Minor open question
+## Resolved: the "broader delete" question (owner, July 8 2026)
 
-The ruling mentions "unless the user explicitly chooses a broader delete
-behavior." The current UI is a single yes/no ("also delete this card's
-memories?") with no "delete even memories shared with other cards" option. The
-logic above treats shared memories as kept-by-default on delete. If the owner
-wants a third, explicit "delete shared too" choice, that's a separate UI
-decision — not assumed here.
+**Keep the two-option UI. Shared memories are always kept.** "Also delete this
+card's memories" means only the memories owned **solely** by the deleted card,
+never ones still linked to other valid cards. **Do NOT add a "delete shared
+memories too" option now** — that is a **future UI decision only**, not to be
+built as part of this fix.
