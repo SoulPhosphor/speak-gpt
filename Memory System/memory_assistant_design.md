@@ -24,13 +24,23 @@ storage notes in `CLAUDE.md` first.
 
 ### Facts block (three lines)
 
-> Total conversations since last backup: `x`
+> Total conversations since last run: `x`
 > Conversations pending review: `x`
 > Date of last backup: `July 5, 2026`
 
-⚠️ **Open question — resolve with owner before building (see §3.1).** The first
-line says "since last backup", but the behavior note in §2 says "since last
-**run**". These are different numbers. Confirm which the top line means.
+**Resolved (owner, July 8 2026): the first line counts conversations since the
+last ANALYSIS RUN, not the last backup.** A *run* is an analysis pass — the
+Archivist reading conversations and filing suggested memories into Pending; a
+*backup* is a separate thing entirely (exporting the store to a JSON file, in
+Memory Settings) and never pulls or suggests anything. Keying the count off the
+run is what lets the user re-run a grouping even when it previously found
+nothing. This count excludes deleted conversations (§2).
+
+⚠️ **Small remaining sub-question (§3.1):** the first line is now "since last
+run" but the third line is still "Date of last **backup**". Backup date is a
+genuine safety fact (what isn't exported yet), but the framing is mixed —
+confirm whether the third line should stay "Date of last backup", change to
+"Date of last run", or show both.
 
 ### The button
 
@@ -99,8 +109,10 @@ line says "since last backup", but the behavior note in §2 says "since last
 
 ## 3. Open questions to settle with the owner before building
 
-1. **"since last backup" vs "since last run"** on the facts block's first line
-   (see §1). Which metric, and is the label right?
+1. ~~"since last backup" vs "since last run"~~ **RESOLVED (July 8 2026): the
+   first line counts since the last analysis RUN.** Sub-question still open:
+   should the third line stay "Date of last backup", become "Date of last
+   run", or show both? (See §1.)
 2. **"View pending memories" target**: the filtered browser (as written) vs the
    existing `MemoryPendingActivity`. Confirm.
 3. **Recent-runs count**: 3 or 5 (or a fixed 5)?
@@ -120,9 +132,13 @@ exists yet.
 ### Facts block — data sources (mostly already in `MemoryStore`)
 - "Conversations pending review" → `MemoryStore.pendingReviewCount()` (exists).
 - "Date of last backup" → `getMeta(META_LAST_AUTO_EXPORT_AT)` (exists).
-- "Total conversations since last backup" → `chatsSinceLastBackup()` (exists) —
-  BUT see the open question; if the owner means "since last **run**", that's a
-  NEW metric off the run history below, and it must exclude deleted chats.
+- "Total conversations since last run" → **NEW metric** (owner chose "since
+  last run", NOT the backup). This is the count of conversations eligible to
+  analyze that haven't been analyzed since the last run — in practice the same
+  eligibility set as below (`transcripts` pending & unprocessed, existing
+  chats only), which is exactly what the button would process next. Do NOT use
+  `chatsSinceLastBackup()` for this line. (`chatsSinceLastBackup()` stays
+  available only if the third line keeps the backup framing.)
 
 ### Eligibility (what a run analyzes)
 - Source is the `transcripts` table: `review_status` ∈ {`pending`,`processed`,
