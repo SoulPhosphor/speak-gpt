@@ -664,6 +664,12 @@ one, it is stale — follow this addendum and fix the stale text.
    backend plumbing it implies and the open questions still to settle — are
    written up in **`Memory System/memory_assistant_design.md`** (July 8 2026).
    Read it before building the screen.
+   *(Status note, not a rule change: as of later on July 8 2026, in the
+   Phase 6 conversation this item anticipated, the run-engine BACKEND exists
+   on the Phase 6 branch — drafts-only, per rules; `origin='archivist'` and
+   the endpoint/model settings are now read by it. The screen is still the
+   placeholder; the design doc's §3 open questions remain with the owner;
+   the `proposals` table stays dormant.)*
 
 8. **Roleplay memory deletion cleanup is BUGGED (verified July 8 2026) — the
    join tables are the source of truth for roleplay memory ownership.** The

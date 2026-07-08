@@ -49,7 +49,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
 
     companion object {
         const val DATABASE_NAME = "companion_memory.db"
-        private const val DATABASE_VERSION = 10
+        private const val DATABASE_VERSION = 11
 
         // Freshness-cooldown source types (rules §10 / Stage 3.3): the
         // composite key (chat_id, source_type, entry_id) keeps ids from
@@ -452,6 +452,25 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 "quick_settings_json TEXT, " +
                 "review_status TEXT NOT NULL DEFAULT 'pending' CHECK (review_status IN ('pending','processed','excluded')), " +
                 "processed_at TEXT)"
+        )
+
+        // Archivist run history (Phase 6, DB v11): powers the Memory
+        // Assistant's "Recent Memory Analysis" list and its Rerun action.
+        // Device-local operational data — never exported (like embeddings),
+        // no tombstones.
+        db.execSQL(
+            "CREATE TABLE archivist_runs (" +
+                "run_id TEXT PRIMARY KEY, " +
+                "started_at TEXT NOT NULL, " +
+                "finished_at TEXT, " +
+                "status TEXT NOT NULL CHECK (status IN ('complete','failed')), " +
+                "chat_ids_json TEXT NOT NULL DEFAULT '[]', " +
+                "transcript_ids_json TEXT NOT NULL DEFAULT '[]', " +
+                "memory_ids_json TEXT NOT NULL DEFAULT '[]', " +
+                "rule_ids_json TEXT NOT NULL DEFAULT '[]', " +
+                "found_count INTEGER NOT NULL DEFAULT 0, " +
+                "failed_chat_ids_json TEXT NOT NULL DEFAULT '[]', " +
+                "error TEXT)"
         )
 
         db.execSQL(
@@ -1048,6 +1067,29 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             db.execSQL(
                 "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                 arrayOf(META_DB_MIGRATION, "10")
+            )
+        }
+        if (oldVersion < 11) {
+            // v11 (July 2026, Phase 6): Archivist run history. Purely
+            // additive; starts empty — rows are written only by real analysis
+            // runs. See the onCreate comment for what it powers.
+            db.execSQL(
+                "CREATE TABLE archivist_runs (" +
+                    "run_id TEXT PRIMARY KEY, " +
+                    "started_at TEXT NOT NULL, " +
+                    "finished_at TEXT, " +
+                    "status TEXT NOT NULL CHECK (status IN ('complete','failed')), " +
+                    "chat_ids_json TEXT NOT NULL DEFAULT '[]', " +
+                    "transcript_ids_json TEXT NOT NULL DEFAULT '[]', " +
+                    "memory_ids_json TEXT NOT NULL DEFAULT '[]', " +
+                    "rule_ids_json TEXT NOT NULL DEFAULT '[]', " +
+                    "found_count INTEGER NOT NULL DEFAULT 0, " +
+                    "failed_chat_ids_json TEXT NOT NULL DEFAULT '[]', " +
+                    "error TEXT)"
+            )
+            db.execSQL(
+                "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                arrayOf(META_DB_MIGRATION, "11")
             )
         }
     }
@@ -2107,6 +2149,175 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 arrayOf(chatId)
             )
         }
+    }
+
+    /* ---------------------------------------------------------------------- */
+    /* Archivist (Phase 6): eligibility readers, draft filing, run history     */
+    /*                                                                         */
+    /* The Archivist only ever files DRAFTS (owner rules: it proposes, the     */
+    /* user decides). Memory drafts are memories.status='draft' rows — their   */
+    /* ONE home (§14); the dormant proposals table is never used for them.     */
+    /* Eligibility is a live query on current state, never a stored watermark  */
+    /* (design: re-enabled conversations must be caught; deleted chats are     */
+    /* filtered by the caller against the app's live chat list, which this     */
+    /* store cannot see).                                                      */
+    /* ---------------------------------------------------------------------- */
+
+    private fun readTranscript(it: Cursor): TranscriptRecord = TranscriptRecord(
+        transcriptId = it.getString(it.getColumnIndexOrThrow("transcript_id")),
+        chatId = it.getStringOrNull("chat_id"),
+        companionId = it.getStringOrNull("companion_id"),
+        worldId = it.getStringOrNull("world_id"),
+        roleplayCharacterId = it.getStringOrNull("roleplay_character_id"),
+        userPersonaId = it.getStringOrNull("user_persona_id"),
+        source = it.getString(it.getColumnIndexOrThrow("source")),
+        startedAt = it.getStringOrNull("started_at"),
+        endedAt = it.getStringOrNull("ended_at"),
+        content = it.getString(it.getColumnIndexOrThrow("content")),
+        modelTag = it.getStringOrNull("model_tag"),
+        quickSettingsJson = it.getStringOrNull("quick_settings_json"),
+        reviewStatus = it.getString(it.getColumnIndexOrThrow("review_status")),
+        processedAt = it.getStringOrNull("processed_at")
+    )
+
+    /** Everything a run would analyze, chronological: pending, never
+     *  processed, tied to a chat. The caller filters against the live chat
+     *  list (deleted conversations don't count — owner rule). */
+    fun pendingUnprocessedTranscripts(): List<TranscriptRecord> {
+        val out = ArrayList<TranscriptRecord>()
+        readableDatabase.query(
+            "transcripts", null,
+            "review_status = 'pending' AND processed_at IS NULL AND chat_id IS NOT NULL",
+            null, null, null, "started_at ASC, transcript_id ASC"
+        ).use { while (it.moveToNext()) out.add(readTranscript(it)) }
+        return out
+    }
+
+    /** Rerun support: re-fetch exactly the rows a past run fed, regardless of
+     *  their current review state. Rows deleted since simply drop out. */
+    fun transcriptsByIds(ids: List<String>): List<TranscriptRecord> {
+        if (ids.isEmpty()) return emptyList()
+        val out = ArrayList<TranscriptRecord>()
+        val db = readableDatabase
+        for (id in ids) {
+            db.query(
+                "transcripts", null, "transcript_id = ?", arrayOf(id),
+                null, null, null
+            ).use { if (it.moveToNext()) out.add(readTranscript(it)) }
+        }
+        out.sortWith(compareBy({ it.startedAt ?: "" }, { it.transcriptId }))
+        return out
+    }
+
+    /** Advance the watermark after a conversation is analyzed. */
+    fun markTranscriptsProcessed(ids: List<String>) {
+        if (ids.isEmpty()) return
+        val now = nowIso()
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            for (id in ids) {
+                db.update("transcripts", ContentValues().apply {
+                    put("review_status", "processed")
+                    put("processed_at", now)
+                }, "transcript_id = ?", arrayOf(id))
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    /**
+     * File one Archivist-proposed memory draft. The record must arrive with
+     * status='draft' and origin='archivist' (enforced here — a bug upstream
+     * must not be able to file an ACTIVE memory: nothing the Archivist writes
+     * may take effect without the user's approval). Never writes protection
+     * (retired July 8 2026 — the Archivist must not emit handling fields).
+     */
+    fun insertArchivistDraftMemory(m: MemoryRecord) {
+        require(m.status == "draft") { "Archivist memories must be drafts" }
+        require(m.origin == "archivist") { "Archivist memories must carry origin='archivist'" }
+        val safe = m.copy(protectionJson = null)
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.insertOrThrow("memories", null, memoryValues(safe))
+            writeMemoryLinks(db, safe)
+            logChange(db, safe.memoryId, "archivist", "proposed", safe.provenanceContext, null)
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    /** Content-level dedup so a rerun doesn't refile what already exists:
+     *  true when any memory row (any status) has this title+content. */
+    fun memoryExistsWithText(title: String, content: String): Boolean {
+        readableDatabase.query(
+            "memories", arrayOf("memory_id"), "title = ? AND content = ?",
+            arrayOf(title, content), null, null, null
+        ).use { return it.moveToNext() }
+    }
+
+    fun insertArchivistRun(run: ArchivistRunRecord) {
+        writableDatabase.insertWithOnConflict("archivist_runs", null, ContentValues().apply {
+            put("run_id", run.runId)
+            put("started_at", run.startedAt)
+            put("finished_at", run.finishedAt)
+            put("status", run.status)
+            put("chat_ids_json", run.chatIdsJson)
+            put("transcript_ids_json", run.transcriptIdsJson)
+            put("memory_ids_json", run.memoryIdsJson)
+            put("rule_ids_json", run.ruleIdsJson)
+            put("found_count", run.foundCount)
+            put("failed_chat_ids_json", run.failedChatIdsJson)
+            put("error", run.error)
+        }, SQLiteDatabase.CONFLICT_REPLACE)
+    }
+
+    /** Newest first, for the "Recent Memory Analysis" list. */
+    fun getArchivistRuns(limit: Int): List<ArchivistRunRecord> {
+        val out = ArrayList<ArchivistRunRecord>()
+        readableDatabase.query(
+            "archivist_runs", null, null, null, null, null,
+            "started_at DESC, run_id DESC", limit.toString()
+        ).use {
+            while (it.moveToNext()) {
+                out.add(
+                    ArchivistRunRecord(
+                        runId = it.getString(it.getColumnIndexOrThrow("run_id")),
+                        startedAt = it.getString(it.getColumnIndexOrThrow("started_at")),
+                        finishedAt = it.getStringOrNull("finished_at"),
+                        status = it.getString(it.getColumnIndexOrThrow("status")),
+                        chatIdsJson = it.getStringOrNull("chat_ids_json") ?: "[]",
+                        transcriptIdsJson = it.getStringOrNull("transcript_ids_json") ?: "[]",
+                        memoryIdsJson = it.getStringOrNull("memory_ids_json") ?: "[]",
+                        ruleIdsJson = it.getStringOrNull("rule_ids_json") ?: "[]",
+                        foundCount = it.getInt(it.getColumnIndexOrThrow("found_count")),
+                        failedChatIdsJson = it.getStringOrNull("failed_chat_ids_json") ?: "[]",
+                        error = it.getStringOrNull("error")
+                    )
+                )
+            }
+        }
+        return out
+    }
+
+    fun getArchivistRun(runId: String): ArchivistRunRecord? =
+        getArchivistRuns(Int.MAX_VALUE).firstOrNull { it.runId == runId }
+
+    /** Which of these memory ids still exist — the complement is "deleted
+     *  since that run" for the Recent Memory Analysis rows. */
+    fun existingMemoryIds(ids: List<String>): Set<String> {
+        if (ids.isEmpty()) return emptySet()
+        val out = HashSet<String>()
+        val db = readableDatabase
+        for (id in ids) {
+            db.query("memories", arrayOf("memory_id"), "memory_id = ?", arrayOf(id), null, null, null)
+                .use { if (it.moveToNext()) out.add(id) }
+        }
+        return out
     }
 
     /* ---------------------------------------------------------------------- */
@@ -3924,6 +4135,9 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             db.delete("deleted_ids", null, null)
             db.delete("injection_cooldowns", null, null)
             db.delete("chat_turn_counters", null, null)
+            // Run history describes conversations/memories that no longer
+            // exist after a reset — it empties with everything else.
+            db.delete("archivist_runs", null, null)
             db.update("app_state", ContentValues().apply {
                 putNull("active_companion_id"); putNull("active_world_id")
                 putNull("active_roleplay_character_id"); putNull("active_user_persona_id")

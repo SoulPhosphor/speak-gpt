@@ -126,8 +126,18 @@ confirm whether the third line should stay "Date of last backup", change to
 
 ## 4. Plumbing notes (implied backend — for the Phase 6 builder, NOT owner-approved UI)
 
-This screen is the trigger + report UI for the Archivist run. None of this
-exists yet.
+This screen is the trigger + report UI for the Archivist run.
+
+> **Status (July 8 2026, Phase 6 branch): the backend below is BUILT** —
+> `preferences/memory/archivist/Archivist.kt` (analyze/rerun/eligibility),
+> `ArchivistPrompt.kt` (the rewritten extraction prompt),
+> `ArchivistResponseParser.kt` (validation gate, unit-tested), the DB v11
+> `archivist_runs` history table, and the MemoryStore draft-filing CRUD
+> (`insertArchivistDraftMemory` — enforces draft + origin='archivist', never
+> writes protection). Drafts land in `memories.status='draft'` (§14 one home)
+> and Model rules' Pending. Card placements are NOT built (owner: that flow
+> isn't designed yet). The SCREEN is not built; the §3 questions below are
+> still the owner's to answer.
 
 ### Facts block — data sources (mostly already in `MemoryStore`)
 - "Conversations pending review" → `MemoryStore.pendingReviewCount()` (exists).

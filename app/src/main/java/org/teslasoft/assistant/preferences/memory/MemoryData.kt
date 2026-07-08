@@ -474,6 +474,28 @@ data class ProposalRecord(
 )
 
 /**
+ * One Archivist analysis run (Phase 6, DB v11) — the storage behind the
+ * Memory Assistant's "Recent Memory Analysis" list
+ * (`Memory System/memory_assistant_design.md` §4). Device-local operational
+ * history, like embeddings: never exported, no tombstones. transcript ids are
+ * kept so a run can be re-fed by Rerun; memory ids so "deleted since this
+ * run" can be computed against the current store.
+ */
+data class ArchivistRunRecord(
+    val runId: String,
+    val startedAt: String,
+    val finishedAt: String?,
+    val status: String,                   // complete | failed
+    val chatIdsJson: String,              // JSON array: chat ids analyzed
+    val transcriptIdsJson: String,        // JSON array: transcript rows fed
+    val memoryIdsJson: String,            // JSON array: draft memory ids created
+    val ruleIdsJson: String,              // JSON array: model-rule draft ids created
+    val foundCount: Int,
+    val failedChatIdsJson: String,        // JSON array: chats whose analysis failed (stay pending)
+    val error: String?
+)
+
+/**
  * Transcripts are storage-level (not part of the JSON schema's record types)
  * but travel in exports per app_adaptation_notes 11c — they are the raw
  * material the whole store can be re-derived from. chat_id and user_persona_id

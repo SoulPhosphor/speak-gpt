@@ -324,6 +324,26 @@ Everything is on-device. No cloud sync, no accounts.
    (§11). `status='draft'` rows are Phase-6 Archivist suggestions (the Pending
    UI is built but stays empty until Phase 6). Backups/codec carry rules, tags,
    and links. UI lives under AI System Settings (see the architecture map).
+   DB v11 (July 2026, Phase 6) adds `archivist_runs` — the Archivist run
+   history behind the Memory Assistant's "Recent Memory Analysis" list and its
+   Rerun action (per-run: dates, status, chat/transcript ids fed, memory/rule
+   draft ids created, failed chats). Device-local operational data like the
+   embeddings: never exported, no tombstones, emptied by Reset memories. The
+   **Archivist run engine** (backend only, `preferences/memory/archivist/`) is
+   BUILT: `Archivist.analyze`/`rerun` read the eligible pending transcripts
+   (live query — deleted chats filtered against the app's chat list,
+   re-included chats reappear automatically), call the configured Archivist
+   endpoint/model, and file every finding as a DRAFT — memory drafts via
+   `insertArchivistDraftMemory` (enforces status='draft' + origin='archivist',
+   never writes protection; lands in the existing Pending screen) and
+   model-rule drafts via `upsertModelRule` (status='draft',
+   source_model_string). `ArchivistResponseParser` (pure, unit-tested) is the
+   validation gate: unknown scope/type rows are dropped and counted (never
+   coerced), handling fields ignored, floods bounded. Proposed target NAMES
+   only link to records that already exist (exact name match) — the Archivist
+   never creates worlds/campaigns/characters/projects. Card placements are
+   deliberately absent (not yet designed with the owner). NO UI calls this
+   engine yet — the Memory Assistant screen is still the placeholder.
    Source is DERIVED for
    display (`provenance_source == "user_entered"` ⇒ "Entered by hand", else
    "Learned from chat"); there is no "Imported" bucket — import preserves each
@@ -954,15 +974,22 @@ Everything is on-device. No cloud sync, no accounts.
   are now PRE-REVISION (each carries a ⚠️ banner): `owner_approved_rules.md`
   + the work orders describe the actual runtime since the July 2026
   rulings and the Stage 3.4 enforcer rework.
-- **Phase 6 (Archivist + Memory Assistant) is the NEXT phase and is NOT
-  built.** Before touching it, read the **"Addendum — modifications approved
+- **Phase 6 (Archivist + Memory Assistant) is IN PROGRESS (July 8 2026, this
+  branch).** Before touching it, read the **"Addendum — modifications approved
   in chat, July 8 2026"** at the end of `owner_approved_rules.md` (written for
   the Phase 6 builder: Protected retired, scope definitions tightened, the
-  memory-UI restructure, the final row-icon system, and the confirmation that
-  no Archivist pipeline exists yet). The Memory Assistant screen — this phase's
-  user-facing surface — has an owner-approved layout/wording + plumbing notes
-  in **`Memory System/memory_assistant_design.md`**. Both outrank the older
-  Phase 6 text wherever they disagree.
+  memory-UI restructure, the final row-icon system). The Memory Assistant
+  screen — this phase's user-facing surface — has an owner-approved
+  layout/wording + plumbing notes in
+  **`Memory System/memory_assistant_design.md`**. Both outrank the older
+  Phase 6 text wherever they disagree. Built so far: the roleplay memory
+  deletion fix (owner-assigned to this phase) and the **Archivist run engine
+  backend** (`preferences/memory/archivist/` + DB v11 run history — see the
+  storage section; drafts-only, no UI wired). NOT built, awaiting owner
+  decisions (their message, July 8 2026): the Memory Assistant screen's open
+  wording/behavior questions (design doc §3), the Pending-screen approval
+  rework (accept/edit/accept-all — owner says not designed yet), the card
+  placement flow (`isOnCard()`/book_5), and emergence proposals.
 - **The roleplay layer (cards + tags) was redesigned and owner-approved
   July 6–7 2026.** `Memory System/roleplay_cards_and_tags_spec.md` is the
   authoritative spec (four two-zone cards: user RP character, NPC party
