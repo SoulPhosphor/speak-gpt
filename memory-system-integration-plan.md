@@ -288,6 +288,8 @@ Specs: `sqlite_table_plan.md`, `companion_memory_schema.json`,
   tombstone writes.
 - Settings entry: a "Memory (experimental)" screen showing store status,
   seed import, export now, auto-export toggle, and the companion records.
+  *(Historical: renamed **Memory Settings** and moved under the new Memory
+  Manager hub, July 8 2026 — see §1 addendum in `owner_approved_rules.md`.)*
 - **Visible result:** import the template seed, see companions/memories in
   the status screen, export a JSON and open it in a file manager.
 
@@ -756,7 +758,9 @@ coexistence, essence guardrail, failure behavior); D7 (compressor), D8.
 >   old pop-up editor was removed.
 > - The **browser** got the full filter/sort chip row (scope/type/status/
 >   source/tag + sort + Reset), and a pinned **Pending** banner opening the
->   **Pending screen** (`MemoryPendingActivity`, §14).
+>   **Pending screen** (`MemoryPendingActivity`, §14). *(The chip row was
+>   RETIRED July 8 2026 — replaced by the slide-out Memory Filters panel; see
+>   the July 8 note at the top of this phase.)*
 > - **Reset memories** (Memory settings) empties every memory-content table with
 >   a backup-first option. **Quick Settings** gained a per-chat **Project**
 >   selector (§4).
@@ -768,7 +772,12 @@ coexistence, essence guardrail, failure behavior); D7 (compressor), D8.
 > amendment above) are all live. Stage 4 (Model rules) is not built. Read
 > the work order + the roleplay spec's §9 before touching Phase 5 UI.
 
-**Landed July 2026.** What shipped: a **Memory manager** hub
+**Landed July 2026.** *(Historical — this original ten-area hub
+`ui/activities/memory/MemoryManagerActivity` was REMOVED in the Phase-5
+rework and stays removed; a new, different four-row Memory Manager hub
+`ui/activities/MemoryManagerActivity` exists as of July 8 2026. See the boxes
+at the top of this phase + the addendum in `owner_approved_rules.md`.)* What
+shipped originally: a **Memory manager** hub
 (`ui/activities/memory/MemoryManagerActivity`, reached from a "Browse & edit"
 button in Memory settings) linking ten areas, all on a shared framework —
 `MemoryScreenActivity` (abstract themed list scaffold: back/AMOLED/insets/
