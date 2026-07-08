@@ -251,7 +251,14 @@ Everything is on-device. No cloud sync, no accounts.
    reads these join tables too (a memory linked to several targets is eligible
    under each); the legacy single columns remain as a **primary-target mirror**
    (first selected) used only by the target teardown paths. The scoped-browser
-   doors read the join tables and the target-delete paths scrub them.
+   doors read the join tables. ⚠️ **KNOWN BUG (verified July 8 2026):** the
+   world/campaign/RP-character teardown paths (`deleteWorld`/`deleteCampaign`/
+   `deleteRoleplayCharacter`) still decide which memories to delete/keep from
+   the **mirror column**, not the join table — so a multi-target memory can be
+   wrongly hard-deleted (or a join-only-owned one mishandled) and the mirror
+   left stale. The join tables are the source of truth; the fix logic +
+   required tests are written up in
+   `Memory System/roleplay_memory_deletion_fix.md` (not yet built).
    DB v6 (July 2026, Stage 3.3) adds the **freshness-cooldown** tables:
    `injection_cooldowns` keyed `(chat_id, source_type, entry_id)` — when each
    entry last reached a prompt, per chat, `source_type` separating memories

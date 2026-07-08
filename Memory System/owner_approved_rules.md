@@ -664,3 +664,14 @@ one, it is stale — follow this addendum and fix the stale text.
    backend plumbing it implies and the open questions still to settle — are
    written up in **`Memory System/memory_assistant_design.md`** (July 8 2026).
    Read it before building the screen.
+
+8. **Roleplay memory deletion cleanup is BUGGED (verified July 8 2026) — the
+   join tables are the source of truth for roleplay memory ownership.** The
+   world/campaign/RP-character teardown paths still select memories to
+   delete/keep by the single mirror column instead of the join table, so a
+   memory linked to several targets can be wrongly hard-deleted or
+   mishandled, and the mirror left stale. The verified diagnosis, the exact
+   fix logic (query the join table; keep vs delete vs shared; reassign the
+   mirror), and the required tests are in
+   **`Memory System/roleplay_memory_deletion_fix.md`**. This is a present bug
+   in shipped Stage 3.6 code, fixable independently of Phase 6.
