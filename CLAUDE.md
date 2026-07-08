@@ -1,5 +1,34 @@
 # Phosphor Shines — AI Onboarding Manual
 
+## ⛔ THE OWNER'S WORDS RULE — absolute, no exceptions (July 8 2026)
+
+**Every word the app shows the user is the owner's.** If a screen, toast,
+status line, error message, button, hint, or ANY other user-visible text
+needs words and the owner has not supplied them, you STOP, list the exact
+spots that need words, ask in plain chat, and WAIT. You do not write
+"reasonable filler." You do not ship your own text and offer to fix it
+later. You do not call anything "minor screen text" — there is no such
+category. On July 7–8 2026 an agent shipped a dozen self-authored status
+lines inside an otherwise owner-approved feature, disclosed it only inside
+a long summary, and then — when the owner objected — twice told the owner
+it was fine. It was not fine. The owner had spent that entire day
+correcting agents for exactly this, more than twenty times, at real cost
+in money and days of lost sleep. If you catch yourself typing a
+user-visible sentence the owner never said: stop and ask.
+
+**Nothing happens without the owner's permission.** Not building, not
+deleting, not "dropping" a planned item, not declaring a question
+"resolved," not choosing the "simplest fix." Those are the owner's
+decisions. On any open point your entire job is: explain it in plain,
+jargon-free words, ask one clear question, and wait for the answer as an
+ordinary chat message. Presenting an already-made decision inside a
+summary is a violation even when the decision looks obviously right.
+When the owner says they don't understand something, that is a full
+stop: re-explain simply and do not advance any work that depends on it
+until they say they understand and say yes. Never argue that a violation
+was acceptable — acknowledge it, fix exactly what the owner directs, and
+wait.
+
 ## ⛔ ACT ONLY FROM FACT, NOT ASSUMPTION
 
 Verify before you act. Read the actual code, the actual file, the actual
