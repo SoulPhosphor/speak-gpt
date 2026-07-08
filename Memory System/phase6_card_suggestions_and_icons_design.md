@@ -1,7 +1,20 @@
 # Phase 6: Card Suggestions, Memory Icons, and UX Design
 
-*Owner decisions from July 7 2026 conversation. This document captures the
-owner's actual phrasing and design intent for the building agent.*
+*Owner decisions from July 7-8 2026 conversation. This document captures
+the owner's actual phrasing and design intent for the building agent.*
+
+---
+
+## Not being built: the extraction request preview
+
+An earlier planning idea proposed a read-only "preview" screen that
+would show the complete final text sent to the Archivist AI — the
+editable extraction prompt glued to the actual conversation transcript
+being analyzed. This is NOT being built. The user has no say over how
+those pieces get combined, and viewing their own instructions pasted
+next to a conversation they already had is not actionable. The editable
+extraction prompt in Advanced Settings is enough transparency. If a
+future need surfaces, it can be added then.
 
 ---
 
@@ -54,19 +67,43 @@ The card-append toggle governs whether the Archivist *proposes* card
 placements automatically. The user's ability to manually place any roleplay
 memory on a card is always available regardless of that toggle.
 
-## 4. The four-way choice for card suggestions
+## 4. The Pending screen approval flow
 
-When the Archivist proposes a card placement, the user gets four options
-(from owner_approved_rules.md section 13, unchanged):
+**One list, mixed contents.** Regular memory drafts and roleplay memory
+drafts (including ones with proposed card placements) live in the same
+Pending list, grouped by scope. Roleplay card suggestions are NOT a
+separate section with a special multi-option decision — they are just
+roleplay memories that also happen to carry a proposed card destination.
 
-- Add to the card permanently
-- Keep as a memory as-is
-- Modify it first
-- Delete it
+**Per-memory actions — three options on every draft:**
 
-Card suggestions are decided individually, never bulk-accepted. The user
-can change the proposed destination (which card, which section) before
-accepting.
+- **Accept** — approves the memory. For roleplay memories with a
+  proposed card placement, Accept also commits the card entry to the
+  proposed section (copy, not link — see section 6).
+- **Delete** — discards the draft entirely.
+- **Edit** — opens the memory editor pre-filled with what the Archivist
+  proposed (scope, targets, type, tags, importance, text, title). For
+  roleplay memories, the editor also shows the proposed card and
+  section: the user can change the destination, choose a different card,
+  or clear it entirely to keep the memory backend-only. Saving keeps it
+  a draft with the user's corrections; the editor also has an Accept
+  button.
+
+**Two Accept All buttons at the top of the screen:**
+
+- **Accept all memories** — bulk-approves the regular (non-roleplay)
+  memory drafts.
+- **Accept all roleplay** — bulk-approves the roleplay drafts,
+  including their proposed card placements.
+
+Two buttons instead of one because card placements are a bigger deal
+than plain memory acceptance. Someone speeding through their real-life
+memory queue shouldn't accidentally auto-place things onto roleplay
+cards they haven't looked at. Splitting the button lets the user
+mass-approve one kind of thing at a time.
+
+Both Accept-all buttons show a count confirm ("Accept 12 memories?" /
+"Accept 5 roleplay memories?").
 
 ## 5. Memory icon system
 
@@ -135,13 +172,16 @@ later (rename the item, update a quantity), they don't expect the backend
 memory to change. And if they remove it from the card, the answer is
 obvious: card entry goes away, memory stays.
 
-## 7. Pending screen: suggestion outline
+## 7. Pending row: suggestion outline
 
-When a memory has an Archivist-proposed card placement that hasn't been
-acted on yet, the memory row gets an outline treatment (distinct from the
-badge). Once the user approves or rejects the placement, the outline goes
-away. If approved, the badge stays permanently so the user always knows
-which memories are on cards when browsing.
+When a roleplay memory has an Archivist-proposed card placement that
+hasn't been acted on yet, the memory row (both in the Pending screen and
+anywhere the draft surfaces) gets an outline treatment around it —
+distinct from the badge on the icon. The outline is "this is waiting on
+your decision about a card placement." Once the user accepts or deletes
+the memory, the outline goes away. If accepted, the badge on the icon
+stays permanently so the user always knows the memory lives on a card
+when browsing later.
 
 ---
 
