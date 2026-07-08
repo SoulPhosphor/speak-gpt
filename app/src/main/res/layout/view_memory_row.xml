@@ -16,9 +16,12 @@
 * limitations under the License.
 **************************************************************************/
 -->
-<!-- Reusable row for every Phase 5 memory-manager list: title + optional
-     subtitle + optional badge chip + optional overflow/action button. The
-     hosting screen decides which fields to show; the adapter hides the rest. -->
+<!-- Memory row (owner ruling, July 8 2026):
+     [ leading identity icon ][ title (bold, larger) / tags (small, dot-joined,
+       no hashtags) / content (normal) ][ edit-square trailing action ].
+     The icon spans the full row height and its resource is picked per memory
+     by the browser from the scope enum (see ic_mem_* drawables). The trailing
+     button is only shown for rows that have per-row actions. -->
 <androidx.constraintlayout.widget.ConstraintLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -38,21 +41,36 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent">
 
+        <!-- Leading identity icon. Centred vertically; sized so it visually
+             matches the row height across the title/tags/content lines. -->
+        <ImageView
+            android:id="@+id/row_icon"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_marginStart="14dp"
+            android:contentDescription="@string/mem_row_icon"
+            android:src="@drawable/ic_mem_public"
+            android:visibility="gone"
+            app:tint="?attr/colorPrimary"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
         <TextView
             android:id="@+id/row_title"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginStart="16dp"
+            android:layout_marginStart="12dp"
             android:layout_marginTop="12dp"
             android:layout_marginEnd="8dp"
             android:ellipsize="end"
             android:maxLines="2"
             android:text="@string/label_memory"
             android:textColor="?attr/colorPrimary"
-            android:textSize="18sp"
+            android:textSize="17sp"
             android:textStyle="bold"
             app:layout_constraintEnd_toStartOf="@+id/row_badge"
-            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintStart_toEndOf="@+id/row_icon"
             app:layout_constraintTop_toTopOf="parent" />
 
         <TextView
@@ -71,38 +89,57 @@
             app:layout_constraintEnd_toStartOf="@+id/btn_row_action"
             app:layout_constraintTop_toTopOf="parent" />
 
+        <!-- Tag list: small, dot-joined, no hashtags. The browser builds this
+             already-formatted (Communication · Technical Help · Tone). -->
         <TextView
-            android:id="@+id/row_subtitle"
+            android:id="@+id/row_tags"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginStart="16dp"
+            android:layout_marginTop="4dp"
             android:layout_marginEnd="8dp"
-            android:layout_marginTop="2dp"
-            android:layout_marginBottom="12dp"
             android:ellipsize="end"
-            android:maxLines="3"
+            android:maxLines="1"
             android:textColor="@color/text_subtitle"
-            android:textSize="14sp"
+            android:textSize="11sp"
             android:visibility="gone"
-            app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toStartOf="@+id/btn_row_action"
             app:layout_constraintStart_toStartOf="@+id/row_title"
             app:layout_constraintTop_toBottomOf="@+id/row_title" />
 
+        <!-- Memory content line — normal weight, 13sp. -->
+        <TextView
+            android:id="@+id/row_subtitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:layout_marginEnd="8dp"
+            android:layout_marginBottom="12dp"
+            android:ellipsize="end"
+            android:maxLines="3"
+            android:textColor="@color/text_subtitle"
+            android:textSize="13sp"
+            android:visibility="gone"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@+id/btn_row_action"
+            app:layout_constraintStart_toStartOf="@+id/row_title"
+            app:layout_constraintTop_toBottomOf="@+id/row_tags" />
+
+        <!-- Trailing action: edit-square (replaces the old cog per owner ruling,
+             July 8 2026). Only visible for rows that have a per-row menu. -->
         <ImageButton
             android:id="@+id/btn_row_action"
             android:layout_width="42dp"
             android:layout_height="42dp"
             android:layout_marginEnd="12dp"
             android:background="@drawable/btn_accent_tonal_selector_v7"
-            android:contentDescription="@string/memory_row_actions"
-            android:src="@drawable/ic_settings"
-            android:tooltipText="@string/memory_row_actions"
+            android:contentDescription="@string/mem_row_edit"
+            android:src="@drawable/ic_edit_square"
+            android:tooltipText="@string/mem_row_edit"
             android:visibility="gone"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toTopOf="parent"
-            app:srcCompat="@drawable/ic_settings" />
+            app:srcCompat="@drawable/ic_edit_square" />
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 </androidx.constraintlayout.widget.ConstraintLayout>

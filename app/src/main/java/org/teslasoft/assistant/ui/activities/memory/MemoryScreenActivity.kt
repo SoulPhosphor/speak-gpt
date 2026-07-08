@@ -69,6 +69,7 @@ abstract class MemoryScreenActivity : FragmentActivity(), MemoryRowAdapter.OnRow
     private var filterBar: HorizontalScrollView? = null
     private var filterChips: ChipGroup? = null
     private var pendingBanner: com.google.android.material.button.MaterialButton? = null
+    private var btnFilter: ImageButton? = null
 
     protected var searchQuery: String = ""
 
@@ -96,8 +97,19 @@ abstract class MemoryScreenActivity : FragmentActivity(), MemoryRowAdapter.OnRow
     /** Load the rows for [query] — runs on a worker thread. */
     protected abstract fun loadRows(query: String): List<MemoryRow>
 
-    /** Show the filter/sort chip row (Stage 2.3, the memory browser only). */
+    /** Show the filter/sort chip row (legacy Stage 2.3). Replaced by the
+     *  slide-out Memory Filters panel; kept for other list screens that may
+     *  still want a chip bar. The browser no longer opts in. */
     protected open fun showFilterBar(): Boolean = false
+
+    /** Show the three-dots (vertical) filter button on the right of the search
+     *  bar. Only the memory browser opts in today; when pressed it delegates
+     *  to [onFilterButtonClick]. */
+    protected open fun showFilterButton(): Boolean = false
+
+    /** Called when the three-dots filter button is tapped. Default no-op so
+     *  screens without a filter panel don't need to override anything. */
+    protected open fun onFilterButtonClick() {}
 
     /** Populate the filter chip row — called once the bar is shown, and again
      *  by the screen after a filter changes. */
@@ -150,6 +162,7 @@ abstract class MemoryScreenActivity : FragmentActivity(), MemoryRowAdapter.OnRow
         filterBar = findViewById(R.id.filter_bar)
         filterChips = findViewById(R.id.chips_filter)
         pendingBanner = findViewById(R.id.pending_banner)
+        btnFilter = findViewById(R.id.btn_filter)
 
         titleView?.text = screenTitle()
 
@@ -196,6 +209,13 @@ abstract class MemoryScreenActivity : FragmentActivity(), MemoryRowAdapter.OnRow
             renderFilterBar()
         } else {
             filterBar?.visibility = View.GONE
+        }
+
+        if (showFilterButton()) {
+            btnFilter?.visibility = View.VISIBLE
+            btnFilter?.setOnClickListener { onFilterButtonClick() }
+        } else {
+            btnFilter?.visibility = View.GONE
         }
     }
 

@@ -78,6 +78,10 @@
     <color name="text_subtitle">#AA000000</color>
     <color name="text_field">#CC000000</color>
     <color name="text_hint">#000000</color>
+    <!-- Paler hint for the memory search field (owner ruling, July 8 2026: the
+         default text_hint is too dark). Named so a future theme swap is one line;
+         the memory list layout is the only site using it today. -->
+    <color name="memory_hint_soft">#66000000</color>
     <color name="text_subtitle_inv">#AAFFFFFF</color>
     <color name="ripple">#32000000</color>
     <color name="ripple_bg">#FF000000</color>

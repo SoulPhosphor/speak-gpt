@@ -22,15 +22,24 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.BaseAdapter
 import android.widget.ImageButton
+import android.widget.ImageView
 import android.widget.TextView
 import org.teslasoft.assistant.R
 
 /**
- * One list item across the whole memory manager: a stable [id], a [title], and
- * optional [subtitle]/[badge]. [hasAction] controls the trailing overflow
- * button (edit/protect/archive/delete menu for records that have one). Kept
- * behaviour-free — the hosting [org.teslasoft.assistant.ui.activities.memory.MemoryScreenActivity]
- * decides what a tap or an action press does.
+ * One list item across the whole memory manager.
+ *
+ *  - [id] stable identifier (memory id, companion id, world id, …).
+ *  - [title] the strong first line.
+ *  - [tagsLine] optional "Communication · Technical Help · Tone"-style joined
+ *    tag row (owner ruling, July 8 2026: no hashtags). The hosting screen
+ *    supplies it already-formatted; the adapter never edits tag text.
+ *  - [subtitle] optional body/content line.
+ *  - [badge] optional pill badge (draft / archived / superseded — the row
+ *    intentionally shows nothing when a memory is Active).
+ *  - [iconRes] optional leading identity icon (see ic_mem_* drawables).
+ *  - [hasAction] shows the trailing edit-square action button.
+ *  - [isHeader] non-tappable section header (Archive sections on card lists).
  */
 data class MemoryRow(
     val id: String,
@@ -38,9 +47,9 @@ data class MemoryRow(
     val subtitle: String? = null,
     val badge: String? = null,
     val hasAction: Boolean = false,
-    /** Non-tappable section header inside the list — the visible Archive
-     *  section at the bottom of the roleplay card lists (spec §5). */
-    val isHeader: Boolean = false
+    val isHeader: Boolean = false,
+    val tagsLine: String? = null,
+    val iconRes: Int? = null
 )
 
 class MemoryRowAdapter(
@@ -78,13 +87,29 @@ class MemoryRowAdapter(
         val view = convertView ?: LayoutInflater.from(context).inflate(R.layout.view_memory_row, parent, false)
 
         val title = view.findViewById<TextView>(R.id.row_title)
+        val tags = view.findViewById<TextView>(R.id.row_tags)
         val subtitle = view.findViewById<TextView>(R.id.row_subtitle)
         val badge = view.findViewById<TextView>(R.id.row_badge)
+        val icon = view.findViewById<ImageView>(R.id.row_icon)
         val action = view.findViewById<ImageButton>(R.id.btn_row_action)
         val ui = view.findViewById<View>(R.id.ui)
 
         val row = rows[position]
         title.text = row.title
+
+        if (row.iconRes != null) {
+            icon.visibility = View.VISIBLE
+            icon.setImageResource(row.iconRes)
+        } else {
+            icon.visibility = View.GONE
+        }
+
+        if (row.tagsLine.isNullOrBlank()) {
+            tags.visibility = View.GONE
+        } else {
+            tags.visibility = View.VISIBLE
+            tags.text = row.tagsLine
+        }
 
         if (row.subtitle.isNullOrBlank()) {
             subtitle.visibility = View.GONE

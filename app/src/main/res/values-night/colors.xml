@@ -29,6 +29,8 @@
     <color name="text_subtitle">#99FFFFFF</color>
     <color name="text_field">#DEFFFFFF</color>
     <color name="text_hint">#EEFFFFFF</color>
+    <!-- Paler hint for the memory search field — see light values for the why. -->
+    <color name="memory_hint_soft">#88FFFFFF</color>
     <color name="text_subtitle_inv">#99000000</color>
     <color name="ripple">#32FFFFFF</color>
     <color name="ripple_bg">#AAFFFFFF</color>

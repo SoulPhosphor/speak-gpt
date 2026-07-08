@@ -1067,7 +1067,7 @@
     <string name="memory_manage_hint">View, add and edit everything the memory system stores.</string>
     <!-- Memory browser -->
     <string name="title_memories">Memories</string>
-    <string name="memory_search_hint">Search memories</string>
+    <string name="memory_search_hint">Search Memories</string>
     <string name="memory_scope_global">Global</string>
     <string name="memory_scope_companion">Companion</string>
     <string name="memory_badge_archived">Archived</string>
@@ -1144,6 +1144,22 @@
     <string name="mem_status_superseded">Superseded</string>
     <string name="mem_source_hand">Entered by hand</string>
     <string name="mem_source_learned">Learned from chat</string>
+
+    <!-- Memory Filters slide-out panel (owner-approved wording, July 8 2026).
+         Category labels reuse the existing "Sort/Scope/Type/Status/Source"
+         strings above; the Tags label is plural here. Options render with their
+         first letter capitalised, per the style guide. -->
+    <string name="title_memory_filters">Memory Filters</string>
+    <string name="mem_filter_tags">Tags</string>
+    <string name="mem_filter_reset_full">Reset Filters</string>
+    <string name="mem_filter_open">Open Memory Filters</string>
+    <string name="mem_filter_close">Close Memory Filters</string>
+    <string name="mem_filter_remove">Remove filter</string>
+    <string name="mem_filter_option_all">All</string>
+    <string name="mem_filter_option_any">Any</string>
+    <string name="mem_filter_pending">Pending</string>
+    <string name="mem_row_icon">Memory type icon</string>
+    <string name="mem_row_edit">Edit memory</string>
 
     <!-- Pending screen (Stage 2.4) -->
     <string name="mem_pending_banner">Pending memories (%1$d) ›</string>

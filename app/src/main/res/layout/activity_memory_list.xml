@@ -18,8 +18,8 @@
 -->
 <!-- Reusable scaffold for every Phase 5 memory-manager list screen
      (MemoryScreenActivity). The back arrow, title and (optional) action button
-     sit in the bar; the search field and the "add" FAB are shown or hidden by
-     the hosting screen. -->
+     sit in the bar; the search field, the three-dots filter button (browser
+     only), and the "add" FAB are shown or hidden by the hosting screen. -->
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/root"
@@ -125,16 +125,16 @@
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginStart="16dp"
-        android:layout_marginEnd="16dp"
+        android:layout_marginEnd="8dp"
         android:layout_marginTop="8dp"
-        android:textColorHint="@color/text_hint"
+        android:textColorHint="@color/memory_hint_soft"
         app:boxStrokeColor="@drawable/box_stroke_color"
         app:boxCornerRadiusBottomEnd="16dp"
         app:boxCornerRadiusBottomStart="16dp"
         app:boxCornerRadiusTopEnd="16dp"
         app:boxCornerRadiusTopStart="16dp"
         app:startIconDrawable="@drawable/ic_search"
-        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintEnd_toStartOf="@+id/btn_filter"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/action_bar">
 
@@ -144,12 +144,29 @@
             android:layout_height="wrap_content"
             android:hint="@string/memory_search_hint"
             android:singleLine="true"
-            android:textColorHint="@color/text_hint" />
+            android:textColorHint="@color/memory_hint_soft" />
     </com.google.android.material.textfield.TextInputLayout>
 
-    <!-- Optional filter/sort chip row (Stage 2.3, the memory browser). Hidden
-         unless the hosting screen enables it; when GONE it collapses so the list
-         sits right under the search field on the other list screens. -->
+    <!-- Three-dots (vertical) filter button. Only visible on screens whose
+         hosting activity opts in (the memory browser today; other list screens
+         don't have filters). Opens the Memory Filters slide-out panel. -->
+    <ImageButton
+        android:id="@+id/btn_filter"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_marginEnd="12dp"
+        android:background="@drawable/btn_accent_icon_large_100"
+        android:contentDescription="@string/mem_filter_open"
+        android:src="@drawable/ic_more_vert"
+        android:tooltipText="@string/mem_filter_open"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="@+id/search_bar"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="@+id/search_bar" />
+
+    <!-- Legacy horizontal chip row (Stage 2.3). Replaced by the slide-out
+         Memory Filters panel; kept in the layout in case another list screen
+         wants a chip-style filter bar. Stays hidden unless a screen opts in. -->
     <HorizontalScrollView
         android:id="@+id/filter_bar"
         android:layout_width="0dp"

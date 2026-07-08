@@ -280,6 +280,12 @@
         </activity>
 
         <activity
+            android:name=".ui.activities.memory.MemoryFilterPanelActivity"
+            android:exported="false"
+            android:label="@string/title_memory_filters" />
+
+
+        <activity
             android:name=".ui.activities.memory.MemoryEditorActivity"
             android:exported="false"
             android:label="@string/mem_edit_title_new" />

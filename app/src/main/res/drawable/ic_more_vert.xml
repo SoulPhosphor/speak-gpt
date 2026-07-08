@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Material Symbols "more_vert" (three dots vertical). Fetched from Google Fonts;
+     paths use the Material Symbols coordinate system (viewBox 0 -960 960 960),
+     wrapped in a group translated by +960 in Y so it fits Android's positive
+     viewport. Colour is tinted at the use site with app:tint. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="960"
+    android:viewportHeight="960">
+    <group android:translateY="960">
+        <path
+            android:fillColor="#FF000000"
+            android:pathData="M480,-160q-33,0 -56.5,-23.5T400,-240q0,-33 23.5,-56.5T480,-320q33,0 56.5,23.5T560,-240q0,33 -23.5,56.5T480,-160ZM480,-400q-33,0 -56.5,-23.5T400,-480q0,-33 23.5,-56.5T480,-560q33,0 56.5,23.5T560,-480q0,33 -23.5,56.5T480,-400ZM480,-640q-33,0 -56.5,-23.5T400,-720q0,-33 23.5,-56.5T480,-800q33,0 56.5,23.5T560,-720q0,33 -23.5,56.5T480,-640Z" />
+    </group>
+</vector>
