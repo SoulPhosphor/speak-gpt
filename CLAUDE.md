@@ -419,7 +419,9 @@ Everything is on-device. No cloud sync, no accounts.
    it. Persona edits sync one-way into linked companion records via the hook
    in `PersonaPreferences` (`MemoryCompanionSync`) — renames re-point
    `app_character_id` under the OLD id; keep that when touching persona save
-   paths. UI: "Memory system" tile in the Characters hub →
+   paths. UI: the **Memory System card on the main Settings screen** (between
+   AI System Settings and Roleplay — moved OUT of the Characters hub at the
+   owner's instruction; never put it back there) →
    `MemorySettingsActivity` (status, import backup, export, persona bootstrap).
 4. **Files** — images in `getExternalFilesDir("images")`, whisper models via
    `LocalWhisperStorage`, rotating memory backups in
@@ -509,7 +511,7 @@ Everything is on-device. No cloud sync, no accounts.
 - Companion memory store, Phases 1–2 (storage + capture): encrypted `companion_memory.db`,
   user backup import (own exported file, no bundled example data), rotating +
   manual JSON export, persona→companion bootstrap and edit-sync (surface:
-  Characters → Memory system). Every completed turn is captured into the transcripts queue from
+  Settings → Memory System). Every completed turn is captured into the transcripts queue from
   the `finally` of `generateResponse` (single funnel; best-effort, never
   disturbs a turn) via `TranscriptRecorder`. Quick Settings has two per-chat
   memory controls (both in the auto-naming copy block): "Use memory" (kill

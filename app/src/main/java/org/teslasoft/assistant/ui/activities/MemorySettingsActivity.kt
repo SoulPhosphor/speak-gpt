@@ -63,9 +63,10 @@ import org.teslasoft.assistant.util.Hash
  * "Memory (experimental)" — Phase 1 surface of the companion memory system:
  * store status (row counts + integrity), seed import (bundled starter template
  * or any schema-shaped JSON via SAF), manual backup export, the persona ->
- * companion bootstrap, and the automatic-backup toggle. Reached from a tile in
- * the Characters hub. Later phases grow the real memory editor; this screen
- * stays the store's plumbing/status page.
+ * companion bootstrap, and the automatic-backup toggle. Reached from the
+ * Memory System card on the main Settings screen (moved out of the Characters
+ * hub at the owner's instruction). Later phases grew the real memory editor;
+ * this screen stays the store's plumbing/status page.
  *
  * The store is created lazily: nothing provisions the encrypted database until
  * the user takes an action here (or a later phase enables tier 2). All DB work
