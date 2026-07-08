@@ -860,10 +860,32 @@
     <string name="row_memory_settings_title">Memory Settings</string>
     <string name="row_memory_settings_subtitle">Control how memory is saved, processed, backed up, and restored.</string>
 
-    <!-- Memory Assistant placeholder (to be designed later; ships with a
-         plain "Coming soon" until the real screen is approved). -->
+    <!-- Memory Assistant (Phase 6). Every user-visible sentence here is the
+         owner's approved wording (memory_assistant_design.md §1–§2 + the
+         July 8 2026 evening answers in phase6_owner_answers_2026-07-08.md).
+         Failure wording is deliberately ABSENT — the owner supplies it after
+         seeing the real failure cases; do not invent any. -->
     <string name="title_memory_assistant">Memory Assistant</string>
-    <string name="memory_assistant_coming_soon">Coming soon.</string>
+    <string name="memory_assistant_hint">Use AI to analyze conversations for possible memories. Found memories will be set to pending in the memory browser.</string>
+    <string name="memory_assistant_fact_since_run">Total conversations since last run: %1$d</string>
+    <string name="memory_assistant_fact_pending">Conversations pending review: %1$d</string>
+    <string name="memory_assistant_fact_last_run">Date of Last Run: %1$s</string>
+    <string name="memory_assistant_btn_idle">Analyze Conversations</string>
+    <string name="memory_assistant_btn_running">Analyzing History…</string>
+    <string name="memory_assistant_btn_done">Complete!</string>
+    <string name="memory_assistant_running_moment">This may take a moment.</string>
+    <string name="memory_assistant_running_conversation">Conversation %1$d of %2$d</string>
+    <string name="memory_assistant_running_while">This may take a while.</string>
+    <string name="memory_assistant_running_batched">Conversations will be batched due to size.</string>
+    <string name="memory_assistant_running_batch">Batch %1$s</string>
+    <string name="memory_assistant_running_batch_conversations">%1$d of %2$d Conversations</string>
+    <string name="memory_assistant_done_found">%1$d memories found.</string>
+    <string name="memory_assistant_view_pending">View Pending Memories.</string>
+    <string name="memory_assistant_done_none">No new memory candidates found.</string>
+    <string name="memory_assistant_recent_header">Recent Memory Analysis</string>
+    <string name="memory_assistant_run_found">%1$d found</string>
+    <string name="memory_assistant_run_none">None found</string>
+    <string name="memory_assistant_rerun">Rerun</string>
 
     <!-- Companion memory system (Phase 1: store, seed, backups) -->
     <string name="title_memory_settings">Memory Settings</string>
