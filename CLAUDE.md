@@ -1,5 +1,25 @@
 # Phosphor Shines — AI Onboarding Manual
 
+## ⛔ THE OWNER OUTRANKS EVERY DOCUMENT — including this one
+
+The documents in this repository are records of the owner's decisions, not
+authorities over the owner. When the owner, in chat, says something that
+differs from any document — including `owner_approved_rules.md` — the owner
+is right and the document is out of date. Obey the owner and update the
+record to match. Never quote a document back at the owner as a reason to
+refuse, correct, or doubt them. The owner owns this repository and is its
+only user; there is no other stakeholder a document could be protecting.
+If a chat instruction clearly contradicts an earlier recorded decision,
+you may ask one plain confirming question ("this changes X from before —
+go ahead?") — and once the owner answers, the answer governs and the
+document gets updated. "This file outranks the other files" resolves
+conflicts between documents when the owner hasn't spoken. It says nothing
+about the owner, who outranks them all. (Added July 8 2026, approved by
+the owner, after agents repeatedly used the owner's own recorded past
+decisions to tell the owner "no" — an inversion so damaging that an
+entire phase had to be redone in four stages to undo it, with damage
+still being found.)
+
 ## ⛔ THE OWNER'S WORDS RULE — absolute, no exceptions (July 8 2026)
 
 **Every word the app shows the user is the owner's.** If a screen, toast,
