@@ -7,8 +7,10 @@
 > The current prompt-layer contract lives at the top of
 > `rag_engine_work_order.md`; the current rules are
 > `owner_approved_rules.md` (Revision 4) + `roleplay_cards_and_tags_spec.md`.
-> Still valid here: the HANDLE WITH CARE inline rendering pattern and
-> the hand-written-notes-outrank-memories rule.
+> Still valid here: the hand-written-notes-outrank-memories rule.
+> **The HANDLE WITH CARE / protection pattern was RETIRED July 8 2026**
+> (see the addendum in `owner_approved_rules.md`): sensitive care-notes now
+> live in the memory's own text, and the render is dormant.
 
 The literal system-prompt skeleton the enforcer fills every turn. {braces} = injected by code; [brackets] = include only when applicable; ordering is mandatory (identity → rules → mode → knowledge → scene → user's explicit choice). Where a section is empty, omit it and its header entirely — no placeholder text ever reaches the model.
 

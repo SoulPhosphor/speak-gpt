@@ -10,8 +10,11 @@
 > `roleplay_cards_and_tags_spec.md` outrank this file wherever they
 > disagree; `rag_engine_work_order.md` is the current build path, and
 > Stage 3.4's enforcer rework (built) is the actual runtime. Still valid
-> here: the librarian mechanics, protection-inseparability, change-set
-> safety, and undo.
+> here: the librarian mechanics, change-set safety, and undo.
+> **Protection-inseparability is NO LONGER a thing** — "Protected" was
+> RETIRED July 8 2026 (see the addendum in `owner_approved_rules.md`):
+> nothing is flagged protected, care-notes now live in the memory's own
+> text, and the HANDLE WITH CARE render is dormant.
 
 This is the sixth and final design document. It defines the runtime: how a conversation turn actually works, how the system prompt is assembled from the memory store, how the Archivist's change-sets get applied safely, and how all of this integrates with the app that already exists (character definitions, activation prompts, lore books, multi-API switching). The coding phase consumes this document plus the schema, seed, guide, Archivist spec, and SQLite plan.
 
