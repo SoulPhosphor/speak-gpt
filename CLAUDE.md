@@ -511,7 +511,10 @@ Everything is on-device. No cloud sync, no accounts.
   (never reordered — prefix caching). That message now contains ONLY what
   the rules allow: retrieved memories with provenance markers and inline
   HANDLE WITH CARE handling (one render function — structurally
-  inseparable), **Instruction-type memories rendered as context rules** in
+  inseparable; **DORMANT since July 8 2026 — "Protected" is retired, so
+  nothing is flagged protected and this branch never fires; kept only so an
+  old backup carrying a protection field still renders**),
+  **Instruction-type memories rendered as context rules** in
   their own "Handling rules" section (law 5 — same retrieval, distinct
   render; the split lives in `PromptAssembler` so a rule can't be filed
   among the facts), the lorebook matches rendered INSIDE this message as
@@ -669,18 +672,28 @@ Everything is on-device. No cloud sync, no accounts.
     `MemoryBrowserActivity.iconForScope(scope, onCard)` (drawables `ic_mem_*`),
     per the owner's **July 8 2026 decisions, which SUPERSEDE the older mapping
     in `Memory System/phase6_card_suggestions_and_icons_design.md` §5**:
-    real_life → person; companion → partner (`partner_exchange`);
-    project → draft (folded-corner page); rp_character → theater comedy mask;
-    world / campaign / global (and any unknown) → public globe; **a memory that
-    has been placed on a card → book_5** (`ic_mem_book`). The user's RP-character
-    slot shares the comedy mask for now but has its OWN branch, ready for a
-    future dedicated icon. **`onCard` is always false today** — a memory↔card
-    link (Phase 6; `card_entries` has no source-memory column and `memories`
-    has no on-card flag) is the one missing piece; `isOnCard()` is the single
-    hook to teach when that flow exists, and book_5 lights up then. (Open: the
-    `global` scope icon isn't owner-specified yet — currently the globe.)
+    real_life → person; **global → borg (`ic_mem_global`, its OWN icon —
+    global is a distinct scope from real life, §3)**; companion → partner
+    (`partner_exchange`); project → draft (folded-corner page); rp_character →
+    theater comedy mask; world / campaign (and any unknown) → public globe;
+    **a memory that has been placed on a card → book_5** (`ic_mem_book`). The
+    user's RP-character slot shares the comedy mask for now but has its OWN
+    branch, ready for a future dedicated icon. **`onCard` is always false
+    today** — a memory↔card link (Phase 6; `card_entries` has no source-memory
+    column and `memories` has no on-card flag) is the one missing piece;
+    `isOnCard()` is the single hook to teach when that flow exists, and book_5
+    lights up then.
     `MemoryRowAdapter`/`MemoryRow` grew `iconRes` + `tagsLine` fields; the
     Pending banner still lives on the shared scaffold.
+  - **"Protected" is retired (owner ruling, July 8 2026 — see
+    `owner_approved_rules.md` Addendum §2).** It was a handling concern, not a
+    scope/type: rule-like protections are now ordinary Global memories, and a
+    sensitive fact keeps its care-note in its own text (memories inject whole,
+    so it can't be sheared off). The **Protect/Unprotect row-menu actions were
+    removed** from the browser. The `protection` column, the backup codec
+    field, and the inert `HANDLE WITH CARE` enforcer render stay DORMANT for
+    backup/import compatibility; the Archivist (Phase 6) must never emit a
+    protection/handling field.
   - The **Pending screen** (`MemoryPendingActivity`, §14): a pinned "Pending
     memories (N) ›" banner on the browser opens draft memories grouped under
     collapsible destination-scope headers with per-group select-all, checkboxes,

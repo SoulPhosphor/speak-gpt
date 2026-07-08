@@ -18,13 +18,10 @@ package org.teslasoft.assistant.ui.activities.memory
 
 import android.content.Intent
 import android.view.View
-import android.widget.EditText
-import android.widget.LinearLayout
 import android.widget.PopupMenu
 import android.widget.Toast
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import org.json.JSONArray
-import org.json.JSONObject
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.memory.MemoryRecord
 import org.teslasoft.assistant.preferences.memory.MemoryStore
@@ -196,11 +193,14 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
      * Pick the leading identity icon (owner icon set, July 8 2026):
      *   on a card (any roleplay scope) → book_5   [Phase-6, see isOnCard]
      *   real_life                      → person
+     *   global                         → borg (its OWN icon — global is a
+     *                                    distinct scope from real life: it
+     *                                    crosses into roleplay, §3)
      *   companion                      → partner (two people + a heart)
      *   project                        → draft (folded-corner page)
      *   rp_character (user's RP char)   → theater comedy mask
      *   world / campaign               → public globe (roleplay, not on a card)
-     *   global (and any unknown)        → public globe
+     *   unknown / fallback              → public globe
      *
      * The user-roleplay-character slot will get its OWN icon later; it shares
      * the comedy mask for now, so keep the branch separate from world/campaign
@@ -209,10 +209,11 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
     private fun iconForScope(scope: String?, onCard: Boolean): Int = when {
         onCard -> R.drawable.ic_mem_book
         scope == "real_life" -> R.drawable.ic_mem_person
+        scope == "global" -> R.drawable.ic_mem_global
         scope == "companion" -> R.drawable.ic_mem_companion
         scope == "project" -> R.drawable.ic_mem_draft
         scope == "rp_character" -> R.drawable.ic_mem_theater
-        else -> R.drawable.ic_mem_public   // world, campaign, global, unknown
+        else -> R.drawable.ic_mem_public   // world, campaign, unknown
     }
 
     /**
@@ -275,14 +276,14 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
         }
     }
 
+    // Protect/Unprotect is retired (owner ruling, July 8 2026): "protection"
+    // was a handling concern, not a memory concept. Rule-like protections are
+    // now ordinary Global memories; a sensitive fact keeps its care-note in
+    // its own text (memories inject whole, so the note can't be sheared off).
+    // The DB protection column stays dormant for backup/import compatibility.
     private fun showRowMenu(anchor: View, m: MemoryRecord) {
         val menu = PopupMenu(this, anchor)
         menu.menu.add(0, 1, 0, getString(R.string.action_edit))
-        if (m.protectionJson.isNullOrBlank()) {
-            menu.menu.add(0, 2, 0, getString(R.string.action_protect))
-        } else {
-            menu.menu.add(0, 3, 0, getString(R.string.action_unprotect))
-        }
         if (m.status == "active") {
             menu.menu.add(0, 4, 0, getString(R.string.action_archive))
         } else {
@@ -293,8 +294,6 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
         menu.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 1 -> openEditor(m.memoryId)
-                2 -> showProtectDialog(m)
-                3 -> applyProtection(m.memoryId, null)
                 4 -> setStatus(m.memoryId, "archived")
                 5 -> setStatus(m.memoryId, "active")
                 6 -> showHistory(m.memoryId)
@@ -357,45 +356,6 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
             .show()
     }
 
-    /** Protect: capture the HANDLE WITH CARE handling lines (one per line). */
-    private fun showProtectDialog(m: MemoryRecord) {
-        val field = EditText(this).apply {
-            hint = getString(R.string.memory_protect_handling_hint)
-            setText(existingHandling(m.protectionJson))
-            minLines = 3
-            gravity = android.view.Gravity.TOP
-        }
-        val pad = (20 * resources.displayMetrics.density).toInt()
-        val container = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(pad, pad, pad, 0)
-            addView(field)
-        }
-        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.action_protect)
-            .setMessage(R.string.memory_protect_dialog_msg)
-            .setView(container)
-            .setPositiveButton(R.string.btn_save) { _, _ ->
-                val handling = field.text.toString().split("\n").map { it.trim() }.filter { it.isNotEmpty() }
-                val json = JSONObject().apply {
-                    put("is_protected", true)
-                    put("handling", JSONArray(handling))
-                }.toString()
-                applyProtection(m.memoryId, json)
-            }
-            .setNegativeButton(R.string.btn_cancel) { _, _ -> }
-            .show()
-    }
-
-    private fun applyProtection(memoryId: String, protectionJson: String?) {
-        runOffThread {
-            MemoryStore.getInstance(this).setMemoryProtection(
-                memoryId, protectionJson, getString(R.string.memory_change_protection)
-            )
-            runOnUiThread { reload() }
-        }
-    }
-
     private fun showHistory(memoryId: String) {
         runOffThread {
             val log = MemoryStore.getInstance(this).getMemoryChangeLog(memoryId)
@@ -415,12 +375,4 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
         }
     }
 
-    /* ------------------------------ json helpers ------------------------------ */
-
-    private fun existingHandling(protectionJson: String?): String = try {
-        if (protectionJson.isNullOrBlank()) "" else {
-            val arr = JSONObject(protectionJson).optJSONArray("handling") ?: JSONArray()
-            (0 until arr.length()).joinToString("\n") { arr.getString(it) }
-        }
-    } catch (_: Exception) { "" }
 }
