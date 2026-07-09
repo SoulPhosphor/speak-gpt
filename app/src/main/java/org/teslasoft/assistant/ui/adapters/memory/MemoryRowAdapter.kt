@@ -54,7 +54,10 @@ data class MemoryRow(
      *  Accept / Delete / Edit action words across the row's bottom. */
     val pendingActions: Boolean = false,
     /** Roleplay pending rows also get Add to Card. */
-    val showAddToCard: Boolean = false
+    val showAddToCard: Boolean = false,
+    /** §7 outline treatment: an unactioned Memory Assistant card-placement
+     *  suggestion is waiting on this row. */
+    val outlined: Boolean = false
 )
 
 class MemoryRowAdapter(
@@ -149,6 +152,14 @@ class MemoryRowAdapter(
             action.visibility = View.GONE
             action.setOnClickListener(null)
         }
+
+        // §7: the outline marks "a card placement is waiting on your
+        // decision"; it drops once the draft is accepted or deleted (the
+        // suggestion clears with the status change). Set on the recycled view
+        // every bind so old outlines never linger.
+        ui.foreground = if (row.outlined)
+            androidx.core.content.ContextCompat.getDrawable(context, R.drawable.bg_suggestion_outline)
+        else null
 
         val pendingStrip = view.findViewById<View>(R.id.row_pending_actions)
         if (row.pendingActions) {

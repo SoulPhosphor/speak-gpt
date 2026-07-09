@@ -130,6 +130,29 @@ class ArchivistResponseParserTest {
         assertEquals("Shadowfell", parsed.memories[0].targetName)
     }
 
+    @Test
+    fun cardPlacementSuggestionParsed() {
+        val parsed = ArchivistResponseParser.parse(
+            """
+            {"memories":[{"title":"Moonblade","content":"Won from the tomb.","scope":"rp_character","type":"lore",
+              "card":"Kaelen","card_section":"INVENTORY"}]}
+            """.trimIndent()
+        )
+        assertEquals("Kaelen", parsed.memories[0].cardName)
+        // Section keys normalize to lowercase; validation against the card's
+        // real section list happens in the runner.
+        assertEquals("inventory", parsed.memories[0].cardSection)
+    }
+
+    @Test
+    fun missingCardFieldsStayNull() {
+        val parsed = ArchivistResponseParser.parse(
+            """{"memories":[{"title":"a","content":"c","scope":"world","type":"lore"}]}"""
+        )
+        assertNull(parsed.memories[0].cardName)
+        assertNull(parsed.memories[0].cardSection)
+    }
+
     @Test(expected = Exception::class)
     fun noJsonObjectThrows() {
         ArchivistResponseParser.parse("I could not analyze this conversation.")

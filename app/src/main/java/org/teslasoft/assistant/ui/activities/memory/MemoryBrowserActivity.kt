@@ -202,7 +202,10 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
             iconRes = iconForScope(m.scope, isOnCard(m)),
             pendingActions = pending,
             // Owner design: roleplay memories additionally get Add to Card.
-            showAddToCard = pending && m.scope in ROLEPLAY_SCOPES
+            showAddToCard = pending && m.scope in ROLEPLAY_SCOPES,
+            // §7 outline: an unactioned Memory Assistant placement suggestion
+            // is waiting on this draft.
+            outlined = pending && m.suggestedCardId != null
         )
     }
 
@@ -448,14 +451,23 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
 
     /** "Accept Memory and Link to Lore Card?" (owner wording) — the card and
      *  section dropdowns are boxed controls (5dp corners, box around the
-     *  dropdown only). No Archivist placement suggestions exist yet; when the
-     *  suggestion engine lands, it pre-selects both dropdowns here. */
+     *  dropdown only). A Memory Assistant placement suggestion pre-selects
+     *  both dropdowns; the user can change either to anything (owner: "it
+     *  already shows what's suggested but they can change it"). */
     private fun showAddToCardDialog(memory: MemoryRecord, cards: List<LoreCard>) {
         val view = layoutInflater.inflate(R.layout.dialog_add_to_card, null)
         val dropCard = view.findViewById<android.widget.TextView>(R.id.dropdown_card)
         val dropSection = view.findViewById<android.widget.TextView>(R.id.dropdown_section)
-        var pickedCard: LoreCard? = null
-        var pickedSection: String? = null
+        var pickedCard: LoreCard? = cards.firstOrNull {
+            it.cardType == memory.suggestedCardType && it.id == memory.suggestedCardId
+        }
+        var pickedSection: String? = memory.suggestedSection?.takeIf { s ->
+            pickedCard != null && s in CardSections.sectionsFor(pickedCard!!.cardType)
+        }
+        if (pickedCard != null) dropCard.text = pickedCard!!.name
+        if (pickedSection != null) {
+            dropSection.text = getString(CardEntryEditorActivity.sectionLabelRes(pickedSection!!))
+        }
 
         dropCard.setOnClickListener { anchor ->
             val menu = PopupMenu(this, anchor)

@@ -428,7 +428,14 @@ data class MemoryRecord(
     val companionIds: List<String>,       // memory_companions join rows
     val entityRefs: List<String>,         // memory_entities join rows
     val changeLog: List<ChangeLogEntry>,
-    val origin: String = "user"
+    val origin: String = "user",
+    /** Archivist card-placement suggestion (DB v13, drafts only): proposed
+     *  CardType / card id / CardSections key, pre-selecting the Add-to-Card
+     *  and Link dropdowns and driving the §7 outline treatment. Cleared when
+     *  the draft is accepted without the card. */
+    val suggestedCardType: String? = null,
+    val suggestedCardId: String? = null,
+    val suggestedSection: String? = null
 )
 
 data class ModeRecord(

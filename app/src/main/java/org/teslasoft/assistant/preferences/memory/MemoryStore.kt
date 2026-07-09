@@ -49,7 +49,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
 
     companion object {
         const val DATABASE_NAME = "companion_memory.db"
-        private const val DATABASE_VERSION = 12
+        private const val DATABASE_VERSION = 13
 
         // Freshness-cooldown source types (rules §10 / Stage 3.3): the
         // composite key (chat_id, source_type, entry_id) keeps ids from
@@ -326,7 +326,13 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 "updated_at TEXT, " +
                 "status TEXT NOT NULL CHECK (status IN ('draft','active','archived','superseded')), " +
                 "supersedes TEXT REFERENCES memories(memory_id), " +
-                "origin TEXT NOT NULL DEFAULT 'user')"
+                "origin TEXT NOT NULL DEFAULT 'user', " +
+                // Archivist card-placement suggestion (DB v13): draft-only
+                // metadata, deliberately FK-less (a stale suggestion must
+                // never block a card delete); never exported.
+                "suggested_card_type TEXT, " +
+                "suggested_card_id TEXT, " +
+                "suggested_section TEXT)"
         )
 
         db.execSQL(
@@ -1103,6 +1109,22 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             db.execSQL(
                 "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                 arrayOf(META_DB_MIGRATION, "12")
+            )
+        }
+        if (oldVersion < 13) {
+            // v13 (July 2026, Phase 6): Archivist card-placement suggestions
+            // (phase6_card_suggestions_and_icons_design.md §2/§7 + the July 8
+            // evening rulings). A roleplay DRAFT may carry a proposed card +
+            // section, pre-selecting the Add-to-Card / Link dropdowns and
+            // giving the row its outline treatment. Draft-only metadata: it
+            // is cleared when the draft is accepted without a card and dies
+            // with the row on convert/delete; never exported. Additive.
+            db.execSQL("ALTER TABLE memories ADD COLUMN suggested_card_type TEXT")
+            db.execSQL("ALTER TABLE memories ADD COLUMN suggested_card_id TEXT")
+            db.execSQL("ALTER TABLE memories ADD COLUMN suggested_section TEXT")
+            db.execSQL(
+                "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                arrayOf(META_DB_MIGRATION, "13")
             )
         }
     }
@@ -4302,7 +4324,10 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             companionIds = readJoin(db, "memory_companions", "companion_id", id),
             entityRefs = readJoin(db, "memory_entities", "entity_id", id),
             changeLog = readChangeLog(db, id),
-            origin = it.getStringOrNull("origin") ?: "user"
+            origin = it.getStringOrNull("origin") ?: "user",
+            suggestedCardType = it.getStringOrNull("suggested_card_type"),
+            suggestedCardId = it.getStringOrNull("suggested_card_id"),
+            suggestedSection = it.getStringOrNull("suggested_section")
         )
     }
 
@@ -4334,6 +4359,9 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         put("status", m.status)
         put("supersedes", m.supersedes)
         put("origin", m.origin)
+        put("suggested_card_type", m.suggestedCardType)
+        put("suggested_card_id", m.suggestedCardId)
+        put("suggested_section", m.suggestedSection)
     }
 
     private fun writeMemoryLinks(db: SQLiteDatabase, m: MemoryRecord) {
@@ -4415,6 +4443,12 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             db.update("memories", ContentValues().apply {
                 put("status", status)
                 put("updated_at", nowIso())
+                // A status change is the user's decision on the draft — any
+                // unactioned card-placement suggestion is discarded with it
+                // (suggestions are draft-only metadata; §7's outline drops).
+                putNull("suggested_card_type")
+                putNull("suggested_card_id")
+                putNull("suggested_section")
             }, "memory_id = ?", arrayOf(memoryId))
             db.delete("embeddings", "memory_id = ?", arrayOf(memoryId))
             logChange(db, memoryId, "user",

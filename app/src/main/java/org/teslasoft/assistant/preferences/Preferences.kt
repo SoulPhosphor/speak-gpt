@@ -1608,6 +1608,19 @@ class Preferences private constructor(private var preferences: SharedPreferences
         putGlobalString("archivist_min_importance", value.coerceIn(1, 5).toString())
     }
 
+    /** The card-append toggle (owner wording lives in
+     *  phase6_card_suggestions_and_icons_design.md §2): whether the Memory
+     *  Assistant also proposes placing roleplay memories onto card sections.
+     *  ON by default (owner: a "danger switch" — its UI ships with the
+     *  Memory Controls screen; manual placement is always available
+     *  regardless). */
+    fun getArchivistCardSuggestions(): Boolean =
+        getGlobalString("archivist_card_suggestions", "true") == "true"
+
+    fun setArchivistCardSuggestions(value: Boolean) {
+        putGlobalString("archivist_card_suggestions", value.toString())
+    }
+
     /** Custom extraction prompt; "" = use the built-in ArchivistPrompt.SYSTEM
      *  (the Reset Prompt action clears back to ""). */
     fun getArchivistCustomPrompt(): String =

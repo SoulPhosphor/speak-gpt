@@ -341,8 +341,19 @@ Everything is on-device. No cloud sync, no accounts.
    validation gate: unknown scope/type rows are dropped and counted (never
    coerced), handling fields ignored, floods bounded. Proposed target NAMES
    only link to records that already exist (exact name match) — the Archivist
-   never creates worlds/campaigns/characters/projects. Card placements are
-   deliberately absent (not yet designed with the owner). The **Memory
+   never creates worlds/campaigns/characters/projects. **DB v13 (July 9
+   2026) adds card-placement SUGGESTIONS**: roleplay drafts may carry
+   `memories.suggested_card_type/_id/_section` (draft-only, FK-less, never
+   exported, cleared on any status change) — the Archivist proposes a card +
+   section by NAME (resolved against existing live cards only; section
+   validated per card type), gated by `getArchivistCardSuggestions()` (ON by
+   default — the owner's card-append toggle; its UI ships with Memory
+   Controls). Suggestions pre-select the Add-to-Card and editor Link
+   dropdowns and give pending rows the §7 outline (`bg_suggestion_outline`).
+   The Memory Assistant tuning prefs (July 9 spec,
+   `memory_settings_reorg_spec.md`): max suggestions per conversation +
+   minimum importance (both ENFORCED IN CODE in the runner), temperature
+   (default 0.3), custom extraction prompt ("" = built-in). The **Memory
    Assistant screen is BUILT** (July 8 2026 evening) to the owner's approved
    wording (`memory_assistant_design.md` + `phase6_owner_answers_2026-07-08.md`)
    and drives this engine: facts block, Analyze Conversations with live

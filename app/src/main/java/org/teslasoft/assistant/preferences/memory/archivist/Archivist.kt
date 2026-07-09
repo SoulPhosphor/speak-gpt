@@ -35,6 +35,8 @@ import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.preferences.memory.ArchivistRunRecord
+import org.teslasoft.assistant.preferences.memory.CardSections
+import org.teslasoft.assistant.preferences.memory.CardType
 import org.teslasoft.assistant.preferences.memory.MemoryLog
 import org.teslasoft.assistant.preferences.memory.MemoryRecord
 import org.teslasoft.assistant.preferences.memory.MemoryStore
@@ -196,6 +198,9 @@ object Archivist {
         val minImportance = prefs.getArchivistMinImportance()
         val temperature = prefs.getArchivistTemperature().toDouble()
         val systemPrompt = prefs.getArchivistCustomPrompt().ifBlank { ArchivistPrompt.SYSTEM }
+        // The card-append toggle (§2, ON by default): off discards any
+        // proposed placements — the memories themselves still file.
+        val cardSuggestionsOn = prefs.getArchivistCardSuggestions()
 
         val memoryIds = ArrayList<String>()
         val ruleIds = ArrayList<String>()
@@ -280,7 +285,9 @@ object Archivist {
                                     "chat=${conversation.chatId}: $belowFloor draft(s) below minimum importance $minImportance skipped")
                             }
                             val before = memoryIds.size
-                            duplicatesSkipped += fileMemoryDrafts(context, store, conversation, candidates, memoryIds)
+                            duplicatesSkipped += fileMemoryDrafts(
+                                context, store, conversation, candidates, memoryIds, cardSuggestionsOn
+                            )
                             filedThisConversation += memoryIds.size - before
                             fileRuleDrafts(context, store, conversation, parsed.rules, ruleIds)
                         }
@@ -402,14 +409,46 @@ object Archivist {
         store: MemoryStore,
         conversation: Conversation,
         drafts: List<ArchivistResponseParser.DraftMemory>,
-        collectedIds: MutableList<String>
+        collectedIds: MutableList<String>,
+        cardSuggestionsOn: Boolean
     ): Int {
         if (drafts.isEmpty()) return 0
         var duplicates = 0
         val now = Instant.now().toString()
         val companionId = conversation.transcripts.firstNotNullOfOrNull { it.companionId }
+        // Live cards for placement-suggestion resolution: name → (type, id).
+        // Loaded once per conversation; exact case-insensitive name match
+        // against EXISTING cards only — an unknown card name just drops the
+        // suggestion, never the memory, and nothing is ever created.
+        val liveCards: List<Triple<String, String, String>> = if (cardSuggestionsOn) {
+            buildList {
+                store.getAllWorlds().filter { it.status == "active" }
+                    .forEach { add(Triple(CardType.WORLD, it.worldId, it.name)) }
+                store.getActiveCampaigns()
+                    .forEach { add(Triple(CardType.CAMPAIGN, it.campaignId, it.name)) }
+                store.getAllRoleplayCharacters().filter { it.status == "active" }
+                    .forEach { add(Triple(CardType.RP_CHARACTER, it.roleplayCharacterId, it.name)) }
+                store.getPartyMembers(includeArchived = false)
+                    .forEach { add(Triple(CardType.PARTY_MEMBER, it.partyMemberId, it.name)) }
+            }
+        } else emptyList()
         for (d in drafts) {
             if (store.memoryExistsWithText(d.title, d.content)) { duplicates++; continue }
+            // Resolve a proposed placement (roleplay scopes only): the section
+            // must be a real key for the matched card's type.
+            var sugType: String? = null
+            var sugId: String? = null
+            var sugSection: String? = null
+            if (cardSuggestionsOn && d.cardName != null && d.cardSection != null &&
+                d.scope in setOf("world", "campaign", "rp_character")
+            ) {
+                val match = liveCards.firstOrNull { it.third.equals(d.cardName, ignoreCase = true) }
+                if (match != null && d.cardSection in CardSections.sectionsFor(match.first)) {
+                    sugType = match.first
+                    sugId = match.second
+                    sugSection = d.cardSection
+                }
+            }
             val record = MemoryRecord(
                 memoryId = MemoryStore.newId("m-"),
                 scope = d.scope,
@@ -439,7 +478,10 @@ object Archivist {
                 companionIds = if (d.scope == "companion" && companionId != null) listOf(companionId) else emptyList(),
                 entityRefs = emptyList(),
                 changeLog = emptyList(),
-                origin = "archivist"
+                origin = "archivist",
+                suggestedCardType = sugType,
+                suggestedCardId = sugId,
+                suggestedSection = sugSection
             )
             try {
                 store.insertArchivistDraftMemory(record)

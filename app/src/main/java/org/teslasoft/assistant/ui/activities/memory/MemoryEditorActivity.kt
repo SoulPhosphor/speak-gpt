@@ -238,6 +238,23 @@ class MemoryEditorActivity : FragmentActivity() {
                         if (record.scope in setOf("world", "campaign", "rp_character")) {
                             sectionLinkCard?.visibility = View.VISIBLE
                             wireLinkCardDropdowns()
+                            // A Memory Assistant placement suggestion
+                            // pre-selects both dropdowns ("Select" otherwise);
+                            // the user can change or ignore it.
+                            val suggested = loreCards.firstOrNull {
+                                it.first == record.suggestedCardType && it.second == record.suggestedCardId
+                            }
+                            if (suggested != null) {
+                                linkCardType = suggested.first
+                                linkCardId = suggested.second
+                                dropdownLinkCard?.text = suggested.third
+                                val section = record.suggestedSection
+                                if (section != null && section in CardSections.sectionsFor(suggested.first)) {
+                                    linkSection = section
+                                    dropdownLinkSection?.text =
+                                        getString(CardEntryEditorActivity.sectionLabelRes(section))
+                                }
+                            }
                         }
                     }
                 } else {

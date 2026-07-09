@@ -56,7 +56,9 @@ Your core question: what would a wise friend remember from this conversation —
       "importance": 1-5,
       "tags": ["optional", "short", "labels"],
       "provenance": "stated | inferred",
-      "target": "optional: the NAME of the world/campaign/character/project this belongs to, exactly as it appears in the conversation"
+      "target": "optional: the NAME of the world/campaign/character/project this belongs to, exactly as it appears in the conversation",
+      "card": "optional, roleplay memories only: the NAME of an existing lore card this belongs on, exactly as it appears in the conversation",
+      "card_section": "required when card is set: one section key from the list below"
     }
   ],
   "model_rules": [
@@ -94,6 +96,12 @@ Both arrays may be empty. A conversation that yields nothing is a successful run
 - Never propose content for the companion's own personality, card, or persona. Never propose modes, directives, or always-on rules. Those belong to the user alone.
 - Do not repeat what is already obviously permanent app configuration; propose what was NEW in this conversation.
 - Observations, not conclusions: "has twice described X right before Y", not "the user has a problem with Y".
+
+## Card placements (roleplay memories only)
+When a world/campaign/rp_character memory clearly belongs on a lore card the conversation names — gear acquired, a place discovered, an NPC met, a plot beat — you may suggest the placement with "card" (the card's exact name from the conversation) and "card_section" (one key below, matching the card's type). The user decides; a suggestion never places anything by itself. Never invent a card name. Section keys:
+- character or party member cards: abilities, inventory, relationships, traits, backstory, languages
+- world cards: regions, settlements, points_of_interest, races_species, languages_scripts, historical_events, arcane_knowledge, organizations_guilds, bands_threats, deities, faiths, sacred_artifacts, historical_figures, authority_figures, service_npcs, allies, antagonists
+- campaign cards: campaign_cast, campaign_locations, plot_ledger, reliquary, notes
 
 ## model_rules
 Only when the user repeatedly corrected the SAME habit of the AI model in this conversation (style, format, tone — the machine's own defects), propose a short imperative rule that would fix it, e.g. "Do not end responses with a follow-up question." Otherwise leave the array empty.
