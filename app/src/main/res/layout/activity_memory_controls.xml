@@ -18,8 +18,9 @@
 -->
 <!-- Memory Controls: the normal user-facing controls page
      (memory_settings_reorg_spec.md §1, July 9 2026). Most-changed settings
-     near the top, backups lower, the destructive Reset at the bottom, and the
-     Advanced Memory Settings door as the very last row. -->
+     near the top, backups lower, the destructive Reset at the bottom. The
+     Advanced Memory Settings door lives in the Memory Manager hub (its own row
+     directly under Memory Controls), not here (owner ruling, July 9 2026). -->
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/root"
@@ -590,50 +591,6 @@
                 android:text="@string/memory_controls_reset_hint"
                 android:textColor="@color/text_subtitle"
                 android:textSize="13sp" />
-
-            <!-- ============ Advanced Memory Settings door (very bottom) ============ -->
-            <LinearLayout
-                android:id="@+id/row_advanced_memory"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="24dp"
-                android:background="?attr/selectableItemBackground"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center_vertical"
-                android:minHeight="56dp"
-                android:orientation="horizontal"
-                android:paddingVertical="12dp">
-
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
-
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/memory_controls_row_advanced"
-                        android:textColor="@color/text"
-                        android:textSize="16sp" />
-
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/memory_controls_row_advanced_subtitle"
-                        android:textColor="@color/text_subtitle"
-                        android:textSize="13sp" />
-                </LinearLayout>
-
-                <ImageView
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:layout_marginStart="12dp"
-                    android:contentDescription="@string/memory_controls_row_advanced"
-                    android:src="@drawable/ic_chevron_right"
-                    android:tint="@color/text_subtitle" />
-            </LinearLayout>
         </LinearLayout>
     </ScrollView>
 </androidx.constraintlayout.widget.ConstraintLayout>

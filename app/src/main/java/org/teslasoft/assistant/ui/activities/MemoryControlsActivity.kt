@@ -61,9 +61,11 @@ import org.teslasoft.assistant.util.Hash
  * July 9 2026). Owner-sanctioned wording, used verbatim. It holds the memory
  * defaults, the Memory Assistant entry + suggestion cap, the memory engine, the
  * Memory Assistant model, backups, and the destructive Reset at the bottom.
- * Two doors lead deeper: "Memory Assistant Advanced Settings" (extraction
- * tuning) inside the Memory Assistant section, and "Advanced Memory Settings"
- * (diagnostics/repair) as the very last row.
+ * One door leads deeper: "Memory Assistant Advanced Settings" (extraction
+ * tuning) inside the Memory Assistant section. "Advanced Memory Settings"
+ * (diagnostics/repair) is NOT here — it sits as its own row in the Memory
+ * Manager hub, directly under the Memory Controls row (owner ruling, July 9
+ * 2026).
  *
  * The user-facing name is "Memory Assistant" — never "Archivist" (the internal
  * `Preferences.getArchivist*` accessors keep the code name).
@@ -100,7 +102,6 @@ class MemoryControlsActivity : FragmentActivity() {
     private var textLastBackup: TextView? = null
 
     private var btnReset: MaterialButton? = null
-    private var rowAdvancedMemory: LinearLayout? = null
 
     /** Guards the suggestion field's TextWatcher while we set text programmatically. */
     private var suppressSuggestionWatcher = false
@@ -158,7 +159,6 @@ class MemoryControlsActivity : FragmentActivity() {
         btnExport = findViewById(R.id.btn_memory_export)
         textLastBackup = findViewById(R.id.text_last_backup)
         btnReset = findViewById(R.id.btn_memory_reset)
-        rowAdvancedMemory = findViewById(R.id.row_advanced_memory)
     }
 
     @Suppress("DEPRECATION")
@@ -252,11 +252,6 @@ class MemoryControlsActivity : FragmentActivity() {
 
         /* ---- Reset (bottom) ---- */
         btnReset?.setOnClickListener { showResetDialog() }
-
-        /* ---- Advanced Memory Settings door ---- */
-        rowAdvancedMemory?.setOnClickListener {
-            startActivity(Intent(this, AdvancedMemorySettingsActivity::class.java).putExtra("chatId", chatId))
-        }
     }
 
     /* ------------------------------ Maximum Suggestions Per Conversation ------------------------------ */

@@ -137,12 +137,15 @@ a foreground service that keeps generation alive in the background.
   2026 — see below.)
 - `ui/activities/MemoryManagerActivity.kt` — the **Memory Manager** (July 8
   2026), reached from the renamed **Memory Manager** tile on the main Settings
-  screen. A plain chevron-row hub (house style: rows, not cards) with four
+  screen. A plain chevron-row hub (house style: rows, not cards) with five
   doors: **Memory Browser** → the global memories browser; **Memory Assistant**
   → `MemoryAssistantActivity` (the built Phase 6 Archivist surface); **Lorebooks**
   → `LoreBooksListActivity` (moved here out of Characters — the lorebook screens
   themselves are unchanged, only the access point moved); **Memory Controls**
-  → `MemoryControlsActivity`. NOTE: this is a NEW, lightweight navigation hub —
+  → `MemoryControlsActivity`; **Advanced Memory Settings** →
+  `AdvancedMemorySettingsActivity` (its own row directly under Memory Controls —
+  moved OUT of the Memory Controls screen, owner ruling July 9 2026). NOTE:
+  this is a NEW, lightweight navigation hub —
   NOT the old ten-area `ui/activities/memory/MemoryManagerActivity`, which was
   removed in the Phase-5 rework and stays removed.
 - **The old combined Memory Settings screen was SPLIT (owner spec, July 9
@@ -152,7 +155,9 @@ a foreground service that keeps generation alive in the background.
   defaults, the Memory Assistant section with the max-suggestions cap
   [defaults 10 when toggled on] and the §2 card-suggestions toggle, the
   Memory Engine picker, Memory Assistant endpoint/model, Backups, Reset at
-  the bottom, and the door to Advanced Memory Settings);
+  the bottom; the Advanced Memory Settings door is NO LONGER here — it moved
+  up to its own row in the Memory Manager hub, directly under Memory Controls,
+  owner ruling July 9 2026);
   `ui/activities/MemoryAssistantAdvancedSettingsActivity.kt` (extraction
   tuning: temperature 0.0–2.0 w/ Reset to Recommended 0.3, Minimum
   Importance, the editable Extraction Prompt with Reset Prompt);
@@ -457,9 +462,10 @@ Everything is on-device. No cloud sync, no accounts.
    paths. UI: the **Memory Manager** tile on the main Settings screen (renamed
    from "Memory System", July 8 2026) → `MemoryManagerActivity` (the row hub)
    → **Memory Controls** row → `MemoryControlsActivity` (defaults, assistant
-   controls, engine, endpoint/model, backups, reset; diagnostics + bootstrap +
-   librarian live behind its Advanced Memory Settings door — July 9 2026
-   split, see the architecture map).
+   controls, engine, endpoint/model, backups, reset); the hub's separate
+   **Advanced Memory Settings** row (directly under Memory Controls) →
+   `AdvancedMemorySettingsActivity` holds diagnostics + bootstrap + librarian
+   — July 9 2026 split, see the architecture map.
 4. **Files** — images in `getExternalFilesDir("images")`, whisper models via
    `LocalWhisperStorage`, rotating memory backups in
    `getExternalFilesDir("memory_backups")`.
