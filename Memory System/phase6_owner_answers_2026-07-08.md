@@ -145,3 +145,38 @@ where anything below differs from earlier documents (including
   building association-delete cascade.)
 - **The advanced memory section** (extraction prompt exposure) — owner is
   writing it up; do not build ahead of it.
+
+## Round 3 — owner rulings, July 9 2026 (afternoon)
+
+1. **Toast is BANNED app-wide** (recorded in both manuals' Coding rules).
+   Persistent messages only — the app is used mostly hands-free; a message
+   that disappears on its own is useless. Never invent a toast again.
+2. **Engine-picker message** (owner wording, verbatim): "Install an embedding
+   model in Advanced Memory Settings before switching to the full memory
+   system." Shown INLINE under the Memory Engine control, persistent — never
+   a toast.
+3. **Emergence (Phase 6 scope):** the Memory Assistant must NOT propose or
+   create worlds/campaigns. Roleplay content from a conversation with no
+   attached target files as an untargeted pending draft clearly marked
+   **"Needs roleplay target."** (owner wording): stays Pending, never
+   auto-approved, CANNOT be added to a card until the user assigns a
+   world/campaign/character target during review (edit/delete/assign all
+   available). Automatic world/campaign proposal is a future design decision.
+4. **Story So Far / Plot Ledger: incinerated.** "story so far is a virus that
+   a previous AI invented." The Memory Assistant must NEVER automatically
+   update campaign Story So Far or Plot Ledger fields; it creates ordinary
+   pending roleplay drafts only. Card suggestions stay limited to the
+   already-approved card-relevant behavior (user-approved placements).
+   NEVER reference retired/old machinery as if it were current or revivable.
+5. **Rerun vs deleted drafts:** preferred behavior IF clean — deleting a
+   pending draft counts as rejecting it, so rerunning the same analysis does
+   not immediately recreate the exact same draft. Rejection must be SPECIFIC
+   (same source conversation + same/highly-similar content + same
+   target/scope when available); never broad global suppression that could
+   swallow useful memories. If clean tracking isn't feasible, document the
+   re-proposal as a known limitation instead of rushing a system.
+6. **Documentation must state plainly:** Phase 6 does not create
+   worlds/campaigns from emergence; does not auto-update Story So Far / Plot
+   Ledger; deleted drafts may be re-proposed on rerun unless rejected-draft
+   tracking is implemented; the full memory system requires an embedding
+   model installed through Advanced Memory Settings.
