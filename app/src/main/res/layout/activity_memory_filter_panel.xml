@@ -17,11 +17,12 @@
 **************************************************************************/
 -->
 <!-- Memory Filters panel (owner ruling, July 8 2026). Slides in from the right;
-     header holds the title + close-X; body is a scrolling list of six filter
-     sections (Sort, Scope, Type, Status, Source, Tags) in Title Case with each
-     selection rendered as a pill (10dp corners) with a tiny × to remove.
-     Category rows are populated in code so options can be added over time
-     without a layout rewrite. -->
+     header holds the title + close-X; body is a scrolling list of five filter
+     sections (Sort, Scope, Type, Source, Tags — Status left the panel the
+     same evening: the browser's Memories | Pending toggle owns the status
+     split) in Title Case with each selection rendered as a pill (10dp
+     corners) with a tiny × to remove. Category rows are populated in code so
+     options can be added over time without a layout rewrite. -->
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/root"

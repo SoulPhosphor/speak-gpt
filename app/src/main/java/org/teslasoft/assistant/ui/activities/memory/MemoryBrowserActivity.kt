@@ -23,6 +23,8 @@ import android.widget.Toast
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import org.json.JSONArray
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.preferences.memory.CardSections
+import org.teslasoft.assistant.preferences.memory.CardType
 import org.teslasoft.assistant.preferences.memory.MemoryRecord
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.memory.librarian.Librarian
@@ -50,9 +52,17 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
     /** Distinct tags across the loaded set, for the filter panel's Tags picker. */
     @Volatile private var availableTags: List<String> = emptyList()
 
-    /** Draft count in the current (global or scoped) view, for the Pending
-     *  banner (§2.4). */
+    /** Draft count in the current (global or scoped) view, for the count line
+     *  under the Memories | Pending toggle (owner design, July 8 2026
+     *  evening — hidden when nothing is pending). */
     @Volatile private var pendingCount: Int = 0
+
+    /** The two-mode view (owner design): "memories" = everything approved
+     *  (non-draft; archived/superseded keep their badges), "pending" = drafts
+     *  with the Accept / Delete / Edit (+ Add to Card) action words. Replaces
+     *  the old Pending banner + separate Pending screen AND the filter
+     *  panel's Status section (removed as a duplicate of this toggle). */
+    private var mode: String = "memories"
 
     private var presetCompanionId: String? = null
     private var presetWorldId: String? = null
@@ -79,24 +89,28 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
         overridePendingTransition(R.anim.slide_in_right, R.anim.anim_hold)
     }
 
-    // Pending banner (§2.4).
-    override fun onRowsRendered() {
-        if (pendingCount > 0) {
-            setPendingBanner(getString(R.string.mem_pending_banner, pendingCount)) { openPending() }
-        } else {
-            setPendingBanner(null, null)
-        }
+    override fun showModeToggle(): Boolean = true
+
+    override fun onModeSelected(mode: String) {
+        if (this.mode == mode) return
+        this.mode = mode
+        // Keep the shared filter state coherent for the entry points that
+        // read it (the Memory Assistant's View Pending Memories link writes
+        // status={draft} to open this view pre-switched).
+        MemoryBrowserFilterState.status.clear()
+        MemoryBrowserFilterState.status.add(if (mode == "pending") "draft" else "active")
+        reload()
     }
 
-    private fun openPending() {
-        startActivity(
-            Intent(this, MemoryPendingActivity::class.java)
-                .putExtra("chatId", chatId)
-                .putExtra("companionId", presetCompanionId)
-                .putExtra("worldId", presetWorldId)
-                .putExtra("campaignId", presetCampaignId)
-                .putExtra("roleplayCharacterId", presetRoleplayCharacterId)
-        )
+    // Count line under the toggle: "One Memory Pending" / "N Memories
+    // Pending", hidden when nothing is pending (owner wording).
+    override fun onRowsRendered() {
+        val countLine = when {
+            pendingCount <= 0 -> null
+            pendingCount == 1 -> getString(R.string.mem_pending_count_one)
+            else -> getString(R.string.mem_pending_count_many, pendingCount)
+        }
+        updateModeToggle(mode, countLine)
     }
 
     // Companions link (unscoped browser only).
@@ -117,6 +131,9 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
         presetCampaignId = intent.getStringExtra("campaignId")
         presetRoleplayCharacterId = intent.getStringExtra("roleplayCharacterId")
         titleOverride = intent.getStringExtra("screenTitle")
+        // An entry point that wrote status={draft} (the Memory Assistant's
+        // View Pending Memories link) opens straight into Pending view.
+        mode = if (MemoryBrowserFilterState.status == setOf("draft")) "pending" else "memories"
         super.onCreate(savedInstanceState)
     }
 
@@ -146,7 +163,12 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
         if (q.isNotEmpty()) list = list.filter { it.title.lowercase().contains(q) || it.content.lowercase().contains(q) }
         if (!isScoped() && f.scope.isNotEmpty()) list = list.filter { it.scope in f.scope }
         if (f.type.isNotEmpty()) list = list.filter { it.kind in f.type }
-        if (f.status.isNotEmpty()) list = list.filter { it.status in f.status }
+        // The mode toggle IS the status split (owner design, July 8 2026
+        // evening — the filter panel's Status section was removed as a
+        // duplicate): Memories = everything approved (non-draft; archived and
+        // superseded keep their row badges), Pending = drafts only.
+        list = if (mode == "pending") list.filter { it.status == "draft" }
+        else list.filter { it.status != "draft" }
         if (f.source != "all") list = list.filter { sourceKey(it.provenanceSource) == f.source }
         if (f.tags.isNotEmpty()) {
             val lowered = f.tags.map { it.lowercase() }.toSet()
@@ -166,15 +188,21 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
         val tags = parseTags(m.tagsJson)
         val firstLine = m.content.substringBefore('\n').trim()
         val tagsLine = if (tags.isEmpty()) null else formatTagsLine(tags)
-        val badge = if (m.status == "active") null else statusLabel(m.status)
+        val pending = mode == "pending"
+        // In Pending view every row is a draft, so the "Pending" badge would
+        // repeat the mode — suppressed, same reasoning as the Active badge.
+        val badge = if (m.status == "active" || pending) null else statusLabel(m.status)
         return MemoryRow(
             id = m.memoryId,
             title = m.title,
             subtitle = firstLine.ifEmpty { null },
             tagsLine = tagsLine,
             badge = badge,
-            hasAction = true,
-            iconRes = iconForScope(m.scope, isOnCard(m))
+            hasAction = !pending,
+            iconRes = iconForScope(m.scope, isOnCard(m)),
+            pendingActions = pending,
+            // Owner design: roleplay memories additionally get Add to Card.
+            showAddToCard = pending && m.scope in ROLEPLAY_SCOPES
         )
     }
 
@@ -375,4 +403,110 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
         }
     }
 
+    /* -------------------- pending actions (owner design) -------------------- */
+
+    // Accept → the draft becomes a regular active memory and leaves Pending.
+    // Delete → the existing can't-be-undone confirm. Edit → the editor (which
+    // shows Approve All As Shown for drafts). Add to Card → the link pop-up.
+    override fun onPendingAction(row: MemoryRow, action: String) {
+        when (action) {
+            org.teslasoft.assistant.ui.adapters.memory.MemoryRowAdapter.ACTION_ACCEPT ->
+                setStatus(row.id, "active")
+            org.teslasoft.assistant.ui.adapters.memory.MemoryRowAdapter.ACTION_EDIT ->
+                openEditor(row.id)
+            org.teslasoft.assistant.ui.adapters.memory.MemoryRowAdapter.ACTION_DELETE ->
+                runOffThread {
+                    val m = MemoryStore.getInstance(this).getMemory(row.id) ?: return@runOffThread
+                    runOnUiThread { confirmDelete(m) }
+                }
+            org.teslasoft.assistant.ui.adapters.memory.MemoryRowAdapter.ACTION_ADD_TO_CARD ->
+                prepareAddToCard(row.id)
+        }
+    }
+
+    /** One selectable lore card in the Add-to-Card dropdown. */
+    private data class LoreCard(val cardType: String, val id: String, val name: String)
+
+    private fun prepareAddToCard(memoryId: String) {
+        runOffThread {
+            val store = MemoryStore.getInstance(this)
+            val memory = store.getMemory(memoryId) ?: return@runOffThread
+            // Every live roleplay card is a valid destination; archived cards
+            // aren't offered (their content is shelved).
+            val cards = ArrayList<LoreCard>()
+            store.getAllWorlds().filter { it.status == "active" }
+                .forEach { cards.add(LoreCard(CardType.WORLD, it.worldId, it.name)) }
+            store.getActiveCampaigns()
+                .forEach { cards.add(LoreCard(CardType.CAMPAIGN, it.campaignId, it.name)) }
+            store.getAllRoleplayCharacters().filter { it.status == "active" }
+                .forEach { cards.add(LoreCard(CardType.RP_CHARACTER, it.roleplayCharacterId, it.name)) }
+            store.getPartyMembers(includeArchived = false)
+                .forEach { cards.add(LoreCard(CardType.PARTY_MEMBER, it.partyMemberId, it.name)) }
+            runOnUiThread { showAddToCardDialog(memory, cards) }
+        }
+    }
+
+    /** "Accept Memory and Link to Lore Card?" (owner wording) — the card and
+     *  section dropdowns are boxed controls (5dp corners, box around the
+     *  dropdown only). No Archivist placement suggestions exist yet; when the
+     *  suggestion engine lands, it pre-selects both dropdowns here. */
+    private fun showAddToCardDialog(memory: MemoryRecord, cards: List<LoreCard>) {
+        val view = layoutInflater.inflate(R.layout.dialog_add_to_card, null)
+        val dropCard = view.findViewById<android.widget.TextView>(R.id.dropdown_card)
+        val dropSection = view.findViewById<android.widget.TextView>(R.id.dropdown_section)
+        var pickedCard: LoreCard? = null
+        var pickedSection: String? = null
+
+        dropCard.setOnClickListener { anchor ->
+            val menu = PopupMenu(this, anchor)
+            cards.forEachIndexed { i, c -> menu.menu.add(0, i, i, c.name) }
+            menu.setOnMenuItemClickListener { item ->
+                pickedCard = cards[item.itemId]
+                dropCard.text = pickedCard!!.name
+                // Sections belong to the picked card's type; reset the choice.
+                pickedSection = null
+                dropSection.text = getString(R.string.mem_dropdown_select)
+                true
+            }
+            menu.show()
+        }
+        dropSection.setOnClickListener { anchor ->
+            val card = pickedCard ?: return@setOnClickListener
+            val sections = CardSections.sectionsFor(card.cardType)
+            val menu = PopupMenu(this, anchor)
+            sections.forEachIndexed { i, s ->
+                menu.menu.add(0, i, i, getString(CardEntryEditorActivity.sectionLabelRes(s)))
+            }
+            menu.setOnMenuItemClickListener { item ->
+                pickedSection = sections[item.itemId]
+                dropSection.text = getString(CardEntryEditorActivity.sectionLabelRes(pickedSection!!))
+                true
+            }
+            menu.show()
+        }
+
+        val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.mem_add_card_title)
+            .setView(view)
+            .setPositiveButton(R.string.mem_pending_accept, null)
+            .setNegativeButton(R.string.btn_cancel) { _, _ -> }
+            .show()
+        // Manual click handling so an incomplete pick doesn't dismiss.
+        dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE)?.setOnClickListener {
+            val card = pickedCard ?: return@setOnClickListener
+            val section = pickedSection ?: return@setOnClickListener
+            dialog.dismiss()
+            runOffThread {
+                MemoryStore.getInstance(this)
+                    .convertMemoryToCardEntry(memory.memoryId, card.cardType, card.id, section)
+                runOnUiThread { reload() }
+            }
+        }
+    }
+
+    companion object {
+        /** Scopes whose pending rows carry Add to Card (owner: "Roleplay
+         *  Memories: Accept Delete Edit Add to Card"). */
+        private val ROLEPLAY_SCOPES = setOf("world", "campaign", "rp_character")
+    }
 }

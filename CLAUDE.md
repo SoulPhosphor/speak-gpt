@@ -726,8 +726,9 @@ Everything is on-device. No cloud sync, no accounts.
     column and `memories` has no on-card flag) is the one missing piece;
     `isOnCard()` is the single hook to teach when that flow exists, and book_5
     lights up then.
-    `MemoryRowAdapter`/`MemoryRow` grew `iconRes` + `tagsLine` fields; the
-    Pending banner still lives on the shared scaffold.
+    `MemoryRowAdapter`/`MemoryRow` grew `iconRes` + `tagsLine` fields (and,
+    July 8 evening, `pendingActions`/`showAddToCard` for the Pending-mode
+    action words); the scaffold's pending banner is Model-rules-only now.
   - **"Protected" is retired (owner ruling, July 8 2026 — see
     `owner_approved_rules.md` Addendum §2).** It was a handling concern, not a
     scope/type: rule-like protections are now ordinary Global memories, and a
@@ -737,11 +738,31 @@ Everything is on-device. No cloud sync, no accounts.
     field, and the inert `HANDLE WITH CARE` enforcer render stay DORMANT for
     backup/import compatibility; the Archivist (Phase 6) must never emit a
     protection/handling field.
-  - The **Pending screen** (`MemoryPendingActivity`, §14): a pinned "Pending
-    memories (N) ›" banner on the browser opens draft memories grouped under
-    collapsible destination-scope headers with per-group select-all, checkboxes,
-    Select all/none, Accept/Delete (count confirm); tap-to-edit opens the editor
-    (which shows an **Accept** button for drafts = save + activate).
+  - **Pending is a browser MODE now (owner design, July 8 2026 evening —
+    `Memory System/phase6_owner_answers_2026-07-08.md`).** The old separate
+    Pending screen (`MemoryPendingActivity`) and the "Pending memories (N) ›"
+    banner are RETIRED and deleted. The browser carries a centered
+    **"Memories | Pending"** word toggle at its top with a **"N Memories
+    Pending"** count line under it ("One Memory Pending" singular; hidden at
+    zero). Memories view = everything non-draft (archived/superseded keep
+    their badges); Pending view = drafts, each row carrying bold
+    **Accept / Delete / Edit** action words across its bottom — roleplay
+    scopes (world/campaign/rp_character) add **Add to Card**, which opens the
+    owner-worded "Accept Memory and Link to Lore Card?" pop-up (boxed 5dp
+    dropdowns for the lore card + section) and **MOVES** the memory onto the
+    card via `MemoryStore.convertMemoryToCardEntry` (title→entry name,
+    content→description; the memory row is deleted and lives/dies with the
+    card from then on — owner's D&D-sheet ruling). The editor's bottom button
+    for drafts reads **"Approve All As Shown"** (save + activate + return);
+    roleplay drafts also get a **"Link to Lore Card:"** boxed dropdown pair —
+    picking a card + section makes approval convert instead of activate. The
+    filter panel's **Status section was removed** (duplicate of the toggle;
+    `MemoryBrowserFilterState.status` remains as entry-point plumbing — the
+    Memory Assistant's View Pending Memories link writes `{draft}` to open
+    the browser pre-switched to Pending). The scaffold's pending banner
+    machinery survives only for Model rules. Dropdown house style (owner,
+    same ruling): `bg_dropdown_box` — a 5dp-corner box around the DROPDOWN
+    only, never the whole line, never pills.
   - **Reset memories** in Memory settings (`resetAllMemoryData` + a blunt
     confirm dialog with a "Save a backup file first" checkbox, checked by
     default) empties every memory-content table. The work order's "Remove

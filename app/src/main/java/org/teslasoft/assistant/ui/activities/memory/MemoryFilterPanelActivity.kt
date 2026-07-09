@@ -41,7 +41,10 @@ import org.teslasoft.assistant.theme.ThemeManager
 
 /**
  * "Memory Filters" — slide-out panel that replaces the old chip-row (owner
- * ruling, July 8 2026). Six sections: Sort, Scope, Type, Status, Source, Tags.
+ * ruling, July 8 2026). Five sections: Sort, Scope, Type, Source, Tags —
+ * Status left the panel the same evening (owner ruling: the browser's
+ * Memories | Pending toggle owns the status split; a Status filter here was
+ * a duplicate).
  *
  * Sort and Source are single-select (Source has only two real values — the
  * "if only two options, no multi" rule). Everything else is multi-select:
@@ -169,12 +172,10 @@ class MemoryFilterPanelActivity : FragmentActivity() {
             selection = MemoryBrowserFilterState.type
         )
 
-        addMultiSection(
-            root, getString(R.string.mem_filter_status),
-            options = STATUS_KEYS.map { it to statusLabel(it) },
-            allLabel = getString(R.string.mem_filter_option_all),
-            selection = MemoryBrowserFilterState.status
-        )
+        // The Status section is REMOVED (owner ruling, July 8 2026 evening):
+        // the browser's Memories | Pending toggle owns the status split, so a
+        // Status filter here was a duplicate. FilterState.status remains as
+        // the entry-point plumbing the toggle reads.
 
         addSingleSection(
             root, getString(R.string.mem_filter_source),
@@ -416,13 +417,6 @@ class MemoryFilterPanelActivity : FragmentActivity() {
         else -> R.string.mem_type_lore
     })
 
-    private fun statusLabel(key: String): String = getString(when (key) {
-        "draft" -> R.string.mem_filter_pending
-        "archived" -> R.string.mem_status_archived
-        "superseded" -> R.string.mem_status_superseded
-        else -> R.string.mem_status_active
-    })
-
     companion object {
         const val EXTRA_AVAILABLE_TAGS = "availableTags"
 
@@ -431,12 +425,6 @@ class MemoryFilterPanelActivity : FragmentActivity() {
         )
         private val TYPE_KEYS = listOf(
             "fact", "preference", "event", "status", "instruction", "lore"
-        )
-        // "draft" surfaces to the user as "Pending" (owner ruling: they see
-        // "Active" and "Pending" as the two everyday choices; the schema key
-        // stays "draft" so migrations don't need to touch it).
-        private val STATUS_KEYS = listOf(
-            "active", "draft", "archived", "superseded"
         )
     }
 }

@@ -2264,6 +2264,43 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         }
     }
 
+    /**
+     * "Add to Card" (owner ruling, July 8 2026 evening): linking MOVES the
+     * memory onto the lore card — its title becomes the entry name, its
+     * content the description, and the memory row is deleted (tombstoned).
+     * From then on the content lives and dies with the card ("think of it
+     * like a d&d sheet… if you put it in the trash and take it out it's
+     * never coming back") — it never returns to the browser. Returns false
+     * when the memory no longer exists.
+     */
+    fun convertMemoryToCardEntry(
+        memoryId: String, cardType: String, cardId: String, section: String
+    ): Boolean {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            val m = getMemory(memoryId) ?: return false
+            db.insertOrThrow("card_entries", null, cardEntryValues(
+                CardEntryRecord(
+                    entryId = newId("ce-"),
+                    cardType = cardType,
+                    cardId = cardId,
+                    section = section,
+                    name = m.title,
+                    description = m.content,
+                    createdAt = nowIso()
+                )
+            ))
+            db.delete("memories", "memory_id = ?", arrayOf(memoryId))
+            recordDeletionTx(db, "memory", memoryId)
+            clearEntryCooldownTx(db, COOLDOWN_SOURCE_MEMORY, memoryId)
+            db.setTransactionSuccessful()
+            return true
+        } finally {
+            db.endTransaction()
+        }
+    }
+
     /** Content-level dedup so a rerun doesn't refile what already exists:
      *  true when any memory row (any status) has this title+content. */
     fun memoryExistsWithText(title: String, content: String): Boolean {

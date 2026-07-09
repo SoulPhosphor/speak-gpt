@@ -40,6 +40,8 @@ import com.google.android.material.textfield.TextInputEditText
 import org.json.JSONArray
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
+import org.teslasoft.assistant.preferences.memory.CardSections
+import org.teslasoft.assistant.preferences.memory.CardType
 import org.teslasoft.assistant.preferences.memory.MemoryRecord
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.memory.ProjectRecord
@@ -85,11 +87,21 @@ class MemoryEditorActivity : FragmentActivity() {
     private var btnAddTarget: MaterialButton? = null
     private var btnSave: MaterialButton? = null
     private var btnAccept: MaterialButton? = null
+    private var sectionLinkCard: View? = null
+    private var dropdownLinkCard: TextView? = null
+    private var dropdownLinkSection: TextView? = null
 
     // Current selections.
     private var currentType: String = "fact"
     private var currentImportance: Int = 3
     private var currentScope: String = "global"
+
+    /** "Link to Lore Card:" pick (roleplay drafts only, owner design July 8
+     *  2026 evening). When both are set, Approve All As Shown MOVES the
+     *  memory onto the card instead of activating it. */
+    private var linkCardType: String? = null
+    private var linkCardId: String? = null
+    private var linkSection: String? = null
 
     /** Selected targets for the current scope category, id -> display name. */
     private val selectedTargets = LinkedHashMap<String, String>()
@@ -102,6 +114,9 @@ class MemoryEditorActivity : FragmentActivity() {
     private val worldItems = LinkedHashMap<String, String>()
     private val campaignItems = LinkedHashMap<String, String>()
     private val rpItems = LinkedHashMap<String, String>()
+
+    /** Live lore cards for the Link to Lore Card dropdown: (cardType, id, name). */
+    private val loreCards = ArrayList<Triple<String, String, String>>()
 
     companion object {
         private val TYPE_KEYS = listOf("fact", "preference", "event", "status", "instruction", "lore")
@@ -133,6 +148,9 @@ class MemoryEditorActivity : FragmentActivity() {
         btnAddTarget = findViewById(R.id.btn_add_target)
         btnSave = findViewById(R.id.btn_mem_save)
         btnAccept = findViewById(R.id.btn_mem_accept)
+        sectionLinkCard = findViewById(R.id.section_link_card)
+        dropdownLinkCard = findViewById(R.id.dropdown_link_card)
+        dropdownLinkSection = findViewById(R.id.dropdown_link_section)
 
         titleView?.setText(if (memoryId == null) R.string.mem_edit_title_new else R.string.mem_edit_title_edit)
 
@@ -176,6 +194,17 @@ class MemoryEditorActivity : FragmentActivity() {
             store.getAllWorlds().forEach { worldItems[it.worldId] = it.name }
             store.getCampaigns().forEach { campaignItems[it.campaignId] = it.name }
             store.getAllRoleplayCharacters().forEach { rpItems[it.roleplayCharacterId] = it.name }
+            // Live cards for Link to Lore Card (archived cards are shelved
+            // and not offered as destinations).
+            loreCards.clear()
+            store.getAllWorlds().filter { it.status == "active" }
+                .forEach { loreCards.add(Triple(CardType.WORLD, it.worldId, it.name)) }
+            store.getActiveCampaigns()
+                .forEach { loreCards.add(Triple(CardType.CAMPAIGN, it.campaignId, it.name)) }
+            store.getAllRoleplayCharacters().filter { it.status == "active" }
+                .forEach { loreCards.add(Triple(CardType.RP_CHARACTER, it.roleplayCharacterId, it.name)) }
+            store.getPartyMembers(includeArchived = false)
+                .forEach { loreCards.add(Triple(CardType.PARTY_MEMBER, it.partyMemberId, it.name)) }
 
             val record = memoryId?.let { store.getMemory(it) }
             runOnUiThread {
@@ -193,8 +222,24 @@ class MemoryEditorActivity : FragmentActivity() {
                     }
                     refreshType()
                     refreshImportance()
-                    // A draft can be accepted (save + activate) right from here (§14).
-                    if (record.status == "draft") btnAccept?.visibility = View.VISIBLE
+                    // Pending mode (owner design, July 8 2026 evening): the
+                    // bottom button reads "Approve All As Shown" — approving
+                    // the draft with everything as shown and returning to the
+                    // pending screen. It replaces the old separate Accept
+                    // button (which stays hidden as redundant).
+                    if (record.status == "draft") {
+                        btnSave?.setText(R.string.mem_approve_all_as_shown)
+                        btnSave?.setOnClickListener { save(activate = true) }
+                        btnAccept?.visibility = View.GONE
+                        // Roleplay drafts get the Link to Lore Card spot:
+                        // picking a card + section makes approval MOVE the
+                        // memory onto the card (owner ruling — it leaves the
+                        // browser and lives with the card).
+                        if (record.scope in setOf("world", "campaign", "rp_character")) {
+                            sectionLinkCard?.visibility = View.VISIBLE
+                            wireLinkCardDropdowns()
+                        }
+                    }
                 } else {
                     // New memory: a single preset target from a scoped door.
                     val presetTarget = intent.getStringExtra("presetTargetId")
@@ -418,6 +463,40 @@ class MemoryEditorActivity : FragmentActivity() {
             .show()
     }
 
+    /* ------------------------------ link to lore card ------------------------------ */
+
+    private fun wireLinkCardDropdowns() {
+        dropdownLinkCard?.setOnClickListener { anchor ->
+            val menu = android.widget.PopupMenu(this, anchor)
+            loreCards.forEachIndexed { i, c -> menu.menu.add(0, i, i, c.third) }
+            menu.setOnMenuItemClickListener { item ->
+                val card = loreCards[item.itemId]
+                linkCardType = card.first
+                linkCardId = card.second
+                dropdownLinkCard?.text = card.third
+                // Sections belong to the picked card's type; reset the choice.
+                linkSection = null
+                dropdownLinkSection?.setText(R.string.mem_dropdown_select)
+                true
+            }
+            menu.show()
+        }
+        dropdownLinkSection?.setOnClickListener { anchor ->
+            val type = linkCardType ?: return@setOnClickListener
+            val sections = CardSections.sectionsFor(type)
+            val menu = android.widget.PopupMenu(this, anchor)
+            sections.forEachIndexed { i, s ->
+                menu.menu.add(0, i, i, getString(CardEntryEditorActivity.sectionLabelRes(s)))
+            }
+            menu.setOnMenuItemClickListener { item ->
+                linkSection = sections[item.itemId]
+                dropdownLinkSection?.text = getString(CardEntryEditorActivity.sectionLabelRes(linkSection!!))
+                true
+            }
+            menu.show()
+        }
+    }
+
     /* ------------------------------ save ------------------------------ */
 
     private fun save(activate: Boolean) {
@@ -443,6 +522,24 @@ class MemoryEditorActivity : FragmentActivity() {
         runOffThread {
             val store = MemoryStore.getInstance(this)
             val prior = existing ?: memoryId?.let { store.getMemory(it) }
+            // Approving a roleplay draft with a Lore Card picked MOVES it onto
+            // the card (owner ruling, July 8 2026 evening): the edited title/
+            // content become the entry, and the memory row is gone for good.
+            val cardType = linkCardType
+            val cardId = linkCardId
+            val section = linkSection
+            if (activate && prior != null && cardType != null && cardId != null && section != null) {
+                store.updateMemory(
+                    prior.copy(title = title, content = content),
+                    getString(R.string.memory_change_edited)
+                )
+                store.convertMemoryToCardEntry(prior.memoryId, cardType, cardId, section)
+                runOnUiThread {
+                    Toast.makeText(this, R.string.memory_saved, Toast.LENGTH_SHORT).show()
+                    finish()
+                }
+                return@runOffThread
+            }
             if (prior == null) {
                 val record = MemoryRecord(
                     memoryId = MemoryStore.newId("m-"),

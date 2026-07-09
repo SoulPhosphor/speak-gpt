@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+/**************************************************************************
+* Copyright (c) 2023-2026 Dmytro Ostapenko. All rights reserved.
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*  http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+**************************************************************************/
+-->
+<!-- Add-to-Card pop-up body (owner design, July 8 2026 evening): the lore
+     card dropdown (suggestion pre-selected when one exists) and the section
+     dropdown, each label + boxed dropdown on ONE line (the box wraps the
+     dropdown only — 5dp corners, never the whole line). -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingHorizontal="24dp"
+    android:paddingTop="12dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/mem_add_card_card_label"
+            android:textColor="@color/text_title"
+            android:textSize="15sp" />
+
+        <TextView
+            android:id="@+id/dropdown_card"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:layout_weight="1"
+            android:background="@drawable/bg_dropdown_box"
+            android:drawableEnd="@drawable/ic_arrow_drop_down"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:padding="10dp"
+            android:text="@string/mem_dropdown_select"
+            android:textColor="@color/text_title"
+            android:textSize="15sp" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/mem_add_card_section_label"
+            android:textColor="@color/text_title"
+            android:textSize="15sp" />
+
+        <TextView
+            android:id="@+id/dropdown_section"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:layout_weight="1"
+            android:background="@drawable/bg_dropdown_box"
+            android:drawableEnd="@drawable/ic_arrow_drop_down"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:padding="10dp"
+            android:text="@string/mem_dropdown_select"
+            android:textColor="@color/text_title"
+            android:textSize="15sp" />
+    </LinearLayout>
+</LinearLayout>

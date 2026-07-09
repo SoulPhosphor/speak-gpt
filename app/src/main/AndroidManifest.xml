@@ -291,11 +291,6 @@
             android:label="@string/mem_edit_title_new" />
 
         <activity
-            android:name=".ui.activities.memory.MemoryPendingActivity"
-            android:exported="false"
-            android:label="@string/mem_pending_title" />
-
-        <activity
             android:name=".ui.activities.memory.RoleplayHubActivity"
             android:exported="false"
             android:label="@string/title_roleplay">

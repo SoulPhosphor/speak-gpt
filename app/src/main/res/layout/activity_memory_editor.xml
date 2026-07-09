@@ -198,6 +198,80 @@
                     app:icon="@drawable/ic_add" />
             </LinearLayout>
 
+            <!-- Roleplay drafts only (owner design, July 8 2026 evening):
+                 "Link to Lore Card:" — picking a card + section here makes
+                 Approve All As Shown MOVE the memory onto that card instead
+                 of activating it (it leaves the browser and lives with the
+                 card). Label + boxed dropdown share the line; the box wraps
+                 the dropdown only (5dp corners). -->
+            <LinearLayout
+                android:id="@+id/section_link_card"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/mem_edit_link_card_label"
+                        android:textColor="@color/text_title"
+                        android:textSize="15sp" />
+
+                    <TextView
+                        android:id="@+id/dropdown_link_card"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="12dp"
+                        android:layout_weight="1"
+                        android:background="@drawable/bg_dropdown_box"
+                        android:drawableEnd="@drawable/ic_arrow_drop_down"
+                        android:ellipsize="end"
+                        android:maxLines="1"
+                        android:padding="10dp"
+                        android:text="@string/mem_dropdown_select"
+                        android:textColor="@color/text_title"
+                        android:textSize="15sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/mem_add_card_section_label"
+                        android:textColor="@color/text_title"
+                        android:textSize="15sp" />
+
+                    <TextView
+                        android:id="@+id/dropdown_link_section"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="12dp"
+                        android:layout_weight="1"
+                        android:background="@drawable/bg_dropdown_box"
+                        android:drawableEnd="@drawable/ic_arrow_drop_down"
+                        android:ellipsize="end"
+                        android:maxLines="1"
+                        android:padding="10dp"
+                        android:text="@string/mem_dropdown_select"
+                        android:textColor="@color/text_title"
+                        android:textSize="15sp" />
+                </LinearLayout>
+            </LinearLayout>
+
             <com.google.android.material.textfield.TextInputLayout
                 style="?attr/textInputOutlinedDenseStyle"
                 android:layout_width="match_parent"

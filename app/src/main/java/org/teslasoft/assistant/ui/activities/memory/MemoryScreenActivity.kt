@@ -70,6 +70,10 @@ abstract class MemoryScreenActivity : FragmentActivity(), MemoryRowAdapter.OnRow
     private var filterChips: ChipGroup? = null
     private var pendingBanner: com.google.android.material.button.MaterialButton? = null
     private var btnFilter: ImageButton? = null
+    private var modeToggleContainer: View? = null
+    private var btnModeMemories: TextView? = null
+    private var btnModePending: TextView? = null
+    private var modePendingCount: TextView? = null
 
     protected var searchQuery: String = ""
 
@@ -122,6 +126,30 @@ abstract class MemoryScreenActivity : FragmentActivity(), MemoryRowAdapter.OnRow
      *  chrome that depends on the data (e.g. the browser's Pending banner). */
     protected open fun onRowsRendered() {}
 
+    /** Opt into the centered "Memories | Pending" two-mode header (owner
+     *  design, July 8 2026 evening). Only the memory browser uses it. */
+    protected open fun showModeToggle(): Boolean = false
+
+    /** Called when the user taps a mode word: "memories" or "pending". */
+    protected open fun onModeSelected(mode: String) {}
+
+    /** Refresh the toggle's selected word and the count line beneath it
+     *  (null hides the count — it never shows when nothing is pending). */
+    protected fun updateModeToggle(mode: String, pendingCountLine: String?) {
+        val selected = com.google.android.material.color.MaterialColors.getColor(
+            titleView ?: return, com.google.android.material.R.attr.colorPrimary
+        )
+        val unselected = ResourcesCompat.getColor(resources, R.color.text_subtitle, theme)
+        btnModeMemories?.setTextColor(if (mode == "memories") selected else unselected)
+        btnModePending?.setTextColor(if (mode == "pending") selected else unselected)
+        if (pendingCountLine == null) {
+            modePendingCount?.visibility = View.GONE
+        } else {
+            modePendingCount?.visibility = View.VISIBLE
+            modePendingCount?.text = pendingCountLine
+        }
+    }
+
     /** Show or hide the pinned Pending-memories banner (Stage 2.4). */
     protected fun setPendingBanner(text: String?, onClick: (() -> Unit)?) {
         if (text == null) {
@@ -163,6 +191,16 @@ abstract class MemoryScreenActivity : FragmentActivity(), MemoryRowAdapter.OnRow
         filterChips = findViewById(R.id.chips_filter)
         pendingBanner = findViewById(R.id.pending_banner)
         btnFilter = findViewById(R.id.btn_filter)
+        modeToggleContainer = findViewById(R.id.mode_toggle_container)
+        btnModeMemories = findViewById(R.id.btn_mode_memories)
+        btnModePending = findViewById(R.id.btn_mode_pending)
+        modePendingCount = findViewById(R.id.mode_pending_count)
+
+        if (showModeToggle()) {
+            modeToggleContainer?.visibility = View.VISIBLE
+            btnModeMemories?.setOnClickListener { onModeSelected("memories") }
+            btnModePending?.setOnClickListener { onModeSelected("pending") }
+        }
 
         titleView?.text = screenTitle()
 

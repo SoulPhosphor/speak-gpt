@@ -930,6 +930,24 @@
     <string name="mem_arch_deleted_badge">Some Memories Deleted Later</string>
     <string name="mem_arch_deleted_explain">This run created memories that no longer exist because they were deleted after extraction.</string>
 
+    <!-- Two-mode memory browser + pending actions (owner design, July 8 2026
+         evening — phase6_owner_answers_2026-07-08.md; owner wording). -->
+    <string name="mem_mode_memories">Memories</string>
+    <string name="mem_mode_separator"> | </string>
+    <string name="mem_mode_pending">Pending</string>
+    <string name="mem_pending_count_one">One Memory Pending</string>
+    <string name="mem_pending_count_many">%1$d Memories Pending</string>
+    <string name="mem_pending_accept">Accept</string>
+    <string name="mem_pending_delete">Delete</string>
+    <string name="mem_pending_edit">Edit</string>
+    <string name="mem_pending_add_card">Add to Card</string>
+    <string name="mem_add_card_title">Accept Memory and Link to Lore Card?</string>
+    <string name="mem_add_card_card_label">Lore Card</string>
+    <string name="mem_add_card_section_label">Section</string>
+    <string name="mem_dropdown_select">Select</string>
+    <string name="mem_approve_all_as_shown">Approve All As Shown</string>
+    <string name="mem_edit_link_card_label">Link to Lore Card:</string>
+
     <!-- Companion memory system (Phase 1: store, seed, backups) -->
     <string name="title_memory_settings">Memory Settings</string>
     <string name="tile_memory_title">Memory system</string>
@@ -1226,23 +1244,9 @@
     <string name="mem_row_icon">Memory type icon</string>
     <string name="mem_row_edit">Edit memory</string>
 
-    <!-- Pending screen (Stage 2.4) -->
-    <string name="mem_pending_banner">Pending memories (%1$d) ›</string>
-    <string name="mem_pending_title">Pending memories</string>
-    <string name="mem_pending_select_all">Select all</string>
-    <string name="mem_pending_select_none">Select none</string>
-    <string name="mem_pending_accept">Accept</string>
-    <string name="mem_pending_delete">Delete</string>
-    <string name="mem_pending_empty">No pending memories.</string>
-    <string name="mem_pending_group">%1$s (%2$d)</string>
-    <string name="mem_pending_dest">%1$s · %2$s</string>
-    <string name="mem_pending_none_checked">Nothing selected.</string>
-    <string name="mem_pending_accept_title">Accept memories?</string>
-    <string name="mem_pending_accept_confirm">Accept %1$d memories?</string>
-    <string name="mem_pending_delete_title">Delete memories?</string>
-    <string name="mem_pending_delete_confirm">Delete %1$d memories? This cannot be undone.</string>
-    <string name="mem_pending_accepted_note">Accepted from Pending</string>
-    <string name="mem_pending_done">Done</string>
+    <!-- The Stage-2.4 separate Pending screen was retired (owner ruling,
+         July 8 2026 evening): the browser's two-mode Memories | Pending view
+         replaced it; its strings left with it. -->
     <string name="mem_edit_accept">Accept</string>
 
     <!-- Reset memories (Stage 2.5) -->

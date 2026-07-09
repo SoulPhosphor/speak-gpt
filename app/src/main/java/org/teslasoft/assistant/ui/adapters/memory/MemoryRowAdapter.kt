@@ -49,7 +49,12 @@ data class MemoryRow(
     val hasAction: Boolean = false,
     val isHeader: Boolean = false,
     val tagsLine: String? = null,
-    val iconRes: Int? = null
+    val iconRes: Int? = null,
+    /** Pending view (owner design, July 8 2026 evening): show the bold
+     *  Accept / Delete / Edit action words across the row's bottom. */
+    val pendingActions: Boolean = false,
+    /** Roleplay pending rows also get Add to Card. */
+    val showAddToCard: Boolean = false
 )
 
 class MemoryRowAdapter(
@@ -60,6 +65,18 @@ class MemoryRowAdapter(
     interface OnRowListener {
         fun onClick(row: MemoryRow)
         fun onAction(row: MemoryRow, anchor: View)
+
+        /** A pending action word was tapped: one of [ACTION_ACCEPT],
+         *  [ACTION_DELETE], [ACTION_EDIT], [ACTION_ADD_TO_CARD]. Default
+         *  no-op so screens without a pending view ignore it. */
+        fun onPendingAction(row: MemoryRow, action: String) {}
+    }
+
+    companion object {
+        const val ACTION_ACCEPT = "accept"
+        const val ACTION_DELETE = "delete"
+        const val ACTION_EDIT = "edit"
+        const val ACTION_ADD_TO_CARD = "add_to_card"
     }
 
     private var listener: OnRowListener? = null
@@ -131,6 +148,22 @@ class MemoryRowAdapter(
         } else {
             action.visibility = View.GONE
             action.setOnClickListener(null)
+        }
+
+        val pendingStrip = view.findViewById<View>(R.id.row_pending_actions)
+        if (row.pendingActions) {
+            pendingStrip.visibility = View.VISIBLE
+            view.findViewById<TextView>(R.id.action_accept)
+                .setOnClickListener { listener?.onPendingAction(row, ACTION_ACCEPT) }
+            view.findViewById<TextView>(R.id.action_delete)
+                .setOnClickListener { listener?.onPendingAction(row, ACTION_DELETE) }
+            view.findViewById<TextView>(R.id.action_edit)
+                .setOnClickListener { listener?.onPendingAction(row, ACTION_EDIT) }
+            val addCard = view.findViewById<TextView>(R.id.action_add_card)
+            addCard.visibility = if (row.showAddToCard) View.VISIBLE else View.GONE
+            addCard.setOnClickListener { listener?.onPendingAction(row, ACTION_ADD_TO_CARD) }
+        } else {
+            pendingStrip.visibility = View.GONE
         }
 
         ui.setOnClickListener { listener?.onClick(row) }
