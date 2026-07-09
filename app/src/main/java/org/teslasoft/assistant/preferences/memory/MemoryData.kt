@@ -492,7 +492,15 @@ data class ArchivistRunRecord(
     val ruleIdsJson: String,              // JSON array: model-rule draft ids created
     val foundCount: Int,
     val failedChatIdsJson: String,        // JSON array: chats whose analysis failed (stay pending)
-    val error: String?
+    val error: String?,
+    /** Display outcome for the Recent Memory Analysis row (DB v12,
+     *  archivist_status_wording_spec.md): completed | full_failed |
+     *  partial_failed | nothing | no_new | interrupted. Null on legacy rows —
+     *  derived from counts then. */
+    val outcome: String? = null,
+    /** Dominant [ArchivistFailure] key when the run (fully or partially)
+     *  failed; picks the on-screen reason sentence. */
+    val failureReason: String? = null
 )
 
 /**

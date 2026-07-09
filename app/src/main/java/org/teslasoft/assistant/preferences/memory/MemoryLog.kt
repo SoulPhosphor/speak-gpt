@@ -44,4 +44,15 @@ object MemoryLog {
             if (enabled(context)) Logger.log(context, "memory", tag, level, message)
         } catch (_: Exception) { /* diagnostics must never break the caller */ }
     }
+
+    /** Log regardless of the diagnostics toggle. Reserved for Archivist run
+     *  failure / partial-failure records, which the owner ruled are
+     *  user-relevant recovery information, not optional debug noise
+     *  (`archivist_status_wording_spec.md`, July 8 2026) — do not widen this
+     *  to ordinary diagnostics. */
+    fun logAlways(context: Context, tag: String, level: String, message: String) {
+        try {
+            Logger.log(context, "memory", tag, level, message)
+        } catch (_: Exception) { /* diagnostics must never break the caller */ }
+    }
 }

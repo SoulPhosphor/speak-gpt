@@ -342,8 +342,22 @@ Everything is on-device. No cloud sync, no accounts.
    coerced), handling fields ignored, floods bounded. Proposed target NAMES
    only link to records that already exist (exact name match) — the Archivist
    never creates worlds/campaigns/characters/projects. Card placements are
-   deliberately absent (not yet designed with the owner). NO UI calls this
-   engine yet — the Memory Assistant screen is still the placeholder.
+   deliberately absent (not yet designed with the owner). The **Memory
+   Assistant screen is BUILT** (July 8 2026 evening) to the owner's approved
+   wording (`memory_assistant_design.md` + `phase6_owner_answers_2026-07-08.md`)
+   and drives this engine: facts block, Analyze Conversations with live
+   batch-aware progress, View Pending Memories → the browser filtered to
+   drafts, Recent Memory Analysis (5 rows, Rerun far right). DB v12 adds
+   `archivist_runs.outcome`/`failure_reason`; run status/failure display
+   implements **`Memory System/archivist_status_wording_spec.md`** verbatim
+   (owner-sanctioned wording with a no-approval dispensation for tone-matched
+   gaps — unique to that spec): not-ready above the disabled button,
+   full/partial-failure reasons A–G via `ArchivistFailure` (mapped through
+   `GenerationErrorClassifier`), Nothing To Extract / No New Memories Added /
+   Run Interrupted states, and the "Some Memories Deleted Later" run-row
+   badge. Archivist failure/partial-failure records ALWAYS write to the
+   Memory log via `MemoryLog.logAlways` (owner rule — never gate them on the
+   diagnostics toggle).
    Source is DERIVED for
    display (`provenance_source == "user_entered"` ⇒ "Entered by hand", else
    "Learned from chat"); there is no "Imported" bucket — import preserves each

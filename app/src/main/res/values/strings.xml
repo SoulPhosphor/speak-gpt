@@ -881,11 +881,54 @@
     <string name="memory_assistant_running_batch_conversations">%1$d of %2$d Conversations</string>
     <string name="memory_assistant_done_found">%1$d memories found.</string>
     <string name="memory_assistant_view_pending">View Pending Memories.</string>
-    <string name="memory_assistant_done_none">No new memory candidates found.</string>
+    <!-- "No new memory candidates found." was superseded by the No New
+         Memories Added state in archivist_status_wording_spec.md. -->
     <string name="memory_assistant_recent_header">Recent Memory Analysis</string>
     <string name="memory_assistant_run_found">%1$d found</string>
     <string name="memory_assistant_run_none">None found</string>
     <string name="memory_assistant_rerun">Rerun</string>
+
+    <!-- Archivist run status/failure wording — implemented verbatim from
+         Memory System/archivist_status_wording_spec.md (owner-sanctioned,
+         July 8 2026; the one area with a no-separate-approval dispensation). -->
+    <string name="mem_arch_not_ready_label">Archivist Not Ready</string>
+    <string name="mem_arch_not_ready_msg">Memory Archivist needs a model before it can run.</string>
+    <string name="mem_arch_btn_setup">Set Up Archivist Model</string>
+    <string name="mem_arch_full_label">Run Fully Failed</string>
+    <string name="mem_arch_full_msg">Memory extraction failed. No memories were created from this run.</string>
+    <string name="mem_arch_full_unreachable">Archivist could not reach the selected AI service. Check your connection or try again later.</string>
+    <string name="mem_arch_full_rejected">Archivist could not access the selected AI service. Check the endpoint settings, API key, or model access.</string>
+    <string name="mem_arch_full_limit">Archivist hit a usage limit before memories could be created. Try again later or choose fewer conversations.</string>
+    <string name="mem_arch_full_unreadable">Archivist returned a response the app could not read. No memories were saved from this run.</string>
+    <string name="mem_arch_full_save">Archivist found possible memories, but the app could not save them. No unsaved memories were added.</string>
+    <string name="mem_arch_full_interrupted">Memory extraction was interrupted before it could finish. No memories were created from this run.</string>
+    <string name="mem_arch_full_unknown">Memory extraction failed for an unknown reason. No memories were created from this run.</string>
+    <string name="mem_arch_partial_label">Run Partially Failed</string>
+    <string name="mem_arch_partial_msg">Memory extraction finished with some skipped conversations. Some memories were created, but a few conversations could not be processed.</string>
+    <string name="mem_arch_partial_counts">Created memories: %1$d\nProcessed conversations: %2$d\nSkipped conversations: %3$d</string>
+    <string name="mem_arch_part_unreachable">Some conversations were skipped because Archivist could not reach the selected AI service.</string>
+    <string name="mem_arch_part_rejected">Some conversations were skipped because the selected AI service rejected access. Check endpoint settings, API key, or model access.</string>
+    <string name="mem_arch_part_limit">Archivist hit a usage limit before all conversations could be processed. Saved memories were kept.</string>
+    <string name="mem_arch_part_unreadable">Some conversations returned responses the app could not read. Saved memories from the rest of the run were kept.</string>
+    <string name="mem_arch_part_save">Archivist found possible memories for some conversations, but the app could not save those items. Other saved memories were kept.</string>
+    <string name="mem_arch_part_interrupted">The run was interrupted before all conversations could be processed. Saved memories were kept.</string>
+    <string name="mem_arch_part_unknown">Some conversations could not be processed for an unknown reason. Saved memories from the rest of the run were kept.</string>
+    <string name="mem_arch_nothing_label">Nothing To Extract</string>
+    <string name="mem_arch_nothing_msg">No eligible conversations were found for this run.</string>
+    <string name="mem_arch_nonew_label">No New Memories Added</string>
+    <string name="mem_arch_nonew_msg">Archivist finished the run, but no new memories were added.</string>
+    <string name="mem_arch_nonew_nothing">Archivist did not find anything new to save.</string>
+    <string name="mem_arch_nonew_dupes">Archivist found only memories that already exist.</string>
+    <string name="mem_arch_interrupted_label">Run Interrupted</string>
+    <string name="mem_arch_interrupted_msg">Memory extraction was interrupted before it could finish.</string>
+    <string name="mem_arch_interrupted_saved">Saved memories were kept. Some conversations may not have been processed.</string>
+    <string name="mem_arch_interrupted_none">No memories were created from this run.</string>
+    <string name="mem_arch_btn_try_again">Try Again</string>
+    <string name="mem_arch_btn_check_settings">Check Archivist Settings</string>
+    <string name="mem_arch_btn_run_again">Run Again</string>
+    <string name="mem_arch_row_completed">Completed</string>
+    <string name="mem_arch_deleted_badge">Some Memories Deleted Later</string>
+    <string name="mem_arch_deleted_explain">This run created memories that no longer exist because they were deleted after extraction.</string>
 
     <!-- Companion memory system (Phase 1: store, seed, backups) -->
     <string name="title_memory_settings">Memory Settings</string>

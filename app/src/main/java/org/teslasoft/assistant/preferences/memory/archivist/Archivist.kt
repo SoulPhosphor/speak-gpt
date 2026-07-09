@@ -73,17 +73,28 @@ object Archivist {
 
     data class RunOutcome(
         val runId: String?,
+        val conversationsSelected: Int,
         val conversationsAnalyzed: Int,
         val memoriesFound: Int,
         val ruleDraftsFound: Int,
         /** Chats whose analysis failed this run; their transcripts stay
          *  pending and are picked up by the next run. */
         val failedChatIds: List<String>,
-        /** True when no Archivist endpoint/model is configured — the screen
-         *  handles this state; no analysis was attempted. */
-        val notConfigured: Boolean = false,
+        /** Display outcome per archivist_status_wording_spec.md: completed |
+         *  full_failed | partial_failed | nothing | no_new | interrupted |
+         *  not_configured. */
+        val outcome: String,
+        /** Dominant failure category when (partially) failed — picks the
+         *  on-screen reason sentence and the action button. */
+        val failureReason: ArchivistFailure? = null,
+        /** Candidates skipped because an identical memory already exists —
+         *  distinguishes "found only memories that already exist" from
+         *  "did not find anything new". */
+        val duplicatesSkipped: Int = 0,
         val error: String? = null
-    )
+    ) {
+        val notConfigured: Boolean get() = outcome == "not_configured"
+    }
 
     /**
      * Live progress for the Memory Assistant's running state (owner answer 4,
@@ -134,7 +145,11 @@ object Archivist {
     suspend fun rerun(context: Context, runId: String, onProgress: (Progress) -> Unit): RunOutcome {
         val store = MemoryStore.getInstance(context)
         val past = store.getArchivistRun(runId)
-            ?: return RunOutcome(null, 0, 0, 0, emptyList(), error = "run not found")
+            ?: return RunOutcome(
+                null, 0, 0, 0, 0, emptyList(),
+                outcome = "full_failed", failureReason = ArchivistFailure.UNKNOWN,
+                error = "run not found"
+            )
         val ids = jsonToList(past.transcriptIdsJson)
         val liveChats = liveChatNamesById(context)
         val conversations = store.transcriptsByIds(ids)
@@ -155,11 +170,17 @@ object Archivist {
         val endpoint = if (endpointId.isBlank()) null
         else ApiEndpointPreferences.getApiEndpointPreferences(context).getApiEndpoint(context, endpointId)
         if (endpoint == null || endpoint.host.isBlank()) {
-            return RunOutcome(null, 0, 0, 0, emptyList(), notConfigured = true)
+            // Always logged (spec): user-relevant recovery information.
+            MemoryLog.logAlways(context, "Archivist", "warn",
+                "Archivist Not Ready — Memory Archivist needs a model before it can run. " +
+                    "Missing: ${if (endpointId.isBlank()) "endpoint profile not selected" else "endpoint host empty"}")
+            return RunOutcome(null, 0, 0, 0, 0, emptyList(), outcome = "not_configured")
         }
         val model = prefs.getArchivistModel().ifBlank { endpoint.model }
         if (model.isBlank()) {
-            return RunOutcome(null, 0, 0, 0, emptyList(), notConfigured = true)
+            MemoryLog.logAlways(context, "Archivist", "warn",
+                "Archivist Not Ready — Memory Archivist needs a model before it can run. Missing: model name")
+            return RunOutcome(null, 0, 0, 0, 0, emptyList(), outcome = "not_configured")
         }
 
         val store = MemoryStore.getInstance(context)
@@ -169,9 +190,13 @@ object Archivist {
         val memoryIds = ArrayList<String>()
         val ruleIds = ArrayList<String>()
         val failedChats = ArrayList<String>()
+        val failedReasons = ArrayList<ArchivistFailure>()
         val analyzedChatIds = ArrayList<String>()
         val fedTranscriptIds = ArrayList<String>()
+        var duplicatesSkipped = 0
         var runError: String? = null
+        var runErrorFailure: ArchivistFailure? = null
+        var interrupted = false
 
         try {
             // Display batches (owner answer 4): size-grouped, presentation
@@ -214,12 +239,18 @@ object Archivist {
                                 )
                             )
                             val raw = response.choices.firstOrNull()?.message?.content.orEmpty()
-                            val parsed = ArchivistResponseParser.parse(raw)
+                            // A parse failure is reason D (unreadable result) —
+                            // tag it so the generic classifier can't misfile it.
+                            val parsed = try {
+                                ArchivistResponseParser.parse(raw)
+                            } catch (e: Exception) {
+                                throw TaggedArchivistException(ArchivistFailure.UNREADABLE, e)
+                            }
                             if (parsed.dropped > 0) {
                                 MemoryLog.log(context, "Archivist", "warn",
                                     "chat=${conversation.chatId}: ${parsed.dropped} proposal(s) failed validation and were dropped")
                             }
-                            fileMemoryDrafts(context, store, conversation, parsed.memories, memoryIds)
+                            duplicatesSkipped += fileMemoryDrafts(context, store, conversation, parsed.memories, memoryIds)
                             fileRuleDrafts(context, store, conversation, parsed.rules, ruleIds)
                         }
                         if (markProcessed) {
@@ -227,19 +258,72 @@ object Archivist {
                         }
                         analyzedChatIds.add(conversation.chatId)
                         fedTranscriptIds.addAll(conversation.transcripts.map { it.transcriptId })
+                    } catch (ce: kotlinx.coroutines.CancellationException) {
+                        // Interruption is a RUN-level state, not a conversation
+                        // failure — handled by the outer catch.
+                        throw ce
                     } catch (e: Exception) {
                         // One conversation failing must not sink the run: its
                         // rows stay pending for the next run (drafts a partial
                         // chunk already filed stay pending drafts; the text
                         // dedup stops identical refiling on the retry).
+                        val reason = ArchivistFailure.classify(e)
                         failedChats.add(conversation.chatId)
-                        MemoryLog.log(context, "Archivist", "error",
-                            "chat=${conversation.chatId} failed: ${e.message}")
+                        failedReasons.add(reason)
+                        MemoryLog.logAlways(context, "Archivist", "error",
+                            "chat=${conversation.chatId} failed (${reason.key}): ${e.message}")
                     }
                 }
             }
+        } catch (ce: kotlinx.coroutines.CancellationException) {
+            // The run was stopped before completion (user left the screen,
+            // process/system interruption). Record what happened — saved
+            // drafts are kept; unprocessed conversations stay pending. The
+            // record writes are plain blocking calls, safe in a cancelled
+            // coroutine; the cancellation is rethrown after bookkeeping.
+            interrupted = true
+            runError = "interrupted"
+            runErrorFailure = ArchivistFailure.INTERRUPTED
         } catch (e: Exception) {
             runError = e.message ?: e.javaClass.simpleName
+            runErrorFailure = ArchivistFailure.classify(e)
+        }
+
+        // Display outcome (archivist_status_wording_spec.md). A partial
+        // success is never called a full failure; "no new" is not an error.
+        val selected = conversations.size
+        val outcome = when {
+            interrupted -> "interrupted"
+            runError != null -> "full_failed"
+            selected == 0 -> "nothing"
+            failedChats.size >= selected -> "full_failed"
+            failedChats.isNotEmpty() -> "partial_failed"
+            memoryIds.isEmpty() -> "no_new"
+            else -> "completed"
+        }
+        // Dominant per-conversation reason picks the on-screen sentence; an
+        // engine-level failure's own classification wins when present.
+        val dominantReason: ArchivistFailure? = runErrorFailure
+            ?: failedReasons.groupingBy { it }.eachCount().maxByOrNull { it.value }?.key
+            ?: if (outcome == "full_failed") ArchivistFailure.UNKNOWN else null
+
+        // Failure and partial-failure records are ALWAYS written to the
+        // Memory Debug Log (owner rule — recovery information, not optional
+        // debug noise).
+        when (outcome) {
+            "full_failed" -> MemoryLog.logAlways(context, "Archivist", "error",
+                "Run Fully Failed — Memory extraction failed. No memories were created from this run. " +
+                    "reason=${dominantReason?.key} error=${runError ?: "per-conversation failures"} " +
+                    "selected=$selected processed=${analyzedChatIds.size} memories=0")
+            "partial_failed" -> MemoryLog.logAlways(context, "Archivist", "warn",
+                "Run Partially Failed — Memory extraction finished with some skipped conversations. " +
+                    "reasons=${failedReasons.map { it.key }.distinct()} selected=$selected " +
+                    "processed=${analyzedChatIds.size} skipped=${failedChats.size} " +
+                    "memories=${memoryIds.size} failedChats=$failedChats")
+            "interrupted" -> MemoryLog.logAlways(context, "Archivist", "warn",
+                "Run Interrupted — Memory extraction was interrupted before it could finish. " +
+                    "cause=coroutine cancellation (screen closed or system stop) selected=$selected " +
+                    "processed=${analyzedChatIds.size} memories=${memoryIds.size}")
         }
 
         val runId = MemoryStore.newId("run-")
@@ -249,41 +333,52 @@ object Archivist {
                     runId = runId,
                     startedAt = startedAt,
                     finishedAt = Instant.now().toString(),
-                    status = if (runError == null) "complete" else "failed",
+                    status = if (outcome == "full_failed" || outcome == "interrupted") "failed" else "complete",
                     chatIdsJson = listToJson(analyzedChatIds),
                     transcriptIdsJson = listToJson(fedTranscriptIds),
                     memoryIdsJson = listToJson(memoryIds),
                     ruleIdsJson = listToJson(ruleIds),
                     foundCount = memoryIds.size,
                     failedChatIdsJson = listToJson(failedChats),
-                    error = runError
+                    error = runError,
+                    outcome = outcome,
+                    failureReason = dominantReason?.key
                 )
             )
         } catch (e: Exception) {
-            MemoryLog.log(context, "Archivist", "error", "run record write failed: ${e.message}")
+            MemoryLog.logAlways(context, "Archivist", "error", "run record write failed: ${e.message}")
         }
         return RunOutcome(
             runId = runId,
+            conversationsSelected = selected,
             conversationsAnalyzed = analyzedChatIds.size,
             memoriesFound = memoryIds.size,
             ruleDraftsFound = ruleIds.size,
             failedChatIds = failedChats,
+            outcome = outcome,
+            failureReason = dominantReason,
+            duplicatesSkipped = duplicatesSkipped,
             error = runError
         )
     }
 
+    /** Returns how many candidates were skipped as duplicates of memories
+     *  that already exist ("Archivist found only memories that already
+     *  exist" needs the distinction). A store insert failure aborts the
+     *  conversation as reason E (save failed). */
     private fun fileMemoryDrafts(
         context: Context,
         store: MemoryStore,
         conversation: Conversation,
         drafts: List<ArchivistResponseParser.DraftMemory>,
         collectedIds: MutableList<String>
-    ) {
-        if (drafts.isEmpty()) return
+    ): Int {
+        if (drafts.isEmpty()) return 0
+        var duplicates = 0
         val now = Instant.now().toString()
         val companionId = conversation.transcripts.firstNotNullOfOrNull { it.companionId }
         for (d in drafts) {
-            if (store.memoryExistsWithText(d.title, d.content)) continue
+            if (store.memoryExistsWithText(d.title, d.content)) { duplicates++; continue }
             val record = MemoryRecord(
                 memoryId = MemoryStore.newId("m-"),
                 scope = d.scope,
@@ -319,9 +414,11 @@ object Archivist {
                 store.insertArchivistDraftMemory(record)
                 collectedIds.add(record.memoryId)
             } catch (e: Exception) {
-                MemoryLog.log(context, "Archivist", "error", "draft insert failed: ${e.message}")
+                MemoryLog.logAlways(context, "Archivist", "error", "draft insert failed: ${e.message}")
+                throw TaggedArchivistException(ArchivistFailure.SAVE_FAILED, e)
             }
         }
+        return duplicates
     }
 
     /** A proposed target NAME only ever links to a record that already exists

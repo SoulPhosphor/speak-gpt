@@ -105,26 +105,43 @@ where anything below differs from earlier documents (including
   individually, never bulk-accepted" still holds (nothing bulk-accepts card
   placements).
 
-## Still open (asked of the owner, not yet answered)
+## Round 2 — owner answers later the same evening (July 8 2026)
 
-1. **Linked-memory visibility:** after linking, does the memory still show in
-   the browser with the book (`book_5`) icon, or vanish from the browser
-   entirely? ("no longer be a normal memory" supports either.)
-2. **Card section for a linked memory:** card entries live under named card
-   sections — when linking manually with no Archivist suggestion, where does
-   it land (user picks a section? a default?).
-3. **Associated + deletion vs the morning's ruling:** earlier on July 8 the
-   owner ruled shared memories always survive card deletion and "delete
-   memories" removes sole-owned only. The new Associated wording says the
-   memory is "assigned the same status" when the card is deleted or archived.
-   Confirm how these compose (e.g. archive-cascade is new and uncontested;
-   deletion still per the morning ruling?).
-4. **Failure wording** for the Memory Assistant (three real cases exist:
-   endpoint/model not configured; the whole run failing; individual
-   conversations failing while others succeed). Owner words needed.
-5. **The old separate Pending screen** (`MemoryPendingActivity` + the browser
-   banner): assumed replaced by the in-browser Pending view — confirm removal.
-6. **"N Memories Pending" singular** — is "1 Memories Pending" acceptable or
-   should the singular read differently? (Owner gave the plural form only.)
-7. **The advanced memory section** (extraction prompt exposure) — owner is
-   writing it up; do not build ahead of it.
+1. **Recent Memory Analysis rows: Rerun goes on the FAR RIGHT** — date, then
+   the information, then the button on the right; "It should look like a nice
+   organized chart." (Supersedes the design doc's far-left note.)
+2. **The old separate Pending screen is replaced** — "we're using the memory
+   browser like I told you with the two modes." Remove
+   `MemoryPendingActivity` + the browser banner when the two-mode browser
+   lands.
+3. **Failure/status wording: fully specified** in
+   `archivist_status_wording_spec.md` (owner had another AI write it; the
+   owner sanctioned implementing it verbatim and matching its tone for any
+   missed case WITHOUT a separate approval pass — unique dispensation for
+   this area only).
+4. **Linked = moved.** "Adding to a Lore card converts or moves the pending
+   memory into card-linked lore content, then removes it from Pending/Memory
+   Browser." Lifecycle is the card's: "If a memory is on a lore card and they
+   delete the lore card it's gone. think of it like a d&d sheet. If you put
+   it in a folder to archive that's where the memory goes. If you put it in
+   the trash and take it out it's never coming back." (The `book_5` on-card
+   browser icon therefore has no surface for now — a linked memory leaves the
+   browser.)
+5. **The Add-to-Card pop-up also suggests a SECTION** (dropdown), not just
+   the card.
+6. **Dropdown style clarified:** put a box around the dropdown itself so it
+   reads as a control — never around the entire line.
+7. **Pending count matches number:** "One Memory Pending" (spelled word) for
+   one; "5 Memories Pending" shape otherwise.
+
+## Still open
+
+- **Associated cards + deletion compose question** (does association's
+  "assigned the same status" replace the sole-owner deletion ruling for
+  ASSOCIATED memories specifically? Linked is now clearly move-and-die-with-
+  the-card; association on delete is presumably the same per the D&D-sheet
+  metaphor — trash means gone — while NON-associated shared scope links keep
+  the morning's sole-owner rule. Confirm if this reading is wrong before
+  building association-delete cascade.)
+- **The advanced memory section** (extraction prompt exposure) — owner is
+  writing it up; do not build ahead of it.

@@ -49,7 +49,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
 
     companion object {
         const val DATABASE_NAME = "companion_memory.db"
-        private const val DATABASE_VERSION = 11
+        private const val DATABASE_VERSION = 12
 
         // Freshness-cooldown source types (rules §10 / Stage 3.3): the
         // composite key (chat_id, source_type, entry_id) keeps ids from
@@ -470,7 +470,9 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 "rule_ids_json TEXT NOT NULL DEFAULT '[]', " +
                 "found_count INTEGER NOT NULL DEFAULT 0, " +
                 "failed_chat_ids_json TEXT NOT NULL DEFAULT '[]', " +
-                "error TEXT)"
+                "error TEXT, " +
+                "outcome TEXT, " +
+                "failure_reason TEXT)"
         )
 
         db.execSQL(
@@ -1090,6 +1092,17 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             db.execSQL(
                 "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                 arrayOf(META_DB_MIGRATION, "11")
+            )
+        }
+        if (oldVersion < 12) {
+            // v12 (July 2026, Phase 6): the status/failure wording spec needs
+            // each run row to carry its display outcome and dominant failure
+            // reason (archivist_status_wording_spec.md). Additive.
+            db.execSQL("ALTER TABLE archivist_runs ADD COLUMN outcome TEXT")
+            db.execSQL("ALTER TABLE archivist_runs ADD COLUMN failure_reason TEXT")
+            db.execSQL(
+                "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                arrayOf(META_DB_MIGRATION, "12")
             )
         }
     }
@@ -2273,6 +2286,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             put("found_count", run.foundCount)
             put("failed_chat_ids_json", run.failedChatIdsJson)
             put("error", run.error)
+            put("outcome", run.outcome)
+            put("failure_reason", run.failureReason)
         }, SQLiteDatabase.CONFLICT_REPLACE)
     }
 
@@ -2296,7 +2311,9 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                         ruleIdsJson = it.getStringOrNull("rule_ids_json") ?: "[]",
                         foundCount = it.getInt(it.getColumnIndexOrThrow("found_count")),
                         failedChatIdsJson = it.getStringOrNull("failed_chat_ids_json") ?: "[]",
-                        error = it.getStringOrNull("error")
+                        error = it.getStringOrNull("error"),
+                        outcome = it.getStringOrNull("outcome"),
+                        failureReason = it.getStringOrNull("failure_reason")
                     )
                 )
             }

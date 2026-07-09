@@ -22,6 +22,7 @@ import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
 import android.view.LayoutInflater
+import android.view.View
 import android.view.WindowInsets
 import android.widget.ImageButton
 import android.widget.LinearLayout
@@ -32,15 +33,19 @@ import androidx.core.graphics.drawable.toDrawable
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.color.MaterialColors
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.elevation.SurfaceColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.memory.ArchivistRunRecord
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.memory.archivist.Archivist
+import org.teslasoft.assistant.preferences.memory.archivist.ArchivistFailure
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.activities.memory.MemoryBrowserActivity
 import org.teslasoft.assistant.ui.activities.memory.MemoryBrowserFilterState
@@ -50,21 +55,17 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 /**
- * The Memory Assistant — the Phase 6 Archivist's user-facing surface. Layout,
- * wording and behavior are the owner's approved design
+ * The Memory Assistant — the Phase 6 Archivist's user-facing surface. Layout
+ * and wording are the owner's approved design
  * (`Memory System/memory_assistant_design.md` §1–§2 + the July 8 2026 evening
- * answers): helper text, three facts lines ("Date of Last Run" per answer 1),
- * the Analyze Conversations button with live per-conversation progress
- * (batch wording when the run is size-batched, answer 4), completion states,
- * "View Pending Memories." opening the browser filtered to Pending (answer 2),
- * and the last five runs under "Recent Memory Analysis" with a far-left Rerun
- * (answer 3).
- *
- * FAILURE STATES ARE DELIBERATELY SILENT for now: the owner supplies failure
- * wording after seeing the real cases (design doc §1) — a failed or
- * unconfigured run resets the button and logs to the Memory log, showing no
- * invented copy. The "deleted since this run" flag on recent rows is stored
- * but not yet displayed for the same reason.
+ * answers) plus the owner-sanctioned status/failure wording implemented
+ * verbatim from `Memory System/archivist_status_wording_spec.md`: the
+ * not-ready state sits ABOVE the disabled run button; every post-run state
+ * (full/partial failure with reasons, nothing to extract, no new memories,
+ * interrupted) shows BENEATH it with a Title Case label, an explanation, and
+ * an action button — never a silent reset, never color alone. Recent Memory
+ * Analysis lists the last five runs (date → information → Rerun on the far
+ * right) with the "Some Memories Deleted Later" badge where it applies.
  */
 class MemoryAssistantActivity : FragmentActivity() {
 
@@ -76,8 +77,13 @@ class MemoryAssistantActivity : FragmentActivity() {
     private var factSinceRun: TextView? = null
     private var factPending: TextView? = null
     private var factLastRun: TextView? = null
+    private var notReadyContainer: LinearLayout? = null
+    private var btnSetup: MaterialButton? = null
     private var btnAnalyze: MaterialButton? = null
+    private var statusLabel: TextView? = null
     private var textRunStatus: TextView? = null
+    private var statusDetails: TextView? = null
+    private var btnStatusAction: MaterialButton? = null
     private var linkViewPending: TextView? = null
     private var runsContainer: LinearLayout? = null
 
@@ -99,14 +105,20 @@ class MemoryAssistantActivity : FragmentActivity() {
         factSinceRun = findViewById(R.id.fact_since_run)
         factPending = findViewById(R.id.fact_pending)
         factLastRun = findViewById(R.id.fact_last_run)
+        notReadyContainer = findViewById(R.id.not_ready_container)
+        btnSetup = findViewById(R.id.btn_setup)
         btnAnalyze = findViewById(R.id.btn_analyze)
+        statusLabel = findViewById(R.id.status_label)
         textRunStatus = findViewById(R.id.text_run_status)
+        statusDetails = findViewById(R.id.status_details)
+        btnStatusAction = findViewById(R.id.btn_status_action)
         linkViewPending = findViewById(R.id.link_view_pending)
         runsContainer = findViewById(R.id.runs_container)
 
         applyTheme()
         btnBack?.setOnClickListener { finish() }
         btnAnalyze?.setOnClickListener { if (!running) startRun(null) }
+        btnSetup?.setOnClickListener { openArchivistSettings() }
         linkViewPending?.setOnClickListener { openPendingBrowser() }
     }
 
@@ -117,10 +129,17 @@ class MemoryAssistantActivity : FragmentActivity() {
         if (!running && completedThisVisit) {
             completedThisVisit = false
             btnAnalyze?.setText(R.string.memory_assistant_btn_idle)
-            textRunStatus?.visibility = android.view.View.GONE
-            linkViewPending?.visibility = android.view.View.GONE
+            clearStatusBlock()
         }
         refreshFactsAndRuns()
+    }
+
+    private fun clearStatusBlock() {
+        statusLabel?.visibility = View.GONE
+        textRunStatus?.visibility = View.GONE
+        statusDetails?.visibility = View.GONE
+        btnStatusAction?.visibility = View.GONE
+        linkViewPending?.visibility = View.GONE
     }
 
     /* ---------------- data ---------------- */
@@ -133,26 +152,57 @@ class MemoryAssistantActivity : FragmentActivity() {
                 MemoryStore.getInstance(this@MemoryAssistantActivity).pendingReviewCount() else 0
             val runs = if (provisioned)
                 MemoryStore.getInstance(this@MemoryAssistantActivity).getArchivistRuns(RECENT_RUNS) else emptyList()
+            // "Some Memories Deleted Later" badge: which runs reference memory
+            // ids that no longer exist. Computed live so the badge appears as
+            // soon as a deletion happens.
+            val deletedLater = HashSet<String>()
+            if (provisioned) {
+                val store = MemoryStore.getInstance(this@MemoryAssistantActivity)
+                for (run in runs) {
+                    val ids = jsonIds(run.memoryIdsJson)
+                    if (ids.isNotEmpty() && store.existingMemoryIds(ids).size < ids.size) {
+                        deletedLater.add(run.runId)
+                    }
+                }
+            }
+            val configured = isArchivistConfigured()
             withContext(Dispatchers.Main) {
                 factSinceRun?.text = getString(R.string.memory_assistant_fact_since_run, eligible)
                 factPending?.text = getString(R.string.memory_assistant_fact_pending, pendingChats)
                 val lastRun = runs.firstOrNull()
                 if (lastRun != null) {
-                    factLastRun?.visibility = android.view.View.VISIBLE
+                    factLastRun?.visibility = View.VISIBLE
                     factLastRun?.text = getString(
                         R.string.memory_assistant_fact_last_run, formatDate(lastRun.startedAt)
                     )
                 } else {
                     // No run has ever happened — the line has nothing truthful
                     // to say, so it stays hidden rather than inventing a value.
-                    factLastRun?.visibility = android.view.View.GONE
+                    factLastRun?.visibility = View.GONE
                 }
-                renderRuns(runs)
+                // Not-ready state (spec 1): message above the button, run
+                // button visibly disabled; Set Up opens the settings screen.
+                notReadyContainer?.visibility = if (configured) View.GONE else View.VISIBLE
+                if (!running) btnAnalyze?.isEnabled = configured
+                renderRuns(runs, deletedLater)
             }
         }
     }
 
-    private fun renderRuns(runs: List<ArchivistRunRecord>) {
+    private fun isArchivistConfigured(): Boolean = try {
+        val prefs = Preferences.getPreferences(this, "")
+        val endpointId = prefs.getArchivistEndpointId()
+        if (endpointId.isBlank()) false else {
+            val endpoint = ApiEndpointPreferences.getApiEndpointPreferences(this)
+                .getApiEndpoint(this, endpointId)
+            endpoint.host.isNotBlank() &&
+                (prefs.getArchivistModel().isNotBlank() || endpoint.model.isNotBlank())
+        }
+    } catch (_: Exception) {
+        false
+    }
+
+    private fun renderRuns(runs: List<ArchivistRunRecord>, deletedLater: Set<String>) {
         val container = runsContainer ?: return
         container.removeAllViews()
         val inflater = LayoutInflater.from(this)
@@ -162,10 +212,41 @@ class MemoryAssistantActivity : FragmentActivity() {
             row.findViewById<TextView>(R.id.run_result)?.text =
                 if (run.foundCount > 0) getString(R.string.memory_assistant_run_found, run.foundCount)
                 else getString(R.string.memory_assistant_run_none)
+            row.findViewById<TextView>(R.id.run_status)?.text = runStatusLabel(run)
+            val badge = row.findViewById<TextView>(R.id.run_badge)
+            if (run.runId in deletedLater) {
+                badge?.visibility = View.VISIBLE
+                badge?.text = getString(R.string.mem_arch_deleted_badge)
+                // The expanded explanation (spec 8): a tap explains without
+                // implying the run deleted anything.
+                badge?.setOnClickListener {
+                    MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+                        .setTitle(R.string.mem_arch_deleted_badge)
+                        .setMessage(R.string.mem_arch_deleted_explain)
+                        .setPositiveButton(android.R.string.ok) { _, _ -> }
+                        .show()
+                }
+            }
             row.findViewById<MaterialButton>(R.id.btn_rerun)?.setOnClickListener {
                 if (!running) startRun(run.runId)
             }
             container.addView(row)
+        }
+    }
+
+    /** Recent-row label per the spec's list. Legacy rows (before the outcome
+     *  column) fall back to a derivation from what they stored. */
+    private fun runStatusLabel(run: ArchivistRunRecord): String = when (run.outcome) {
+        "completed" -> getString(R.string.mem_arch_row_completed)
+        "full_failed" -> getString(R.string.mem_arch_full_label)
+        "partial_failed" -> getString(R.string.mem_arch_partial_label)
+        "nothing" -> getString(R.string.mem_arch_nothing_label)
+        "no_new" -> getString(R.string.mem_arch_nonew_label)
+        "interrupted" -> getString(R.string.mem_arch_interrupted_label)
+        else -> when {
+            run.status == "failed" -> getString(R.string.mem_arch_full_label)
+            run.foundCount > 0 -> getString(R.string.mem_arch_row_completed)
+            else -> getString(R.string.mem_arch_nonew_label)
         }
     }
 
@@ -175,8 +256,8 @@ class MemoryAssistantActivity : FragmentActivity() {
         running = true
         btnAnalyze?.setText(R.string.memory_assistant_btn_running)
         btnAnalyze?.isEnabled = false
-        linkViewPending?.visibility = android.view.View.GONE
-        textRunStatus?.visibility = android.view.View.VISIBLE
+        clearStatusBlock()
+        textRunStatus?.visibility = View.VISIBLE
         textRunStatus?.text = ""
 
         lifecycleScope.launch(Dispatchers.IO) {
@@ -187,34 +268,155 @@ class MemoryAssistantActivity : FragmentActivity() {
                 if (rerunOfRunId == null) Archivist.analyze(this@MemoryAssistantActivity, onProgress)
                 else Archivist.rerun(this@MemoryAssistantActivity, rerunOfRunId, onProgress)
             } catch (e: Exception) {
-                Archivist.RunOutcome(null, 0, 0, 0, emptyList(), error = e.message)
+                Archivist.RunOutcome(
+                    null, 0, 0, 0, 0, emptyList(),
+                    outcome = "full_failed",
+                    failureReason = ArchivistFailure.classify(e),
+                    error = e.message
+                )
             }
             withContext(Dispatchers.Main) {
                 running = false
                 btnAnalyze?.isEnabled = true
-                if (outcome.notConfigured || outcome.error != null) {
-                    // Failure copy is the owner's to write (design doc §1) —
-                    // until then the button resets and the Memory log carries
-                    // the diagnosis; nothing invented is shown.
-                    btnAnalyze?.setText(R.string.memory_assistant_btn_idle)
-                    textRunStatus?.visibility = android.view.View.GONE
-                } else {
-                    completedThisVisit = true
-                    btnAnalyze?.setText(R.string.memory_assistant_btn_done)
-                    if (outcome.memoriesFound > 0) {
-                        textRunStatus?.text =
-                            getString(R.string.memory_assistant_done_found, outcome.memoriesFound)
-                        linkViewPending?.visibility = android.view.View.VISIBLE
-                    } else {
-                        textRunStatus?.text = getString(R.string.memory_assistant_done_none)
-                    }
-                }
+                showOutcome(outcome)
                 refreshFactsAndRuns()
             }
         }
     }
 
+    /** Every terminal state is visible (spec: never a silent reset). */
+    private fun showOutcome(o: Archivist.RunOutcome) {
+        clearStatusBlock()
+        completedThisVisit = true
+        when (o.outcome) {
+            "completed" -> {
+                btnAnalyze?.setText(R.string.memory_assistant_btn_done)
+                showStatus(null, getString(R.string.memory_assistant_done_found, o.memoriesFound), null, null, null)
+                linkViewPending?.visibility = View.VISIBLE
+            }
+            "no_new" -> {
+                btnAnalyze?.setText(R.string.memory_assistant_btn_done)
+                showStatus(
+                    getString(R.string.mem_arch_nonew_label),
+                    getString(R.string.mem_arch_nonew_msg),
+                    if (o.duplicatesSkipped > 0) getString(R.string.mem_arch_nonew_dupes)
+                    else getString(R.string.mem_arch_nonew_nothing),
+                    getString(R.string.mem_arch_btn_run_again),
+                    neutralLabelColor()
+                ) { startRun(null) }
+            }
+            "nothing" -> {
+                btnAnalyze?.setText(R.string.memory_assistant_btn_idle)
+                showStatus(
+                    getString(R.string.mem_arch_nothing_label),
+                    getString(R.string.mem_arch_nothing_msg),
+                    null,
+                    getString(R.string.mem_arch_btn_try_again),
+                    neutralLabelColor()
+                ) { startRun(null) }
+            }
+            "partial_failed" -> {
+                btnAnalyze?.setText(R.string.memory_assistant_btn_idle)
+                val counts = getString(
+                    R.string.mem_arch_partial_counts,
+                    o.memoriesFound, o.conversationsAnalyzed, o.failedChatIds.size
+                )
+                val reason = partialReason(o.failureReason)
+                showStatus(
+                    getString(R.string.mem_arch_partial_label),
+                    getString(R.string.mem_arch_partial_msg),
+                    counts + "\n\n" + reason,
+                    getString(R.string.mem_arch_btn_try_again),
+                    MaterialColors.getColor(statusLabel!!, com.google.android.material.R.attr.colorTertiary)
+                ) { startRun(null) }
+            }
+            "full_failed" -> {
+                btnAnalyze?.setText(R.string.memory_assistant_btn_idle)
+                val reason = o.failureReason ?: ArchivistFailure.UNKNOWN
+                showStatus(
+                    getString(R.string.mem_arch_full_label),
+                    getString(R.string.mem_arch_full_msg),
+                    fullReason(reason),
+                    if (reason.settingsRelated) getString(R.string.mem_arch_btn_check_settings)
+                    else getString(R.string.mem_arch_btn_try_again),
+                    MaterialColors.getColor(statusLabel!!, com.google.android.material.R.attr.colorError)
+                ) {
+                    if (reason.settingsRelated) openArchivistSettings() else startRun(null)
+                }
+            }
+            "interrupted" -> {
+                btnAnalyze?.setText(R.string.memory_assistant_btn_idle)
+                showStatus(
+                    getString(R.string.mem_arch_interrupted_label),
+                    getString(R.string.mem_arch_interrupted_msg),
+                    if (o.memoriesFound > 0) getString(R.string.mem_arch_interrupted_saved)
+                    else getString(R.string.mem_arch_interrupted_none),
+                    getString(R.string.mem_arch_btn_try_again),
+                    MaterialColors.getColor(statusLabel!!, com.google.android.material.R.attr.colorTertiary)
+                ) { startRun(null) }
+            }
+            "not_configured" -> {
+                btnAnalyze?.setText(R.string.memory_assistant_btn_idle)
+                // The above-button block + disabled button carry this state.
+            }
+        }
+    }
+
+    private fun neutralLabelColor(): Int =
+        ResourcesCompat.getColor(resources, R.color.text_title, theme)
+
+    private fun showStatus(
+        label: String?,
+        message: String,
+        details: String?,
+        actionText: String?,
+        labelColor: Int?,
+        action: (() -> Unit)? = null
+    ) {
+        if (label != null) {
+            statusLabel?.visibility = View.VISIBLE
+            statusLabel?.text = label
+            labelColor?.let { statusLabel?.setTextColor(it) }
+        }
+        textRunStatus?.visibility = View.VISIBLE
+        textRunStatus?.text = message
+        if (details != null) {
+            statusDetails?.visibility = View.VISIBLE
+            statusDetails?.text = details
+        }
+        if (actionText != null) {
+            btnStatusAction?.visibility = View.VISIBLE
+            btnStatusAction?.text = actionText
+            btnStatusAction?.setOnClickListener { if (!running) action?.invoke() }
+        }
+    }
+
+    private fun fullReason(r: ArchivistFailure): String = getString(
+        when (r) {
+            ArchivistFailure.UNREACHABLE -> R.string.mem_arch_full_unreachable
+            ArchivistFailure.REJECTED -> R.string.mem_arch_full_rejected
+            ArchivistFailure.LIMIT -> R.string.mem_arch_full_limit
+            ArchivistFailure.UNREADABLE -> R.string.mem_arch_full_unreadable
+            ArchivistFailure.SAVE_FAILED -> R.string.mem_arch_full_save
+            ArchivistFailure.INTERRUPTED -> R.string.mem_arch_full_interrupted
+            ArchivistFailure.UNKNOWN -> R.string.mem_arch_full_unknown
+        }
+    )
+
+    private fun partialReason(r: ArchivistFailure?): String = getString(
+        when (r) {
+            ArchivistFailure.UNREACHABLE -> R.string.mem_arch_part_unreachable
+            ArchivistFailure.REJECTED -> R.string.mem_arch_part_rejected
+            ArchivistFailure.LIMIT -> R.string.mem_arch_part_limit
+            ArchivistFailure.UNREADABLE -> R.string.mem_arch_part_unreadable
+            ArchivistFailure.SAVE_FAILED -> R.string.mem_arch_part_save
+            ArchivistFailure.INTERRUPTED -> R.string.mem_arch_part_interrupted
+            else -> R.string.mem_arch_part_unknown
+        }
+    )
+
     private fun showProgress(p: Archivist.Progress) {
+        textRunStatus?.visibility = View.VISIBLE
         textRunStatus?.text = if (p.batchCount <= 1) {
             // Small run: the design doc's plain form.
             getString(R.string.memory_assistant_running_moment) + "\n" +
@@ -249,6 +451,19 @@ class MemoryAssistantActivity : FragmentActivity() {
         MemoryBrowserFilterState.status.clear()
         MemoryBrowserFilterState.status.add("draft")
         startActivity(Intent(this, MemoryBrowserActivity::class.java))
+    }
+
+    /** "Set Up Archivist Model" / "Check Archivist Settings": the Archivist
+     *  endpoint + model live on the Memory Settings screen. */
+    private fun openArchivistSettings() {
+        startActivity(Intent(this, MemorySettingsActivity::class.java))
+    }
+
+    private fun jsonIds(json: String): List<String> = try {
+        val arr = org.json.JSONArray(json)
+        (0 until arr.length()).mapNotNull { arr.optString(it).takeIf { s -> s.isNotEmpty() } }
+    } catch (_: Exception) {
+        emptyList()
     }
 
     private fun formatDate(iso: String): String = try {
