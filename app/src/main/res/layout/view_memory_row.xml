@@ -123,6 +123,22 @@
             app:layout_constraintStart_toStartOf="@+id/row_title"
             app:layout_constraintTop_toBottomOf="@+id/row_tags" />
 
+        <!-- Persistent inline note (owner design, July 9 2026): e.g. "Needs
+             roleplay target." on an untargeted roleplay draft. Never a
+             vanishing message. -->
+        <TextView
+            android:id="@+id/row_note"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:textColor="?attr/colorPrimary"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:visibility="gone"
+            app:layout_constraintEnd_toStartOf="@+id/btn_row_action"
+            app:layout_constraintStart_toStartOf="@+id/row_title"
+            app:layout_constraintTop_toBottomOf="@+id/row_subtitle" />
+
         <!-- Pending action words (owner design, July 8 2026 evening): across
              the bottom of every PENDING memory row, larger than the normal
              row text and bold so they're easy to see. Add to Card appears on
@@ -138,7 +154,7 @@
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="@+id/row_title"
-            app:layout_constraintTop_toBottomOf="@+id/row_subtitle">
+            app:layout_constraintTop_toBottomOf="@+id/row_note">
 
             <TextView
                 android:id="@+id/action_accept"

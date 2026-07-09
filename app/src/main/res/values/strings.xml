@@ -949,6 +949,10 @@
     <string name="mem_dropdown_select">Select</string>
     <string name="mem_approve_all_as_shown">Approve All As Shown</string>
     <string name="mem_edit_link_card_label">Link to Lore Card:</string>
+    <!-- Owner wording (round-3 rulings, July 9 2026): a roleplay draft with
+         no world/campaign/character target — shown inline on the row and in
+         the editor; the draft cannot be added to a card until targeted. -->
+    <string name="mem_needs_roleplay_target">Needs roleplay target.</string>
 
     <!-- Companion memory system (Phase 1: store, seed, backups) -->
     <string name="tile_memory_title">Memory system</string>
@@ -1023,7 +1027,9 @@
          (Engine picker title, "needs model" toast and endpoint infra strings are
          reused by the reorged Memory Controls screen — see the reorg block below.) -->
     <string name="memory_engine_picker_title">Choose memory engine</string>
-    <string name="memory_engine_full_needs_model_toast">Install an embedding model in the Librarian section below before switching to the full memory system.</string>
+    <!-- Owner wording, July 9 2026 — shown inline (persistent) under the
+         Memory Engine control, never a toast. -->
+    <string name="memory_engine_full_needs_model">Install an embedding model in Advanced Memory Settings before switching to the full memory system.</string>
     <string name="memory_archivist_endpoint_picker_title">Choose an endpoint</string>
     <string name="memory_archivist_endpoint_none_toast">No saved API endpoints yet — add one in API Endpoints first.</string>
     <string name="memory_archivist_model_hint">e.g. gpt-4o-mini</string>
@@ -1154,9 +1160,11 @@
     <string name="mem_edit_label_type">Type</string>
     <string name="mem_edit_label_importance">Importance</string>
     <string name="mem_edit_label_scope">Scope</string>
-    <string name="mem_edit_targets_heading">Which ones does this belong to? Pick one or more.</string>
-    <string name="mem_edit_add_target">Add</string>
-    <string name="mem_edit_pick_targets_title">Select targets</string>
+    <!-- Owner rework (July 8–9 2026): the old "Which ones does this belong
+         to?" sentence is GONE; the picker label is "Associated <Scope>",
+         composed from the owner's approved scope labels below ("Associated
+         Companion" is the owner's exact wording for the companion case). -->
+    <string name="mem_edit_associated_fmt">Associated %1$s</string>
     <string name="mem_edit_new_project">New project</string>
     <string name="mem_edit_new_project_hint">Project name</string>
     <string name="mem_edit_btn_save">Save</string>

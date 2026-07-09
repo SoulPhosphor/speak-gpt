@@ -49,7 +49,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
 
     companion object {
         const val DATABASE_NAME = "companion_memory.db"
-        private const val DATABASE_VERSION = 13
+        private const val DATABASE_VERSION = 14
 
         // Freshness-cooldown source types (rules §10 / Stage 3.3): the
         // composite key (chat_id, source_type, entry_id) keeps ids from
@@ -458,6 +458,19 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 "quick_settings_json TEXT, " +
                 "review_status TEXT NOT NULL DEFAULT 'pending' CHECK (review_status IN ('pending','processed','excluded')), " +
                 "processed_at TEXT)"
+        )
+
+        // Rejected drafts (Phase 6, DB v14): deleting a Memory Assistant
+        // draft rejects it — a rerun of the same conversation must not
+        // refile the exact same draft. Specific by design: exact
+        // title+content hash + the source conversation; never broad
+        // similarity suppression. Device-local, never exported.
+        db.execSQL(
+            "CREATE TABLE rejected_drafts (" +
+                "content_hash TEXT NOT NULL, " +
+                "chat_key TEXT NOT NULL, " +
+                "deleted_at TEXT NOT NULL, " +
+                "PRIMARY KEY (content_hash, chat_key))"
         )
 
         // Archivist run history (Phase 6, DB v11): powers the Memory
@@ -1125,6 +1138,27 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             db.execSQL(
                 "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                 arrayOf(META_DB_MIGRATION, "13")
+            )
+        }
+        if (oldVersion < 14) {
+            // v14 (July 2026, Phase 6): rejected-draft tracking (owner
+            // preference, round-3 rulings). Deleting a Memory Assistant
+            // DRAFT counts as rejecting it: rerunning the same analysis must
+            // not immediately recreate the exact same draft. Rejection is
+            // deliberately SPECIFIC — exact title+content hash, scoped to
+            // the source conversation — never a broad similarity rule that
+            // could swallow useful memories. Device-local, never exported,
+            // emptied by Reset memories. Additive.
+            db.execSQL(
+                "CREATE TABLE rejected_drafts (" +
+                    "content_hash TEXT NOT NULL, " +
+                    "chat_key TEXT NOT NULL, " +
+                    "deleted_at TEXT NOT NULL, " +
+                    "PRIMARY KEY (content_hash, chat_key))"
+            )
+            db.execSQL(
+                "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                arrayOf(META_DB_MIGRATION, "14")
             )
         }
     }
@@ -4228,8 +4262,10 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             db.delete("injection_cooldowns", null, null)
             db.delete("chat_turn_counters", null, null)
             // Run history describes conversations/memories that no longer
-            // exist after a reset — it empties with everything else.
+            // exist after a reset — it empties with everything else, as does
+            // the rejected-draft record.
             db.delete("archivist_runs", null, null)
+            db.delete("rejected_drafts", null, null)
             db.update("app_state", ContentValues().apply {
                 putNull("active_companion_id"); putNull("active_world_id")
                 putNull("active_roleplay_character_id"); putNull("active_user_persona_id")
@@ -4489,6 +4525,19 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         val db = writableDatabase
         db.beginTransaction()
         try {
+            // Deleting a Memory Assistant DRAFT is a rejection (owner
+            // preference, July 9 2026): remember it so a rerun of the same
+            // conversation doesn't refile the exact same draft. Scoped to
+            // the draft's source conversation (its provenance context) and
+            // exact text — never broad suppression. User-authored memories
+            // and non-draft deletions register nothing.
+            val prior = getMemory(memoryId)
+            if (prior != null && prior.status == "draft" && prior.origin == "archivist") {
+                db.execSQL(
+                    "INSERT OR REPLACE INTO rejected_drafts (content_hash, chat_key, deleted_at) VALUES (?, ?, ?)",
+                    arrayOf(draftContentHash(prior.title, prior.content), prior.provenanceContext ?: "", nowIso())
+                )
+            }
             db.delete("memories", "memory_id = ?", arrayOf(memoryId))
             recordDeletionTx(db, "memory", memoryId)
             clearEntryCooldownTx(db, COOLDOWN_SOURCE_MEMORY, memoryId)
@@ -4496,6 +4545,22 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         } finally {
             db.endTransaction()
         }
+    }
+
+    /** Whether an identical draft (exact title+content) from this source
+     *  conversation was deleted before — the runner skips refiling it. */
+    fun isDraftRejected(title: String, content: String, chatKey: String): Boolean {
+        readableDatabase.query(
+            "rejected_drafts", arrayOf("content_hash"),
+            "content_hash = ? AND chat_key = ?",
+            arrayOf(draftContentHash(title, content), chatKey), null, null, null
+        ).use { return it.moveToNext() }
+    }
+
+    private fun draftContentHash(title: String, content: String): String {
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+            .digest((title + " " + content).toByteArray(Charsets.UTF_8))
+        return digest.joinToString("") { "%02x".format(it) }
     }
 
     fun getMemoryChangeLog(memoryId: String): List<ChangeLogEntry> =

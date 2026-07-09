@@ -387,6 +387,21 @@
                 android:textColor="@color/text_subtitle"
                 android:textSize="13sp" />
 
+            <!-- Setup guidance (owner wording + placement, July 9 2026):
+                 INLINE and persistent under the Memory Engine control —
+                 never a toast. Shown when Full is refused for lack of an
+                 embedding model; stays visible until the screen is left. -->
+            <TextView
+                android:id="@+id/text_engine_needs_model"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="8dp"
+                android:text="@string/memory_engine_full_needs_model"
+                android:textColor="?attr/colorPrimary"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
             <!-- ============ Memory Assistant Model ============ -->
             <TextView
                 android:layout_width="match_parent"

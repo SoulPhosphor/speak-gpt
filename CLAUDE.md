@@ -359,6 +359,26 @@ Everything is on-device. No cloud sync, no accounts.
    default — the owner's card-append toggle; its UI ships with Memory
    Controls). Suggestions pre-select the Add-to-Card and editor Link
    dropdowns and give pending rows the §7 outline (`bg_suggestion_outline`).
+   **DB v14 (July 9 2026) adds `rejected_drafts`** (owner preference):
+   deleting a Memory Assistant DRAFT records its exact title+content hash +
+   source conversation, and a rerun will not refile that exact draft from
+   that conversation — deliberately narrow, never broad similarity
+   suppression (owner rule). Device-local, never exported, emptied by Reset
+   memories. **Phase 6 scope limits (owner rulings, July 9 2026 — final):**
+   the Memory Assistant NEVER creates or proposes worlds/campaigns from
+   emergence — roleplay content with no attached target files as an
+   untargeted pending draft carrying the persistent inline note "Needs
+   roleplay target." (it cannot be added to a card until the user assigns a
+   world/campaign/character target in the editor; Add to Card is hidden and
+   the editor's Link section gated until then). The Memory Assistant NEVER
+   automatically updates campaign story_so_far or Plot Ledger fields — those
+   columns are DEAD legacy and must never be revived or referenced as
+   current (owner ruling; card-section placement SUGGESTIONS, user-approved,
+   including to plot_ledger, are the only sanctioned path). The full memory
+   engine requires an embedding model installed through Advanced Memory
+   Settings — refusing the switch shows the owner-worded guidance INLINE
+   under the Memory Engine control (persistent; the app-wide toast ban
+   applies).
    The Memory Assistant tuning prefs (July 9 spec,
    `memory_settings_reorg_spec.md`): max suggestions per conversation +
    minimum importance (both ENFORCED IN CODE in the runner), temperature
@@ -705,10 +725,16 @@ Everything is on-device. No cloud sync, no accounts.
     pop-up — the owner's device mishandles large dialogs): title + content, a
     Type picker (six, with the §5 meanings as hint lines), an Importance picker
     (five), a primary Scope picker (seven), and — for the target-bearing scopes
-    — a **multi-select target picker with removable pills** (§2). Projects can
-    be created from that picker (no other creation surface yet). Protection
-    editing stays on the browser row menu. The old `EditMemoryDialogFragment`
-    was removed.
+    — the **"Associated <Scope>" target picker (owner rework, July 8–9
+    2026)**: label + boxed "Select" dropdown on one line (`bg_dropdown_box`,
+    5dp corners, box around the dropdown only — never pills, never a boxed
+    whole line), selections rendered below as small-curve boxes with an × at
+    the far right to remove. Projects can still be created from that dropdown
+    (no other creation surface yet). A roleplay DRAFT with no target shows
+    the persistent inline "Needs roleplay target." note and its Link-to-Lore-
+    Card section stays hidden until a target is assigned (July 9 ruling); the
+    same note appears on its browser row, where Add to Card is hidden too.
+    The old `EditMemoryDialogFragment` was removed.
   - The **browser** filters (reworked July 8 2026): the old horizontal chip
     row is RETIRED (the `filter_bar` container stays in the shared scaffold,
     hidden, in case another list screen wants chips). A **three-dots

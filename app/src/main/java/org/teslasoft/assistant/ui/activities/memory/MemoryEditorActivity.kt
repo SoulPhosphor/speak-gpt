@@ -32,7 +32,6 @@ import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
 import androidx.fragment.app.FragmentActivity
 import com.google.android.material.button.MaterialButton
-import com.google.android.material.chip.Chip
 import com.google.android.material.chip.ChipGroup
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.elevation.SurfaceColors
@@ -84,7 +83,7 @@ class MemoryEditorActivity : FragmentActivity() {
     private var sectionTargets: View? = null
     private var targetsHeading: TextView? = null
     private var chipsTargets: ChipGroup? = null
-    private var btnAddTarget: MaterialButton? = null
+    private var dropdownTargets: TextView? = null
     private var btnSave: MaterialButton? = null
     private var btnAccept: MaterialButton? = null
     private var sectionLinkCard: View? = null
@@ -102,6 +101,11 @@ class MemoryEditorActivity : FragmentActivity() {
     private var linkCardType: String? = null
     private var linkCardId: String? = null
     private var linkSection: String? = null
+
+    /** True while editing a roleplay-scoped DRAFT — drives the "Needs
+     *  roleplay target." note and the card-link gate (owner ruling, July 9
+     *  2026: an untargeted roleplay draft cannot be added to a card). */
+    private var isRoleplayDraft = false
 
     /** Selected targets for the current scope category, id -> display name. */
     private val selectedTargets = LinkedHashMap<String, String>()
@@ -145,7 +149,7 @@ class MemoryEditorActivity : FragmentActivity() {
         sectionTargets = findViewById(R.id.section_targets)
         targetsHeading = findViewById(R.id.text_targets_heading)
         chipsTargets = findViewById(R.id.chips_targets)
-        btnAddTarget = findViewById(R.id.btn_add_target)
+        dropdownTargets = findViewById(R.id.dropdown_targets)
         btnSave = findViewById(R.id.btn_mem_save)
         btnAccept = findViewById(R.id.btn_mem_accept)
         sectionLinkCard = findViewById(R.id.section_link_card)
@@ -160,7 +164,7 @@ class MemoryEditorActivity : FragmentActivity() {
         btnType?.setOnClickListener { showTypePicker() }
         btnImportance?.setOnClickListener { showImportancePicker() }
         btnScope?.setOnClickListener { showScopePicker() }
-        btnAddTarget?.setOnClickListener { showTargetPicker() }
+        dropdownTargets?.setOnClickListener { showTargetDropdown(it) }
         btnSave?.setOnClickListener { save(activate = false) }
         btnAccept?.setOnClickListener { save(activate = true) }
 
@@ -236,7 +240,7 @@ class MemoryEditorActivity : FragmentActivity() {
                         // memory onto the card (owner ruling — it leaves the
                         // browser and lives with the card).
                         if (record.scope in setOf("world", "campaign", "rp_character")) {
-                            sectionLinkCard?.visibility = View.VISIBLE
+                            isRoleplayDraft = true
                             wireLinkCardDropdowns()
                             // A Memory Assistant placement suggestion
                             // pre-selects both dropdowns ("Select" otherwise);
@@ -383,6 +387,11 @@ class MemoryEditorActivity : FragmentActivity() {
         btnScope?.text = scopeLabel(currentScope)
         val hasTargets = currentScope in TARGET_SCOPES
         sectionTargets?.visibility = if (hasTargets) View.VISIBLE else View.GONE
+        // "Associated Companion" / "Associated World" / … — the owner's label
+        // pattern applied to the approved scope names.
+        if (hasTargets) {
+            targetsHeading?.text = getString(R.string.mem_edit_associated_fmt, scopeLabel(currentScope))
+        }
         renderChips()
     }
 
@@ -407,45 +416,77 @@ class MemoryEditorActivity : FragmentActivity() {
 
     /* ------------------------------ targets ------------------------------ */
 
+    // Selected targets render as small-curve boxes (owner style: 5dp
+    // corners, never pills) with the × at the far right to remove; the
+    // ChipGroup container is kept only as the wrapping flow layout.
     private fun renderChips() {
         val group = chipsTargets ?: return
         group.removeAllViews()
+        val pad = (10 * resources.displayMetrics.density).toInt()
         for ((id, name) in selectedTargets) {
-            val chip = Chip(this).apply {
+            val box = TextView(this).apply {
                 text = name
-                isCloseIconVisible = true
-                setOnCloseIconClickListener {
+                textSize = 15f
+                setTextColor(ResourcesCompat.getColor(resources, R.color.text_title, theme))
+                background = ResourcesCompat.getDrawable(resources, R.drawable.bg_dropdown_box, theme)
+                setPadding(pad, pad, pad, pad)
+                setCompoundDrawablesRelativeWithIntrinsicBounds(0, 0, R.drawable.ic_close, 0)
+                compoundDrawablePadding = pad / 2
+                setOnClickListener {
                     selectedTargets.remove(id)
                     renderChips()
                 }
             }
-            group.addView(chip)
+            group.addView(box)
+        }
+        refreshRoleplayDraftGate()
+    }
+
+    /** Owner ruling (July 9 2026): an untargeted roleplay draft shows the
+     *  persistent "Needs roleplay target." note and cannot be linked to a
+     *  card; assigning a target (via the picker) opens the Link section.
+     *  Re-evaluated on every target change. */
+    private fun refreshRoleplayDraftGate() {
+        if (!isRoleplayDraft) return
+        val needsTarget = selectedTargets.isEmpty()
+        findViewById<TextView>(R.id.text_needs_target)?.visibility =
+            if (needsTarget) View.VISIBLE else View.GONE
+        sectionLinkCard?.visibility = if (needsTarget) View.GONE else View.VISIBLE
+        if (needsTarget && linkCardId != null) {
+            // Losing the last target also clears any pending card link —
+            // approval then activates normally instead of converting.
+            linkCardType = null
+            linkCardId = null
+            linkSection = null
+            dropdownLinkCard?.setText(R.string.mem_dropdown_select)
+            dropdownLinkSection?.setText(R.string.mem_dropdown_select)
         }
     }
 
-    private fun showTargetPicker() {
+    /** The boxed "Select" dropdown (owner rework): lists the not-yet-selected
+     *  targets for the current scope; picking one adds it as a ×-removable
+     *  box below. Projects keep their create-from-picker ability
+     *  (owner_approved_rules §4) as the dropdown's last entry. */
+    private fun showTargetDropdown(anchor: View) {
         val items = itemsForScope(currentScope)
-        val ids = items.keys.toList()
-        val names = ids.map { items[it]!! }.toTypedArray()
-        val checked = BooleanArray(ids.size) { selectedTargets.containsKey(ids[it]) }
-
-        val builder = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.mem_edit_pick_targets_title)
-            .setMultiChoiceItems(names, checked) { _, which, isChecked -> checked[which] = isChecked }
-            .setPositiveButton(R.string.btn_save) { _, _ ->
-                selectedTargets.clear()
-                ids.forEachIndexed { i, id -> if (checked[i]) selectedTargets[id] = items[id]!! }
+        val available = items.entries.filter { it.key !in selectedTargets }
+        val menu = android.widget.PopupMenu(this, anchor)
+        available.forEachIndexed { i, entry -> menu.menu.add(0, i, i, entry.value) }
+        val newProjectId = available.size
+        if (currentScope == "project") {
+            menu.menu.add(0, newProjectId, newProjectId, getString(R.string.mem_edit_new_project))
+        }
+        menu.setOnMenuItemClickListener { item ->
+            if (currentScope == "project" && item.itemId == newProjectId) {
+                showNewProjectDialog()
+            } else {
+                val entry = available[item.itemId]
+                selectedTargets[entry.key] = entry.value
                 renderChips()
             }
-            .setNegativeButton(R.string.btn_cancel) { _, _ -> }
-
-        // Projects have no other creation surface, so the picker can make one
-        // (owner_approved_rules §4). The other categories are authored on their
-        // own screens.
-        if (currentScope == "project") {
-            builder.setNeutralButton(R.string.mem_edit_new_project) { _, _ -> showNewProjectDialog() }
+            true
         }
-        builder.show()
+        menu.show()
     }
 
     private fun showNewProjectDialog() {

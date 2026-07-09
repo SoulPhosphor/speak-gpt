@@ -57,7 +57,10 @@ data class MemoryRow(
     val showAddToCard: Boolean = false,
     /** §7 outline treatment: an unactioned Memory Assistant card-placement
      *  suggestion is waiting on this row. */
-    val outlined: Boolean = false
+    val outlined: Boolean = false,
+    /** Persistent inline note (owner design, July 9 2026): e.g. "Needs
+     *  roleplay target." on an untargeted roleplay draft. */
+    val noteLine: String? = null
 )
 
 class MemoryRowAdapter(
@@ -151,6 +154,14 @@ class MemoryRowAdapter(
         } else {
             action.visibility = View.GONE
             action.setOnClickListener(null)
+        }
+
+        val note = view.findViewById<TextView>(R.id.row_note)
+        if (row.noteLine.isNullOrBlank()) {
+            note.visibility = View.GONE
+        } else {
+            note.visibility = View.VISIBLE
+            note.text = row.noteLine
         }
 
         // §7: the outline marks "a card placement is waiting on your

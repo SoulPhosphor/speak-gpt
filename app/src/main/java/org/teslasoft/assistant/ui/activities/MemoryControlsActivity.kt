@@ -331,14 +331,17 @@ class MemoryControlsActivity : FragmentActivity() {
                 if (picked == "full" && EmbeddingModelStorage.activeModel(this) == null) {
                     // The full engine needs semantic retrieval to be usable — refuse
                     // the switch rather than silently degrading to keyword-only.
-                    // TODO(owner-wording): this moved string says "the Librarian
-                    // section below", but the Librarian now lives on Advanced
-                    // Memory Settings, not below on this screen. Kept verbatim
-                    // (owner-approved words) pending an owner reword.
-                    Toast.makeText(this, R.string.memory_engine_full_needs_model_toast, Toast.LENGTH_LONG).show()
+                    // Setup guidance shows INLINE under the engine control and
+                    // stays visible (owner rule: never a toast — the app is
+                    // used mostly hands-free; vanishing messages are useless).
+                    findViewById<android.widget.TextView>(R.id.text_engine_needs_model)
+                        ?.visibility = android.view.View.VISIBLE
                     dialog.dismiss()
                     return@setSingleChoiceItems
                 }
+                // A successful pick clears any earlier setup guidance.
+                findViewById<android.widget.TextView>(R.id.text_engine_needs_model)
+                    ?.visibility = android.view.View.GONE
                 preferences?.setMemoryEngine(picked)
                 refreshEngineRow()
                 if (picked == "full") {

@@ -192,6 +192,14 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
         // In Pending view every row is a draft, so the "Pending" badge would
         // repeat the mode — suppressed, same reasoning as the Active badge.
         val badge = if (m.status == "active" || pending) null else statusLabel(m.status)
+        // Emergence scope (owner ruling, July 9 2026): a roleplay draft with
+        // no world/campaign/character target carries a persistent "Needs
+        // roleplay target." note and CANNOT be added to a card until the
+        // user assigns a target in the editor. Nothing proposes or creates
+        // worlds/campaigns automatically.
+        val roleplay = m.scope in ROLEPLAY_SCOPES
+        val needsTarget = roleplay &&
+            m.worldIds.isEmpty() && m.campaignIds.isEmpty() && m.roleplayCharacterIds.isEmpty()
         return MemoryRow(
             id = m.memoryId,
             title = m.title,
@@ -201,11 +209,13 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
             hasAction = !pending,
             iconRes = iconForScope(m.scope, isOnCard(m)),
             pendingActions = pending,
-            // Owner design: roleplay memories additionally get Add to Card.
-            showAddToCard = pending && m.scope in ROLEPLAY_SCOPES,
+            // Owner design: roleplay memories additionally get Add to Card —
+            // but only once they have a target.
+            showAddToCard = pending && roleplay && !needsTarget,
             // §7 outline: an unactioned Memory Assistant placement suggestion
             // is waiting on this draft.
-            outlined = pending && m.suggestedCardId != null
+            outlined = pending && m.suggestedCardId != null,
+            noteLine = if (pending && needsTarget) getString(R.string.mem_needs_roleplay_target) else null
         )
     }
 

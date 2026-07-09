@@ -434,6 +434,15 @@ object Archivist {
         } else emptyList()
         for (d in drafts) {
             if (store.memoryExistsWithText(d.title, d.content)) { duplicates++; continue }
+            // A draft the user deleted is a rejection (owner preference,
+            // July 9 2026): the exact same draft from the same conversation
+            // is not refiled on rerun. Deliberately narrow — different
+            // wording or a different conversation files normally.
+            if (store.isDraftRejected(d.title, d.content, conversation.chatName)) {
+                MemoryLog.log(context, "Archivist", "info",
+                    "chat=${conversation.chatId}: previously rejected draft not refiled (\"${d.title}\")")
+                continue
+            }
             // Resolve a proposed placement (roleplay scopes only): the section
             // must be a real key for the matched card's type.
             var sugType: String? = null
