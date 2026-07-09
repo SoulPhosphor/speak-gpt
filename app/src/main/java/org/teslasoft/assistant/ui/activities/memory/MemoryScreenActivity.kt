@@ -136,8 +136,11 @@ abstract class MemoryScreenActivity : FragmentActivity(), MemoryRowAdapter.OnRow
     /** Refresh the toggle's selected word and the count line beneath it
      *  (null hides the count — it never shows when nothing is pending). */
     protected fun updateModeToggle(mode: String, pendingCountLine: String?) {
+        // colorPrimary via appcompat's R — material inherits the attr rather
+        // than declaring it (colorError failed to resolve from material.R in
+        // CI; colorPrimary has the same risk).
         val selected = com.google.android.material.color.MaterialColors.getColor(
-            titleView ?: return, com.google.android.material.R.attr.colorPrimary
+            titleView ?: return, androidx.appcompat.R.attr.colorPrimary
         )
         val unselected = ResourcesCompat.getColor(resources, R.color.text_subtitle, theme)
         btnModeMemories?.setTextColor(if (mode == "memories") selected else unselected)

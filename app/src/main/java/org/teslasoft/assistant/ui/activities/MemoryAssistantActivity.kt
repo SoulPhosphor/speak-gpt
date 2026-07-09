@@ -339,7 +339,9 @@ class MemoryAssistantActivity : FragmentActivity() {
                     fullReason(reason),
                     if (reason.settingsRelated) getString(R.string.mem_arch_btn_check_settings)
                     else getString(R.string.mem_arch_btn_try_again),
-                    MaterialColors.getColor(statusLabel!!, com.google.android.material.R.attr.colorError)
+                    // colorError lives in appcompat's attrs (material inherits
+                    // it rather than declaring it — material.R has no entry).
+                    MaterialColors.getColor(statusLabel!!, androidx.appcompat.R.attr.colorError)
                 ) {
                     if (reason.settingsRelated) openArchivistSettings() else startRun(null)
                 }
