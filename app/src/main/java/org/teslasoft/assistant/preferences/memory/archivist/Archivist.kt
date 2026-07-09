@@ -187,6 +187,16 @@ object Archivist {
         val startedAt = Instant.now().toString()
         val ai = buildClient(endpoint)
 
+        // Memory Assistant tuning (owner spec, July 9 2026): the cap and the
+        // importance floor are enforced HERE in code — the prompt is never
+        // trusted to do it. Temperature rides every analysis request
+        // (recommended default 0.3); a user-edited extraction prompt replaces
+        // the built-in one (Reset clears back to built-in).
+        val maxSuggestions = prefs.getArchivistMaxSuggestions()
+        val minImportance = prefs.getArchivistMinImportance()
+        val temperature = prefs.getArchivistTemperature().toDouble()
+        val systemPrompt = prefs.getArchivistCustomPrompt().ifBlank { ArchivistPrompt.SYSTEM }
+
         val memoryIds = ArrayList<String>()
         val ruleIds = ArrayList<String>()
         val failedChats = ArrayList<String>()
@@ -222,20 +232,22 @@ object Archivist {
                             MemoryLog.log(context, "Archivist", "info",
                                 "chat=${conversation.chatId}: oversized conversation split into ${chunks.size} requests")
                         }
+                        var filedThisConversation = 0
                         for (chunk in chunks) {
                             val rows = chunk.map { conversation.transcripts[it] }
                             val response = ai.chatCompletion(
                                 ChatCompletionRequest(
                                     model = ModelId(model),
                                     messages = listOf(
-                                        ChatMessage(role = ChatRole.System, content = ArchivistPrompt.SYSTEM),
+                                        ChatMessage(role = ChatRole.System, content = systemPrompt),
                                         ChatMessage(
                                             role = ChatRole.User,
                                             content = ArchivistPrompt.userMessage(
                                                 conversation.chatName, companionName, rows
                                             )
                                         )
-                                    )
+                                    ),
+                                    temperature = temperature
                                 )
                             )
                             val raw = response.choices.firstOrNull()?.message?.content.orEmpty()
@@ -250,7 +262,26 @@ object Archivist {
                                 MemoryLog.log(context, "Archivist", "warn",
                                     "chat=${conversation.chatId}: ${parsed.dropped} proposal(s) failed validation and were dropped")
                             }
-                            duplicatesSkipped += fileMemoryDrafts(context, store, conversation, parsed.memories, memoryIds)
+                            // Code-enforced tuning (owner spec): the importance
+                            // floor first, then the per-conversation cap across
+                            // all of the conversation's chunks.
+                            var candidates = parsed.memories.filter { it.importance >= minImportance }
+                            val belowFloor = parsed.memories.size - candidates.size
+                            if (maxSuggestions > 0) {
+                                val room = (maxSuggestions - filedThisConversation).coerceAtLeast(0)
+                                if (candidates.size > room) {
+                                    MemoryLog.log(context, "Archivist", "info",
+                                        "chat=${conversation.chatId}: cap $maxSuggestions reached, ${candidates.size - room} draft(s) not filed")
+                                    candidates = candidates.take(room)
+                                }
+                            }
+                            if (belowFloor > 0) {
+                                MemoryLog.log(context, "Archivist", "info",
+                                    "chat=${conversation.chatId}: $belowFloor draft(s) below minimum importance $minImportance skipped")
+                            }
+                            val before = memoryIds.size
+                            duplicatesSkipped += fileMemoryDrafts(context, store, conversation, candidates, memoryIds)
+                            filedThisConversation += memoryIds.size - before
                             fileRuleDrafts(context, store, conversation, parsed.rules, ruleIds)
                         }
                         if (markProcessed) {
