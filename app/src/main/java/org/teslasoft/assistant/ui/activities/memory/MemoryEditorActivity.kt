@@ -32,7 +32,6 @@ import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
 import androidx.fragment.app.FragmentActivity
 import com.google.android.material.button.MaterialButton
-import com.google.android.material.chip.Chip
 import com.google.android.material.chip.ChipGroup
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.elevation.SurfaceColors
@@ -40,6 +39,8 @@ import com.google.android.material.textfield.TextInputEditText
 import org.json.JSONArray
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
+import org.teslasoft.assistant.preferences.memory.CardSections
+import org.teslasoft.assistant.preferences.memory.CardType
 import org.teslasoft.assistant.preferences.memory.MemoryRecord
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.memory.ProjectRecord
@@ -82,24 +83,44 @@ class MemoryEditorActivity : FragmentActivity() {
     private var sectionTargets: View? = null
     private var targetsHeading: TextView? = null
     private var chipsTargets: ChipGroup? = null
-    private var btnAddTarget: MaterialButton? = null
+    private var dropdownTargets: TextView? = null
     private var btnSave: MaterialButton? = null
     private var btnAccept: MaterialButton? = null
+    private var sectionLinkCard: View? = null
+    private var dropdownLinkCard: TextView? = null
+    private var dropdownLinkSection: TextView? = null
 
     // Current selections.
     private var currentType: String = "fact"
     private var currentImportance: Int = 3
     private var currentScope: String = "global"
 
+    /** "Link to Lore Card:" pick (roleplay drafts only, owner design July 8
+     *  2026 evening). When both are set, Approve All As Shown MOVES the
+     *  memory onto the card instead of activating it. */
+    private var linkCardType: String? = null
+    private var linkCardId: String? = null
+    private var linkSection: String? = null
+
+    /** True while editing a roleplay-scoped DRAFT — drives the "Needs
+     *  roleplay target." note and the card-link gate (owner ruling, July 9
+     *  2026: an untargeted roleplay draft cannot be added to a card). */
+    private var isRoleplayDraft = false
+
     /** Selected targets for the current scope category, id -> display name. */
     private val selectedTargets = LinkedHashMap<String, String>()
 
     // Loaded pick lists (id -> name), populated off-thread once.
     private val companionItems = LinkedHashMap<String, String>()
+    /** ALL companions (drafts included) for id→name display only. */
+    private val companionNames = LinkedHashMap<String, String>()
     private val projectItems = LinkedHashMap<String, String>()
     private val worldItems = LinkedHashMap<String, String>()
     private val campaignItems = LinkedHashMap<String, String>()
     private val rpItems = LinkedHashMap<String, String>()
+
+    /** Live lore cards for the Link to Lore Card dropdown: (cardType, id, name). */
+    private val loreCards = ArrayList<Triple<String, String, String>>()
 
     companion object {
         private val TYPE_KEYS = listOf("fact", "preference", "event", "status", "instruction", "lore")
@@ -128,9 +149,12 @@ class MemoryEditorActivity : FragmentActivity() {
         sectionTargets = findViewById(R.id.section_targets)
         targetsHeading = findViewById(R.id.text_targets_heading)
         chipsTargets = findViewById(R.id.chips_targets)
-        btnAddTarget = findViewById(R.id.btn_add_target)
+        dropdownTargets = findViewById(R.id.dropdown_targets)
         btnSave = findViewById(R.id.btn_mem_save)
         btnAccept = findViewById(R.id.btn_mem_accept)
+        sectionLinkCard = findViewById(R.id.section_link_card)
+        dropdownLinkCard = findViewById(R.id.dropdown_link_card)
+        dropdownLinkSection = findViewById(R.id.dropdown_link_section)
 
         titleView?.setText(if (memoryId == null) R.string.mem_edit_title_new else R.string.mem_edit_title_edit)
 
@@ -140,7 +164,7 @@ class MemoryEditorActivity : FragmentActivity() {
         btnType?.setOnClickListener { showTypePicker() }
         btnImportance?.setOnClickListener { showImportancePicker() }
         btnScope?.setOnClickListener { showScopePicker() }
-        btnAddTarget?.setOnClickListener { showTargetPicker() }
+        dropdownTargets?.setOnClickListener { showTargetDropdown(it) }
         btnSave?.setOnClickListener { save(activate = false) }
         btnAccept?.setOnClickListener { save(activate = true) }
 
@@ -163,11 +187,28 @@ class MemoryEditorActivity : FragmentActivity() {
                 return@runOffThread
             }
             val store = MemoryStore.getInstance(this)
+            // The PICKER offers approved companions only, but name display
+            // must resolve every id — the owner's rule (July 8 2026): the
+            // internal identifier is never shown; always the current name.
+            // A memory can point at a draft companion (auto-created on first
+            // contact), and its pill used to leak the raw id.
+            store.getCompanions().forEach { companionNames[it.companionId] = it.currentName }
             store.getCompanions().filter { it.status != "draft" }.forEach { companionItems[it.companionId] = it.currentName }
             store.getProjects().forEach { projectItems[it.projectId] = it.name }
             store.getAllWorlds().forEach { worldItems[it.worldId] = it.name }
             store.getCampaigns().forEach { campaignItems[it.campaignId] = it.name }
             store.getAllRoleplayCharacters().forEach { rpItems[it.roleplayCharacterId] = it.name }
+            // Live cards for Link to Lore Card (archived cards are shelved
+            // and not offered as destinations).
+            loreCards.clear()
+            store.getAllWorlds().filter { it.status == "active" }
+                .forEach { loreCards.add(Triple(CardType.WORLD, it.worldId, it.name)) }
+            store.getActiveCampaigns()
+                .forEach { loreCards.add(Triple(CardType.CAMPAIGN, it.campaignId, it.name)) }
+            store.getAllRoleplayCharacters().filter { it.status == "active" }
+                .forEach { loreCards.add(Triple(CardType.RP_CHARACTER, it.roleplayCharacterId, it.name)) }
+            store.getPartyMembers(includeArchived = false)
+                .forEach { loreCards.add(Triple(CardType.PARTY_MEMBER, it.partyMemberId, it.name)) }
 
             val record = memoryId?.let { store.getMemory(it) }
             runOnUiThread {
@@ -185,8 +226,41 @@ class MemoryEditorActivity : FragmentActivity() {
                     }
                     refreshType()
                     refreshImportance()
-                    // A draft can be accepted (save + activate) right from here (§14).
-                    if (record.status == "draft") btnAccept?.visibility = View.VISIBLE
+                    // Pending mode (owner design, July 8 2026 evening): the
+                    // bottom button reads "Approve All As Shown" — approving
+                    // the draft with everything as shown and returning to the
+                    // pending screen. It replaces the old separate Accept
+                    // button (which stays hidden as redundant).
+                    if (record.status == "draft") {
+                        btnSave?.setText(R.string.mem_approve_all_as_shown)
+                        btnSave?.setOnClickListener { save(activate = true) }
+                        btnAccept?.visibility = View.GONE
+                        // Roleplay drafts get the Link to Lore Card spot:
+                        // picking a card + section makes approval MOVE the
+                        // memory onto the card (owner ruling — it leaves the
+                        // browser and lives with the card).
+                        if (record.scope in setOf("world", "campaign", "rp_character")) {
+                            isRoleplayDraft = true
+                            wireLinkCardDropdowns()
+                            // A Memory Assistant placement suggestion
+                            // pre-selects both dropdowns ("Select" otherwise);
+                            // the user can change or ignore it.
+                            val suggested = loreCards.firstOrNull {
+                                it.first == record.suggestedCardType && it.second == record.suggestedCardId
+                            }
+                            if (suggested != null) {
+                                linkCardType = suggested.first
+                                linkCardId = suggested.second
+                                dropdownLinkCard?.text = suggested.third
+                                val section = record.suggestedSection
+                                if (section != null && section in CardSections.sectionsFor(suggested.first)) {
+                                    linkSection = section
+                                    dropdownLinkSection?.text =
+                                        getString(CardEntryEditorActivity.sectionLabelRes(section))
+                                }
+                            }
+                        }
+                    }
                 } else {
                     // New memory: a single preset target from a scoped door.
                     val presetTarget = intent.getStringExtra("presetTargetId")
@@ -218,7 +292,10 @@ class MemoryEditorActivity : FragmentActivity() {
         else -> LinkedHashMap()
     }
 
-    private fun nameFor(scope: String, id: String): String = itemsForScope(scope)[id] ?: id
+    private fun nameFor(scope: String, id: String): String =
+        itemsForScope(scope)[id]
+            ?: (if (scope == "companion") companionNames[id] else null)
+            ?: id
 
     /* ------------------------------ type ------------------------------ */
 
@@ -310,6 +387,11 @@ class MemoryEditorActivity : FragmentActivity() {
         btnScope?.text = scopeLabel(currentScope)
         val hasTargets = currentScope in TARGET_SCOPES
         sectionTargets?.visibility = if (hasTargets) View.VISIBLE else View.GONE
+        // "Associated Companion" / "Associated World" / … — the owner's label
+        // pattern applied to the approved scope names.
+        if (hasTargets) {
+            targetsHeading?.text = getString(R.string.mem_edit_associated_fmt, scopeLabel(currentScope))
+        }
         renderChips()
     }
 
@@ -334,45 +416,77 @@ class MemoryEditorActivity : FragmentActivity() {
 
     /* ------------------------------ targets ------------------------------ */
 
+    // Selected targets render as small-curve boxes (owner style: 5dp
+    // corners, never pills) with the × at the far right to remove; the
+    // ChipGroup container is kept only as the wrapping flow layout.
     private fun renderChips() {
         val group = chipsTargets ?: return
         group.removeAllViews()
+        val pad = (10 * resources.displayMetrics.density).toInt()
         for ((id, name) in selectedTargets) {
-            val chip = Chip(this).apply {
+            val box = TextView(this).apply {
                 text = name
-                isCloseIconVisible = true
-                setOnCloseIconClickListener {
+                textSize = 15f
+                setTextColor(ResourcesCompat.getColor(resources, R.color.text_title, theme))
+                background = ResourcesCompat.getDrawable(resources, R.drawable.bg_dropdown_box, theme)
+                setPadding(pad, pad, pad, pad)
+                setCompoundDrawablesRelativeWithIntrinsicBounds(0, 0, R.drawable.ic_close, 0)
+                compoundDrawablePadding = pad / 2
+                setOnClickListener {
                     selectedTargets.remove(id)
                     renderChips()
                 }
             }
-            group.addView(chip)
+            group.addView(box)
+        }
+        refreshRoleplayDraftGate()
+    }
+
+    /** Owner ruling (July 9 2026): an untargeted roleplay draft shows the
+     *  persistent "Needs roleplay target." note and cannot be linked to a
+     *  card; assigning a target (via the picker) opens the Link section.
+     *  Re-evaluated on every target change. */
+    private fun refreshRoleplayDraftGate() {
+        if (!isRoleplayDraft) return
+        val needsTarget = selectedTargets.isEmpty()
+        findViewById<TextView>(R.id.text_needs_target)?.visibility =
+            if (needsTarget) View.VISIBLE else View.GONE
+        sectionLinkCard?.visibility = if (needsTarget) View.GONE else View.VISIBLE
+        if (needsTarget && linkCardId != null) {
+            // Losing the last target also clears any pending card link —
+            // approval then activates normally instead of converting.
+            linkCardType = null
+            linkCardId = null
+            linkSection = null
+            dropdownLinkCard?.setText(R.string.mem_dropdown_select)
+            dropdownLinkSection?.setText(R.string.mem_dropdown_select)
         }
     }
 
-    private fun showTargetPicker() {
+    /** The boxed "Select" dropdown (owner rework): lists the not-yet-selected
+     *  targets for the current scope; picking one adds it as a ×-removable
+     *  box below. Projects keep their create-from-picker ability
+     *  (owner_approved_rules §4) as the dropdown's last entry. */
+    private fun showTargetDropdown(anchor: View) {
         val items = itemsForScope(currentScope)
-        val ids = items.keys.toList()
-        val names = ids.map { items[it]!! }.toTypedArray()
-        val checked = BooleanArray(ids.size) { selectedTargets.containsKey(ids[it]) }
-
-        val builder = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.mem_edit_pick_targets_title)
-            .setMultiChoiceItems(names, checked) { _, which, isChecked -> checked[which] = isChecked }
-            .setPositiveButton(R.string.btn_save) { _, _ ->
-                selectedTargets.clear()
-                ids.forEachIndexed { i, id -> if (checked[i]) selectedTargets[id] = items[id]!! }
+        val available = items.entries.filter { it.key !in selectedTargets }
+        val menu = android.widget.PopupMenu(this, anchor)
+        available.forEachIndexed { i, entry -> menu.menu.add(0, i, i, entry.value) }
+        val newProjectId = available.size
+        if (currentScope == "project") {
+            menu.menu.add(0, newProjectId, newProjectId, getString(R.string.mem_edit_new_project))
+        }
+        menu.setOnMenuItemClickListener { item ->
+            if (currentScope == "project" && item.itemId == newProjectId) {
+                showNewProjectDialog()
+            } else {
+                val entry = available[item.itemId]
+                selectedTargets[entry.key] = entry.value
                 renderChips()
             }
-            .setNegativeButton(R.string.btn_cancel) { _, _ -> }
-
-        // Projects have no other creation surface, so the picker can make one
-        // (owner_approved_rules §4). The other categories are authored on their
-        // own screens.
-        if (currentScope == "project") {
-            builder.setNeutralButton(R.string.mem_edit_new_project) { _, _ -> showNewProjectDialog() }
+            true
         }
-        builder.show()
+        menu.show()
     }
 
     private fun showNewProjectDialog() {
@@ -407,6 +521,40 @@ class MemoryEditorActivity : FragmentActivity() {
             .show()
     }
 
+    /* ------------------------------ link to lore card ------------------------------ */
+
+    private fun wireLinkCardDropdowns() {
+        dropdownLinkCard?.setOnClickListener { anchor ->
+            val menu = android.widget.PopupMenu(this, anchor)
+            loreCards.forEachIndexed { i, c -> menu.menu.add(0, i, i, c.third) }
+            menu.setOnMenuItemClickListener { item ->
+                val card = loreCards[item.itemId]
+                linkCardType = card.first
+                linkCardId = card.second
+                dropdownLinkCard?.text = card.third
+                // Sections belong to the picked card's type; reset the choice.
+                linkSection = null
+                dropdownLinkSection?.setText(R.string.mem_dropdown_select)
+                true
+            }
+            menu.show()
+        }
+        dropdownLinkSection?.setOnClickListener { anchor ->
+            val type = linkCardType ?: return@setOnClickListener
+            val sections = CardSections.sectionsFor(type)
+            val menu = android.widget.PopupMenu(this, anchor)
+            sections.forEachIndexed { i, s ->
+                menu.menu.add(0, i, i, getString(CardEntryEditorActivity.sectionLabelRes(s)))
+            }
+            menu.setOnMenuItemClickListener { item ->
+                linkSection = sections[item.itemId]
+                dropdownLinkSection?.text = getString(CardEntryEditorActivity.sectionLabelRes(linkSection!!))
+                true
+            }
+            menu.show()
+        }
+    }
+
     /* ------------------------------ save ------------------------------ */
 
     private fun save(activate: Boolean) {
@@ -432,6 +580,24 @@ class MemoryEditorActivity : FragmentActivity() {
         runOffThread {
             val store = MemoryStore.getInstance(this)
             val prior = existing ?: memoryId?.let { store.getMemory(it) }
+            // Approving a roleplay draft with a Lore Card picked MOVES it onto
+            // the card (owner ruling, July 8 2026 evening): the edited title/
+            // content become the entry, and the memory row is gone for good.
+            val cardType = linkCardType
+            val cardId = linkCardId
+            val section = linkSection
+            if (activate && prior != null && cardType != null && cardId != null && section != null) {
+                store.updateMemory(
+                    prior.copy(title = title, content = content),
+                    getString(R.string.memory_change_edited)
+                )
+                store.convertMemoryToCardEntry(prior.memoryId, cardType, cardId, section)
+                runOnUiThread {
+                    Toast.makeText(this, R.string.memory_saved, Toast.LENGTH_SHORT).show()
+                    finish()
+                }
+                return@runOffThread
+            }
             if (prior == null) {
                 val record = MemoryRecord(
                     memoryId = MemoryStore.newId("m-"),

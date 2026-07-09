@@ -49,7 +49,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
 
     companion object {
         const val DATABASE_NAME = "companion_memory.db"
-        private const val DATABASE_VERSION = 10
+        private const val DATABASE_VERSION = 14
 
         // Freshness-cooldown source types (rules §10 / Stage 3.3): the
         // composite key (chat_id, source_type, entry_id) keeps ids from
@@ -326,7 +326,13 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 "updated_at TEXT, " +
                 "status TEXT NOT NULL CHECK (status IN ('draft','active','archived','superseded')), " +
                 "supersedes TEXT REFERENCES memories(memory_id), " +
-                "origin TEXT NOT NULL DEFAULT 'user')"
+                "origin TEXT NOT NULL DEFAULT 'user', " +
+                // Archivist card-placement suggestion (DB v13): draft-only
+                // metadata, deliberately FK-less (a stale suggestion must
+                // never block a card delete); never exported.
+                "suggested_card_type TEXT, " +
+                "suggested_card_id TEXT, " +
+                "suggested_section TEXT)"
         )
 
         db.execSQL(
@@ -345,12 +351,14 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
 
         // Named target scopes are multi-select (owner_approved_rules §2): a memory
         // may belong to several worlds/campaigns/RP characters/projects at once,
-        // mirroring memory_companions. These join tables are the full multi-target
-        // truth — the editor, the scoped-browser doors AND (since Stage 3.1) the
-        // retrieval eligibility query all read them. The single memories.world_id/
-        // campaign_id/roleplay_character_id/project_id columns remain as a
-        // "primary target" mirror (the first selected) used only by the target
-        // teardown paths (deleteCampaign/deleteProject) and legacy consumers.
+        // mirroring memory_companions. These join tables are the SOURCE OF TRUTH
+        // for ownership — the editor, the scoped-browser doors, the retrieval
+        // eligibility query (Stage 3.1) AND (since the July 8 2026 owner ruling,
+        // `roleplay_memory_deletion_fix.md`) the target teardown paths all read
+        // them. The single memories.world_id/campaign_id/roleplay_character_id/
+        // project_id columns remain as a "primary target" mirror (the first
+        // selected), display-only; teardowns reassign it to a surviving owner
+        // and never trust it to decide what gets deleted.
         db.execSQL(
             "CREATE TABLE memory_worlds (" +
                 "memory_id TEXT NOT NULL REFERENCES memories(memory_id) ON DELETE CASCADE, " +
@@ -450,6 +458,40 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 "quick_settings_json TEXT, " +
                 "review_status TEXT NOT NULL DEFAULT 'pending' CHECK (review_status IN ('pending','processed','excluded')), " +
                 "processed_at TEXT)"
+        )
+
+        // Rejected drafts (Phase 6, DB v14): deleting a Memory Assistant
+        // draft rejects it — a rerun of the same conversation must not
+        // refile the exact same draft. Specific by design: exact
+        // title+content hash + the source conversation; never broad
+        // similarity suppression. Device-local, never exported.
+        db.execSQL(
+            "CREATE TABLE rejected_drafts (" +
+                "content_hash TEXT NOT NULL, " +
+                "chat_key TEXT NOT NULL, " +
+                "deleted_at TEXT NOT NULL, " +
+                "PRIMARY KEY (content_hash, chat_key))"
+        )
+
+        // Archivist run history (Phase 6, DB v11): powers the Memory
+        // Assistant's "Recent Memory Analysis" list and its Rerun action.
+        // Device-local operational data — never exported (like embeddings),
+        // no tombstones.
+        db.execSQL(
+            "CREATE TABLE archivist_runs (" +
+                "run_id TEXT PRIMARY KEY, " +
+                "started_at TEXT NOT NULL, " +
+                "finished_at TEXT, " +
+                "status TEXT NOT NULL CHECK (status IN ('complete','failed')), " +
+                "chat_ids_json TEXT NOT NULL DEFAULT '[]', " +
+                "transcript_ids_json TEXT NOT NULL DEFAULT '[]', " +
+                "memory_ids_json TEXT NOT NULL DEFAULT '[]', " +
+                "rule_ids_json TEXT NOT NULL DEFAULT '[]', " +
+                "found_count INTEGER NOT NULL DEFAULT 0, " +
+                "failed_chat_ids_json TEXT NOT NULL DEFAULT '[]', " +
+                "error TEXT, " +
+                "outcome TEXT, " +
+                "failure_reason TEXT)"
         )
 
         db.execSQL(
@@ -1046,6 +1088,77 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             db.execSQL(
                 "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                 arrayOf(META_DB_MIGRATION, "10")
+            )
+        }
+        if (oldVersion < 11) {
+            // v11 (July 2026, Phase 6): Archivist run history. Purely
+            // additive; starts empty — rows are written only by real analysis
+            // runs. See the onCreate comment for what it powers.
+            db.execSQL(
+                "CREATE TABLE archivist_runs (" +
+                    "run_id TEXT PRIMARY KEY, " +
+                    "started_at TEXT NOT NULL, " +
+                    "finished_at TEXT, " +
+                    "status TEXT NOT NULL CHECK (status IN ('complete','failed')), " +
+                    "chat_ids_json TEXT NOT NULL DEFAULT '[]', " +
+                    "transcript_ids_json TEXT NOT NULL DEFAULT '[]', " +
+                    "memory_ids_json TEXT NOT NULL DEFAULT '[]', " +
+                    "rule_ids_json TEXT NOT NULL DEFAULT '[]', " +
+                    "found_count INTEGER NOT NULL DEFAULT 0, " +
+                    "failed_chat_ids_json TEXT NOT NULL DEFAULT '[]', " +
+                    "error TEXT)"
+            )
+            db.execSQL(
+                "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                arrayOf(META_DB_MIGRATION, "11")
+            )
+        }
+        if (oldVersion < 12) {
+            // v12 (July 2026, Phase 6): the status/failure wording spec needs
+            // each run row to carry its display outcome and dominant failure
+            // reason (archivist_status_wording_spec.md). Additive.
+            db.execSQL("ALTER TABLE archivist_runs ADD COLUMN outcome TEXT")
+            db.execSQL("ALTER TABLE archivist_runs ADD COLUMN failure_reason TEXT")
+            db.execSQL(
+                "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                arrayOf(META_DB_MIGRATION, "12")
+            )
+        }
+        if (oldVersion < 13) {
+            // v13 (July 2026, Phase 6): Archivist card-placement suggestions
+            // (phase6_card_suggestions_and_icons_design.md §2/§7 + the July 8
+            // evening rulings). A roleplay DRAFT may carry a proposed card +
+            // section, pre-selecting the Add-to-Card / Link dropdowns and
+            // giving the row its outline treatment. Draft-only metadata: it
+            // is cleared when the draft is accepted without a card and dies
+            // with the row on convert/delete; never exported. Additive.
+            db.execSQL("ALTER TABLE memories ADD COLUMN suggested_card_type TEXT")
+            db.execSQL("ALTER TABLE memories ADD COLUMN suggested_card_id TEXT")
+            db.execSQL("ALTER TABLE memories ADD COLUMN suggested_section TEXT")
+            db.execSQL(
+                "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                arrayOf(META_DB_MIGRATION, "13")
+            )
+        }
+        if (oldVersion < 14) {
+            // v14 (July 2026, Phase 6): rejected-draft tracking (owner
+            // preference, round-3 rulings). Deleting a Memory Assistant
+            // DRAFT counts as rejecting it: rerunning the same analysis must
+            // not immediately recreate the exact same draft. Rejection is
+            // deliberately SPECIFIC — exact title+content hash, scoped to
+            // the source conversation — never a broad similarity rule that
+            // could swallow useful memories. Device-local, never exported,
+            // emptied by Reset memories. Additive.
+            db.execSQL(
+                "CREATE TABLE rejected_drafts (" +
+                    "content_hash TEXT NOT NULL, " +
+                    "chat_key TEXT NOT NULL, " +
+                    "deleted_at TEXT NOT NULL, " +
+                    "PRIMARY KEY (content_hash, chat_key))"
+            )
+            db.execSQL(
+                "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                arrayOf(META_DB_MIGRATION, "14")
             )
         }
     }
@@ -2108,6 +2221,216 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
     }
 
     /* ---------------------------------------------------------------------- */
+    /* Archivist (Phase 6): eligibility readers, draft filing, run history     */
+    /*                                                                         */
+    /* The Archivist only ever files DRAFTS (owner rules: it proposes, the     */
+    /* user decides). Memory drafts are memories.status='draft' rows — their   */
+    /* ONE home (§14); the dormant proposals table is never used for them.     */
+    /* Eligibility is a live query on current state, never a stored watermark  */
+    /* (design: re-enabled conversations must be caught; deleted chats are     */
+    /* filtered by the caller against the app's live chat list, which this     */
+    /* store cannot see).                                                      */
+    /* ---------------------------------------------------------------------- */
+
+    private fun readTranscript(it: Cursor): TranscriptRecord = TranscriptRecord(
+        transcriptId = it.getString(it.getColumnIndexOrThrow("transcript_id")),
+        chatId = it.getStringOrNull("chat_id"),
+        companionId = it.getStringOrNull("companion_id"),
+        worldId = it.getStringOrNull("world_id"),
+        roleplayCharacterId = it.getStringOrNull("roleplay_character_id"),
+        userPersonaId = it.getStringOrNull("user_persona_id"),
+        source = it.getString(it.getColumnIndexOrThrow("source")),
+        startedAt = it.getStringOrNull("started_at"),
+        endedAt = it.getStringOrNull("ended_at"),
+        content = it.getString(it.getColumnIndexOrThrow("content")),
+        modelTag = it.getStringOrNull("model_tag"),
+        quickSettingsJson = it.getStringOrNull("quick_settings_json"),
+        reviewStatus = it.getString(it.getColumnIndexOrThrow("review_status")),
+        processedAt = it.getStringOrNull("processed_at")
+    )
+
+    /** Everything a run would analyze, chronological: pending, never
+     *  processed, tied to a chat. The caller filters against the live chat
+     *  list (deleted conversations don't count — owner rule). */
+    fun pendingUnprocessedTranscripts(): List<TranscriptRecord> {
+        val out = ArrayList<TranscriptRecord>()
+        readableDatabase.query(
+            "transcripts", null,
+            "review_status = 'pending' AND processed_at IS NULL AND chat_id IS NOT NULL",
+            null, null, null, "started_at ASC, transcript_id ASC"
+        ).use { while (it.moveToNext()) out.add(readTranscript(it)) }
+        return out
+    }
+
+    /** Rerun support: re-fetch exactly the rows a past run fed, regardless of
+     *  their current review state. Rows deleted since simply drop out. */
+    fun transcriptsByIds(ids: List<String>): List<TranscriptRecord> {
+        if (ids.isEmpty()) return emptyList()
+        val out = ArrayList<TranscriptRecord>()
+        val db = readableDatabase
+        for (id in ids) {
+            db.query(
+                "transcripts", null, "transcript_id = ?", arrayOf(id),
+                null, null, null
+            ).use { if (it.moveToNext()) out.add(readTranscript(it)) }
+        }
+        out.sortWith(compareBy({ it.startedAt ?: "" }, { it.transcriptId }))
+        return out
+    }
+
+    /** Advance the watermark after a conversation is analyzed. */
+    fun markTranscriptsProcessed(ids: List<String>) {
+        if (ids.isEmpty()) return
+        val now = nowIso()
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            for (id in ids) {
+                db.update("transcripts", ContentValues().apply {
+                    put("review_status", "processed")
+                    put("processed_at", now)
+                }, "transcript_id = ?", arrayOf(id))
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    /**
+     * File one Archivist-proposed memory draft. The record must arrive with
+     * status='draft' and origin='archivist' (enforced here — a bug upstream
+     * must not be able to file an ACTIVE memory: nothing the Archivist writes
+     * may take effect without the user's approval). Never writes protection
+     * (retired July 8 2026 — the Archivist must not emit handling fields).
+     */
+    fun insertArchivistDraftMemory(m: MemoryRecord) {
+        require(m.status == "draft") { "Archivist memories must be drafts" }
+        require(m.origin == "archivist") { "Archivist memories must carry origin='archivist'" }
+        val safe = m.copy(protectionJson = null)
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.insertOrThrow("memories", null, memoryValues(safe))
+            writeMemoryLinks(db, safe)
+            logChange(db, safe.memoryId, "archivist", "proposed", safe.provenanceContext, null)
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    /**
+     * "Add to Card" (owner ruling, July 8 2026 evening): linking MOVES the
+     * memory onto the lore card — its title becomes the entry name, its
+     * content the description, and the memory row is deleted (tombstoned).
+     * From then on the content lives and dies with the card ("think of it
+     * like a d&d sheet… if you put it in the trash and take it out it's
+     * never coming back") — it never returns to the browser. Returns false
+     * when the memory no longer exists.
+     */
+    fun convertMemoryToCardEntry(
+        memoryId: String, cardType: String, cardId: String, section: String
+    ): Boolean {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            val m = getMemory(memoryId) ?: return false
+            db.insertOrThrow("card_entries", null, cardEntryValues(
+                CardEntryRecord(
+                    entryId = newId("ce-"),
+                    cardType = cardType,
+                    cardId = cardId,
+                    section = section,
+                    name = m.title,
+                    description = m.content,
+                    createdAt = nowIso()
+                )
+            ))
+            db.delete("memories", "memory_id = ?", arrayOf(memoryId))
+            recordDeletionTx(db, "memory", memoryId)
+            clearEntryCooldownTx(db, COOLDOWN_SOURCE_MEMORY, memoryId)
+            db.setTransactionSuccessful()
+            return true
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    /** Content-level dedup so a rerun doesn't refile what already exists:
+     *  true when any memory row (any status) has this title+content. */
+    fun memoryExistsWithText(title: String, content: String): Boolean {
+        readableDatabase.query(
+            "memories", arrayOf("memory_id"), "title = ? AND content = ?",
+            arrayOf(title, content), null, null, null
+        ).use { return it.moveToNext() }
+    }
+
+    fun insertArchivistRun(run: ArchivistRunRecord) {
+        writableDatabase.insertWithOnConflict("archivist_runs", null, ContentValues().apply {
+            put("run_id", run.runId)
+            put("started_at", run.startedAt)
+            put("finished_at", run.finishedAt)
+            put("status", run.status)
+            put("chat_ids_json", run.chatIdsJson)
+            put("transcript_ids_json", run.transcriptIdsJson)
+            put("memory_ids_json", run.memoryIdsJson)
+            put("rule_ids_json", run.ruleIdsJson)
+            put("found_count", run.foundCount)
+            put("failed_chat_ids_json", run.failedChatIdsJson)
+            put("error", run.error)
+            put("outcome", run.outcome)
+            put("failure_reason", run.failureReason)
+        }, SQLiteDatabase.CONFLICT_REPLACE)
+    }
+
+    /** Newest first, for the "Recent Memory Analysis" list. */
+    fun getArchivistRuns(limit: Int): List<ArchivistRunRecord> {
+        val out = ArrayList<ArchivistRunRecord>()
+        readableDatabase.query(
+            "archivist_runs", null, null, null, null, null,
+            "started_at DESC, run_id DESC", limit.toString()
+        ).use {
+            while (it.moveToNext()) {
+                out.add(
+                    ArchivistRunRecord(
+                        runId = it.getString(it.getColumnIndexOrThrow("run_id")),
+                        startedAt = it.getString(it.getColumnIndexOrThrow("started_at")),
+                        finishedAt = it.getStringOrNull("finished_at"),
+                        status = it.getString(it.getColumnIndexOrThrow("status")),
+                        chatIdsJson = it.getStringOrNull("chat_ids_json") ?: "[]",
+                        transcriptIdsJson = it.getStringOrNull("transcript_ids_json") ?: "[]",
+                        memoryIdsJson = it.getStringOrNull("memory_ids_json") ?: "[]",
+                        ruleIdsJson = it.getStringOrNull("rule_ids_json") ?: "[]",
+                        foundCount = it.getInt(it.getColumnIndexOrThrow("found_count")),
+                        failedChatIdsJson = it.getStringOrNull("failed_chat_ids_json") ?: "[]",
+                        error = it.getStringOrNull("error"),
+                        outcome = it.getStringOrNull("outcome"),
+                        failureReason = it.getStringOrNull("failure_reason")
+                    )
+                )
+            }
+        }
+        return out
+    }
+
+    fun getArchivistRun(runId: String): ArchivistRunRecord? =
+        getArchivistRuns(Int.MAX_VALUE).firstOrNull { it.runId == runId }
+
+    /** Which of these memory ids still exist — the complement is "deleted
+     *  since that run" for the Recent Memory Analysis rows. */
+    fun existingMemoryIds(ids: List<String>): Set<String> {
+        if (ids.isEmpty()) return emptySet()
+        val out = HashSet<String>()
+        val db = readableDatabase
+        for (id in ids) {
+            db.query("memories", arrayOf("memory_id"), "memory_id = ?", arrayOf(id), null, null, null)
+                .use { if (it.moveToNext()) out.add(id) }
+        }
+        return out
+    }
+
+    /* ---------------------------------------------------------------------- */
     /* enforcer (Phase 4): targeted single-purpose readers                     */
     /*                                                                         */
     /* The enforcer assembles a prompt on EVERY turn; it must never pay for    */
@@ -2796,29 +3119,45 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
 
     /**
      * Removes a companion from the memory system (its persona/character card is
-     * app-owned and untouched — only the memory-side record goes). Follows the
-     * [deleteRoleplayCharacter] pattern: tombstone for future cross-device
-     * merge; [deleteMemories] decides whether this companion's memories go with
-     * it or stay. memory_companions has ON DELETE CASCADE on the memory side but
-     * nothing on the companion side, so its links to this companion are scrubbed
-     * explicitly first (a dangling FK would block the companion delete).
+     * app-owned and untouched — only the memory-side record goes). Tombstone
+     * for future cross-device merge. Memories follow the owner's sole-owner
+     * rule (answer 5, `phase6_owner_answers_2026-07-08.md`): [deleteMemories]
+     * removes only memories owned SOLELY by this companion — "if the other
+     * companion that it's linked to is still active or existing then the
+     * memory should not be deleted." Shared memories keep, with this
+     * companion's link removed. memory_companions has ON DELETE CASCADE on the
+     * memory side but nothing on the companion side, so surviving links are
+     * scrubbed explicitly (a dangling FK would block the companion delete).
+     * Companions have no mirror column on memories, so the planner's mirror
+     * reassignments are always empty here.
      */
     fun deleteCompanion(companionId: String, deleteMemories: Boolean) {
         val db = writableDatabase
         db.beginTransaction()
         try {
-            if (deleteMemories) {
-                // Every memory linked to this companion is removed; deleting the
-                // memory rows cascades their memory_companions links away.
-                deleteMemoriesWhere(
-                    db,
-                    "memory_id IN (SELECT memory_id FROM memory_companions WHERE companion_id = ?)",
-                    arrayOf(companionId)
-                )
+            val owned = ArrayList<TargetTeardownPlanner.OwnedMemory>()
+            db.query(
+                "memory_companions", arrayOf("memory_id"), "companion_id = ?",
+                arrayOf(companionId), null, null, "memory_id ASC"
+            ).use { c ->
+                while (c.moveToNext()) {
+                    val memoryId = c.getString(0)
+                    val others = ArrayList<String>()
+                    db.query(
+                        "memory_companions", arrayOf("companion_id"),
+                        "memory_id = ? AND companion_id != ?", arrayOf(memoryId, companionId),
+                        null, null, "companion_id ASC"
+                    ).use { oc -> while (oc.moveToNext()) others.add(oc.getString(0)) }
+                    owned.add(TargetTeardownPlanner.OwnedMemory(memoryId, others, mirrorId = null))
+                }
             }
-            // Scrub any surviving links to this companion (the whole set when
-            // memories are kept; a no-op safety net when they were deleted) so
-            // no memory references a companion that no longer exists.
+            val plan = TargetTeardownPlanner.plan(companionId, owned, deleteMemories)
+            for (memoryId in plan.deleteMemoryIds) {
+                deleteMemoriesWhere(db, "memory_id = ?", arrayOf(memoryId))
+            }
+            // Scrub every remaining link to this companion (the kept/shared
+            // memories' rows plus any stragglers) so no memory references a
+            // companion that no longer exists.
             db.delete("memory_companions", "companion_id = ?", arrayOf(companionId))
             db.delete("companions", "companion_id = ?", arrayOf(companionId))
             recordDeletionTx(db, "companion", companionId)
@@ -2985,20 +3324,17 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         )
     }
 
-    /** Teardown: delete the character; its memories are either removed (their
-     *  embeddings cascade) or freed by nulling the link. Tombstone left. */
+    /** Teardown: delete the character. Its memories are handled join-first
+     *  (owner ruling July 8 2026, `roleplay_memory_deletion_fix.md`): shared
+     *  memories always survive with their link removed and mirror reassigned;
+     *  [deleteMemories] removes only the card's sole-owned ones. */
     fun deleteRoleplayCharacter(id: String, deleteMemories: Boolean) {
         val db = writableDatabase
         db.beginTransaction()
         try {
-            if (deleteMemories) {
-                deleteMemoriesWhere(db, "roleplay_character_id = ?", arrayOf(id))
-            } else {
-                db.update("memories", ContentValues().apply { putNull("roleplay_character_id") },
-                    "roleplay_character_id = ?", arrayOf(id))
-            }
-            // Scrub multi-select links (§2) so the FK to roleplay_characters clears.
-            db.delete("memory_roleplay_characters", "roleplay_character_id = ?", arrayOf(id))
+            teardownTargetMemoriesTx(
+                db, "memory_roleplay_characters", "roleplay_character_id", id, deleteMemories
+            )
             // The card's Zone 2 entries and tag links go with it (3.6a).
             deleteCardEntriesForCardTx(db, CardType.RP_CHARACTER, id)
             db.delete("rp_tag_links", "target_type = ? AND target_id = ?", arrayOf(RpTagTargetType.RP_CHARACTER, id))
@@ -3048,33 +3384,24 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
     }
 
     /**
-     * Delete-all teardown for a world. [keepCharacterMemories] honours the
-     * table plan's option: memories that ALSO belong to a roleplay character
-     * are kept (their world link nulled) so the character walks away clean;
-     * pure world memories are removed. When false, every world-scoped memory
-     * is deleted.
+     * Delete-all teardown for a world, join-first (owner ruling July 8 2026,
+     * `roleplay_memory_deletion_fix.md`): memories shared with another world
+     * always survive. [keepCharacterMemories] honours the table plan's
+     * option — a memory that ALSO belongs to a roleplay character (any row in
+     * memory_roleplay_characters, not the old mirror-column read) is kept so
+     * the character walks away clean; pure sole-owned world memories are
+     * removed when [deleteMemories] is set.
      */
     fun deleteWorld(worldId: String, deleteMemories: Boolean, keepCharacterMemories: Boolean) {
         val db = writableDatabase
         db.beginTransaction()
         try {
-            if (deleteMemories) {
-                if (keepCharacterMemories) {
-                    db.update("memories", ContentValues().apply { putNull("world_id") },
-                        "world_id = ? AND roleplay_character_id IS NOT NULL", arrayOf(worldId))
-                    deleteMemoriesWhere(db, "world_id = ? AND roleplay_character_id IS NULL", arrayOf(worldId))
-                } else {
-                    deleteMemoriesWhere(db, "world_id = ?", arrayOf(worldId))
-                }
-            } else {
-                db.update("memories", ContentValues().apply { putNull("world_id") },
-                    "world_id = ?", arrayOf(worldId))
-            }
+            teardownTargetMemoriesTx(
+                db, "memory_worlds", "world_id", worldId, deleteMemories, keepCharacterMemories
+            )
             // Campaigns anchored to this world lose their anchor but survive.
             db.update("campaigns", ContentValues().apply { putNull("world_id") },
                 "world_id = ?", arrayOf(worldId))
-            // Scrub multi-select links (§2) so the FK to worlds clears.
-            db.delete("memory_worlds", "world_id = ?", arrayOf(worldId))
             // The card's Zone 2 entries and tag links go with it (3.6a).
             // Campaign overlays pointing at those entries keep their dangling
             // world_entry_id on purpose — §5's "(deleted card)" rendering.
@@ -3179,19 +3506,15 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
     }
 
     /** Delete-all teardown: the world and character walk away clean — only the
-     *  campaign and (optionally) its campaign-scoped memories go. */
+     *  campaign and (optionally) its sole-owned campaign memories go, join-first
+     *  (owner ruling July 8 2026, `roleplay_memory_deletion_fix.md`). */
     fun deleteCampaign(campaignId: String, deleteMemories: Boolean) {
         val db = writableDatabase
         db.beginTransaction()
         try {
-            if (deleteMemories) {
-                deleteMemoriesWhere(db, "campaign_id = ?", arrayOf(campaignId))
-            } else {
-                db.update("memories", ContentValues().apply { putNull("campaign_id") },
-                    "campaign_id = ?", arrayOf(campaignId))
-            }
-            // Scrub multi-select links (§2) so the FK to campaigns clears.
-            db.delete("memory_campaigns", "campaign_id = ?", arrayOf(campaignId))
+            teardownTargetMemoriesTx(
+                db, "memory_campaigns", "campaign_id", campaignId, deleteMemories
+            )
             // Party-member links, the card's Zone 2 entries and tag links go
             // with it (3.6a). The party-member CARDS survive — the join is
             // link, not ownership (§4).
@@ -3252,20 +3575,17 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         )
     }
 
-    /** Delete a project; its project-scoped memories are deleted or unlinked
-     *  per the flag (mirrors [deleteCampaign]). */
+    /** Delete a project; its memories are handled join-first per the same
+     *  owner ruling as the roleplay teardowns ("projects share the shape",
+     *  `roleplay_memory_deletion_fix.md`): shared memories survive, only
+     *  sole-owned ones go when [deleteMemories] is set. */
     fun deleteProject(projectId: String, deleteMemories: Boolean) {
         val db = writableDatabase
         db.beginTransaction()
         try {
-            if (deleteMemories) {
-                deleteMemoriesWhere(db, "project_id = ?", arrayOf(projectId))
-            } else {
-                db.update("memories", ContentValues().apply { putNull("project_id") },
-                    "project_id = ?", arrayOf(projectId))
-            }
-            // Scrub multi-select links (§2) so the FK to projects clears.
-            db.delete("memory_projects", "project_id = ?", arrayOf(projectId))
+            teardownTargetMemoriesTx(
+                db, "memory_projects", "project_id", projectId, deleteMemories
+            )
             db.delete("projects", "project_id = ?", arrayOf(projectId))
             recordDeletionTx(db, "project", projectId)
             db.setTransactionSuccessful()
@@ -3941,6 +4261,11 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             db.delete("deleted_ids", null, null)
             db.delete("injection_cooldowns", null, null)
             db.delete("chat_turn_counters", null, null)
+            // Run history describes conversations/memories that no longer
+            // exist after a reset — it empties with everything else, as does
+            // the rejected-draft record.
+            db.delete("archivist_runs", null, null)
+            db.delete("rejected_drafts", null, null)
             db.update("app_state", ContentValues().apply {
                 putNull("active_companion_id"); putNull("active_world_id")
                 putNull("active_roleplay_character_id"); putNull("active_user_persona_id")
@@ -4035,7 +4360,10 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             companionIds = readJoin(db, "memory_companions", "companion_id", id),
             entityRefs = readJoin(db, "memory_entities", "entity_id", id),
             changeLog = readChangeLog(db, id),
-            origin = it.getStringOrNull("origin") ?: "user"
+            origin = it.getStringOrNull("origin") ?: "user",
+            suggestedCardType = it.getStringOrNull("suggested_card_type"),
+            suggestedCardId = it.getStringOrNull("suggested_card_id"),
+            suggestedSection = it.getStringOrNull("suggested_section")
         )
     }
 
@@ -4067,6 +4395,9 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         put("status", m.status)
         put("supersedes", m.supersedes)
         put("origin", m.origin)
+        put("suggested_card_type", m.suggestedCardType)
+        put("suggested_card_id", m.suggestedCardId)
+        put("suggested_section", m.suggestedSection)
     }
 
     private fun writeMemoryLinks(db: SQLiteDatabase, m: MemoryRecord) {
@@ -4148,6 +4479,12 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             db.update("memories", ContentValues().apply {
                 put("status", status)
                 put("updated_at", nowIso())
+                // A status change is the user's decision on the draft — any
+                // unactioned card-placement suggestion is discarded with it
+                // (suggestions are draft-only metadata; §7's outline drops).
+                putNull("suggested_card_type")
+                putNull("suggested_card_id")
+                putNull("suggested_section")
             }, "memory_id = ?", arrayOf(memoryId))
             db.delete("embeddings", "memory_id = ?", arrayOf(memoryId))
             logChange(db, memoryId, "user",
@@ -4188,6 +4525,19 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         val db = writableDatabase
         db.beginTransaction()
         try {
+            // Deleting a Memory Assistant DRAFT is a rejection (owner
+            // preference, July 9 2026): remember it so a rerun of the same
+            // conversation doesn't refile the exact same draft. Scoped to
+            // the draft's source conversation (its provenance context) and
+            // exact text — never broad suppression. User-authored memories
+            // and non-draft deletions register nothing.
+            val prior = getMemory(memoryId)
+            if (prior != null && prior.status == "draft" && prior.origin == "archivist") {
+                db.execSQL(
+                    "INSERT OR REPLACE INTO rejected_drafts (content_hash, chat_key, deleted_at) VALUES (?, ?, ?)",
+                    arrayOf(draftContentHash(prior.title, prior.content), prior.provenanceContext ?: "", nowIso())
+                )
+            }
             db.delete("memories", "memory_id = ?", arrayOf(memoryId))
             recordDeletionTx(db, "memory", memoryId)
             clearEntryCooldownTx(db, COOLDOWN_SOURCE_MEMORY, memoryId)
@@ -4195,6 +4545,22 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         } finally {
             db.endTransaction()
         }
+    }
+
+    /** Whether an identical draft (exact title+content) from this source
+     *  conversation was deleted before — the runner skips refiling it. */
+    fun isDraftRejected(title: String, content: String, chatKey: String): Boolean {
+        readableDatabase.query(
+            "rejected_drafts", arrayOf("content_hash"),
+            "content_hash = ? AND chat_key = ?",
+            arrayOf(draftContentHash(title, content), chatKey), null, null, null
+        ).use { return it.moveToNext() }
+    }
+
+    private fun draftContentHash(title: String, content: String): String {
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+            .digest((title + " " + content).toByteArray(Charsets.UTF_8))
+        return digest.joinToString("") { "%02x".format(it) }
     }
 
     fun getMemoryChangeLog(memoryId: String): List<ChangeLogEntry> =
@@ -4230,10 +4596,86 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
 
     /* -------- teardown helpers (must run inside an open transaction) -------- */
 
+    /**
+     * Handles a deleted target's memories per the owner's July 8 2026 ruling
+     * (`Memory System/roleplay_memory_deletion_fix.md`): ownership is read
+     * from the JOIN table, never the mirror column. Shared memories are always
+     * kept (their link to the dead target removed, mirror reassigned to a
+     * surviving owner); [deleteMemories] hard-deletes only sole-owned ones.
+     * [keepCharacterMemories] (worlds only) keeps memories that have any
+     * memory_roleplay_characters row — the join-based reading of "a
+     * character's memory too". Ends with two safety sweeps so neither a join
+     * row nor a mirror value can survive pointing at the deleted target
+     * (a leftover mirror would break the FK when the target row goes).
+     */
+    private fun teardownTargetMemoriesTx(
+        db: SQLiteDatabase,
+        joinTable: String,
+        idColumn: String,
+        targetId: String,
+        deleteMemories: Boolean,
+        keepCharacterMemories: Boolean = false
+    ) {
+        val owned = ArrayList<TargetTeardownPlanner.OwnedMemory>()
+        db.query(
+            joinTable, arrayOf("memory_id"), "$idColumn = ?", arrayOf(targetId),
+            null, null, "memory_id ASC"
+        ).use { c ->
+            while (c.moveToNext()) {
+                val memoryId = c.getString(0)
+                val others = ArrayList<String>()
+                db.query(
+                    joinTable, arrayOf(idColumn), "memory_id = ? AND $idColumn != ?",
+                    arrayOf(memoryId, targetId), null, null, "$idColumn ASC"
+                ).use { oc -> while (oc.moveToNext()) others.add(oc.getString(0)) }
+                var mirror: String? = null
+                db.query(
+                    "memories", arrayOf(idColumn), "memory_id = ?", arrayOf(memoryId),
+                    null, null, null
+                ).use { mc -> if (mc.moveToNext() && !mc.isNull(0)) mirror = mc.getString(0) }
+                var hasCharacterLink = false
+                if (keepCharacterMemories) {
+                    db.query(
+                        "memory_roleplay_characters", arrayOf("memory_id"),
+                        "memory_id = ?", arrayOf(memoryId), null, null, null
+                    ).use { rc -> hasCharacterLink = rc.moveToNext() }
+                }
+                owned.add(TargetTeardownPlanner.OwnedMemory(memoryId, others, mirror, hasCharacterLink))
+            }
+        }
+        val plan = TargetTeardownPlanner.plan(targetId, owned, deleteMemories, keepCharacterMemories)
+        for (memoryId in plan.deleteMemoryIds) {
+            deleteMemoriesWhere(db, "memory_id = ?", arrayOf(memoryId))
+        }
+        for (memoryId in plan.unlinkMemoryIds) {
+            db.delete(joinTable, "memory_id = ? AND $idColumn = ?", arrayOf(memoryId, targetId))
+        }
+        for ((memoryId, newMirror) in plan.mirrorReassignments) {
+            db.update("memories", ContentValues().apply {
+                if (newMirror == null) putNull(idColumn) else put(idColumn, newMirror)
+            }, "memory_id = ?", arrayOf(memoryId))
+        }
+        // Safety sweeps: harmless after the plan ran; they also catch rows the
+        // join-driven plan can't see (a mirror-only memory with no join row —
+        // join-as-truth says it isn't owned, so it survives with the mirror
+        // cleared rather than dangling at a deleted card).
+        db.delete(joinTable, "$idColumn = ?", arrayOf(targetId))
+        db.update(
+            "memories", ContentValues().apply { putNull(idColumn) },
+            "$idColumn = ?", arrayOf(targetId)
+        )
+    }
+
     private fun deleteMemoriesWhere(db: SQLiteDatabase, where: String, args: Array<String>) {
         // Tombstone each id first (change_log + embeddings cascade on delete).
+        // Cooldown rows have no FK, so they're cleared per id here — same
+        // contract as the single-memory deleteMemory path.
         db.query("memories", arrayOf("memory_id"), where, args, null, null, null).use {
-            while (it.moveToNext()) recordDeletionTx(db, "memory", it.getString(0))
+            while (it.moveToNext()) {
+                val memoryId = it.getString(0)
+                recordDeletionTx(db, "memory", memoryId)
+                clearEntryCooldownTx(db, COOLDOWN_SOURCE_MEMORY, memoryId)
+            }
         }
         db.delete("memories", where, args)
     }

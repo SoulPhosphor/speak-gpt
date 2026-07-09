@@ -123,7 +123,7 @@ class MemoryManagerActivity : FragmentActivity() {
         }
 
         rowMemorySettings?.setOnClickListener {
-            startActivity(Intent(this, MemorySettingsActivity::class.java).putExtra("chatId", chatId))
+            startActivity(Intent(this, MemoryControlsActivity::class.java).putExtra("chatId", chatId))
         }
     }
 

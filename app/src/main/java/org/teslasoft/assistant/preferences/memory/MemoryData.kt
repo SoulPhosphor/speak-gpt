@@ -428,7 +428,14 @@ data class MemoryRecord(
     val companionIds: List<String>,       // memory_companions join rows
     val entityRefs: List<String>,         // memory_entities join rows
     val changeLog: List<ChangeLogEntry>,
-    val origin: String = "user"
+    val origin: String = "user",
+    /** Archivist card-placement suggestion (DB v13, drafts only): proposed
+     *  CardType / card id / CardSections key, pre-selecting the Add-to-Card
+     *  and Link dropdowns and driving the §7 outline treatment. Cleared when
+     *  the draft is accepted without the card. */
+    val suggestedCardType: String? = null,
+    val suggestedCardId: String? = null,
+    val suggestedSection: String? = null
 )
 
 data class ModeRecord(
@@ -471,6 +478,36 @@ data class ProposalRecord(
     val status: String,                   // pending | accepted | rejected
     val createdAt: String,
     val resolvedAt: String?
+)
+
+/**
+ * One Archivist analysis run (Phase 6, DB v11) — the storage behind the
+ * Memory Assistant's "Recent Memory Analysis" list
+ * (`Memory System/memory_assistant_design.md` §4). Device-local operational
+ * history, like embeddings: never exported, no tombstones. transcript ids are
+ * kept so a run can be re-fed by Rerun; memory ids so "deleted since this
+ * run" can be computed against the current store.
+ */
+data class ArchivistRunRecord(
+    val runId: String,
+    val startedAt: String,
+    val finishedAt: String?,
+    val status: String,                   // complete | failed
+    val chatIdsJson: String,              // JSON array: chat ids analyzed
+    val transcriptIdsJson: String,        // JSON array: transcript rows fed
+    val memoryIdsJson: String,            // JSON array: draft memory ids created
+    val ruleIdsJson: String,              // JSON array: model-rule draft ids created
+    val foundCount: Int,
+    val failedChatIdsJson: String,        // JSON array: chats whose analysis failed (stay pending)
+    val error: String?,
+    /** Display outcome for the Recent Memory Analysis row (DB v12,
+     *  archivist_status_wording_spec.md): completed | full_failed |
+     *  partial_failed | nothing | no_new | interrupted. Null on legacy rows —
+     *  derived from counts then. */
+    val outcome: String? = null,
+    /** Dominant [ArchivistFailure] key when the run (fully or partially)
+     *  failed; picks the on-screen reason sentence. */
+    val failureReason: String? = null
 )
 
 /**

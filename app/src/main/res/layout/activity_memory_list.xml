@@ -120,6 +120,64 @@
             app:srcCompat="@drawable/ic_settings" />
     </androidx.constraintlayout.widget.ConstraintLayout>
 
+    <!-- Two-mode header (owner design, July 8 2026 evening): centered
+         "Memories | Pending" words — tap a word to switch views — with the
+         "N Memories Pending" count line under it (hidden when none are
+         pending). Only the memory browser opts in; other list screens keep
+         this collapsed. -->
+    <LinearLayout
+        android:id="@+id/mode_toggle_container"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/action_bar">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/btn_mode_memories"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:padding="8dp"
+                android:text="@string/mem_mode_memories"
+                android:textSize="17sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/mem_mode_separator"
+                android:textColor="@color/text_subtitle"
+                android:textSize="17sp" />
+
+            <TextView
+                android:id="@+id/btn_mode_pending"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:padding="8dp"
+                android:text="@string/mem_mode_pending"
+                android:textSize="17sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/mode_pending_count"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/text_subtitle"
+            android:textSize="13sp"
+            android:visibility="gone" />
+    </LinearLayout>
+
     <com.google.android.material.textfield.TextInputLayout
         android:id="@+id/search_bar"
         android:layout_width="0dp"
@@ -136,7 +194,7 @@
         app:startIconDrawable="@drawable/ic_search"
         app:layout_constraintEnd_toStartOf="@+id/btn_filter"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/action_bar">
+        app:layout_constraintTop_toBottomOf="@+id/mode_toggle_container">
 
         <com.google.android.material.textfield.TextInputEditText
             android:id="@+id/field_search"

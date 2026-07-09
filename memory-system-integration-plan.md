@@ -855,14 +855,12 @@ authority.
 > **`Memory System/memory_assistant_design.md`**. Where those disagree with
 > anything below or in the pre-revision specs, they WIN.
 >
-> **Phase 6 also OWNS this bug fix (owner-assigned July 8 2026):** roleplay
-> memory deletion cleanup must use the join tables as the source of truth, not
-> the mirror columns (`deleteWorld`/`deleteCampaign`/`deleteRoleplayCharacter`
-> currently mis-handle multi-target memories). Full diagnosis, fix logic, the
-> owner-confirmed keep-shared behavior, and the required tests are in
-> **`Memory System/roleplay_memory_deletion_fix.md`**. (It is a present
-> Stage-3.6 bug and may be fixed sooner, but it is tracked here so it isn't
-> lost.)
+> **Phase 6 also OWNED this bug fix (owner-assigned July 8 2026) — ✅ BUILT
+> (July 8 2026):** roleplay memory deletion cleanup now uses the join tables
+> as the source of truth (`teardownTargetMemoriesTx` + the unit-tested
+> `TargetTeardownPlanner`; shared memories always kept, mirror reassigned).
+> Diagnosis, fix logic, the owner-confirmed keep-shared behavior, and the
+> tests are in **`Memory System/roleplay_memory_deletion_fix.md`**.
 
 Specs: `archivist_spec.md`, `archivist_prompt.md` (send verbatim with
 injections), `enforcer_librarian_spec.md` §Applying change-sets; D7.

@@ -109,6 +109,15 @@ confirm whether the third line should stay "Date of last backup", change to
 
 ## 3. Open questions to settle with the owner before building
 
+> **✅ ANSWERED (July 8 2026, evening).** The owner resolved every question
+> below in chat — the answers, plus the pending-flow and editor redesign they
+> gave in the same message, are recorded verbatim in
+> **`phase6_owner_answers_2026-07-08.md`**, which supersedes this section:
+> third line = "Date of Last Run"; the link opens the browser filtered to
+> Pending ("View Pending Memories", Title Case); 5 recent runs; any batch
+> size with size-aware batching + the owner's batch wording; failure copy
+> still needs owner words (real cases to be presented).
+
 1. ~~"since last backup" vs "since last run"~~ **RESOLVED (July 8 2026): the
    first line counts since the last analysis RUN.** Sub-question still open:
    should the third line stay "Date of last backup", become "Date of last
@@ -126,8 +135,18 @@ confirm whether the third line should stay "Date of last backup", change to
 
 ## 4. Plumbing notes (implied backend — for the Phase 6 builder, NOT owner-approved UI)
 
-This screen is the trigger + report UI for the Archivist run. None of this
-exists yet.
+This screen is the trigger + report UI for the Archivist run.
+
+> **Status (July 8 2026, Phase 6 branch): the backend below is BUILT** —
+> `preferences/memory/archivist/Archivist.kt` (analyze/rerun/eligibility),
+> `ArchivistPrompt.kt` (the rewritten extraction prompt),
+> `ArchivistResponseParser.kt` (validation gate, unit-tested), the DB v11
+> `archivist_runs` history table, and the MemoryStore draft-filing CRUD
+> (`insertArchivistDraftMemory` — enforces draft + origin='archivist', never
+> writes protection). Drafts land in `memories.status='draft'` (§14 one home)
+> and Model rules' Pending. Card placements are NOT built (owner: that flow
+> isn't designed yet). The SCREEN is not built; the §3 questions below are
+> still the owner's to answer.
 
 ### Facts block — data sources (mostly already in `MemoryStore`)
 - "Conversations pending review" → `MemoryStore.pendingReviewCount()` (exists).

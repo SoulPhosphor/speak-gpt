@@ -49,7 +49,18 @@ data class MemoryRow(
     val hasAction: Boolean = false,
     val isHeader: Boolean = false,
     val tagsLine: String? = null,
-    val iconRes: Int? = null
+    val iconRes: Int? = null,
+    /** Pending view (owner design, July 8 2026 evening): show the bold
+     *  Accept / Delete / Edit action words across the row's bottom. */
+    val pendingActions: Boolean = false,
+    /** Roleplay pending rows also get Add to Card. */
+    val showAddToCard: Boolean = false,
+    /** §7 outline treatment: an unactioned Memory Assistant card-placement
+     *  suggestion is waiting on this row. */
+    val outlined: Boolean = false,
+    /** Persistent inline note (owner design, July 9 2026): e.g. "Needs
+     *  roleplay target." on an untargeted roleplay draft. */
+    val noteLine: String? = null
 )
 
 class MemoryRowAdapter(
@@ -60,6 +71,18 @@ class MemoryRowAdapter(
     interface OnRowListener {
         fun onClick(row: MemoryRow)
         fun onAction(row: MemoryRow, anchor: View)
+
+        /** A pending action word was tapped: one of [ACTION_ACCEPT],
+         *  [ACTION_DELETE], [ACTION_EDIT], [ACTION_ADD_TO_CARD]. Default
+         *  no-op so screens without a pending view ignore it. */
+        fun onPendingAction(row: MemoryRow, action: String) {}
+    }
+
+    companion object {
+        const val ACTION_ACCEPT = "accept"
+        const val ACTION_DELETE = "delete"
+        const val ACTION_EDIT = "edit"
+        const val ACTION_ADD_TO_CARD = "add_to_card"
     }
 
     private var listener: OnRowListener? = null
@@ -131,6 +154,38 @@ class MemoryRowAdapter(
         } else {
             action.visibility = View.GONE
             action.setOnClickListener(null)
+        }
+
+        val note = view.findViewById<TextView>(R.id.row_note)
+        if (row.noteLine.isNullOrBlank()) {
+            note.visibility = View.GONE
+        } else {
+            note.visibility = View.VISIBLE
+            note.text = row.noteLine
+        }
+
+        // §7: the outline marks "a card placement is waiting on your
+        // decision"; it drops once the draft is accepted or deleted (the
+        // suggestion clears with the status change). Set on the recycled view
+        // every bind so old outlines never linger.
+        ui.foreground = if (row.outlined)
+            androidx.core.content.ContextCompat.getDrawable(context, R.drawable.bg_suggestion_outline)
+        else null
+
+        val pendingStrip = view.findViewById<View>(R.id.row_pending_actions)
+        if (row.pendingActions) {
+            pendingStrip.visibility = View.VISIBLE
+            view.findViewById<TextView>(R.id.action_accept)
+                .setOnClickListener { listener?.onPendingAction(row, ACTION_ACCEPT) }
+            view.findViewById<TextView>(R.id.action_delete)
+                .setOnClickListener { listener?.onPendingAction(row, ACTION_DELETE) }
+            view.findViewById<TextView>(R.id.action_edit)
+                .setOnClickListener { listener?.onPendingAction(row, ACTION_EDIT) }
+            val addCard = view.findViewById<TextView>(R.id.action_add_card)
+            addCard.visibility = if (row.showAddToCard) View.VISIBLE else View.GONE
+            addCard.setOnClickListener { listener?.onPendingAction(row, ACTION_ADD_TO_CARD) }
+        } else {
+            pendingStrip.visibility = View.GONE
         }
 
         ui.setOnClickListener { listener?.onClick(row) }

@@ -857,21 +857,106 @@
     <string name="row_memory_assistant_title">Memory Assistant</string>
     <string name="row_memory_assistant_subtitle">Analyze conversation history and review pending memories.</string>
     <string name="row_lorebooks_subtitle">Simple memory notes triggered invisibly by keywords for your companion.</string>
-    <string name="row_memory_settings_title">Memory Settings</string>
-    <string name="row_memory_settings_subtitle">Control how memory is saved, processed, backed up, and restored.</string>
+    <!-- Memory Manager hub, fourth row (memory_settings_reorg_spec.md placement
+         ruling 1, July 9 2026): the row now opens the Memory Controls screen. -->
+    <string name="row_memory_settings_title">Memory Controls</string>
+    <string name="row_memory_settings_subtitle">Set memory defaults, models, backups, and review limits.</string>
 
-    <!-- Memory Assistant placeholder (to be designed later; ships with a
-         plain "Coming soon" until the real screen is approved). -->
+    <!-- Memory Assistant (Phase 6). Every user-visible sentence here is the
+         owner's approved wording (memory_assistant_design.md §1–§2 + the
+         July 8 2026 evening answers in phase6_owner_answers_2026-07-08.md).
+         Failure wording is deliberately ABSENT — the owner supplies it after
+         seeing the real failure cases; do not invent any. -->
     <string name="title_memory_assistant">Memory Assistant</string>
-    <string name="memory_assistant_coming_soon">Coming soon.</string>
+    <string name="memory_assistant_hint">Use AI to analyze conversations for possible memories. Found memories will be set to pending in the memory browser.</string>
+    <string name="memory_assistant_fact_since_run">Total conversations since last run: %1$d</string>
+    <string name="memory_assistant_fact_pending">Conversations pending review: %1$d</string>
+    <string name="memory_assistant_fact_last_run">Date of Last Run: %1$s</string>
+    <string name="memory_assistant_btn_idle">Analyze Conversations</string>
+    <string name="memory_assistant_btn_running">Analyzing History…</string>
+    <string name="memory_assistant_btn_done">Complete!</string>
+    <string name="memory_assistant_running_moment">This may take a moment.</string>
+    <string name="memory_assistant_running_conversation">Conversation %1$d of %2$d</string>
+    <string name="memory_assistant_running_while">This may take a while.</string>
+    <string name="memory_assistant_running_batched">Conversations will be batched due to size.</string>
+    <string name="memory_assistant_running_batch">Batch %1$s</string>
+    <string name="memory_assistant_running_batch_conversations">%1$d of %2$d Conversations</string>
+    <string name="memory_assistant_done_found">%1$d memories found.</string>
+    <string name="memory_assistant_view_pending">View Pending Memories.</string>
+    <!-- "No new memory candidates found." was superseded by the No New
+         Memories Added state in archivist_status_wording_spec.md. -->
+    <string name="memory_assistant_recent_header">Recent Memory Analysis</string>
+    <string name="memory_assistant_run_found">%1$d found</string>
+    <string name="memory_assistant_run_none">None found</string>
+    <string name="memory_assistant_rerun">Rerun</string>
+
+    <!-- Archivist run status/failure wording — implemented verbatim from
+         Memory System/archivist_status_wording_spec.md (owner-sanctioned,
+         July 8 2026; the one area with a no-separate-approval dispensation). -->
+    <string name="mem_arch_not_ready_label">Archivist Not Ready</string>
+    <string name="mem_arch_not_ready_msg">Memory Archivist needs a model before it can run.</string>
+    <string name="mem_arch_btn_setup">Set Up Archivist Model</string>
+    <string name="mem_arch_full_label">Run Fully Failed</string>
+    <string name="mem_arch_full_msg">Memory extraction failed. No memories were created from this run.</string>
+    <string name="mem_arch_full_unreachable">Archivist could not reach the selected AI service. Check your connection or try again later.</string>
+    <string name="mem_arch_full_rejected">Archivist could not access the selected AI service. Check the endpoint settings, API key, or model access.</string>
+    <string name="mem_arch_full_limit">Archivist hit a usage limit before memories could be created. Try again later or choose fewer conversations.</string>
+    <string name="mem_arch_full_unreadable">Archivist returned a response the app could not read. No memories were saved from this run.</string>
+    <string name="mem_arch_full_save">Archivist found possible memories, but the app could not save them. No unsaved memories were added.</string>
+    <string name="mem_arch_full_interrupted">Memory extraction was interrupted before it could finish. No memories were created from this run.</string>
+    <string name="mem_arch_full_unknown">Memory extraction failed for an unknown reason. No memories were created from this run.</string>
+    <string name="mem_arch_partial_label">Run Partially Failed</string>
+    <string name="mem_arch_partial_msg">Memory extraction finished with some skipped conversations. Some memories were created, but a few conversations could not be processed.</string>
+    <string name="mem_arch_partial_counts">Created memories: %1$d\nProcessed conversations: %2$d\nSkipped conversations: %3$d</string>
+    <string name="mem_arch_part_unreachable">Some conversations were skipped because Archivist could not reach the selected AI service.</string>
+    <string name="mem_arch_part_rejected">Some conversations were skipped because the selected AI service rejected access. Check endpoint settings, API key, or model access.</string>
+    <string name="mem_arch_part_limit">Archivist hit a usage limit before all conversations could be processed. Saved memories were kept.</string>
+    <string name="mem_arch_part_unreadable">Some conversations returned responses the app could not read. Saved memories from the rest of the run were kept.</string>
+    <string name="mem_arch_part_save">Archivist found possible memories for some conversations, but the app could not save those items. Other saved memories were kept.</string>
+    <string name="mem_arch_part_interrupted">The run was interrupted before all conversations could be processed. Saved memories were kept.</string>
+    <string name="mem_arch_part_unknown">Some conversations could not be processed for an unknown reason. Saved memories from the rest of the run were kept.</string>
+    <string name="mem_arch_nothing_label">Nothing To Extract</string>
+    <string name="mem_arch_nothing_msg">No eligible conversations were found for this run.</string>
+    <string name="mem_arch_nonew_label">No New Memories Added</string>
+    <string name="mem_arch_nonew_msg">Archivist finished the run, but no new memories were added.</string>
+    <string name="mem_arch_nonew_nothing">Archivist did not find anything new to save.</string>
+    <string name="mem_arch_nonew_dupes">Archivist found only memories that already exist.</string>
+    <string name="mem_arch_interrupted_label">Run Interrupted</string>
+    <string name="mem_arch_interrupted_msg">Memory extraction was interrupted before it could finish.</string>
+    <string name="mem_arch_interrupted_saved">Saved memories were kept. Some conversations may not have been processed.</string>
+    <string name="mem_arch_interrupted_none">No memories were created from this run.</string>
+    <string name="mem_arch_btn_try_again">Try Again</string>
+    <string name="mem_arch_btn_check_settings">Check Archivist Settings</string>
+    <string name="mem_arch_btn_run_again">Run Again</string>
+    <string name="mem_arch_row_completed">Completed</string>
+    <string name="mem_arch_deleted_badge">Some Memories Deleted Later</string>
+    <string name="mem_arch_deleted_explain">This run created memories that no longer exist because they were deleted after extraction.</string>
+
+    <!-- Two-mode memory browser + pending actions (owner design, July 8 2026
+         evening — phase6_owner_answers_2026-07-08.md; owner wording). -->
+    <string name="mem_mode_memories">Memories</string>
+    <string name="mem_mode_separator"> | </string>
+    <string name="mem_mode_pending">Pending</string>
+    <string name="mem_pending_count_one">One Memory Pending</string>
+    <string name="mem_pending_count_many">%1$d Memories Pending</string>
+    <string name="mem_pending_accept">Accept</string>
+    <string name="mem_pending_delete">Delete</string>
+    <string name="mem_pending_edit">Edit</string>
+    <string name="mem_pending_add_card">Add to Card</string>
+    <string name="mem_add_card_title">Accept Memory and Link to Lore Card?</string>
+    <string name="mem_add_card_card_label">Lore Card</string>
+    <string name="mem_add_card_section_label">Section</string>
+    <string name="mem_dropdown_select">Select</string>
+    <string name="mem_approve_all_as_shown">Approve All As Shown</string>
+    <string name="mem_edit_link_card_label">Link to Lore Card:</string>
+    <!-- Owner wording (round-3 rulings, July 9 2026): a roleplay draft with
+         no world/campaign/character target — shown inline on the row and in
+         the editor; the draft cannot be added to a card until targeted. -->
+    <string name="mem_needs_roleplay_target">Needs roleplay target.</string>
 
     <!-- Companion memory system (Phase 1: store, seed, backups) -->
-    <string name="title_memory_settings">Memory Settings</string>
     <string name="tile_memory_title">Memory system</string>
     <string name="tile_memory_desc">Long-term companion memory: status, starter seed, backups (experimental)</string>
-    <string name="memory_settings_intro">The long-term memory store for your companions. This early version sets up the encrypted database, loads a starter seed, links your personas, and keeps backups. Memory doesn\'t influence conversations yet — that arrives in a later update.</string>
-    <string name="memory_section_status">Status</string>
-    <string name="memory_section_actions">Seed &amp; backup</string>
     <string name="memory_status_loading">Loading…</string>
     <string name="memory_status_not_provisioned">The memory store hasn\'t been created yet. Load the starter template, import a backup, or create companions from your personas to set it up.</string>
     <string name="memory_status_integrity_ok">Store integrity: OK</string>
@@ -887,11 +972,6 @@
     <string name="memory_status_bootstrap_no">Personas linked to companions: not yet</string>
     <string name="memory_status_last_backup">Last automatic backup: %1$s</string>
     <string name="memory_status_last_backup_never">Last automatic backup: never</string>
-    <string name="btn_memory_import">Import backup (JSON)</string>
-    <string name="btn_memory_export">Export backup (JSON)</string>
-    <string name="btn_memory_bootstrap">Create companions from personas</string>
-    <string name="memory_auto_backup">Automatic daily backup</string>
-    <string name="memory_auto_backup_hint">Writes a rotating JSON backup (memories, settings and chats, never embeddings) to this app\'s files folder once a day. Use “Export backup” to put a copy somewhere safer — the export file is also how you move to a new phone.</string>
     <string name="memory_not_provisioned_toast">The memory store hasn\'t been set up yet.</string>
     <string name="memory_export_done">Backup exported.</string>
     <string name="memory_operation_failed">Memory operation failed: %1$s</string>
@@ -907,10 +987,6 @@
     <string name="memory_marker_partial">Memory: partially archived</string>
     <string name="memory_marker_processed">Memory: archived</string>
     <string name="memory_marker_excluded">Memory: excluded</string>
-    <string name="memory_default_enabled">Use memory in new chats</string>
-    <string name="memory_default_enabled_hint">The default for the per-chat "Use memory" switch in Quick Settings. With memory off, nothing is injected and the chat\'s recording is marked excluded — the content is still captured, so you can un-exclude it later if the experiment turned out to matter. Turning off "Archive this chat" in Quick Settings stops recording entirely.</string>
-    <string name="memory_companion_in_roleplay">Allow active companion memories in roleplay</string>
-    <string name="memory_companion_in_roleplay_hint">Off: companion memories do not enter roleplay or campaign chats (a campaign\'s narrator/GM companion still brings theirs). On: the active companion\'s approved active memories can come up during roleplay when relevant — this never forces them into the conversation.</string>
 
     <!-- Memory system Phase 3: librarian (embedding model + semantic search) -->
     <string name="memory_section_librarian">Librarian (semantic memory)</string>
@@ -930,7 +1006,6 @@
     <string name="memory_model_progress_placeholder">~%1$d MB · %2$s</string>
     <string name="memory_model_downloaded">Downloaded model %1$s.</string>
     <string name="memory_model_download_failed">Download failed: %1$s</string>
-    <string name="memory_section_debug_search">Debug search</string>
     <string name="memory_debug_search_hint">Search your memories</string>
     <string name="memory_debug_search_button">Search</string>
     <string name="memory_debug_search_empty">No matches.</string>
@@ -948,21 +1023,15 @@
     <string name="memory_usage_logging_title">Memory usage logging</string>
     <string name="memory_usage_logging_desc">Write the app\'s memory use to the Performance Log about once a minute (and whenever the system asks the app to free memory). Off by default; leave it on across a long session to spot a memory leak — a steadily rising figure is the tell-tale sign.</string>
 
-    <!-- Memory system Phase 4: engine tier, Archivist model, per-chat scene picker, assembly debug -->
-    <string name="memory_section_engine">Memory engine</string>
-    <string name="label_memory_engine">Engine</string>
-    <string name="memory_engine_hint">Controls how much of the companion memory system reaches your conversations. \"None\" uses only personas and activation prompts. \"Lore books\" is the classic trigger-based tier. \"Full\" needs an on-device embedding model — download one in the Librarian section below first.</string>
+    <!-- Memory system Phase 4: engine tier, per-chat scene picker, assembly debug.
+         (Engine picker title, "needs model" toast and endpoint infra strings are
+         reused by the reorged Memory Controls screen — see the reorg block below.) -->
     <string name="memory_engine_picker_title">Choose memory engine</string>
-    <string name="memory_engine_none">None — personas and activation prompts only</string>
-    <string name="memory_engine_lorebooks">Lore books (classic)</string>
-    <string name="memory_engine_full">Full memory system</string>
-    <string name="memory_engine_full_needs_model_toast">Install an embedding model in the Librarian section below before switching to the full memory system.</string>
-    <string name="label_archivist_endpoint">Archivist endpoint</string>
-    <string name="label_archivist_model">Archivist model name</string>
-    <string name="memory_archivist_hint">The Archivist model compresses the \"About you\" briefing shown to your companions and, in a later phase, reviews conversations for memories worth keeping. It can point at any API endpoint you\'ve already saved — a small, cheap model is enough.</string>
+    <!-- Owner wording, July 9 2026 — shown inline (persistent) under the
+         Memory Engine control, never a toast. -->
+    <string name="memory_engine_full_needs_model">Install an embedding model in Advanced Memory Settings before switching to the full memory system.</string>
     <string name="memory_archivist_endpoint_picker_title">Choose an endpoint</string>
     <string name="memory_archivist_endpoint_none_toast">No saved API endpoints yet — add one in API Endpoints first.</string>
-    <string name="memory_archivist_model_dialog_title">Archivist model name</string>
     <string name="memory_archivist_model_hint">e.g. gpt-4o-mini</string>
     <string name="label_endpoint_none">None configured</string>
     <string name="label_archivist_model_none">Not set</string>
@@ -1091,9 +1160,11 @@
     <string name="mem_edit_label_type">Type</string>
     <string name="mem_edit_label_importance">Importance</string>
     <string name="mem_edit_label_scope">Scope</string>
-    <string name="mem_edit_targets_heading">Which ones does this belong to? Pick one or more.</string>
-    <string name="mem_edit_add_target">Add</string>
-    <string name="mem_edit_pick_targets_title">Select targets</string>
+    <!-- Owner rework (July 8–9 2026): the old "Which ones does this belong
+         to?" sentence is GONE; the picker label is "Associated <Scope>",
+         composed from the owner's approved scope labels below ("Associated
+         Companion" is the owner's exact wording for the companion case). -->
+    <string name="mem_edit_associated_fmt">Associated %1$s</string>
     <string name="mem_edit_new_project">New project</string>
     <string name="mem_edit_new_project_hint">Project name</string>
     <string name="mem_edit_btn_save">Save</string>
@@ -1161,33 +1232,101 @@
     <string name="mem_row_icon">Memory type icon</string>
     <string name="mem_row_edit">Edit memory</string>
 
-    <!-- Pending screen (Stage 2.4) -->
-    <string name="mem_pending_banner">Pending memories (%1$d) ›</string>
-    <string name="mem_pending_title">Pending memories</string>
-    <string name="mem_pending_select_all">Select all</string>
-    <string name="mem_pending_select_none">Select none</string>
-    <string name="mem_pending_accept">Accept</string>
-    <string name="mem_pending_delete">Delete</string>
-    <string name="mem_pending_empty">No pending memories.</string>
-    <string name="mem_pending_group">%1$s (%2$d)</string>
-    <string name="mem_pending_dest">%1$s · %2$s</string>
-    <string name="mem_pending_none_checked">Nothing selected.</string>
-    <string name="mem_pending_accept_title">Accept memories?</string>
-    <string name="mem_pending_accept_confirm">Accept %1$d memories?</string>
-    <string name="mem_pending_delete_title">Delete memories?</string>
-    <string name="mem_pending_delete_confirm">Delete %1$d memories? This cannot be undone.</string>
-    <string name="mem_pending_accepted_note">Accepted from Pending</string>
-    <string name="mem_pending_done">Done</string>
+    <!-- The Stage-2.4 separate Pending screen was retired (owner ruling,
+         July 8 2026 evening): the browser's two-mode Memories | Pending view
+         replaced it; its strings left with it. -->
     <string name="mem_edit_accept">Accept</string>
 
     <!-- Reset memories (Stage 2.5) -->
-    <string name="mem_reset_button">Reset memories</string>
     <string name="mem_reset_title">Reset memories?</string>
     <string name="mem_reset_message">This will delete all your memories. It cannot be undone. Are you sure?</string>
     <string name="mem_reset_backup">Save a backup file first</string>
     <string name="mem_reset_confirm">Reset</string>
     <string name="mem_reset_done">Memory reset.</string>
     <string name="mem_reset_done_backup">Memory reset. Backup saved: %1$s</string>
+
+    <!-- ============================================================
+         Memory Settings reorganization (memory_settings_reorg_spec.md,
+         owner-sanctioned, July 9 2026). The old combined Memory Settings
+         screen is split into three: Memory Controls (§1), Memory Assistant
+         Advanced Settings (§2), Advanced Memory Settings (§3). All
+         user-facing wording below is verbatim from that spec. User-facing
+         name is "Memory Assistant" — never "Archivist".
+         ============================================================ -->
+    <!-- Screen titles (also the manifest activity labels) -->
+    <string name="title_memory_controls">Memory Controls</string>
+    <string name="title_memory_assistant_advanced">Memory Assistant Advanced Settings</string>
+    <string name="title_advanced_memory_settings">Advanced Memory Settings</string>
+
+    <!-- Memory Controls (spec §1) -->
+    <string name="memory_controls_intro">Choose how memory works in chats, roleplay, backups, and memory review.</string>
+    <string name="memory_controls_section_defaults">Memory Defaults</string>
+    <string name="memory_controls_use_in_new_chats">Use Memory in New Chats</string>
+    <string name="memory_controls_use_in_new_chats_hint">Turn memory on by default for new chats. You can still change this per chat.</string>
+    <string name="memory_controls_companion_roleplay">Allow Companion Memories in Roleplay</string>
+    <string name="memory_controls_companion_roleplay_hint">Let the active companion\'s approved memories be eligible during roleplay. Off keeps companion memories out of roleplay unless another rule allows them.</string>
+    <string name="memory_controls_section_assistant">Memory Assistant</string>
+    <string name="memory_controls_row_assistant">Memory Assistant</string>
+    <string name="memory_controls_row_assistant_hint">Find possible memories in finished conversations, then review them in Pending before saving.</string>
+    <string name="memory_controls_max_suggestions">Maximum Suggestions Per Conversation</string>
+    <string name="memory_controls_max_suggestions_hint">Limit how many memory drafts Memory Assistant can create from each conversation.</string>
+    <!-- Card-suggestions "danger switch" (placement ruling 6; owner phrasing verbatim
+         from phase6_card_suggestions_and_icons_design.md §2). ON by default. -->
+    <string name="memory_controls_card_suggestions">Allow card-relevant roleplay recommended memories to be automatically appended to appropriate system locations?</string>
+    <string name="memory_controls_card_suggestions_warning">Warning: turning this off could cause campaign relevant information to not line up with roleplay related information cards, causing information to be out of date. Only approved information will be applied to cards. You will have a chance to specify card to add data to. Smaller models may struggle more with accurately classifying proper memory card location.</string>
+    <string name="memory_controls_card_suggestions_hint">If auto-suggest is turned off you will still be able to manually assign memories to cards.</string>
+    <string name="memory_controls_row_advanced_assistant">Memory Assistant Advanced Settings</string>
+    <string name="memory_controls_row_advanced_assistant_subtitle">Tune extraction temperature, importance, and prompt behavior.</string>
+    <string name="memory_controls_section_engine">Memory Engine</string>
+    <string name="memory_controls_row_engine">Memory Engine</string>
+    <string name="memory_controls_row_engine_hint">Choose how much memory support the app uses.</string>
+    <string name="memory_controls_engine_none">None</string>
+    <string name="memory_controls_engine_lorebooks">Lore Books</string>
+    <string name="memory_controls_engine_full">Full</string>
+    <string name="memory_controls_engine_none_desc">None: Memory stays off.</string>
+    <string name="memory_controls_engine_lorebooks_desc">Lore Books: Uses trigger-based lore notes.</string>
+    <string name="memory_controls_engine_full_desc">Full: Uses the full memory system.</string>
+    <string name="memory_controls_section_assistant_model">Memory Assistant Model</string>
+    <string name="memory_controls_row_assistant_endpoint">Memory Assistant Endpoint</string>
+    <string name="memory_controls_row_assistant_endpoint_hint">Choose which saved AI endpoint analyzes history and drafts memory items.</string>
+    <string name="memory_controls_row_assistant_model">Memory Assistant Model</string>
+    <string name="memory_controls_row_assistant_model_hint">Model name used by Memory Assistant.</string>
+    <string name="memory_controls_section_backups">Backups</string>
+    <string name="memory_controls_auto_backup">Automatic Daily Backup</string>
+    <string name="memory_controls_auto_backup_hint">Save a rotating local backup once a day.</string>
+    <string name="memory_controls_import">Import Backup</string>
+    <string name="memory_controls_import_hint">Restore memories from an exported JSON backup.</string>
+    <string name="memory_controls_export">Export Backup</string>
+    <string name="memory_controls_export_hint">Save a JSON backup you can store or move to another device.</string>
+    <string name="memory_controls_last_backup">Last Backup: %1$s</string>
+    <string name="memory_controls_never">Never</string>
+    <string name="memory_controls_section_reset">Reset</string>
+    <string name="memory_controls_reset">Reset Memories</string>
+    <string name="memory_controls_reset_hint">Delete memory content. Offer to export a backup first.</string>
+    <string name="memory_controls_row_advanced">Advanced Memory Settings</string>
+    <string name="memory_controls_row_advanced_subtitle">Diagnostics, indexing, model files, and repair tools.</string>
+
+    <!-- Memory Assistant Advanced Settings (spec §2) -->
+    <string name="memory_assistant_adv_intro">Tune how Memory Assistant analyzes conversation history and creates pending memory drafts. Most users should keep the defaults.</string>
+    <string name="memory_assistant_adv_temperature">Temperature</string>
+    <string name="memory_assistant_adv_temperature_hint">Controls how literal or creative the AI is when analyzing conversations. Lower values are stricter; higher values may find more but can be less reliable.</string>
+    <string name="memory_assistant_adv_temperature_recommended">Recommended: 0.3</string>
+    <string name="memory_assistant_adv_reset_temperature">Reset to Recommended</string>
+    <string name="memory_assistant_adv_min_importance">Minimum Importance</string>
+    <string name="memory_assistant_adv_min_importance_hint">Only create memory drafts at or above this importance level.</string>
+    <string name="memory_assistant_adv_extraction_prompt">Extraction Prompt</string>
+    <string name="memory_assistant_adv_extraction_prompt_hint">Instructs AI how to analyze conversation history.</string>
+    <string name="memory_assistant_adv_reset_prompt">Reset Prompt</string>
+    <string name="memory_assistant_adv_reset_prompt_confirm">Restore default extraction prompt?</string>
+    <string name="memory_assistant_adv_saved">Advanced settings saved.</string>
+
+    <!-- Advanced Memory Settings (spec §3) -->
+    <string name="advanced_memory_intro">Technical tools for memory diagnostics, indexing, model files, and repair.</string>
+    <string name="advanced_memory_section_status">System Status</string>
+    <string name="advanced_memory_section_setup">Setup / Repair</string>
+    <string name="advanced_memory_bootstrap">Create Companions From Personas</string>
+    <string name="advanced_memory_section_librarian">Librarian / Embeddings</string>
+    <string name="advanced_memory_section_debug">Debug</string>
 
     <!-- Row action menu -->
     <string name="action_edit">Edit</string>

@@ -119,10 +119,87 @@
             android:textColor="@color/text_subtitle"
             android:textSize="13sp"
             android:visibility="gone"
-            app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toStartOf="@+id/btn_row_action"
             app:layout_constraintStart_toStartOf="@+id/row_title"
             app:layout_constraintTop_toBottomOf="@+id/row_tags" />
+
+        <!-- Persistent inline note (owner design, July 9 2026): e.g. "Needs
+             roleplay target." on an untargeted roleplay draft. Never a
+             vanishing message. -->
+        <TextView
+            android:id="@+id/row_note"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:textColor="?attr/colorPrimary"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:visibility="gone"
+            app:layout_constraintEnd_toStartOf="@+id/btn_row_action"
+            app:layout_constraintStart_toStartOf="@+id/row_title"
+            app:layout_constraintTop_toBottomOf="@+id/row_subtitle" />
+
+        <!-- Pending action words (owner design, July 8 2026 evening): across
+             the bottom of every PENDING memory row, larger than the normal
+             row text and bold so they're easy to see. Add to Card appears on
+             roleplay memories only. Hidden everywhere outside Pending view. -->
+        <LinearLayout
+            android:id="@+id/row_pending_actions"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="14dp"
+            android:layout_marginBottom="10dp"
+            android:orientation="horizontal"
+            android:visibility="gone"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="@+id/row_title"
+            app:layout_constraintTop_toBottomOf="@+id/row_note">
+
+            <TextView
+                android:id="@+id/action_accept"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingVertical="6dp"
+                android:paddingEnd="18dp"
+                android:text="@string/mem_pending_accept"
+                android:textColor="?attr/colorPrimary"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/action_delete"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingVertical="6dp"
+                android:paddingEnd="18dp"
+                android:text="@string/mem_pending_delete"
+                android:textColor="?attr/colorPrimary"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/action_edit"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingVertical="6dp"
+                android:paddingEnd="18dp"
+                android:text="@string/mem_pending_edit"
+                android:textColor="?attr/colorPrimary"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/action_add_card"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingVertical="6dp"
+                android:text="@string/mem_pending_add_card"
+                android:textColor="?attr/colorPrimary"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+        </LinearLayout>
 
         <!-- Trailing action: edit-square (replaces the old cog per owner ruling,
              July 8 2026). Only visible for rows that have a per-row menu. -->

@@ -139,19 +139,28 @@ a foreground service that keeps generation alive in the background.
   2026), reached from the renamed **Memory Manager** tile on the main Settings
   screen. A plain chevron-row hub (house style: rows, not cards) with four
   doors: **Memory Browser** → the global memories browser; **Memory Assistant**
-  → `MemoryAssistantActivity` (a "Coming soon" placeholder — the future
-  Archivist/Phase 6 surface, owner to design); **Lorebooks** →
-  `LoreBooksListActivity` (moved here out of Characters — the lorebook screens
-  themselves are unchanged, only the access point moved); **Memory Settings**
-  → `MemorySettingsActivity`. NOTE: this is a NEW, lightweight navigation hub —
+  → `MemoryAssistantActivity` (the built Phase 6 Archivist surface); **Lorebooks**
+  → `LoreBooksListActivity` (moved here out of Characters — the lorebook screens
+  themselves are unchanged, only the access point moved); **Memory Controls**
+  → `MemoryControlsActivity`. NOTE: this is a NEW, lightweight navigation hub —
   NOT the old ten-area `ui/activities/memory/MemoryManagerActivity`, which was
   removed in the Phase-5 rework and stays removed.
-- `ui/activities/MemorySettingsActivity.kt` — the **Memory Settings** screen
-  (was the "Memory (experimental)" screen). Everything the old screen had
-  EXCEPT the browser (which is now the hub's top row): store status, import
-  backup / export, persona bootstrap, Reset memories, the Memory engine
-  picker, Archivist endpoint/model, and the Librarian (embedding models,
-  rebuild index, debug search).
+- **The old combined Memory Settings screen was SPLIT (owner spec, July 9
+  2026 — `Memory System/memory_settings_reorg_spec.md`, wording verbatim;
+  user-facing name is "Memory Assistant", never "Archivist"):**
+  `ui/activities/MemoryControlsActivity.kt` (the normal-user page: memory
+  defaults, the Memory Assistant section with the max-suggestions cap
+  [defaults 10 when toggled on] and the §2 card-suggestions toggle, the
+  Memory Engine picker, Memory Assistant endpoint/model, Backups, Reset at
+  the bottom, and the door to Advanced Memory Settings);
+  `ui/activities/MemoryAssistantAdvancedSettingsActivity.kt` (extraction
+  tuning: temperature 0.0–2.0 w/ Reset to Recommended 0.3, Minimum
+  Importance, the editable Extraction Prompt with Reset Prompt);
+  `ui/activities/AdvancedMemorySettingsActivity.kt` (diagnostics: store
+  status/row counts, Create Companions From Personas, the Librarian
+  embedding models/rebuild index, debug search — Reset Memories is
+  deliberately NOT here, one home only). `MemorySettingsActivity` is
+  deleted.
 - `ui/activities/AiSystemSettingsActivity.kt` — the **AI System Settings**
   screen (Stage 4), a new card on the main Settings screen. Plain
   chevron-rows (not tiles): the chat's **System prompt** (moved here out of
@@ -250,15 +259,17 @@ Everything is on-device. No cloud sync, no accounts.
    without being duplicated. Since Stage 3.1 the retrieval eligibility query
    reads these join tables too (a memory linked to several targets is eligible
    under each); the legacy single columns remain as a **primary-target mirror**
-   (first selected) used only by the target teardown paths. The scoped-browser
-   doors read the join tables. ⚠️ **KNOWN BUG (verified July 8 2026):** the
-   world/campaign/RP-character teardown paths (`deleteWorld`/`deleteCampaign`/
-   `deleteRoleplayCharacter`) still decide which memories to delete/keep from
-   the **mirror column**, not the join table — so a multi-target memory can be
-   wrongly hard-deleted (or a join-only-owned one mishandled) and the mirror
-   left stale. The join tables are the source of truth; the fix logic +
-   required tests are written up in
-   `Memory System/roleplay_memory_deletion_fix.md` (not yet built).
+   (first selected), display-only. The scoped-browser doors read the join
+   tables. The July 8 2026 teardown bug (delete/keep decided by the mirror
+   column, so a multi-target memory could be wrongly hard-deleted) is **FIXED**
+   (Phase 6, July 8 2026): `deleteWorld`/`deleteCampaign`/
+   `deleteRoleplayCharacter`/`deleteProject` now run join-first through
+   `teardownTargetMemoriesTx` + the pure `TargetTeardownPlanner` (unit-tested
+   in `app/src/test` with the owner's required cases) — shared memories always
+   survive with the dead link removed and the mirror reassigned to a surviving
+   owner; "also delete this card's memories" removes only sole-owned ones;
+   `keepCharacterMemories` reads the character JOIN, not the mirror. Spec +
+   history in `Memory System/roleplay_memory_deletion_fix.md`.
    DB v6 (July 2026, Stage 3.3) adds the **freshness-cooldown** tables:
    `injection_cooldowns` keyed `(chat_id, source_type, entry_id)` — when each
    entry last reached a prompt, per chat, `source_type` separating memories
@@ -322,6 +333,71 @@ Everything is on-device. No cloud sync, no accounts.
    (§11). `status='draft'` rows are Phase-6 Archivist suggestions (the Pending
    UI is built but stays empty until Phase 6). Backups/codec carry rules, tags,
    and links. UI lives under AI System Settings (see the architecture map).
+   DB v11 (July 2026, Phase 6) adds `archivist_runs` — the Archivist run
+   history behind the Memory Assistant's "Recent Memory Analysis" list and its
+   Rerun action (per-run: dates, status, chat/transcript ids fed, memory/rule
+   draft ids created, failed chats). Device-local operational data like the
+   embeddings: never exported, no tombstones, emptied by Reset memories. The
+   **Archivist run engine** (backend only, `preferences/memory/archivist/`) is
+   BUILT: `Archivist.analyze`/`rerun` read the eligible pending transcripts
+   (live query — deleted chats filtered against the app's chat list,
+   re-included chats reappear automatically), call the configured Archivist
+   endpoint/model, and file every finding as a DRAFT — memory drafts via
+   `insertArchivistDraftMemory` (enforces status='draft' + origin='archivist',
+   never writes protection; lands in the existing Pending screen) and
+   model-rule drafts via `upsertModelRule` (status='draft',
+   source_model_string). `ArchivistResponseParser` (pure, unit-tested) is the
+   validation gate: unknown scope/type rows are dropped and counted (never
+   coerced), handling fields ignored, floods bounded. Proposed target NAMES
+   only link to records that already exist (exact name match) — the Archivist
+   never creates worlds/campaigns/characters/projects. **DB v13 (July 9
+   2026) adds card-placement SUGGESTIONS**: roleplay drafts may carry
+   `memories.suggested_card_type/_id/_section` (draft-only, FK-less, never
+   exported, cleared on any status change) — the Archivist proposes a card +
+   section by NAME (resolved against existing live cards only; section
+   validated per card type), gated by `getArchivistCardSuggestions()` (ON by
+   default — the owner's card-append toggle; its UI ships with Memory
+   Controls). Suggestions pre-select the Add-to-Card and editor Link
+   dropdowns and give pending rows the §7 outline (`bg_suggestion_outline`).
+   **DB v14 (July 9 2026) adds `rejected_drafts`** (owner preference):
+   deleting a Memory Assistant DRAFT records its exact title+content hash +
+   source conversation, and a rerun will not refile that exact draft from
+   that conversation — deliberately narrow, never broad similarity
+   suppression (owner rule). Device-local, never exported, emptied by Reset
+   memories. **Phase 6 scope limits (owner rulings, July 9 2026 — final):**
+   the Memory Assistant NEVER creates or proposes worlds/campaigns from
+   emergence — roleplay content with no attached target files as an
+   untargeted pending draft carrying the persistent inline note "Needs
+   roleplay target." (it cannot be added to a card until the user assigns a
+   world/campaign/character target in the editor; Add to Card is hidden and
+   the editor's Link section gated until then). The Memory Assistant NEVER
+   automatically updates campaign story_so_far or Plot Ledger fields — those
+   columns are DEAD legacy and must never be revived or referenced as
+   current (owner ruling; card-section placement SUGGESTIONS, user-approved,
+   including to plot_ledger, are the only sanctioned path). The full memory
+   engine requires an embedding model installed through Advanced Memory
+   Settings — refusing the switch shows the owner-worded guidance INLINE
+   under the Memory Engine control (persistent; the app-wide toast ban
+   applies).
+   The Memory Assistant tuning prefs (July 9 spec,
+   `memory_settings_reorg_spec.md`): max suggestions per conversation +
+   minimum importance (both ENFORCED IN CODE in the runner), temperature
+   (default 0.3), custom extraction prompt ("" = built-in). The **Memory
+   Assistant screen is BUILT** (July 8 2026 evening) to the owner's approved
+   wording (`memory_assistant_design.md` + `phase6_owner_answers_2026-07-08.md`)
+   and drives this engine: facts block, Analyze Conversations with live
+   batch-aware progress, View Pending Memories → the browser filtered to
+   drafts, Recent Memory Analysis (5 rows, Rerun far right). DB v12 adds
+   `archivist_runs.outcome`/`failure_reason`; run status/failure display
+   implements **`Memory System/archivist_status_wording_spec.md`** verbatim
+   (owner-sanctioned wording with a no-approval dispensation for tone-matched
+   gaps — unique to that spec): not-ready above the disabled button,
+   full/partial-failure reasons A–G via `ArchivistFailure` (mapped through
+   `GenerationErrorClassifier`), Nothing To Extract / No New Memories Added /
+   Run Interrupted states, and the "Some Memories Deleted Later" run-row
+   badge. Archivist failure/partial-failure records ALWAYS write to the
+   Memory log via `MemoryLog.logAlways` (owner rule — never gate them on the
+   diagnostics toggle).
    Source is DERIVED for
    display (`provenance_source == "user_entered"` ⇒ "Entered by hand", else
    "Learned from chat"); there is no "Imported" bucket — import preserves each
@@ -380,8 +456,10 @@ Everything is on-device. No cloud sync, no accounts.
    `app_character_id` under the OLD id; keep that when touching persona save
    paths. UI: the **Memory Manager** tile on the main Settings screen (renamed
    from "Memory System", July 8 2026) → `MemoryManagerActivity` (the row hub)
-   → **Memory Settings** row → `MemorySettingsActivity` (status, import backup,
-   export, persona bootstrap, engine/librarian/reset).
+   → **Memory Controls** row → `MemoryControlsActivity` (defaults, assistant
+   controls, engine, endpoint/model, backups, reset; diagnostics + bootstrap +
+   librarian live behind its Advanced Memory Settings door — July 9 2026
+   split, see the architecture map).
 4. **Files** — images in `getExternalFilesDir("images")`, whisper models via
    `LocalWhisperStorage`, rotating memory backups in
    `getExternalFilesDir("memory_backups")`.
@@ -647,10 +725,16 @@ Everything is on-device. No cloud sync, no accounts.
     pop-up — the owner's device mishandles large dialogs): title + content, a
     Type picker (six, with the §5 meanings as hint lines), an Importance picker
     (five), a primary Scope picker (seven), and — for the target-bearing scopes
-    — a **multi-select target picker with removable pills** (§2). Projects can
-    be created from that picker (no other creation surface yet). Protection
-    editing stays on the browser row menu. The old `EditMemoryDialogFragment`
-    was removed.
+    — the **"Associated <Scope>" target picker (owner rework, July 8–9
+    2026)**: label + boxed "Select" dropdown on one line (`bg_dropdown_box`,
+    5dp corners, box around the dropdown only — never pills, never a boxed
+    whole line), selections rendered below as small-curve boxes with an × at
+    the far right to remove. Projects can still be created from that dropdown
+    (no other creation surface yet). A roleplay DRAFT with no target shows
+    the persistent inline "Needs roleplay target." note and its Link-to-Lore-
+    Card section stays hidden until a target is assigned (July 9 ruling); the
+    same note appears on its browser row, where Add to Card is hidden too.
+    The old `EditMemoryDialogFragment` was removed.
   - The **browser** filters (reworked July 8 2026): the old horizontal chip
     row is RETIRED (the `filter_bar` container stays in the shared scaffold,
     hidden, in case another list screen wants chips). A **three-dots
@@ -690,8 +774,9 @@ Everything is on-device. No cloud sync, no accounts.
     column and `memories` has no on-card flag) is the one missing piece;
     `isOnCard()` is the single hook to teach when that flow exists, and book_5
     lights up then.
-    `MemoryRowAdapter`/`MemoryRow` grew `iconRes` + `tagsLine` fields; the
-    Pending banner still lives on the shared scaffold.
+    `MemoryRowAdapter`/`MemoryRow` grew `iconRes` + `tagsLine` fields (and,
+    July 8 evening, `pendingActions`/`showAddToCard` for the Pending-mode
+    action words); the scaffold's pending banner is Model-rules-only now.
   - **"Protected" is retired (owner ruling, July 8 2026 — see
     `owner_approved_rules.md` Addendum §2).** It was a handling concern, not a
     scope/type: rule-like protections are now ordinary Global memories, and a
@@ -701,11 +786,31 @@ Everything is on-device. No cloud sync, no accounts.
     field, and the inert `HANDLE WITH CARE` enforcer render stay DORMANT for
     backup/import compatibility; the Archivist (Phase 6) must never emit a
     protection/handling field.
-  - The **Pending screen** (`MemoryPendingActivity`, §14): a pinned "Pending
-    memories (N) ›" banner on the browser opens draft memories grouped under
-    collapsible destination-scope headers with per-group select-all, checkboxes,
-    Select all/none, Accept/Delete (count confirm); tap-to-edit opens the editor
-    (which shows an **Accept** button for drafts = save + activate).
+  - **Pending is a browser MODE now (owner design, July 8 2026 evening —
+    `Memory System/phase6_owner_answers_2026-07-08.md`).** The old separate
+    Pending screen (`MemoryPendingActivity`) and the "Pending memories (N) ›"
+    banner are RETIRED and deleted. The browser carries a centered
+    **"Memories | Pending"** word toggle at its top with a **"N Memories
+    Pending"** count line under it ("One Memory Pending" singular; hidden at
+    zero). Memories view = everything non-draft (archived/superseded keep
+    their badges); Pending view = drafts, each row carrying bold
+    **Accept / Delete / Edit** action words across its bottom — roleplay
+    scopes (world/campaign/rp_character) add **Add to Card**, which opens the
+    owner-worded "Accept Memory and Link to Lore Card?" pop-up (boxed 5dp
+    dropdowns for the lore card + section) and **MOVES** the memory onto the
+    card via `MemoryStore.convertMemoryToCardEntry` (title→entry name,
+    content→description; the memory row is deleted and lives/dies with the
+    card from then on — owner's D&D-sheet ruling). The editor's bottom button
+    for drafts reads **"Approve All As Shown"** (save + activate + return);
+    roleplay drafts also get a **"Link to Lore Card:"** boxed dropdown pair —
+    picking a card + section makes approval convert instead of activate. The
+    filter panel's **Status section was removed** (duplicate of the toggle;
+    `MemoryBrowserFilterState.status` remains as entry-point plumbing — the
+    Memory Assistant's View Pending Memories link writes `{draft}` to open
+    the browser pre-switched to Pending). The scaffold's pending banner
+    machinery survives only for Model rules. Dropdown house style (owner,
+    same ruling): `bg_dropdown_box` — a 5dp-corner box around the DROPDOWN
+    only, never the whole line, never pills.
   - **Reset memories** in Memory settings (`resetAllMemoryData` + a blunt
     confirm dialog with a "Save a backup file first" checkbox, checked by
     default) empties every memory-content table. The work order's "Remove
@@ -853,6 +958,14 @@ Everything is on-device. No cloud sync, no accounts.
 
 ## Coding rules
 
+- **NEVER use `Toast` unless the owner explicitly approves it for that exact
+  spot (owner rule, July 9 2026).** Toasts vanish on their own and are
+  useless with the owner's voice/accessibility setup. Favor PERSISTENT
+  messages: inline status text that stays on screen, field errors set on the
+  input itself, or a dialog the user dismisses. This extends the existing
+  "dialogs, never toasts" ruling from the campaign work to the whole app.
+  When touching a screen that still has toasts, convert them (keep the
+  approved wording, change only the presentation).
 - Match the existing style: nullable `var` view fields + `findViewById`,
   `DialogFragment.newInstance(Bundle)` pattern, listener interfaces with
   default no-op methods, copyright header on every file, strings ONLY in
@@ -952,15 +1065,22 @@ Everything is on-device. No cloud sync, no accounts.
   are now PRE-REVISION (each carries a ⚠️ banner): `owner_approved_rules.md`
   + the work orders describe the actual runtime since the July 2026
   rulings and the Stage 3.4 enforcer rework.
-- **Phase 6 (Archivist + Memory Assistant) is the NEXT phase and is NOT
-  built.** Before touching it, read the **"Addendum — modifications approved
+- **Phase 6 (Archivist + Memory Assistant) is IN PROGRESS (July 8 2026, this
+  branch).** Before touching it, read the **"Addendum — modifications approved
   in chat, July 8 2026"** at the end of `owner_approved_rules.md` (written for
   the Phase 6 builder: Protected retired, scope definitions tightened, the
-  memory-UI restructure, the final row-icon system, and the confirmation that
-  no Archivist pipeline exists yet). The Memory Assistant screen — this phase's
-  user-facing surface — has an owner-approved layout/wording + plumbing notes
-  in **`Memory System/memory_assistant_design.md`**. Both outrank the older
-  Phase 6 text wherever they disagree.
+  memory-UI restructure, the final row-icon system). The Memory Assistant
+  screen — this phase's user-facing surface — has an owner-approved
+  layout/wording + plumbing notes in
+  **`Memory System/memory_assistant_design.md`**. Both outrank the older
+  Phase 6 text wherever they disagree. Built so far: the roleplay memory
+  deletion fix (owner-assigned to this phase) and the **Archivist run engine
+  backend** (`preferences/memory/archivist/` + DB v11 run history — see the
+  storage section; drafts-only, no UI wired). NOT built, awaiting owner
+  decisions (their message, July 8 2026): the Memory Assistant screen's open
+  wording/behavior questions (design doc §3), the Pending-screen approval
+  rework (accept/edit/accept-all — owner says not designed yet), the card
+  placement flow (`isOnCard()`/book_5), and emergence proposals.
 - **The roleplay layer (cards + tags) was redesigned and owner-approved
   July 6–7 2026.** `Memory System/roleplay_cards_and_tags_spec.md` is the
   authoritative spec (four two-zone cards: user RP character, NPC party

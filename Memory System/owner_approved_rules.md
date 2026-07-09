@@ -664,6 +664,12 @@ one, it is stale — follow this addendum and fix the stale text.
    backend plumbing it implies and the open questions still to settle — are
    written up in **`Memory System/memory_assistant_design.md`** (July 8 2026).
    Read it before building the screen.
+   *(Status note, not a rule change: as of later on July 8 2026, in the
+   Phase 6 conversation this item anticipated, the run-engine BACKEND exists
+   on the Phase 6 branch — drafts-only, per rules; `origin='archivist'` and
+   the endpoint/model settings are now read by it. The screen is still the
+   placeholder; the design doc's §3 open questions remain with the owner;
+   the `proposals` table stays dormant.)*
 
 8. **Roleplay memory deletion cleanup is BUGGED (verified July 8 2026) — the
    join tables are the source of truth for roleplay memory ownership.** The
@@ -676,6 +682,7 @@ one, it is stale — follow this addendum and fix the stale text.
    **`Memory System/roleplay_memory_deletion_fix.md`**. Confirmed behavior: the
    two-option UI **keeps shared memories** — "also delete this card's memories"
    deletes only memories owned SOLELY by the deleted card; no "delete shared
-   too" option is built now (future UI decision only). Present bug in shipped
-   Stage 3.6 code; **owner-assigned to Phase 6** so it's tracked (may be fixed
-   sooner).
+   too" option is built now (future UI decision only). Was a present bug in
+   shipped Stage 3.6 code; **owner-assigned to Phase 6** so it's tracked.
+   *(Status note, not a rule change: FIXED per this ruling in Phase 6,
+   July 8 2026 — see the fix doc's status section.)*

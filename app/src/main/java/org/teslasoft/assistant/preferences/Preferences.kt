@@ -1577,6 +1577,59 @@ class Preferences private constructor(private var preferences: SharedPreferences
         putGlobalString("archivist_model", model)
     }
 
+    /* Memory Assistant tuning (owner spec, July 9 2026 —
+     * `Memory System/memory_settings_reorg_spec.md`). All global. The cap and
+     * minimum importance are ENFORCED IN CODE in the Archivist runner, never
+     * only in the extraction prompt. User-facing name: "Memory Assistant"
+     * (Archivist stays the internal name only). */
+
+    /** Maximum Suggestions Per Conversation: 0 = off (no cap). */
+    fun getArchivistMaxSuggestions(): Int =
+        getGlobalString("archivist_max_suggestions", "0").toIntOrNull()?.coerceAtLeast(0) ?: 0
+
+    fun setArchivistMaxSuggestions(value: Int) {
+        putGlobalString("archivist_max_suggestions", value.coerceAtLeast(0).toString())
+    }
+
+    /** Analysis temperature, 0.0–2.0. Recommended/default 0.3. */
+    fun getArchivistTemperature(): Float =
+        getGlobalString("archivist_temperature", "0.3").toFloatOrNull()?.coerceIn(0.0f, 2.0f) ?: 0.3f
+
+    fun setArchivistTemperature(value: Float) {
+        putGlobalString("archivist_temperature", value.coerceIn(0.0f, 2.0f).toString())
+    }
+
+    /** Minimum Importance (1–5) a draft must reach to be filed. Default 1
+     *  (Low — everything comes through). */
+    fun getArchivistMinImportance(): Int =
+        getGlobalString("archivist_min_importance", "1").toIntOrNull()?.coerceIn(1, 5) ?: 1
+
+    fun setArchivistMinImportance(value: Int) {
+        putGlobalString("archivist_min_importance", value.coerceIn(1, 5).toString())
+    }
+
+    /** The card-append toggle (owner wording lives in
+     *  phase6_card_suggestions_and_icons_design.md §2): whether the Memory
+     *  Assistant also proposes placing roleplay memories onto card sections.
+     *  ON by default (owner: a "danger switch" — its UI ships with the
+     *  Memory Controls screen; manual placement is always available
+     *  regardless). */
+    fun getArchivistCardSuggestions(): Boolean =
+        getGlobalString("archivist_card_suggestions", "true") == "true"
+
+    fun setArchivistCardSuggestions(value: Boolean) {
+        putGlobalString("archivist_card_suggestions", value.toString())
+    }
+
+    /** Custom extraction prompt; "" = use the built-in ArchivistPrompt.SYSTEM
+     *  (the Reset Prompt action clears back to ""). */
+    fun getArchivistCustomPrompt(): String =
+        getGlobalString("archivist_custom_prompt", "")
+
+    fun setArchivistCustomPrompt(value: String) {
+        putGlobalString("archivist_custom_prompt", value)
+    }
+
     /**
      * Per-chat scene selection (Phase 4, D8): the active world, roleplay
      * character and user persona for this chat, as memory-store ids; "" =

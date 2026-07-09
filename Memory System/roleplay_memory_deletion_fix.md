@@ -1,15 +1,32 @@
 # Fix: roleplay memory deletion cleanup (join tables vs mirror columns)
 
 *Owner-relayed fix, worked through with another AI; verified against the code
-by reading `MemoryStore.kt` on **July 8 2026**. This is a **spec for the fix,
-not the fix itself** — nothing is built here.*
+by reading `MemoryStore.kt` on **July 8 2026**.*
 
 ## Status / scope
 
-This is a **real bug in already-shipped code** (Stage 3.6f card teardown). It
-could be fixed independently at any time, but the **owner assigned it to
-Phase 6 (July 8 2026)** so it is tracked and taken care of there — see the
-Phase 6 section of `memory-system-integration-plan.md`.
+**✅ BUILT (Phase 6, July 8 2026).** The fix below is implemented:
+`deleteWorld`/`deleteCampaign`/`deleteRoleplayCharacter`/`deleteProject` all
+route their memory handling through `MemoryStore.teardownTargetMemoriesTx`,
+which reads ownership from the join table and executes a plan computed by the
+pure `TargetTeardownPlanner` (`preferences/memory/TargetTeardownPlanner.kt`).
+The required tests below run in `app/src/test/.../TargetTeardownPlannerTest.kt`
+(each owner case × world/campaign/RP-character, plus the mirror-reassignment
+and join-based `keepCharacterMemories` cases). Two safety sweeps ensure no
+join row or mirror value survives pointing at the deleted target. The rest of
+this file is kept as the spec/history of the bug.
+
+This was a **real bug in already-shipped code** (Stage 3.6f card teardown),
+**owner-assigned to Phase 6 (July 8 2026)** — see the Phase 6 section of
+`memory-system-integration-plan.md`.
+
+Companion deletion was flagged during the build as the same bug shape, and
+the owner ruled the same day (answer 5, `phase6_owner_answers_2026-07-08.md`):
+companions follow the sole-owner rule too. **✅ Fixed:** `deleteCompanion`
+now plans through `TargetTeardownPlanner` — "also delete its memories"
+removes only sole-owned memories; a memory shared with another companion
+survives with the dead link removed (companions have no mirror column, so no
+mirror handling applies).
 
 ## Implementation checklist (owner-confirmed, July 8 2026)
 
