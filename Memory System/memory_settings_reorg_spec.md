@@ -133,6 +133,15 @@ ask for an owner ruling before implementing.
    number field defaults to **10**. Off still means no cap.
 5. **Reset Memories lives in Memory Controls ONLY** — never duplicated in
    Advanced Memory Settings (one clear home for a destructive action).
+6. **(Confirmed later the same day)** The card-suggestions toggle ("Allow
+   card-relevant roleplay recommended memories to be automatically appended
+   to appropriate system locations?" — owner wording + warning + hint in
+   `phase6_card_suggestions_and_icons_design.md` §2, ON by default, wired to
+   `getArchivistCardSuggestions`) goes in the **Memory Assistant section of
+   Memory Controls, near Maximum Suggestions Per Conversation** — both shape
+   what appears in Pending after analysis. Not in Memory Assistant Advanced
+   Settings (it's a normal behavior toggle, not extraction tuning) and not
+   on the Memory Assistant action screen.
 
 ## Same-message ruling: "Associated Lore Card" is REMOVED as a concept
 
