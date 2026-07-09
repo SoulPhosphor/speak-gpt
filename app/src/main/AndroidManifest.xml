@@ -226,9 +226,23 @@
         </activity>
 
         <activity
-            android:name=".ui.activities.MemorySettingsActivity"
+            android:name=".ui.activities.MemoryControlsActivity"
             android:exported="false"
-            android:label="@string/title_memory_settings"
+            android:label="@string/title_memory_controls"
+            android:launchMode="singleTask">
+        </activity>
+
+        <activity
+            android:name=".ui.activities.MemoryAssistantAdvancedSettingsActivity"
+            android:exported="false"
+            android:label="@string/title_memory_assistant_advanced"
+            android:launchMode="singleTask">
+        </activity>
+
+        <activity
+            android:name=".ui.activities.AdvancedMemorySettingsActivity"
+            android:exported="false"
+            android:label="@string/title_advanced_memory_settings"
             android:launchMode="singleTask">
         </activity>
 

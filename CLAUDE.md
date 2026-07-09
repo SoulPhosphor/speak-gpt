@@ -139,19 +139,28 @@ a foreground service that keeps generation alive in the background.
   2026), reached from the renamed **Memory Manager** tile on the main Settings
   screen. A plain chevron-row hub (house style: rows, not cards) with four
   doors: **Memory Browser** → the global memories browser; **Memory Assistant**
-  → `MemoryAssistantActivity` (a "Coming soon" placeholder — the future
-  Archivist/Phase 6 surface, owner to design); **Lorebooks** →
-  `LoreBooksListActivity` (moved here out of Characters — the lorebook screens
-  themselves are unchanged, only the access point moved); **Memory Settings**
-  → `MemorySettingsActivity`. NOTE: this is a NEW, lightweight navigation hub —
+  → `MemoryAssistantActivity` (the built Phase 6 Archivist surface); **Lorebooks**
+  → `LoreBooksListActivity` (moved here out of Characters — the lorebook screens
+  themselves are unchanged, only the access point moved); **Memory Controls**
+  → `MemoryControlsActivity`. NOTE: this is a NEW, lightweight navigation hub —
   NOT the old ten-area `ui/activities/memory/MemoryManagerActivity`, which was
   removed in the Phase-5 rework and stays removed.
-- `ui/activities/MemorySettingsActivity.kt` — the **Memory Settings** screen
-  (was the "Memory (experimental)" screen). Everything the old screen had
-  EXCEPT the browser (which is now the hub's top row): store status, import
-  backup / export, persona bootstrap, Reset memories, the Memory engine
-  picker, Archivist endpoint/model, and the Librarian (embedding models,
-  rebuild index, debug search).
+- **The old combined Memory Settings screen was SPLIT (owner spec, July 9
+  2026 — `Memory System/memory_settings_reorg_spec.md`, wording verbatim;
+  user-facing name is "Memory Assistant", never "Archivist"):**
+  `ui/activities/MemoryControlsActivity.kt` (the normal-user page: memory
+  defaults, the Memory Assistant section with the max-suggestions cap
+  [defaults 10 when toggled on] and the §2 card-suggestions toggle, the
+  Memory Engine picker, Memory Assistant endpoint/model, Backups, Reset at
+  the bottom, and the door to Advanced Memory Settings);
+  `ui/activities/MemoryAssistantAdvancedSettingsActivity.kt` (extraction
+  tuning: temperature 0.0–2.0 w/ Reset to Recommended 0.3, Minimum
+  Importance, the editable Extraction Prompt with Reset Prompt);
+  `ui/activities/AdvancedMemorySettingsActivity.kt` (diagnostics: store
+  status/row counts, Create Companions From Personas, the Librarian
+  embedding models/rebuild index, debug search — Reset Memories is
+  deliberately NOT here, one home only). `MemorySettingsActivity` is
+  deleted.
 - `ui/activities/AiSystemSettingsActivity.kt` — the **AI System Settings**
   screen (Stage 4), a new card on the main Settings screen. Plain
   chevron-rows (not tiles): the chat's **System prompt** (moved here out of
@@ -427,8 +436,10 @@ Everything is on-device. No cloud sync, no accounts.
    `app_character_id` under the OLD id; keep that when touching persona save
    paths. UI: the **Memory Manager** tile on the main Settings screen (renamed
    from "Memory System", July 8 2026) → `MemoryManagerActivity` (the row hub)
-   → **Memory Settings** row → `MemorySettingsActivity` (status, import backup,
-   export, persona bootstrap, engine/librarian/reset).
+   → **Memory Controls** row → `MemoryControlsActivity` (defaults, assistant
+   controls, engine, endpoint/model, backups, reset; diagnostics + bootstrap +
+   librarian live behind its Advanced Memory Settings door — July 9 2026
+   split, see the architecture map).
 4. **Files** — images in `getExternalFilesDir("images")`, whisper models via
    `LocalWhisperStorage`, rotating memory backups in
    `getExternalFilesDir("memory_backups")`.

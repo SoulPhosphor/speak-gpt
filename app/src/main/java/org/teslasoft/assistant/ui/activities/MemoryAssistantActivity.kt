@@ -455,10 +455,11 @@ class MemoryAssistantActivity : FragmentActivity() {
         startActivity(Intent(this, MemoryBrowserActivity::class.java))
     }
 
-    /** "Set Up Archivist Model" / "Check Archivist Settings": the Archivist
-     *  endpoint + model live on the Memory Settings screen. */
+    /** "Set Up Archivist Model" / "Check Archivist Settings": the Memory
+     *  Assistant endpoint + model live on the Memory Controls screen (the
+     *  reorged Memory Settings, July 9 2026). */
     private fun openArchivistSettings() {
-        startActivity(Intent(this, MemorySettingsActivity::class.java))
+        startActivity(Intent(this, MemoryControlsActivity::class.java).putExtra("chatId", chatId))
     }
 
     private fun jsonIds(json: String): List<String> = try {
