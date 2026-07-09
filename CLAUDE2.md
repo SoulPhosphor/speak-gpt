@@ -908,6 +908,14 @@ Everything is on-device. No cloud sync, no accounts.
 
 ## Coding rules
 
+- **NEVER use `Toast` unless the owner explicitly approves it for that exact
+  spot (owner rule, July 9 2026).** Toasts vanish on their own and are
+  useless with the owner's voice/accessibility setup. Favor PERSISTENT
+  messages: inline status text that stays on screen, field errors set on the
+  input itself, or a dialog the user dismisses. This extends the existing
+  "dialogs, never toasts" ruling from the campaign work to the whole app.
+  When touching a screen that still has toasts, convert them (keep the
+  approved wording, change only the presentation).
 - **Owner's house style for user-facing wording (owner instruction, July 7
   2026):** labels are treated like titles — every major word capitalized
   ("Extraction Prompt", "Analyze History", "Maximum Suggestions Per

@@ -932,6 +932,14 @@ Everything is on-device. No cloud sync, no accounts.
 
 ## Coding rules
 
+- **NEVER use `Toast` unless the owner explicitly approves it for that exact
+  spot (owner rule, July 9 2026).** Toasts vanish on their own and are
+  useless with the owner's voice/accessibility setup. Favor PERSISTENT
+  messages: inline status text that stays on screen, field errors set on the
+  input itself, or a dialog the user dismisses. This extends the existing
+  "dialogs, never toasts" ruling from the campaign work to the whole app.
+  When touching a screen that still has toasts, convert them (keep the
+  approved wording, change only the presentation).
 - Match the existing style: nullable `var` view fields + `findViewById`,
   `DialogFragment.newInstance(Bundle)` pattern, listener interfaces with
   default no-op methods, copyright header on every file, strings ONLY in
