@@ -115,16 +115,36 @@ tuning option seems useful, list it as a question instead of implementing it.
 If any placement, wording, behavior, or screen structure is unclear, stop and
 ask for an owner ruling before implementing.
 
-## Open navigation questions (asked of the owner — do not build past them)
+## Placement rulings (owner, July 9 2026 — all questions answered)
 
-1. Does the Memory Manager hub's "Memory Settings" row become **"Memory
-   Controls"** (and with what subtitle wording), with Memory Controls
-   replacing the old screen?
-2. Where is **Advanced Memory Settings** reached from — a row at the bottom
-   of Memory Controls, a row on the Memory Manager hub, or somewhere else?
-3. Where is **Memory Assistant Advanced Settings** reached from — the Memory
-   Assistant screen itself, the Memory Assistant section of Memory Controls,
-   or somewhere else?
-4. Reset Memories placement: the spec keeps it at the bottom of Memory
-   Controls AND lists it under the diagnostics Danger Zone "if not kept in
-   Memory Controls" — confirm it lives in Memory Controls only.
+1. **Hub row**: the Memory Manager hub's fourth row becomes **"Memory
+   Controls"**, subtitle **"Set memory defaults, models, backups, and review
+   limits."** — it opens the normal user-facing controls page.
+2. **Advanced Memory Settings** door: a row at the BOTTOM of Memory Controls
+   (never on the hub — the hub stays clean). Label **"Advanced Memory
+   Settings"**, subtitle **"Diagnostics, indexing, model files, and repair
+   tools."**
+3. **Memory Assistant Advanced Settings** door: inside the Memory Assistant
+   SECTION of Memory Controls (not on the Memory Assistant action screen,
+   which stays focused on Analyze History / queue status / recent runs /
+   Pending). Label **"Memory Assistant Advanced Settings"**, subtitle
+   **"Tune extraction temperature, importance, and prompt behavior."**
+4. **Maximum Suggestions Per Conversation**: when the toggle switches ON the
+   number field defaults to **10**. Off still means no cap.
+5. **Reset Memories lives in Memory Controls ONLY** — never duplicated in
+   Advanced Memory Settings (one clear home for a destructive action).
+
+## Same-message ruling: "Associated Lore Card" is REMOVED as a concept
+
+(Owner, July 9 2026.) A roleplay item is either (1) a standalone memory in
+the browser/archive — with normal ownership links to world/campaign/RP
+character/NPC and normal archive rules — or (2) card content on a lore card,
+having MOVED there and stopped being a standalone memory ("If something is on
+the card, it follows the card. If something is in the archive, it follows
+archive memory rules."). There is NO second lore-card relationship where a
+memory stays in the archive but mirrors a card's archive/delete status — do
+not build one. This retires the "Associated Lore Card" dropdown and its
+lifecycle sentence from the July 8 editor design; the "Associated Companion"
+picker REWORK (label + dropdown + small-curve ×-boxes replacing the chips)
+still stands — it was a visual redesign of the normal target links, not a
+new relationship.
