@@ -2861,16 +2861,30 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
      * from [setup] inside its messages.isEmpty() guard), so existing
      * conversations are never retroactively changed. A last-used id whose
      * persona/activation has since been deleted is skipped (falls back to none).
+     * If no persona was EVER chosen in Quick Settings, the first persona in the
+     * list is seeded instead of none (owner ruling, July 10 2026); only Quick
+     * Settings choices are recorded as the last-used default — the Characters
+     * screen no longer writes it.
      */
     private fun seedPersonaAndActivationDefaults() {
         if (preferences?.isPersonaActivationSeeded() == true) return
         preferences?.setPersonaActivationSeeded(true)
 
         if (preferences?.getPersonaId().isNullOrEmpty()) {
+            val personaPrefs = PersonaPreferences.getPersonaPreferences(this)
             val lastPersona = preferences?.getLastUsedPersonaId().orEmpty()
-            if (lastPersona.isNotEmpty() &&
-                PersonaPreferences.getPersonaPreferences(this).getPersona(lastPersona).label.isNotEmpty()) {
+            if (lastPersona.isNotEmpty() && personaPrefs.getPersona(lastPersona).label.isNotEmpty()) {
                 preferences?.setPersonaId(lastPersona)
+            } else if (preferences?.hasLastUsedPersonaChoice() != true) {
+                // No companion has EVER been chosen in Quick Settings: default
+                // to the first persona in the list rather than none (owner
+                // ruling, July 10 2026). Only this never-chosen case — an
+                // explicit "none" choice, or a remembered persona that was
+                // since deleted, still seeds none; silently substituting a
+                // different companion is exactly what the owner objected to.
+                personaPrefs.getPersonasList().firstOrNull()?.let { top ->
+                    preferences?.setPersonaId(Hash.hash(top.label))
+                }
             }
         }
 

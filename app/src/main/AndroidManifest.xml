@@ -59,10 +59,16 @@
             </intent-filter>
         </activity>
 
+        <!-- configChanges: a rotation/fold/resize must NOT recreate ChatActivity.
+             Recreation runs onDestroy, which tears down TTS readback and the
+             hands-free mic loop — so merely tilting the phone mid-conversation
+             killed whatever was happening (owner report, July 10 2026). There is
+             no landscape-specific layout; the view tree just reflows. -->
         <activity
             android:name=".ui.activities.ChatActivity"
             android:exported="false"
             android:theme="@style/Theme.Transparent"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
             android:windowSoftInputMode="adjustPan">
         </activity>
 

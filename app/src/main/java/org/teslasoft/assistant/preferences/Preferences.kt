@@ -1355,6 +1355,17 @@ class Preferences private constructor(private var preferences: SharedPreferences
     }
 
     /**
+     * True once ANY persona choice — including an explicit "none" — has ever
+     * been recorded from Quick Settings. Lets new-chat seeding tell apart
+     * "the user never picked a companion" (seed the first one in the list,
+     * owner ruling July 10 2026) from "the user explicitly picked none"
+     * (respect the none).
+     * */
+    fun hasLastUsedPersonaChoice(): Boolean {
+        return gp.contains("last_used_persona_id")
+    }
+
+    /**
      * The activation prompt last applied in any chat (global, not per-chat),
      * seeded into new chats the same way as [getLastUsedPersonaId].
      *

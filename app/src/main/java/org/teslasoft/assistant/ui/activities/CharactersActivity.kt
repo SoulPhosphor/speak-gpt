@@ -58,7 +58,11 @@ class CharactersActivity : FragmentActivity() {
             val personaId = result.data?.getStringExtra("personaId")
             if (personaId != null) {
                 preferences?.setPersonaId(personaId)
-                preferences?.setLastUsedPersonaId(personaId)
+                // Deliberately NOT setLastUsedPersonaId: what new chats default
+                // to is decided ONLY by Quick Settings choices (owner ruling,
+                // July 10 2026). Browsing/tapping a persona here used to
+                // silently rewrite the new-chat default to whatever the owner
+                // was merely looking at.
                 textPersonasSubtitle?.text = getActivePersonaLabel()
             }
         }

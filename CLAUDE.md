@@ -1125,6 +1125,21 @@ Everything is on-device. No cloud sync, no accounts.
   Do not rotate/remove it; do not publish debug builds as real releases.
 - **Auto-naming preference copy block** in `ChatActivity` (see feature list) —
   easy to forget, silent data loss when missed.
+- **`ChatActivity` handles rotation itself** (`android:configChanges`
+  includes orientation/screenSize etc., July 10 2026): recreation runs
+  onDestroy, which kills TTS readback and the hands-free loop — tilting the
+  phone mid-conversation used to stop everything. Never remove that manifest
+  attribute, and don't add orientation-dependent layouts for the chat screen
+  without accounting for it.
+- **The new-chat companion default is written ONLY by Quick Settings**
+  (`setLastUsedPersonaId` — owner ruling, July 10 2026). The Characters
+  screen deliberately does not write it (browsing a persona there used to
+  silently rewrite what new chats open with). If no companion was ever
+  chosen in Quick Settings, `seedPersonaAndActivationDefaults` seeds the
+  FIRST persona in the list (an explicit "none" choice, or a deleted
+  remembered persona, still seeds none — never silently substitute a
+  different companion; `Preferences.hasLastUsedPersonaChoice()` is the
+  never-vs-none discriminator).
 - Legacy/odd-named files exist (`InstructionsForDegradedTeapots…Activity`,
   `MainActivity_robo_script.json`, `experiment.json`, `desktop.ini`,
   `hub-purge.sh`) — leave them unless asked.
