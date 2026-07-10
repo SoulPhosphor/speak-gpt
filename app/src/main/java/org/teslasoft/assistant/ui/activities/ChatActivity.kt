@@ -272,6 +272,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     private var chatName = ""
     private var languageIdentifier: LanguageIdentifier? = null
 
+    // Mid-stream persistence throttle (see the collect block in
+    // regularGPTResponse): a full-history encrypt per streamed chunk scaled
+    // with conversation length and made long chats slower every turn.
+    private var lastStreamSaveUptime = 0L
+    private val STREAM_SAVE_INTERVAL_MS = 2000L
+
     // Init states
     private var isRecording = false
     private var keyboardMode = false
@@ -495,8 +501,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
         if (chatMessages == null) chatMessages = arrayListOf()
 
+        // One tokenizer for the whole pass: constructing it inside the loop
+        // rebuilt the BPE tables once per message, per turn, on the main
+        // thread — O(history) work that grew with every exchange and is part
+        // of why long conversations felt slower and slower.
+        val tokenizer = Tokenizer.of(encoding = Encoding.CL100K_BASE)
         for (m in chatMessages) {
-            val tokenizer = Tokenizer.of(encoding = Encoding.CL100K_BASE)
             val tokens = tokenizer.encode(m.content.toString()).size
 
             messagesUsageProjection.add(
@@ -1419,6 +1429,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         }
 
         try { unregisterReceiver(hangUpReceiver) } catch (_: Exception) { /* not registered */ }
+        // Release the last ML Kit language-detector client (see pronounce()).
+        try { languageIdentifier?.close() } catch (_: Exception) { /* ignore */ }
         // The read-aloud keep-alive must not outlive the activity: its poll runs on
         // a handler tied to this instance, so without this the service could hold a
         // wake lock with nothing to release it.
@@ -2625,8 +2637,19 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 processLocalWhisperTranscript(transcription)
             } catch (_: CancellationException) {
                 restoreUIState()
-            } catch (_: Exception) {
-                Toast.makeText(this@ChatActivity, "Failed to transcribe on device", Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                // Hands-free: a throwing transcription must not strand the
+                // loop. restoreUIState() alone left HandsFreeService and any
+                // Bluetooth mic route up while the mic never reopened — with
+                // the screen off the user got no cue at all. Give up through
+                // the one funnel that logs the reason, plays the give-up cue
+                // and tears the loop down properly.
+                if (preferences?.getHandsFreeMode() == true && !handsFreeStopped) {
+                    logVoiceEventAlways("on-device transcription threw: ${e.message}")
+                    stopHandsFreeLoop("on-device transcription threw", notify = true)
+                } else {
+                    Toast.makeText(this@ChatActivity, "Failed to transcribe on device", Toast.LENGTH_SHORT).show()
+                }
                 restoreUIState()
             }
         }
@@ -4349,7 +4372,18 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                         adapter?.notifyItemChanged(messages.size - 1)
                     }
                     scroll(false)
-                    saveSettings()
+                    // Persist mid-stream so a killed process doesn't lose the
+                    // partial reply — but NOT on every chunk: saveSettings()
+                    // re-serializes and re-encrypts the WHOLE history on the
+                    // main thread (flowOn only moves the upstream), so
+                    // per-chunk saves made long conversations progressively
+                    // slower with every turn. The completion save below still
+                    // persists the full reply.
+                    val nowUptime = android.os.SystemClock.uptimeMillis()
+                    if (nowUptime - lastStreamSaveUptime >= STREAM_SAVE_INTERVAL_MS) {
+                        lastStreamSaveUptime = nowUptime
+                        saveSettings()
+                    }
                 }
             }
         }
@@ -4567,6 +4601,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             if (!handsFree) acquireReadbackKeepAlive()
             if (autoLangDetect) {
                 try {
+                    // ML Kit clients hold native resources: re-creating one per
+                    // readback without closing the old one leaked a client per
+                    // spoken reply across a long hands-free session.
+                    try { languageIdentifier?.close() } catch (_: Exception) { /* already closed */ }
                     languageIdentifier = LanguageIdentification.getClient()
                     languageIdentifier?.identifyLanguage(message)
                         ?.addOnSuccessListener { languageCode ->
@@ -4690,6 +4728,20 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                             }
                         }
                     } catch (_: CancellationException) {
+                        restoreUIState()
+                    } catch (e: Exception) {
+                        // A failed speech request (network drop, HTTP error)
+                        // used to escape this coroutine uncaught and kill the
+                        // whole process mid-readback — and with it any
+                        // hands-free loop. Fail just the readback instead:
+                        // log it and re-arm exactly like the playback-error
+                        // listener above.
+                        logVoiceEventAlways("cloud voice request failed: ${e.message}")
+                        runOnUiThread {
+                            adapter?.clearSpeakingPosition()
+                            onHandsFreeReadbackFinished()
+                        }
+                        releaseReadbackKeepAlive()
                         restoreUIState()
                     }
                 }
