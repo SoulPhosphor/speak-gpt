@@ -277,6 +277,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     // with conversation length and made long chats slower every turn.
     private var lastStreamSaveUptime = 0L
     private val STREAM_SAVE_INTERVAL_MS = 2000L
+    // Screen-off network resilience: how many times a turn retries a transient
+    // network/DNS blip (Doze / Bluetooth-vs-Wi-Fi radio contention) before it
+    // surfaces the error, and the base backoff (grows per attempt).
+    private val GENERATION_NET_RETRIES = 3
+    private val GENERATION_NET_RETRY_DELAY_MS = 1200L
 
     // Init states
     private var isRecording = false
@@ -4355,36 +4360,58 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             )
         }
 
-        val completions: Flow<ChatCompletionChunk> =
-            ai!!.chatCompletions(chatCompletionRequest)
-
         scroll(true)
 
-        completions.flowOn(Dispatchers.IO).collect { v ->
-            run {
-                if (!currentCoroutineContext().isActive) throw CancellationException()
-                else if (v.choices[0].delta != null && v.choices[0].delta?.content != null && v.choices[0].delta?.content.toString() != "null") {
-                    response += v.choices[0].delta?.content
-                    messages[messages.size - 1]["message"] = response
-                    if (messages.size > 2) {
-                        adapter?.notifyItemRangeChanged(messages.size - 3, messages.size - 1)
-                    } else {
-                        adapter?.notifyItemChanged(messages.size - 1)
-                    }
-                    scroll(false)
-                    // Persist mid-stream so a killed process doesn't lose the
-                    // partial reply — but NOT on every chunk: saveSettings()
-                    // re-serializes and re-encrypts the WHOLE history on the
-                    // main thread (flowOn only moves the upstream), so
-                    // per-chunk saves made long conversations progressively
-                    // slower with every turn. The completion save below still
-                    // persists the full reply.
-                    val nowUptime = android.os.SystemClock.uptimeMillis()
-                    if (nowUptime - lastStreamSaveUptime >= STREAM_SAVE_INTERVAL_MS) {
-                        lastStreamSaveUptime = nowUptime
-                        saveSettings()
+        // Screen-off resilience: with the screen off, Wi-Fi can blink out for a
+        // moment (Doze, or the Bluetooth SCO voice link contending for the
+        // 2.4GHz radio during hands-free), and a DNS lookup that lands in that
+        // gap fails with "Unable to resolve host" — killing a turn the user
+        // never saw fail because their connection was fine a second later.
+        // Retry a transient network/resolution failure a few times with short
+        // backoff BEFORE surfacing the error. Only safe while nothing has
+        // streamed yet: once tokens arrive, retrying would duplicate the reply,
+        // so any failure mid-stream is rethrown untouched.
+        var netAttempt = 0
+        while (true) {
+            try {
+                ai!!.chatCompletions(chatCompletionRequest).flowOn(Dispatchers.IO).collect { v ->
+                    run {
+                        if (!currentCoroutineContext().isActive) throw CancellationException()
+                        else if (v.choices[0].delta != null && v.choices[0].delta?.content != null && v.choices[0].delta?.content.toString() != "null") {
+                            response += v.choices[0].delta?.content
+                            messages[messages.size - 1]["message"] = response
+                            if (messages.size > 2) {
+                                adapter?.notifyItemRangeChanged(messages.size - 3, messages.size - 1)
+                            } else {
+                                adapter?.notifyItemChanged(messages.size - 1)
+                            }
+                            scroll(false)
+                            // Persist mid-stream so a killed process doesn't lose the
+                            // partial reply — but NOT on every chunk: saveSettings()
+                            // re-serializes and re-encrypts the WHOLE history on the
+                            // main thread (flowOn only moves the upstream), so
+                            // per-chunk saves made long conversations progressively
+                            // slower with every turn. The completion save below still
+                            // persists the full reply.
+                            val nowUptime = android.os.SystemClock.uptimeMillis()
+                            if (nowUptime - lastStreamSaveUptime >= STREAM_SAVE_INTERVAL_MS) {
+                                lastStreamSaveUptime = nowUptime
+                                saveSettings()
+                            }
+                        }
                     }
                 }
+                break
+            } catch (ce: CancellationException) {
+                throw ce
+            } catch (e: Exception) {
+                val transient = response.isEmpty() &&
+                        netAttempt < GENERATION_NET_RETRIES &&
+                        GenerationErrorClassifier.isTransientNetwork(e)
+                if (!transient) throw e
+                netAttempt++
+                logVoiceEventAlways("network blip during generation (screen-off resilience), retry $netAttempt/$GENERATION_NET_RETRIES: ${e.message}")
+                kotlinx.coroutines.delay(GENERATION_NET_RETRY_DELAY_MS * netAttempt)
             }
         }
 

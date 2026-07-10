@@ -121,6 +121,17 @@ object GenerationErrorClassifier {
         return GenErrorResult(GenErrorCode.U0, status)
     }
 
+    /**
+     * True for transient TRANSPORT failures worth a short retry before the turn
+     * is surfaced as failed: DNS/host-unreachable (N3), connection abort (N1),
+     * and connect/socket timeout (N2). These are the screen-off Wi-Fi/Doze
+     * blips that resolve on their own within a second or two. Deliberately does
+     * NOT include auth, quota, model, context-length, or content-rejection
+     * errors — retrying those just repeats a failure that will never succeed.
+     */
+    fun isTransientNetwork(error: Throwable): Boolean =
+        classify(error).code in setOf(GenErrorCode.N1, GenErrorCode.N2, GenErrorCode.N3)
+
     /** The throwable and its cause chain, guarding against a cyclic `cause`. */
     private fun causeChain(error: Throwable): List<Throwable> {
         val out = ArrayList<Throwable>()
