@@ -111,14 +111,7 @@ class Logger {
         }
 
         /**
-         * Get ads log
-         * */
-        fun getAdsLog(context: Context) : String {
-            return EncryptedPreferences.getEncryptedPreference(context, "logs", "ads")
-        }
-
-        /**
-         * @param type - type of log (crash/event/memory/performance/ads)
+         * @param type - type of log (crash/event/memory/performance)
          * @param tag - any tag to identify log message and source
          * @param level - log level (info/error/warning/debug/verbose)
          * @param message - log message

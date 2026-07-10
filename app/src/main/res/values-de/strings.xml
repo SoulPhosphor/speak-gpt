@@ -295,7 +295,6 @@
     <string name="logit_bias_help">Logit-Bias-Konfiguration ist eine Funktion, mit der Sie einen benutzerdefinierten Logit-Bias für bestimmte Token festlegen können. Logit-Bias ist ein Wert, der zum Logit des Tokens hinzugefügt wird. Er kann verwendet werden, um die Wahrscheinlichkeit des Tokens in der Ausgabesequenz zu erhöhen oder zu verringern. Wenn Sie zum Beispiel einen Logit-Bias von 100 festlegen, wird das Token wahrscheinlich in der Ausgabesequenz erscheinen. Wenn Sie einen Logit-Bias von -100 einstellen, wird das Token weniger wahrscheinlich in der Ausgabesequenz erscheinen.</string>
     <string name="label_disable_this_feature">Diese Funktion deaktivieren</string>
     <string name="title_crash_log">Absturzprotokoll</string>
-    <string name="title_ads_log">Werbelog</string>
     <string name="title_event_log">Ereignisprotokoll</string>
     <string name="label_clear_log">Protokoll löschen</string>
     <string name="msg_clear_log_confirm">Sind Sie sicher, dass Sie dieses Protokoll löschen möchten?</string>
@@ -364,8 +363,6 @@
     <string name="tile_assistant_customize_desc">Diese Funktion ermöglicht es Ihnen, den Namen und das Avatar des Assistenten für einzelne Chats oder global zu ändern.</string>
     <string name="tile_crash_log_title">Absturzprotokoll</string>
     <string name="tile_crash_log_desc">Diese Funktion ermöglicht Ihnen das Ansehen des Absturzprotokolls.</string>
-    <string name="tile_ads_log_title">Werbelog</string>
-    <string name="tile_ads_log_desc">Diese Funktion ermöglicht Ihnen das Ansehen des Werbelogs. Normalerweise benötigen Sie diese Funktion nicht.</string>
     <string name="tile_events_log_title">Ereignisprotokoll</string>
     <string name="tile_events_log_desc">Diese Funktion ermöglicht Ihnen das Ansehen des Ereignisprotokolls. Wir erfassen dieses Protokoll nicht, da es sensible Informationen enthalten kann. Verwenden Sie dieses Protokoll, wenn Sie einen Fehler melden möchten.</string>
     <string name="tile_autosave_title">Automatisches Speichern von Chats</string>

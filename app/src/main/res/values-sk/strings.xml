@@ -293,7 +293,6 @@
     <string name="logit_bias_help">Konfigurácia Logit Bias je funkcia, ktorá vám umožňuje nastaviť vlastný logit bias pre konkrétne tokeny. Logit bias je hodnota, ktorá sa pridáva k logitu tokenu. Môže byť použitá na zvýšenie alebo zníženie pravdepodobnosti tokenu vo výstupnej sekvencii. Napríklad, ak nastavíte logit bias na 100, token bude pravdepodobnejšie objaviť sa vo výstupnej sekvencii. Ak nastavíte logit bias na -100, token bude menej pravdepodobne objaviť sa vo výstupnej sekvencii.</string>
     <string name="label_disable_this_feature">Zakázať túto funkciu</string>
     <string name="title_crash_log">Denník zrážok</string>
-    <string name="title_ads_log">Denník reklám</string>
     <string name="title_event_log">Denník udalostí</string>
     <string name="label_clear_log">Vyčistiť denník</string>
     <string name="msg_clear_log_confirm">Ste si istí, že chcete vyčistiť tento denník?</string>
@@ -361,8 +360,6 @@
     <string name="tile_assistant_customize_desc">Táto funkcia umožňuje zmeniť meno a avatar asistenta pre individuálny chat alebo globálne.</string>
     <string name="tile_crash_log_title">Log pádu</string>
     <string name="tile_crash_log_desc">Táto funkcia umožňuje zobraziť log pádu.</string>
-    <string name="tile_ads_log_title">Log reklám</string>
-    <string name="tile_ads_log_desc">Táto funkcia umožňuje zobraziť log reklám. Zvyčajne túto funkciu nepotrebujete používať.</string>
     <string name="tile_events_log_title">Log udalostí</string>
     <string name="tile_events_log_desc">Táto funkcia umožňuje zobraziť log udalostí. Tento log nezbierame, pretože môže obsahovať citlivé informácie. Použite tento log, ak chcete nahlásiť chybu.</string>
     <string name="tile_autosave_title">Automatické ukladanie chatov</string>

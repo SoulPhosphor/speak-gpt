@@ -298,7 +298,6 @@
     <string name="logit_bias_help">La configuración de sesgo de logit es una característica que te permite establecer un sesgo de logit personalizado para tokens específicos. El sesgo de logit es un valor que se añade al logit del token. Puede usarse para aumentar o disminuir la probabilidad del token en la secuencia de salida. Por ejemplo, si estableces el sesgo de logit en 100, el token será más probable que aparezca en la secuencia de salida. Si lo estableces en -100, será menos probable.</string>
     <string name="label_disable_this_feature">Desactivar esta característica</string>
     <string name="title_crash_log">Registro de errores</string>
-    <string name="title_ads_log">Registro de anuncios</string>
     <string name="title_event_log">Registro de eventos</string>
     <string name="label_clear_log">Limpiar registro</string>
     <string name="msg_clear_log_confirm">¿Estás seguro de que quieres limpiar este registro?</string>
@@ -368,8 +367,6 @@
     <string name="tile_assistant_customize_desc">Esta función te permite cambiar el nombre y el avatar del asistente por chat individual o globalmente.</string>
     <string name="tile_crash_log_title">Registro de errores</string>
     <string name="tile_crash_log_desc">Esta función te permite ver el registro de errores.</string>
-    <string name="tile_ads_log_title">Registro de anuncios</string>
-    <string name="tile_ads_log_desc">Esta función te permite ver el registro de anuncios. Normalmente no necesitas usar esta función.</string>
     <string name="tile_events_log_title">Registro de eventos</string>
     <string name="tile_events_log_desc">Esta función te permite ver el registro de eventos. No recopilamos este registro ya que puede contener información sensible. Usa este registro si deseas reportar un error.</string>
     <string name="tile_autosave_title">Auto-guardar chats</string>

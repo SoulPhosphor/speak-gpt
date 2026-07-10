@@ -295,7 +295,6 @@
     <string name="logit_bias_help">پیکربندی سوگیری لوجیت یک ویژگی است که به شما امکان تنظیم سوگیری لوجیت سفارشی برای توکن‌های خاص را می‌دهد. سوگیری لوجیت مقداری است که به لوجیت توکن اضافه می‌شود. می‌توان از آن برای افزایش یا کاهش احتمال ظاهر شدن توکن در دنباله خروجی استفاده کرد. برای مثال، اگر سوگیری لوجیت را روی 100 تنظیم کنید، توکن احتمال بیشتری برای ظاهر شدن در دنباله خروجی خواهد داشت. اگر آن را روی -100 تنظیم کنید، توکن احتمال کمتری برای ظاهر شدن خواهد داشت.</string>
     <string name="label_disable_this_feature">غیرفعال کردن این ویژگی</string>
     <string name="title_crash_log">گزارش خرابی</string>
-    <string name="title_ads_log">گزارش تبلیغات</string>
     <string name="title_event_log">گزارش رویداد</string>
     <string name="label_clear_log">پاک کردن گزارش</string>
     <string name="msg_clear_log_confirm">آیا مطمئن هستید که می‌خواهید این گزارش را پاک کنید؟</string>
@@ -364,8 +363,6 @@
     <string name="tile_assistant_customize_desc">این ویژگی به شما امکان تغییر نام و آواتار دستیار را برای گفتگوی فردی یا به‌صورت عمومی می‌دهد.</string>
     <string name="tile_crash_log_title">گزارش خرابی</string>
     <string name="tile_crash_log_desc">این ویژگی به شما امکان مشاهده گزارش خرابی را می‌دهد.</string>
-    <string name="tile_ads_log_title">گزارش تبلیغات</string>
-    <string name="tile_ads_log_desc">این ویژگی به شما امکان مشاهده گزارش تبلیغات را می‌دهد. معمولاً نیازی به استفاده از این ویژگی ندارید.</string>
     <string name="tile_events_log_title">گزارش رویداد</string>
     <string name="tile_events_log_desc">این ویژگی به شما امکان مشاهده گزارش رویداد را می‌دهد. ما این گزارش را جمع‌آوری نمی‌کنیم زیرا ممکن است حاوی اطلاعات حساس باشد. اگر می‌خواهید اشکالی را گزارش کنید، از این گزارش استفاده کنید.</string>
     <string name="tile_autosave_title">ذخیره خودکار گفتگوها</string>

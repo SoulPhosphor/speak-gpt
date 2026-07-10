@@ -84,12 +84,6 @@ class LogsActivity : FragmentActivity() {
                             textLog?.text = Logger.getCrashLog(this)
                         }
 
-                        "ads" -> {
-                            activityLogsTitle?.text = getString(R.string.title_ads_log)
-                            this.title = getString(R.string.title_ads_log)
-                            textLog?.text = Logger.getAdsLog(this)
-                        }
-
                         "event" -> {
                             activityLogsTitle?.text = getString(R.string.title_event_log)
                             this.title = getString(R.string.title_event_log)

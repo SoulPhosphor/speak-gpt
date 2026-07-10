@@ -294,7 +294,6 @@
     <string name="logit_bias_help">Konfiguracja Logit Bias to funkcja, która pozwala ustawić niestandardowy logit bias dla określonych tokenów. Logit bias to wartość, która jest dodawana do logitu tokenu. Może być używana do zwiększenia lub zmniejszenia prawdopodobieństwa pojawienia się tokenu w sekwencji wyjściowej. Na przykład, jeśli ustawisz logit bias na 100, token będzie bardziej prawdopodobny do pojawienia się w sekwencji wyjściowej. Jeśli ustawisz logit bias na -100, token będzie mniej prawdopodobny do pojawienia się w sekwencji wyjściowej.</string>
     <string name="label_disable_this_feature">Wyłącz tę funkcję</string>
     <string name="title_crash_log">Log błędów</string>
-    <string name="title_ads_log">Log reklam</string>
     <string name="title_event_log">Log zdarzeń</string>
     <string name="label_clear_log">Wyczyść log</string>
     <string name="msg_clear_log_confirm">Czy na pewno chcesz wyczyścić ten log?</string>
@@ -362,8 +361,6 @@
     <string name="tile_assistant_customize_desc">Ta funkcja pozwala zmienić nazwę i awatar asystenta dla indywidualnej rozmowy lub globalnie.</string>
     <string name="tile_crash_log_title">Log awarii</string>
     <string name="tile_crash_log_desc">Ta funkcja pozwala wyświetlić dziennik awarii.</string>
-    <string name="tile_ads_log_title">Dziennik reklam</string>
-    <string name="tile_ads_log_desc">Ta funkcja pozwala wyświetlić dziennik reklam. Zwykle nie potrzebujesz korzystać z tej funkcji.</string>
     <string name="tile_events_log_title">Dziennik zdarzeń</string>
     <string name="tile_events_log_desc">Ta funkcja pozwala wyświetlić dziennik zdarzeń. Nie zbieramy tego dziennika, ponieważ może zawierać informacje poufne. Użyj tego dziennika, jeśli chcesz zgłosić błąd.</string>
     <string name="tile_autosave_title">Automatyczne zapisywanie rozmów</string>

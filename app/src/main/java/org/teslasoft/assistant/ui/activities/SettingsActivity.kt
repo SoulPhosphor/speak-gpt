@@ -40,7 +40,6 @@ import androidx.fragment.app.FragmentActivity
 import androidx.fragment.app.FragmentTransaction
 import androidx.interpolator.view.animation.FastOutLinearInInterpolator
 import androidx.interpolator.view.animation.LinearOutSlowInInterpolator
-import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.elevation.SurfaceColors
 import org.teslasoft.assistant.R
@@ -83,7 +82,6 @@ class SettingsActivity : FragmentActivity() {
     private var tileHideModelNames: TileFragment? = null
     private var tileMonochromeBackgroundForChatList: TileFragment? = null
     // private var threadLoading: LinearLayout? = null
-    private var btnRemoveAds: MaterialButton? = null
     private var root: ScrollView? = null
     private var textGlobal: TextView? = null
     private var btnBack: ImageButton? = null
@@ -284,7 +282,6 @@ class SettingsActivity : FragmentActivity() {
         btnBack = findViewById(R.id.btn_back)
         root = findViewById(R.id.root)
         textGlobal = findViewById(R.id.text_global)
-        btnRemoveAds?.visibility = View.GONE
 
         val extras: Bundle? = intent.extras
 

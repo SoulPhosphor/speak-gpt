@@ -296,7 +296,6 @@
     <string name="logit_bias_help">La configurazione del Bias Logit è una funzionalità che ti permette di impostare un bias logit personalizzato per token specifici. Il bias logit è un valore che viene aggiunto al logit del token. Può essere utilizzato per aumentare o diminuire la probabilità del token nella sequenza di output. Ad esempio, se imposti il bias logit a 100, il token sarà più probabile che appaia nella sequenza di output. Se imposti il bias logit a -100, il token sarà meno probabile che appaia.</string>
     <string name="label_disable_this_feature">Disabilita questa funzionalità</string>
     <string name="title_crash_log">Registro dei crash</string>
-    <string name="title_ads_log">Registro degli annunci</string>
     <string name="title_event_log">Registro degli eventi</string>
     <string name="label_clear_log">Pulisci registro</string>
     <string name="msg_clear_log_confirm">Sei sicuro di voler pulire questo registro?</string>
@@ -365,8 +364,6 @@
     <string name="tile_assistant_customize_desc">Questa funzione permette di cambiare il nome e l\'avatar dell\'assistente per una chat individuale o globalmente.</string>
     <string name="tile_crash_log_title">Registro dei crash</string>
     <string name="tile_crash_log_desc">Questa funzione permette di visualizzare il registro dei crash.</string>
-    <string name="tile_ads_log_title">Registro degli annunci</string>
-    <string name="tile_ads_log_desc">Questa funzione permette di visualizzare il registro degli annunci. Solitamente non hai bisogno di usare questa funzione.</string>
     <string name="tile_events_log_title">Registro degli eventi</string>
     <string name="tile_events_log_desc">Questa funzione permette di visualizzare il registro degli eventi. Non raccogliamo questo registro poiché può contenere informazioni sensibili. Usa questo registro se vuoi segnalare un bug.</string>
     <string name="tile_autosave_title">Salvataggio automatico chat</string>

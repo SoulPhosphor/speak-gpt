@@ -296,7 +296,6 @@
     <string name="logit_bias_help">Logit Bias Yapılandırması, belirli tokenlar için özel logit bias ayarlamanıza olanak tanıyan bir özelliktir. Logit bias, tokenın logit\'ine eklenen bir değerdir. Çıkış dizisinde tokenın olasılığını artırmak veya azaltmak için kullanılabilir. Örneğin, logit bias\'ı 100 olarak ayarlarsanız, token çıkış dizisinde daha olası hale gelir. Logit bias\'ı -100 olarak ayarlarsanız, token çıkış dizisinde daha az olası hale gelir.</string>
     <string name="label_disable_this_feature">Bu özelliği devre dışı bırak</string>
     <string name="title_crash_log">Çökme günlüğü</string>
-    <string name="title_ads_log">Reklam günlüğü</string>
     <string name="title_event_log">Olay günlüğü</string>
     <string name="label_clear_log">Günlüğü temizle</string>
     <string name="msg_clear_log_confirm">Bu günlüğü temizlemek istediğinizden emin misiniz?</string>
@@ -365,8 +364,6 @@
     <string name="tile_assistant_customize_desc">Bu özellik, bireysel sohbet veya genel olarak asistanın adını ve avatarını değiştirmenize olanak tanır.</string>
     <string name="tile_crash_log_title">Çökme günlüğü</string>
     <string name="tile_crash_log_desc">Bu özellik, çökme günlüğünü görüntülemenize olanak tanır.</string>
-    <string name="tile_ads_log_title">Reklam günlüğü</string>
-    <string name="tile_ads_log_desc">Bu özellik, reklam günlüğünü görüntülemenize olanak tanır. Genellikle bu özelliği kullanmanıza gerek yoktur.</string>
     <string name="tile_events_log_title">Olay günlüğü</string>
     <string name="tile_events_log_desc">Bu özellik, olay günlüğünü görüntülemenize olanak tanır. Bu günlüğü toplamaz, hassas bilgiler içerebilir. Bir hata bildirmek istiyorsanız bu günlüğü kullanın.</string>
     <string name="tile_autosave_title">Sohbetleri otomatik kaydet</string>
