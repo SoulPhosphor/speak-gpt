@@ -34,9 +34,9 @@ import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.materialswitch.MaterialSwitch
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
+import org.teslasoft.assistant.preferences.SystemPromptsPreferences
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.activities.memory.ModelRulesActivity
-import org.teslasoft.assistant.ui.fragments.dialogs.SystemMessageDialogFragment
 
 /**
  * "AI System Settings" (Stage 4, owner_approved_rules §11 Revision 5): a
@@ -45,10 +45,9 @@ import org.teslasoft.assistant.ui.fragments.dialogs.SystemMessageDialogFragment
  * Characters identity hub) and Model rules. A top hint (owner-approved
  * words) reminds the user that longer prompts/rules cost context every turn.
  *
- * The System prompt is chat-scoped (opens the existing
- * SystemMessageDialogFragment, untouched — not converted to full-screen; see
- * the coding-rules note about not doing that as a drive-by). The
- * "Automatically Apply Model Rules" switch is the GLOBAL default; the
+ * The System prompts row opens the user's system prompt library
+ * (SystemPromptsListActivity) — multiple saved prompts, one chosen at a time.
+ * The "Automatically Apply Model Rules" switch is the GLOBAL default; the
  * per-chat "Apply Model Rules" override lives in Quick Settings.
  */
 class AiSystemSettingsActivity : FragmentActivity() {
@@ -64,11 +63,7 @@ class AiSystemSettingsActivity : FragmentActivity() {
     private var rowModelRules: LinearLayout? = null
     private var switchAutoApplyModelRules: MaterialSwitch? = null
 
-    private var systemChangedListener: SystemMessageDialogFragment.StateChangesListener =
-        SystemMessageDialogFragment.StateChangesListener { prompt ->
-            preferences?.setSystemMessage(prompt)
-            textSystemPromptSubtitle?.text = systemPromptPreview()
-        }
+    private var systemPromptsPreferences: SystemPromptsPreferences? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -77,6 +72,7 @@ class AiSystemSettingsActivity : FragmentActivity() {
 
         chatId = intent.extras?.getString("chatId", "") ?: ""
         preferences = Preferences.getPreferences(this, chatId)
+        systemPromptsPreferences = SystemPromptsPreferences.getSystemPromptsPreferences(this)
 
         bindViews()
         applyTheme()
@@ -121,13 +117,17 @@ class AiSystemSettingsActivity : FragmentActivity() {
         switchAutoApplyModelRules?.isChecked = preferences?.getAutoApplyModelRules() ?: true
     }
 
+    override fun onResume() {
+        super.onResume()
+        // The library may have changed (selection/add/edit/delete) while away.
+        textSystemPromptSubtitle?.text = systemPromptPreview()
+    }
+
     private fun initLogic() {
         btnBack?.setOnClickListener { finish() }
 
         rowSystemPrompt?.setOnClickListener {
-            val dialog = SystemMessageDialogFragment.newInstance(preferences?.getSystemMessage() ?: "")
-            dialog.setStateChangedListener(systemChangedListener)
-            dialog.show(supportFragmentManager, "SystemMessageDialogFragment")
+            startActivity(Intent(this, SystemPromptsListActivity::class.java))
         }
 
         rowModelRules?.setOnClickListener {
@@ -140,8 +140,8 @@ class AiSystemSettingsActivity : FragmentActivity() {
     }
 
     private fun systemPromptPreview(): String {
-        val message = preferences?.getSystemMessage() ?: ""
-        return if (message.isBlank()) getString(R.string.label_tap_to_set) else message
+        val effective = systemPromptsPreferences?.getEffectivePrompt()
+        return effective?.title ?: getString(R.string.system_prompt_none)
     }
 
     override fun onAttachedToWindow() {

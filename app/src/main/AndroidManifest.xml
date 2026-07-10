@@ -116,6 +116,18 @@
         </activity>
 
         <activity
+            android:name=".ui.activities.SystemPromptsListActivity"
+            android:exported="false"
+            android:label="@string/title_system_prompts">
+        </activity>
+
+        <activity
+            android:name=".ui.activities.SystemPromptEditorActivity"
+            android:exported="false"
+            android:label="@string/title_system_prompts">
+        </activity>
+
+        <activity
             android:name=".ui.activities.LogitBiasConfigActivity"
             android:exported="false">
         </activity>

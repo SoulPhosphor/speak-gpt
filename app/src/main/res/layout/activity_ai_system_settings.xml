@@ -88,8 +88,8 @@
                 android:textColor="@color/text_subtitle"
                 android:textSize="14sp" />
 
-            <!-- System prompt: moved here out of the Characters hub. Still opens
-                 the existing SystemMessageDialogFragment; chat-scoped. -->
+            <!-- System prompts: opens the user's library of saved system prompts
+                 (SystemPromptsListActivity). -->
             <LinearLayout
                 android:id="@+id/row_system_prompt"
                 android:layout_width="match_parent"
@@ -112,7 +112,7 @@
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="@string/tile_system_message_title"
+                        android:text="@string/title_system_prompts"
                         android:textColor="@color/text"
                         android:textSize="16sp" />
 
@@ -122,7 +122,7 @@
                         android:layout_height="wrap_content"
                         android:ellipsize="end"
                         android:maxLines="1"
-                        android:text="@string/label_tap_to_set"
+                        android:text="@string/system_prompt_none"
                         android:textColor="@color/text_subtitle"
                         android:textSize="13sp" />
                 </LinearLayout>
@@ -131,7 +131,7 @@
                     android:layout_width="24dp"
                     android:layout_height="24dp"
                     android:layout_marginStart="12dp"
-                    android:contentDescription="@string/tile_system_message_title"
+                    android:contentDescription="@string/title_system_prompts"
                     android:src="@drawable/ic_chevron_right"
                     android:tint="@color/text_subtitle" />
             </LinearLayout>

@@ -46,6 +46,7 @@ import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
 import org.teslasoft.assistant.preferences.LogitBiasConfigPreferences
 import org.teslasoft.assistant.preferences.PersonaPreferences
 import org.teslasoft.assistant.preferences.Preferences
+import org.teslasoft.assistant.preferences.SystemPromptsPreferences
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.preferences.dto.PersonaObject
 import org.teslasoft.assistant.preferences.lorebook.LoreBookStore
@@ -64,6 +65,7 @@ import org.teslasoft.assistant.ui.activities.LogitBiasConfigListActivity
 import org.teslasoft.assistant.ui.activities.LoreBookEntriesActivity
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import org.teslasoft.assistant.ui.activities.PersonasListActivity
+import org.teslasoft.assistant.ui.activities.SystemPromptsListActivity
 import org.teslasoft.core.api.network.RequestNetwork
 
 class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
@@ -85,6 +87,9 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
 
     private var btnSelectModel: ConstraintLayout? = null
     private var btnSelectSystemMessage: ConstraintLayout? = null
+    private var btnSelectSystemPrompt: ConstraintLayout? = null
+    private var textSystemPrompt: TextView? = null
+    private var systemPromptsPreferences: SystemPromptsPreferences? = null
     private var btnSelectLogitBias: ConstraintLayout? = null
     private var btnSelectApiEndpoint: ConstraintLayout? = null
     private var btnSelectPersona: ConstraintLayout? = null
@@ -403,12 +408,21 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         }
     }
 
-    private var systemChangedListener: SystemMessageDialogFragment.StateChangesListener =
-        SystemMessageDialogFragment.StateChangesListener { prompt ->
-            preferences?.setSystemMessage(prompt)
+    // Returning from the system prompt library (pick mode): the chosen prompt is
+    // already recorded and mirrored into the global system message by the list
+    // screen, so we just refresh the label and force the chat to reload.
+    private var systemPromptActivityResultLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            updateSystemPromptLabel()
             shouldForceUpdate = true
             updateListener?.onUpdate()
         }
+    }
+
+    private fun updateSystemPromptLabel() {
+        val effective = systemPromptsPreferences?.getEffectivePrompt()
+        textSystemPrompt?.text = effective?.title ?: getString(R.string.system_prompt_none)
+    }
 
     private var modelSelectedListener: AdvancedModelSelectorDialogFragment.OnModelSelectedListener = AdvancedModelSelectorDialogFragment.OnModelSelectedListener { model ->
         preferences?.setModel(model)
@@ -517,9 +531,12 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         favoriteModelsPreferences = FavoriteModelsPreferences.getPreferences(requireContext())
         personaPreferences = PersonaPreferences.getPersonaPreferences(requireContext())
         activationPromptPreferences = ActivationPromptPreferences.getActivationPromptPreferences(requireContext())
+        systemPromptsPreferences = SystemPromptsPreferences.getSystemPromptsPreferences(requireContext())
 
         btnSelectModel = view.findViewById(R.id.btn_select_model)
         btnSelectSystemMessage = view.findViewById(R.id.btn_select_system)
+        btnSelectSystemPrompt = view.findViewById(R.id.btn_select_system_prompt)
+        textSystemPrompt = view.findViewById(R.id.text_system_prompt)
         btnSelectLogitBias = view.findViewById(R.id.btn_set_logit_biases)
         btnSelectApiEndpoint = view.findViewById(R.id.btn_select_api_endpoint)
         btnSelectPersona = view.findViewById(R.id.btn_select_persona)
@@ -592,6 +609,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         btnSelectApiEndpoint?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(activity ?: return))
         btnSelectPersona?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(activity ?: return))
         btnSelectActivation?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(activity ?: return))
+        btnSelectSystemPrompt?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(activity ?: return))
         btnSelectLoreBook?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(activity ?: return))
         bgTemperature?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(activity ?: return))
         bgTopP?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(activity ?: return))
@@ -606,6 +624,10 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         textHost?.text = if (apiEndpoint?.label != "") apiEndpoint?.label ?: getString(R.string.label_tap_to_set) else getString(R.string.label_tap_to_set)
         updatePersonaLabel(preferences?.getPersonaId() ?: "")
         updateActivationLabel(preferences?.getActivationPromptId() ?: "")
+        // Fold any pre-library system message into the library so the label names
+        // it, then show the effective (chosen or top) prompt's title.
+        preferences?.let { systemPromptsPreferences?.migrateExistingSystemMessage(it) }
+        updateSystemPromptLabel()
         renderLoreBookList()
         textLogitBiasesConfig?.text = if (preferences?.getLogitBiasesConfigId() != "") {
             logitBiasConfigPreferences?.getConfigById(preferences?.getLogitBiasesConfigId()!!)?.get("label") ?: getString(R.string.label_tap_to_set)
@@ -661,10 +683,10 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
             }
         }
 
-        btnSelectSystemMessage?.setOnClickListener {
-            val dialog = SystemMessageDialogFragment.newInstance(preferences?.getSystemMessage()!!)
-            dialog.setStateChangedListener(systemChangedListener)
-            dialog.show(parentFragmentManager, "SystemMessageDialogFragment")
+        btnSelectSystemPrompt?.setOnClickListener {
+            val intent = Intent(requireContext(), SystemPromptsListActivity::class.java)
+            intent.putExtra("pickMode", true)
+            systemPromptActivityResultLauncher.launch(intent)
         }
 
         fieldSeed?.addTextChangedListener { text ->
