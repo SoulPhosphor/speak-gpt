@@ -1394,6 +1394,7 @@
     <string name="mem_comp_delete_title">Delete companion?</string>
     <string name="mem_comp_delete_body">This removes %1$s from the memory system. Its persona/character card is not affected.</string>
     <string name="mem_comp_delete_also_memories">Also delete this companion\'s memories</string>
+    <string name="mem_comp_delete_warning">Deleting this companion will also delete all non-shared system memories associated with it.</string>
     <string name="mem_comp_deleted_toast">Companion deleted.</string>
 
     <!-- ============ Phase 5 area screens: My personas & roleplay characters ============ -->
