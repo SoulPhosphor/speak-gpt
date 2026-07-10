@@ -21,5 +21,5 @@
          card (character, NPC, world, campaign share view_card_section). One
          place to tune the line spacing for all of them (owner ask, July 10
          2026 — "a variable that's the same"). -->
-    <dimen name="card_section_gap">24dp</dimen>
+    <dimen name="card_section_gap">12dp</dimen>
 </resources>
