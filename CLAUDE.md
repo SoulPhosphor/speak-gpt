@@ -1083,22 +1083,29 @@ Everything is on-device. No cloud sync, no accounts.
   are now PRE-REVISION (each carries a ⚠️ banner): `owner_approved_rules.md`
   + the work orders describe the actual runtime since the July 2026
   rulings and the Stage 3.4 enforcer rework.
-- **Phase 6 (Archivist + Memory Assistant) is IN PROGRESS (July 8 2026, this
-  branch).** Before touching it, read the **"Addendum — modifications approved
-  in chat, July 8 2026"** at the end of `owner_approved_rules.md` (written for
-  the Phase 6 builder: Protected retired, scope definitions tightened, the
-  memory-UI restructure, the final row-icon system). The Memory Assistant
-  screen — this phase's user-facing surface — has an owner-approved
-  layout/wording + plumbing notes in
-  **`Memory System/memory_assistant_design.md`**. Both outrank the older
-  Phase 6 text wherever they disagree. Built so far: the roleplay memory
-  deletion fix (owner-assigned to this phase) and the **Archivist run engine
-  backend** (`preferences/memory/archivist/` + DB v11 run history — see the
-  storage section; drafts-only, no UI wired). NOT built, awaiting owner
-  decisions (their message, July 8 2026): the Memory Assistant screen's open
-  wording/behavior questions (design doc §3), the Pending-screen approval
-  rework (accept/edit/accept-all — owner says not designed yet), the card
-  placement flow (`isOnCard()`/book_5), and emergence proposals.
+- **Phase 6 (Archivist + Memory Assistant) is COMPLETE (built July 8–9 2026,
+  merged to `main` via PR #55, carried forward on this branch).** Before
+  touching it, read the **"Addendum — modifications approved in chat, July 8
+  2026"** at the end of `owner_approved_rules.md` (Protected retired, scope
+  definitions tightened, the memory-UI restructure, the final row-icon
+  system) and **`Memory System/memory_assistant_design.md`** for the Memory
+  Assistant screen's approved layout/wording. Both outrank the older Phase 6
+  text wherever they disagree. Built: the roleplay memory deletion fix, the
+  **Archivist run engine** (`preferences/memory/archivist/`, DB v11–v12 run
+  history + status/failure wording per `archivist_status_wording_spec.md`),
+  the **Memory Assistant screen** (`MemoryAssistantActivity`, owner-approved
+  wording, live batch progress, Recent Memory Analysis + Rerun), the
+  **Pending review mode** in the Memories browser (Accept / Delete / Edit /
+  Add to Card, the last via `convertMemoryToCardEntry`), the **card
+  placement flow** (`isOnCard()`/book_5, DB v13 suggested-card-placement
+  columns), and **rejected-draft tracking** (DB v14). Scope was finalized,
+  not left open: the Memory Assistant never creates or proposes
+  worlds/campaigns from emergence (an untargeted roleplay draft gets a
+  persistent "Needs roleplay target." note instead), and it never
+  automatically updates campaign `story_so_far`/Plot Ledger fields — see the
+  "Phase 6 scope limits (owner rulings, July 9 2026 — final)" paragraph in
+  the storage section. Remaining deferred work (Model rules merge tooling)
+  is tracked separately under Stage 4, not this phase.
 - **The roleplay layer (cards + tags) was redesigned and owner-approved
   July 6–7 2026.** `Memory System/roleplay_cards_and_tags_spec.md` is the
   authoritative spec (four two-zone cards: user RP character, NPC party
