@@ -82,7 +82,10 @@
             android:orientation="vertical"
             android:paddingHorizontal="20dp">
 
-            <!-- Zone 1 — always visibly labeled (spec §1/§8a). -->
+            <!-- Zone 1 — always visibly labeled (spec §1/§8a). Each field is a
+                 label on its own line, the box immediately under it, then one
+                 empty half-line before the next field (owner ruling, July 10
+                 2026). No floating-hint boxes. -->
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -100,116 +103,173 @@
                 android:textColor="@color/text_subtitle"
                 android:textSize="13sp" />
 
-            <com.google.android.material.textfield.TextInputLayout
-                style="?attr/textInputOutlinedDenseStyle"
+            <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:hint="@string/mem_pers_field_name">
+                android:layout_marginTop="16dp"
+                android:text="@string/mem_pers_field_name"
+                android:textColor="?attr/colorPrimary"
+                android:textSize="15sp"
+                android:textStyle="bold" />
 
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/field_card_name"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:inputType="textCapSentences"
-                    android:singleLine="true" />
-            </com.google.android.material.textfield.TextInputLayout>
-
-            <com.google.android.material.textfield.TextInputLayout
-                style="?attr/textInputOutlinedDenseStyle"
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/field_card_name"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:hint="@string/card_field_species">
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_field_box"
+                android:inputType="textCapSentences"
+                android:padding="12dp"
+                android:singleLine="true" />
 
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/field_card_species"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:gravity="top"
-                    android:inputType="textMultiLine|textCapSentences" />
-            </com.google.android.material.textfield.TextInputLayout>
+            <Space
+                android:layout_width="match_parent"
+                android:layout_height="12dp" />
 
-            <com.google.android.material.textfield.TextInputLayout
-                style="?attr/textInputOutlinedDenseStyle"
+            <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:hint="@string/card_field_class">
+                android:text="@string/card_field_species"
+                android:textColor="?attr/colorPrimary"
+                android:textSize="15sp"
+                android:textStyle="bold" />
 
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/field_card_class"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:gravity="top"
-                    android:inputType="textMultiLine|textCapSentences" />
-            </com.google.android.material.textfield.TextInputLayout>
-
-            <com.google.android.material.textfield.TextInputLayout
-                style="?attr/textInputOutlinedDenseStyle"
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/field_card_species"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:hint="@string/card_field_core_personality">
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_field_box"
+                android:gravity="top"
+                android:inputType="textMultiLine|textCapSentences"
+                android:padding="12dp" />
 
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/field_card_core_personality"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:gravity="top"
-                    android:inputType="textMultiLine|textCapSentences"
-                    android:minLines="2" />
-            </com.google.android.material.textfield.TextInputLayout>
+            <Space
+                android:layout_width="match_parent"
+                android:layout_height="12dp" />
 
-            <com.google.android.material.textfield.TextInputLayout
-                style="?attr/textInputOutlinedDenseStyle"
+            <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:hint="@string/card_field_physical_description">
+                android:text="@string/card_field_class"
+                android:textColor="?attr/colorPrimary"
+                android:textSize="15sp"
+                android:textStyle="bold" />
 
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/field_card_physical_description"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:gravity="top"
-                    android:inputType="textMultiLine|textCapSentences"
-                    android:minLines="2" />
-            </com.google.android.material.textfield.TextInputLayout>
-
-            <com.google.android.material.textfield.TextInputLayout
-                style="?attr/textInputOutlinedDenseStyle"
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/field_card_class"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:hint="@string/card_field_goals_drives">
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_field_box"
+                android:gravity="top"
+                android:inputType="textMultiLine|textCapSentences"
+                android:padding="12dp" />
 
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/field_card_goals_drives"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:gravity="top"
-                    android:inputType="textMultiLine|textCapSentences"
-                    android:minLines="2" />
-            </com.google.android.material.textfield.TextInputLayout>
+            <Space
+                android:layout_width="match_parent"
+                android:layout_height="12dp" />
 
-            <!-- NPC-only Zone 1 fields (spec §6b); GONE for the user card. -->
-            <com.google.android.material.textfield.TextInputLayout
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/card_field_core_personality"
+                android:textColor="?attr/colorPrimary"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/field_card_core_personality"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_field_box"
+                android:gravity="top"
+                android:inputType="textMultiLine|textCapSentences"
+                android:minLines="2"
+                android:padding="12dp" />
+
+            <Space
+                android:layout_width="match_parent"
+                android:layout_height="12dp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/card_field_physical_description"
+                android:textColor="?attr/colorPrimary"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/field_card_physical_description"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_field_box"
+                android:gravity="top"
+                android:inputType="textMultiLine|textCapSentences"
+                android:minLines="2"
+                android:padding="12dp" />
+
+            <Space
+                android:layout_width="match_parent"
+                android:layout_height="12dp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/card_field_goals_drives"
+                android:textColor="?attr/colorPrimary"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/field_card_goals_drives"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_field_box"
+                android:gravity="top"
+                android:inputType="textMultiLine|textCapSentences"
+                android:minLines="2"
+                android:padding="12dp" />
+
+            <Space
+                android:layout_width="match_parent"
+                android:layout_height="12dp" />
+
+            <!-- NPC-only Zone 1 field (spec §6b); GONE for the user card. The
+                 container carries the id the activity toggles. -->
+            <LinearLayout
                 android:id="@+id/layout_card_speech_style"
-                style="?attr/textInputOutlinedDenseStyle"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:hint="@string/card_field_speech_style"
+                android:orientation="vertical"
                 android:visibility="gone">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/card_field_speech_style"
+                    android:textColor="?attr/colorPrimary"
+                    android:textSize="15sp"
+                    android:textStyle="bold" />
 
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/field_card_speech_style"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:background="@drawable/bg_field_box"
                     android:gravity="top"
-                    android:inputType="textMultiLine|textCapSentences" />
-            </com.google.android.material.textfield.TextInputLayout>
+                    android:inputType="textMultiLine|textCapSentences"
+                    android:padding="12dp" />
+
+                <Space
+                    android:layout_width="match_parent"
+                    android:layout_height="12dp" />
+            </LinearLayout>
 
             <LinearLayout
                 android:id="@+id/row_card_status"
