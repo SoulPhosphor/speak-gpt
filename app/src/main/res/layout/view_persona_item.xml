@@ -74,14 +74,14 @@
             android:layout_width="42dp"
             android:layout_height="42dp"
             android:layout_marginEnd="12dp"
-            android:background="@drawable/btn_accent_tonal_selector_v7"
+            android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="@string/btn_edit_persona"
-            android:src="@drawable/ic_settings"
+            android:src="@drawable/ic_chevron_right"
             android:tooltipText="@string/btn_edit_persona"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toTopOf="parent"
-            app:srcCompat="@drawable/ic_settings" />
+            app:srcCompat="@drawable/ic_chevron_right" />
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 </androidx.constraintlayout.widget.ConstraintLayout>

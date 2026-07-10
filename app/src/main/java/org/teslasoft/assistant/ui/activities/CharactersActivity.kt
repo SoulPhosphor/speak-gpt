@@ -24,6 +24,8 @@ import android.os.Build
 import android.os.Bundle
 import android.view.WindowInsets
 import android.widget.ImageButton
+import android.widget.LinearLayout
+import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
@@ -34,7 +36,6 @@ import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.PersonaPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.theme.ThemeManager
-import org.teslasoft.assistant.ui.fragments.TileFragment
 
 class CharactersActivity : FragmentActivity() {
 
@@ -45,9 +46,10 @@ class CharactersActivity : FragmentActivity() {
     private var preferences: Preferences? = null
     private var personaPreferences: PersonaPreferences? = null
 
-    private var tilePersonas: TileFragment? = null
-    private var tileMyPersonas: TileFragment? = null
-    private var tileActivationPrompts: TileFragment? = null
+    private var rowPersonas: LinearLayout? = null
+    private var textPersonasSubtitle: TextView? = null
+    private var rowMyPersonas: LinearLayout? = null
+    private var rowActivationPrompts: LinearLayout? = null
     // Lorebooks moved to the Memory Manager (owner ruling, July 8 2026): they
     // are memory notes, so they belong with the rest of the memory system.
 
@@ -57,7 +59,7 @@ class CharactersActivity : FragmentActivity() {
             if (personaId != null) {
                 preferences?.setPersonaId(personaId)
                 preferences?.setLastUsedPersonaId(personaId)
-                tilePersonas?.updateSubtitle(getActivePersonaLabel())
+                textPersonasSubtitle?.text = getActivePersonaLabel()
             }
         }
     }
@@ -82,6 +84,10 @@ class CharactersActivity : FragmentActivity() {
 
         btnBack = findViewById(R.id.btn_back)
         actionBar = findViewById(R.id.action_bar)
+        rowPersonas = findViewById(R.id.row_personas)
+        textPersonasSubtitle = findViewById(R.id.text_personas_subtitle)
+        rowMyPersonas = findViewById(R.id.row_my_personas)
+        rowActivationPrompts = findViewById(R.id.row_activation_prompts)
 
         ThemeManager.getThemeManager().applyTheme(this, isDarkThemeEnabled() && preferences!!.getAmoledPitchBlack())
 
@@ -110,74 +116,34 @@ class CharactersActivity : FragmentActivity() {
 
         btnBack?.setOnClickListener { finish() }
 
-        initializeTiles()
+        initializeRows()
     }
 
-    private fun initializeTiles() {
-        tilePersonas = TileFragment.newInstance(
-            checked = false,
-            checkable = false,
-            enabledText = getString(R.string.tile_personas_title),
-            disabledText = null,
-            enabledDesc = getActivePersonaLabel(),
-            disabledDesc = null,
-            icon = R.drawable.ic_user,
-            disabled = false,
-            chatId = chatId,
-            functionDesc = getString(R.string.tile_personas_desc),
-            transitionName = "expand_persona_list"
-        )
+    private fun initializeRows() {
+        textPersonasSubtitle?.text = getActivePersonaLabel()
 
-        tileMyPersonas = TileFragment.newInstance(
-            checked = false,
-            checkable = false,
-            enabledText = getString(R.string.mem_pers_title_user_personas),
-            disabledText = null,
-            enabledDesc = getString(R.string.mm_user_personas_desc),
-            disabledDesc = null,
-            icon = R.drawable.ic_user,
-            disabled = false,
-            chatId = chatId,
-            functionDesc = getString(R.string.mm_user_personas_desc),
-            transitionName = null
-        )
-
-        tileActivationPrompts = TileFragment.newInstance(
-            checked = false,
-            checkable = false,
-            enabledText = getString(R.string.tile_activation_prompts_title),
-            disabledText = null,
-            enabledDesc = getString(R.string.tile_activation_prompts_desc),
-            disabledDesc = null,
-            icon = R.drawable.ic_chat,
-            disabled = false,
-            chatId = chatId,
-            functionDesc = getString(R.string.tile_activation_prompts_desc),
-            transitionName = "expand_activation_list"
-        )
-
-        supportFragmentManager.beginTransaction()
-            .replace(R.id.tile_personas_entry, tilePersonas!!)
-            .replace(R.id.tile_my_personas_entry, tileMyPersonas!!)
-            .replace(R.id.tile_activation_prompts_entry, tileActivationPrompts!!)
-            .commit()
-
-        tilePersonas?.setOnTileClickListener {
+        rowPersonas?.setOnClickListener {
             val intent = Intent(this, PersonasListActivity::class.java)
             intent.putExtra("currentPersonaId", preferences?.getPersonaId() ?: "")
             personasActivityResultLauncher.launch(intent)
         }
 
-        tileMyPersonas?.setOnTileClickListener {
+        rowMyPersonas?.setOnClickListener {
             startActivity(
                 Intent(this, org.teslasoft.assistant.ui.activities.memory.MemoryUserPersonasActivity::class.java)
                     .putExtra("chatId", chatId)
             )
         }
 
-        tileActivationPrompts?.setOnTileClickListener {
+        rowActivationPrompts?.setOnClickListener {
             startActivity(Intent(this, ActivationPromptsListActivity::class.java))
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Persona may have been edited/renamed while away.
+        textPersonasSubtitle?.text = getActivePersonaLabel()
     }
 
     private fun isDarkThemeEnabled(): Boolean {
