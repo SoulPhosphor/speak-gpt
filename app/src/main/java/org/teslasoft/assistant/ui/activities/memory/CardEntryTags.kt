@@ -46,7 +46,7 @@ object CardEntryTags {
         }
         group.visibility = View.VISIBLE
 
-        val accent = MaterialColors.getColor(group, com.google.android.material.R.attr.colorPrimary)
+        val accent = MaterialColors.getColor(group, androidx.appcompat.R.attr.colorPrimary)
         val dm = group.resources.displayMetrics
         val corner = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 4f, dm)
         val strokeW = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 1f, dm)
