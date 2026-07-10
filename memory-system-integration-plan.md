@@ -930,18 +930,69 @@ injections), `enforcer_librarian_spec.md` §Applying change-sets; D7.
   report, watch memories appear, undo one, reject a pattern, accept a
   proposal.
 
-### ☐ Phase 7 — Hardening + docs
-- End-to-end pass over `troubleshooting_guide.md`: every symptom's "where to
-  look / how to fix" must actually exist in the UI — but the guide is a
-  pre-rules document: check each workflow against `owner_approved_rules.md`
-  first and skip/flag the ones the rules removed (modes, directives,
-  always-load, autonomy dials).
-- Failure-mode sweep: mid-conversation degradation (store locked, model
-  missing, embedding load failure) never blocks generation — tier drops to
-  lore-books-only for that turn with an Event-log line.
-- CLAUDE.md fully updated: storage section (new DB + encrypted stores),
-  feature list, fragile list (enforcer assembly joins the
-  "system-message assembly" do-not-reorder warning).
+### ☑ Phase 7 — Hardening + docs
+**Verification + docs landed July 10 2026.** Phase 7 is a hardening/audit
+pass, not a feature phase — it changed NO app code, strings, or UI (owner
+constraint for this pass: any user-facing text/UI change stops and asks
+first). What it produced:
+
+- **Failure-mode sweep — PASSES (verified by code read, two independent
+  degradation layers).** Mid-conversation memory failures never block
+  generation and every path logs a diagnostic line:
+  - Enforcer `assembleTurn` is wrapped in a try/catch at its one call site
+    in `regularGPTResponse` (~ChatActivity:4250): any throw (store
+    locked/unreadable, provisioning race, internal error) degrades to the
+    classic lore-books-only path and writes a `MemoryLog` "Enforcer / error
+    / Assembly failed, lore-books-only this turn" line. `isProvisioned`
+    (the gate before the try) is a pure file-exists check and cannot throw.
+  - The lorebook gather has its own try/catch → `MemoryLog` "Lorebook
+    unavailable this turn" and continues with no lore (SQLCipher key/store
+    failure never crashes a turn).
+  - `Librarian` degrades internally to keyword/tag matching on: no usable
+    model, self-check failure, embedding-load failure, and vector-search
+    throw — each with a `MemoryLog` line (`Librarian.kt` ~150–301). So even
+    when the enforcer runs, a missing/broken embedding model yields keyword
+    retrieval rather than an exception.
+  - Transcript capture sits in the `generateResponse` `finally` and is
+    best-effort (never disturbs the turn).
+  Net: "full" tier drops to lore-books-only (or the enforcer runs with
+  keyword retrieval) on any memory-subsystem failure, always with a log
+  line — the Phase 7 acceptance criterion. (Wording note: the diagnostic
+  lands in the **Memory log** channel, the correct home for memory-system
+  diagnostics, not the Voice/Event log.)
+- **Troubleshooting-guide audit (`Memory System/troubleshooting_guide.md`)
+  — done; see the "Phase 7 audit status" appendix added to that file.**
+  Every LIVE workflow has a real UI home (Rebuild index → Advanced Memory
+  Settings; browser search / status badges / change-log → Memory Browser;
+  scope+target inspection → Memory Editor; kill switch / exclusion /
+  participation → Quick Settings + Companion detail; embedding-model manager
+  → Advanced Memory Settings; import/export → Memory Controls). The
+  workflows with NO UI home are all pre-rules: retired-by-rules (modes,
+  companion model_adaptations, Protected/handling/never_assume, the
+  harvest_generosity/pattern_harvest dials, essence/hard-limits, the
+  standing-packet "mirror drift flags") — Phase 7's instruction is to flag,
+  not build these — or superseded aspirations (a per-memory
+  guessed/tentative provenance display and contradiction-flags surfaced in
+  the run report), which the approved §7 Source model + the Phase-6 run-row
+  states replaced. The guide's pre-revision banner already warns readers;
+  the new appendix maps each symptom to EXISTS / RETIRED-BY-RULES / GAP.
+- **CLAUDE.md:** already carries the new-DB/encrypted-stores storage
+  section, the feature list, and the fragile-list entry that folds enforcer
+  assembly into the "system-message assembly" do-not-reorder warning;
+  Phase 7 only updated the roadmap status.
+
+**Surfaced to the owner, NOT built (would touch app text/UI — held for the
+owner's decision, per this pass's constraint):**
+1. `ChatActivity.notifyMemoryDegradedOnce()` still shows a one-per-process
+   **Toast** (`R.string.memory_degraded_notice`) when memory degrades. This
+   predates the July 9 2026 toast ban and is now a lingering violation. It
+   is an EXTRA courtesy notice, not part of the "never blocks + log line"
+   contract (which is met without it), so Phase 7 left it untouched. A fix
+   = convert to a persistent presentation (owner-rule work), owner to
+   approve wording/placement.
+2. The two audit GAPS (a user-facing provenance-confidence display; a
+   contradiction/"reconcile" surface in the run report) are new features
+   under the memory approval gate — owner design required before any build.
 
 ### ☐ Phase 8 — Android ⇄ Windows sync (file-based, later)
 Specs: D10; old roadmap Phase 8 merge rules.

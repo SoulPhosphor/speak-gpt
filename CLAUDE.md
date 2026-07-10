@@ -1106,6 +1106,27 @@ Everything is on-device. No cloud sync, no accounts.
   "Phase 6 scope limits (owner rulings, July 9 2026 — final)" paragraph in
   the storage section. Remaining deferred work (Model rules merge tooling)
   is tracked separately under Stage 4, not this phase.
+- **Phase 7 (Hardening + docs) is COMPLETE (July 10 2026) — a
+  verification/docs pass that changed NO app code, strings, or UI** (owner
+  constraint for the pass). Confirmed by code read that mid-conversation
+  memory failures never block generation: the enforcer `assembleTurn` call
+  in `regularGPTResponse` is try/catch-wrapped → degrades to lore-books-only
+  + a `MemoryLog` line; the lorebook gather has its own catch → no-lore + a
+  line; the `Librarian` degrades internally to keyword/tag matching (no
+  model / self-check fail / embed fail / vector-search throw), each with a
+  line — two independent degradation layers, always logged. Audited
+  `troubleshooting_guide.md` symptom-by-symptom against the current UI + the
+  owner rules and appended a "Phase 7 audit status" table to that file: live
+  workflows all have UI homes; the ones without are pre-rules (retired
+  machinery — modes / model_adaptations / Protected / handling / harvest
+  dials / essence-hard-limits / mirror-drift-flags — or superseded
+  aspirations: provenance-confidence display, contradiction-in-run-report).
+  Two findings were SURFACED to the owner, NOT built (both would touch app
+  text/UI, held for approval): (1) `notifyMemoryDegradedOnce()` still uses a
+  `Toast` (`R.string.memory_degraded_notice`) — a pre-July-9-ban leftover, an
+  extra courtesy notice not required by the never-blocks contract; (2) the
+  two audit GAPS are new features under the memory approval gate. Phase 8
+  (Android⇄Windows file-based sync) remains the only unbuilt phase.
 - **The roleplay layer (cards + tags) was redesigned and owner-approved
   July 6–7 2026.** `Memory System/roleplay_cards_and_tags_spec.md` is the
   authoritative spec (four two-zone cards: user RP character, NPC party
