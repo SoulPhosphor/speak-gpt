@@ -334,17 +334,15 @@ class CampaignDetailActivity : FragmentActivity() {
 
     private fun renderSections() {
         val container = sectionsContainer ?: return
-        val id = campaignId
-        if (id == null) {
-            textSaveFirst?.visibility = View.VISIBLE
-            container.removeAllViews()
-            return
-        }
+        // Zone 2 always shows — never hidden, even before the card is saved
+        // (owner ruling, July 10 2026).
         textSaveFirst?.visibility = View.GONE
+        val id = campaignId
 
         runOffThread {
-            val entries = MemoryStore.getInstance(this).entriesForCard(CardType.CAMPAIGN, id)
-            val bySection = entries.groupBy { it.section }
+            val bySection = if (id != null)
+                MemoryStore.getInstance(this).entriesForCard(CardType.CAMPAIGN, id).groupBy { it.section }
+            else emptyMap()
             runOnUiThread {
                 container.removeAllViews()
                 val inflater = LayoutInflater.from(this)
@@ -353,12 +351,8 @@ class CampaignDetailActivity : FragmentActivity() {
                     block.findViewById<TextView>(R.id.section_title)
                         .setText(CardEntryEditorActivity.sectionLabelRes(section))
 
-                    val rows = bySection[section].orEmpty()
-                    block.findViewById<TextView>(R.id.section_empty).visibility =
-                        if (rows.isEmpty()) View.VISIBLE else View.GONE
-
                     val list = block.findViewById<LinearLayout>(R.id.section_entries)
-                    for (entry in rows) list.addView(entryRow(inflater, list, entry))
+                    for (entry in bySection[section].orEmpty()) list.addView(entryRow(inflater, list, entry))
 
                     block.findViewById<MaterialButton>(R.id.btn_add_entry).setOnClickListener {
                         openEntryEditor(section, null)

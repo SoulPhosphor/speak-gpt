@@ -325,17 +325,15 @@ class CharacterCardActivity : FragmentActivity() {
 
     private fun renderSections() {
         val container = sectionsContainer ?: return
-        val id = cardId
-        if (id == null) {
-            textSaveFirst?.visibility = View.VISIBLE
-            container.removeAllViews()
-            return
-        }
+        // Zone 2 always shows — the structure is never hidden, even before the
+        // card is saved (owner ruling, July 10 2026).
         textSaveFirst?.visibility = View.GONE
+        val id = cardId
 
         runOffThread {
-            val entries = MemoryStore.getInstance(this).entriesForCard(cardType, id)
-            val bySection = entries.groupBy { it.section }
+            val bySection = if (id != null)
+                MemoryStore.getInstance(this).entriesForCard(cardType, id).groupBy { it.section }
+            else emptyMap()
             runOnUiThread {
                 container.removeAllViews()
                 val inflater = LayoutInflater.from(this)
@@ -344,12 +342,8 @@ class CharacterCardActivity : FragmentActivity() {
                     block.findViewById<TextView>(R.id.section_title)
                         .setText(CardEntryEditorActivity.sectionLabelRes(section))
 
-                    val rows = bySection[section].orEmpty()
-                    block.findViewById<TextView>(R.id.section_empty).visibility =
-                        if (rows.isEmpty()) View.VISIBLE else View.GONE
-
                     val list = block.findViewById<LinearLayout>(R.id.section_entries)
-                    for (entry in rows) {
+                    for (entry in bySection[section].orEmpty()) {
                         list.addView(entryRow(inflater, list, entry))
                     }
 

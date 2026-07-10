@@ -1536,9 +1536,9 @@
          Zone labels, warnings and button texts are the owner's approved words
          (roleplay_cards_and_tags_spec.md §8a, July 7 2026); field, section and
          dropdown names are the spec §6 lists verbatim. Do not reword. -->
-    <string name="card_zone1_title">Zone 1: Always Active</string>
+    <string name="card_zone1_title">Always Active</string>
     <string name="card_zone1_subtext">Included every time this card is active. Large amounts of text may affect model performance.</string>
-    <string name="card_zone2_title">Zone 2: Retrieved When Relevant</string>
+    <string name="card_zone2_title">Retrieved When Relevant</string>
     <string name="card_zone2_subtext">Used only when it matches the current conversation.</string>
     <plurals name="card_word_count">
         <item quantity="one">%1$d word</item>
