@@ -54,6 +54,32 @@ Stale onboarding docs are worse than none.
   their reply as an ordinary conversation turn. Stopping and asking in
   chat is always fine; the pop-up mechanism specifically is not.
 
+## ⚠️ OPEN OWNER PRIORITY (recorded July 10 2026): the voice pipeline is failing in daily use
+
+The owner reports the voice system keeps erroring in real use. This is not
+a routine bug: **voice is the owner's primary way of using this app** — when
+it fails they are reduced to OS dictation that garbles their words. Fixing
+this outranks all other feature work until the owner says otherwise.
+
+Standing instructions for whichever session picks this up:
+
+1. **Start by asking the owner, in a plain chat message, what the failure
+   looks like in their own words** (cuts off mid-sentence? mic never
+   re-arms? error chime? wrong or missing transcription?). Do not start
+   from a guess. Do not assert causes you have not verified — the owner
+   has caught agents doing this and it destroys trust.
+2. Get the Event log contents (the app records every loop decision,
+   failure and exit reason — see the voice diagnostics notes in this
+   file). Work from that evidence.
+3. The voice/VAD pipeline is the most fragile area in the codebase. Read
+   the commit history of the files first. Make the smallest change that
+   the evidence supports. No incidental refactors.
+4. It is fixed ONLY when the owner confirms it working on their own phone
+   via the test build. **Never report it done on any other basis.** A
+   false "done" report happened before on UI work; the owner installed
+   the app and discovered nothing had been changed. That must never
+   happen again.
+
 ## App summary
 
 Android voice/chat assistant (fork of TeslaSoft SpeakGPT, now independent —
