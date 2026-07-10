@@ -385,6 +385,14 @@ class LocalWhisperEngine private constructor() {
             var totalSamplesRead = 0L
             var lastHeartbeatSamples = 0L
             val heartbeatIntervalSamples = SAMPLE_RATE * 2L
+            // Mid-capture route watcher for the VAD (deliberately independent of
+            // the AudioHealthMonitor above — that one only exists when the Audio
+            // Health toggle is on, and a diagnostics toggle must never change
+            // loop behavior). -2 = route not sampled yet; routedDevice can be
+            // null in the first moments of a capture.
+            var vadRouteKnownId = -2
+            var vadRouteResets = 0
+            var lastVadRouteCheckSamples = 0L
             try {
                 while (isActive && isCapturing) {
                     val read = try {
@@ -407,6 +415,41 @@ class LocalWhisperEngine private constructor() {
                         audioHealthMonitor?.accept(readBuffer, read, totalSamplesRead)
 
                         if (detector != null && !vadFired) {
+                            // A mid-capture input-route change (the Bluetooth SCO
+                            // link coming up a beat after the mic opened, or a
+                            // headset dropping) hands the recording to a different
+                            // physical microphone. The handover delivers near-
+                            // silent frames and the new mic has a different noise
+                            // floor — to the detector that dead air is
+                            // indistinguishable from the user going quiet, so the
+                            // silence/no-speech timers counted straight through
+                            // the handover and cut the user off mid-sentence
+                            // (owner's Event log, July 10 2026: 11 of 27 health
+                            // frames near-zero, end-of-turn fired while they were
+                            // still talking). When the route flips, restart the
+                            // timers and recalibrate the detector so the listening
+                            // window belongs to the mic that is actually live.
+                            // Capped per turn so a flapping headset can't hold a
+                            // turn open forever. ~1s cadence, same as the health
+                            // monitor's route re-check.
+                            if (totalSamplesRead - lastVadRouteCheckSamples >= SAMPLE_RATE.toLong()) {
+                                lastVadRouteCheckSamples = totalSamplesRead
+                                val routedId = try { record.routedDevice?.id ?: -1 } catch (_: Throwable) { -1 }
+                                if (vadRouteKnownId == -2) {
+                                    vadRouteKnownId = routedId
+                                } else if (routedId != vadRouteKnownId) {
+                                    vadRouteKnownId = routedId
+                                    if (graceComplete && vadRouteResets < 2) {
+                                        vadRouteResets++
+                                        silenceSamples = 0L
+                                        preSpeechSamples = 0L
+                                        speechRunSamples = 0L
+                                        detector.reset()
+                                        if (vadLog) Log.i(TAG, "[Turn $tn] ROUTE_CHANGE: input device changed mid-capture — " +
+                                                "VAD timers reset ($vadRouteResets/2), detector recalibrating from the live mic")
+                                    }
+                                }
+                            }
                             val frameRms = if (vadLog) rmsOfShort(readBuffer, read) else 0.0
                             if (!graceComplete) {
                                 detector.accept(readBuffer, read)
