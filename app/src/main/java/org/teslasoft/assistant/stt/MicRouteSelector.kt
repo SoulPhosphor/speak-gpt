@@ -82,20 +82,36 @@ object MicRouteSelector {
             return Result(null, "built-in mic", "system default (Bluetooth routing needs Android 12+)", false)
         }
 
-        val before = label(am.communicationDevice)
+        val current = try { am.communicationDevice } catch (_: Throwable) { null }
+        val before = label(current)
         val bt = try {
             am.availableCommunicationDevices.firstOrNull { it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO }
         } catch (_: Throwable) { null }
 
         return if (bt != null) {
-            val ok = try { am.setCommunicationDevice(bt) } catch (_: Throwable) { false }
+            // Only switch when we aren't already on this headset. Re-selecting
+            // the SAME device every turn forced the OS to renegotiate the SCO
+            // link at the exact moment the mic opened — a dead-air gap that ate
+            // the start of the user's speech and burned the no-speech window
+            // against a link that wasn't live yet ("I start talking and it
+            // records none of it", "switching to Bluetooth even though it's
+            // already Bluetooth" — owner report, July 10 2026). A headset that
+            // connects or drops mid-conversation is still honoured: this
+            // re-evaluates every turn, it just no-ops when nothing changed.
+            val alreadyRouted = current != null &&
+                    current.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO && current.id == bt.id
+            val ok = if (alreadyRouted) true
+                     else try { am.setCommunicationDevice(bt) } catch (_: Throwable) { false }
             // If the OS refused the switch, capture stays on the built-in mic;
             // say so rather than claiming the headset is in use.
             Result(if (ok) bt else null, label(bt) + if (ok) "" else " (selection failed)", before, true)
         } else {
             // No headset connected: undo any SCO selection from an earlier turn
             // whose headset has since dropped, so we return to the built-in mic.
-            try { am.clearCommunicationDevice() } catch (_: Throwable) {}
+            // (Only if one is actually set — a blind clear also churns routing.)
+            if (current != null) {
+                try { am.clearCommunicationDevice() } catch (_: Throwable) {}
+            }
             Result(null, "built-in mic", before, false)
         }
     }
