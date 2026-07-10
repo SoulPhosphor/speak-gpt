@@ -80,6 +80,20 @@ Standing instructions for whichever session picks this up:
    the app and discovered nothing had been changed. That must never
    happen again.
 
+Status July 10 2026: a full pipeline read found five code-provable
+defects, fixed in commit cde5f37 (branch
+`claude/memory-update-phase-7-ss5u3t`): the per-turn slowdown
+accumulation (a full-history encrypt per streamed chunk + a tokenizer
+rebuilt per message, both on the main thread — this contradicted and
+corrects the old "no per-turn accumulation" claim, which was true only
+of LocalWhisperEngine itself), an ML Kit language-detector leak per
+spoken reply, a hands-free strand (transcription throw → mic never
+re-arms, no cue, BT route left up), and an uncaught cloud-voice
+exception that killed the process mid-readback. **The owner has NOT
+confirmed anything on-device; their symptom description and Event log
+are still needed, and this priority stays OPEN until they say their
+voice works.**
+
 ## App summary
 
 Android voice/chat assistant (fork of TeslaSoft SpeakGPT, now independent —
