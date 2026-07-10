@@ -33,7 +33,6 @@ import android.widget.Toast
 import android.window.OnBackInvokedDispatcher
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.DrawableCompat
 import androidx.fragment.app.FragmentActivity
@@ -43,11 +42,9 @@ import androidx.interpolator.view.animation.LinearOutSlowInInterpolator
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.elevation.SurfaceColors
 import org.teslasoft.assistant.R
-import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.Preferences
-import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.ui.fragments.TileFragment
 import org.teslasoft.assistant.ui.fragments.dialogs.CustomizeAssistantDialog
 import org.teslasoft.assistant.ui.fragments.dialogs.SelectImageModelFragment
@@ -60,7 +57,6 @@ import org.teslasoft.assistant.theme.ThemeManager
 
 class SettingsActivity : FragmentActivity() {
 
-    private var tileAccountFragment: TileFragment? = null
     private var tileCharacters: TileFragment? = null
     private var tileAiSystemSettings: TileFragment? = null
     private var tileMemorySystem: TileFragment? = null
@@ -91,10 +87,6 @@ class SettingsActivity : FragmentActivity() {
     private var preferences: Preferences? = null
     private var resolution = ""
     private var imageModel = ""
-    private var host = ""
-    private var apiEndpoint: ApiEndpointObject? = null
-
-    private var apiEndpointPreferences: ApiEndpointPreferences? = null
 
     private var resolutionChangedListener: SelectResolutionFragment.StateChangesListener = object : SelectResolutionFragment.StateChangesListener {
         override fun onSelected(name: String) {
@@ -175,7 +167,6 @@ class SettingsActivity : FragmentActivity() {
         transition.excludeTarget(R.id.constraintLayout17, true)
         transition.excludeTarget(R.id.activity_new_settings_title, true)
         transition.excludeTarget(R.id.btn_back, true)
-        transition.excludeTarget(R.id.tile_account, true)
         transition.excludeTarget(R.id.tile_characters, true)
         transition.excludeTarget(R.id.tile_ai_system_settings, true)
         transition.excludeTarget(R.id.tile_memory_system, true)
@@ -226,7 +217,6 @@ class SettingsActivity : FragmentActivity() {
         transition2.excludeTarget(R.id.constraintLayout14, true)
         transition2.excludeTarget(R.id.constraintLayout16, true)
         transition2.excludeTarget(R.id.constraintLayout17, true)
-        transition2.excludeTarget(R.id.tile_account, true)
         transition2.excludeTarget(R.id.tile_characters, true)
         transition2.excludeTarget(R.id.tile_ai_system_settings, true)
         transition2.excludeTarget(R.id.tile_memory_system, true)
@@ -302,13 +292,9 @@ class SettingsActivity : FragmentActivity() {
         }
 
         preferences = Preferences.getPreferences(this, chatId)
-        apiEndpointPreferences = ApiEndpointPreferences.getApiEndpointPreferences(this)
-        apiEndpoint = apiEndpointPreferences?.getApiEndpoint(this, preferences?.getApiEndpointId()!!)
 
         resolution = preferences?.getResolution() ?: "256x256"
         imageModel = preferences?.getImageModel() ?: "dall-e-3"
-
-        host = apiEndpoint?.host ?: ""
 
         reloadAmoled()
 
@@ -365,20 +351,6 @@ class SettingsActivity : FragmentActivity() {
 
     private fun createFragments1() {
         val t1 = Thread {
-            tileAccountFragment = TileFragment.newInstance(
-                checked = false,
-                checkable = false,
-                enabledText = getString(R.string.tile_profiles_title),
-                disabledText = null,
-                enabledDesc = host,
-                disabledDesc = null,
-                icon = R.drawable.ic_key,
-                disabled = false,
-                chatId = chatId,
-                functionDesc = getString(R.string.tile_profiles_desc),
-                transitionName = "expand_api_list"
-            )
-
             tileCharacters = TileFragment.newInstance(
                 checked = false,
                 checkable = false,
@@ -691,7 +663,7 @@ class SettingsActivity : FragmentActivity() {
     }
 
     private fun placeFragments() : FragmentTransaction {
-        val operation = supportFragmentManager.beginTransaction().replace(R.id.tile_account, tileAccountFragment!!)
+        val operation = supportFragmentManager.beginTransaction()
             .replace(R.id.tile_characters, tileCharacters!!)
             .replace(R.id.tile_ai_system_settings, tileAiSystemSettings!!)
             .replace(R.id.tile_memory_system, tileMemorySystem!!)
@@ -716,27 +688,9 @@ class SettingsActivity : FragmentActivity() {
         return operation
     }
 
-    private var apiEndpointActivityResultLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode == RESULT_OK) {
-            val data: Intent? = result.data
-            val apiEndpointId = data?.getStringExtra("apiEndpointId")
-
-            if (apiEndpointId != null) {
-                apiEndpoint = apiEndpointPreferences?.getApiEndpoint(this, apiEndpointId)
-                host = apiEndpoint?.host ?: ""
-                preferences?.setApiEndpointId(apiEndpointId)
-                tileAccountFragment?.updateSubtitle(host)
-            }
-        }
-    }
-
     private fun initializeLogic() {
         btnBack?.setOnClickListener {
             finishActivity()
-        }
-
-        tileAccountFragment?.setOnTileClickListener {
-            apiEndpointActivityResultLauncher.launch(Intent(this, ApiEndpointsListActivity::class.java))
         }
 
         tileCharacters?.setOnTileClickListener {

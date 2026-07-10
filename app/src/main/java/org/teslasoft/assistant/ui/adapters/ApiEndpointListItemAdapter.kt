@@ -68,7 +68,9 @@ class ApiEndpointListItemAdapter(private val dataArray: ArrayList<HashMap<String
         val item = dataArray[position]
 
         endpointLabel?.text = item["label"]
-        endpointHost?.text = item["host"]
+        // Second line shows the provider (owner decision), or nothing when the
+        // profile has no provider filled in — never the base URL.
+        endpointHost?.text = item["provider"] ?: ""
 
         ui?.setOnClickListener {
             listener?.onClick(position)

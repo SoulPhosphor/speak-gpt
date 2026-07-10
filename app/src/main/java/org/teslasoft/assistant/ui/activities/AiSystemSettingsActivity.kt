@@ -26,6 +26,7 @@ import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
@@ -33,6 +34,7 @@ import androidx.fragment.app.FragmentActivity
 import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.materialswitch.MaterialSwitch
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.SystemPromptsPreferences
 import org.teslasoft.assistant.theme.ThemeManager
@@ -58,12 +60,25 @@ class AiSystemSettingsActivity : FragmentActivity() {
     private var actionBar: ConstraintLayout? = null
     private var btnBack: ImageButton? = null
 
+    private var rowApiProfiles: LinearLayout? = null
+    private var textApiProfilesSubtitle: TextView? = null
     private var rowSystemPrompt: LinearLayout? = null
     private var textSystemPromptSubtitle: TextView? = null
     private var rowModelRules: LinearLayout? = null
     private var switchAutoApplyModelRules: MaterialSwitch? = null
 
     private var systemPromptsPreferences: SystemPromptsPreferences? = null
+    private var apiEndpointPreferences: ApiEndpointPreferences? = null
+
+    // Opening the profiles list and picking a profile also makes it the active
+    // endpoint (existing behaviour, previously handled by SettingsActivity).
+    private val apiProfilesLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == RESULT_OK) {
+            val id = result.data?.getStringExtra("apiEndpointId")
+            if (id != null) preferences?.setApiEndpointId(id)
+        }
+        textApiProfilesSubtitle?.text = activeProfileLabel()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -73,6 +88,7 @@ class AiSystemSettingsActivity : FragmentActivity() {
         chatId = intent.extras?.getString("chatId", "") ?: ""
         preferences = Preferences.getPreferences(this, chatId)
         systemPromptsPreferences = SystemPromptsPreferences.getSystemPromptsPreferences(this)
+        apiEndpointPreferences = ApiEndpointPreferences.getApiEndpointPreferences(this)
 
         bindViews()
         applyTheme()
@@ -83,6 +99,8 @@ class AiSystemSettingsActivity : FragmentActivity() {
     private fun bindViews() {
         actionBar = findViewById(R.id.action_bar)
         btnBack = findViewById(R.id.btn_back)
+        rowApiProfiles = findViewById(R.id.row_api_profiles)
+        textApiProfilesSubtitle = findViewById(R.id.text_api_profiles_subtitle)
         rowSystemPrompt = findViewById(R.id.row_system_prompt)
         textSystemPromptSubtitle = findViewById(R.id.text_system_prompt_subtitle)
         rowModelRules = findViewById(R.id.row_model_rules)
@@ -113,6 +131,7 @@ class AiSystemSettingsActivity : FragmentActivity() {
     }
 
     private fun loadValues() {
+        textApiProfilesSubtitle?.text = activeProfileLabel()
         textSystemPromptSubtitle?.text = systemPromptPreview()
         switchAutoApplyModelRules?.isChecked = preferences?.getAutoApplyModelRules() ?: true
     }
@@ -120,11 +139,16 @@ class AiSystemSettingsActivity : FragmentActivity() {
     override fun onResume() {
         super.onResume()
         // The library may have changed (selection/add/edit/delete) while away.
+        textApiProfilesSubtitle?.text = activeProfileLabel()
         textSystemPromptSubtitle?.text = systemPromptPreview()
     }
 
     private fun initLogic() {
         btnBack?.setOnClickListener { finish() }
+
+        rowApiProfiles?.setOnClickListener {
+            apiProfilesLauncher.launch(Intent(this, ApiEndpointsListActivity::class.java))
+        }
 
         rowSystemPrompt?.setOnClickListener {
             startActivity(Intent(this, SystemPromptsListActivity::class.java))
@@ -142,6 +166,16 @@ class AiSystemSettingsActivity : FragmentActivity() {
     private fun systemPromptPreview(): String {
         val effective = systemPromptsPreferences?.getEffectivePrompt()
         return effective?.title ?: getString(R.string.system_prompt_none)
+    }
+
+    /** Label of the profile currently in use, for the row subtitle. */
+    private fun activeProfileLabel(): String {
+        return try {
+            val id = preferences?.getApiEndpointId() ?: return ""
+            apiEndpointPreferences?.getApiEndpoint(this, id)?.label ?: ""
+        } catch (_: Exception) {
+            ""
+        }
     }
 
     override fun onAttachedToWindow() {

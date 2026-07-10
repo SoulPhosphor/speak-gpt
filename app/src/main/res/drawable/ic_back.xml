@@ -1,5 +1,31 @@
-<vector xmlns:android="http://schemas.android.com/apk/res/android" android:height="24dp" android:autoMirrored="true" android:tint="?attr/colorPrimary" android:viewportHeight="24" android:viewportWidth="24" android:width="24dp">
-      
-    <path android:fillColor="@android:color/white" android:pathData="M17.77,3.77l-1.77,-1.77l-10,10l10,10l1.77,-1.77l-8.23,-8.23z"/>
-    
+<!--
+  ~ Shared "back / go out" affordance for the whole app. Redrawn July 2026 as a
+  ~ LEFT-pointing DOUBLE chevron (owner decision): double chevron = go backwards,
+  ~ single chevron (ic_chevron_right) = go forward / drill in. Every screen's
+  ~ back button references this one file, so this single change re-skins them all.
+  ~ Kept auto-mirrored so it flips correctly in RTL layouts.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:autoMirrored="true"
+    android:tint="?attr/colorPrimary"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="@android:color/white"
+        android:strokeWidth="2.2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M12,5 L5,12 L12,19" />
+
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="@android:color/white"
+        android:strokeWidth="2.2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M19,5 L12,12 L19,19" />
 </vector>

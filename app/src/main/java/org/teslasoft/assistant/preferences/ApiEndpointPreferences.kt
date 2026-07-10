@@ -64,11 +64,12 @@ class ApiEndpointPreferences private constructor(private var preferences: Shared
             ?: ApiEndpointObject.DEFAULT_MAX_TOKENS
         val endSeparator = getString(id + "_end_separator", "")
         val prefix = getString(id + "_prefix", "")
+        val provider = getString(id + "_provider", "")
 
         return ApiEndpointObject(
             label, host, apiKey, chatEndpoint, authType,
             model, temperature, topP, frequencyPenalty, presencePenalty,
-            maxTokens, endSeparator, prefix
+            maxTokens, endSeparator, prefix, provider
         )
     }
 
@@ -85,6 +86,7 @@ class ApiEndpointPreferences private constructor(private var preferences: Shared
         preferences.edit { remove(id + "_max_tokens") }
         preferences.edit { remove(id + "_end_separator") }
         preferences.edit { remove(id + "_prefix") }
+        preferences.edit { remove(id + "_provider") }
         EncryptedPreferences.setEncryptedPreference(context, "api_endpoint", id + "_api_key", "null")
 
         for (listener in listeners) {
@@ -106,6 +108,7 @@ class ApiEndpointPreferences private constructor(private var preferences: Shared
         putString(id + "_max_tokens", endpoint.maxTokens.toString())
         putString(id + "_end_separator", endpoint.endSeparator)
         putString(id + "_prefix", endpoint.prefix)
+        putString(id + "_provider", endpoint.provider)
         EncryptedPreferences.setEncryptedPreference(context, "api_endpoint", id + "_api_key", endpoint.apiKey)
 
         for (listener in listeners) {

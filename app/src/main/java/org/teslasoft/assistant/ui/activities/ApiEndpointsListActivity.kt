@@ -25,7 +25,7 @@ import android.view.WindowInsets
 import android.widget.ImageButton
 import android.widget.ListView
 import android.widget.TextView
-import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.view.marginBottom
@@ -36,10 +36,8 @@ import com.google.android.material.floatingactionbutton.ExtendedFloatingActionBu
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.Preferences
-import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.adapters.ApiEndpointListItemAdapter
-import org.teslasoft.assistant.ui.fragments.dialogs.EditApiEndpointDialogFragment
 import org.teslasoft.assistant.util.Hash
 import androidx.core.graphics.drawable.toDrawable
 
@@ -57,36 +55,38 @@ class ApiEndpointsListActivity : FragmentActivity() {
 
     private var actionBar: ConstraintLayout? = null
 
-    private fun newEditDialog(endpoint: ApiEndpointObject, position: Int): EditApiEndpointDialogFragment {
-        return EditApiEndpointDialogFragment.newInstance(
-            endpoint.label,
-            endpoint.host,
-            endpoint.apiKey,
-            endpoint.chatEndpoint,
-            endpoint.authType,
-            endpoint.model,
-            endpoint.temperature,
-            endpoint.topP,
-            endpoint.frequencyPenalty,
-            endpoint.presencePenalty,
-            endpoint.maxTokens,
-            endpoint.endSeparator,
-            endpoint.prefix,
-            position
+    /** Opens the full-page editor. The editor persists everything itself and
+     *  reports back through [editorLauncher]. */
+    private val editorLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode != RESULT_OK) return@registerForActivityResult
+
+        val deleted = result.data?.getBooleanExtra("deleted", false) ?: false
+        if (deleted) {
+            // Stay on the list so the user can see the profile is gone.
+            reloadList()
+        } else {
+            // Saving a profile also selects it as the active endpoint (existing
+            // behaviour) — finish and hand the id back to the caller.
+            val label = result.data?.getStringExtra("apiEndpointLabel") ?: return@registerForActivityResult
+            finishWithActive(label)
+        }
+    }
+
+    private fun openEditor(position: Int) {
+        val label = list[position]["label"] ?: return
+        editorLauncher.launch(
+            Intent(this, ApiEndpointEditorActivity::class.java)
+                .putExtra("position", position)
+                .putExtra("label", label)
         )
     }
 
-    private fun newEmptyEndpoint(): ApiEndpointObject {
-        return ApiEndpointObject("", "", "")
-    }
-
-    private fun openEditDialog(position: Int) {
-        val label = list[position]["label"] ?: return
-        val endpoint = apiEndpointPreferences!!.getApiEndpoint(this, Hash.hash(label))
-        val dialog = newEditDialog(endpoint, position)
-        dialog.setListener(editDialogListener)
-        dialog.setCancelable(false)
-        dialog.show(supportFragmentManager, "EditApiEndpointDialogFragment")
+    private fun openNewEditor() {
+        editorLauncher.launch(
+            Intent(this, ApiEndpointEditorActivity::class.java)
+                .putExtra("position", -1)
+                .putExtra("label", "")
+        )
     }
 
     private fun finishWithActive(label: String) {
@@ -98,52 +98,11 @@ class ApiEndpointsListActivity : FragmentActivity() {
 
     private var onSelectListener: ApiEndpointListItemAdapter.OnSelectListener = object : ApiEndpointListItemAdapter.OnSelectListener {
         override fun onClick(position: Int) {
-            openEditDialog(position)
+            openEditor(position)
         }
 
         override fun onLongClick(position: Int) {
-            openEditDialog(position)
-        }
-    }
-
-    private var editDialogListener: EditApiEndpointDialogFragment.StateChangesListener = object : EditApiEndpointDialogFragment.StateChangesListener {
-        override fun onAdd(apiEndpoint: ApiEndpointObject) {
-            apiEndpointPreferences!!.setApiEndpoint(this@ApiEndpointsListActivity, apiEndpoint)
-            finishWithActive(apiEndpoint.label)
-        }
-
-        override fun onEdit(oldLabel: String, apiEndpoint: ApiEndpointObject, position: Int) {
-            if (oldLabel == "Default" && apiEndpoint.label != "Default") {
-                Toast.makeText(this@ApiEndpointsListActivity, getString(R.string.default_api_endpoint_error), Toast.LENGTH_SHORT).show()
-                return
-            }
-            apiEndpointPreferences!!.editEndpoint(this@ApiEndpointsListActivity, list[position]["label"]?: return, apiEndpoint)
-            finishWithActive(apiEndpoint.label)
-        }
-
-        override fun onDelete(position: Int, id: String) {
-            if (list != null && position >= 0 && list[position]["label"] == "Default") {
-                Toast.makeText(this@ApiEndpointsListActivity, getString(R.string.default_api_endpoint_error_delete), Toast.LENGTH_SHORT).show()
-            } else if (/* R8 fucker */ list != null && list.size > 1) {
-                apiEndpointPreferences!!.deleteApiEndpoint(this@ApiEndpointsListActivity, id)
-                reloadList()
-            } else {
-                Toast.makeText(this@ApiEndpointsListActivity, getString(R.string.api_endpoint_error_zero), Toast.LENGTH_SHORT).show()
-            }
-        }
-
-        override fun onError(message: String, position: Int) {
-            Toast.makeText(this@ApiEndpointsListActivity, message, Toast.LENGTH_SHORT).show()
-            val endpoint = if (position == -1) {
-                newEmptyEndpoint()
-            } else {
-                val label = list[position]["label"] ?: return
-                apiEndpointPreferences!!.getApiEndpoint(this@ApiEndpointsListActivity, Hash.hash(label))
-            }
-            val dialog = newEditDialog(endpoint, position)
-            dialog.setListener(this)
-            dialog.setCancelable(false)
-            dialog.show(supportFragmentManager, "EditApiEndpointDialogFragment")
+            openEditor(position)
         }
     }
 
@@ -203,6 +162,7 @@ class ApiEndpointsListActivity : FragmentActivity() {
             val map = HashMap<String, String>()
             map["label"] = i.label
             map["host"] = i.host
+            map["provider"] = i.provider
             map["apiKey"] = i.apiKey
             map["chatEndpoint"] = i.chatEndpoint
             map["authType"] = i.authType
@@ -239,10 +199,7 @@ class ApiEndpointsListActivity : FragmentActivity() {
         }
 
         btnAdd!!.setOnClickListener {
-            val dialog = newEditDialog(newEmptyEndpoint(), -1)
-            dialog.setListener(editDialogListener)
-            dialog.setCancelable(false)
-            dialog.show(supportFragmentManager, "EditApiEndpointDialogFragment")
+            openNewEditor()
         }
     }
 
