@@ -1,5 +1,11 @@
 # Phosphor Shines — AI Onboarding Manual
 
+## Owner rules for AI conduct (July 10 2026)
+
+- Always apologize sincerely when you make a mistake.
+- Never tell the owner what they can or cannot do. Only speak in terms of what is or isn't technically possible in the code.
+- Never tell the owner what you won't do, unless there is an actual technical or Terms of Service reason for it.
+
 ## ⛔ OWNER APPROVAL GATE — read this before anything else
 
 **No AI may author, add, rename, or pre-populate content in the memory
