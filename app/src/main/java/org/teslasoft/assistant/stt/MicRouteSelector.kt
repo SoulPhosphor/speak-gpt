@@ -138,6 +138,7 @@ object MicRouteSelector {
         if (dev == null) return "unavailable"
         val base = when (dev.type) {
             AudioDeviceInfo.TYPE_BUILTIN_MIC -> "built-in mic"
+            AudioDeviceInfo.TYPE_BUILTIN_EARPIECE -> "built-in earpiece"
             AudioDeviceInfo.TYPE_BLUETOOTH_SCO -> "Bluetooth SCO"
             AudioDeviceInfo.TYPE_WIRED_HEADSET -> "wired headset"
             AudioDeviceInfo.TYPE_USB_DEVICE -> "USB device"

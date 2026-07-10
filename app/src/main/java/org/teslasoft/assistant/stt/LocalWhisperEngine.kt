@@ -85,6 +85,19 @@ class LocalWhisperEngine private constructor() {
             return filtered.replace(Regex("\\s+"), " ").trim()
         }
 
+        // Digital dead air: a frame whose peak never leaves ±4 (of 32767)
+        // carried nothing at all. A live microphone in even a silent room has
+        // a noise floor well above this — the only way to get frames this flat
+        // is an input link that isn't delivering, which in practice is the
+        // Bluetooth SCO mic during its warm-up/handover after a mid-capture
+        // route switch. Those frames must not count as the user "being silent"
+        // (they kept talking; the link just wasn't live — owner cut-off report,
+        // July 10 2026: 11 of 27 health frames near-zero, end-of-turn fired
+        // mid-sentence). Capped so a genuinely dead mic still times out
+        // instead of listening forever.
+        private const val DEAD_AIR_PEAK = 4
+        private const val DEAD_AIR_SKIP_CAP_MS = 10_000L
+
         private fun rmsOfShort(buf: ShortArray, len: Int): Double {
             if (len <= 0) return 0.0
             var sum = 0.0
@@ -385,6 +398,19 @@ class LocalWhisperEngine private constructor() {
             var totalSamplesRead = 0L
             var lastHeartbeatSamples = 0L
             val heartbeatIntervalSamples = SAMPLE_RATE * 2L
+            // Mid-capture input-route tracking (~1 check/second, same pacing as
+            // AudioHealthMonitor). When the OS moves capture to a different mic
+            // mid-turn (Bluetooth SCO coming live after warm-up, or a headset
+            // dropping), the detector's calibration belongs to the OLD mic and
+            // any handover glitch must not be billed to the user as silence —
+            // so the detector recalibrates and the silence clock restarts.
+            var lastRouteCheckSamples = 0L
+            var routedDeviceId = Int.MIN_VALUE
+            // Samples excluded from the VAD clocks as digital dead air (see
+            // DEAD_AIR_PEAK); capped so a dead mic can't listen forever.
+            var deadAirSkippedSamples = 0L
+            var deadAirLogged = false
+            val deadAirSkipCapSamples = DEAD_AIR_SKIP_CAP_MS * SAMPLE_RATE / 1000
             try {
                 while (isActive && isCapturing) {
                     val read = try {
@@ -407,8 +433,47 @@ class LocalWhisperEngine private constructor() {
                         audioHealthMonitor?.accept(readBuffer, read, totalSamplesRead)
 
                         if (detector != null && !vadFired) {
+                            // Re-check which device is actually feeding capture
+                            // about once a second (cheap). On a mid-turn switch
+                            // (Bluetooth SCO coming live, a headset dropping),
+                            // recalibrate the detector for the NEW mic and
+                            // restart the silence clock: the glitch around a
+                            // handover is the link's doing, not the user's.
+                            if (totalSamplesRead - lastRouteCheckSamples >= SAMPLE_RATE) {
+                                lastRouteCheckSamples = totalSamplesRead
+                                val dev = try { record.routedDevice } catch (_: Throwable) { null }
+                                val id = dev?.id ?: -1
+                                if (routedDeviceId == Int.MIN_VALUE) {
+                                    routedDeviceId = id
+                                } else if (id != routedDeviceId) {
+                                    routedDeviceId = id
+                                    detector.reset()
+                                    silenceSamples = 0L
+                                    speechRunSamples = 0L
+                                    if (vadLog) Log.i(TAG, "[Turn $tn] ROUTE_CHANGE: input now ${MicRouteSelector.label(dev)} — detector reset, silence clock cleared")
+                                }
+                            }
                             val frameRms = if (vadLog) rmsOfShort(readBuffer, read) else 0.0
-                            if (!graceComplete) {
+                            // Digital dead air (see DEAD_AIR_PEAK): the input
+                            // link delivered nothing this frame, so no VAD clock
+                            // may advance — the same principle as the audio-time
+                            // stall note above: never invent silence the user
+                            // didn't produce. The detector isn't fed either (a
+                            // stream of true zeros would drag the energy
+                            // detector's noise floor to nothing).
+                            var framePeak = 0
+                            for (i in 0 until read) {
+                                val s = readBuffer[i].toInt()
+                                val a = if (s < 0) -s else s
+                                if (a > framePeak) framePeak = a
+                            }
+                            if (framePeak <= DEAD_AIR_PEAK && deadAirSkippedSamples < deadAirSkipCapSamples) {
+                                deadAirSkippedSamples += read
+                                if (vadLog && !deadAirLogged) {
+                                    deadAirLogged = true
+                                    Log.w(TAG, "[Turn $tn] DEAD_AIR: input delivering digital silence (peak<=$DEAD_AIR_PEAK) — VAD clocks paused (cap ${DEAD_AIR_SKIP_CAP_MS}ms)")
+                                }
+                            } else if (!graceComplete) {
                                 detector.accept(readBuffer, read)
                                 graceSamples += read
                                 preSpeechSamples += read

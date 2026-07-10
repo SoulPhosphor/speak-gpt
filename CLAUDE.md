@@ -94,6 +94,24 @@ confirmed anything on-device; their symptom description and Event log
 are still needed, and this priority stays OPEN until they say their
 voice works.**
 
+Update July 10 2026 (evening): the owner sent their symptom description
+and Event log — screen-off hands-free (their normal daily mode) (a) cut
+them off mid-sentence with no long pause, and (b) failed generation with
+[N3] "Unable to resolve host api.z.ai" while the phone reported
+`Network: none`. The log proves both mechanisms: (a) the mid-capture
+built-in→Bluetooth-SCO route switch delivered ~5s of digital dead air
+(11/27 Audio Health frames near-zero) which the VAD billed as user
+silence → end-of-turn fired mid-sentence; (b) nothing held Wi-Fi awake
+between turns (only GenerationForegroundService had a Wi-Fi lock, held
+only during responses), so the radio slept during listening and the
+next request died on DNS before Wi-Fi could wake. Fixed on branch
+`claude/server-connectivity-screen-off-z0d66y`: HandsFreeService now
+holds a session-long Wi-Fi lock, and the Whisper capture loop pauses
+the VAD clocks on digital dead-air frames (peak ≤ 4, capped at 10s per
+turn so a truly dead mic still times out) and resets the detector +
+silence clock on a mid-capture input-route change. Still awaiting owner
+on-device confirmation — the priority stays OPEN.
+
 ## App summary
 
 Android voice/chat assistant (fork of TeslaSoft SpeakGPT, now independent —
@@ -156,7 +174,11 @@ files may linger on old devices, unread.
 - `ui/adapters/chat/ChatAdapter.kt` — message rendering (Markwon markdown,
   selectable text, copy/edit/speak buttons, bulk select).
 - `service/HandsFreeService.kt` — microphone-typed foreground service for
-  screen-off hands-free conversation (wake lock + notification). Its
+  screen-off hands-free conversation (wake lock + Wi-Fi lock + notification).
+  The Wi-Fi lock spans the WHOLE session (added July 10 2026): the generation
+  service's Wi-Fi lock only covers each response, so between turns — screen
+  off, just listening — Android could put the Wi-Fi radio to sleep and the
+  next request died on DNS ("Unable to resolve host", `Network: none`). Its
   notification carries a **Hang Up** action (see below).
 - `service/GenerationForegroundService.kt` — **mediaPlayback**-typed foreground
   service (was dataSync; switched so it can legitimately span audio readback,

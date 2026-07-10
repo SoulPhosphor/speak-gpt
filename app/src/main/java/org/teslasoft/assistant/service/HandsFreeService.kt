@@ -24,6 +24,7 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
@@ -33,11 +34,18 @@ import org.teslasoft.assistant.ui.activities.ChatActivity
 
 /**
  * Foreground service that keeps the hands-free conversation alive while the
- * screen is off. Three jobs:
+ * screen is off. Four jobs:
  *   1. Run as a foregroundServiceType="microphone" service so the OS lets the
  *      mic stay open from the background.
  *   2. Hold a partial wake lock so the CPU doesn't sleep mid-recognition.
- *   3. Show a persistent notification (required by the OS for foreground
+ *   3. Hold a Wi-Fi lock for the WHOLE conversation, not just while a reply
+ *      streams. GenerationForegroundService's Wi-Fi lock covers each response,
+ *      but between turns — while the app just listens with the screen off —
+ *      nothing used to stop Android putting the Wi-Fi radio to sleep. The
+ *      radio would then be down when the next turn's request went out, and the
+ *      request died on DNS before Wi-Fi could wake ("Unable to resolve host",
+ *      Network: none — owner report, July 10 2026, screen-off hands-free).
+ *   4. Show a persistent notification (required by the OS for foreground
  *      services) that lets the user tap back into the chat.
  */
 class HandsFreeService : Service() {
@@ -68,6 +76,7 @@ class HandsFreeService : Service() {
     }
 
     private var wakeLock: PowerManager.WakeLock? = null
+    private var wifiLock: WifiManager.WifiLock? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -104,6 +113,7 @@ class HandsFreeService : Service() {
         }
 
         acquireWakeLock()
+        acquireWifiLock()
         // NOT sticky: if the OS kills this service (or the app is closed), it must
         // stay dead. START_STICKY would have Android resurrect it with a null
         // intent and no Activity driving it — a zombie that re-holds the mic
@@ -122,11 +132,32 @@ class HandsFreeService : Service() {
         }
     }
 
-    private fun releaseWakeLock() {
+    @Suppress("DEPRECATION")
+    private fun acquireWifiLock() {
+        if (wifiLock?.isHeld == true) return
+        try {
+            val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+            // FULL_HIGH_PERF is deprecated but is the only mode that keeps
+            // Wi-Fi out of power-save while the screen is off — same choice,
+            // for the same reason, as GenerationForegroundService. Held for
+            // the whole listening session so the radio is already awake when
+            // a turn's request goes out. Cellular is unaffected either way.
+            wifiLock = wm.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, WAKE_LOCK_TAG).apply {
+                setReferenceCounted(false)
+                acquire()
+            }
+        } catch (_: Exception) { /* no Wi-Fi service; nothing to hold */ }
+    }
+
+    private fun releaseLocks() {
         try {
             if (wakeLock?.isHeld == true) wakeLock?.release()
         } catch (_: Exception) { /* ignore */ }
         wakeLock = null
+        try {
+            if (wifiLock?.isHeld == true) wifiLock?.release()
+        } catch (_: Exception) { /* ignore */ }
+        wifiLock = null
     }
 
     private fun createChannelIfNeeded() {
@@ -187,7 +218,7 @@ class HandsFreeService : Service() {
     }
 
     override fun onDestroy() {
-        releaseWakeLock()
+        releaseLocks()
         super.onDestroy()
     }
 }
