@@ -40,7 +40,7 @@ import org.teslasoft.assistant.ui.adapters.memory.MemoryRow
 class MemoryPartyMembersActivity : MemoryScreenActivity() {
 
     override fun screenTitle(): String = getString(R.string.mem_party_title)
-    override fun showSearch(): Boolean = true
+    override fun showSearch(): Boolean = false
     override fun addButtonText(): String = getString(R.string.mem_party_fab_add)
 
     /* ------------------------------ data ------------------------------ */

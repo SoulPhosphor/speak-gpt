@@ -31,7 +31,7 @@ import org.teslasoft.assistant.ui.adapters.memory.MemoryRow
 class MemoryCampaignsActivity : MemoryScreenActivity() {
 
     override fun screenTitle(): String = getString(R.string.mem_world_campaigns_title)
-    override fun showSearch(): Boolean = true
+    override fun showSearch(): Boolean = false
     override fun addButtonText(): String = getString(R.string.mem_world_campaign_add)
 
     override fun loadRows(query: String): List<MemoryRow> {

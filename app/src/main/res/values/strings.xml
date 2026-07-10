@@ -1627,7 +1627,7 @@
     <string name="card_section_backstory">Backstory</string>
     <string name="card_section_languages">Languages</string>
     <string name="card_section_notes">Notes</string>
-    <string name="card_btn_add_entry">Add Entry</string>
+    <string name="card_btn_add_entry">Add</string>
     <string name="card_no_entries">No entries yet.</string>
     <string name="card_archive_header">Archive</string>
 
