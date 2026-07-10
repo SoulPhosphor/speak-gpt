@@ -75,7 +75,14 @@
         <activity
             android:name=".ui.activities.ApiEndpointsListActivity"
             android:exported="false"
-            android:label="@string/title_api_endpoints">
+            android:label="@string/title_api_endpoint_profiles">
+        </activity>
+
+        <activity
+            android:name=".ui.activities.ApiEndpointEditorActivity"
+            android:exported="false"
+            android:label="@string/title_api_endpoint_profiles"
+            android:windowSoftInputMode="adjustResize">
         </activity>
 
         <activity

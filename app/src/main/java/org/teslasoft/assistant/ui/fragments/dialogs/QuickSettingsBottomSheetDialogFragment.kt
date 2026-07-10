@@ -1141,7 +1141,8 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
             presencePenalty = preferences?.getPresencePenalty() ?: currentProfile.presencePenalty,
             maxTokens = preferences?.getMaxTokens() ?: currentProfile.maxTokens,
             endSeparator = preferences?.getEndSeparator() ?: currentProfile.endSeparator,
-            prefix = preferences?.getPrefix() ?: currentProfile.prefix
+            prefix = preferences?.getPrefix() ?: currentProfile.prefix,
+            provider = currentProfile.provider
         )
         apiEndpointPreferences?.setApiEndpoint(requireContext(), updated)
         android.widget.Toast.makeText(requireContext(), R.string.msg_saved_to_profile, android.widget.Toast.LENGTH_SHORT).show()

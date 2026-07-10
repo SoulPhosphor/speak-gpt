@@ -31,7 +31,12 @@ class ApiEndpointObject(
     var presencePenalty: Float = DEFAULT_PRESENCE_PENALTY,
     var maxTokens: Int = DEFAULT_MAX_TOKENS,
     var endSeparator: String = "",
-    var prefix: String = ""
+    var prefix: String = "",
+    /* Optional, free-text provider name (e.g. "OpenAI", "z.ai"). Never required;
+     * shown in the profiles list in place of the base URL when the user filled it
+     * in. Kept at the END of the constructor so existing positional callers stay
+     * valid. */
+    var provider: String = ""
 ) {
     companion object {
         const val DEFAULT_CHAT_ENDPOINT = "/chat/completions"
