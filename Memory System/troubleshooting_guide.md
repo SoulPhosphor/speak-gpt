@@ -46,3 +46,46 @@ Read the **run report** after each Archivist run — it's short on purpose. If i
 3. **Re-derive from transcripts** — the nuclear option: on a fresh store, re-import your seed, then re-run the Archivist over the retained transcript archive. Slow, but the raw material of nearly everything survives in the transcripts.
 
 If a fix requires editing code rather than records, it's a repo issue — capture the run report and the specific record IDs involved; those two things are what an AI debugging the code will need from you.
+
+---
+
+## Phase 7 audit status (July 10 2026)
+
+This appendix is the Phase 7 "end-to-end pass": each symptom above checked
+against the CURRENT app UI and against `owner_approved_rules.md`. Verdicts:
+**EXISTS** (a real screen/control does the job — path given), **RETIRED** (the
+machinery the symptom names was removed by the owner's July 6–8 2026 rulings;
+the advice is stale, not a bug), **GAP** (a live concern with no UI home yet —
+surfaced to the owner, not silently built). No app code or strings were
+changed by this pass.
+
+Screen paths use the current navigation: **Settings → Memory Manager** opens
+the hub (Memory Browser · Memory Assistant · Lorebooks · Memory Controls ·
+Advanced Memory Settings).
+
+| Symptom (above) | Verdict | Where it lives now / why retired |
+|---|---|---|
+| A companion forgot something — search, status, change log | **EXISTS** | Memory Browser (search + status badges; superseded/archived reachable via the Filters panel, since Status defaults to Active); per-row **History** shows the change log. |
+| …index may be stale → Rebuild index | **EXISTS** | Memory Manager → **Advanced Memory Settings** → Rebuild Index. (Guide says "Settings → Rebuild memory index"; that's the real path.) |
+| Untrue statement — check provenance (guessed/tentative vs user_stated) | **GAP** (display) / EXISTS (edit/reject) | Editing/deleting a memory EXISTS (Browser row → Edit / Delete). But a per-memory *confidence* marker is not surfaced — the approved model (§7) shows only **Source** = Entered by hand / Imported / Learned from chat (a Browser filter). Finer "guessed/tentative" is pre-rules; superseded by §7 Source. |
+| Wrong tone → mode signals list | **RETIRED** | Modes retired (rules §15). No Modes screen exists; the model-drift remedy is now **Model rules** (AI System Settings). |
+| One API plays a companion wrong → model_adaptations note | **RETIRED** | Removed from the companion page (Approved UI decisions — "Companion page surgery"). Use **Model rules** (§11) keyed to the model string instead. |
+| Same fact twice / two versions disagree — contradiction flagged in run report | **GAP** | Archiving the worse memory EXISTS (Browser). But the run report (Memory Assistant → Recent Memory Analysis) surfaces counts/status, not contradiction flags or a reconcile action. Pre-rules aspiration; not built. |
+| A companion knows another's private business | **EXISTS** (inspect) | Scope + targets are inspectable/editable in the Memory Editor; a genuine leak past that is a code bug to report, as the guide says. |
+| Protected topic handled badly → handling / never_assume lists | **RETIRED** | "Protected" retired (addendum §2). No handling/never_assume UI. Care-notes now live inline in the memory's own text. |
+| Archivist harvesting weird patterns — reject; harvest_generosity / pattern_harvest dials | **RETIRED** (dials) / EXISTS (reject) | Reject EXISTS (Browser **Pending** mode: Accept/Delete/Edit). The autonomy *dials* were collapsed to toggles — Memory Controls has "Suggest roleplay card updates" + a "Maximum suggestions per conversation" cap; no generosity/harvest-mode dials. |
+| No memories being created (pending / excluded / participation / kill switch) | **EXISTS** (all four) | Run the Archivist → Memory Assistant → Analyze. Excluded chats + kill switch → Quick Settings ("Archive this chat" / "Use memory"). memory_participation → Companion detail (full / global_only / none). |
+| Fiction bleeding into real life — world_id tag | **EXISTS** | Memory Editor scope picker (World/Campaign/RP-character + target picker); untargeted roleplay drafts are flagged "Needs roleplay target." |
+| Slow/battery-hungry after tier 2 → switch quantization, rebuild | **EXISTS** | Advanced Memory Settings → Librarian model rows (download/delete per variant, same flow as Whisper) + Rebuild Index. |
+| Personality drifting — proposals / change log / essence / hard limits / mirror drift flags | **MIXED** | Proposals → Pending mode **EXISTS**; change log **EXISTS**. Essence/hard-limits **RETIRED** from the companion page. The standing-packet "mirror drift flags" surface **RETIRED** (StandingPacketManager deleted in Stage 3.4) — no drift-flag view exists. |
+| Escalation: Rebuild index | **EXISTS** | Advanced Memory Settings. |
+| Escalation: Restore from export | **EXISTS** | Memory Controls → Import (+ rotating auto-backups / manual export). |
+| Escalation: Re-derive from transcripts → "re-import your seed" | **PARTIAL** | Import (user's own export) + retained transcripts + rerun Archivist works. But there is **no bundled seed** to re-import (removed by owner decision — law 8, "no AI pre-authors"); the user supplies their own export file. |
+
+**Screens a reader of the old guide would hunt for but that are gone**
+(deleted per rules; only dormant tables remain, some still shown as
+row-counts in Advanced Memory Settings → System Status, which can mislead):
+Modes, Directives, Entities, Owner Profile, Protect/Unprotect, the
+companion essence/hard-limits/model_adaptations fields, the
+harvest_generosity/pattern_harvest dials, the mirror/drift-flags view, and
+the old ten-area Memory hub (now Memory Manager → Memory Browser).
