@@ -278,6 +278,11 @@ class CardEntryEditorActivity : FragmentActivity() {
             findViewById<AutoCompleteTextView>(R.id.field_entry_tag_input)
         )
 
+        // "Add" button (owner redesign): attach whatever is typed, same as the
+        // keyboard's Done action already does.
+        findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_entry_tag_add)
+            ?.setOnClickListener { tagChips?.confirmText() }
+
         titleView?.setText(if (entryId == null) R.string.entry_title_new else R.string.entry_title_edit)
         sectionLabel?.setText(sectionLabelRes(section))
 

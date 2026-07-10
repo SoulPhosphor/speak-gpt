@@ -1687,6 +1687,8 @@
     <!-- Roleplay tags on entries (spec §3) -->
     <string name="card_tags_label">Tags</string>
     <string name="card_tags_hint">Add a tag</string>
+    <string name="card_tags_add_header">Add Tags</string>
+    <string name="card_tags_add_desc">Tags connect and help organize shared concepts. They can be used to view a page with all information from a single tag shared within roleplay areas.</string>
 
     <!-- Quick Settings campaign behavior (3.6c; wording owner-approved
          July 7 2026 — spec §8b. Do not reword.) -->

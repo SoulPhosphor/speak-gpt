@@ -201,22 +201,24 @@
                 android:visibility="gone" />
         </LinearLayout>
 
-        <!-- Trailing action: edit-square (replaces the old cog per owner ruling,
-             July 8 2026). Only visible for rows that have a per-row menu. -->
+        <!-- Trailing action: a plain side chevron (owner ruling, July 2026 —
+             replaces the edit-square across every memory list). Only visible for
+             rows that have a per-row action. -->
         <ImageButton
             android:id="@+id/btn_row_action"
             android:layout_width="42dp"
             android:layout_height="42dp"
             android:layout_marginEnd="12dp"
-            android:background="@drawable/btn_accent_tonal_selector_v7"
+            android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="@string/mem_row_edit"
-            android:src="@drawable/ic_edit_square"
+            android:src="@drawable/ic_chevron_right"
             android:tooltipText="@string/mem_row_edit"
             android:visibility="gone"
+            app:tint="?attr/colorPrimary"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toTopOf="parent"
-            app:srcCompat="@drawable/ic_edit_square" />
+            app:srcCompat="@drawable/ic_chevron_right" />
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 </androidx.constraintlayout.widget.ConstraintLayout>

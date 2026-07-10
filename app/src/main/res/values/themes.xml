@@ -14,6 +14,21 @@
         <item name="android:typeface">sans</item>
         <item name="android:fontFamily">@font/roboto_ttf</item>
         <item name="bottomSheetDialogTheme">@style/ThemeOverlay.App.BottomSheetDialog</item>
+        <!-- Owner ruling (July 2026): buttons are semi-square, not pills. This
+             is the single shared shape for every default MaterialButton (Save,
+             Add, etc.) across the app; buttons that set an explicit style keep
+             theirs. -->
+        <item name="materialButtonStyle">@style/App.Button</item>
+    </style>
+
+    <!-- Default filled button, reshaped to 4dp corners (owner: no pills). -->
+    <style name="App.Button" parent="Widget.Material3.Button">
+        <item name="shapeAppearanceOverlay">@style/ShapeAppearance.App.Button</item>
+    </style>
+
+    <style name="ShapeAppearance.App.Button" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">4dp</item>
     </style>
 
     <style name="BottomNavigationView.ActiveIndicator" parent="Widget.Material3.BottomNavigationView.ActiveIndicator">
