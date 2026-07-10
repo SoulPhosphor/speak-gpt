@@ -26,6 +26,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.provider.Settings
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
@@ -54,7 +55,6 @@ import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.navigation.NavigationBarView
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
-import org.teslasoft.assistant.preferences.DeviceInfoProvider
 import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.SecurePrefs
@@ -96,7 +96,7 @@ class MainActivity : FragmentActivity() {
         "monochrome_background_for_chat_list" to false
     )
 
-    @SuppressLint("SetTextI18n")
+    @SuppressLint("SetTextI18n", "HardwareIds")
     override fun onCreate(savedInstanceState: Bundle?) {
         if (Build.VERSION.SDK_INT >= 30) {
             enableEdgeToEdge(
@@ -193,8 +193,6 @@ class MainActivity : FragmentActivity() {
         }
 
         Thread {
-            DeviceInfoProvider.assignInstallationId(this)
-
             runOnUiThread {
                 navigationBar!!.setOnItemSelectedListener(NavigationBarView.OnItemSelectedListener { item: MenuItem ->
                     when (item.itemId) {
@@ -215,8 +213,7 @@ class MainActivity : FragmentActivity() {
                     return@OnItemSelectedListener false
                 })
 
-                val installationId = DeviceInfoProvider.getInstallationId(this)
-                val androidId = DeviceInfoProvider.getAndroidId(this)
+                val androidId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
 
                 if (preferences!!.getDebugMode()) {
                     btnDebugger?.visibility = View.VISIBLE
@@ -245,7 +242,7 @@ class MainActivity : FragmentActivity() {
                     val pm = packageManager
                     val pi = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) { pm.getInstallSourceInfo(packageName).installingPackageName } else { "<Current OS version is not supported>" }
 
-                    devIds?.text = "${devIds?.text}\n\nInstallation ID: $installationId\nAndroid ID: $androidId"
+                    devIds?.text = "${devIds?.text}\n\nAndroid ID: $androidId"
                     devIds?.text = "${devIds?.text}\nApp Version: ${packageManager.getPackageInfo(packageName, 0).versionName} (${packageManager.getPackageInfo(packageName, 0).versionCode})"
                     devIds?.text = "${devIds?.text}\nKotlin language version: ${KotlinVersion.CURRENT}"
                     devIds?.text = "${devIds?.text}\nJava language version: 21 (LTS)"

@@ -329,15 +329,5 @@ class Logger {
             ApplicationExitInfo.REASON_FREEZER -> "frozen by the system"
             else -> "ended for an unknown reason (code $reason)"
         }
-
-        /**
-         * Delete all logs
-         * */
-        fun deleteAllLogs(context: Context) {
-            clearCrashLog(context)
-            clearEventLog(context)
-            clearMemoryLog(context)
-            clearPerformanceLog(context)
-        }
     }
 }

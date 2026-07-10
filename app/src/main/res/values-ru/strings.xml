@@ -179,7 +179,6 @@
     <string name="control_center_experimental_features">Экспериментальные функции</string>
     <string name="control_center_other">Прочее</string>
     <string name="control_center_debug">Отладка</string>
-    <string name="control_center_privacy">Конфиденциальность</string>
     <string name="control_center_text_generation">Генерация текста</string>
     <string name="control_center_audio_and_voice_recognition">Аудио и распознавание голоса</string>
     <string name="btn_remove_ads">Убрать рекламу</string>
@@ -363,14 +362,6 @@
     <string name="tile_amoled_mode_title">Режим AMOLED</string><string name="tile_amoled_mode_desc">Эта функция позволяет включить режим AMOLED для поддерживаемых дисплеев. Это может значительно сэкономить заряд батареи. Режим AMOLED доступен только в темной теме.</string>
     <string name="tile_assistant_customize_title">Настройка помощника</string>
     <string name="tile_assistant_customize_desc">Эта функция позволяет изменить имя и аватар помощника для отдельного чата или глобально.</string>
-    <string name="tile_delete_data_title">Удаление данных</string>
-    <string name="tile_delete_data_subtitle">Удаление данных диагностики</string>
-    <string name="tile_delete_data_desc">Эта функция позволяет удалить все собранные диагностические данные SpeakGPT. Это действие не может быть отменено.</string>
-    <string name="tile_uad_title">Использование и диагностика</string>
-    <string name="tile_assign_iid_title">Получить новый идентификатор установки</string>
-    <string name="tile_assign_iid_desc">Эта функция позволяет получить новый идентификатор установки.</string>
-    <string name="tile_revoke_authorization_title">Отзыв авторизации</string>
-    <string name="tile_revoke_authorization_desc">Эта функция позволяет отозвать авторизацию. После отзыва авторизации приложение прекратит сбор данных и удалит данные с серверов. Ведение журнала будет отключено, что усложнит поиск и устранение ошибок.</string>
     <string name="tile_crash_log_title">Журнал сбоев</string>
     <string name="tile_crash_log_desc">Эта функция позволяет просмотреть журнал сбоев.</string>
     <string name="tile_ads_log_title">Журнал рекламы</string>
@@ -387,21 +378,7 @@
     <string name="label_clear_chat">Очистить чат</string>
     <string name="msg_clear_chat">Вы уверены? Это действие нельзя отменить.</string>
     <string name="submsg_chat_cleared">Чат очищен</string>
-    <string name="submsg_data_deletion">Данные удалены</string>
-    <string name="label_delete_data">Удалить данные</string>
-    <string name="msg_delete_data">Вы уверены, что хотите удалить ваши данные? После отправки запроса на удаление данных все журналы будут удалены, и все аналитические данные, отправленные нам, будут удалены с наших серверов. Вы хотите продолжить?</string>
-    <string name="label_uad">Использование и диагностика</string>
-    <string name="msg_uad">Вы хотите отказаться от сбора данных об использовании и диагностике? Эти данные используются для улучшения SpeakGPT и исправления ошибок. Обратите внимание, что SpeakGPT может все еще создавать логи на вашем устройстве. Логи сохраняются локально. Если вы хотите предотвратить запись логов этим приложением, пожалуйста, отзовите авторизацию. Вы хотите отказаться сейчас?</string>
-    <string name="label_uad_optin">Использование и диагностика</string>
-    <string name="mgs_uad_optin">Хотите включить сбор данных об использовании и диагностике? Мы можем собирать журналы сбоев, информацию об использовании, события для улучшения SpeakGPT и исправления ошибок.</string>
-    <string name="btn_agree_and_enable">Согласиться и включить</string>
     <string name="cancel">Отмена</string>
-    <string name="label_revoke_authorization">Отозвать авторизацию</string>
-    <string name="label_iid_assign">Получить новый идентификатор установки</string>
-    <string name="msg_iid_assign">После этого действия будет назначен новый идентификатор установки. Авторизация будет предоставлена, и SpeakGPT будет продолжать записывать логи. Логи не будут отправляться нам, если не включена опция \'Использование и диагностика\'. Вы уверены, что хотите продолжить?</string>
-    <string name="btn_iid_assign">Получить новый ID</string>
-    <string name="label_iid_reset">Сбросить идентификатор установки?</string>
-    <string name="msg_iid_reset">Хотите дополнительно сбросить идентификатор установки? После этого все собранные о вашем устройстве данные больше не будут с ним связаны.</string>
     <string name="btn_reset">Сброс</string>
     <string name="label_provided_by">Предоставлено:</string>
     <string name="label_untitled_chat">Беседа без названия</string>

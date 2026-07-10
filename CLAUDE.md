@@ -58,6 +58,17 @@ transcription (native whisper.cpp), VAD-driven mic loop, TTS readback with the
 screen off. Recent additions: a persona-scoped **lorebook memory system** and
 a foreground service that keeps generation alive in the background.
 
+The old **telemetry/installation-id system is gone** (July 2026): the Settings
+"Privacy" section and its four tiles (Delete data, Revoke authorization, Usage
+and diagnostics, Get new installation ID), `DeviceInfoProvider`, the
+`installation_id`/`device_info` and `consent`/`usage` prefs, and
+`Logger.deleteAllLogs` were all removed — they drove servers that no longer
+exist. Nothing mints or reads an installation id anymore; logs stay purely
+local and are cleared only from the Logs screen. The debug-only device-info
+panel and the crash report now show just the Android ID (read inline via
+`Settings.Secure.ANDROID_ID`), no installation id. Stale `device_info`/`consent`
+files may linger on old devices, unread.
+
 - Package: `org.teslasoft.assistant` (namespace) / app id `com.soulphosphor.phosphorshines`
 - Single module `:app`, Kotlin + some C++ (whisper.cpp, WebRTC VAD via JNI)
 - minSdk 28, target/compile SdK 36, Java 21, arm64-v8a only (owner runs a Pixel 8)
@@ -514,8 +525,9 @@ Everything is on-device. No cloud sync, no accounts.
   when adding a new loop exit path, log it there or failures become
   undiagnosable. The per-turn VAD diagnostics line (`logVadDiagnostics`)
   follows the same toggles (`voiceDiagnosticsEnabled()`), so logging off means
-  no VadDiag spam. `Logger` is local-only (no telemetry); it must not be gated
-  on the installation id.
+  no VadDiag spam. `Logger` is local-only (no telemetry); it must never be
+  gated on any consent/telemetry flag (the old installation-id gate, and the
+  whole installation-id/consent system, were removed July 2026).
   Advanced Voice Settings screen (`VoiceAdvancedSettingsActivity`, plain
   rows not tiles, reached from a full-width tile in Voice settings — the VAD
   *logging* toggles are NOT here, they're in Audio Debugging): VAD
@@ -929,8 +941,8 @@ Everything is on-device. No cloud sync, no accounts.
     (native decode caps threads at 4, `no_context` defaults on), so the cause is an
     emergent system effect these logs are built to localize.
   All toggles are global prefs; the logs are local-only and intentionally always
-  reachable (not gated on the installation id) — don't reintroduce that gate when
-  restyling. **Audio Health** is a separate hands-free diagnostic from VAD
+  reachable — never add a telemetry/consent gate (the old installation-id gate,
+  and the installation-id/consent system it belonged to, were removed July 2026). **Audio Health** is a separate hands-free diagnostic from VAD
   logging (`getAudioHealthLogging`): per-turn
   microphone input-health stats (frames, RMS/peak levels, near-silent/clipped
   counts, sample rate, channels, input route + mid-capture route changes) with
