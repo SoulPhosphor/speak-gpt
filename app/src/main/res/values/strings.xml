@@ -975,6 +975,7 @@
     <!-- Memory system Phase 2: transcript capture, review markers, kill switch -->
     <string name="label_memory">Memory</string>
     <string name="label_chat_memory_enabled">Use memory in this chat</string>
+    <string name="label_chat_lorebooks_enabled">Use lore books in this chat</string>
     <string name="label_chat_memory_excluded">Archive this chat</string>
     <string name="memory_marker_pending">Memory: waiting for review</string>
     <string name="memory_marker_partial">Memory: partially archived</string>

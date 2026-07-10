@@ -4227,10 +4227,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             }
         }
 
-        // Memory engine tier (Phase 4): "none" = no injected memory of either
-        // kind, "lorebooks" = the classic tier below, "full" = the enforcer
-        // assembly (which renders the lore matches inside its own message).
-        val memoryEngine = preferences!!.getMemoryEngine()
+        // QUICK SETTINGS IS AUTHORITATIVE (owner ruling, July 10 2026): the
+        // per-chat "Use lore books" and "Use memory" switches decide, each on
+        // its own, what this chat injects — any combination works. The global
+        // Memory engine picker only supplies the DEFAULTS for chats that never
+        // touched their switches (see the tri-state getters in Preferences).
+        val loreBooksEnabled = preferences?.getChatLoreBooksEnabled() == true
 
         // Lorebook (memory system): match the user's latest message against the
         // persona's core lorebook (always active when the persona is used) plus
@@ -4241,7 +4243,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         // -1 = the store threw (unavailable); the debug view distinguishes that
         // from "searched N books and matched nothing" and "had no active books".
         var activeLoreBookCount = -1
-        if (memoryEngine != "none") {
+        if (loreBooksEnabled) {
             try {
                 val loreStore = LoreBookStore.getInstance(this)
                 val activeBookIds = LinkedHashSet<String>()
@@ -4275,13 +4277,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         }
 
         // Full memory system (Phase 4 enforcer): assemble the per-turn memory
-        // message — standing packet, modes, retrieved memories with protection
-        // handling, lore notes, scene — as ONE separate system message after
-        // the stable base prompt. The kill switch skips the store entirely
-        // (lorebooks are user-authored app material and still apply), and ANY
-        // failure degrades to the classic lore path below: never block a turn.
+        // message — retrieved memories, lore notes, scene — as ONE separate
+        // system message after the stable base prompt. Gated on the per-chat
+        // "Use memory" switch alone (Quick Settings is God; the engine tier is
+        // only its default). With lore books off for the chat, allLoreMatches
+        // is empty, so the assembly contains no lore notes — the switches stay
+        // independent. ANY failure degrades to the classic lore path below:
+        // never block a turn.
         var memoryAssembly: String? = null
-        if (memoryEngine == "full" && preferences?.getChatMemoryEnabled() == true &&
+        if (preferences?.getChatMemoryEnabled() == true &&
             MemoryStore.isProvisioned(this)
         ) {
             memoryAssembly = try {
@@ -4494,6 +4498,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     val activeLoreBookIds = preferences.getActiveLoreBookIds()
                     val loreBooksSeeded = preferences.isLoreBooksSeeded()
                     val chatMemoryEnabledRaw = preferences.getChatMemoryEnabledRaw()
+                    val chatLoreBooksEnabledRaw = preferences.getChatLoreBooksEnabledRaw()
                     val chatExcludedFromMemory = preferences.isChatExcludedFromMemory()
                     val chatWorldId = preferences.getChatWorldId()
                     val chatCampaignId = preferences.getChatCampaignId()
@@ -4532,6 +4537,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     preferences.setActiveLoreBookIds(activeLoreBookIds)
                     preferences.setLoreBooksSeeded(loreBooksSeeded)
                     preferences.setChatMemoryEnabledRaw(chatMemoryEnabledRaw)
+                    preferences.setChatLoreBooksEnabledRaw(chatLoreBooksEnabledRaw)
                     preferences.setChatExcludedFromMemory(chatExcludedFromMemory)
                     preferences.setChatWorldId(chatWorldId)
                     preferences.setChatCampaignId(chatCampaignId)

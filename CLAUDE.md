@@ -636,10 +636,13 @@ Everything is on-device. No cloud sync, no accounts.
   manual JSON export, persona→companion bootstrap and edit-sync (surface:
   Settings → Memory Manager → Memory Settings). Every completed turn is captured into the transcripts queue from
   the `finally` of `generateResponse` (single funnel; best-effort, never
-  disturbs a turn) via `TranscriptRecorder`. Quick Settings has two per-chat
-  memory controls (both in the auto-naming copy block): "Use memory" (kill
-  switch — still captures, marks rows excluded; global default in Memory
-  settings) and "Don't archive" (stops capture entirely). Chat renames must
+  disturbs a turn) via `TranscriptRecorder`. Quick Settings has three per-chat
+  memory controls (all in the auto-naming copy block): "Use memory" (kill
+  switch — still captures, marks rows excluded; unset chats default from the
+  global engine tier + the Memory settings default toggle), "Use lore books"
+  (independent lore switch, July 10 2026 — see the Quick-Settings-is-God
+  ruling in the Phase 4 section) and "Don't archive" (stops capture
+  entirely). Chat renames must
   re-point `transcripts.chat_id` (`MemoryStore.repointChat`, hooked in
   auto-naming and `ChatPreferences.editChat`). Chat-list rows show a memory
   review marker.
@@ -676,7 +679,17 @@ Everything is on-device. No cloud sync, no accounts.
   `preferences/memory/enforcer/`, and was **reworked by Stage 3.4 to the
   owner-approved rules**: a global **Memory engine** setting in
   Memory settings — none / lore books (default = classic behavior) / full
-  (selectable only with an embedding model installed). At "full",
+  (selectable only with an embedding model installed). **QUICK SETTINGS IS
+  GOD (owner ruling, July 10 2026):** the engine picker only supplies the
+  DEFAULTS; each chat has two independent Quick Settings switches — "Use
+  memory in this chat" and "Use lore books in this chat" (tri-state prefs
+  `memory_enabled` / `lorebooks_enabled`, both in the auto-naming copy
+  block) — and an explicit per-chat switch always wins over the engine
+  tier. Unset chats derive: memory ON iff engine=="full" (× the Memory
+  settings default toggle); lore ON iff engine!="none". The injection
+  gates in `regularGPTResponse` read ONLY the per-chat getters; the scene
+  selectors in Quick Settings follow the chat's memory switch, not the
+  engine. When memory injects,
   `Enforcer.assembleTurn` builds ONE extra system message per turn on
   Dispatchers.IO in `regularGPTResponse`, after the stable first message
   (never reordered — prefix caching). That message now contains ONLY what
@@ -747,8 +760,10 @@ Everything is on-device. No cloud sync, no accounts.
   the retrieval policy ONLY (the five pre-written origin='system' modes
   were deleted and are purged once at store open — owner ruling, July 6 2026).
   ANY enforcer failure degrades to the classic lorebook message plus
-  one soft toast per process — never blocks generation. Tier "none" disables
-  lorebook injection too. The lorebook debug screen also renders the
+  one soft toast per process — never blocks generation. (Tier "none" used
+  to disable lorebook injection outright; since July 10 2026 it only sets
+  the per-chat lore switch's default — Quick Settings is God, see above.)
+  The lorebook debug screen also renders the
   enforcer's per-turn `AssemblyLog` (the "room" the turn stood in —
   ordinary vs roleplay, which targets, which companion-memory door — plus
   injected/cut lines with scores and cooldown/budget/near-dup reasons;

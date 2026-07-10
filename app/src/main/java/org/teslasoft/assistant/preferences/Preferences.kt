@@ -1452,12 +1452,20 @@ class Preferences private constructor(private var preferences: SharedPreferences
      * Per-chat value; a chat that has never set it follows the global default.
      * Stored as a string tri-state ("" = follow global) so the auto-naming
      * copy block can move an unset value without pinning it.
+     *
+     * QUICK SETTINGS IS AUTHORITATIVE (owner ruling, July 10 2026): an
+     * explicit per-chat value always wins, even over the global Memory
+     * engine picker — a chat switched ON injects memory regardless of the
+     * engine tier, a chat switched OFF never does. Only an UNSET chat
+     * follows the globals, and its default is derived from the engine
+     * picker (memory injects by default only at the "full" tier) combined
+     * with the Memory settings default toggle.
      * */
     fun getChatMemoryEnabled() : Boolean {
         return when (getString("memory_enabled", "")) {
             "true" -> true
             "false" -> false
-            else -> getDefaultMemoryEnabled()
+            else -> getMemoryEngine() == "full" && getDefaultMemoryEnabled()
         }
     }
 
@@ -1480,6 +1488,35 @@ class Preferences private constructor(private var preferences: SharedPreferences
 
     fun setDefaultMemoryEnabled(enabled: Boolean) {
         putGlobalBoolean("default_memory_enabled", enabled, true)
+    }
+
+    /**
+     * Lore books per-chat switch (Quick Settings). Same tri-state pattern
+     * and the same authority rule as [getChatMemoryEnabled]: Quick Settings
+     * is God (owner ruling, July 10 2026) — an explicit per-chat value wins
+     * over the global Memory engine picker; an unset chat follows the
+     * engine-derived default (lore books are on unless the engine is
+     * "none"). Independent of the memory switch, so any combination —
+     * both, either one alone, or neither — works per chat.
+     * */
+    fun getChatLoreBooksEnabled() : Boolean {
+        return when (getString("lorebooks_enabled", "")) {
+            "true" -> true
+            "false" -> false
+            else -> getMemoryEngine() != "none"
+        }
+    }
+
+    fun getChatLoreBooksEnabledRaw() : String {
+        return getString("lorebooks_enabled", "")
+    }
+
+    fun setChatLoreBooksEnabledRaw(value: String) {
+        putString("lorebooks_enabled", value)
+    }
+
+    fun setChatLoreBooksEnabled(enabled: Boolean) {
+        putString("lorebooks_enabled", if (enabled) "true" else "false")
     }
 
     /**

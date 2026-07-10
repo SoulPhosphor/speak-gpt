@@ -121,9 +121,14 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     private var btnSaveToProfile: MaterialButton? = null
     private var switchChatMemory: com.google.android.material.materialswitch.MaterialSwitch? = null
     private var switchChatExcluded: com.google.android.material.materialswitch.MaterialSwitch? = null
+    // Per-chat lore books on/off, independent of the memory switch. QUICK
+    // SETTINGS IS AUTHORITATIVE (owner ruling, July 10 2026): these two
+    // switches decide what this chat injects; the global Memory engine picker
+    // only supplies defaults for chats that never touched them.
+    private var switchChatLoreBooks: com.google.android.material.materialswitch.MaterialSwitch? = null
 
     // Memory system Phase 4: per-chat scene (world / roleplay character / user
-    // persona). Only shown once the full engine is selected and the store
+    // persona). Only shown once the chat's memory switch is on and the store
     // exists — before that there is nothing meaningful to pick from.
     private var containerMemoryScene: LinearLayout? = null
     private var rowChatWorld: LinearLayout? = null
@@ -582,6 +587,14 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         switchChatExcluded?.isChecked = !(preferences?.isChatExcludedFromMemory() ?: false)
         switchChatMemory?.setOnCheckedChangeListener { _, checked ->
             preferences?.setChatMemoryEnabled(checked)
+            // The scene rows follow this switch (not the global engine), so
+            // they appear/disappear the moment it's flipped.
+            setupMemorySceneRows()
+        }
+        switchChatLoreBooks = view.findViewById(R.id.switch_chat_lorebooks)
+        switchChatLoreBooks?.isChecked = preferences?.getChatLoreBooksEnabled() ?: true
+        switchChatLoreBooks?.setOnCheckedChangeListener { _, checked ->
+            preferences?.setChatLoreBooksEnabled(checked)
         }
         switchChatExcluded?.setOnCheckedChangeListener { _, archive ->
             val excluded = !archive
@@ -761,9 +774,13 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
      * shouldForceUpdate/restart.
      */
     private fun setupMemorySceneRows() {
-        val engineIsFull = preferences?.getMemoryEngine() == "full"
+        // Follows the per-chat "Use memory" switch, not the global engine tier
+        // (Quick Settings is God — owner ruling, July 10 2026): a chat with
+        // memory switched on gets its scene selectors regardless of the
+        // global default.
+        val memoryOn = preferences?.getChatMemoryEnabled() == true
         val provisioned = MemoryStore.isProvisioned(requireContext())
-        val visible = engineIsFull && provisioned
+        val visible = memoryOn && provisioned
         containerMemoryScene?.visibility = if (visible) View.VISIBLE else View.GONE
         if (!visible) return
 
