@@ -47,6 +47,8 @@ import org.teslasoft.assistant.preferences.memory.CardSections
 import org.teslasoft.assistant.preferences.memory.CardType
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.memory.PartyMemberRecord
+import org.teslasoft.assistant.preferences.memory.RpTagRecord
+import org.teslasoft.assistant.preferences.memory.RpTagTargetType
 import org.teslasoft.assistant.theme.ThemeManager
 
 /**
@@ -340,9 +342,14 @@ class CampaignDetailActivity : FragmentActivity() {
         val id = campaignId
 
         runOffThread {
+            val store = MemoryStore.getInstance(this)
             val bySection = if (id != null)
-                MemoryStore.getInstance(this).entriesForCard(CardType.CAMPAIGN, id).groupBy { it.section }
+                store.entriesForCard(CardType.CAMPAIGN, id).groupBy { it.section }
             else emptyMap()
+            // Each entry's own tags, read off-thread so the row can show them as
+            // tappable links without a DB hit on the UI thread.
+            val tagsByEntry = bySection.values.flatten()
+                .associate { it.entryId to store.tagsForTarget(RpTagTargetType.CARD_ENTRY, it.entryId) }
             runOnUiThread {
                 container.removeAllViews()
                 val inflater = LayoutInflater.from(this)
@@ -352,7 +359,7 @@ class CampaignDetailActivity : FragmentActivity() {
                         .setText(CardEntryEditorActivity.sectionLabelRes(section))
 
                     val list = block.findViewById<LinearLayout>(R.id.section_entries)
-                    for (entry in bySection[section].orEmpty()) list.addView(entryRow(inflater, list, entry))
+                    for (entry in bySection[section].orEmpty()) list.addView(entryRow(inflater, list, entry, tagsByEntry[entry.entryId].orEmpty()))
 
                     block.findViewById<MaterialButton>(R.id.btn_add_entry).setOnClickListener {
                         openEntryEditor(section, null)
@@ -363,13 +370,18 @@ class CampaignDetailActivity : FragmentActivity() {
         }
     }
 
-    private fun entryRow(inflater: LayoutInflater, parent: LinearLayout, entry: CardEntryRecord): View {
-        val row = inflater.inflate(R.layout.view_memory_row, parent, false)
-        row.findViewById<TextView>(R.id.row_title).text = entry.name
+    private fun entryRow(
+        inflater: LayoutInflater,
+        parent: LinearLayout,
+        entry: CardEntryRecord,
+        tags: List<RpTagRecord>
+    ): View {
+        val row = inflater.inflate(R.layout.view_card_entry, parent, false)
+        row.findViewById<TextView>(R.id.entry_name).text = entry.name
 
         // State-shaped sections show their state line; the rest show the
         // first description line.
-        val subtitleView = row.findViewById<TextView>(R.id.row_subtitle)
+        val descView = row.findViewById<TextView>(R.id.entry_desc)
         val subtitle = when (entry.section) {
             CardSections.CAMPAIGN_CAST ->
                 listOfNotNull(entry.castDisposition, entry.castStatus)
@@ -378,12 +390,12 @@ class CampaignDetailActivity : FragmentActivity() {
             CardSections.RELIQUARY -> entry.holder?.trim()?.takeIf { it.isNotEmpty() }
             else -> entry.description?.lineSequence()?.firstOrNull()?.trim()?.takeIf { it.isNotEmpty() }
         }
-        if (subtitle == null) subtitleView.visibility = View.GONE
-        else { subtitleView.visibility = View.VISIBLE; subtitleView.text = subtitle }
+        if (subtitle == null) descView.visibility = View.GONE
+        else { descView.visibility = View.VISIBLE; descView.text = subtitle }
 
-        row.findViewById<TextView>(R.id.row_badge).visibility = View.GONE
-        row.findViewById<ImageButton>(R.id.btn_row_action).visibility = View.GONE
-        row.findViewById<View>(R.id.ui).setOnClickListener {
+        CardEntryTags.render(this, row.findViewById(R.id.entry_tags), tags, chatId)
+
+        row.setOnClickListener {
             openEntryEditor(entry.section, entry.entryId)
         }
         return row

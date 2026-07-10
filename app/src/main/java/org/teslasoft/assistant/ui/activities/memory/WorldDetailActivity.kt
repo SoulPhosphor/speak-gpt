@@ -43,6 +43,8 @@ import org.teslasoft.assistant.preferences.memory.CardEntryRecord
 import org.teslasoft.assistant.preferences.memory.CardSections
 import org.teslasoft.assistant.preferences.memory.CardType
 import org.teslasoft.assistant.preferences.memory.MemoryStore
+import org.teslasoft.assistant.preferences.memory.RpTagRecord
+import org.teslasoft.assistant.preferences.memory.RpTagTargetType
 import org.teslasoft.assistant.preferences.memory.WorldRecord
 import org.teslasoft.assistant.theme.ThemeManager
 
@@ -251,6 +253,11 @@ class WorldDetailActivity : FragmentActivity() {
             val entries = if (id != null) store.entriesForCard(CardType.WORLD, id) else emptyList()
             val bySection = entries.groupBy { it.section }
             val nameById = entries.associate { it.entryId to it.name }
+            // Each entry's own tags, read off-thread so the row can show them as
+            // tappable links without a DB hit on the UI thread.
+            val tagsByEntry = entries.associate {
+                it.entryId to store.tagsForTarget(RpTagTargetType.CARD_ENTRY, it.entryId)
+            }
             // §5 (3.6f): promotion pointers to a gone party-member card must
             // say so — collect the living roster ids once.
             val partyIds = try {
@@ -271,12 +278,12 @@ class WorldDetailActivity : FragmentActivity() {
                     }
                     container.addView(header)
                     for (section in sections) {
-                        container.addView(sectionBlock(inflater, container, section, bySection, nameById, partyIds))
+                        container.addView(sectionBlock(inflater, container, section, bySection, nameById, partyIds, tagsByEntry))
                     }
                 }
                 // The owner-added Notes section (spec §8a), no group.
                 container.addView(
-                    sectionBlock(inflater, container, CardSections.NOTES, bySection, nameById, partyIds)
+                    sectionBlock(inflater, container, CardSections.NOTES, bySection, nameById, partyIds, tagsByEntry)
                 )
             }
         }
@@ -288,14 +295,15 @@ class WorldDetailActivity : FragmentActivity() {
         section: String,
         bySection: Map<String, List<CardEntryRecord>>,
         nameById: Map<String, String>,
-        partyIds: Set<String>
+        partyIds: Set<String>,
+        tagsByEntry: Map<String, List<RpTagRecord>>
     ): View {
         val block = inflater.inflate(R.layout.view_card_section, container, false)
         block.findViewById<TextView>(R.id.section_title)
             .setText(CardEntryEditorActivity.sectionLabelRes(section))
 
         val list = block.findViewById<LinearLayout>(R.id.section_entries)
-        for (entry in bySection[section].orEmpty()) list.addView(entryRow(inflater, list, entry, nameById, partyIds))
+        for (entry in bySection[section].orEmpty()) list.addView(entryRow(inflater, list, entry, nameById, partyIds, tagsByEntry[entry.entryId].orEmpty()))
 
         block.findViewById<MaterialButton>(R.id.btn_add_entry).setOnClickListener {
             openEntryEditor(section, null)
@@ -308,27 +316,28 @@ class WorldDetailActivity : FragmentActivity() {
         parent: LinearLayout,
         entry: CardEntryRecord,
         nameById: Map<String, String>,
-        partyIds: Set<String>
+        partyIds: Set<String>,
+        tags: List<RpTagRecord>
     ): View {
-        val row = inflater.inflate(R.layout.view_memory_row, parent, false)
-        row.findViewById<TextView>(R.id.row_title).text = entry.name
+        val row = inflater.inflate(R.layout.view_card_entry, parent, false)
+        row.findViewById<TextView>(R.id.entry_name).text = entry.name
 
         // Geography shows its parent (the chain is self-locating, spec §6c/§8);
         // otherwise the first description line.
-        val subtitleView = row.findViewById<TextView>(R.id.row_subtitle)
+        val descView = row.findViewById<TextView>(R.id.entry_desc)
         val subtitle = entry.parentEntryId?.let { nameById[it] }
             ?: entry.description?.lineSequence()?.firstOrNull()?.trim()?.takeIf { it.isNotEmpty() }
         if (subtitle == null) {
-            subtitleView.visibility = View.GONE
+            descView.visibility = View.GONE
         } else {
-            subtitleView.visibility = View.VISIBLE
-            subtitleView.text = subtitle
+            descView.visibility = View.VISIBLE
+            descView.text = subtitle
         }
 
         // A promoted NPC entry: the party-member card is the source of truth —
         // tap opens the card (owner ruling, spec §8a); long-press still opens
         // the lightweight lore entry. Badge marks the promoted state.
-        val badge = row.findViewById<TextView>(R.id.row_badge)
+        val badge = row.findViewById<TextView>(R.id.entry_badge)
         val promotedTo = entry.partyMemberId
         val promotedExists = promotedTo != null && promotedTo in partyIds
         if (promotedTo != null) {
@@ -339,13 +348,13 @@ class WorldDetailActivity : FragmentActivity() {
             badge.visibility = View.GONE
         }
 
-        row.findViewById<ImageButton>(R.id.btn_row_action).visibility = View.GONE
-        val ui = row.findViewById<View>(R.id.ui)
-        ui.setOnClickListener {
+        CardEntryTags.render(this, row.findViewById(R.id.entry_tags), tags, chatId)
+
+        row.setOnClickListener {
             if (promotedExists) openPartyMemberCard(promotedTo!!)
             else openEntryEditor(entry.section, entry.entryId)
         }
-        ui.setOnLongClickListener {
+        row.setOnLongClickListener {
             openEntryEditor(entry.section, entry.entryId)
             true
         }

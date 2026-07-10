@@ -45,6 +45,8 @@ import org.teslasoft.assistant.preferences.memory.CardType
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.memory.PartyMemberRecord
 import org.teslasoft.assistant.preferences.memory.RoleplayCharacterRecord
+import org.teslasoft.assistant.preferences.memory.RpTagRecord
+import org.teslasoft.assistant.preferences.memory.RpTagTargetType
 import org.teslasoft.assistant.theme.ThemeManager
 
 /**
@@ -331,9 +333,14 @@ class CharacterCardActivity : FragmentActivity() {
         val id = cardId
 
         runOffThread {
+            val store = MemoryStore.getInstance(this)
             val bySection = if (id != null)
-                MemoryStore.getInstance(this).entriesForCard(cardType, id).groupBy { it.section }
+                store.entriesForCard(cardType, id).groupBy { it.section }
             else emptyMap()
+            // Each entry's own tags, read off-thread so the row can show them as
+            // tappable links without a DB hit on the UI thread.
+            val tagsByEntry = bySection.values.flatten()
+                .associate { it.entryId to store.tagsForTarget(RpTagTargetType.CARD_ENTRY, it.entryId) }
             runOnUiThread {
                 container.removeAllViews()
                 val inflater = LayoutInflater.from(this)
@@ -344,7 +351,7 @@ class CharacterCardActivity : FragmentActivity() {
 
                     val list = block.findViewById<LinearLayout>(R.id.section_entries)
                     for (entry in bySection[section].orEmpty()) {
-                        list.addView(entryRow(inflater, list, entry))
+                        list.addView(entryRow(inflater, list, entry, tagsByEntry[entry.entryId].orEmpty()))
                     }
 
                     block.findViewById<MaterialButton>(R.id.btn_add_entry).setOnClickListener {
@@ -356,26 +363,31 @@ class CharacterCardActivity : FragmentActivity() {
         }
     }
 
-    private fun entryRow(inflater: LayoutInflater, parent: LinearLayout, entry: CardEntryRecord): View {
-        val row = inflater.inflate(R.layout.view_memory_row, parent, false)
-        row.findViewById<TextView>(R.id.row_title).text = entry.name
+    private fun entryRow(
+        inflater: LayoutInflater,
+        parent: LinearLayout,
+        entry: CardEntryRecord,
+        tags: List<RpTagRecord>
+    ): View {
+        val row = inflater.inflate(R.layout.view_card_entry, parent, false)
+        row.findViewById<TextView>(R.id.entry_name).text = entry.name
 
-        val subtitleView = row.findViewById<TextView>(R.id.row_subtitle)
+        val descView = row.findViewById<TextView>(R.id.entry_desc)
         val parts = ArrayList<String>()
         entry.entryKind?.let { parts.add(getString(CardEntryEditorActivity.kindLabelRes(it))) }
         entry.quantity?.let { parts.add(getString(R.string.entry_quantity_fmt, it)) }
         if (parts.isEmpty()) entry.description?.lineSequence()?.firstOrNull()?.trim()
             ?.takeIf { it.isNotEmpty() }?.let { parts.add(it) }
         if (parts.isEmpty()) {
-            subtitleView.visibility = View.GONE
+            descView.visibility = View.GONE
         } else {
-            subtitleView.visibility = View.VISIBLE
-            subtitleView.text = parts.joinToString(" · ")
+            descView.visibility = View.VISIBLE
+            descView.text = parts.joinToString(" · ")
         }
 
-        row.findViewById<TextView>(R.id.row_badge).visibility = View.GONE
-        row.findViewById<ImageButton>(R.id.btn_row_action).visibility = View.GONE
-        row.findViewById<View>(R.id.ui).setOnClickListener {
+        CardEntryTags.render(this, row.findViewById(R.id.entry_tags), tags, chatId)
+
+        row.setOnClickListener {
             openEntryEditor(entry.section, entry.entryId)
         }
         return row
