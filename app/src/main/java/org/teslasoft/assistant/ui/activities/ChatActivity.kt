@@ -3290,19 +3290,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
      *  loop in one shot. Mirrors what long-press has always done; also reachable
      *  from a short tap when the AI is busy. */
     private fun cancelAllAiActivity() {
-        // Gated on the voice-diagnostics toggles like every other loop event —
-        // the owner explicitly does NOT want stop presses written when logging
-        // is off (July 11 2026 ruling; an always-on version was added and
-        // removed the same day). To diagnose a dead stop tap, the owner turns
-        // a VAD-logging toggle on first; the line then records the audio state
-        // the tap saw.
-        logVoiceEvent(
-            "user cancelled all AI activity (stop tap): " +
-            "ttsSpeaking=${try { tts?.isSpeaking == true } catch (_: Exception) { "?" }} " +
-            "mediaPlaying=${try { mediaPlayer?.isPlaying == true } catch (_: Exception) { "?" }} " +
-            "readbackExpected=$handsFreeReadbackExpected keepAlive=$readbackKeepAliveActive " +
-            "pendingSpeak=${pendingSpeak != null} recording=$isRecording"
-        )
+        logVoiceEvent("user cancelled all AI activity (stop tap)")
         cancelState = true
         handsFreeStopped = true
         handsFreeReadbackExpected = false
