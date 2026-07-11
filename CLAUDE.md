@@ -128,10 +128,26 @@ now cancels every generation scope (`killAllProcesses`, incl. the new
 `parseMessageScope`), a `stopReadback()` helper owns the audio teardown +
 clears `pendingSpeak`, a `readbackSession` stamp (bumped on every stop,
 re-checked right before text reaches the engine) closes the async-hop
-races, and the speaker button is now a read/stop toggle. The owner then
-described their stop flow ("it prints the whole reply, then begins
-reading; stop should stop readback immediately and not open the mic"),
-which exposed a fifth hole: in the silent gap between the reply printing
+races, and the speaker button is now a read/stop toggle. **Then the owner
+gave the decisive observation: "The button just stayed red. Like I wasn't
+hitting it."** A stop tap that reaches ANY handler changes the button
+(micIdle, or at minimum a state flip) — a tap with zero visual effect
+means the MAIN THREAD WAS FROZEN and Android dropped the tap before the
+app saw it, while the TTS engine (its own process) kept talking. The
+freeze is code-provable: `calculateCost()` → `tokenizeArray()` BPE-encoded
+the ENTIRE conversation history on Dispatchers.Main (plus an O(n²)
+summation), once or twice per turn, exactly when the readback starts — and
+the cost grows with every exchange, matching "it works worse than when I
+started" a month in. Fixed: the encode + summation now run on
+Dispatchers.Default over a snapshot; only field assignments touch Main.
+(`saveSettings()`'s whole-history encrypt is still on Main — deliberately
+untouched, write-ordering risk; the a625894 throttle covers streaming.)
+The stop tap also now logs to the Event log UNCONDITIONALLY with the
+audio state at that instant (`logVoiceEventAlways` in
+`cancelAllAiActivity`), so a future dead-stop report is diagnosable.
+The owner also described their stop flow ("it prints the whole reply,
+then begins reading; stop should stop readback immediately and not open
+the mic"), which exposed a fifth hole: in the silent gap between the reply printing
 and the audio actually starting (ML Kit hop, engine spin-up, cloud-voice
 fetch) — and during engines' mid-utterance isSpeaking=false blips —
 `isAiCurrentlyBusy()` returned false, so the stop tap fell through to the

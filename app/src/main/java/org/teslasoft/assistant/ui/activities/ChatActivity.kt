@@ -502,26 +502,42 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         messageInput?.hint = getString(if (listening) R.string.hint_listening else R.string.hint_message)
     }
 
+    /**
+     * Token counting for the usage/cost display. BPE-encoding the ENTIRE
+     * conversation history is real CPU work that grows with every exchange —
+     * running it on the main thread (as this did, once or twice per turn,
+     * right when the readback starts) froze the whole UI for seconds in long
+     * conversations. A frozen main thread drops taps outright: the owner's
+     * "the stop button just stayed red, like I wasn't hitting it" while the
+     * voice kept talking — the TTS engine renders audio in its own process,
+     * so speech keeps flowing while the app can't respond. The encode (and
+     * the O(n²) usage summation in calculateCost) now run on a worker
+     * dispatcher over an immutable snapshot; only the field assignments
+     * happen on the main thread.
+     */
     private suspend fun tokenizeArray() {
-        messagesUsageProjection = arrayListOf()
-        messagesUsageProjection.clear()
-
         if (chatMessages == null) chatMessages = arrayListOf()
 
-        // One tokenizer for the whole pass: constructing it inside the loop
-        // rebuilt the BPE tables once per message, per turn, on the main
-        // thread — O(history) work that grew with every exchange and is part
-        // of why long conversations felt slower and slower.
-        val tokenizer = Tokenizer.of(encoding = Encoding.CL100K_BASE)
-        for (m in chatMessages) {
-            val tokens = tokenizer.encode(m.content.toString()).size
+        // Snapshot on the main thread: chatMessages is main-thread state and
+        // can be edited while the encode runs on the worker.
+        val snapshot = chatMessages.map { (it.role == Role.Assistant) to it.content.toString() }
 
-            messagesUsageProjection.add(
-                hashMapOf(
-                    "isBot" to (m.role == Role.Assistant),
-                    "tokens" to if (m.content.toString().trim().startsWith("~file:")) 0 else tokens
+        messagesUsageProjection = withContext(Dispatchers.Default) {
+            // One tokenizer for the whole pass: constructing it inside the
+            // loop rebuilt the BPE tables once per message, per turn.
+            val tokenizer = Tokenizer.of(encoding = Encoding.CL100K_BASE)
+            val projection = arrayListOf<HashMap<String, Any>>()
+            for ((isBot, content) in snapshot) {
+                val tokens = tokenizer.encode(content).size
+
+                projection.add(
+                    hashMapOf(
+                        "isBot" to isBot,
+                        "tokens" to if (content.trim().startsWith("~file:")) 0 else tokens
+                    )
                 )
-            )
+            }
+            projection
         }
     }
 
@@ -529,32 +545,41 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         CoroutineScope(Dispatchers.Main).launch {
             tokenizeArray()
 
-            usageIn = 0
-            usageOut = 0
-            inCost = 0.0f
-            outCost = 0.0f
+            val projection = messagesUsageProjection
 
-            var i = messagesUsageProjection.size - 1
+            // The summation is O(n²) over the message count — trivial for a
+            // short chat, another main-thread stall for a months-long one.
+            // Same math as always, just off the UI thread.
+            val (totalIn, totalOut) = withContext(Dispatchers.Default) {
+                var tIn = 0
+                var tOut = 0
 
-            while (i > 0) {
-                var j = 0
-                var c = 0
+                var i = projection.size - 1
 
-                while (j < i) {
-                    c += messagesUsageProjection[j]["tokens"] as Int
-                    j++
+                while (i > 0) {
+                    var j = 0
+                    var c = 0
+
+                    while (j < i) {
+                        c += projection[j]["tokens"] as Int
+                        j++
+                    }
+
+                    tIn += c
+                    i--
                 }
 
-                usageIn += c
-                i--
+                for (m in projection) {
+                    val msgUsage = if (m["isBot"] == true) m["tokens"] as Int else 0
+
+                    tOut += msgUsage
+                }
+
+                tIn to tOut
             }
 
-            for (m in messagesUsageProjection) {
-                val msgUsage = if (m["isBot"] == true) m["tokens"] as Int else 0
-
-                usageOut += msgUsage
-            }
-
+            usageIn = totalIn
+            usageOut = totalOut
             inCost = usageIn * priceIn
             outCost = usageOut * priceOut
         }
