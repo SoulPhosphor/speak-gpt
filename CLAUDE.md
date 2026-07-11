@@ -142,9 +142,12 @@ started" a month in. Fixed: the encode + summation now run on
 Dispatchers.Default over a snapshot; only field assignments touch Main.
 (`saveSettings()`'s whole-history encrypt is still on Main — deliberately
 untouched, write-ordering risk; the a625894 throttle covers streaming.)
-The stop tap also now logs to the Event log UNCONDITIONALLY with the
-audio state at that instant (`logVoiceEventAlways` in
-`cancelAllAiActivity`), so a future dead-stop report is diagnosable.
+The stop-tap log line now carries the audio state at that instant, but it
+is GATED on the voice-diagnostics toggles like every other loop event —
+**an always-on version was added without approval and the owner ordered it
+removed the same day (July 11 2026): never make stop presses write to the
+log when the user has logging off.** Diagnosing a dead stop tap means the
+owner turns a VAD-logging toggle on first.
 The owner also described their stop flow ("it prints the whole reply,
 then begins reading; stop should stop readback immediately and not open
 the mic"), which exposed a fifth hole: in the silent gap between the reply printing
