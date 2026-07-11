@@ -167,6 +167,7 @@ import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.PersonaPreferences
 import org.teslasoft.assistant.preferences.ActivationPromptPreferences
 import org.teslasoft.assistant.preferences.ChatPreferences
+import org.teslasoft.assistant.preferences.MessageCompletionState
 import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.LogitBiasPreferences
 import org.teslasoft.assistant.preferences.Preferences
@@ -1647,13 +1648,31 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             if (messages == null) messages = arrayListOf()
             if (chatMessages == null) chatMessages = arrayListOf()
 
+            // A reply still marked "streaming" on disk means the previous
+            // session died mid-generation and nothing wrote a terminal state
+            // (a hard process kill runs no code on the way out). Reconcile it
+            // to "interrupted" once so it can't masquerade as a finished reply,
+            // and persist. Idempotent; the partial text is untouched.
+            var reconciledStreaming = false
+            for (message: HashMap<String, Any> in messages) {
+                val reconciled = MessageCompletionState.reconcileOnLoad(
+                    message[MessageCompletionState.KEY_STATE]?.toString()
+                )
+                if (reconciled != null) {
+                    message[MessageCompletionState.KEY_STATE] = reconciled
+                    message[MessageCompletionState.KEY_STATE_DETAIL] = MessageCompletionState.DETAIL_PROCESS_DEATH
+                    reconciledStreaming = true
+                }
+            }
+            if (reconciledStreaming) saveSettings()
+
             for (message: HashMap<String, Any> in messages) {
                 if (!message["message"].toString().contains("data:image")) {
                     if (message["isBot"] == true) {
                         chatMessages.add(
                             ChatMessage(
                                 role = ChatRole.Assistant,
-                                content = message["message"].toString()
+                                content = modelFacingContent(message)
                             )
                         )
                     } else {
@@ -3707,6 +3726,59 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         scroll(true)
     }
 
+    // ---- Streamed-reply completion state (Round 3) ------------------------
+    // A streamed assistant reply is persisted incrementally, so a partial reply
+    // on disk is otherwise indistinguishable from a finished one. These helpers
+    // stamp a persisted completion marker (see MessageCompletionState) onto the
+    // reply's own message map, so the marker travels atomically in the same JSON
+    // blob as the text — there is never a window where the text is final but the
+    // state is stale.
+
+    /** Tag the just-added assistant placeholder as actively streaming. Not
+     *  saved eagerly: the marker rides the first mid-stream save, so no
+     *  fragment ever reaches disk without it. A death before that first save
+     *  leaves nothing on disk to mislead. */
+    private fun markLastAssistantStreaming() {
+        val last = messages.lastOrNull() ?: return
+        if (last["isBot"] == true) last[MessageCompletionState.KEY_STATE] = MessageCompletionState.STREAMING
+    }
+
+    /** Mark the last assistant reply as completed normally. The caller's
+     *  existing completion saveSettings() persists it alongside the final text. */
+    private fun markLastAssistantDone() {
+        val last = messages.lastOrNull() ?: return
+        if (last["isBot"] == true) {
+            last[MessageCompletionState.KEY_STATE] = MessageCompletionState.DONE
+            last.remove(MessageCompletionState.KEY_STATE_DETAIL)
+        }
+    }
+
+    /** Stamp a terminal state onto the last assistant message ONLY if it is
+     *  still marked streaming, and persist immediately. No-op otherwise, so it
+     *  is safe from any terminal path and never downgrades an already-final
+     *  state (e.g. a completion that raced ahead of a late cancellation). */
+    private fun finalizeStreamingMessageState(state: String, detail: String?) {
+        val last = messages.lastOrNull() ?: return
+        if (last["isBot"] != true) return
+        if (last[MessageCompletionState.KEY_STATE]?.toString() != MessageCompletionState.STREAMING) return
+        last[MessageCompletionState.KEY_STATE] = state
+        if (detail != null) last[MessageCompletionState.KEY_STATE_DETAIL] = detail
+        saveSettings()
+    }
+
+    /** Content of an assistant message as the MODEL should see it. An
+     *  unfinished reply gets an internal note appended so the model cannot
+     *  mistake it for an intentionally completed reply — never shown to the
+     *  user (this shapes the model projection only, not the visible text). */
+    private fun modelFacingContent(message: HashMap<String, Any>): String {
+        val content = message["message"].toString()
+        if (message["isBot"] == true && content.isNotBlank() &&
+            MessageCompletionState.isIncomplete(message[MessageCompletionState.KEY_STATE]?.toString())) {
+            return content + "\n\n" + getString(R.string.message_incomplete_model_note)
+        }
+        return content
+    }
+
     private fun scroll(mode: Boolean) {
         if (!disableAutoScroll) {
             val itemCount = adapter?.itemCount ?: 0
@@ -3782,6 +3854,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 attachedImage?.visibility = View.GONE
 
                 putMessage("", true)
+                markLastAssistantStreaming()
 
                 val reqList: ArrayList<ContentPart> = arrayListOf()
                 reqList.add(TextPart(request))
@@ -3851,6 +3924,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 }
 
                 messages[messages.size - 1]["message"] = "${response}\n"
+                markLastAssistantDone()
 
                 if (messages.size > 2) {
                     adapter?.notifyItemRangeChanged(messages.size - 3, messages.size - 1)
@@ -3871,6 +3945,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 messageInput?.requestFocus()
             } else if (model.contains(":ft") || model.contains("ft:")) {
                 putMessage("", true)
+                markLastAssistantStreaming()
                 val completionRequest = if (preferences?.getLogitBiasesConfigId() == null || preferences?.getLogitBiasesConfigId() == "null" || preferences?.getLogitBiasesConfigId() == "") {
                     CompletionRequest(
                         model = ModelId(model),
@@ -3913,6 +3988,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 }
 
                 messages[messages.size - 1]["message"] = "$response\n"
+                markLastAssistantDone()
                 if (messages.size > 2) {
                     adapter?.notifyItemRangeChanged(messages.size - 3, messages.size - 1)
                 } else {
@@ -4020,6 +4096,20 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 }
             }
         } catch (_: CancellationException) {
+            // The stream was cut short. Stamp a terminal state on the reply that
+            // was streaming so it can't reopen looking finished, keeping whatever
+            // partial text already streamed in. A user stop (mic/hang-up/progress
+            // cancel) while the screen is alive is "stopped"; a cancellation from
+            // the activity being torn down is "interrupted". This save also
+            // closes the streaming marker so the load-time reconciler has nothing
+            // to fix (they are belt-and-suspenders for a hard process kill, which
+            // runs no code here at all). No suspension points below, so this runs
+            // even though the coroutine is already cancelled.
+            val destroying = isFinishing || isDestroyed
+            finalizeStreamingMessageState(
+                if (destroying) MessageCompletionState.INTERRUPTED else MessageCompletionState.STOPPED,
+                if (destroying) MessageCompletionState.DETAIL_SCREEN_CLOSED else null
+            )
             calculateCost()
             runOnUiThread {
                 restoreUIState()
@@ -4039,8 +4129,21 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 putMessage("", true)
             }
 
-            if (preferences?.showChatErrors() == true) {
-                messages[messages.size - 1]["message"] = "${messages[messages.size - 1]["message"]}\n\n${getString(R.string.prompt_show_error)}\n\n$response"
+            // The reply failed before finishing. Mark it failed (keeping whatever
+            // partial text streamed in) and stash the coded error SEPARATELY from
+            // the reply text — the error prose is no longer appended into the
+            // message body, so the model's own words are never contaminated. The
+            // adapter renders the error next to the failure marker only when
+            // "Show chat errors" is on.
+            val failedIndex = messages.size - 1
+            if (messages[failedIndex]["isBot"] == true) {
+                messages[failedIndex][MessageCompletionState.KEY_STATE] = MessageCompletionState.FAILED
+                messages[failedIndex][MessageCompletionState.KEY_STATE_DETAIL] = genError.code.code
+                if (preferences?.showChatErrors() == true) {
+                    messages[failedIndex][MessageCompletionState.KEY_ERROR_TEXT] = response
+                } else {
+                    messages[failedIndex].remove(MessageCompletionState.KEY_ERROR_TEXT)
+                }
                 if (messages.size > 2) {
                     adapter?.notifyItemRangeChanged(messages.size - 3, messages.size - 1)
                 } else {
@@ -4117,6 +4220,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             val reply = last["message"].toString()
             if (reply.isBlank() || request.isBlank()) return
 
+            // The reply is captured either way (nothing successfully received is
+            // silently dropped), but a reply that did not finish streaming is
+            // marked incomplete so the Archivist never treats a truncated
+            // fragment as a reliable fact. Legacy/done -> complete.
+            val replyComplete = MessageCompletionState.isComplete(
+                last[MessageCompletionState.KEY_STATE]?.toString()
+            )
+
             val appContext = applicationContext
             val turnChatId = chatId
             val turnPersonaId = preferences?.getPersonaId().orEmpty()
@@ -4137,7 +4248,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             Thread {
                 TranscriptRecorder.recordTurn(
                     appContext, turnChatId, turnPersonaId, request, reply,
-                    turnModel, quickSettings, memoryEnabled, excluded
+                    turnModel, quickSettings, memoryEnabled, excluded, replyComplete
                 )
             }.start()
         } catch (e: Exception) {
@@ -4515,6 +4626,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
         var response = ""
         putMessage("", true)
+        markLastAssistantStreaming()
 
         val msgs: ArrayList<ChatMessage> = arrayListOf()
 
@@ -4762,6 +4874,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         }
 
         messages[messages.size - 1]["message"] = "$response\n"
+        markLastAssistantDone()
         if (messages.size > 2) {
             adapter?.notifyItemRangeChanged(messages.size - 3, messages.size - 1)
         } else {
@@ -5451,7 +5564,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     chatMessages.add(
                         ChatMessage(
                             role = ChatRole.Assistant,
-                            content = content
+                            // An unfinished reply carries an internal, model-only
+                            // note so the model treats it as truncated (not shown
+                            // to the user; see modelFacingContent).
+                            content = modelFacingContent(message)
                         )
                     )
                 } else {

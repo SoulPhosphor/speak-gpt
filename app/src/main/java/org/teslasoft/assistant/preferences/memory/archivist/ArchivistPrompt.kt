@@ -138,7 +138,13 @@ Only when the user repeatedly corrected the SAME habit of the AI model in this c
             val turns = JSONArray(contentJson)
             for (i in 0 until turns.length()) {
                 val turn = turns.optJSONObject(i) ?: continue
-                val role = if (turn.optString("role") == "assistant") "Assistant" else "User"
+                val isAssistant = turn.optString("role") == "assistant"
+                // An assistant reply that did not finish streaming is a truncated
+                // fragment — never mine it as a reliable fact. It is dropped from
+                // the extraction view; the user's own turn beside it stays. Absent
+                // "complete" means complete (every legacy row, all user turns).
+                if (isAssistant && !turn.optBoolean("complete", true)) continue
+                val role = if (isAssistant) "Assistant" else "User"
                 val text = turn.optString("content")
                 if (text.isNotBlank()) sb.append(role).append(": ").append(text).append('\n')
             }

@@ -650,6 +650,45 @@ Everything is on-device. No cloud sync, no accounts.
   boundary.
   Auto-naming adopts the new id **in place** — it must never relaunch
   ChatActivity, because onDestroy kills the readback and hands-free loop.
+- **Streamed-reply completion state (Round 3, July 11 2026).** A streamed
+  assistant reply is persisted incrementally, so a partial reply on disk was
+  byte-identical to a finished one — a process kill / activity destroy / stop
+  / error could reopen a fragment looking complete, and export, transcript
+  capture, the Archivist and RAG all trusted it. Assistant message maps now
+  carry an optional `state` key (`preferences/MessageCompletionState.kt`, pure
+  + unit-tested): **absent = complete** (every legacy/older-build message —
+  historical replies never suddenly look incomplete), `done` = complete, and
+  `streaming`/`stopped`/`failed`/`interrupted` (plus any unrecognized value)
+  are treated as NOT complete and preserved as-is, never silently upgraded.
+  State travels in the SAME JSON blob as the text (`saveSettings`), so text
+  and marker are atomic — there is no window where the text is final but the
+  flag is stale. The placeholder is tagged `streaming`; each of the three
+  streaming completion points sets `done`; the `generateResponse`
+  CancellationException catch sets `stopped` (user stop, screen alive) or
+  `interrupted` (`isFinishing`/`isDestroyed` — activity torn down); the
+  Exception catch sets `failed` (+ classifier code in `stateDetail`). A hard
+  process kill runs no code, so `initSettings` has a **load-time reconciler**
+  that turns any stale `streaming` row into `interrupted` (idempotent) — do
+  NOT rely on the process-exit log for this. `finalizeStreamingMessageState`
+  only stamps a still-`streaming` row, never downgrades an already-terminal
+  one. The design deliberately does NOT add a synchronous-commit save-queue
+  (owner call): a lost terminal write at worst mislabels a complete reply as
+  interrupted (safe direction, visible), never the reverse. Downstream: an
+  unfinished reply keeps its partial text everywhere (nothing received is
+  deleted), but gets an INTERNAL model-only note (`modelFacingContent`, never
+  shown) so the model can't mistake it for finished; transcript capture marks
+  the assistant turn `"complete": false` (absent = complete) and
+  `ArchivistPrompt.renderTurns` drops `complete:false` assistant turns (the
+  user's own turn beside it stays) so a fragment is never mined as fact.
+  **Error prose is no longer appended into the reply text** — a `failed`
+  reply's coded error lives in `errorText` and renders next to the inline
+  marker (a small persistent line in the bot/classic layouts, `status_marker`;
+  no toast/dialog/notification/sound) only when "Show chat errors" is on.
+  **Retry replaces** the incomplete reply (unchanged); **editing** an
+  incomplete reply clears the state to `done` (in-memory in `ChatAdapter` and
+  on disk in `ChatPreferences.editMessage`). Marker wording lives in
+  `strings.xml` (`message_state_*`) and is owner-approved copy — do not reword
+  without asking.
 - Any OpenAI-compatible endpoint; multiple endpoint profiles; streaming via
   `com.aallam.openai` (Ktor 2.3.12 — pinned, do not upgrade); secondary
   official `openai-java` client for function calling.

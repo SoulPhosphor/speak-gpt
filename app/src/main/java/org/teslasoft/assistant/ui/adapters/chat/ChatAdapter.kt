@@ -68,6 +68,7 @@ import io.noties.markwon.html.HtmlPlugin
 import io.noties.markwon.inlineparser.MarkwonInlineParserPlugin
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.ChatPreferences
+import org.teslasoft.assistant.preferences.MessageCompletionState
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.ui.activities.ImageBrowserActivity
 import org.teslasoft.assistant.ui.fragments.dialogs.EditMessageDialogFragment
@@ -158,6 +159,17 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
 
     private fun editMessage(position: Int, message: String) {
         dataArray[position]["message"] = message
+        // Editing an incomplete assistant reply finalizes it: the user owns the
+        // text now, so drop any incomplete-completion marker (and its error
+        // fields) in the live list too. The persisted copy is cleared in
+        // ChatPreferences.editMessage; this keeps the on-screen row in sync.
+        if (dataArray[position]["isBot"] == true &&
+            !MessageCompletionState.isComplete(dataArray[position][MessageCompletionState.KEY_STATE]?.toString())
+        ) {
+            dataArray[position][MessageCompletionState.KEY_STATE] = MessageCompletionState.DONE
+            dataArray[position].remove(MessageCompletionState.KEY_STATE_DETAIL)
+            dataArray[position].remove(MessageCompletionState.KEY_ERROR_TEXT)
+        }
         listener?.onMessageEdited()
     }
 
@@ -224,6 +236,10 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         private val btnReport: ImageButton = itemView.findViewById(R.id.btn_report)
         private val btnShare: ImageButton = itemView.findViewById(R.id.btn_share)
         private val btnSpeak: ImageButton = itemView.findViewById(R.id.btn_speak)
+        // Present only on the assistant/classic layouts (the user bubble has no
+        // completion marker); nullable so the shared ViewHolder is safe on every
+        // layout it inflates.
+        private val statusMarker: TextView? = itemView.findViewById(R.id.status_marker)
 
         @SuppressLint("SetTextI18n", "SetJavaScriptEnabled")
         open fun bind(chatMessage: HashMap<String, Any>, position: Int) {
@@ -233,6 +249,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             updateReportButton(chatMessage)
             updateShareButton(chatMessage)
             updateSpeakButton(chatMessage, position)
+            updateStatusMarker(chatMessage)
 
             if (selectorProjection[position]["selected"].toString() == "true") {
                 ui.setBackgroundColor(getSurface3Color(context))
@@ -318,6 +335,39 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
 
                 message.visibility = View.VISIBLE
             }
+        }
+
+        /**
+         * Small persistent inline marker shown on an assistant reply that did
+         * not finish streaming (interrupted / stopped / failed / an
+         * unrecognized non-complete state). The partial text stays visible
+         * above it. For a failed reply, the coded error is shown next to the
+         * marker ONLY when "Show chat errors" is on, and always separately from
+         * the model's own words (it lives in a different field). No toast,
+         * dialog, notification, or sound — just this line.
+         */
+        private fun updateStatusMarker(chatMessage: HashMap<String, Any>) {
+            val marker = statusMarker ?: return
+            val state = chatMessage[MessageCompletionState.KEY_STATE]?.toString()
+            if (chatMessage["isBot"] != true || MessageCompletionState.isComplete(state)) {
+                marker.visibility = View.GONE
+                return
+            }
+            val label = when (state) {
+                MessageCompletionState.INTERRUPTED -> context.getString(R.string.message_state_interrupted)
+                MessageCompletionState.STOPPED -> context.getString(R.string.message_state_stopped)
+                MessageCompletionState.FAILED -> context.getString(R.string.message_state_failed)
+                else -> context.getString(R.string.message_state_incomplete)
+            }
+            val errorText = chatMessage[MessageCompletionState.KEY_ERROR_TEXT]?.toString().orEmpty()
+            marker.text = if (state == MessageCompletionState.FAILED &&
+                preferences.showChatErrors() && errorText.isNotBlank()
+            ) {
+                "$label\n$errorText"
+            } else {
+                label
+            }
+            marker.visibility = View.VISIBLE
         }
 
         private fun updateRetryButton(chatMessage: HashMap<String, Any>, position: Int) {

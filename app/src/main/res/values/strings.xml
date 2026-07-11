@@ -655,6 +655,18 @@
     <string name="prompt_no_model">No valid model is set in settings. Please change the model and try again.</string>
     <string name="prompt_show_error">An error has been occurred during generation. See the error details below:</string>
 
+    <!-- Assistant-reply completion markers (Round 3). Small persistent inline
+         status shown on a reply that did not finish streaming; the partial
+         text stays visible above them. Wording pending owner approval. -->
+    <string name="message_state_interrupted">Interrupted before finishing — this reply may be incomplete.</string>
+    <string name="message_state_stopped">Stopped before finishing — this reply may be incomplete.</string>
+    <string name="message_state_failed">This reply failed before it finished.</string>
+    <string name="message_state_incomplete">This reply may be incomplete.</string>
+    <!-- Internal, model-facing only (never shown to the user): appended to an
+         unfinished reply in the model's context so it is not mistaken for an
+         intentionally completed reply. -->
+    <string name="message_incomplete_model_note">[System note: your previous reply above was cut off before it finished and may be incomplete.]</string>
+
     <!-- Coded generation-error messages (see ERROR_CODES.md). Plain, neutral, no
          profile/URL/model/config (that lives in the Error Log). The [code] prefix
          is added in code from GenErrorCode, not stored here. -->
