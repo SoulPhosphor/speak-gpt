@@ -30,6 +30,7 @@ import android.os.IBinder
 import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.preferences.Logger
 import org.teslasoft.assistant.ui.activities.ChatActivity
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -82,11 +83,18 @@ class GenerationForegroundService : Service() {
                 } else {
                     context.startService(intent)
                 }
-            } catch (_: Exception) {
+            } catch (e: Exception) {
                 // Starting a foreground service can be refused (e.g. the app is
                 // already in the background under strict OEM policies). The
                 // generation itself must still proceed; it just loses the
-                // keep-alive safety net.
+                // keep-alive safety net — which must leave a persistent trace,
+                // because "the reply died when the screen went off" is
+                // undiagnosable without it. Ungated, one line per refusal.
+                try {
+                    Logger.log(context.applicationContext, "event", "GenerationService", "error",
+                        "keep-alive service refused to start: ${e.javaClass.simpleName}: ${e.message} — " +
+                                "generation continues without screen-off protection")
+                } catch (_: Throwable) { /* logging must never break generation */ }
                 activeGenerations.decrementAndGet()
             }
         }
@@ -132,9 +140,15 @@ class GenerationForegroundService : Service() {
             } else {
                 startForeground(NOTIFICATION_ID, notification)
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
             // If startForeground fails, bail out cleanly rather than crash;
-            // the generation continues without the keep-alive.
+            // the generation continues without the keep-alive. Persist the
+            // reason (ungated) — this used to disappear without a trace.
+            try {
+                Logger.log(applicationContext, "event", "GenerationService", "error",
+                    "startForeground failed: ${e.javaClass.simpleName}: ${e.message} — " +
+                            "generation continues without screen-off protection")
+            } catch (_: Throwable) { /* logging must never crash the service */ }
             stopSelf()
             return START_NOT_STICKY
         }

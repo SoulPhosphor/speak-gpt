@@ -30,6 +30,7 @@ import android.os.IBinder
 import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.preferences.Logger
 import org.teslasoft.assistant.ui.activities.ChatActivity
 
 /**
@@ -105,9 +106,18 @@ class HandsFreeService : Service() {
             } else {
                 startForeground(NOTIFICATION_ID, notification)
             }
-        } catch (_: Exception) {
-            // If startForeground fails (e.g. user revoked POST_NOTIFICATIONS),
-            // bail out cleanly rather than crashing the app.
+        } catch (e: Exception) {
+            // If startForeground fails (e.g. user revoked POST_NOTIFICATIONS,
+            // or RECORD_AUDIO was revoked — a mic-typed foreground service
+            // needs it on Android 14+), bail out cleanly rather than crashing
+            // the app — but leave a persistent, ungated trace: this failure
+            // means the hands-free session has NO screen-off keep-alive, and
+            // it used to vanish without a line anywhere.
+            try {
+                Logger.log(applicationContext, "event", "HandsFreeService", "error",
+                    "startForeground failed: ${e.javaClass.simpleName}: ${e.message} — " +
+                            "hands-free keep-alive unavailable (screen-off listening may be cut off)")
+            } catch (_: Throwable) { /* logging must never crash the service */ }
             stopSelf()
             return START_NOT_STICKY
         }

@@ -28,6 +28,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -85,6 +86,13 @@ class LocalWhisperEngine private constructor() {
             return filtered.replace(Regex("\\s+"), " ").trim()
         }
 
+        // A read() that returns 0 doesn't block, so a stream that only ever
+        // returns 0 used to busy-spin this loop forever with the UI stuck on
+        // "Listening". Bounded (with a short delay per empty read) so a dead
+        // stream becomes an explicit READ_FAILED instead of a silent spin.
+        private const val EMPTY_READ_LIMIT = 400
+        private const val EMPTY_READ_DELAY_MS = 5L
+
         // Digital dead air: a frame whose peak never leaves ±4 (of 32767)
         // carried nothing at all. A live microphone in even a silent room has
         // a noise floor well above this — the only way to get frames this flat
@@ -103,6 +111,19 @@ class LocalWhisperEngine private constructor() {
             var sum = 0.0
             for (i in 0 until len) { val s = buf[i].toDouble(); sum += s * s }
             return kotlin.math.sqrt(sum / len)
+        }
+
+        // Persistent Event-log line from inside the engine, ungated by the
+        // diagnostics toggles — used only for the bounded watchdog / abnormal-
+        // exit events (at most a couple per session), never per-frame data.
+        // Lives here (not in ChatActivity) so a trace is written even when the
+        // UI that armed the mic is already gone.
+        private fun logAlways(context: Context?, message: String) {
+            Log.w(TAG, message)
+            if (context == null) return
+            try {
+                Logger.log(context, "event", "WhisperCapture", "warning", message)
+            } catch (_: Throwable) { /* diagnostics must never break capture */ }
         }
 
         @Volatile private var instance: LocalWhisperEngine? = null
@@ -131,7 +152,29 @@ class LocalWhisperEngine private constructor() {
     // re-records would kick off a second concurrent whisper_full.
     private val transcribeMutex = Mutex()
 
-    private var audioRecord: AudioRecord? = null
+    /**
+     * One live recording session. Exists so that every teardown path —
+     * user-initiated (stopAndTranscribe / cancel), abnormal (the capture loop
+     * died), and stale-recovery (a later startRecording finds the corpse) —
+     * funnels through ONE idempotent cleanup ([closeCapture]) with the
+     * [closed] latch guaranteeing it runs exactly once per session, no matter
+     * how many paths race. [onError] is the session's typed failure callback,
+     * captured per-session (not an engine field) so a dying old loop can never
+     * fire a NEWER session's callback.
+     */
+    private class ActiveCapture(
+        val record: AudioRecord,
+        val turn: Int,
+        /** Application context for the ungated Event-log trace on abnormal
+         *  exits — kept on the session (not the engine) so a trace is written
+         *  even when the UI that armed the mic is already gone. */
+        val logContext: Context?,
+        val onError: ((CaptureErrorReason, String) -> Unit)?
+    ) {
+        val closed = OnceFlag()
+    }
+
+    @Volatile private var activeCapture: ActiveCapture? = null
     private var captureJob: Job? = null
     @Volatile private var isCapturing: Boolean = false
 
@@ -231,8 +274,18 @@ class LocalWhisperEngine private constructor() {
 
     /**
      * Starts mic capture. Returns false if AudioRecord couldn't be
-     * initialized (e.g. mic permission missing, mic in use). Caller must
-     * have already verified RECORD_AUDIO permission.
+     * initialized (e.g. mic permission missing, mic in use) — or if a capture
+     * is genuinely still active (it used to return true then, claiming a new
+     * listening turn that didn't exist); a stale session (flag stuck, loop
+     * dead) is recovered and a fresh session started. Caller must have
+     * already verified RECORD_AUDIO permission.
+     *
+     * [onCaptureError] is the typed failure channel: if the capture loop dies
+     * on its own (AudioRecord read failure, a crash inside the loop, or a
+     * watchdog abort), the engine cleans everything up and reports the reason
+     * here, at most once per session, on the capture (IO) thread. Engine
+     * failure is never delivered as silence, a null transcript, or an empty
+     * transcript.
      *
      * [context] enables Bluetooth-first input routing: when supplied, a
      * connected Bluetooth headset is selected as the capture device (else the
@@ -246,13 +299,36 @@ class LocalWhisperEngine private constructor() {
         context: Context? = null,
         vad: VadConfig? = null,
         onEndOfTurn: (() -> Unit)? = null,
-        onNoSpeechTimeout: (() -> Unit)? = null
+        onNoSpeechTimeout: (() -> Unit)? = null,
+        onCaptureError: ((CaptureErrorReason, String) -> Unit)? = null
     ): Boolean {
         val vadLog = vad?.logging == true
         val audioHealth = vad?.audioHealth == true
         if (isCapturing) {
-            if (vadLog) Log.w(TAG, "[Turn ${turnNumber}] startRecording called while isCapturing=true — returning early WITHOUT resetting state!")
-            return true
+            // A previous session's flag is still set. This used to return true
+            // — reporting a successful new listening turn that did not exist
+            // (no new callbacks, no new capture). Recover a provably-dead
+            // session; refuse a live one so the caller's failure path runs.
+            val existing = activeCapture
+            val loopAlive = captureJob?.isActive == true &&
+                    existing != null && !existing.closed.isClaimed()
+            when (StaleCapturePolicy.decide(isCapturing, loopAlive)) {
+                StaleCapturePolicy.Decision.BUSY -> {
+                    Log.w(TAG, "[Turn $turnNumber] startRecording called while a capture is genuinely active — refusing")
+                    return false
+                }
+                StaleCapturePolicy.Decision.RECOVER_STALE -> {
+                    Log.w(TAG, "[Turn $turnNumber] startRecording found a stale capture (flag set, loop dead) — recovering")
+                    existing?.let { closeCapture(it, keepBufferAndRouting = false) }
+                    try { captureJob?.cancel() } catch (_: Throwable) {}
+                    captureJob = null
+                    // A stuck flag with no session at all (shouldn't happen,
+                    // but the whole point here is distrusting that assumption).
+                    isCapturing = false
+                    activeCapture = null
+                }
+                StaleCapturePolicy.Decision.PROCEED -> { /* flag flipped under us; carry on */ }
+            }
         }
         turnNumber++
         synchronized(chunkLock) {
@@ -312,13 +388,14 @@ class LocalWhisperEngine private constructor() {
         // just leaves OS default routing).
         micRoute?.requested?.let { try { record.setPreferredDevice(it) } catch (_: Throwable) {} }
 
-        audioRecord = record
+        val capture = ActiveCapture(record, turnNumber, context?.applicationContext, onCaptureError)
+        activeCapture = capture
         try {
             record.startRecording()
         } catch (t: Throwable) {
             Log.w(TAG, "startRecording threw", t)
             record.release()
-            audioRecord = null
+            activeCapture = null
             return false
         }
 
@@ -364,6 +441,11 @@ class LocalWhisperEngine private constructor() {
         val minSpeechSampleTarget = (cfg?.minSpeechMs ?: 0L) * SAMPLE_RATE / 1000
         val tuning = cfg?.tuning ?: VadTuning()
         val tn = turnNumber
+        // Wall-clock watchdog for VAD-driven (hands-free) turns only. Manual
+        // push-to-talk is deliberately unwatched: the user explicitly owns
+        // start/stop there, and a cap would cut off intended long dictation.
+        val watchdog = if (cfg != null) CaptureWatchdog() else null
+        val startedAtMs = SystemClock.elapsedRealtime()
         captureJob = CoroutineScope(Dispatchers.IO).launch {
             // The effective speech gate for log lines — mirrors the detectors'
             // own computation so the logs show the user's tuned values, not
@@ -411,13 +493,46 @@ class LocalWhisperEngine private constructor() {
             var deadAirSkippedSamples = 0L
             var deadAirLogged = false
             val deadAirSkipCapSamples = DEAD_AIR_SKIP_CAP_MS * SAMPLE_RATE / 1000
+            // Wall-clock moment the VAD fired (0 = hasn't) — feeds the
+            // watchdog's "end-of-turn was never collected" guard.
+            var vadFiredAtMs = 0L
+            var consecutiveEmptyReads = 0
+            // Non-null = this loop is dying abnormally; set before break so the
+            // finally block runs the one idempotent cleanup + error callback.
+            var exitError: Pair<CaptureErrorReason, String>? = null
             try {
-                while (isActive && isCapturing) {
+                while (isActive && isCapturing && !capture.closed.isClaimed()) {
                     val read = try {
                         record.read(readBuffer, 0, readBuffer.size)
                     } catch (t: Throwable) {
                         Log.w(TAG, "AudioRecord.read threw", t)
+                        exitError = CaptureErrorReason.READ_FAILED to
+                                "AudioRecord.read threw ${t.javaClass.simpleName}: ${t.message}"
                         break
+                    }
+                    when (AudioReadClassifier.classify(read)) {
+                        AudioReadClassifier.Outcome.ERROR -> {
+                            // A negative return used to be silently ignored by
+                            // the old `if (read > 0)` — the loop busy-spun on a
+                            // dead AudioRecord forever with the UI stuck on
+                            // "Listening". Now it is an explicit failure.
+                            exitError = CaptureErrorReason.READ_FAILED to
+                                    "AudioRecord.read returned ${AudioReadClassifier.describe(read)}"
+                            break
+                        }
+                        AudioReadClassifier.Outcome.EMPTY -> {
+                            // read()==0 doesn't block, so an endless stream of
+                            // empty reads was also a silent busy-spin. Pause
+                            // briefly and give up after the bounded run.
+                            consecutiveEmptyReads++
+                            if (consecutiveEmptyReads >= EMPTY_READ_LIMIT) {
+                                exitError = CaptureErrorReason.READ_FAILED to
+                                        "AudioRecord.read returned no data $consecutiveEmptyReads times in a row"
+                                break
+                            }
+                            delay(EMPTY_READ_DELAY_MS)
+                        }
+                        AudioReadClassifier.Outcome.DATA -> consecutiveEmptyReads = 0
                     }
                     if (read > 0) {
                         val copy = readBuffer.copyOf(read)
@@ -522,7 +637,8 @@ class LocalWhisperEngine private constructor() {
                                     }
                                     if (audioHealthMonitor != null) lastAudioHealthDiagnostics = audioHealthMonitor.summarize(vadHeardSpeech = true)
                                     vadFired = true
-                                    onVadEndOfTurn?.invoke()
+                                    vadFiredAtMs = SystemClock.elapsedRealtime()
+                                    if (!capture.closed.isClaimed()) onVadEndOfTurn?.invoke()
                                 } else if (!speechStarted && preSpeechSamples >= noSpeechSampleTarget) {
                                     if (vadLog) {
                                         val floor = detector.currentNoiseFloor()
@@ -535,7 +651,8 @@ class LocalWhisperEngine private constructor() {
                                     }
                                     if (audioHealthMonitor != null) lastAudioHealthDiagnostics = audioHealthMonitor.summarize(vadHeardSpeech = false)
                                     vadFired = true
-                                    onVadNoSpeech?.invoke()
+                                    vadFiredAtMs = SystemClock.elapsedRealtime()
+                                    if (!capture.closed.isClaimed()) onVadNoSpeech?.invoke()
                                 }
                                 if (vadLog && totalSamplesRead - lastHeartbeatSamples >= heartbeatIntervalSamples) {
                                     lastHeartbeatSamples = totalSamplesRead
@@ -548,12 +665,112 @@ class LocalWhisperEngine private constructor() {
                             }
                         }
                     }
+
+                    // Wall-clock watchdog (VAD turns only). The VAD's own
+                    // timers run on audio time and can be legitimately paused
+                    // (dead air, stalls) — this independent wall-clock bound is
+                    // what guarantees the mic can never be held open forever by
+                    // a lost callback, a noise-pinned detector, or a stream
+                    // that keeps delivering. The soft cap ends the turn the
+                    // NORMAL way (speech is transcribed, nothing is lost); only
+                    // the uncollected-turn and hard-ceiling cases abort.
+                    if (watchdog != null) {
+                        val now = SystemClock.elapsedRealtime()
+                        val sinceFired = if (vadFiredAtMs == 0L) 0L else now - vadFiredAtMs
+                        when (watchdog.check(now - startedAtMs, speechStarted, vadFired, sinceFired)) {
+                            CaptureWatchdog.Action.CONTINUE -> {}
+                            CaptureWatchdog.Action.FORCE_END_OF_TURN -> {
+                                logAlways(capture.logContext, "[Turn $tn] wall-clock listening cap (${CaptureWatchdog.MAX_TURN_MS / 60_000} min) reached mid-speech — ending the turn; the audio is transcribed as usual")
+                                if (audioHealthMonitor != null) lastAudioHealthDiagnostics = audioHealthMonitor.summarize(vadHeardSpeech = true)
+                                detector?.let { lastVadDiagnostics = it.diagnostics() }
+                                vadFired = true
+                                vadFiredAtMs = now
+                                if (!capture.closed.isClaimed()) onVadEndOfTurn?.invoke()
+                            }
+                            CaptureWatchdog.Action.FORCE_NO_SPEECH -> {
+                                logAlways(capture.logContext, "[Turn $tn] wall-clock listening cap (${CaptureWatchdog.MAX_TURN_MS / 60_000} min) reached with no speech registered — ending the listening turn")
+                                if (audioHealthMonitor != null) lastAudioHealthDiagnostics = audioHealthMonitor.summarize(vadHeardSpeech = false)
+                                detector?.let { lastVadDiagnostics = it.diagnostics() }
+                                vadFired = true
+                                vadFiredAtMs = now
+                                if (!capture.closed.isClaimed()) onVadNoSpeech?.invoke()
+                            }
+                            CaptureWatchdog.Action.ABORT_TURN_NOT_COLLECTED -> {
+                                exitError = CaptureErrorReason.TURN_NOT_COLLECTED to
+                                        "end-of-turn fired ${sinceFired / 1000}s ago but nothing collected the audio — releasing the microphone"
+                            }
+                            CaptureWatchdog.Action.ABORT_HARD_LIMIT -> {
+                                exitError = CaptureErrorReason.LISTENING_TIMEOUT to
+                                        "listening session exceeded the absolute ${CaptureWatchdog.HARD_LIMIT_MS / 60_000}-minute ceiling"
+                            }
+                        }
+                        if (exitError != null) break
+                    }
                 }
+            } catch (c: kotlinx.coroutines.CancellationException) {
+                // Owner-initiated teardown (stopAndTranscribe / cancel): the
+                // owner runs the cleanup. Rethrow so the job ends cancelled.
+                throw c
+            } catch (t: Throwable) {
+                // Anything thrown inside the loop body (detector, health
+                // monitor, chunk handling) used to kill the loop with only
+                // detector.close() behind it — mic held, flag stuck, UI
+                // "listening" forever. Route it through the same funnel.
+                Log.w(TAG, "capture loop crashed", t)
+                exitError = CaptureErrorReason.CAPTURE_CRASHED to
+                        "capture loop crashed: ${t.javaClass.simpleName}: ${t.message}"
             } finally {
                 detector?.close()
+                // Abnormal exit: no owner tore this session down, so everything
+                // it holds — the AudioRecord, the mic/Bluetooth route, the
+                // buffer, the "listening" flag — is released HERE, and the UI
+                // told via the typed error callback, exactly once.
+                if (exitError != null) {
+                    closeCapture(capture, keepBufferAndRouting = false, error = exitError)
+                }
             }
         }
         return true
+    }
+
+    /**
+     * The single idempotent teardown for one capture session. Every exit path
+     * funnels here; the session's [ActiveCapture.closed] latch makes the first
+     * caller win outright, so cleanup and the error callback can never run
+     * twice and racing paths can't double-release. [keepBufferAndRouting] is
+     * the stopAndTranscribe path: the captured samples are about to be
+     * transcribed, and the Bluetooth route deliberately stays up between
+     * hands-free turns. Abnormal exits ([error] != null) discard the buffer —
+     * engine failure must never flow downstream disguised as silence or an
+     * empty transcript — release the routing, and fire the session's typed
+     * error callback exactly once.
+     */
+    private fun closeCapture(
+        capture: ActiveCapture,
+        keepBufferAndRouting: Boolean,
+        error: Pair<CaptureErrorReason, String>? = null
+    ) {
+        if (!capture.closed.tryClaim()) return
+        if (activeCapture === capture) {
+            isCapturing = false
+            activeCapture = null
+        }
+        try { capture.record.stop() } catch (_: Throwable) {}
+        try { capture.record.release() } catch (_: Throwable) {}
+        if (!keepBufferAndRouting || error != null) {
+            clearVad()
+            synchronized(chunkLock) {
+                capturedChunks.clear()
+                capturedCount = 0
+            }
+            clearMicRouting()
+        }
+        if (error != null) {
+            logAlways(capture.logContext, "[Turn ${capture.turn}] capture ended abnormally — ${error.first}: ${error.second}")
+            try {
+                capture.onError?.invoke(error.first, error.second)
+            } catch (_: Throwable) { /* a UI callback must never break cleanup */ }
+        }
     }
 
     /** Coarse phases reported to the UI so the user knows what they're waiting on. */
@@ -574,7 +791,8 @@ class LocalWhisperEngine private constructor() {
         language: String = "en",
         onPhase: ((Phase) -> Unit)? = null
     ): String? {
-        if (!isCapturing && audioRecord == null) {
+        val capture = activeCapture
+        if (!isCapturing && capture == null) {
             return null
         }
         isCapturing = false
@@ -582,9 +800,9 @@ class LocalWhisperEngine private constructor() {
         try { captureJob?.cancelAndJoin() } catch (_: Throwable) {}
         captureJob = null
 
-        try { audioRecord?.stop() } catch (_: Throwable) {}
-        audioRecord?.release()
-        audioRecord = null
+        // Buffer and Bluetooth route survive: the samples are transcribed
+        // below, and a continuous hands-free loop keeps SCO up between turns.
+        capture?.let { closeCapture(it, keepBufferAndRouting = true) }
 
         val samples = drainBuffer()
         if (samples.isEmpty()) return null
@@ -688,9 +906,9 @@ class LocalWhisperEngine private constructor() {
         clearVad()
         try { captureJob?.cancel() } catch (_: Throwable) {}
         captureJob = null
-        try { audioRecord?.stop() } catch (_: Throwable) {}
-        audioRecord?.release()
-        audioRecord = null
+        activeCapture?.let { closeCapture(it, keepBufferAndRouting = false) }
+        // Kept outside closeCapture (which is per-session and may already have
+        // run) so cancel always leaves the engine empty, even with no session.
         synchronized(chunkLock) {
             capturedChunks.clear()
             capturedCount = 0

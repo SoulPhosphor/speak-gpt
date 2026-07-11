@@ -1212,6 +1212,33 @@ Everything is on-device. No cloud sync, no accounts.
   hard-won fixes (mic re-arm, audio-time VAD windows, barge-in prevention,
   watchdogs). Don't refactor it incidentally; change it only when the task is
   about it, and read the commit history of the file first.
+  **Capture-recovery invariants (July 11 2026, silent-failure audit round 2 —
+  keep these):** every Whisper capture session is an engine-internal
+  `ActiveCapture` whose teardown funnels through the idempotent
+  `closeCapture()` (a once-latch makes cleanup + the typed error callback run
+  exactly once per session, on every exit path — user stop, transcribe,
+  abnormal loop death, stale recovery). An abnormal capture exit (read
+  throw / error return / endless empty reads / loop crash / watchdog abort)
+  always releases the AudioRecord + Bluetooth route, clears `isCapturing`,
+  discards the buffer, and reports a typed `CaptureErrorReason` — NEVER
+  surface an engine failure as silence, a null transcript, or an empty
+  transcript. `startRecording` while a capture is genuinely live returns
+  **false** (it used to lie with `true`); a stuck flag over a dead loop is
+  recovered. VAD-driven turns carry a wall-clock `CaptureWatchdog` (soft cap
+  10 min → flows into the NORMAL end-of-turn/no-speech path so speech is
+  never lost; 60 s uncollected-turn abort after the VAD fired; 12 min hard
+  ceiling); manual push-to-talk is deliberately un-capped (the user owns
+  stop; a cap would cut intended long dictation). ChatActivity guards every
+  whisper callback with `whisperTurnToken` (late/duplicate callbacks from an
+  old turn are dropped), retries mid-turn capture errors through
+  `whisperCaptureErrorBudget` (2, reset only when a turn completes — separate
+  from `handsFreeTurnRetries`, which covers arm failures and resets on a
+  successful arm), and re-checks RECORD_AUDIO before EVERY arm and in
+  onResume — a revoked permission is a named, always-logged stop, never a
+  fake no-speech. Foreground-service start failures (both services, plus
+  `startHandsFreeService`) always write an ungated Event-log line. Cloud
+  Whisper never calls `start()` after `prepare()` fails. The pure decision
+  logic lives in `stt/CaptureTurnPolicy.kt`, unit-tested in `app/src/test`.
 - **System-message assembly in `regularGPTResponse`** — the prompt layers are
   FIXED and deterministic every turn: (1) persona prompt + system message
   merged into ONE stable first system message, byte-identical, specifically
