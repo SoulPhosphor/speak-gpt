@@ -135,6 +135,8 @@
     <string name="btn_copy">Copy</string>
     <string name="user">User</string>
     <string name="title_edit_chat">Edit chat</string>
+    <string name="title_rename_failed">Rename failed</string>
+    <string name="msg_rename_failed">The chat could not be renamed safely, so nothing was changed. The chat, its messages and its settings are all untouched under the old name. You can try again.</string>
     <string name="prompt_explain">What does "%s" means?</string>
     <string name="cat_sport">Sport</string>
     <string name="cat_uncat">Uncategorized</string>
@@ -1238,6 +1240,7 @@
     <string name="mem_reset_confirm">Reset</string>
     <string name="mem_reset_done">Memory reset.</string>
     <string name="mem_reset_done_backup">Memory reset. Backup saved: %1$s</string>
+    <string name="mem_reset_backup_failed">The backup file could not be written, so nothing was deleted. Your memories are untouched. You can try again, or run the reset without a backup by unchecking the backup option.</string>
 
     <!-- ============================================================
          Memory Settings reorganization (memory_settings_reorg_spec.md,

@@ -176,19 +176,38 @@ class AddChatDialogFragment : DialogFragment() {
         if (chatPreferences?.checkDuplicate(requireActivity(), nameInput?.text.toString()) == false) {
             val chatName = if (autoName?.isChecked!! && requireArguments().getString("name") == "") "_autoname_${chatPreferences?.getAvailableChatIdForAutoname(requireActivity())}" else nameInput?.text.toString()
 
-            val preferences: Preferences = if (isEdit) {
-                chatPreferences?.editChat(requireActivity(), nameInput?.text.toString(), requireArguments().getString("name").toString())
-                listener!!.onEdit(chatName, Hash.hash(nameInput?.text.toString()), arguments?.getInt("position")!!)
+            if (isEdit) {
+                // A rename must never re-derive or overwrite the chat's own
+                // settings: editChat moves the history AND copies every
+                // per-chat settings key atomically (ChatRenameTransaction).
+                // The re-derivation block this branch used to run reset the
+                // chat's persona, lorebooks, memory scene and per-chat tuning
+                // to endpoint-profile defaults on every manual rename.
+                val renamed = chatPreferences?.editChat(
+                    requireActivity(),
+                    nameInput?.text.toString(),
+                    requireArguments().getString("name").toString()
+                ) == true
 
-                // Transfer settings
-                Preferences.getPreferences(requireActivity(), Hash.hash(arguments?.getString("name").toString()))
-            } else {
-                chatPreferences?.addChat(requireActivity(), chatName)
-                listener!!.onAdd(chatName, Hash.hash(chatName), arguments?.getBoolean("fromFile") == true)
-
-                // Copy settings from default
-                Preferences.getPreferences(requireActivity(), "")
+                if (renamed) {
+                    listener!!.onEdit(chatName, Hash.hash(nameInput?.text.toString()), arguments?.getInt("position")!!)
+                } else {
+                    // false = nothing changed; the chat is intact under its
+                    // old name. Say so persistently (dialog, never a toast).
+                    MaterialAlertDialogBuilder(requireActivity(), R.style.App_MaterialAlertDialog)
+                        .setTitle(R.string.title_rename_failed)
+                        .setMessage(R.string.msg_rename_failed)
+                        .setPositiveButton(R.string.btn_ok) { _, _ -> }
+                        .show()
+                }
+                return
             }
+
+            chatPreferences?.addChat(requireActivity(), chatName)
+            listener!!.onAdd(chatName, Hash.hash(chatName), arguments?.getBoolean("fromFile") == true)
+
+            // Copy settings from default
+            val preferences: Preferences = Preferences.getPreferences(requireActivity(), "")
 
             // Write settings
             val resolution = preferences.getResolution()

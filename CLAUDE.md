@@ -612,9 +612,23 @@ Everything is on-device. No cloud sync, no accounts.
 ## Current feature list
 
 - Multi-chat with per-chat settings (model, endpoint, sampling, persona, …),
-  auto-naming of new chats (which **changes the chat id** and copies every
-  per-chat preference — if you add a per-chat setting, add it to the copy block
-  in `ChatActivity` after auto-naming, or it silently vanishes on rename).
+  auto-naming of new chats (which **changes the chat id**). Renames — auto or
+  manual — go through `ChatPreferences.editChat` → `ChatRenameTransaction`
+  (July 11 2026): the message history and the WHOLE per-chat settings file
+  are copied wholesale (write-new → verify → flip the chat-list pointer →
+  clear old, all synchronous commits), so a new per-chat setting survives
+  renames automatically — the old hand-maintained copy blocks in
+  `ChatActivity` and `AddChatDialogFragment` are GONE (they had drifted: one
+  dropped persona/lorebooks/memory scene on manual rename, the other reset
+  the voice settings on auto-name, and the manual one re-derived per-chat
+  tuning from the endpoint profile). When you add a per-chat key, register
+  it in `PerChatSettingKeys` — `PerChatSettingKeysTest` scans
+  `Preferences.kt` and fails CI when the inventory drifts. `editChat`
+  returns false when the rename could not be fully applied (the chat is then
+  untouched under its old name and callers keep the old id); auto-naming
+  retries on later turns (max 3 attempts per screen instance) instead of
+  giving up after one failure. Older doc mentions of "the auto-naming copy
+  block" mean this mechanism now.
   Auto-naming adopts the new id **in place** — it must never relaunch
   ChatActivity, because onDestroy kills the readback and hands-free loop.
 - Any OpenAI-compatible endpoint; multiple endpoint profiles; streaming via
@@ -974,7 +988,12 @@ Everything is on-device. No cloud sync, no accounts.
     only, never the whole line, never pills.
   - **Reset memories** in Memory settings (`resetAllMemoryData` + a blunt
     confirm dialog with a "Save a backup file first" checkbox, checked by
-    default) empties every memory-content table. The work order's "Remove
+    default) empties every memory-content table. Since July 11 2026 the
+    backup gates the reset: `writeBackupNow` writes atomically (temp file →
+    rename via `AtomicFileWriter`) and reads the file back, and if it
+    reports failure the reset is ABORTED with a dialog — it used to proceed
+    and only change the confirmation wording, destroying the store the user
+    had asked to protect. The work order's "Remove
     everything imported" was intentionally NOT built (imported rows aren't
     distinguishable; owner decision).
   - **Quick Settings** gained an optional per-chat **Project** selector (§4;
@@ -1198,8 +1217,12 @@ Everything is on-device. No cloud sync, no accounts.
   arm64 — keep the gate if you touch JNI loading.
 - **Checked-in `debug.keystore`** is intentional (stable CI debug signing).
   Do not rotate/remove it; do not publish debug builds as real releases.
-- **Auto-naming preference copy block** in `ChatActivity` (see feature list) —
-  easy to forget, silent data loss when missed.
+- **Chat renames are a verified transaction** (`ChatRenameTransaction`, July
+  11 2026 — see the feature list): write-new → verify → pointer flip → clear
+  old, settings copied wholesale, every write a synchronous commit. Never
+  reintroduce a hand-enumerated settings copy, an apply()-deferred write, or
+  a clear-before-write into a rename path; new per-chat keys are registered
+  in `PerChatSettingKeys` (test-enforced).
 - **`ChatActivity` handles rotation itself** (`android:configChanges`
   includes orientation/screenSize etc., July 10 2026): recreation runs
   onDestroy, which kills TTS readback and the hands-free loop — tilting the
@@ -1308,6 +1331,8 @@ Everything is on-device. No cloud sync, no accounts.
    the layout actually inflated.
 3. Cross-cutting request changes go through the single generation funnel
    (`generateResponse` → `regularGPTResponse`); there is no second path.
-4. New per-chat preference added to the auto-naming copy block.
+4. New per-chat preference key registered in `PerChatSettingKeys` (renames
+   copy the settings file wholesale; the unit test fails when the registry
+   drifts from `Preferences.kt`).
 5. DB change → version bump + additive migration + fresh-install path.
 6. Push, then confirm the `Android Checks` workflow run for your commit is green.

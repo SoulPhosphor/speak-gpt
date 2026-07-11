@@ -519,12 +519,40 @@ class MemoryControlsActivity : FragmentActivity() {
 
     private fun doReset(backupFirst: Boolean) {
         runOffThread {
-            val backupName = if (backupFirst) MemoryExporter.writeBackupNow(this) else null
+            var backupName: String? = null
+            if (backupFirst) {
+                // The user asked for a safety copy, so the reset must not run
+                // unless that copy is verifiably on disk. writeBackupNow
+                // returns null on ANY failure (it writes atomically and reads
+                // the file back), and a null aborts BEFORE anything is
+                // deleted — it used to only change the confirmation wording
+                // while the reset destroyed the store anyway.
+                backupName = MemoryExporter.writeBackupNow(this)
+                if (backupName == null) {
+                    runOnUiThread {
+                        if (!isFinishing) {
+                            MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+                                .setTitle(R.string.mem_reset_title)
+                                .setMessage(R.string.mem_reset_backup_failed)
+                                .setPositiveButton(R.string.btn_ok) { _, _ -> }
+                                .show()
+                        }
+                    }
+                    return@runOffThread
+                }
+            }
             MemoryStore.getInstance(this).resetAllMemoryData()
             runOnUiThread {
                 val msg = if (backupName != null) getString(R.string.mem_reset_done_backup, backupName)
                 else getString(R.string.mem_reset_done)
-                Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+                // Outcome as a dialog, not a toast (owner rule: persistent
+                // messages); the wording itself is unchanged.
+                if (!isFinishing) {
+                    MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+                        .setMessage(msg)
+                        .setPositiveButton(R.string.btn_ok) { _, _ -> }
+                        .show()
+                }
                 refreshBackupStatus()
             }
         }
