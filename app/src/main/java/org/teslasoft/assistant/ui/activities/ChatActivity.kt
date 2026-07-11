@@ -363,6 +363,22 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     // retry a couple of times before declaring the loop dead.
     private var handsFreeTurnRetries = 0
 
+    // Guards the whisper engine's per-turn callbacks (end-of-turn, no-speech,
+    // capture error) against arriving late, twice, or after the turn they
+    // belong to was already torn down: each arm bumps the token, every
+    // callback closure captures it, and a mismatch means "a different turn
+    // owns the mic now — drop it". Without this, a stale callback from a dead
+    // turn could end (or error out) the NEXT turn's capture. Main thread only.
+    private var whisperTurnToken = 0
+
+    // Mid-turn capture failures (the engine's typed capture-error callback).
+    // Deliberately separate from handsFreeTurnRetries: that budget covers
+    // failures to OPEN the mic and resets on a successful arm — which would
+    // let arm-ok/die-mid-turn cycles retry forever. This one only resets when
+    // a turn actually completes (end of turn reached), so a capture that
+    // keeps dying can never become an infinite automatic recovery loop.
+    private val whisperCaptureErrorBudget = org.teslasoft.assistant.stt.BoundedRetryBudget(2)
+
     // Readback watchdog cadence: how often to poll playback state, and how long
     // to wait for speech to start before assuming the utterance was lost.
     private val HANDS_FREE_READBACK_POLL_MS = 250L
@@ -402,7 +418,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action != ACTION_HANG_UP) return
             runOnUiThread {
-                cancelAllAiActivity()
+                // Always persisted: a Hang Up can be fired without any human
+                // tap on this phone (a paired watch/car surface, or any app
+                // granted notification access can press notification buttons).
+                // When a session ends "by itself", this line is the evidence.
+                logVoiceEventAlways("Hang Up received from the notification action " +
+                        "(the notification button, a paired device, or an app with notification access) — stopping everything")
+                cancelAllAiActivity("notification Hang Up action")
                 restoreUIState()
             }
         }
@@ -790,6 +812,22 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
         // Diagnostics may have been toggled in Settings while we were away.
         updateDebugLogButtonVisibility()
+
+        // The mic permission can be revoked while we're away (system settings,
+        // a one-time grant expiring). A session that thinks it's listening
+        // without the permission must be shut down as a NAMED permission
+        // failure, not left to surface later as mysterious silence.
+        if (isRecording && !hasRecordAudioPermission()) {
+            logVoiceEventAlways("microphone permission was revoked while a voice session was active — stopping capture")
+            try { LocalWhisperEngine.get().cancel() } catch (_: Exception) { /* ignore */ }
+            try { recognizer?.cancel() } catch (_: Exception) { /* ignore */ }
+            if (preferences?.getHandsFreeMode() == true && !handsFreeStopped) {
+                stopHandsFreeLoop("microphone permission revoked", notify = false)
+            } else {
+                isRecording = false
+                micIdle()
+            }
+        }
 
         // Safety net for the top action bar. The settings cog is a shared-element
         // scene-transition target, so Android hides it (and can leave the bar in a
@@ -1307,13 +1345,72 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         tts = TextToSpeech(this, ttsListener)
     }
 
+    // One-shot guard for the delivery-tuning retry so overlapping ttsPostInit
+    // calls (init listener + the language-detect reset path) can't stack
+    // multiple scheduled re-applications. Main thread only.
+    private var ttsTuningRetryPending = false
+
+    /**
+     * Applies the saved speech rate / pitch to the device TTS engine and
+     * checks whether the engine ACCEPTED them. The Google engine can reject a
+     * call made at the exact moment init completes (returns ERROR, throws
+     * nothing) — the old code ignored the result, so the whole session spoke
+     * at the engine's default rate, faster than the saved value, with no
+     * trace ("the readback suddenly talks faster on a new session", owner
+     * report July 11 2026). On rejection the SAME saved values are re-applied
+     * exactly once, shortly after init (never per utterance, never a loop);
+     * only rejection/fallback is logged — success is silent. The saved value,
+     * UI, defaults and playback behavior are untouched. The system-wide
+     * Android speech rate (Accessibility settings) multiplies the app's rate
+     * and is external — it cannot be seen or changed from here.
+     */
+    private fun applyTtsDeliveryTuning(isRetry: Boolean) {
+        val engine = tts ?: return
+        val prefs = preferences
+        if (prefs == null) {
+            // Settings not loaded yet — the engine would run at its default.
+            // The one-shot retry re-reads the saved values once loaded.
+            logVoiceEventAlways("TTS engine initialized before settings loaded — saved speech rate not applied" +
+                    if (isRetry) " (retry also ran too early; this session may use the engine's default rate)"
+                    else "; re-applying once shortly")
+            if (!isRetry) scheduleTtsTuningRetry()
+            return
+        }
+        val rate = prefs.getTtsSpeechRate()
+        val pitch = prefs.getTtsPitch()
+        val rateResult = try { engine.setSpeechRate(rate) } catch (_: Throwable) { TextToSpeech.ERROR }
+        val pitchResult = try { engine.setPitch(pitch) } catch (_: Throwable) { TextToSpeech.ERROR }
+        when (org.teslasoft.assistant.stt.TtsTuningPolicy.afterApply(rateResult, pitchResult, isRetry)) {
+            org.teslasoft.assistant.stt.TtsTuningPolicy.Next.DONE -> {
+                /* accepted — deliberately no successful-operation logging */
+            }
+            org.teslasoft.assistant.stt.TtsTuningPolicy.Next.RETRY_ONCE -> {
+                logVoiceEventAlways("TTS engine rejected the saved delivery tuning at init " +
+                        "(rate=$rate result=$rateResult, pitch=$pitch result=$pitchResult) — re-applying once")
+                scheduleTtsTuningRetry()
+            }
+            org.teslasoft.assistant.stt.TtsTuningPolicy.Next.GIVE_UP -> {
+                logVoiceEventAlways("TTS engine rejected the saved delivery tuning again on the retry " +
+                        "(rate=$rate result=$rateResult, pitch=$pitch result=$pitchResult) — " +
+                        "this session may speak at the engine's default rate")
+            }
+        }
+    }
+
+    private fun scheduleTtsTuningRetry() {
+        if (ttsTuningRetryPending) return
+        ttsTuningRetryPending = true
+        Handler(Looper.getMainLooper()).postDelayed({
+            ttsTuningRetryPending = false
+            if (!isFinishing && !isDestroyed) applyTtsDeliveryTuning(isRetry = true)
+        }, 750)
+    }
+
     private fun ttsPostInit() {
         // Delivery tuning (advanced voice settings). Device-TTS only; the
-        // OpenAI voice renders server-side and ignores these.
-        try {
-            tts?.setSpeechRate(preferences?.getTtsSpeechRate() ?: 1.0f)
-            tts?.setPitch(preferences?.getTtsPitch() ?: 1.0f)
-        } catch (_: Exception) { /* engine may not support it; defaults apply */ }
+        // OpenAI voice renders server-side and ignores these. Applied with
+        // accept/reject verification — see applyTtsDeliveryTuning.
+        applyTtsDeliveryTuning(isRetry = false)
         if (!autoLangDetect) {
             val result = tts!!.setLanguage(
                 LocaleParser.parse(
@@ -1976,7 +2073,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     private fun initLogic() {
         btnMicro?.setOnClickListener {
             if (isAiCurrentlyBusy()) {
-                cancelAllAiActivity()
+                cancelAllAiActivity("mic button tap on this screen")
                 return@setOnClickListener
             }
             when (preferences!!.getEffectiveAudioModel()) {
@@ -1992,7 +2089,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         // View.isEnabled, so a stop tap always lands.
         btnMicro?.setOnTouchListener { _, event ->
             if (event.action == MotionEvent.ACTION_UP && isAiCurrentlyBusy() && !isRecording) {
-                cancelAllAiActivity()
+                cancelAllAiActivity("mic button touch on this screen (mid-generation)")
                 true
             } else {
                 false
@@ -2161,76 +2258,63 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         }
     }
 
+    @Suppress("DEPRECATION")
     private fun startWhisper() {
         if (openAIKey == null) {
             openAIMissing("whisper", "")
-        } else if (Build.VERSION.SDK_INT >= 31) {
-            recorder = MediaRecorder(this).apply {
-                setAudioSource(MediaRecorder.AudioSource.MIC)
-                setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-                setAudioEncoder(MediaRecorder.AudioEncoder.HE_AAC)
-                setAudioChannels(1)
-                setAudioSamplingRate(44100)
-                setAudioEncodingBitRate(96000)
-                setOutputFile("${externalCacheDir?.absolutePath}/tmp.m4a")
-
-                if (!cancelState) {
-                    try {
-                        prepare()
-                    } catch (_: IOException) {
-                        micIdle()
-                        isRecording = false
-                        MaterialAlertDialogBuilder(
-                            this@ChatActivity,
-                            R.style.App_MaterialAlertDialog
-                        )
-                            .setTitle(R.string.label_audio_error)
-                            .setMessage(R.string.msg_audio_error)
-                            .setPositiveButton(R.string.btn_close) { _, _ -> }
-                            .show()
-                    }
-
-                    start()
-                } else {
-                    cancelState = false
-                    micIdle()
-                    isRecording = false
-                }
-            }
-        } else {
-            recorder = MediaRecorder().apply {
-                setAudioSource(MediaRecorder.AudioSource.MIC)
-                setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-                setAudioEncoder(MediaRecorder.AudioEncoder.HE_AAC)
-                setAudioChannels(1)
-                setAudioSamplingRate(44100)
-                setAudioEncodingBitRate(96000)
-                setOutputFile("${externalCacheDir?.absolutePath}/tmp.m4a")
-
-                if (!cancelState) {
-                    try {
-                        prepare()
-                    } catch (_: IOException) {
-                        micIdle()
-                        isRecording = false
-                        MaterialAlertDialogBuilder(
-                            this@ChatActivity,
-                            R.style.App_MaterialAlertDialog
-                        )
-                            .setTitle(R.string.label_audio_error)
-                            .setMessage(R.string.msg_audio_error)
-                            .setPositiveButton(R.string.btn_close) { _, _ -> }
-                            .show()
-                    }
-
-                    start()
-                } else {
-                    cancelState = false
-                    micIdle()
-                    isRecording = false
-                }
-            }
+            return
         }
+        // Arm-time permission check (the tap entry point checks too; this
+        // covers arms that don't come through it). Without the permission
+        // MediaRecorder just throws, which used to read as a generic failure.
+        if (!hasRecordAudioPermission()) {
+            logVoiceEventAlways("microphone permission is missing/revoked — cannot start cloud-Whisper capture")
+            micIdle()
+            isRecording = false
+            permissionResultLauncherV2.launch(
+                Intent(this, MicrophonePermissionActivity::class.java)
+                    .setAction(Intent.ACTION_VIEW)
+            )
+            return
+        }
+        if (cancelState) {
+            cancelState = false
+            micIdle()
+            isRecording = false
+            return
+        }
+        val r = if (Build.VERSION.SDK_INT >= 31) MediaRecorder(this) else MediaRecorder()
+        try {
+            r.setAudioSource(MediaRecorder.AudioSource.MIC)
+            r.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+            r.setAudioEncoder(MediaRecorder.AudioEncoder.HE_AAC)
+            r.setAudioChannels(1)
+            r.setAudioSamplingRate(44100)
+            r.setAudioEncodingBitRate(96000)
+            r.setOutputFile("${externalCacheDir?.absolutePath}/tmp.m4a")
+            r.prepare()
+            // start() only runs when prepare() succeeded. It used to run
+            // unconditionally AFTER the prepare-failure dialog was shown,
+            // turning a handled setup failure into an IllegalStateException
+            // crash. A start() failure is the same handled class.
+            r.start()
+        } catch (e: Exception) {
+            try { r.release() } catch (_: Exception) { /* ignore */ }
+            recorder = null
+            logVoiceEventAlways("cloud-Whisper recorder setup failed: ${e.javaClass.simpleName}: ${e.message}")
+            micIdle()
+            isRecording = false
+            MaterialAlertDialogBuilder(
+                this@ChatActivity,
+                R.style.App_MaterialAlertDialog
+            )
+                .setTitle(R.string.label_audio_error)
+                .setMessage(R.string.msg_audio_error)
+                .setPositiveButton(R.string.btn_close) { _, _ -> }
+                .show()
+            return
+        }
+        recorder = r
     }
 
     private fun stopWhisper() {
@@ -2410,12 +2494,39 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         }
     }
 
+    /** True iff RECORD_AUDIO is granted right now. Re-checked before every arm
+     *  (not just at the tap entry points) and on returning to the screen,
+     *  because a permission revoked mid-session used to surface as ordinary
+     *  "heard nothing" instead of naming the real cause. */
+    private fun hasRecordAudioPermission(): Boolean =
+        ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
+                PackageManager.PERMISSION_GRANTED
+
     private fun startLocalWhisper() {
+        if (!hasRecordAudioPermission()) {
+            // Distinct state, never "no speech": say exactly what is wrong in
+            // the persistent Event log and send the user to the existing
+            // microphone-permission screen (same one the tap entry points use).
+            logVoiceEventAlways("microphone permission is missing/revoked — cannot start on-device capture")
+            isRecording = false
+            micIdle()
+            permissionResultLauncherV2.launch(
+                Intent(this, MicrophonePermissionActivity::class.java)
+                    .setAction(Intent.ACTION_VIEW)
+            )
+            return
+        }
         micRecording()
         isRecording = true
+        val token = ++whisperTurnToken
         // applicationContext lets the engine route capture to a Bluetooth
         // headset when one is connected (else the built-in mic).
-        val ok = LocalWhisperEngine.get().startRecording(context = applicationContext)
+        val ok = LocalWhisperEngine.get().startRecording(
+            context = applicationContext,
+            onCaptureError = { reason, detail ->
+                runOnUiThread { if (token == whisperTurnToken) onWhisperCaptureError(reason, detail) }
+            }
+        )
         if (!ok) {
             isRecording = false
             micIdle()
@@ -2437,10 +2548,24 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     private fun startLocalWhisperHandsFreeTurn(freshTurn: Boolean) {
         Log.i("HandsFree", "startLocalWhisperHandsFreeTurn: freshTurn=$freshTurn " +
                 "isRecording=$isRecording handsFreeStopped=$handsFreeStopped cancelState=$cancelState")
+        // Permission is re-checked on EVERY arm, not just the tap entry point:
+        // the auto re-arm after a readback used to open a doomed capture when
+        // the permission had been revoked mid-session, and the failure then
+        // masqueraded as "heard nothing". This is a distinct, always-logged
+        // stop with the give-up cue, never a no-speech timeout.
+        if (!hasRecordAudioPermission()) {
+            logVoiceEventAlways("microphone permission is missing/revoked at " +
+                    (if (freshTurn) "hands-free start" else "hands-free re-arm") +
+                    " — stopping the loop (this is a permission problem, not silence)")
+            isRecording = false
+            stopHandsFreeLoop("microphone permission revoked", notify = true)
+            return
+        }
         if (freshTurn) {
             handsFreeStopped = false
             cancelState = false
             handsFreeTurnRetries = 0
+            whisperCaptureErrorBudget.reset()
             // Same readback-interrupt reset as startRecognition(): a mic press
             // mid-readback must kill the readback's completion gate/watchdog and
             // silence the playback itself before the mic opens, or the VAD
@@ -2496,6 +2621,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             hangoverMs = preferences!!.getVadHangoverMs().toLong(),
             sileroThreshold = preferences!!.getVadSileroThreshold() / 100.0
         )
+        // Every callback closure carries this turn's token; a late/duplicate
+        // callback from an older turn (or from a session the engine already
+        // cleaned up) compares stale and is dropped on the main thread.
+        val token = ++whisperTurnToken
         val ok = LocalWhisperEngine.get().startRecording(
             // applicationContext lets the engine route capture to a Bluetooth
             // headset when one is connected (else the built-in mic), re-checked
@@ -2507,8 +2636,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 minSpeechMs = preferences!!.getVadMinSpeechMs().toLong(),
                 audioHealth = preferences!!.getAudioHealthLogging()
             ),
-            onEndOfTurn = { runOnUiThread { onHandsFreeWhisperEndOfTurn() } },
-            onNoSpeechTimeout = { runOnUiThread { onHandsFreeWhisperNoSpeech() } }
+            onEndOfTurn = { runOnUiThread { if (token == whisperTurnToken) onHandsFreeWhisperEndOfTurn() } },
+            onNoSpeechTimeout = { runOnUiThread { if (token == whisperTurnToken) onHandsFreeWhisperNoSpeech() } },
+            onCaptureError = { reason, detail ->
+                runOnUiThread { if (token == whisperTurnToken) onWhisperCaptureError(reason, detail) }
+            }
         )
         if (!ok) {
             isRecording = false
@@ -2547,6 +2679,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 "handsFreeStopped=$handsFreeStopped cancelState=$cancelState")
         if (!isRecording || handsFreeStopped || cancelState) return
         isRecording = false
+        // The turn made real progress — restore the mid-turn failure budget.
+        whisperCaptureErrorBudget.reset()
         logVoiceEvent("end of turn detected; transcribing")
         logVadDiagnostics("end-of-turn", showToast = false)
         // stopLocalWhisper() transcribes the buffered audio and routes through
@@ -2561,6 +2695,53 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         logVadDiagnostics("no-speech-timeout")
         stopHandsFreeLoop("no speech within the no-speech window", notify = true)
         LocalWhisperEngine.get().cancel()
+    }
+
+    /**
+     * The engine's capture loop died on its own (AudioRecord read failure, a
+     * crash inside the loop, or a wall-clock watchdog abort). This is the
+     * explicit failure path — it is NEVER delivered as silence or an empty
+     * transcript. The engine has already released the mic, the Bluetooth
+     * route and the buffer; this side owns the UI state and the loop
+     * decision: a bounded retry in hands-free (so one glitch doesn't end the
+     * conversation), then a visible-and-audible stop through the same funnel
+     * as every other loop ending. Manual push-to-talk resets to idle and
+     * tells the user with the existing audio-error dialog. Late or duplicate
+     * deliveries are filtered by the turn token before this runs.
+     */
+    private fun onWhisperCaptureError(reason: org.teslasoft.assistant.stt.CaptureErrorReason, detail: String) {
+        logVoiceEventAlways("on-device capture failed ($reason): $detail")
+        val wasHandsFreeTurn = preferences?.getHandsFreeMode() == true &&
+                !handsFreeStopped && !cancelState && isRecording
+        isRecording = false
+        if (wasHandsFreeTurn) {
+            if (whisperCaptureErrorBudget.tryConsume()) {
+                logVoiceEvent("re-arming after capture error (attempt ${whisperCaptureErrorBudget.attemptsUsed()})")
+                handsFreeHandler.postDelayed({
+                    if (!isFinishing && !isDestroyed && !handsFreeStopped && !cancelState && !isRecording) {
+                        startLocalWhisperHandsFreeTurn(freshTurn = false)
+                    }
+                }, 600)
+            } else {
+                stopHandsFreeLoop("on-device capture failed repeatedly ($reason)", notify = true)
+            }
+            return
+        }
+        // Manual push-to-talk (or the loop is already down): back to idle. The
+        // dialog matches the house persistent-message rule and reuses the
+        // existing audio-error wording; hands-free never shows it (the give-up
+        // chime + Event log are the screen-off signals there).
+        micIdle()
+        btnMicro?.isEnabled = true
+        btnSend?.isEnabled = true
+        progress?.visibility = View.GONE
+        if (preferences?.getHandsFreeMode() != true && !isFinishing && !isDestroyed) {
+            MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+                .setTitle(R.string.label_audio_error)
+                .setMessage(R.string.local_whisper_capture_failed)
+                .setPositiveButton(R.string.btn_close) { _, _ -> }
+                .show()
+        }
     }
 
     /** Surface the per-recording diagnostics when a hands-free turn ends. Two
@@ -2668,6 +2849,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     }
 
     private fun stopLocalWhisper() {
+        // This turn is being collected; any capture callback still in flight
+        // (a duplicate end-of-turn, a racing error) belongs to the past.
+        whisperTurnToken++
         btnMicro?.isEnabled = false
         btnSend?.isEnabled = false
         progress?.visibility = View.VISIBLE
@@ -3241,6 +3425,23 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     }
 
     private fun startRecognition(freshTurn: Boolean = true) {
+        // Re-checked on every arm (the tap entry point checks too, but the
+        // hands-free restarts and re-arms come straight here): with the
+        // permission revoked the recognizer just errors opaquely, and the
+        // failure used to read as a recognizer problem instead of naming the
+        // permission.
+        if (!hasRecordAudioPermission()) {
+            logVoiceEventAlways("microphone permission is missing/revoked at " +
+                    (if (freshTurn) "recognition start" else "recognition re-arm") +
+                    " — not opening the mic (this is a permission problem, not silence)")
+            if (preferences?.getHandsFreeMode() == true && !handsFreeStopped) {
+                stopHandsFreeLoop("microphone permission revoked", notify = true)
+            } else {
+                isRecording = false
+                micIdle()
+            }
+            return
+        }
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
         intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
         intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, LocaleParser.parse(preferences!!.getLanguage()))
@@ -3289,6 +3490,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         // off knows it stopped listening and is waiting for them, rather than
         // sitting in silence assuming it's still listening.
         if (notify) playNoSpeechSignal()
+        whisperTurnToken++ // invalidate any whisper turn callback still in flight
         handsFreeStopped = true
         handsFreeReadbackExpected = false
         handsFreeReadbackToken++ // invalidate any in-flight readback watchdog
@@ -3343,10 +3545,20 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
     /** Cancels generation, TTS, audio playback, recognizer, and the hands-free
      *  loop in one shot. Mirrors what long-press has always done; also reachable
-     *  from a short tap when the AI is busy. */
-    private fun cancelAllAiActivity() {
-        logVoiceEvent("user cancelled all AI activity (stop tap)")
+     *  from a short tap when the AI is busy.
+     *
+     *  [source] names WHICH trigger fired, verbatim, in the log line. All three
+     *  triggers used to log the identical "(stop tap)", so when a stop arrived
+     *  with the screen off and the owner nowhere near the phone (July 11 2026
+     *  report), the log claimed a tap that never happened and the real source
+     *  was unprovable. Only three paths exist: the two mic-button touch paths
+     *  (impossible with the screen off) and the notification Hang Up
+     *  PendingIntent — which any paired device or app with notification access
+     *  can fire without a human tap. */
+    private fun cancelAllAiActivity(source: String) {
+        logVoiceEvent("all AI activity cancelled ($source)")
         cancelState = true
+        whisperTurnToken++ // invalidate any whisper turn callback still in flight
         handsFreeStopped = true
         handsFreeReadbackExpected = false
         handsFreeReadbackToken++ // invalidate any in-flight readback watchdog
@@ -3459,7 +3671,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         ensurePostNotificationsPermission()
         try {
             HandsFreeService.start(this, chatId, chatName)
-        } catch (_: Exception) { /* ignore — service will be retried on next turn */ }
+        } catch (e: Exception) {
+            // The loop still runs without the keep-alive, but the failure used
+            // to leave no trace anywhere — screen-off protection was silently
+            // missing when the session later died. One line per fresh loop
+            // start, ungated. (On Android 14+, a revoked mic permission makes
+            // this very start throw SecurityException — the line names it.)
+            logVoiceEventAlways("HandsFreeService failed to start: ${e.javaClass.simpleName}: ${e.message} — " +
+                    "hands-free continues WITHOUT the screen-off keep-alive")
+        }
     }
 
     private fun stopHandsFreeService() {
