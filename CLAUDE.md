@@ -128,8 +128,20 @@ now cancels every generation scope (`killAllProcesses`, incl. the new
 `parseMessageScope`), a `stopReadback()` helper owns the audio teardown +
 clears `pendingSpeak`, a `readbackSession` stamp (bumped on every stop,
 re-checked right before text reaches the engine) closes the async-hop
-races, and the speaker button is now a read/stop toggle. Awaiting owner
-on-device confirmation — not done until they say so.
+races, and the speaker button is now a read/stop toggle. The owner then
+described their stop flow ("it prints the whole reply, then begins
+reading; stop should stop readback immediately and not open the mic"),
+which exposed a fifth hole: in the silent gap between the reply printing
+and the audio actually starting (ML Kit hop, engine spin-up, cloud-voice
+fetch) — and during engines' mid-utterance isSpeaking=false blips —
+`isAiCurrentlyBusy()` returned false, so the stop tap fell through to the
+mic-toggle and OPENED THE MIC while the readback then spoke over it (in
+hands-free the app could transcribe its own voice as the next turn).
+Fixed: `isAiCurrentlyBusy()` now also counts a committed-but-not-yet-
+audible readback (`handsFreeReadbackExpected` / `readbackKeepAliveActive`
+/ `pendingSpeak` / the adapter's speaking position) as busy, so a tap in
+the gap is a stop, never a mic-open. Awaiting owner on-device
+confirmation — not done until they say so.
 
 ## App summary
 

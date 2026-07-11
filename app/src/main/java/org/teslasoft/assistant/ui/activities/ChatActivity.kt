@@ -3236,13 +3236,29 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         }
     }
 
-    /** True while the AI is generating, speaking through TTS, or playing back
-     *  OpenAI TTS audio. Used so a single mic-button tap can cancel everything. */
+    /** True while the AI is generating, speaking through TTS, playing back
+     *  OpenAI TTS audio, or COMMITTED to speaking (readback decided but the
+     *  audio hasn't started yet). Used so a single mic-button tap can cancel
+     *  everything.
+     *
+     *  The pending-readback signals matter: the reply prints BEFORE any sound
+     *  comes out (language detection, engine spin-up, cloud-voice fetch), and
+     *  that gap is exactly when the user taps stop. Counting the gap as
+     *  "idle" turned the stop tap into a mic-open — the loop started
+     *  listening, the readback then spoke over the open mic, and in
+     *  hands-free the app transcribed its own voice as the user's next turn.
+     *  Same for the engines' documented habit of blipping isSpeaking=false
+     *  mid-utterance: without these flags a stop tap during a blip opened
+     *  the mic instead of stopping. */
     private fun isAiCurrentlyBusy(): Boolean {
         val ttsSpeaking = try { tts?.isSpeaking == true } catch (_: Exception) { false }
         val mediaPlaying = try { mediaPlayer?.isPlaying == true } catch (_: Exception) { false }
         val progressVisible = progress?.visibility == View.VISIBLE
-        return ttsSpeaking || mediaPlaying || progressVisible
+        val readbackPending = handsFreeReadbackExpected ||        // loop readback in flight
+                readbackKeepAliveActive ||                        // plain read-aloud in flight
+                pendingSpeak != null ||                           // utterance parked behind a TTS init
+                (adapter?.getSpeakingPosition() ?: -1) != -1      // manual speaker-button readback
+        return ttsSpeaking || mediaPlaying || progressVisible || readbackPending
     }
 
     /** Cancels generation, TTS, audio playback, recognizer, and the hands-free
