@@ -30,6 +30,7 @@ import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.Logger
 import org.teslasoft.assistant.preferences.Preferences
+import org.teslasoft.assistant.preferences.RenameJournal
 import org.teslasoft.assistant.preferences.memory.MemoryExporter
 import org.teslasoft.assistant.preferences.memory.MemoryLog
 import org.teslasoft.assistant.preferences.memory.MemoryStore
@@ -102,6 +103,18 @@ class MainApplication : Application() {
         // automatic backup if one is due. Off the main thread; app start must
         // not wait on SQLCipher.
         Thread {
+            try {
+                // Finish any chat rename whose memory re-point didn't complete
+                // last session (process death or a SQLCipher failure between the
+                // prefs pointer flip and MemoryStore.repointChat). Runs first —
+                // before the auto-export below and before any future orphan
+                // pruning — so a renamed chat's transcripts are re-pointed, not
+                // treated as abandoned. Guards provisioning + the chat list
+                // internally; off the main thread here.
+                RenameJournal.reconcile(this)
+            } catch (e: Exception) {
+                MemoryLog.log(this, "RenameJournal", "error", "Rename reconciliation at startup failed: ${e.message}")
+            }
             try {
                 if (MemoryStore.isProvisioned(this)) {
                     val problem = MemoryStore.getInstance(this).integrityCheck()

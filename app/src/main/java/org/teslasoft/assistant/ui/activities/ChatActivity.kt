@@ -108,7 +108,6 @@ import com.aallam.ktoken.Encoding
 import com.aallam.ktoken.Tokenizer
 import com.aallam.openai.api.audio.SpeechRequest
 import com.aallam.openai.api.audio.TranscriptionRequest
-import com.aallam.openai.api.chat.ChatCompletion
 import com.aallam.openai.api.chat.ChatCompletionChunk
 import com.aallam.openai.api.chat.ChatCompletionRequest
 import com.aallam.openai.api.chat.ChatMessage
@@ -310,7 +309,19 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     // Init DALL-e
     private var resolution = "512x152"
 
-    private var messageCounter = 0
+    // Auto-naming attempts this screen instance. Used to be a one-shot
+    // "messageCounter == 0" gate: a single transient failure (network blip,
+    // model briefly unavailable) left the chat named "_autoname_…" for the
+    // whole session with no retry. Now each turn retries while the
+    // placeholder name remains, capped so a permanently broken endpoint
+    // can't fire a naming request forever.
+    private var autoNameAttempts = 0
+    private val AUTO_NAME_MAX_ATTEMPTS = 3
+
+    // True while an auto-name rename's off-main storage work is in flight, so a
+    // following turn can't launch an overlapping rename. Touched only on the
+    // main dispatcher (set before the IO hop, cleared in its finally).
+    private var renameInProgress = false
 
     // Init audio
     private var recognizer: SpeechRecognizer? = null
@@ -4508,10 +4519,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         // Put timestamp to chat to sort chats by last message
         ChatPreferences.getChatPreferences().putTimestampToChatById(this, chatId)
 
-        if (messageCounter == 0) {
-            val chatName = ChatPreferences.getChatPreferences().getChatName(this, chatId)
+        if (autoNameAttempts < AUTO_NAME_MAX_ATTEMPTS && chatName.trim().contains("_autoname_")) {
+            val placeholderName = ChatPreferences.getChatPreferences().getChatName(this, chatId)
 
-            if (chatName.trim().contains("_autoname_")) {
+            if (placeholderName.trim().contains("_autoname_")) {
+                autoNameAttempts++
                 btnMicro?.isEnabled = false
                 btnSend?.isEnabled = false
                 progress?.visibility = View.GONE
@@ -4528,7 +4540,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
                 // Auto-naming used to be hardcoded to "gpt-4o". On any account or
                 // custom API endpoint where that exact id isn't served, the request
-                // threw and the (silent) catch below left every chat stuck on its
+                // threw and the (silent) catch left every chat stuck on its
                 // "_autoname_" placeholder — so titles were never set. Use the chat's
                 // own configured model instead, which the endpoint is known to serve.
                 val titleModel = model.ifBlank { preferences?.getModel() ?: "gpt-4o" }
@@ -4538,126 +4550,76 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     messages = m
                 )
 
-                try {
-                    val completion: ChatCompletion = ai!!.chatCompletion(chatCompletionRequest2)
+                // The naming REQUEST and the local rename are separate failure
+                // events and must not share a catch: a request error is
+                // transient (a later turn retries), while a rename failure
+                // means editChat aborted with the chat intact under its old
+                // name. One catch-all used to swallow both — including a
+                // half-applied settings copy.
+                val newChatName: String? = try {
+                    ai!!.chatCompletion(chatCompletionRequest2).choices.firstOrNull()?.message?.content?.trim()
+                } catch (e: Exception) {
+                    logVoiceEvent("auto-name request failed (attempt $autoNameAttempts of $AUTO_NAME_MAX_ATTEMPTS); a later turn retries")
+                    null
+                }
 
-                    val newChatName = completion.choices[0].message.content
-
-                    ChatPreferences.getChatPreferences().editChat(this, newChatName.toString(), chatName)
-                    chatId = Hash.hash(newChatName.toString())
-
-                    val preferences = Preferences.getPreferences(this, Hash.hash(chatName))
-
-                    // Write settings
-                    val resolution = preferences.getResolution()
-                    val speech = preferences.getAudioModel()
-                    val model = preferences.getModel()
-                    val maxTokens = preferences.getMaxTokens()
-                    val prefix = preferences.getPrefix()
-                    val endSeparator = preferences.getEndSeparator()
-                    val activationPrompt = preferences.getPrompt()
-                    val layout = preferences.getLayout()
-                    val silent = preferences.getSilence()
-                    val systemMessage1 = preferences.getSystemMessage()
-                    val alwaysSpeak = preferences.getNotSilence()
-                    val autoLanguageDetect = preferences.getAutoLangDetect()
-                    val functionCalling = preferences.getFunctionCalling()
-                    val slashCommands = preferences.getImagineCommand()
-                    val apiEndpointId = preferences.getApiEndpointId()
-                    val logitBiasConfigId = preferences.getLogitBiasesConfigId()
-                    val temperature = preferences.getTemperature()
-                    val topP = preferences.getTopP()
-                    val frequencyPenalty = preferences.getFrequencyPenalty()
-                    val presencePenalty = preferences.getPresencePenalty()
-                    val avatarType = preferences.getAvatarType()
-                    val avatarId = preferences.getAvatarId()
-                    val assistantName = preferences.getAssistantName()
-                    val personaId = preferences.getPersonaId()
-                    val activationPromptId = preferences.getActivationPromptId()
-                    val personaActivationSeeded = preferences.isPersonaActivationSeeded()
-                    val activeLoreBookIds = preferences.getActiveLoreBookIds()
-                    val loreBooksSeeded = preferences.isLoreBooksSeeded()
-                    val chatMemoryEnabledRaw = preferences.getChatMemoryEnabledRaw()
-                    val chatLoreBooksEnabledRaw = preferences.getChatLoreBooksEnabledRaw()
-                    val chatExcludedFromMemory = preferences.isChatExcludedFromMemory()
-                    val chatWorldId = preferences.getChatWorldId()
-                    val chatCampaignId = preferences.getChatCampaignId()
-                    val chatRoleplayCharacterId = preferences.getChatRoleplayCharacterId()
-                    val chatUserPersonaId = preferences.getChatUserPersonaId()
-                    val chatProjectId = preferences.getChatProjectId()
-                    val chatApplyModelRules = preferences.getChatApplyModelRules()
-
-                    preferences.setPreferences(Hash.hash(newChatName.toString()), this)
-                    preferences.setResolution(resolution)
-                    preferences.setAudioModel(speech)
-                    preferences.setModel(model)
-                    preferences.setMaxTokens(maxTokens)
-                    preferences.setPrefix(prefix)
-                    preferences.setEndSeparator(endSeparator)
-                    preferences.setPrompt(activationPrompt)
-                    preferences.setLayout(layout)
-                    preferences.setSilence(silent)
-                    preferences.setSystemMessage(systemMessage1)
-                    preferences.setNotSilence(alwaysSpeak)
-                    preferences.setAutoLangDetect(autoLanguageDetect)
-                    preferences.setFunctionCalling(functionCalling)
-                    preferences.setImagineCommand(slashCommands)
-                    preferences.setApiEndpointId(apiEndpointId)
-                    preferences.setLogitBiasesConfigId(logitBiasConfigId)
-                    preferences.setTemperature(temperature)
-                    preferences.setTopP(topP)
-                    preferences.setFrequencyPenalty(frequencyPenalty)
-                    preferences.setPresencePenalty(presencePenalty)
-                    preferences.setAvatarType(avatarType)
-                    preferences.setAvatarId(avatarId)
-                    preferences.setAssistantName(assistantName)
-                    preferences.setPersonaId(personaId)
-                    preferences.setActivationPromptId(activationPromptId)
-                    preferences.setPersonaActivationSeeded(personaActivationSeeded)
-                    preferences.setActiveLoreBookIds(activeLoreBookIds)
-                    preferences.setLoreBooksSeeded(loreBooksSeeded)
-                    preferences.setChatMemoryEnabledRaw(chatMemoryEnabledRaw)
-                    preferences.setChatLoreBooksEnabledRaw(chatLoreBooksEnabledRaw)
-                    preferences.setChatExcludedFromMemory(chatExcludedFromMemory)
-                    preferences.setChatWorldId(chatWorldId)
-                    preferences.setChatCampaignId(chatCampaignId)
-                    preferences.setChatRoleplayCharacterId(chatRoleplayCharacterId)
-                    preferences.setChatUserPersonaId(chatUserPersonaId)
-                    preferences.setChatProjectId(chatProjectId)
-                    preferences.setChatApplyModelRules(chatApplyModelRules)
-
-                    // The rename changed the chat id; captured transcripts are
-                    // keyed by it, so the queue must follow the chat.
-                    try {
-                        if (MemoryStore.isProvisioned(this)) {
-                            MemoryStore.getInstance(this).repointChat(Hash.hash(chatName), chatId)
+                if (!newChatName.isNullOrBlank() && !renameInProgress) {
+                    // Storage work goes OFF the main thread: editChat does
+                    // encrypted reads, verified encrypted writes, several
+                    // synchronous commits and a SQLCipher re-point — none of
+                    // which may run on the UI thread. The guard prevents a
+                    // second turn from launching an overlapping rename while
+                    // this one's IO is still in flight (the flag is set/checked
+                    // only on the main dispatcher, so it holds across the
+                    // withContext suspension).
+                    renameInProgress = true
+                    val renamed = try {
+                        // editChat is atomic on the prefs side (ChatRenameTransaction):
+                        // it moves the history, copies the WHOLE per-chat settings
+                        // file (nothing enumerated by hand or re-derived from the
+                        // endpoint profile) and flips the chat-list pointer only
+                        // after the copies verify; the memory re-point is journalled
+                        // and recoverable. false = nothing changed anywhere — keep
+                        // the old id; a later turn may retry with a fresh title.
+                        withContext(Dispatchers.IO) {
+                            ChatPreferences.getChatPreferences().editChat(this@ChatActivity, newChatName, placeholderName)
                         }
-                    } catch (_: Exception) { /* transcripts re-point on the next capture-free path; never block renaming */ }
+                    } catch (e: Exception) {
+                        logVoiceEventAlways("auto-name rename threw (${e.message}); keeping the placeholder name and old chat id")
+                        false
+                    } finally {
+                        renameInProgress = false
+                    }
 
-                    // Adopt the renamed chat in place. This used to relaunch
-                    // ChatActivity (startActivity + finish) to pick up the new
-                    // chat id — but onDestroy of the old instance stops TTS,
-                    // kills the hands-free loop and releases the mic, which cut
-                    // off the first reply's readback almost immediately and
-                    // ended the voice conversation with no visible error.
-                    // Everything keyed by the chat id is re-pointed here
-                    // instead; the data itself was already moved above.
-                    // ("this." needed: a local val chatName — the old name —
-                    // shadows the field in this block.)
-                    this.chatName = newChatName.toString()
-                    this.preferences = Preferences.getPreferences(this, chatId)
-                    // If the OS later recreates this screen (rotation, process
-                    // restore), onCreate re-reads the intent extras — they must
-                    // name the renamed chat, not the deleted placeholder.
-                    intent.putExtra("chatId", chatId)
-                    intent.putExtra("name", this.chatName)
-                    activityTitle?.text = newChatName.toString()
-                    logVoiceEvent("chat auto-named without restarting the screen (voice loop preserved)")
-                } catch (_: Exception) { /* model might not be available */ }
+                    // Back on the main dispatcher (regularGPTResponse resumes on
+                    // Main after the IO hop). Never touch views/intent from IO,
+                    // and never apply the result to a destroyed screen.
+                    if (renamed && !isFinishing && !isDestroyed) {
+                        chatId = Hash.hash(newChatName)
+
+                        // Adopt the renamed chat in place. This used to relaunch
+                        // ChatActivity (startActivity + finish) to pick up the new
+                        // chat id — but onDestroy of the old instance stops TTS,
+                        // kills the hands-free loop and releases the mic, which cut
+                        // off the first reply's readback almost immediately and
+                        // ended the voice conversation with no visible error.
+                        // Everything keyed by the chat id is re-pointed here
+                        // instead; the data itself was already moved by editChat.
+                        this.chatName = newChatName
+                        this.preferences = Preferences.getPreferences(this, chatId)
+                        // If the OS later recreates this screen (rotation, process
+                        // restore), onCreate re-reads the intent extras — they must
+                        // name the renamed chat, not the deleted placeholder.
+                        intent.putExtra("chatId", chatId)
+                        intent.putExtra("name", this.chatName)
+                        activityTitle?.text = newChatName
+                        logVoiceEvent("chat auto-named without restarting the screen (voice loop preserved)")
+                    } else if (!renamed) {
+                        logVoiceEventAlways("auto-name rename did not apply; the chat keeps its placeholder name (attempt $autoNameAttempts of $AUTO_NAME_MAX_ATTEMPTS)")
+                    }
+                }
             }
         }
-
-        messageCounter++
     }
 
     private fun pronounce(st: Boolean, message: String) {

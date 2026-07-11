@@ -37,6 +37,17 @@ class ChatPreferences private constructor() {
             if (preferences == null) preferences = ChatPreferences()
             return preferences!!
         }
+
+        /**
+         * The Logger channel the corrupt-data preservation notice is written
+         * to. It used to pass "error", which is NOT one of Logger's channels
+         * (crash/event/memory/performance) so the notice was silently dropped
+         * by `Logger.log`'s unknown-type guard. The user-facing Error Log
+         * (the "crash" channel) is the semantically correct home for a
+         * data-integrity notice. Exposed so a test can assert it is a real
+         * persistent channel — see LoggerTypeTest.
+         */
+        const val CORRUPT_DATA_LOG_TYPE = "crash"
     }
 
     /**
@@ -60,7 +71,7 @@ class ChatPreferences private constructor() {
             .edit(commit = true) { putString(key, "[]") }
 
         Logger.log(
-            context, "error", "ChatPreferences", "error",
+            context, CORRUPT_DATA_LOG_TYPE, "ChatPreferences", "error",
             "Stored $what failed to parse. The raw data was preserved in the encrypted preferences file $backupName and the broken entry was reset."
         )
 
@@ -420,46 +431,141 @@ class ChatPreferences private constructor() {
     }
 
     /**
-     * Edits the name of a chat and updates the chat list and chat data accordingly.
+     * Renames a chat: moves the message history AND the whole per-chat
+     * settings file to the new chat id, then flips the chat-list pointer.
      *
-     * @param context The context of the application.
-     * @param chatName The new name of the chat.
-     * @param previousName The previous name of the chat.
+     * Runs through [ChatRenameTransaction] — write-new → verify → copy
+     * settings wholesale → verify → flip pointer → clear old, every write a
+     * synchronous commit. The old implementation cleared the old history
+     * file BEFORE the new one was written (both async), so a process kill
+     * mid-rename silently destroyed the conversation; and it did not move
+     * the settings at all, leaving that to two hand-maintained copy blocks
+     * in callers that had drifted out of sync with the real per-chat key
+     * set (see PerChatSettingKeys).
+     *
+     * @return true when the rename fully applied. false means NOTHING
+     *         changed — the chat is intact under [previousName] and callers
+     *         must keep using the old id. Never partially applied.
      */
-    fun editChat(context: Context, chatName: String, previousName: String) {
+    fun editChat(context: Context, chatName: String, previousName: String): Boolean {
+        if (chatName == previousName) return true
+
+        val oldId = Hash.hash(previousName)
+        val newId = Hash.hash(chatName)
+
         val list = getChatList(context)
+        val entry = list.firstOrNull { it["id"] == oldId } ?: return false
 
-        for (map: HashMap<String, String> in list) {
-            if (map["id"] == Hash.hash(previousName)) {
-                map["name"] = chatName
-                map["id"] = Hash.hash(chatName)
-
-                val settings: SharedPreferences = SecurePrefs.get(context, "chat_list")
-
-                val json: String = Gson().toJson(list)
-
-                settings.edit { putString("data", json) }
-
-                val settings1: SharedPreferences = SecurePrefs.get(context, "chat_${Hash.hash(previousName)}")
-
-                val str = settings1.getString("chat", "")
-                settings1.edit { clear() }
-
-                val settings2: SharedPreferences = SecurePrefs.get(context, "chat_${Hash.hash(chatName)}")
-                settings2.edit { putString("chat", str) }
-
-                // Renaming changes the chat id; the memory system's transcript
-                // queue is keyed by it and must follow the chat.
-                try {
-                    if (MemoryStore.isProvisioned(context)) {
-                        MemoryStore.getInstance(context)
-                            .repointChat(Hash.hash(previousName), Hash.hash(chatName))
-                    }
-                } catch (_: Exception) { /* never block a rename over the memory store */ }
-
-                break
-            }
+        // Renaming onto an id another chat already owns would silently
+        // overwrite that chat's history. Refuse instead (the rename dialog
+        // pre-checks duplicates; auto-naming may retry with another title).
+        if (list.any { it !== entry && it["id"] == newId }) {
+            Logger.log(
+                context, "crash", "ChatPreferences", "error",
+                "Rename refused: a chat named \"$chatName\" already exists; \"$previousName\" was left unchanged."
+            )
+            return false
         }
+
+        entry["name"] = chatName
+        entry["id"] = newId
+        val newListJson: String = Gson().toJson(list)
+
+        // Journal the rename BEFORE touching prefs. The prefs pointer flip is
+        // the authoritative moment, but a process death right after it would
+        // leave the memory re-point (a separate store) undone and the chat's
+        // transcripts stranded under the old id. The journal makes that window
+        // recoverable at next start; recovery consults the live chat list, so
+        // an entry written for a rename that then fails pre-flip is safely
+        // discarded (the old id is still live). Committed synchronously to
+        // encrypted prefs, outside the memory DB, so it survives even when the
+        // DB is the thing failing.
+        RenameJournal.record(context, oldId, newId)
+
+        val outcome = try {
+            ChatRenameTransaction.rename(securePrefsFileAccess(context), oldId, newId, newListJson)
+        } catch (e: Exception) {
+            ChatRenameTransaction.Outcome(false, "unexpected error: ${e.message}")
+        }
+
+        if (!outcome.success) {
+            // The pointer never flipped: the old chat is still authoritative,
+            // so the journal entry would drive no re-point anyway (recovery
+            // sees the old id live) — drop it now to keep the journal clean.
+            RenameJournal.clear(context, oldId, newId)
+            // Never silent: a failed rename is recorded in the user-facing
+            // Error Log even though the data itself is safe.
+            Logger.log(
+                context, "crash", "ChatPreferences", "error",
+                "Renaming \"$previousName\" to \"$chatName\" failed at ${outcome.failedStage}. " +
+                    "The chat and its settings are untouched under the old name."
+            )
+            return false
+        }
+        for (warning in outcome.warnings) {
+            Logger.log(context, "crash", "ChatPreferences", "warning", "Chat rename: $warning")
+        }
+
+        // The rename is now authoritative (chat list names the new id). Complete
+        // the cross-store re-point of the memory rows. repointChat is one atomic
+        // DB transaction and idempotent; on success the journal entry is dropped.
+        // On failure (or a death here) the entry is LEFT for startup recovery to
+        // retry — the rename still succeeds and the chat is fully usable under
+        // the new name; only the memory re-point is deferred, and past
+        // transcripts stay preserved under the old id until it completes. We do
+        // NOT pretend the two stores committed together.
+        var repointed = false
+        try {
+            if (MemoryStore.isProvisioned(context)) {
+                MemoryStore.getInstance(context).repointChat(oldId, newId)
+            }
+            repointed = true // provisioned + moved, or nothing to move (no store)
+        } catch (e: Exception) {
+            Logger.log(
+                context, "crash", "ChatPreferences", "error",
+                "Renamed \"$previousName\" to \"$chatName\", but moving its memory records failed (${e.message}). " +
+                    "It is queued for retry on the next app start; past messages stay preserved under the old name."
+            )
+        }
+        if (repointed) RenameJournal.clear(context, oldId, newId)
+
+        return true
+    }
+
+    /**
+     * SharedPreferences-backed storage for [ChatRenameTransaction]. All
+     * writes are synchronous commits — the transaction's ordering guarantee
+     * (new data durable before the pointer flips, pointer durable before the
+     * old data clears) only holds if nothing here is apply()-deferred.
+     */
+    private fun securePrefsFileAccess(context: Context) = object : ChatRenameTransaction.FileAccess {
+        override fun readAll(fileName: String): Map<String, Any?> =
+            SecurePrefs.get(context, fileName).all
+
+        override fun readString(fileName: String, key: String): String? =
+            SecurePrefs.get(context, fileName).getString(key, null)
+
+        override fun replaceAll(fileName: String, entries: Map<String, Any?>): Boolean {
+            val editor = SecurePrefs.get(context, fileName).edit()
+            editor.clear()
+            for ((key, value) in entries) {
+                when (value) {
+                    is String -> editor.putString(key, value)
+                    is Boolean -> editor.putBoolean(key, value)
+                    is Int -> editor.putInt(key, value)
+                    is Long -> editor.putLong(key, value)
+                    is Float -> editor.putFloat(key, value)
+                    is Set<*> -> @Suppress("UNCHECKED_CAST") editor.putStringSet(key, value as Set<String>)
+                }
+            }
+            return editor.commit()
+        }
+
+        override fun writeString(fileName: String, key: String, value: String): Boolean =
+            SecurePrefs.get(context, fileName).edit().putString(key, value).commit()
+
+        override fun clear(fileName: String): Boolean =
+            SecurePrefs.get(context, fileName).edit().clear().commit()
     }
 
     fun deleteChatById(context: Context, chatId: String) {

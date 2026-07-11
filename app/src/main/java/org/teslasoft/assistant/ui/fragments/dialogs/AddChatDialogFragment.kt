@@ -29,7 +29,11 @@ import android.widget.EditText
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.DialogFragment
+import androidx.lifecycle.lifecycleScope
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.ChatPreferences
@@ -73,6 +77,10 @@ class AddChatDialogFragment : DialogFragment() {
     private var chatPreferences: ChatPreferences? = null
 
     private var autoName: CheckBox? = null
+
+    // One-shot guard so a double tap on Save can't launch two overlapping
+    // renames (the storage work is now async).
+    private var renameSubmitted = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -176,19 +184,62 @@ class AddChatDialogFragment : DialogFragment() {
         if (chatPreferences?.checkDuplicate(requireActivity(), nameInput?.text.toString()) == false) {
             val chatName = if (autoName?.isChecked!! && requireArguments().getString("name") == "") "_autoname_${chatPreferences?.getAvailableChatIdForAutoname(requireActivity())}" else nameInput?.text.toString()
 
-            val preferences: Preferences = if (isEdit) {
-                chatPreferences?.editChat(requireActivity(), nameInput?.text.toString(), requireArguments().getString("name").toString())
-                listener!!.onEdit(chatName, Hash.hash(nameInput?.text.toString()), arguments?.getInt("position")!!)
+            if (isEdit) {
+                // Guard against a double submission (a second tap before the
+                // dialog dismisses) launching two overlapping renames.
+                if (renameSubmitted) return
+                renameSubmitted = true
 
-                // Transfer settings
-                Preferences.getPreferences(requireActivity(), Hash.hash(arguments?.getString("name").toString()))
-            } else {
-                chatPreferences?.addChat(requireActivity(), chatName)
-                listener!!.onAdd(chatName, Hash.hash(chatName), arguments?.getBoolean("fromFile") == true)
+                // A rename must never re-derive or overwrite the chat's own
+                // settings: editChat moves the history AND copies every
+                // per-chat settings key atomically (ChatRenameTransaction).
+                // The re-derivation block this branch used to run reset the
+                // chat's persona, lorebooks, memory scene and per-chat tuning
+                // to endpoint-profile defaults on every manual rename.
+                //
+                // editChat does encrypted I/O, synchronous commits and a
+                // SQLCipher re-point, so it runs OFF the main thread. The work
+                // is hosted on the ACTIVITY's lifecycle scope, not this
+                // dialog's: the dialog auto-dismisses on the button tap (as
+                // before — no new wording, no progress UI), and the rename +
+                // list refresh complete in the background, cancelling cleanly
+                // if the activity is destroyed. Everything the continuation
+                // needs is captured up front so no destroyed-fragment state is
+                // touched afterwards.
+                val act = requireActivity()
+                val cp = chatPreferences ?: ChatPreferences.getChatPreferences()
+                val l = listener
+                val newName = nameInput?.text.toString()
+                val oldName = requireArguments().getString("name").toString()
+                val position = arguments?.getInt("position") ?: -1
+                val newId = Hash.hash(newName)
 
-                // Copy settings from default
-                Preferences.getPreferences(requireActivity(), "")
+                act.lifecycleScope.launch {
+                    val renamed = withContext(Dispatchers.IO) {
+                        cp.editChat(act, newName, oldName)
+                    }
+                    // Resumes on Main. Only touch UI if the activity is alive.
+                    if (act.isFinishing || act.isDestroyed) return@launch
+                    if (renamed) {
+                        l?.onEdit(newName, newId, position)
+                    } else {
+                        // false = nothing changed; the chat is intact under its
+                        // old name. Say so persistently (dialog, never a toast).
+                        MaterialAlertDialogBuilder(act, R.style.App_MaterialAlertDialog)
+                            .setTitle(R.string.title_rename_failed)
+                            .setMessage(R.string.msg_rename_failed)
+                            .setPositiveButton(R.string.btn_ok) { _, _ -> }
+                            .show()
+                    }
+                }
+                return
             }
+
+            chatPreferences?.addChat(requireActivity(), chatName)
+            listener!!.onAdd(chatName, Hash.hash(chatName), arguments?.getBoolean("fromFile") == true)
+
+            // Copy settings from default
+            val preferences: Preferences = Preferences.getPreferences(requireActivity(), "")
 
             // Write settings
             val resolution = preferences.getResolution()

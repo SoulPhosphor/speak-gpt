@@ -21,6 +21,7 @@ import com.google.gson.Gson
 import org.json.JSONArray
 import org.json.JSONObject
 import org.teslasoft.assistant.preferences.ChatPreferences
+import org.teslasoft.assistant.util.AtomicFileWriter
 import org.teslasoft.assistant.util.Hash
 import java.io.File
 import java.time.Instant
@@ -49,16 +50,27 @@ object MemoryExporter {
      * Write a backup right now into the rotating backup dir, ignoring the daily
      * throttle. Used by "Reset memories" when the user leaves the backup-first
      * option checked. Returns the file name, or null on failure.
+     *
+     * The caller is about to DELETE the store on the strength of this file,
+     * so "probably written" isn't enough: the write is atomic (temp file →
+     * rename) and read back before success is reported. A null return means
+     * the reset must not proceed.
      */
     fun writeBackupNow(context: Context): String? = try {
         val dir = File(context.getExternalFilesDir(null), BACKUP_DIR)
-        if (!dir.exists() && !dir.mkdirs()) null
-        else {
+        if (!dir.exists() && !dir.mkdirs()) {
+            MemoryLog.log(context, "MemoryExport", "error", "Backup-before-reset failed: the backup folder could not be created.")
+            null
+        } else {
             val stamp = MemoryStore.nowIso().replace(":", "-")
             val file = File(dir, "memory-backup-$stamp.json")
-            file.writeText(buildExportJson(context))
-            MemoryLog.log(context, "MemoryExport", "info", "Backup written before reset: ${file.name}")
-            file.name
+            if (AtomicFileWriter.writeAndVerify(file, buildExportJson(context))) {
+                MemoryLog.log(context, "MemoryExport", "info", "Backup written before reset: ${file.name}")
+                file.name
+            } else {
+                MemoryLog.log(context, "MemoryExport", "error", "Backup-before-reset failed: the file did not verify after writing.")
+                null
+            }
         }
     } catch (e: Exception) {
         MemoryLog.log(context, "MemoryExport", "error", "Backup-before-reset failed: ${e.message}")
@@ -120,7 +132,14 @@ object MemoryExporter {
 
             val stamp = MemoryStore.nowIso().replace(":", "-")
             val file = File(dir, "memory-export-$stamp.json")
-            file.writeText(buildExportJson(context))
+            // Atomic + verified like the pre-reset backup: a torn write must
+            // not leave a truncated file as the NEWEST backup (the one a user
+            // in trouble grabs first). On failure the throttle marker is left
+            // unset so the next start retries.
+            if (!AtomicFileWriter.writeAndVerify(file, buildExportJson(context))) {
+                MemoryLog.log(context, "MemoryExport", "error", "Automatic memory backup did not verify after writing; will retry on the next start.")
+                return
+            }
             store.setMeta(MemoryStore.META_LAST_AUTO_EXPORT_AT, MemoryStore.nowIso())
 
             val backups = dir.listFiles { f -> f.name.startsWith("memory-export-") && f.name.endsWith(".json") }

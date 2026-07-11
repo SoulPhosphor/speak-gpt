@@ -111,6 +111,17 @@ class Logger {
         }
 
         /**
+         * The persistent log channels [log] recognizes. A `type` outside this
+         * set is silently dropped (see the unknown-channel `else` in [log]),
+         * so a caller passing e.g. "error" instead of "crash" writes nowhere.
+         * Exposed so callers/tests can verify a channel name is real before
+         * relying on it reaching a durable log. Kept in sync with the `when`
+         * in [log].
+         */
+        fun isPersistentType(type: String): Boolean =
+            type == "crash" || type == "event" || type == "memory" || type == "performance"
+
+        /**
          * @param type - type of log (crash/event/memory/performance)
          * @param tag - any tag to identify log message and source
          * @param level - log level (info/error/warning/debug/verbose)

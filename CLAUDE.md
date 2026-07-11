@@ -612,9 +612,42 @@ Everything is on-device. No cloud sync, no accounts.
 ## Current feature list
 
 - Multi-chat with per-chat settings (model, endpoint, sampling, persona, …),
-  auto-naming of new chats (which **changes the chat id** and copies every
-  per-chat preference — if you add a per-chat setting, add it to the copy block
-  in `ChatActivity` after auto-naming, or it silently vanishes on rename).
+  auto-naming of new chats (which **changes the chat id**). Renames — auto or
+  manual — go through `ChatPreferences.editChat` → `ChatRenameTransaction`
+  (July 11 2026): the message history and the WHOLE per-chat settings file
+  are copied wholesale (write-new → verify → flip the chat-list pointer →
+  clear old, all synchronous commits), so a new per-chat setting survives
+  renames automatically — the old hand-maintained copy blocks in
+  `ChatActivity` and `AddChatDialogFragment` are GONE (they had drifted: one
+  dropped persona/lorebooks/memory scene on manual rename, the other reset
+  the voice settings on auto-name, and the manual one re-derived per-chat
+  tuning from the endpoint profile). When you add a per-chat key, register
+  it in `PerChatSettingKeys` — `PerChatSettingKeysTest` scans
+  `Preferences.kt` and fails CI when the inventory drifts. `editChat`
+  returns false when the rename could not be fully applied (the chat is then
+  untouched under its old name and callers keep the old id); auto-naming
+  retries on later turns (max 3 attempts per screen instance) instead of
+  giving up after one failure. Older doc mentions of "the auto-naming copy
+  block" mean this mechanism now.
+  `editChat` runs **off the main thread** at both call sites (manual rename on
+  the host activity's `lifecycleScope`, auto-naming via `withContext(IO)`),
+  returning to Main only for UI adoption and only if the screen is still alive;
+  a per-caller guard prevents overlapping rename submissions. The cross-store
+  memory re-point is made durable by a small **rename journal**
+  (`RenameJournal`, encrypted prefs, outside the memory DB): `editChat` records
+  the pending (oldId→newId) before touching prefs and clears it once
+  `repointChat` succeeds; the prefs pointer flip is the authoritative moment,
+  so if the process dies or SQLCipher fails in between, `MainApplication`'s
+  startup thread calls `RenameJournal.reconcile` — which consults the live chat
+  list to decide whether to finish the re-point (new id live, old gone),
+  discard (old still live = rename never took; both live = old id reused;
+  neither = chat deleted). `repointChat` is one atomic, idempotent DB
+  transaction, so recovery can retry safely; a repeatedly-failing re-point
+  keeps its journal entry and retries each start while the chat stays usable
+  and pre-rename transcripts stay preserved under the old id. Any future
+  orphan-row pruning MUST check `RenameJournal.hasPending` first. The pure
+  reconcile decision (`RenameJournal.planReconcile`) is unit-tested at every
+  boundary.
   Auto-naming adopts the new id **in place** — it must never relaunch
   ChatActivity, because onDestroy kills the readback and hands-free loop.
 - Any OpenAI-compatible endpoint; multiple endpoint profiles; streaming via
@@ -974,7 +1007,12 @@ Everything is on-device. No cloud sync, no accounts.
     only, never the whole line, never pills.
   - **Reset memories** in Memory settings (`resetAllMemoryData` + a blunt
     confirm dialog with a "Save a backup file first" checkbox, checked by
-    default) empties every memory-content table. The work order's "Remove
+    default) empties every memory-content table. Since July 11 2026 the
+    backup gates the reset: `writeBackupNow` writes atomically (temp file →
+    rename via `AtomicFileWriter`) and reads the file back, and if it
+    reports failure the reset is ABORTED with a dialog — it used to proceed
+    and only change the confirmation wording, destroying the store the user
+    had asked to protect. The work order's "Remove
     everything imported" was intentionally NOT built (imported rows aren't
     distinguishable; owner decision).
   - **Quick Settings** gained an optional per-chat **Project** selector (§4;
@@ -1198,8 +1236,17 @@ Everything is on-device. No cloud sync, no accounts.
   arm64 — keep the gate if you touch JNI loading.
 - **Checked-in `debug.keystore`** is intentional (stable CI debug signing).
   Do not rotate/remove it; do not publish debug builds as real releases.
-- **Auto-naming preference copy block** in `ChatActivity` (see feature list) —
-  easy to forget, silent data loss when missed.
+- **Chat renames are a verified transaction** (`ChatRenameTransaction`, July
+  11 2026 — see the feature list): write-new → verify → pointer flip → clear
+  old, settings copied wholesale, every write a synchronous commit, run
+  **off the main thread**. Never reintroduce a hand-enumerated settings copy,
+  an apply()-deferred write, a clear-before-write, or a main-thread commit into
+  a rename path; new per-chat keys are registered in `PerChatSettingKeys`
+  (test-enforced). The memory-store re-point is a **separate store** and is NOT
+  in the prefs transaction — it is journalled (`RenameJournal`) and recovered
+  at startup; never assume the prefs rename and the memory re-point committed
+  atomically together, and never let a future orphan sweep prune rows while
+  `RenameJournal.hasPending` is true.
 - **`ChatActivity` handles rotation itself** (`android:configChanges`
   includes orientation/screenSize etc., July 10 2026): recreation runs
   onDestroy, which kills TTS readback and the hands-free loop — tilting the
@@ -1308,6 +1355,8 @@ Everything is on-device. No cloud sync, no accounts.
    the layout actually inflated.
 3. Cross-cutting request changes go through the single generation funnel
    (`generateResponse` → `regularGPTResponse`); there is no second path.
-4. New per-chat preference added to the auto-naming copy block.
+4. New per-chat preference key registered in `PerChatSettingKeys` (renames
+   copy the settings file wholesale; the unit test fails when the registry
+   drifts from `Preferences.kt`).
 5. DB change → version bump + additive migration + fresh-install path.
 6. Push, then confirm the `Android Checks` workflow run for your commit is green.
