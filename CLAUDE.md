@@ -1224,11 +1224,17 @@ Everything is on-device. No cloud sync, no accounts.
   surface an engine failure as silence, a null transcript, or an empty
   transcript. `startRecording` while a capture is genuinely live returns
   **false** (it used to lie with `true`); a stuck flag over a dead loop is
-  recovered. VAD-driven turns carry a wall-clock `CaptureWatchdog` (soft cap
-  10 min → flows into the NORMAL end-of-turn/no-speech path so speech is
-  never lost; 60 s uncollected-turn abort after the VAD fired; 12 min hard
-  ceiling); manual push-to-talk is deliberately un-capped (the user owns
-  stop; a cap would cut intended long dictation). ChatActivity guards every
+  recovered. VAD-driven turns carry a state-dependent wall-clock
+  `CaptureWatchdog` (owner-approved July 11 2026): the configured
+  silence/no-speech clocks stay authoritative; at 10 min mid-speech the turn
+  is NOT cut — a soft limit arms and the turn finishes at the next natural
+  pause (~1 s of non-speech); at 10 min with no speech the backup fires the
+  normal no-speech ending; the 12-min absolute ceiling ends the turn through
+  the NORMAL transcribe-and-submit path (recorded speech is never discarded
+  by a time limit, and a watchdog-ended turn is never reported as a mic
+  failure); the ONLY watchdog error is the 60 s uncollected-end-of-turn
+  abort (lost callback). Manual push-to-talk is deliberately un-capped (the
+  user owns stop; a cap would cut intended long dictation). ChatActivity guards every
   whisper callback with `whisperTurnToken` (late/duplicate callbacks from an
   old turn are dropped), retries mid-turn capture errors through
   `whisperCaptureErrorBudget` (2, reset only when a turn completes — separate

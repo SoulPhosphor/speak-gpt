@@ -436,6 +436,10 @@ class LocalWhisperEngine private constructor() {
         // during a stall, so this can only ever under-count — it never invents
         // phantom silence — which is exactly the safe direction.
         val silenceSampleTarget = (cfg?.silenceMs ?: 0L) * SAMPLE_RATE / 1000
+        // The shortened "natural pause" window used after the watchdog's soft
+        // limit arms (10-min turn still mid-speech): finish at the next real
+        // pause instead of waiting the full configured silence window.
+        val softLimitPauseSampleTarget = CaptureWatchdog.SOFT_LIMIT_PAUSE_MS * SAMPLE_RATE / 1000
         val noSpeechSampleTarget = (cfg?.noSpeechMs ?: 0L) * SAMPLE_RATE / 1000
         val graceSampleTarget = (cfg?.graceMs ?: 0L) * SAMPLE_RATE / 1000
         val minSpeechSampleTarget = (cfg?.minSpeechMs ?: 0L) * SAMPLE_RATE / 1000
@@ -624,7 +628,14 @@ class LocalWhisperEngine private constructor() {
                                     speechRunSamples = 0L
                                     preSpeechSamples += read
                                 }
-                                if (speechStarted && silenceSamples >= silenceSampleTarget) {
+                                // The configured silence window is authoritative;
+                                // it only shrinks to the short natural-pause
+                                // window once the watchdog's 10-min soft limit
+                                // armed mid-speech (never lengthens).
+                                val effectiveSilenceTarget = watchdog?.effectiveSilenceTargetSamples(
+                                    silenceSampleTarget, softLimitPauseSampleTarget
+                                ) ?: silenceSampleTarget
+                                if (speechStarted && silenceSamples >= effectiveSilenceTarget) {
                                     if (vadLog) {
                                         val floor = detector.currentNoiseFloor()
                                         Log.w(TAG, "[Turn $tn] FINALIZE END_OF_TURN: rms=${frameRms.toInt()} " +
@@ -667,20 +678,25 @@ class LocalWhisperEngine private constructor() {
                     }
 
                     // Wall-clock watchdog (VAD turns only). The VAD's own
-                    // timers run on audio time and can be legitimately paused
-                    // (dead air, stalls) — this independent wall-clock bound is
-                    // what guarantees the mic can never be held open forever by
-                    // a lost callback, a noise-pinned detector, or a stream
-                    // that keeps delivering. The soft cap ends the turn the
-                    // NORMAL way (speech is transcribed, nothing is lost); only
-                    // the uncollected-turn and hard-ceiling cases abort.
+                    // timers run on audio time and stay AUTHORITATIVE — this
+                    // is only the backup for the states where they can't be
+                    // trusted (lost callbacks, paused clocks, a noise-pinned
+                    // detector). Healthy continuous speech is never cut off:
+                    // the 10-min soft limit arms finish-at-next-pause, and
+                    // even the 12-min absolute ceiling ends the turn through
+                    // the NORMAL transcribe-and-submit path — recorded speech
+                    // is never discarded by a time limit. The only outcome
+                    // reported as a failure is an end-of-turn nobody collected.
                     if (watchdog != null) {
                         val now = SystemClock.elapsedRealtime()
                         val sinceFired = if (vadFiredAtMs == 0L) 0L else now - vadFiredAtMs
                         when (watchdog.check(now - startedAtMs, speechStarted, vadFired, sinceFired)) {
                             CaptureWatchdog.Action.CONTINUE -> {}
+                            CaptureWatchdog.Action.ARM_SOFT_LIMIT -> {
+                                logAlways(capture.logContext, "[Turn $tn] ${CaptureWatchdog.MAX_TURN_MS / 60_000}-minute listening limit reached mid-speech — the turn will finish at the next natural pause; nothing said is lost")
+                            }
                             CaptureWatchdog.Action.FORCE_END_OF_TURN -> {
-                                logAlways(capture.logContext, "[Turn $tn] wall-clock listening cap (${CaptureWatchdog.MAX_TURN_MS / 60_000} min) reached mid-speech — ending the turn; the audio is transcribed as usual")
+                                logAlways(capture.logContext, "[Turn $tn] absolute ${CaptureWatchdog.HARD_LIMIT_MS / 60_000}-minute listening limit ended the turn — everything captured is transcribed and submitted as usual")
                                 if (audioHealthMonitor != null) lastAudioHealthDiagnostics = audioHealthMonitor.summarize(vadHeardSpeech = true)
                                 detector?.let { lastVadDiagnostics = it.diagnostics() }
                                 vadFired = true
@@ -688,7 +704,7 @@ class LocalWhisperEngine private constructor() {
                                 if (!capture.closed.isClaimed()) onVadEndOfTurn?.invoke()
                             }
                             CaptureWatchdog.Action.FORCE_NO_SPEECH -> {
-                                logAlways(capture.logContext, "[Turn $tn] wall-clock listening cap (${CaptureWatchdog.MAX_TURN_MS / 60_000} min) reached with no speech registered — ending the listening turn")
+                                logAlways(capture.logContext, "[Turn $tn] wall-clock backup limit reached with no speech registered (the configured no-speech window should have ended this turn) — ending the listening turn")
                                 if (audioHealthMonitor != null) lastAudioHealthDiagnostics = audioHealthMonitor.summarize(vadHeardSpeech = false)
                                 detector?.let { lastVadDiagnostics = it.diagnostics() }
                                 vadFired = true
@@ -698,10 +714,6 @@ class LocalWhisperEngine private constructor() {
                             CaptureWatchdog.Action.ABORT_TURN_NOT_COLLECTED -> {
                                 exitError = CaptureErrorReason.TURN_NOT_COLLECTED to
                                         "end-of-turn fired ${sinceFired / 1000}s ago but nothing collected the audio — releasing the microphone"
-                            }
-                            CaptureWatchdog.Action.ABORT_HARD_LIMIT -> {
-                                exitError = CaptureErrorReason.LISTENING_TIMEOUT to
-                                        "listening session exceeded the absolute ${CaptureWatchdog.HARD_LIMIT_MS / 60_000}-minute ceiling"
                             }
                         }
                         if (exitError != null) break
@@ -1182,7 +1194,11 @@ private class AudioHealthMonitor(private val record: AudioRecord) {
             hints.add("The sound coming in was quite quiet (but not silent) — could be the mic, the distance, or a quiet room, not necessarily you. What to do: move the phone a bit closer; or if you're often far away, turn down 'Minimum speech energy' in Settings > Voice & speech > Advanced & debugging so quiet speech still counts.")
         }
         if (scoWarmUp) {
-            hints.add("The recording started on the phone's microphone and switched to your Bluetooth headset a moment later. This is normal Bluetooth 'warm-up' — the headset's mic link takes a beat to connect after the mic opens — NOT your headset dropping or you disconnecting anything. Only the very start was on the phone mic; the rest was the headset. Nothing to fix; if the first word ever gets clipped, pause briefly before speaking after the mic opens.")
+            // Healthy warm-up (the routine per-turn case) is one factual line;
+            // the incident-style paragraph only appears when the audio on this
+            // warm-up turn was actually unhealthy. Selection is pure and
+            // unit-tested — see AudioHealthWording.
+            hints.add(AudioHealthWording.bluetoothWarmUpHint(inputHealthy, clippedFrames))
         } else if (scoDropped) {
             hints.add("Your Bluetooth headset dropped partway through and recording fell back to the phone's microphone, which can chop the recording. This one IS a real drop, not warm-up. What to do: check the headset's battery and that it stays in range; if it keeps dropping, turn it off and use the phone's own mic.")
         } else if (routeChanged) {

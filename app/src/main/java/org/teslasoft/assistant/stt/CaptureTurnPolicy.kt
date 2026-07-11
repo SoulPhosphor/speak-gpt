@@ -50,10 +50,7 @@ enum class CaptureErrorReason {
     /** The VAD declared end-of-turn but nothing collected the audio within the
      *  grace window — the end-of-turn callback was lost (activity torn down
      *  mid-handoff) and the mic would otherwise stay open forever. */
-    TURN_NOT_COLLECTED,
-
-    /** The absolute wall-clock ceiling for one listening session elapsed. */
-    LISTENING_TIMEOUT
+    TURN_NOT_COLLECTED
 }
 
 /** Classification of a single AudioRecord.read() return value. */
@@ -82,42 +79,60 @@ object AudioReadClassifier {
 }
 
 /**
- * Wall-clock watchdog for one VAD-driven (hands-free) listening turn.
+ * Wall-clock watchdog for one VAD-driven (hands-free) listening turn,
+ * state-dependent per the owner's July 11 2026 ruling: healthy continuous
+ * speech is never treated like a wedged capture, and successfully recorded
+ * speech is never discarded by a time limit.
  *
  * The VAD's own silence / no-speech timers run on *audio* time (samples
- * captured), which is the right clock for "was the user silent" but means a
- * loop whose callbacks are lost, whose detector is pinned "speech" by steady
- * noise, or whose stream stalls can listen forever with the mic held open.
- * This watchdog is the independent wall-clock bound on top:
+ * captured) and REMAIN AUTHORITATIVE — this watchdog is only the independent
+ * wall-clock backup for the states where those clocks can no longer be
+ * trusted (callbacks lost, clocks legitimately paused by dead air/stalls, a
+ * detector pinned "speech" by steady noise). Read failures and dead capture
+ * loops are handled separately and promptly by the capture loop itself; they
+ * never wait for these bounds.
  *
- *  - Soft cap ([maxTurnMs], default 10 min): the turn is ENDED THE NORMAL WAY
- *    — as end-of-turn if speech was heard (the audio is transcribed and
- *    submitted, nothing the user said is lost) or as the no-speech timeout if
- *    not. It does not interfere with intended hands-free use: turns normally
- *    end via the user-configured silence window (settable up to 120 s), so
- *    the cap is only reachable by speaking continuously for 10 minutes
- *    without a single silence-window pause, or by a detector wedged open by
- *    noise — which is exactly the failure being bounded.
- *  - Post-turn grace ([postTurnGraceMs], default 60 s): once the VAD fired,
- *    the UI must collect the audio (stopAndTranscribe) promptly; if nothing
- *    does, the callback was lost and the session is aborted so the mic is
- *    released.
- *  - Hard limit ([hardLimitMs], default 12 min): absolute ceiling on the
- *    whole session no matter what state it is in.
+ *  - Soft limit ([maxTurnMs], default 10 min), speech ongoing: the turn is
+ *    NOT cut off. [Action.ARM_SOFT_LIMIT] fires once and [softLimitArmed]
+ *    latches: from then on the turn finishes at the next natural pause
+ *    (the effective end-of-turn silence window shrinks to
+ *    [SOFT_LIMIT_PAUSE_MS] via [effectiveSilenceTargetSamples]), flowing
+ *    into the NORMAL end-of-turn → transcribe → submit path.
+ *  - Soft limit, no speech yet: the configured no-speech clock should have
+ *    ended the turn long ago (it is settable only up to 120 s), so reaching
+ *    10 min without speech means that clock failed — the backup fires the
+ *    normal no-speech ending ([Action.FORCE_NO_SPEECH]).
+ *  - Post-turn grace ([postTurnGraceMs], default 60 s): once end-of-turn /
+ *    no-speech fired, the UI must collect the audio promptly; if nothing
+ *    does, the callback was lost and the session is aborted
+ *    ([Action.ABORT_TURN_NOT_COLLECTED]) so the mic is released. This is the
+ *    ONLY watchdog outcome reported as a capture failure.
+ *  - Absolute ceiling ([hardLimitMs], default 12 min): if no natural pause
+ *    ever arrived, [Action.FORCE_END_OF_TURN] ends the turn through the
+ *    NORMAL end-of-turn path — everything captured is preserved, transcribed
+ *    and submitted; the Event log states that the absolute limit ended the
+ *    turn. Never an error, never a discard.
  *
  * Manual push-to-talk capture is deliberately NOT watched: there the user
  * explicitly owns start/stop and a cap would cut off intended long dictation.
- * Manual sessions are still protected by read-failure detection and by
- * stale-session recovery at the next arm.
+ * Manual sessions are still cleaned up by read-failure detection, activity
+ * destruction (engine cancel in onDestroy), and stale-session recovery at
+ * the next arm.
  */
 class CaptureWatchdog(
     private val maxTurnMs: Long = MAX_TURN_MS,
     private val postTurnGraceMs: Long = POST_TURN_GRACE_MS,
     private val hardLimitMs: Long = HARD_LIMIT_MS
 ) {
-    enum class Action { CONTINUE, FORCE_END_OF_TURN, FORCE_NO_SPEECH, ABORT_TURN_NOT_COLLECTED, ABORT_HARD_LIMIT }
+    enum class Action { CONTINUE, ARM_SOFT_LIMIT, FORCE_NO_SPEECH, FORCE_END_OF_TURN, ABORT_TURN_NOT_COLLECTED }
 
-    private var softCapFired = false
+    /** Latched by the soft limit while speech is ongoing: the turn should now
+     *  finish at the next natural pause instead of the full configured
+     *  silence window. Read by [effectiveSilenceTargetSamples]. */
+    var softLimitArmed = false
+        private set
+
+    private var softCapHandled = false
 
     /**
      * @param elapsedMs wall-clock ms since the session started
@@ -126,19 +141,48 @@ class CaptureWatchdog(
      * @param sinceVadFiredMs wall-clock ms since the VAD fired (0 if it hasn't)
      */
     fun check(elapsedMs: Long, speechStarted: Boolean, vadFired: Boolean, sinceVadFiredMs: Long): Action {
-        if (elapsedMs >= hardLimitMs) return Action.ABORT_HARD_LIMIT
-        if (vadFired && sinceVadFiredMs >= postTurnGraceMs) return Action.ABORT_TURN_NOT_COLLECTED
-        if (!vadFired && !softCapFired && elapsedMs >= maxTurnMs) {
-            softCapFired = true
+        if (vadFired) {
+            // The turn already ended; the only thing left to watch is whether
+            // anyone collects it. (The absolute ceiling no longer applies —
+            // ending the turn again would be meaningless.)
+            return if (sinceVadFiredMs >= postTurnGraceMs) Action.ABORT_TURN_NOT_COLLECTED else Action.CONTINUE
+        }
+        if (elapsedMs >= hardLimitMs) {
+            // Absolute ceiling: end the turn NOW through the normal path.
+            // With speech, everything captured is transcribed and submitted;
+            // without (defensive — the soft limit should have ended it), the
+            // normal no-speech ending runs.
             return if (speechStarted) Action.FORCE_END_OF_TURN else Action.FORCE_NO_SPEECH
+        }
+        if (!softCapHandled && elapsedMs >= maxTurnMs) {
+            softCapHandled = true
+            if (speechStarted) {
+                softLimitArmed = true
+                return Action.ARM_SOFT_LIMIT
+            }
+            return Action.FORCE_NO_SPEECH
         }
         return Action.CONTINUE
     }
+
+    /**
+     * The end-of-turn silence window the capture loop should apply right now:
+     * the user's configured window normally; the short natural-pause window
+     * once the soft limit armed (whichever is smaller, so a user-configured
+     * window shorter than the pause window is never lengthened).
+     */
+    fun effectiveSilenceTargetSamples(configuredSamples: Long, softPauseSamples: Long): Long =
+        if (softLimitArmed) minOf(configuredSamples, softPauseSamples) else configuredSamples
 
     companion object {
         const val MAX_TURN_MS = 10 * 60_000L
         const val POST_TURN_GRACE_MS = 60_000L
         const val HARD_LIMIT_MS = 12 * 60_000L
+
+        /** Detected non-speech run that counts as the "natural pause" ending
+         *  a soft-limited turn. Audio-time, like the silence clock it
+         *  temporarily replaces. */
+        const val SOFT_LIMIT_PAUSE_MS = 1_000L
     }
 }
 

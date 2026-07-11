@@ -151,7 +151,7 @@ class CaptureTurnPolicyTest {
         assertFalse(BoundedRetryBudget(0).tryConsume())
     }
 
-    // ---- Wall-clock watchdog -----------------------------------------------
+    // ---- Wall-clock watchdog (state-dependent, owner-approved July 11 2026) --
 
     private fun watchdog() = CaptureWatchdog(maxTurnMs = 1000, postTurnGraceMs = 200, hardLimitMs = 2000)
 
@@ -160,49 +160,106 @@ class CaptureTurnPolicyTest {
         val wd = watchdog()
         assertEquals(CaptureWatchdog.Action.CONTINUE, wd.check(0, false, false, 0))
         assertEquals(CaptureWatchdog.Action.CONTINUE, wd.check(999, true, false, 0))
+        assertFalse(wd.softLimitArmed)
     }
 
     @Test
-    fun softCapWithSpeechEndsTheTurnNormally() {
-        // Speech was heard: the cap must flow into the NORMAL end-of-turn so
-        // the audio is transcribed — never discarded.
-        assertEquals(CaptureWatchdog.Action.FORCE_END_OF_TURN, watchdog().check(1000, true, false, 0))
+    fun healthyContinuousSpeechAtSoftLimitIsNotCutOff() {
+        // Speech ongoing at the 10-minute mark: the watchdog must NOT end the
+        // turn — it arms finish-at-next-pause and the capture continues.
+        val wd = watchdog()
+        assertEquals(CaptureWatchdog.Action.ARM_SOFT_LIMIT, wd.check(1000, true, false, 0))
+        assertTrue(wd.softLimitArmed)
+        // The soft limit arms exactly once; speech continues uninterrupted.
+        assertEquals(CaptureWatchdog.Action.CONTINUE, wd.check(1001, true, false, 0))
+        assertEquals(CaptureWatchdog.Action.CONTINUE, wd.check(1500, true, false, 0))
     }
 
     @Test
-    fun softCapWithoutSpeechEndsAsNoSpeech() {
+    fun naturalPauseBetweenSoftAndHardLimitUsesShortenedSilenceWindow() {
+        // Before the soft limit arms, the user's configured silence window is
+        // authoritative; after it arms, the next natural pause (the short
+        // window) finishes the turn — never lengthening a shorter setting.
+        val wd = watchdog()
+        assertEquals(5000L, wd.effectiveSilenceTargetSamples(5000L, 160L))
+        wd.check(1000, true, false, 0) // arms the soft limit
+        assertTrue(wd.softLimitArmed)
+        assertEquals(160L, wd.effectiveSilenceTargetSamples(5000L, 160L))
+        assertEquals(100L, wd.effectiveSilenceTargetSamples(100L, 160L))
+    }
+
+    @Test
+    fun prolongedSilenceUsesBackupNoSpeechEnding() {
+        // No speech by the soft limit means the configured no-speech clock
+        // (max 120 s) failed — the backup fires the normal no-speech ending.
         assertEquals(CaptureWatchdog.Action.FORCE_NO_SPEECH, watchdog().check(1000, false, false, 0))
     }
 
     @Test
-    fun softCapFiresOnlyOnce() {
+    fun absoluteCeilingEndsTheTurnNormallyAndPreservesSpeech() {
+        // No natural pause by the 12-minute ceiling: the turn is ended through
+        // the NORMAL end-of-turn path (transcribe + submit) — never an abort,
+        // never a discard of recorded speech.
         val wd = watchdog()
-        assertEquals(CaptureWatchdog.Action.FORCE_END_OF_TURN, wd.check(1000, true, false, 0))
-        // The loop keeps running (buffering) until the audio is collected; the
-        // soft cap must not fire again on the next iteration.
-        assertEquals(CaptureWatchdog.Action.CONTINUE, wd.check(1001, true, true, 1))
+        wd.check(1000, true, false, 0) // soft limit armed at 10 min
+        assertEquals(CaptureWatchdog.Action.CONTINUE, wd.check(1999, true, false, 0))
+        assertEquals(CaptureWatchdog.Action.FORCE_END_OF_TURN, wd.check(2000, true, false, 0))
     }
 
     @Test
     fun uncollectedTurnIsAbortedAfterGrace() {
+        // Callback loss: end-of-turn fired but nothing collected the audio —
+        // the ONLY watchdog outcome reported as a capture failure.
         val wd = watchdog()
         assertEquals(CaptureWatchdog.Action.CONTINUE, wd.check(500, true, true, 199))
         assertEquals(CaptureWatchdog.Action.ABORT_TURN_NOT_COLLECTED, wd.check(501, true, true, 200))
     }
 
     @Test
-    fun hardLimitAbortsRegardlessOfState() {
-        assertEquals(CaptureWatchdog.Action.ABORT_HARD_LIMIT, watchdog().check(2000, true, false, 0))
-        assertEquals(CaptureWatchdog.Action.ABORT_HARD_LIMIT, watchdog().check(2000, false, true, 50))
+    fun ceilingEndedTurnIsStillWatchedForCollection() {
+        // Cleanup after the ceiling case: once FORCE_END_OF_TURN fired (the
+        // loop marks the turn ended), the collection guard keeps watching so
+        // a lost callback still releases the microphone.
+        val wd = watchdog()
+        wd.check(1000, true, false, 0)
+        assertEquals(CaptureWatchdog.Action.FORCE_END_OF_TURN, wd.check(2000, true, false, 0))
+        assertEquals(CaptureWatchdog.Action.CONTINUE, wd.check(2100, true, true, 100))
+        assertEquals(CaptureWatchdog.Action.ABORT_TURN_NOT_COLLECTED, wd.check(2300, true, true, 300))
     }
 
     @Test
-    fun defaultsKeepTheSoftCapFarAboveTheConfigurableWindows() {
+    fun defaultsKeepTheSoftLimitFarAboveTheConfigurableWindows() {
         // The silence / no-speech windows are user-settable up to 120 s each;
-        // the soft cap must stay far above them so it can never preempt an
+        // the soft limit must stay far above them so it can never preempt an
         // intended hands-free pause.
         assertTrue(CaptureWatchdog.MAX_TURN_MS >= 4 * 120_000L)
         assertTrue(CaptureWatchdog.HARD_LIMIT_MS > CaptureWatchdog.MAX_TURN_MS)
         assertTrue(CaptureWatchdog.POST_TURN_GRACE_MS >= 30_000L)
+        assertTrue(CaptureWatchdog.SOFT_LIMIT_PAUSE_MS in 500L..5000L)
+    }
+
+    // ---- Audio Health warm-up wording (owner-approved July 11 2026) ---------
+
+    @Test
+    fun healthyBluetoothWarmUpProducesOneFactualLine() {
+        val hint = AudioHealthWording.bluetoothWarmUpHint(inputHealthy = true, clippedFrames = 0L)
+        assertEquals("Bluetooth microphone connected shortly after recording began; audio remained healthy.", hint)
+        // No incident narrative or hypothetical troubleshooting on a healthy turn.
+        assertFalse(hint.contains("Nothing to fix"))
+        assertFalse(hint.contains("pause briefly"))
+        assertFalse(hint.contains("dropping"))
+        assertFalse(hint.contains("clipped"))
+    }
+
+    @Test
+    fun unhealthyWarmUpKeepsTheExistingProblemWording() {
+        // Any failed health check falls back to the pre-existing paragraph
+        // (unchanged this pass), so the concise line can never appear when the
+        // audio was actually bad.
+        val quiet = AudioHealthWording.bluetoothWarmUpHint(inputHealthy = false, clippedFrames = 0L)
+        val clipped = AudioHealthWording.bluetoothWarmUpHint(inputHealthy = true, clippedFrames = 3L)
+        assertEquals(AudioHealthWording.WARM_UP_WITH_UNHEALTHY_AUDIO, quiet)
+        assertEquals(AudioHealthWording.WARM_UP_WITH_UNHEALTHY_AUDIO, clipped)
+        assertTrue(quiet.contains("warm-up"))
     }
 }
