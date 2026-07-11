@@ -177,6 +177,17 @@ class PersonasListActivity : FragmentActivity() {
 
         personaPreferences = PersonaPreferences.getPersonaPreferences(this)
         initialize()
+
+        // Launched to create the very first companion (from ChatActivity when a
+        // new chat has none): drop the owner straight onto the creation form
+        // rather than an empty list. Guarded on savedInstanceState so a
+        // rotation doesn't reopen it.
+        if (savedInstanceState == null && intent.getBooleanExtra("createOnStart", false)) {
+            val dialog = newEditDialog(newEmptyPersona(), -1)
+            dialog.setListener(editDialogListener)
+            dialog.setCancelable(false)
+            dialog.show(supportFragmentManager, "EditPersonaDialogFragment")
+        }
     }
 
     private fun reloadList() {

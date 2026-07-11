@@ -1253,15 +1253,30 @@ Everything is on-device. No cloud sync, no accounts.
   phone mid-conversation used to stop everything. Never remove that manifest
   attribute, and don't add orientation-dependent layouts for the chat screen
   without accounting for it.
-- **The new-chat companion default is written ONLY by Quick Settings**
-  (`setLastUsedPersonaId` — owner ruling, July 10 2026). The Characters
-  screen deliberately does not write it (browsing a persona there used to
-  silently rewrite what new chats open with). If no companion was ever
-  chosen in Quick Settings, `seedPersonaAndActivationDefaults` seeds the
-  FIRST persona in the list (an explicit "none" choice, or a deleted
-  remembered persona, still seeds none — never silently substitute a
-  different companion; `Preferences.hasLastUsedPersonaChoice()` is the
-  never-vs-none discriminator).
+- **New-chat companion selection — owner ruling July 11 2026 (SUPERSEDES the
+  July 10 wording; "there is no other acceptable behavior"). Do NOT revert
+  this — it kept regressing because the old doc enshrined the opposite.**
+  `seedPersonaAndActivationDefaults` (in `ChatActivity`) decides which
+  companion a brand-new empty chat opens with, in this exact order:
+  1. **Default: the last-used companion** — always, this is the expected
+     behavior.
+  2. **Only exception — first-ever use** (no last-used companion recorded, or
+     the recorded one was since deleted): open with the companion at the **top
+     of the list** (`getPersonasList().first()`).
+  3. **No companion exists at all:** a chat can't begin — `promptCreateFirstCompanion()`
+     shows the owner-approved dialog "Please create a new companion to begin a
+     chat." and opens the companion creation screen (`PersonasListActivity`
+     with the `createOnStart` extra); on creation the chat adopts it and records
+     it as last-used. Seeding is NOT marked done in this case so it re-runs.
+  There is **no "explicit none stays none"** state any more (it was removed —
+  the owner does not want new chats resting on no companion). `setLastUsedPersonaId`
+  is written whenever a companion is chosen through **ANY** selection surface —
+  **both Quick Settings AND the Companions list opened from Characters** (the
+  July 10 rule that only Quick Settings wrote it was the bug: a companion picked
+  via Characters never carried into new chats). Recording fires only on an
+  explicit tap-to-select (the persona list returns `CANCELED` on back-out), so
+  a mere browse is never recorded. `Preferences.hasLastUsedPersonaChoice()` is
+  now unused by seeding.
 - Legacy/odd-named files exist (`InstructionsForDegradedTeapots…Activity`,
   `MainActivity_robo_script.json`, `experiment.json`, `desktop.ini`,
   `hub-purge.sh`) — leave them unless asked.

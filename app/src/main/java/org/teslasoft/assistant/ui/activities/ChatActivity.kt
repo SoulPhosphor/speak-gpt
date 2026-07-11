@@ -1364,6 +1364,21 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
     private val settingsLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { recreate() }
 
+    // Opened from [promptCreateFirstCompanion] when a new chat has no companion
+    // to open with because none exist yet. On a companion being created the
+    // list returns it; adopt it as this chat's companion AND as the last-used
+    // default, and mark seeding done so it isn't re-run.
+    private val createFirstCompanionLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == RESULT_OK) {
+            val personaId = result.data?.getStringExtra("personaId")
+            if (!personaId.isNullOrEmpty()) {
+                preferences?.setPersonaId(personaId)
+                preferences?.setLastUsedPersonaId(personaId)
+                preferences?.setPersonaActivationSeeded(true)
+            }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         if (Build.VERSION.SDK_INT >= 30) {
             enableEdgeToEdge(
@@ -2904,41 +2919,50 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     }
 
     /**
-     * Carry the persona/activation you were last using into a brand-new chat.
-     * A fresh chat starts with no selection, which previously always showed
-     * "none"; instead seed it once from the global last-used defaults so a new
-     * chat continues with the same persona/activation. The per-chat one-shot
-     * flag means this only happens on the chat's first setup — if you later set
-     * the chat to "none", it stays none. Only runs for an empty chat (called
+     * Decide which companion a brand-new chat opens with. Owner rules
+     * (July 11 2026 — these SUPERSEDE the July 10 wording; there is no other
+     * acceptable behavior):
+     *   1. Default to the companion you last used.
+     *   2. The ONLY exception is first-ever use — no last-used companion yet
+     *      (or the last-used one was since deleted): open with whichever
+     *      companion is at the top of the list.
+     *   3. If no companion exists at all, a chat can't begin: prompt the owner
+     *      to create one and take them straight to the creation screen.
+     * "Last used" is recorded whenever a companion is chosen through ANY
+     * selection surface (Quick Settings and the Companions list both write it),
+     * so it always reflects the companion actually in use. One-shot per chat
+     * (the persona_activation_seeded flag) and only for an empty chat (called
      * from [setup] inside its messages.isEmpty() guard), so existing
-     * conversations are never retroactively changed. A last-used id whose
-     * persona/activation has since been deleted is skipped (falls back to none).
-     * If no persona was EVER chosen in Quick Settings, the first persona in the
-     * list is seeded instead of none (owner ruling, July 10 2026); only Quick
-     * Settings choices are recorded as the last-used default — the Characters
-     * screen no longer writes it.
+     * conversations are never retroactively changed.
      */
     private fun seedPersonaAndActivationDefaults() {
         if (preferences?.isPersonaActivationSeeded() == true) return
-        preferences?.setPersonaActivationSeeded(true)
 
         if (preferences?.getPersonaId().isNullOrEmpty()) {
             val personaPrefs = PersonaPreferences.getPersonaPreferences(this)
+            val personasList = personaPrefs.getPersonasList()
+
+            if (personasList.isEmpty()) {
+                // Rule 3: no companion exists. Ask the owner to create one and
+                // open the creation screen. Do NOT mark seeding done — when
+                // they return with a companion made, this runs again and seeds
+                // it (rules 1/2).
+                promptCreateFirstCompanion()
+                return
+            }
+
             val lastPersona = preferences?.getLastUsedPersonaId().orEmpty()
             if (lastPersona.isNotEmpty() && personaPrefs.getPersona(lastPersona).label.isNotEmpty()) {
+                // Rule 1: continue with the companion you last used.
                 preferences?.setPersonaId(lastPersona)
-            } else if (preferences?.hasLastUsedPersonaChoice() != true) {
-                // No companion has EVER been chosen in Quick Settings: default
-                // to the first persona in the list rather than none (owner
-                // ruling, July 10 2026). Only this never-chosen case — an
-                // explicit "none" choice, or a remembered persona that was
-                // since deleted, still seeds none; silently substituting a
-                // different companion is exactly what the owner objected to.
-                personaPrefs.getPersonasList().firstOrNull()?.let { top ->
-                    preferences?.setPersonaId(Hash.hash(top.label))
-                }
+            } else {
+                // Rule 2: first-ever use, or the last-used companion was since
+                // deleted — open with the companion at the top of the list.
+                preferences?.setPersonaId(Hash.hash(personasList.first().label))
             }
         }
+
+        preferences?.setPersonaActivationSeeded(true)
 
         if (preferences?.getActivationPromptId().isNullOrEmpty()) {
             val lastActivation = preferences?.getLastUsedActivationPromptId().orEmpty()
@@ -2954,6 +2978,26 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 }
             }
         }
+    }
+
+    /**
+     * Rule 3 of the new-chat companion logic: no companion exists yet, so a
+     * chat can't begin. Persistent dialog (never a toast) with the owner's
+     * approved wording; the positive button opens the companion creation
+     * screen. Declining leaves the chat companion-less until one is made.
+     */
+    private fun promptCreateFirstCompanion() {
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setMessage(R.string.create_first_companion_message)
+            .setCancelable(false)
+            .setPositiveButton(R.string.create_first_companion_button) { _, _ ->
+                createFirstCompanionLauncher.launch(
+                    Intent(this, PersonasListActivity::class.java)
+                        .putExtra("createOnStart", true)
+                )
+            }
+            .setNegativeButton(R.string.cancel) { _, _ -> }
+            .show()
     }
 
     /**
