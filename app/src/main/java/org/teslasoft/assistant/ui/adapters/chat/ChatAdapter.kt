@@ -151,6 +151,11 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         setSpeakingPosition(-1)
     }
 
+    /** The adapter position currently marked as being read aloud, or -1.
+     *  Lets the host treat a second tap on the same speaker button as a stop
+     *  instead of a restart. */
+    fun getSpeakingPosition(): Int = speakingPosition
+
     private fun editMessage(position: Int, message: String) {
         dataArray[position]["message"] = message
         listener?.onMessageEdited()

@@ -112,6 +112,25 @@ turn so a truly dead mic still times out) and resets the detector +
 silence clock on a mid-capture input-route change. Still awaiting owner
 on-device confirmation — the priority stays OPEN.
 
+Update July 11 2026: new owner report — **"I can't stop it from reading
+back to me."** Code read found the stop control was a facade whenever the
+reply was still streaming: `cancelAllAiActivity()` (mic-tap stop + the
+notification Hang Up) stopped the *audio* but cancelled NO generation
+scope — and the typed-send path ran in an anonymous CoroutineScope nothing
+could reach — so the stream quietly finished and the unguarded
+`pronounce()` read the whole reply aloud after the user said stop. Three
+smaller holes: `pendingSpeak` (an utterance parked behind a TTS re-init)
+survived a stop and played afterwards; a stop landing inside pronounce's
+async ML Kit hop lost the race to `speak()`; and tapping the speaker
+button of the message currently being read RESTARTED it instead of
+stopping it. Fixed on branch `claude/tts-playback-control-pcokcg`: stop
+now cancels every generation scope (`killAllProcesses`, incl. the new
+`parseMessageScope`), a `stopReadback()` helper owns the audio teardown +
+clears `pendingSpeak`, a `readbackSession` stamp (bumped on every stop,
+re-checked right before text reaches the engine) closes the async-hop
+races, and the speaker button is now a read/stop toggle. Awaiting owner
+on-device confirmation — not done until they say so.
+
 ## App summary
 
 Android voice/chat assistant (fork of TeslaSoft SpeakGPT, now independent —
@@ -196,8 +215,17 @@ files may linger on old devices, unread.
   bar). Both service notifications expose a **Hang Up** action that broadcasts
   `ChatActivity.ACTION_HANG_UP` (package-scoped, non-exported; `hangUpReceiver`
   registered for the activity's whole life so it fires while backgrounded) →
-  runs `cancelAllAiActivity()` (the same teardown as the in-app stop control:
-  stops readback + listening).
+  runs `cancelAllAiActivity()` (the same teardown as the in-app stop control).
+  **Stop semantics (July 11 2026): a stop cancels the still-streaming reply
+  too**, not just the audio — `cancelAllAiActivity()` runs `killAllProcesses()`
+  (all generation scopes, incl. `parseMessageScope` for typed sends) and then
+  `stopReadback()` (TTS + MediaPlayer + cloud-voice scope + `pendingSpeak` +
+  read-aloud keep-alive + the `readbackSession` bump that invalidates any
+  speak() still in an async hop). Without the generation cancel, `pronounce()`
+  — which runs unconditionally when the stream completes — read the whole
+  reply aloud after the user said stop. Tapping a message's speaker button
+  while that message is being read is a STOP (toggle), not a restart. Don't
+  re-split these paths.
 - `stt/` — on-device speech: `LocalWhisperEngine/Native` (whisper.cpp JNI),
   `WebRtcVadNative` + `VoiceActivityDetector` (energy VAD + libfvad), model
   download/storage. Native sources in `app/src/main/cpp/`.

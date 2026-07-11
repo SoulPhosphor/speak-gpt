@@ -407,6 +407,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     private var setupScope: CoroutineScope? = null
     private var imageRequestScope: CoroutineScope? = null
     private var speakScope: CoroutineScope? = null
+    // Typed-send / regenerate generation (parseMessage). Was an anonymous
+    // CoroutineScope, which meant NOTHING could cancel it — the stop control
+    // could not reach a typed turn's generation at all. Stored so
+    // killAllProcesses()/cancelAllAiActivity() can cancel it like every other
+    // generation path.
+    private var parseMessageScope: CoroutineScope? = null
     private var generateGptImageJob: Job? = null
 
     private fun killAllProcesses() {
@@ -417,6 +423,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         setupScope?.coroutineContext?.cancel(CancellationException("Killed"))
         imageRequestScope?.coroutineContext?.cancel(CancellationException("Killed"))
         speakScope?.coroutineContext?.cancel(CancellationException("Killed"))
+        parseMessageScope?.coroutineContext?.cancel(CancellationException("Killed"))
         generateGptImageJob?.cancel(CancellationException("Killed"))
         generateGptImageJob = null
         handsFreeStopped = true
@@ -1004,6 +1011,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     private var tts: TextToSpeech? = null
     private var pendingSpeak: String? = null
     private var ttsUtteranceCounter: Long = 0
+    // Readback session stamp, bumped by every user stop (stopReadback()).
+    // speak() can be reached through async hops — ML Kit language detection,
+    // a main-looper post, a TTS re-init — and a stop that lands inside one of
+    // those hops used to lose the race: the queued speak() fired anyway and
+    // the reply was read out AFTER the user said stop. Every readback captures
+    // the stamp at pronounce()/speak() time and re-checks it right before
+    // handing text to the engine; a stale stamp means "the user stopped this"
+    // and the utterance is dropped.
+    private var readbackSession = 0
     // The exact text last handed to the TTS engine, recorded so a readback
     // failure can log *what* it choked on (length vs the engine's max, plus a
     // short sample) instead of just an opaque error code.
@@ -3098,7 +3114,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     syncChatProjection()
                 }
 
-                CoroutineScope(Dispatchers.Main).launch {
+                parseMessageScope = CoroutineScope(Dispatchers.Main)
+                parseMessageScope?.launch {
                     progress?.setOnClickListener {
                         cancel()
                         restoreUIState()
@@ -3238,28 +3255,50 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         handsFreeReadbackExpected = false
         handsFreeReadbackToken++ // invalidate any in-flight readback watchdog
         handsFreeHandler.removeCallbacksAndMessages(null)
-        adapter?.clearSpeakingPosition()
         handsFreeSubmitRunnable = null
         handsFreeBuffer = ""
+        // Stop must also cancel a reply that is still being GENERATED, not just
+        // the audio. pronounce() runs unconditionally when the stream completes,
+        // so an uncancelled generation meant: hit stop mid-generation, the
+        // stream quietly finishes, and the full reply is read out loud anyway —
+        // "I can't stop it from reading back to me." Cancelling the scopes takes
+        // the same path as the progress-spinner cancel always has (each launch
+        // site catches CancellationException and restores the UI; the
+        // generateResponse finally releases the foreground service).
+        killAllProcesses()
+        stopReadback()
+        try { recognizer?.stopListening() } catch (_: Exception) { /* ignore */ }
+        // A whisper-local capture holds the device mic (and the OS privacy
+        // indicator) independently of the Google recognizer — a stop tap must
+        // release that too, or the mic stays open with nothing consuming it.
+        try { LocalWhisperEngine.get().cancel() } catch (_: Exception) { /* ignore */ }
+        isRecording = false
+        micIdle()
+        stopHandsFreeService()
+    }
+
+    /**
+     * Silence any readback, current or queued, and make sure nothing can start
+     * one behind the user's back: bumps [readbackSession] (kills speak() calls
+     * still in an async hop), drops [pendingSpeak] (an utterance parked behind
+     * a TTS re-init used to survive a stop and play AFTER it), stops both audio
+     * paths, cancels an in-flight cloud-voice fetch, and releases the
+     * read-aloud keep-alive so the notification bar clears instead of a silent
+     * service holding a wake lock.
+     */
+    private fun stopReadback() {
+        readbackSession++
+        pendingSpeak = null
+        try { tts?.stop() } catch (_: Exception) { /* ignore */ }
         try {
             if (mediaPlayer?.isPlaying == true) {
                 mediaPlayer?.stop()
                 mediaPlayer?.reset()
             }
         } catch (_: Exception) { /* ignore */ }
-        try { tts?.stop() } catch (_: Exception) { /* ignore */ }
-        try { recognizer?.stopListening() } catch (_: Exception) { /* ignore */ }
-        // A whisper-local capture holds the device mic (and the OS privacy
-        // indicator) independently of the Google recognizer — a stop tap must
-        // release that too, or the mic stays open with nothing consuming it.
-        try { LocalWhisperEngine.get().cancel() } catch (_: Exception) { /* ignore */ }
-        try { speakScope?.coroutineContext?.cancel(CancellationException("Cancelled by user")) } catch (_: Exception) { /* ignore */ }
-        isRecording = false
-        micIdle()
-        // Drop the read-aloud keep-alive too, so Hang Up actually clears the bar
-        // instead of leaving the (now silent) service holding a wake lock.
+        try { speakScope?.coroutineContext?.cancel(CancellationException("Readback stopped by user")) } catch (_: Exception) { /* ignore */ }
+        adapter?.clearSpeakingPosition()
         releaseReadbackKeepAlive()
-        stopHandsFreeService()
     }
 
     /**
@@ -4584,6 +4623,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         val handsFree = preferences?.getHandsFreeMode() == true
         val willReadAloud = (st && !silenceMode) || preferences!!.getNotSilence()
 
+        // Stamp this readback: if the user stops while we're still inside an
+        // async hop below (ML Kit language detection), the stale stamp keeps
+        // speak() from firing after the stop. See readbackSession.
+        val session = readbackSession
+
         // Fresh reply → fresh TTS failure budget (see handleTtsReadbackError).
         if (willReadAloud) ttsErrorRetries = 0
 
@@ -4637,27 +4681,30 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                                 )
                             }
 
-                            speak(message)
+                            speak(message, session)
                         }?.addOnFailureListener {
                             // Ignore auto language detection if an error is occurred
                             autoLangDetect = false
                             ttsPostInit()
 
-                            speak(message)
+                            speak(message, session)
                         }
                 } catch (_: NullPointerException) {
                     autoLangDetect = false
                     ttsPostInit()
 
-                    speak(message)
+                    speak(message, session)
                 }
             } else {
-                speak(message)
+                speak(message, session)
             }
         }
     }
 
-    private fun speak(message: String) {
+    private fun speak(message: String, session: Int = readbackSession) {
+        // The user stopped this readback while it was still in flight (see
+        // readbackSession) — starting the audio now would speak over a stop.
+        if (session != readbackSession) return
         if (preferences!!.getTtsEngine() == "google") {
             val engine = tts
             if (engine == null || !isTTSInitialized) {
@@ -4667,7 +4714,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 }
                 return
             }
-            val runSpeak = {
+            val runSpeak = runSpeak@{
+                // Re-check on the main looper too: a stop can land between the
+                // entry check above and this posted execution.
+                if (session != readbackSession) return@runSpeak
                 ttsUtteranceCounter++
                 val utteranceId = "speakgpt-$ttsUtteranceCounter"
                 lastTtsText = message
@@ -5025,6 +5075,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     }
 
     override fun onSpeakClick(message: String, position: Int) {
+        // Tapping the speaker on the message that is CURRENTLY being read means
+        // stop, not restart. It used to re-read from the top, so the most
+        // natural "be quiet" tap made the readback start over — one face of
+        // "I can't stop it from reading back to me".
+        if (position != -1 && adapter?.getSpeakingPosition() == position) {
+            stopReadback()
+            return
+        }
         // Manual re-read of a single message via the existing TTS path. This is
         // user-initiated playback, not a hands-free loop readback: it must never
         // re-arm the mic afterwards, so drop the loop's completion gate and any
