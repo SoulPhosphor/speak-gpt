@@ -51,7 +51,8 @@ object TranscriptRecorder {
         modelTag: String,
         quickSettingsJson: String?,
         memoryEnabled: Boolean,
-        excludedByUser: Boolean
+        excludedByUser: Boolean,
+        assistantComplete: Boolean = true
     ) {
         try {
             // Diagnostic breadcrumbs: capture is otherwise invisible, so each
@@ -95,10 +96,11 @@ object TranscriptRecorder {
                 assistantMessage = assistantMessage,
                 modelTag = modelTag,
                 quickSettingsJson = quickSettingsJson,
-                markExcluded = markExcluded
+                markExcluded = markExcluded,
+                assistantComplete = assistantComplete
             )
             MemoryLog.log(context, "Transcript", "info",
-                "captured chat=$chatId companion=${companionId ?: "none"} memOn=$memoryEnabled -> $outcome")
+                "captured chat=$chatId companion=${companionId ?: "none"} memOn=$memoryEnabled complete=$assistantComplete -> $outcome")
         } catch (e: Exception) {
             MemoryLog.log(context, "Transcript", "error", "Turn capture failed: ${e.message}")
         }
@@ -131,7 +133,18 @@ object TranscriptRecorder {
                     val content = m["message"]?.toString() ?: continue
                     if (content.isBlank()) continue
                     val role = if (m["isBot"] == true) "assistant" else "user"
-                    turns.put(JSONObject().put("role", role).put("content", content))
+                    val turn = JSONObject().put("role", role).put("content", content)
+                    // An assistant reply that never finished streaming is marked
+                    // so the Archivist won't mine a truncated fragment as fact.
+                    // Absent "complete" means complete (legacy rows, user turns).
+                    if (role == "assistant" &&
+                        !org.teslasoft.assistant.preferences.MessageCompletionState.isComplete(
+                            m[org.teslasoft.assistant.preferences.MessageCompletionState.KEY_STATE]?.toString()
+                        )
+                    ) {
+                        turn.put("complete", false)
+                    }
+                    turns.put(turn)
                 }
                 if (turns.length() == 0) continue
 

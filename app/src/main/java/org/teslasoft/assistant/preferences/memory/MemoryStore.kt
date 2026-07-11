@@ -2138,7 +2138,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         assistantMessage: String,
         modelTag: String,
         quickSettingsJson: String?,
-        markExcluded: Boolean
+        markExcluded: Boolean,
+        assistantComplete: Boolean = true
     ): String {
         val now = nowIso()
         val db = writableDatabase
@@ -2164,7 +2165,14 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
 
             val turns = org.json.JSONArray(content)
             turns.put(org.json.JSONObject().put("role", "user").put("content", userMessage).put("at", now))
-            turns.put(org.json.JSONObject().put("role", "assistant").put("content", assistantMessage).put("at", now))
+            // "complete": false marks an assistant reply that did not finish
+            // streaming, so the Archivist never mines a truncated fragment as a
+            // reliable fact. Absent (the common case) means complete — backward
+            // compatible with every already-stored transcript.
+            val assistantTurn = org.json.JSONObject()
+                .put("role", "assistant").put("content", assistantMessage).put("at", now)
+            if (!assistantComplete) assistantTurn.put("complete", false)
+            turns.put(assistantTurn)
 
             val outcome: String
             if (rowId == null) {

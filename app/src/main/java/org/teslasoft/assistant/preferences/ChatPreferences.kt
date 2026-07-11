@@ -313,6 +313,19 @@ class ChatPreferences private constructor() {
 
         list[position]["message"] = newMessage
 
+        // A user edit finalizes an assistant reply: the user has taken ownership
+        // of the text, so it is no longer a truncated fragment. Clear any
+        // incomplete completion state (and its diagnostic/error fields) so the
+        // message is treated as done everywhere — model context, transcript,
+        // export. Harmless on user messages (they never carry state).
+        if (list[position]["isBot"] == true &&
+            !MessageCompletionState.isComplete(list[position][MessageCompletionState.KEY_STATE]?.toString())
+        ) {
+            list[position][MessageCompletionState.KEY_STATE] = MessageCompletionState.DONE
+            list[position].remove(MessageCompletionState.KEY_STATE_DETAIL)
+            list[position].remove(MessageCompletionState.KEY_ERROR_TEXT)
+        }
+
         val json: String = Gson().toJson(list)
 
         val settings: SharedPreferences = SecurePrefs.get(context, "chat_$chatId")
