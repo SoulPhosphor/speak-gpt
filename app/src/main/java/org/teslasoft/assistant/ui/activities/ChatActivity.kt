@@ -318,6 +318,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     private var autoNameAttempts = 0
     private val AUTO_NAME_MAX_ATTEMPTS = 3
 
+    // True while an auto-name rename's off-main storage work is in flight, so a
+    // following turn can't launch an overlapping rename. Touched only on the
+    // main dispatcher (set before the IO hop, cleared in its finally).
+    private var renameInProgress = false
+
     // Init audio
     private var recognizer: SpeechRecognizer? = null
     private var recorder: MediaRecorder? = null
@@ -4558,22 +4563,38 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     null
                 }
 
-                if (!newChatName.isNullOrBlank()) {
-                    // editChat is atomic (ChatRenameTransaction): it moves the
-                    // history, copies the WHOLE per-chat settings file (nothing
-                    // is enumerated by hand or re-derived from the endpoint
-                    // profile), re-points the memory store's chat-keyed rows,
-                    // and flips the chat-list pointer only after the copies
-                    // verify. false = nothing changed anywhere — keep using
-                    // the old id; a later turn may retry with a fresh title.
+                if (!newChatName.isNullOrBlank() && !renameInProgress) {
+                    // Storage work goes OFF the main thread: editChat does
+                    // encrypted reads, verified encrypted writes, several
+                    // synchronous commits and a SQLCipher re-point — none of
+                    // which may run on the UI thread. The guard prevents a
+                    // second turn from launching an overlapping rename while
+                    // this one's IO is still in flight (the flag is set/checked
+                    // only on the main dispatcher, so it holds across the
+                    // withContext suspension).
+                    renameInProgress = true
                     val renamed = try {
-                        ChatPreferences.getChatPreferences().editChat(this, newChatName, placeholderName)
+                        // editChat is atomic on the prefs side (ChatRenameTransaction):
+                        // it moves the history, copies the WHOLE per-chat settings
+                        // file (nothing enumerated by hand or re-derived from the
+                        // endpoint profile) and flips the chat-list pointer only
+                        // after the copies verify; the memory re-point is journalled
+                        // and recoverable. false = nothing changed anywhere — keep
+                        // the old id; a later turn may retry with a fresh title.
+                        withContext(Dispatchers.IO) {
+                            ChatPreferences.getChatPreferences().editChat(this@ChatActivity, newChatName, placeholderName)
+                        }
                     } catch (e: Exception) {
                         logVoiceEventAlways("auto-name rename threw (${e.message}); keeping the placeholder name and old chat id")
                         false
+                    } finally {
+                        renameInProgress = false
                     }
 
-                    if (renamed) {
+                    // Back on the main dispatcher (regularGPTResponse resumes on
+                    // Main after the IO hop). Never touch views/intent from IO,
+                    // and never apply the result to a destroyed screen.
+                    if (renamed && !isFinishing && !isDestroyed) {
                         chatId = Hash.hash(newChatName)
 
                         // Adopt the renamed chat in place. This used to relaunch
@@ -4593,7 +4614,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                         intent.putExtra("name", this.chatName)
                         activityTitle?.text = newChatName
                         logVoiceEvent("chat auto-named without restarting the screen (voice loop preserved)")
-                    } else {
+                    } else if (!renamed) {
                         logVoiceEventAlways("auto-name rename did not apply; the chat keeps its placeholder name (attempt $autoNameAttempts of $AUTO_NAME_MAX_ATTEMPTS)")
                     }
                 }

@@ -629,6 +629,25 @@ Everything is on-device. No cloud sync, no accounts.
   retries on later turns (max 3 attempts per screen instance) instead of
   giving up after one failure. Older doc mentions of "the auto-naming copy
   block" mean this mechanism now.
+  `editChat` runs **off the main thread** at both call sites (manual rename on
+  the host activity's `lifecycleScope`, auto-naming via `withContext(IO)`),
+  returning to Main only for UI adoption and only if the screen is still alive;
+  a per-caller guard prevents overlapping rename submissions. The cross-store
+  memory re-point is made durable by a small **rename journal**
+  (`RenameJournal`, encrypted prefs, outside the memory DB): `editChat` records
+  the pending (oldId→newId) before touching prefs and clears it once
+  `repointChat` succeeds; the prefs pointer flip is the authoritative moment,
+  so if the process dies or SQLCipher fails in between, `MainApplication`'s
+  startup thread calls `RenameJournal.reconcile` — which consults the live chat
+  list to decide whether to finish the re-point (new id live, old gone),
+  discard (old still live = rename never took; both live = old id reused;
+  neither = chat deleted). `repointChat` is one atomic, idempotent DB
+  transaction, so recovery can retry safely; a repeatedly-failing re-point
+  keeps its journal entry and retries each start while the chat stays usable
+  and pre-rename transcripts stay preserved under the old id. Any future
+  orphan-row pruning MUST check `RenameJournal.hasPending` first. The pure
+  reconcile decision (`RenameJournal.planReconcile`) is unit-tested at every
+  boundary.
   Auto-naming adopts the new id **in place** — it must never relaunch
   ChatActivity, because onDestroy kills the readback and hands-free loop.
 - Any OpenAI-compatible endpoint; multiple endpoint profiles; streaming via
@@ -1219,10 +1238,15 @@ Everything is on-device. No cloud sync, no accounts.
   Do not rotate/remove it; do not publish debug builds as real releases.
 - **Chat renames are a verified transaction** (`ChatRenameTransaction`, July
   11 2026 — see the feature list): write-new → verify → pointer flip → clear
-  old, settings copied wholesale, every write a synchronous commit. Never
-  reintroduce a hand-enumerated settings copy, an apply()-deferred write, or
-  a clear-before-write into a rename path; new per-chat keys are registered
-  in `PerChatSettingKeys` (test-enforced).
+  old, settings copied wholesale, every write a synchronous commit, run
+  **off the main thread**. Never reintroduce a hand-enumerated settings copy,
+  an apply()-deferred write, a clear-before-write, or a main-thread commit into
+  a rename path; new per-chat keys are registered in `PerChatSettingKeys`
+  (test-enforced). The memory-store re-point is a **separate store** and is NOT
+  in the prefs transaction — it is journalled (`RenameJournal`) and recovered
+  at startup; never assume the prefs rename and the memory re-point committed
+  atomically together, and never let a future orphan sweep prune rows while
+  `RenameJournal.hasPending` is true.
 - **`ChatActivity` handles rotation itself** (`android:configChanges`
   includes orientation/screenSize etc., July 10 2026): recreation runs
   onDestroy, which kills TTS readback and the hands-free loop — tilting the
