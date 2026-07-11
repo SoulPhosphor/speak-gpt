@@ -708,7 +708,14 @@ Everything is on-device. No cloud sync, no accounts.
   temperature, suppress-blank, single-segment, initial prompt, prev-context,
   cleanup toggle — plumbed Kotlin→JNI→whisper_full, defaults match the old
   hardcoded values), and device-TTS rate/pitch (set in both ttsPostInit
-  funnels). (The voice-diagnostics logging toggles that used to live here moved
+  funnels — since July 11 2026 the engine's accept/reject result is CHECKED
+  (`TtsTuningPolicy`, unit-tested): a rejected application is re-applied
+  exactly once ~750 ms after init and rejection/fallback is Event-logged
+  ungated, success never — the Google engine can drop a setSpeechRate made
+  at the instant init completes, which made whole sessions read back at the
+  default rate ("suddenly talks faster"); the system-wide Accessibility
+  speech rate multiplies the app's and is external/undetectable).
+  (The voice-diagnostics logging toggles that used to live here moved
   to the Audio Debugging screen.) The VAD energy gate exists because WebRTC
   mislabels fan noise as voice, but a fixed gate also silently discarded a
   quiet voice ("voiced N, gated 0" in diagnostics) — that's why it's tunable.

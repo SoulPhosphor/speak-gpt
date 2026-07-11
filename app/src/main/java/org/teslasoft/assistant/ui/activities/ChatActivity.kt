@@ -1345,13 +1345,72 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         tts = TextToSpeech(this, ttsListener)
     }
 
+    // One-shot guard for the delivery-tuning retry so overlapping ttsPostInit
+    // calls (init listener + the language-detect reset path) can't stack
+    // multiple scheduled re-applications. Main thread only.
+    private var ttsTuningRetryPending = false
+
+    /**
+     * Applies the saved speech rate / pitch to the device TTS engine and
+     * checks whether the engine ACCEPTED them. The Google engine can reject a
+     * call made at the exact moment init completes (returns ERROR, throws
+     * nothing) — the old code ignored the result, so the whole session spoke
+     * at the engine's default rate, faster than the saved value, with no
+     * trace ("the readback suddenly talks faster on a new session", owner
+     * report July 11 2026). On rejection the SAME saved values are re-applied
+     * exactly once, shortly after init (never per utterance, never a loop);
+     * only rejection/fallback is logged — success is silent. The saved value,
+     * UI, defaults and playback behavior are untouched. The system-wide
+     * Android speech rate (Accessibility settings) multiplies the app's rate
+     * and is external — it cannot be seen or changed from here.
+     */
+    private fun applyTtsDeliveryTuning(isRetry: Boolean) {
+        val engine = tts ?: return
+        val prefs = preferences
+        if (prefs == null) {
+            // Settings not loaded yet — the engine would run at its default.
+            // The one-shot retry re-reads the saved values once loaded.
+            logVoiceEventAlways("TTS engine initialized before settings loaded — saved speech rate not applied" +
+                    if (isRetry) " (retry also ran too early; this session may use the engine's default rate)"
+                    else "; re-applying once shortly")
+            if (!isRetry) scheduleTtsTuningRetry()
+            return
+        }
+        val rate = prefs.getTtsSpeechRate()
+        val pitch = prefs.getTtsPitch()
+        val rateResult = try { engine.setSpeechRate(rate) } catch (_: Throwable) { TextToSpeech.ERROR }
+        val pitchResult = try { engine.setPitch(pitch) } catch (_: Throwable) { TextToSpeech.ERROR }
+        when (org.teslasoft.assistant.stt.TtsTuningPolicy.afterApply(rateResult, pitchResult, isRetry)) {
+            org.teslasoft.assistant.stt.TtsTuningPolicy.Next.DONE -> {
+                /* accepted — deliberately no successful-operation logging */
+            }
+            org.teslasoft.assistant.stt.TtsTuningPolicy.Next.RETRY_ONCE -> {
+                logVoiceEventAlways("TTS engine rejected the saved delivery tuning at init " +
+                        "(rate=$rate result=$rateResult, pitch=$pitch result=$pitchResult) — re-applying once")
+                scheduleTtsTuningRetry()
+            }
+            org.teslasoft.assistant.stt.TtsTuningPolicy.Next.GIVE_UP -> {
+                logVoiceEventAlways("TTS engine rejected the saved delivery tuning again on the retry " +
+                        "(rate=$rate result=$rateResult, pitch=$pitch result=$pitchResult) — " +
+                        "this session may speak at the engine's default rate")
+            }
+        }
+    }
+
+    private fun scheduleTtsTuningRetry() {
+        if (ttsTuningRetryPending) return
+        ttsTuningRetryPending = true
+        Handler(Looper.getMainLooper()).postDelayed({
+            ttsTuningRetryPending = false
+            if (!isFinishing && !isDestroyed) applyTtsDeliveryTuning(isRetry = true)
+        }, 750)
+    }
+
     private fun ttsPostInit() {
         // Delivery tuning (advanced voice settings). Device-TTS only; the
-        // OpenAI voice renders server-side and ignores these.
-        try {
-            tts?.setSpeechRate(preferences?.getTtsSpeechRate() ?: 1.0f)
-            tts?.setPitch(preferences?.getTtsPitch() ?: 1.0f)
-        } catch (_: Exception) { /* engine may not support it; defaults apply */ }
+        // OpenAI voice renders server-side and ignores these. Applied with
+        // accept/reject verification — see applyTtsDeliveryTuning.
+        applyTtsDeliveryTuning(isRetry = false)
         if (!autoLangDetect) {
             val result = tts!!.setLanguage(
                 LocaleParser.parse(
