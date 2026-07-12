@@ -1,5 +1,16 @@
 # Round 5, Phase 1 — Memory Health, Silent Degradation, and Recovery (DESIGN ONLY)
 
+> **STATUS: DRAFT AND PARTIALLY SUPERSEDED**
+>
+> Round 4, covering Keystore loss and storage-lock recovery, has not been
+> designed. Any proposal in this document that chooses plaintext
+> SharedPreferences or another final storage location for memory-health state
+> is withdrawn and not approved. Persistent health storage, cross-restart
+> repair state, reset-survival behavior, and handling of unreadable health
+> storage remain blocked by Round 4. Unreadable or unavailable storage must
+> never be interpreted as empty or automatically reinitialized. The pipeline
+> findings and storage-independent health logic remain useful design material.
+
 **Status: DESIGN AWAITING OWNER APPROVAL. Nothing in this document is built.
 Phase 2 (user-facing wording/placement) has not begun and must not begin
 until the owner approves this design.**
