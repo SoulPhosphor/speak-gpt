@@ -1,29 +1,48 @@
 # Round 5, Phase 1 — Memory Health, Silent Degradation, and Recovery (DESIGN ONLY)
 
-> **STATUS: DRAFT AND PARTIALLY SUPERSEDED**
+> **STATUS: DRAFT, BROUGHT CURRENT July 12 2026 (evening). AWAITING OWNER
+> APPROVAL — nothing here is built.**
 >
-> Round 4, covering Keystore loss and storage-lock recovery, has not been
-> designed. Any proposal in this document that chooses plaintext
-> SharedPreferences or another final storage location for memory-health state
-> is withdrawn and not approved. Persistent health storage, cross-restart
-> repair state, reset-survival behavior, and handling of unreadable health
-> storage remain blocked by Round 4. Unreadable or unavailable storage must
-> never be interpreted as empty or automatically reinitialized. The pipeline
-> findings and storage-independent health logic remain useful design material.
+> **Round 4 is now BUILT AND MERGED** (merge `e2f8289`, "chat storage locks
+> instead of masquerading as empty"). The earlier caveat that Round 4 "has
+> not been designed" and that persistent health storage was "blocked by
+> Round 4" is now RESOLVED: chat storage has an explicit LOCKED/HEALTHY/
+> LEGACY_PLAINTEXT/FRESH_UNENCRYPTED state machine (`ChatStorageHealth`,
+> `SecurePrefs`, `OutageReconciler`, `SnapshotRegistry`), a blocking
+> full-screen `ChatStorageLockedActivity`, and the owner lock policy
+> (LOCKED means BLOCKED — never a plaintext fallback). This document's
+> proposal to hold memory-health state in a **plain, unencrypted**
+> `memory_health` prefs file is now consistent with Round 4's own choice to
+> keep the `storage_health` journal raw so it works while the Keystore is
+> down — the two health stores are siblings.
+>
+> Still true: **nothing in THIS document (the memory-health system) is
+> built.** Phase 2 (user-facing wording/placement) must not begin until the
+> owner approves the design. Unreadable or unavailable storage must never be
+> interpreted as empty or automatically reinitialized.
+>
+> **Owner directions added July 12 2026 (evening) live in the new §15** —
+> the mandatory database-issue dialog, the repair flow, force-close-on-
+> decline, the crash-triggered check, and the verified backup reality. §15
+> is the current owner intent and outranks anything earlier in this document
+> where they disagree. Wording is still not written; §15 records behavior
+> and choices, not final copy.
 
 **Status: DESIGN AWAITING OWNER APPROVAL. Nothing in this document is built.
 Phase 2 (user-facing wording/placement) has not begun and must not begin
 until the owner approves this design.**
 
-Date: July 12 2026. Branch: `claude/phosphor-memory-health-audit-hjw6ow`.
-Audited against the current `main` (through the Round 3 merge, a34fa7f).
-Every claim below was verified by reading the current code; file:line
-references are to that state of the tree.
+Original draft date: July 12 2026 (early), branch
+`claude/phosphor-memory-health-audit-hjw6ow`. Audited against the then-current
+`main` (through the Round 3 merge, a34fa7f). Brought current July 12 2026
+(evening) against `main` through the Round 4 merge (`e2f8289`). Every
+original claim was verified by reading the code at a34fa7f; the §15 backup
+facts were verified against `MemoryExporter.kt` at the Round 4 tree.
 
-Scope guard: Round 4 (Keystore loss / store-lock recovery) is referenced
-only where the health system must *represent* that state; its design is not
-revisited here. Rounds 1–3 machinery (rename transaction, RenameJournal,
-capture recovery, message completion states) is treated as fixed.
+Scope guard: Round 4 (Keystore loss / store-lock recovery) is now BUILT and
+is referenced where the health system must *represent* that state. Rounds
+1–3 machinery (rename transaction, RenameJournal, capture recovery, message
+completion states) is treated as fixed.
 
 ---
 
@@ -508,9 +527,13 @@ Single background thread, same as today, strictly ordered:
 3. `isProvisioned()` gate — everything below skipped if false (unchanged).
 4. `integrityCheck()` — failure now: MEMORY_DB → `USER_ACTION_REQUIRED` /
    `integrity_failed` (dataLoss=POSSIBLE), **ungated** health line; skip
-   steps 5–8 (as today). The startup Toast is retired in Phase 2 (its
-   replacement wording needs owner approval; until then the Toast stays —
-   no silent removal of the only current signal).
+   steps 5–8 (as today). **Owner direction July 12 2026 (§15): the vanishing
+   Toast is replaced by a MANDATORY blocking dialog the user must dismiss,
+   with a Repair path.** The integrity check itself should run on a
+   crash-triggered basis (§15.3), not unconditionally every launch — the
+   background thread first checks the already-computed last-exit reason and
+   only runs the PRAGMA when the previous exit was abnormal or a repair is
+   pending. See §15 for the full flow.
 5. Backfill: flag set **only when the backfill actually completed**
    (`backfillExistingChats` gains a success/failure return distinct from
    "0 chats needed"); failure → counter + retry next start.
@@ -676,6 +699,161 @@ or screen (Phase 2, owner-approved wording only); `SecurePrefs`;
     proposed ≥3 occurrences for capture failures, >7 days active for
     fallback states) are tunable constants; Phase 2 decides what
     escalation *shows*, the owner may also tune when.
+
+---
+
+## 15. Owner directions — July 12 2026 (evening)
+
+These are the owner's current instructions, recorded during the walkthrough.
+They set behavior and choices; final wording is still not written. Where they
+conflict with earlier sections, §15 wins.
+
+### 15.1 Verified backup reality (facts, not proposal)
+
+Read from the current code so the plan starts from truth:
+
+- **This app has TWO SQLite databases**, both SQLCipher-encrypted:
+  1. `companion_memory.db` — the memory system (companions, memories,
+     transcripts, roleplay cards, embeddings, run history).
+  2. `lorebook.db` — the lorebook tier (books, entries, triggers).
+  - Chats and settings are **not** SQLite — they live in
+    EncryptedSharedPreferences files (the Round 4 storage-lock machinery
+    covers those separately).
+- **Automatic backup exists, but only for ONE of the two databases.**
+  `MemoryExporter.autoExportIfDue` runs once per app start on the startup
+  background thread, throttled to at most once per 24 h. It writes a
+  rotating JSON export (keep the newest **5**; older ones deleted) into
+  `getExternalFilesDir("memory_backups")`. That export contains
+  `companion_memory.db`'s contents **plus the app's chats** (carried along
+  under `app_chats`). Writes are atomic + verified (torn file can't become
+  the newest backup).
+- **`lorebook.db` is NOT backed up by anything, automatically or on a
+  schedule.** It has no integrity check either. (Only `companion_memory.db`
+  has `integrityCheck()`.) This is a gap — see §15.5.
+- **Embeddings are never exported** (they are regenerated by re-indexing).
+- **The automatic backup is SILENT.** There is no user-facing signal that it
+  ran, succeeded, or failed — successes and failures go only to the Memory
+  log, and that log is gated off by default. The only visible hint is the
+  "last backup" time on the Memory Controls screen going stale.
+- Backup **pauses** while chat storage is locked/degraded (Round 4), so a
+  backup written during an outage can't overwrite the last complete one.
+- **Restore is manual only** (SAF file-picker Import). Nothing restores
+  automatically today.
+
+Performance note: the auto-backup is *not* an every-launch cost (24 h
+throttle), but when it does run it serializes the whole memory DB + all
+chats to JSON on the startup background thread — it competes for disk with
+the other startup work but does not block the UI thread.
+
+### 15.2 Mandatory database-issue dialog + repair flow (owner-directed)
+
+Replaces the vanishing Toast (F3). When a database integrity problem is
+detected:
+
+1. **A blocking dialog the user must actively dismiss** appears (not a Toast,
+   not a banner). It states, in plain terms to be worded later: a database
+   problem was found, whether the app can repair it automatically, and what
+   repair involves.
+2. **If the app CAN repair it without user involvement** (e.g. restore the
+   affected database from the last good automatic backup, or salvage-and-
+   rebuild from the readable pages), it does so — but the user is still shown
+   the dialog *first* so they know it happened and what it means (e.g. "some
+   very recent memories may be missing because they were restored from
+   yesterday's backup").
+3. **If repair needs the user to trigger it**, the dialog offers a **Repair
+   Database** action. The user may choose to repair **now** or **later**:
+   - **Now** → repair runs. During the repair the user is clearly warned
+     **not to close the app**, because interrupting it mid-write could worsen
+     corruption. (Design must make repair itself restartable/idempotent so an
+     accidental kill is survivable — see §5 common laws.)
+   - **Later** → the app **force-closes itself** after the user dismisses the
+     dialog. Rationale (owner): continuing to run against a known-corrupt
+     database risks compounding the corruption with more writes. Force-close
+     stops all further writes until the user is ready to repair. The user is
+     told this is why it's closing, so it doesn't feel like a crash.
+4. The dialog must distinguish **repairable** from **not repairable on this
+   device**. If a database is corrupt and there is no usable backup and no
+   salvage is possible, the honest state is "this database can't be repaired
+   here" — the app must say so rather than pretend a repair will work. What
+   happens next (start fresh, keep the corrupt file preserved for manual
+   export, etc.) is an open owner decision — see §15.6.
+
+**Flag for owner (impact of force-close-on-decline):** the memory database
+being corrupt does **not** break ordinary chatting — chats live in separate
+storage that still works. So force-closing the *entire* app because the
+*memory* database is corrupt also takes away chat, which was fine. Two
+choices to weigh (§15.6): (a) force-close the whole app on decline, simplest
+and safest against compounding corruption but heaviest; or (b) enter a
+"memory features off until repaired" degraded mode that still lets you chat,
+lighter but means running with a known-bad memory DB (writes to it must then
+be fully blocked, not just discouraged). The owner asked for (a); this flag
+records the trade so it's a conscious choice.
+
+### 15.3 Crash-triggered checking (owner-directed)
+
+The integrity check should **not** run on every launch (that is part of why
+startup is slow — see the separate startup-performance discussion). Instead:
+
+- The app already computes, at every startup, **why the previous process
+  died** (`Logger.logLastExitReason` → Android's historical exit reasons:
+  clean exit vs crash vs low-memory kill vs ANR vs force-stop). This signal
+  exists today and costs nothing new.
+- The startup background thread runs the database integrity check **only
+  when** the last exit looked abnormal (crash / ANR / kill), **or** when a
+  repair was left pending from a previous session. On a clean previous exit,
+  the check is skipped — the common case, and the fast path.
+- A **manual "Check database now"** action (like a Windows manual disk check)
+  is available for when the user suspects a problem without a crash having
+  happened. Placement/wording is Phase 2.
+
+This directly ties the health work to the startup-speed goal: the expensive
+check becomes occasional-and-justified instead of every-single-open.
+
+### 15.4 One-time vs ongoing (carried from the startup discussion)
+
+Recorded so the implementation keeps them separate:
+
+- **One-time past-event chores** (encrypting leftover plaintext files, the
+  Round 4 outage reconcile) should run once, record "done," and never run
+  again — not re-scan every launch.
+- **Ongoing risk** (corruption) is the only thing that justifies a repeated
+  check, and even that is now crash-triggered (§15.3), not every launch.
+
+### 15.5 Lorebook backup + integrity gap (owner-flagged)
+
+Surfaced during the walkthrough and recorded as open work:
+
+- `lorebook.db` has **no automatic backup and no integrity check**. If it
+  corrupts, there is today no detection and no restore point.
+- Options to weigh (Phase 2 / owner): fold `lorebook.db` into the same
+  automatic rotating backup that already protects `companion_memory.db`, and
+  give it an integrity check on the same crash-triggered schedule. This is a
+  natural, low-risk extension since the backup machinery already exists.
+- Until decided, the plan must not *claim* lorebooks are protected — they
+  are not.
+
+### 15.6 Open owner decisions introduced by §15
+
+1. **Force-close whole app vs memory-features-off degraded mode** on repair-
+   declined (§15.2 flag). Owner asked for force-close; trade recorded.
+2. **Not-repairable path** (§15.2.4): what the app does when a database is
+   corrupt, un-backed-up, and unsalvageable on this device.
+3. **Lorebook coverage** (§15.5): extend auto-backup + integrity to
+   `lorebook.db` — yes/no.
+4. **Backup visibility** (§15.1): the auto-backup is silent today. Does the
+   owner want any persistent (non-Toast) indication that backups are
+   happening / last succeeded / are failing? (Ties to the ungated-health-
+   line decision in §14.1.)
+5. **Backup frequency** (§15.1): once-per-day means a memory-DB restore can
+   lose up to ~24 h of memories. Keep daily, or back up more often /
+   before risky operations?
+
+### 15.7 What §15 does NOT change
+
+No app code, strings, or UI are written by this update — it is design text
+only, consistent with the "stop after the design" instruction. The mandatory
+dialog, repair action, force-close, and any lorebook coverage remain subject
+to owner approval of both behavior and wording before implementation.
 
 ---
 
