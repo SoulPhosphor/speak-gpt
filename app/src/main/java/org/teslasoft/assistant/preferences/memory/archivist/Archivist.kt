@@ -93,6 +93,11 @@ object Archivist {
          *  distinguishes "found only memories that already exist" from
          *  "did not find anything new". */
         val duplicatesSkipped: Int = 0,
+        /** Assistant transcript turns excluded from analysis because Round 3
+         *  marked them `complete:false` (a truncated fragment is never mined as
+         *  fact; the user turn beside it is still sent). In-memory run
+         *  diagnostic only — not persisted, logged, or shown. */
+        val incompleteTurnsExcluded: Int = 0,
         val error: String? = null
     ) {
         val notConfigured: Boolean get() = outcome == "not_configured"
@@ -209,6 +214,7 @@ object Archivist {
         val analyzedChatIds = ArrayList<String>()
         val fedTranscriptIds = ArrayList<String>()
         var duplicatesSkipped = 0
+        var incompleteTurnsExcluded = 0
         var runError: String? = null
         var runErrorFailure: ArchivistFailure? = null
         var interrupted = false
@@ -240,6 +246,10 @@ object Archivist {
                         var filedThisConversation = 0
                         for (chunk in chunks) {
                             val rows = chunk.map { conversation.transcripts[it] }
+                            val rendered = ArchivistPrompt.userMessage(
+                                conversation.chatName, companionName, rows
+                            )
+                            incompleteTurnsExcluded += rendered.incompleteAssistantTurnsDropped
                             val response = ai.chatCompletion(
                                 ChatCompletionRequest(
                                     model = ModelId(model),
@@ -247,9 +257,7 @@ object Archivist {
                                         ChatMessage(role = ChatRole.System, content = systemPrompt),
                                         ChatMessage(
                                             role = ChatRole.User,
-                                            content = ArchivistPrompt.userMessage(
-                                                conversation.chatName, companionName, rows
-                                            )
+                                            content = rendered.text
                                         )
                                     ),
                                     temperature = temperature
@@ -396,6 +404,7 @@ object Archivist {
             outcome = outcome,
             failureReason = dominantReason,
             duplicatesSkipped = duplicatesSkipped,
+            incompleteTurnsExcluded = incompleteTurnsExcluded,
             error = runError
         )
     }

@@ -125,11 +125,15 @@ class MainApplication : Application() {
                         }
                     } else {
                         // One-time backfill: pre-existing chats become eligible
-                        // for memory review too (guarded so it runs just once).
+                        // for memory review too. The completion flag is set ONLY
+                        // when the pass actually completed — a failed or partial
+                        // pass leaves it unset and retries next start (the pass
+                        // is idempotent: already-imported chats are skipped).
                         val store = MemoryStore.getInstance(this)
                         if (store.getMeta(MemoryStore.META_BACKFILL_DONE) != "1") {
-                            TranscriptRecorder.backfillExistingChats(this)
-                            store.setMeta(MemoryStore.META_BACKFILL_DONE, "1")
+                            if (TranscriptRecorder.backfillExistingChats(this).completed) {
+                                store.setMeta(MemoryStore.META_BACKFILL_DONE, "1")
+                            }
                         }
                         MemoryExporter.autoExportIfDue(this)
                     }

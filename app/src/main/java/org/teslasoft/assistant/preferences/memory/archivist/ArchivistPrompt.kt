@@ -107,13 +107,23 @@ When a world/campaign/rp_character memory clearly belongs on a lore card the con
 Only when the user repeatedly corrected the SAME habit of the AI model in this conversation (style, format, tone — the machine's own defects), propose a short imperative rule that would fix it, e.g. "Do not end responses with a follow-up question." Otherwise leave the array empty.
 """.trim()
 
+    /** One conversation rendered for the model, plus the count of assistant
+     *  turns dropped because Round 3 marked them `complete:false`. The count is
+     *  in-memory diagnostic data for the run only (RunOutcome) — it is not
+     *  persisted, logged, or surfaced. */
+    data class RenderedConversation(
+        val text: String,
+        val incompleteAssistantTurnsDropped: Int
+    )
+
     /** The user-role message: the conversation rendered plainly, with the
-     *  little context the model is entitled to (names and dates only). */
+     *  little context the model is entitled to (names and dates only). Also
+     *  reports how many incomplete assistant fragments were excluded. */
     fun userMessage(
         chatName: String,
         companionName: String?,
         transcripts: List<TranscriptRecord>
-    ): String {
+    ): RenderedConversation {
         val sb = StringBuilder()
         sb.append("Conversation: ").append(chatName).append('\n')
         if (!companionName.isNullOrBlank()) {
@@ -123,17 +133,20 @@ Only when the user repeatedly corrected the SAME habit of the AI model in this c
         if (models.isNotEmpty()) {
             sb.append("AI model(s) that served it: ").append(models.joinToString(", ")).append('\n')
         }
+        var incompleteDropped = 0
         for (t in transcripts) {
             if (!t.startedAt.isNullOrBlank()) {
                 sb.append("\n[").append(t.startedAt).append("]\n")
             }
-            sb.append(renderTurns(t.content))
+            incompleteDropped += renderTurns(sb, t.content)
         }
-        return sb.toString()
+        return RenderedConversation(sb.toString(), incompleteDropped)
     }
 
-    private fun renderTurns(contentJson: String): String {
-        val sb = StringBuilder()
+    /** Appends one transcript's turns to [sb]; returns how many assistant turns
+     *  were dropped for being incomplete (Round 3 `complete:false`). */
+    private fun renderTurns(sb: StringBuilder, contentJson: String): Int {
+        var incompleteDropped = 0
         try {
             val turns = JSONArray(contentJson)
             for (i in 0 until turns.length()) {
@@ -143,7 +156,10 @@ Only when the user repeatedly corrected the SAME habit of the AI model in this c
                 // fragment — never mine it as a reliable fact. It is dropped from
                 // the extraction view; the user's own turn beside it stays. Absent
                 // "complete" means complete (every legacy row, all user turns).
-                if (isAssistant && !turn.optBoolean("complete", true)) continue
+                if (isAssistant && !turn.optBoolean("complete", true)) {
+                    incompleteDropped++
+                    continue
+                }
                 val role = if (isAssistant) "Assistant" else "User"
                 val text = turn.optString("content")
                 if (text.isNotBlank()) sb.append(role).append(": ").append(text).append('\n')
@@ -153,6 +169,6 @@ Only when the user repeatedly corrected the SAME habit of the AI model in this c
             // the conversation — the model can still read it.
             sb.append(contentJson).append('\n')
         }
-        return sb.toString()
+        return incompleteDropped
     }
 }
