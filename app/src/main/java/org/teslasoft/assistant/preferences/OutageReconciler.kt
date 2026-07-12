@@ -23,16 +23,22 @@ import org.json.JSONObject
  * Merges data written during an encryption outage back into the encrypted
  * store once the Keystore recovers (silent-failure audit, Round 4).
  *
- * While a file is LOCKED (see ChatStorageHealth) every read and write is
- * redirected to a separate `outage.<name>` file, so the outage side starts
- * empty and holds ONLY what the user did during the outage. That isolation
- * is what makes most reconciliation provably safe: a chat that exists only
- * on the outage side was created during the outage (append it); a key the
+ * RECOVERY-ONLY since the owner's July 12 2026 lock policy: the first
+ * Round-4 build redirected locked traffic into separate `outage.<name>`
+ * plaintext files; that redirection was rejected and removed (LOCKED now
+ * blocks), but files it already created still hold real user data and this
+ * merge remains the ONLY path that recovers them. Nothing creates or
+ * writes outage files anymore — this code only reads and retires them.
+ *
+ * Because the outage side held ONLY what the user did during the outage,
+ * most reconciliation is provably safe: a chat that exists only on the
+ * outage side was created during the outage (append it); a key the
  * encrypted side has never held carries no conflict (copy it). Only a key
  * that is non-empty on BOTH sides with different values is a real conflict,
  * and those are never resolved automatically — the whole outage file is
- * preserved as a snapshot the owner can act on later, and the encrypted
- * side stays presented. Neither copy is ever silently discarded.
+ * preserved as a snapshot the owner can act on later (indexed in
+ * SnapshotRegistry), and the encrypted side stays presented. Neither copy
+ * is ever silently discarded.
  *
  * Discipline (the same copy → verify → only-then-clear order the rest of
  * the storage layer uses, restartable and idempotent at every boundary):
@@ -135,7 +141,16 @@ object OutageReconciler {
     fun isEmptyValue(value: Any?): Boolean =
         value == null || value == "" || value == "[]"
 
-    fun reconcile(files: Files): Result {
+    /**
+     * @param chatListLock the SAME monitor every normal chat-list mutation
+     *        holds (ChatPreferences.CHAT_LIST_LOCK in production). The
+     *        chat-list merge — read, modify, write, verify, delete — runs
+     *        entirely inside it, so a concurrent user list-write can never
+     *        interleave and erase freshly reconciled entries after the
+     *        verify step. The race window being short was never a defense;
+     *        the lock removes the window.
+     */
+    fun reconcile(files: Files, chatListLock: Any = Any()): Result {
         val names = files.outageNames()
         if (names.isEmpty()) return Result(emptyList(), emptyList(), emptyList())
 
@@ -149,7 +164,11 @@ object OutageReconciler {
 
         for (name in ordered) {
             val outcome = try {
-                reconcileOne(files, name)
+                if (name == CHAT_LIST_FILE) {
+                    synchronized(chatListLock) { reconcileOne(files, name) }
+                } else {
+                    reconcileOne(files, name)
+                }
             } catch (e: Exception) {
                 files.log("Reconciling '$name' threw ${e.message}; deferred to the next start.")
                 Outcome.DEFERRED

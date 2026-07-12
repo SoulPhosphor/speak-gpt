@@ -38,34 +38,42 @@ import java.io.File
  * holding a single migration marker.
  *
  * Failure behavior is a per-file state machine (ChatStorageHealth.classify,
- * silent-failure audit Round 4 — it replaced a single plaintext fallback
- * that let locked encrypted data masquerade as an empty chat list and then
- * silently destroyed anything written during the outage):
+ * silent-failure audit Round 4; corrected to the owner's approved lock
+ * policy July 12 2026 — the original Round-4 pass redirected locked
+ * traffic into plaintext "outage.<name>" files, which the owner rejected
+ * as an unapproved plaintext fallback):
  *
  *  - HEALTHY: the encrypted file opens; reads/writes go to it. If a lock
- *    was recorded for this file, the recovery is logged and outage data is
- *    merged back at the next startup pass ([reconcileOutageAtStartup]).
+ *    was recorded for this file, the recovery is logged and any legacy
+ *    outage data is merged back at the next startup pass
+ *    ([reconcileOutageAtStartup]).
  *  - LOCKED: an encrypted file EXISTS but cannot be opened (Keystore key
  *    unavailable — transient failure, cleared credentials, or a restore
  *    onto new hardware; the states are indistinguishable synchronously, so
  *    the journal counts attempts and recovery is automatic if the key ever
- *    returns). Reads and writes are redirected to a separate
- *    "outage.<name>" plaintext file: the encrypted file is NEVER read as
- *    empty, never written, never cleared, never migrated while locked, and
- *    outage writes can never be consumed by the legacy migration pass
- *    (which only looks at the original file name). The outage file holds
- *    only data the user creates during the outage — the same at-rest
- *    protection level the app had before encryption existed — and is
- *    merged back and deleted by OutageReconciler once the key returns.
+ *    returns). **Chat activity is BLOCKED, not redirected (owner policy):**
+ *    [get] returns an inert [LockedSharedPreferences] whose reads present
+ *    nothing and whose writes are refused (commit() == false, apply() is a
+ *    no-op) — NOTHING is written to plaintext storage, the encrypted file
+ *    is never read as empty, never written, never cleared, never migrated.
+ *    Callers must consult [isLockedName]/ChatPreferences' result-typed
+ *    reads instead of interpreting the empty view, and the UI shows the
+ *    owner-approved locked screen (ChatStorageLockedActivity). Legacy
+ *    outage files created by the earlier Round-4 build are still read and
+ *    reconciled when the key returns — but no code path CREATES or WRITES
+ *    outage files anymore.
  *  - LEGACY_PLAINTEXT / FRESH_UNENCRYPTED: no encrypted file exists, so
  *    nothing is being masked; the plaintext original stays in use exactly
- *    as before encryption, and the normal migration picks it up when the
- *    Keystore becomes available.
+ *    as before encryption existed, and the normal migration picks it up
+ *    when the Keystore becomes available. (This is the one deliberate
+ *    exception to "no plaintext writes": a device whose Keystore has never
+ *    worked keeps its pre-encryption behavior rather than becoming
+ *    unusable; there is no encrypted data to protect or mask there.)
  *
  * Nothing is ever deleted on any failure path. The lock state, per-file, is
- * recorded persistently (ChatStorageHealth's journal) and queryable —
- * surfacing it in UI is an owner wording decision; the storage layer's job
- * is that the data survives to be surfaced.
+ * recorded persistently (ChatStorageHealth's journal, sanitized categories
+ * only) and queryable; every preserved artifact is indexed in
+ * SnapshotRegistry.
  */
 object SecurePrefs {
 
@@ -78,9 +86,8 @@ object SecurePrefs {
 
     private val cache = HashMap<String, SharedPreferences>()
 
-    /** Names redirected to their outage file in THIS process. The reconciler
-     *  must skip these: the app is actively writing to the outage copy, so
-     *  merging and deleting it mid-session would drop those writes. */
+    /** Names currently served by the inert locked view in THIS process.
+     *  Cleared per name by [retryUnlock] when the user asks for a retry. */
     private val lockedThisProcess = LinkedHashSet<String>()
 
     /** Once-per-process log dedup so a lock that is hit on every read does
@@ -110,9 +117,38 @@ object SecurePrefs {
         return encrypted
     }
 
-    /** True while [name] is served by its outage file in this process. */
+    /** True while [name] is in the LOCKED state in this process. */
     @Synchronized
-    fun isLockedThisProcess(name: String): Boolean = name in lockedThisProcess
+    fun isLockedName(name: String): Boolean = name in lockedThisProcess
+
+    /**
+     * Whether the authoritative chat list is currently LOCKED. Triggers
+     * classification if the file has not been opened yet this process, so
+     * activity gates can call it first thing.
+     */
+    fun isChatStorageLocked(context: Context): Boolean {
+        get(context, ChatRenameTransaction.CHAT_LIST_FILE)
+        return isLockedName(ChatRenameTransaction.CHAT_LIST_FILE)
+    }
+
+    /**
+     * The "Try Again" path of the locked screen: drop every locked entry
+     * from the cache so the next [get] re-attempts the encrypted open, then
+     * probe the chat list. Touches no data — a failed retry leaves the same
+     * locked views in place. Must be called off the main thread (Keystore +
+     * disk work).
+     *
+     * @return true when the chat list opened; the caller relaunches the UI.
+     */
+    fun retryUnlock(context: Context): Boolean {
+        synchronized(this) {
+            for (name in lockedThisProcess.toList()) cache.remove(name)
+            lockedThisProcess.clear()
+            // Allow the recovery (or the repeat failure) to log once more.
+            loggedThisProcess.removeAll { it.startsWith("lock.") }
+        }
+        return !isChatStorageLocked(context)
+    }
 
     private fun degradedFallback(context: Context, name: String, e: Exception): SharedPreferences {
         val encExists = encryptedFileExists(context, name)
@@ -125,18 +161,22 @@ object SecurePrefs {
 
         return when (ChatStorageHealth.classify(false, encExists, plainHasData)) {
             ChatStorageHealth.FileState.LOCKED -> {
-                ChatStorageHealth.recordLock(context, name, e.message ?: e.javaClass.simpleName)
+                ChatStorageHealth.recordLock(context, name, e)
                 if (loggedThisProcess.add("lock.$name")) {
-                    val msg = "Encrypted storage for '$name' exists but cannot be opened (${e.message}). " +
-                        "The data is LOCKED, not lost: nothing touches the encrypted file, and anything saved " +
-                        "meanwhile goes to a separate recovery file that is merged back when the key returns."
+                    val msg = "Encrypted storage for '$name' exists but cannot be opened " +
+                        "(${StorageErrorSanitizer.categorize(e)}). The data is LOCKED, not lost: nothing touches " +
+                        "the encrypted file, and saving is paused until storage is available again."
                     MemoryLog.log(context, "SecurePrefs", "error", msg)
                     Logger.log(context, ChatPreferences.CORRUPT_DATA_LOG_TYPE, "SecurePrefs", "error", msg)
                 }
                 lockedThisProcess.add(name)
-                val outage = context.getSharedPreferences(OutageReconciler.OUTAGE_PREFIX + name, Context.MODE_PRIVATE)
-                cache[name] = outage
-                outage
+                // Owner policy (July 12 2026): BLOCK, never redirect to
+                // plaintext. The inert view presents nothing and refuses
+                // every write; result-typed reads and the UI gates surface
+                // the state explicitly.
+                val locked = LockedSharedPreferences
+                cache[name] = locked
+                locked
             }
             else -> {
                 // No encrypted file exists → nothing is masked. Pre-encryption
@@ -144,12 +184,47 @@ object SecurePrefs {
                 // normal migration consumes it when the Keystore works.
                 if (loggedThisProcess.add("plain.$name")) {
                     MemoryLog.log(context, "SecurePrefs", "error",
-                        "Encrypted preferences unavailable for '$name' (${e.message}); no encrypted data exists, so the plaintext file stays in use until encryption is available."
+                        "Encrypted preferences unavailable for '$name' (${StorageErrorSanitizer.categorize(e)}); no encrypted data exists, so the plaintext file stays in use until encryption is available."
                     )
                 }
                 cache[name] = plain
                 plain
             }
+        }
+    }
+
+    /**
+     * The LOCKED-state view: reads present nothing (callers must consult the
+     * lock state, never interpret this as empty — that is what the
+     * result-typed reads in ChatPreferences are for) and every write is
+     * refused (commit() == false, apply() drops silently at THIS layer;
+     * operational writers check [isLockedName] first and refuse loudly).
+     * Stateless, hence a shared object.
+     */
+    internal object LockedSharedPreferences : SharedPreferences {
+        override fun getAll(): MutableMap<String, *> = mutableMapOf<String, Any?>()
+        override fun getString(key: String?, defValue: String?): String? = defValue
+        override fun getStringSet(key: String?, defValues: MutableSet<String>?): MutableSet<String>? = defValues
+        override fun getInt(key: String?, defValue: Int): Int = defValue
+        override fun getLong(key: String?, defValue: Long): Long = defValue
+        override fun getFloat(key: String?, defValue: Float): Float = defValue
+        override fun getBoolean(key: String?, defValue: Boolean): Boolean = defValue
+        override fun contains(key: String?): Boolean = false
+        override fun edit(): SharedPreferences.Editor = LockedEditor
+        override fun registerOnSharedPreferenceChangeListener(l: SharedPreferences.OnSharedPreferenceChangeListener?) {}
+        override fun unregisterOnSharedPreferenceChangeListener(l: SharedPreferences.OnSharedPreferenceChangeListener?) {}
+
+        private object LockedEditor : SharedPreferences.Editor {
+            override fun putString(key: String?, value: String?): SharedPreferences.Editor = this
+            override fun putStringSet(key: String?, values: MutableSet<String>?): SharedPreferences.Editor = this
+            override fun putInt(key: String?, value: Int): SharedPreferences.Editor = this
+            override fun putLong(key: String?, value: Long): SharedPreferences.Editor = this
+            override fun putFloat(key: String?, value: Float): SharedPreferences.Editor = this
+            override fun putBoolean(key: String?, value: Boolean): SharedPreferences.Editor = this
+            override fun remove(key: String?): SharedPreferences.Editor = this
+            override fun clear(): SharedPreferences.Editor = this
+            override fun commit(): Boolean = false
+            override fun apply() {}
         }
     }
 
@@ -208,7 +283,7 @@ object SecurePrefs {
                 k in encryptedBefore.keys && encryptedBefore[k] != v
             }
             if (conflicts.isNotEmpty()) {
-                val snapName = "${name}_conflict_${System.currentTimeMillis()}"
+                val snapName = "${name}_conflict_${SnapshotRegistry.uniqueSuffix()}"
                 val snap = createEncrypted(context, ENC_PREFIX + snapName)
                 val wrote = snap.edit().apply {
                     for ((key, value) in conflicts) {
@@ -228,6 +303,10 @@ object SecurePrefs {
                     )
                     return
                 }
+                SnapshotRegistry.record(
+                    context, snapName, name,
+                    SnapshotRegistry.ORIGIN_LEGACY_CONFLICT, "migration_conflict"
+                )
                 val logMsg = "Migration of '$name' found ${conflicts.size} entr${if (conflicts.size == 1) "y" else "ies"} that differ between the plaintext and encrypted copies. " +
                     "The plaintext versions were preserved in '$snapName'; the encrypted versions stay in place. Neither was deleted."
                 MemoryLog.log(context, "SecurePrefs", "error", logMsg)
@@ -277,8 +356,12 @@ object SecurePrefs {
             if (!src.exists()) return null
             val dir = File(context.filesDir, RECOVERY_DIR)
             if (!dir.exists() && !dir.mkdirs()) return null
-            val dst = File(dir, "$ENC_PREFIX$name.${System.currentTimeMillis()}.xml")
+            val dst = File(dir, "$ENC_PREFIX$name.${SnapshotRegistry.uniqueSuffix()}.xml")
             src.copyTo(dst, overwrite = false)
+            SnapshotRegistry.record(
+                context, dst.name, name,
+                SnapshotRegistry.ORIGIN_READ_FAILURE, "undecryptable_value"
+            )
             MemoryLog.log(context, "SecurePrefs", "error",
                 "A value in '$name' could not be decrypted; the encrypted file was preserved as '${dst.name}' before anything can overwrite it."
             )
@@ -294,22 +377,34 @@ object SecurePrefs {
     // ----- Startup outage reconciliation -----------------------------------
 
     /**
-     * Merge any `outage.<name>` files back into their encrypted homes. Runs
-     * on the startup background thread BEFORE RenameJournal.reconcile (which
-     * consults the chat list this pass may be restoring) and before the
-     * memory-store housekeeping. Restartable and idempotent — every decision
-     * lives in OutageReconciler (pure, unit-tested) and every marker in
+     * Merge any `outage.<name>` files back into their encrypted homes. Only
+     * LEGACY outage files exist — the earlier Round-4 build created them;
+     * since the owner's July 12 2026 lock policy nothing writes them, but
+     * data already inside them must still be recovered. Runs on the startup
+     * background thread BEFORE RenameJournal.reconcile (which consults the
+     * chat list this pass may be restoring) and before the memory-store
+     * housekeeping. Restartable and idempotent — every decision lives in
+     * OutageReconciler (pure, unit-tested) and every marker in
      * ChatStorageHealth's journal, so a process death at any boundary
      * re-converges on the next start. Files whose encrypted side is still
-     * locked, or that the app is actively serving from their outage copy in
-     * this process, are left untouched for a later start.
+     * locked are left untouched for a later start. The chat-list merge runs
+     * under ChatPreferences.CHAT_LIST_LOCK — the same monitor every normal
+     * chat-list mutation holds — so a user write can never interleave with
+     * the merge's read-modify-write-verify-delete sequence.
+     *
+     * Also runs the one-time discovery of pre-registry preserved artifacts
+     * (SnapshotRegistry.discoverLegacy) — cheap, idempotent, best-effort.
      */
     fun reconcileOutageAtStartup(context: Context) {
         val appContext = context.applicationContext
+        SnapshotRegistry.discoverLegacy(appContext)
         val names = listOutageNames(appContext)
         if (names.isEmpty()) return
 
-        val result = OutageReconciler.reconcile(androidFiles(appContext, names))
+        val result = OutageReconciler.reconcile(
+            androidFiles(appContext, names),
+            ChatPreferences.CHAT_LIST_LOCK
+        )
         // A merged file's encrypted side opened and absorbed the outage data:
         // its lock record is finished business. (Locks for files that are
         // simply read again also clear in get(); this covers files nothing
@@ -340,9 +435,9 @@ object SecurePrefs {
     private fun androidFiles(context: Context, names: List<String>): OutageReconciler.Files =
         object : OutageReconciler.Files {
             override fun outageNames(): List<String> =
-                // Never reconcile a file this process is actively serving
-                // from its outage copy — the merge would race live writes.
-                names.filter { !isLockedThisProcess(it) }
+                // A name still locked this process can't open its encrypted
+                // side anyway; skipping it here just avoids pointless work.
+                names.filter { !isLockedName(it) }
 
             override fun encryptedOpens(name: String): Boolean = try {
                 synchronized(this@SecurePrefs) { createEncrypted(context, ENC_PREFIX + name) }
@@ -385,10 +480,18 @@ object SecurePrefs {
                 // Preserved copies are written ENCRYPTED (the Keystore is
                 // healthy on this path) — the plaintext outage data is
                 // re-protected at rest the moment it stops being needed
-                // for live operation.
-                val snapName = "${name}_recovered_${System.currentTimeMillis()}"
+                // for live operation. Collision-proof name + a permanent
+                // registry entry (the idempotency MARKER in the journal is
+                // cleared after settlement; the registry entry never is).
+                val snapName = "${name}_recovered_${SnapshotRegistry.uniqueSuffix()}"
                 val ok = putEncrypted(snapName, entries.filterValues { it != null })
-                if (ok) snapName else null
+                if (ok) {
+                    SnapshotRegistry.record(
+                        context, snapName, name,
+                        SnapshotRegistry.ORIGIN_OUTAGE_RECONCILIATION, "outage_conflict"
+                    )
+                    snapName
+                } else null
             } catch (_: Exception) {
                 null
             }

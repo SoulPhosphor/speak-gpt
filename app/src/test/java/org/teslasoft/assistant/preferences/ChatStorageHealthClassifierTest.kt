@@ -17,6 +17,8 @@
 package org.teslasoft.assistant.preferences
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.teslasoft.assistant.preferences.ChatStorageHealth.FileState
 
@@ -77,5 +79,69 @@ class ChatStorageHealthClassifierTest {
             FileState.FRESH_UNENCRYPTED,
             ChatStorageHealth.classify(encryptedOpens = false, encryptedFileExists = false, plaintextHasData = false)
         )
+    }
+
+    // ---- caller-visible read states (Round 4 correction) -------------------
+
+    @Test fun lockedRead_isNeverOrdinaryEmpty() {
+        // The masquerade Round 4 exists to end: a locked read must classify
+        // as LOCKED regardless of what the fallback view claims — even when
+        // it claims a present-and-empty value.
+        for (keyPresent in listOf(true, false)) {
+            for (hasEntries in listOf(true, false)) {
+                val state = ChatStorageHealth.readStateFor(
+                    locked = true, decryptFailed = false, parseFailed = false,
+                    keyPresent = keyPresent, hasEntries = hasEntries
+                )
+                assertEquals(ChatStorageHealth.ReadState.LOCKED, state)
+                assertTrue(state != ChatStorageHealth.ReadState.EMPTY)
+            }
+        }
+    }
+
+    @Test fun corruptBeatsMissingAndEmpty() {
+        assertEquals(
+            ChatStorageHealth.ReadState.CORRUPT,
+            ChatStorageHealth.readStateFor(false, decryptFailed = true, parseFailed = false, keyPresent = true, hasEntries = false)
+        )
+        assertEquals(
+            ChatStorageHealth.ReadState.CORRUPT,
+            ChatStorageHealth.readStateFor(false, decryptFailed = false, parseFailed = true, keyPresent = true, hasEntries = false)
+        )
+    }
+
+    @Test fun emptyMissingAndReadableAreDistinct() {
+        assertEquals(
+            ChatStorageHealth.ReadState.MISSING,
+            ChatStorageHealth.readStateFor(false, false, false, keyPresent = false, hasEntries = false)
+        )
+        assertEquals(
+            ChatStorageHealth.ReadState.EMPTY,
+            ChatStorageHealth.readStateFor(false, false, false, keyPresent = true, hasEntries = false)
+        )
+        assertEquals(
+            ChatStorageHealth.ReadState.OK,
+            ChatStorageHealth.readStateFor(false, false, false, keyPresent = true, hasEntries = true)
+        )
+    }
+
+    @Test fun onlyReadableStatesAreAuthoritative() {
+        // Authority decisions (rename reconciliation, backfill completion,
+        // export completeness) may run only on states that truly describe
+        // what exists. Everything else — locked, corrupt, failed — defers.
+        assertTrue(ChatStorageHealth.isAuthoritative(ChatStorageHealth.ReadState.OK))
+        assertTrue(ChatStorageHealth.isAuthoritative(ChatStorageHealth.ReadState.EMPTY))
+        assertTrue(ChatStorageHealth.isAuthoritative(ChatStorageHealth.ReadState.MISSING))
+        assertFalse(ChatStorageHealth.isAuthoritative(ChatStorageHealth.ReadState.LOCKED))
+        assertFalse(ChatStorageHealth.isAuthoritative(ChatStorageHealth.ReadState.CORRUPT))
+        // Unknown/unexpected fails conservatively, never as empty.
+        assertFalse(ChatStorageHealth.isAuthoritative(ChatStorageHealth.ReadState.FAILED))
+    }
+
+    @Test fun writesAreRefusedOverLockedOrPreservedCorruptStorage() {
+        assertTrue(ChatStorageHealth.writeAllowed(locked = false, readFailed = false))
+        assertFalse(ChatStorageHealth.writeAllowed(locked = true, readFailed = false))
+        assertFalse(ChatStorageHealth.writeAllowed(locked = false, readFailed = true))
+        assertFalse(ChatStorageHealth.writeAllowed(locked = true, readFailed = true))
     }
 }

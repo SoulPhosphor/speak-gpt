@@ -39,12 +39,14 @@ import org.json.JSONObject
  *    it. Legacy plaintext migration (with conflict preservation) and outage
  *    reconciliation may run.
  *  - [FileState.LOCKED] — an encrypted file EXISTS on disk but cannot be
- *    opened. The data is unreadable, not absent. Reads and writes are
- *    redirected to a separate `outage.<name>` file so nothing can touch,
- *    mask, or later clobber the encrypted copy; the lock is recorded here
- *    (persistently) and reconciliation merges the outage file back when the
- *    key returns. The encrypted file is never modified, cleared, or deleted
- *    in this state.
+ *    opened. The data is unreadable, not absent. Chat activity is BLOCKED
+ *    (owner policy, July 12 2026): reads surface [ReadState.LOCKED] through
+ *    the result-typed APIs, writes are refused, nothing is redirected to
+ *    plaintext, and the encrypted file is never modified, cleared, or
+ *    deleted in this state. The lock is recorded here (persistently) with a
+ *    sanitized category. Legacy `outage.<name>` files from the first
+ *    Round-4 build are still merged back when the key returns; nothing
+ *    creates new ones.
  *  - [FileState.LEGACY_PLAINTEXT] — no encrypted file exists and the
  *    plaintext file has real data: a pre-encryption install whose Keystore
  *    is unavailable. The plaintext file stays authoritative (the pre-July-
@@ -67,11 +69,67 @@ import org.json.JSONObject
  * rule targets chat-content files): it must stay readable and writable
  * precisely when the encryption layer is down, and it contains only state
  * metadata — logical file names (already visible as file names on disk),
- * timestamps, counters and exception summaries — never chat content.
+ * timestamps, counters, SnapshotRegistry entries and SANITIZED error
+ * categories (StorageErrorSanitizer; never raw exception messages) — never
+ * chat content, prompts, or keys.
  */
 object ChatStorageHealth {
 
     enum class FileState { HEALTHY, LOCKED, LEGACY_PLAINTEXT, FRESH_UNENCRYPTED }
+
+    /**
+     * Caller-visible state of one chat-storage READ. The whole point of the
+     * Round-4 correction is that these are distinct at the CALL SITE, not
+     * just in the journal: locked and corrupt must never be presentable as
+     * an ordinary empty result.
+     *
+     *  - OK        data present and parsed.
+     *  - EMPTY     the value exists and is genuinely the empty list.
+     *  - MISSING   the key has never been written (fresh chat/file).
+     *  - LOCKED    encrypted storage for this file cannot be opened; the
+     *              data is unreadable, not absent.
+     *  - CORRUPT   the file opened but this value failed to decrypt or
+     *              parse; the original bytes are preserved.
+     *  - FAILED    anything unrecognized — treated conservatively (reads
+     *              present nothing, writes are refused), never as empty.
+     */
+    enum class ReadState { OK, EMPTY, MISSING, LOCKED, CORRUPT, FAILED }
+
+    /** Outcome of a guarded chat-storage WRITE. */
+    enum class WriteOutcome { OK, LOCKED, BLOCKED_CORRUPT, FAILED }
+
+    /**
+     * Pure mapping from raw read observations to the caller-visible state.
+     * Precedence mirrors [classify]: lock beats everything (an unreadable
+     * store must not be reinterpreted by whatever the fallback read said),
+     * then decrypt/parse corruption, then missing, then empty.
+     */
+    fun readStateFor(
+        locked: Boolean,
+        decryptFailed: Boolean,
+        parseFailed: Boolean,
+        keyPresent: Boolean,
+        hasEntries: Boolean
+    ): ReadState = when {
+        locked -> ReadState.LOCKED
+        decryptFailed -> ReadState.CORRUPT
+        parseFailed -> ReadState.CORRUPT
+        !keyPresent -> ReadState.MISSING
+        !hasEntries -> ReadState.EMPTY
+        else -> ReadState.OK
+    }
+
+    /** A read state that is safe to treat as authoritative "this is what
+     *  exists" — the only states under which authority decisions (rename
+     *  reconciliation, backfill completion, export completeness) may be
+     *  made. LOCKED/CORRUPT/FAILED views are masked, not authoritative. */
+    fun isAuthoritative(state: ReadState): Boolean =
+        state == ReadState.OK || state == ReadState.EMPTY || state == ReadState.MISSING
+
+    /** Pure write-permission rule: never write over locked or read-failed
+     *  storage. A corrupt value stays preserved and write-blocked until an
+     *  explicit recovery action (user delete, future restore UI) resolves it. */
+    fun writeAllowed(locked: Boolean, readFailed: Boolean): Boolean = !locked && !readFailed
 
     /**
      * Pure classification of one logical preferences file. The precedence is
@@ -102,7 +160,7 @@ object ChatStorageHealth {
     private fun prefs(context: Context) =
         context.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)
 
-    private fun recordEvent(context: Context, key: String, error: String?) {
+    private fun recordEvent(context: Context, key: String, cause: Throwable?) {
         val p = prefs(context)
         val now = System.currentTimeMillis()
         val existing = try {
@@ -113,7 +171,10 @@ object ChatStorageHealth {
         val obj = existing ?: JSONObject().put("first", now)
         obj.put("last", now)
         obj.put("count", obj.optInt("count", 0) + 1)
-        if (error != null) obj.put("error", error.take(300))
+        // Sanitized category ONLY — never the exception message (crypto/IO
+        // messages can embed file paths and provider details, and this
+        // journal is deliberately plaintext).
+        obj.put("error", StorageErrorSanitizer.categorize(cause))
         p.edit(commit = true) { putString(key, obj.toString()) }
     }
 
@@ -125,8 +186,8 @@ object ChatStorageHealth {
     }
 
     /** An encrypted file exists but could not be opened this attempt. */
-    fun recordLock(context: Context, name: String, error: String?) =
-        recordEvent(context, KEY_LOCK_PREFIX + name, error)
+    fun recordLock(context: Context, name: String, cause: Throwable?) =
+        recordEvent(context, KEY_LOCK_PREFIX + name, cause)
 
     /**
      * The encrypted file opened again. Clears the lock record; returns true
@@ -149,8 +210,8 @@ object ChatStorageHealth {
      * the ciphertext itself is the unreadable thing, so the caller must
      * preserve a copy of the underlying file BEFORE any write can replace it.
      */
-    fun recordReadFailure(context: Context, name: String, error: String?) =
-        recordEvent(context, KEY_READFAIL_PREFIX + name, error)
+    fun recordReadFailure(context: Context, name: String, cause: Throwable?) =
+        recordEvent(context, KEY_READFAIL_PREFIX + name, cause)
 
     fun readFailureNames(context: Context): Set<String> = namesWithPrefix(context, KEY_READFAIL_PREFIX)
 

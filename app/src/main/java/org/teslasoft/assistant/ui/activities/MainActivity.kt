@@ -57,6 +57,7 @@ import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.Preferences
+import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.SecurePrefs
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.fragments.tabs.ChatsListFragment
@@ -287,14 +288,30 @@ class MainActivity : FragmentActivity() {
     }
 
     private fun preInit() {
+        // LOCKED chat storage gate (Round 4): must run BEFORE the API-key
+        // check. During a Keystore outage the encrypted API keys also read
+        // empty, and this method would otherwise bounce an established user
+        // into WelcomeActivity — the fresh-install experience — over an
+        // account whose data is locked, not gone. The locked screen blocks
+        // everything until storage opens or the app closes.
+        if (SecurePrefs.isChatStorageLocked(this)) {
+            startActivity(Intent(this, ChatStorageLockedActivity::class.java).setAction(Intent.ACTION_VIEW))
+            finish()
+            return
+        }
+
         val apiEndpointPreferences = ApiEndpointPreferences.getApiEndpointPreferences(this)
 
         if (apiEndpointPreferences.getApiEndpoint(this, preferences!!.getApiEndpointId()).apiKey == "") {
             if (preferences!!.getApiKey(this) == "") {
                 if (preferences!!.getOldApiKey() == "") {
                     startActivity(Intent(this, WelcomeActivity::class.java).setAction(Intent.ACTION_VIEW))
-                    SecurePrefs.get(this, "chat_list").edit {
-                        putString("data", "[]")
+                    // List wipe on the new-user path holds the same monitor
+                    // as every other chat-list mutation (Round 4).
+                    synchronized(ChatPreferences.CHAT_LIST_LOCK) {
+                        SecurePrefs.get(this, "chat_list").edit {
+                            putString("data", "[]")
+                        }
                     }
                     finish()
                 } else {

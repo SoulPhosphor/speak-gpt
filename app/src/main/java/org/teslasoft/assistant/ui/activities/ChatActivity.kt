@@ -167,6 +167,7 @@ import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.PersonaPreferences
 import org.teslasoft.assistant.preferences.ActivationPromptPreferences
 import org.teslasoft.assistant.preferences.ChatPreferences
+import org.teslasoft.assistant.preferences.ChatStorageHealth
 import org.teslasoft.assistant.preferences.MessageCompletionState
 import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.LogitBiasPreferences
@@ -266,6 +267,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
     // Init chat
     private var messages: ArrayList<HashMap<String, Any>> = arrayListOf()
+
+    /** True when this chat's stored history is LOCKED or CORRUPT (Round 4):
+     *  the owner-approved "Chat unavailable" state is showing, and sending,
+     *  saving and generation are refused so the preserved encrypted value
+     *  can never be overwritten by this screen's (empty) in-memory view. */
+    private var chatStorageUnavailable = false
     private var messagesSelectionProjection: ArrayList<HashMap<String, Any>> = arrayListOf()
     private var messagesUsageProjection: ArrayList<HashMap<String, Any>> = arrayListOf()
     private var adapter: ChatAdapter? = null
@@ -1511,6 +1518,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         super.onCreate(savedInstanceState)
         ThemeManager.getThemeManager().applyPalette(this)
 
+        // LOCKED chat storage gate (Round 4): a chat opened from a launcher
+        // shortcut or notification must hit the same wall as MainActivity —
+        // no chat UI, no generation, no saving over locked storage.
+        if (SecurePrefs.isChatStorageLocked(this)) {
+            startActivity(Intent(this, ChatStorageLockedActivity::class.java).setAction(Intent.ACTION_VIEW))
+            finish()
+            return
+        }
+
         if (Build.VERSION.SDK_INT >= 33) {
             onBackInvokedDispatcher.registerOnBackInvokedCallback(
                 OnBackInvokedDispatcher.PRIORITY_DEFAULT
@@ -1595,7 +1611,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             tts!!.stop()
             tts!!.shutdown()
         }
-        if (mediaPlayer!!.isPlaying) {
+        // Null-safe: when the locked-storage gate finishes onCreate early,
+        // mediaPlayer was never constructed but onDestroy still runs.
+        if (mediaPlayer?.isPlaying == true) {
             mediaPlayer!!.stop()
             mediaPlayer!!.reset()
         }
@@ -1649,7 +1667,23 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         } else {
             silenceMode = preferences!!.getSilence()
             autoLangDetect = preferences!!.getAutoLangDetect()
-            messages = ChatPreferences.getChatPreferences().getChatById(this, chatId)
+            val historyResult = ChatPreferences.getChatPreferences().getChatByIdResult(this, chatId)
+            messages = historyResult.messages
+
+            // A LOCKED/CORRUPT/FAILED history must never render as an empty
+            // conversation the user can talk into (Round 4): the encrypted
+            // value is preserved and write-blocked in ChatPreferences; here
+            // the owner-approved blocking state covers the screen and every
+            // send/save path checks chatStorageUnavailable.
+            if (!ChatStorageHealth.isAuthoritative(historyResult.state)) {
+                chatStorageUnavailable = true
+                MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+                    .setTitle(R.string.chat_unavailable_title)
+                    .setMessage(R.string.chat_unavailable_body)
+                    .setCancelable(false)
+                    .setPositiveButton(R.string.chat_unavailable_back) { _, _ -> finishActivity() }
+                    .show()
+            }
 
             // R8 fix
             if (messages == null) messages = arrayListOf()
@@ -3299,13 +3333,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     /** SYSTEM INITIALIZATION END **/
 
     private fun saveSettings() {
-        val chat = SecurePrefs.get(this, "chat_$chatId")
-        chat.edit {
-            val gson = Gson()
-            val json: String = gson.toJson(messages)
-
-            putString("chat", json)
-        }
+        // Guarded save (Round 4): ChatPreferences refuses the write when the
+        // chat's storage is locked or its stored value is preserved-corrupt —
+        // this screen's in-memory list came from that unreadable read, and
+        // persisting it would overwrite the only copy. The refusal is logged
+        // by the guard; the "Chat unavailable" state already blocks the UI.
+        if (chatStorageUnavailable) return
+        ChatPreferences.getChatPreferences().saveChatHistory(this, chatId, messages)
     }
 
     /**
@@ -3330,6 +3364,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     }
 
     private fun parseMessage(message: String, shouldAdd: Boolean = true) {
+        // No sends into a chat whose stored history is locked or preserved-
+        // corrupt (Round 4) — the blocking dialog owns this screen.
+        if (chatStorageUnavailable) return
         // Put timestamp to chat to sort chats by last message
         ChatPreferences.getChatPreferences().putTimestampToChatById(this, chatId)
         try {
@@ -3839,6 +3876,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
     @Suppress("deprecation")
     private suspend fun generateResponse(request: String, shouldPronounce: Boolean) {
+        // The single generation funnel is also the single guard point: no
+        // generation into a chat whose stored history is locked or
+        // preserved-corrupt (Round 4) — typed, voice and retry paths all
+        // flow through here, and a reply that can't be saved must not be
+        // produced over the blocking "Chat unavailable" state.
+        if (chatStorageUnavailable) return
+
         disableAutoScroll = false
 
         // Capture the user's message here, the single point every input method flows

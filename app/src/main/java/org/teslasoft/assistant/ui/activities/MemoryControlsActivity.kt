@@ -474,8 +474,23 @@ class MemoryControlsActivity : FragmentActivity() {
         }
     }
 
+    /** Owner-approved blocking notice (Round 4): no chat backup can be
+     *  produced while encrypted chat storage is unavailable. */
+    private fun showChatBackupUnavailableDialog() {
+        if (isFinishing) return
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.chat_backup_unavailable_title)
+            .setMessage(R.string.chat_backup_unavailable_body)
+            .setPositiveButton(R.string.chat_backup_unavailable_ok) { _, _ -> }
+            .show()
+    }
+
     private fun exportToUri(uri: Uri) {
         runOffThread {
+            if (MemoryExporter.isChatListUnavailable(this)) {
+                runOnUiThread { showChatBackupUnavailableDialog() }
+                return@runOffThread
+            }
             val json = MemoryExporter.buildExportJson(this)
             contentResolver.openOutputStream(uri, "wt")?.bufferedWriter()?.use { it.write(json) }
                 ?: throw IllegalStateException(getString(R.string.memory_file_unreadable))
@@ -520,6 +535,13 @@ class MemoryControlsActivity : FragmentActivity() {
     private fun doReset(backupFirst: Boolean) {
         runOffThread {
             var backupName: String? = null
+            if (backupFirst && MemoryExporter.isChatListUnavailable(this)) {
+                // The safety copy the user asked for cannot be complete while
+                // chat storage is locked — abort the reset BEFORE anything is
+                // deleted and say why with the owner-approved wording.
+                runOnUiThread { showChatBackupUnavailableDialog() }
+                return@runOffThread
+            }
             if (backupFirst) {
                 // The user asked for a safety copy, so the reset must not run
                 // unless that copy is verifiably on disk. writeBackupNow

@@ -172,4 +172,52 @@ class RenameJournalReconcileTest {
         assertEquals(0, store.repointCalls)
         assertTrue(journal.isEmpty())
     }
+
+    // ---- Round 4: authority guard — no decisions on a masked chat list ----
+
+    @Test fun maskedChatListStatesDeferAllAuthorityDecisions() {
+        // LOCKED/CORRUPT/FAILED views look empty; planning against them
+        // would read "neither id live" as "chat deleted" and discard valid
+        // entries. Only truly readable states may decide.
+        assertFalse(RenameJournal.canDecideAuthority(ChatStorageHealth.ReadState.LOCKED))
+        assertFalse(RenameJournal.canDecideAuthority(ChatStorageHealth.ReadState.CORRUPT))
+        assertFalse(RenameJournal.canDecideAuthority(ChatStorageHealth.ReadState.FAILED))
+        assertTrue(RenameJournal.canDecideAuthority(ChatStorageHealth.ReadState.OK))
+        assertTrue(RenameJournal.canDecideAuthority(ChatStorageHealth.ReadState.EMPTY))
+        assertTrue(RenameJournal.canDecideAuthority(ChatStorageHealth.ReadState.MISSING))
+    }
+
+    @Test fun withoutTheGuard_aMaskedEmptyListWouldWronglyDiscard() {
+        // Documents the exact defect the guard closes: against the masked
+        // (empty) view the pure plan discards a still-valid entry. The
+        // guard's job is that this plan never runs on such a view.
+        val plan = RenameJournal.planReconcile(one(), emptySet(), provisioned = true)
+        assertEquals(listOf(Action.Discard(old, new)), plan)
+        assertFalse(RenameJournal.canDecideAuthority(ChatStorageHealth.ReadState.LOCKED))
+    }
+
+    @Test fun lockedList_thenCorruptList_thenHealthyRetry_completesWithoutLoss() {
+        val store = FakeStore().apply { transcripts[old] = 3 }
+        val journal = mutableListOf(Pending(old, new))
+
+        // Start 1 (chat list LOCKED) and start 2 (chat list CORRUPT): the
+        // guard defers before any plan is made — entry intact, rows intact.
+        for (masked in listOf(ChatStorageHealth.ReadState.LOCKED, ChatStorageHealth.ReadState.CORRUPT)) {
+            if (RenameJournal.canDecideAuthority(masked)) {
+                runRecovery(journal, emptySet(), store) // must never execute
+            }
+            assertEquals("journal survives a masked start", 1, journal.size)
+            assertEquals("transcripts untouched during deferral", 3, store.transcripts[old])
+            assertEquals(0, store.repointCalls)
+        }
+
+        // Start 3: storage healthy again — the same idempotent recovery
+        // completes exactly as it would have without the outage.
+        if (RenameJournal.canDecideAuthority(ChatStorageHealth.ReadState.OK)) {
+            runRecovery(journal, setOf(new), store)
+        }
+        assertTrue(journal.isEmpty())
+        assertEquals(3, store.transcripts[new])
+        assertFalse(store.transcripts.containsKey(old))
+    }
 }

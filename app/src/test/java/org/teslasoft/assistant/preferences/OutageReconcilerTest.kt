@@ -43,13 +43,18 @@ class OutageReconcilerTest {
      * guarantees can be asserted.
      */
     private class FakeFiles : OutageReconciler.Files {
-        val locked = mutableSetOf<String>()
-        val encrypted = mutableMapOf<String, MutableMap<String, Any?>>()
-        val outage = mutableMapOf<String, MutableMap<String, Any?>>()
-        val markers = mutableMapOf<String, String>()
-        val snapshots = mutableMapOf<String, Map<String, Any?>>()
-        val logs = mutableListOf<String>()
-        val ops = mutableListOf<String>()
+        // Concurrent containers: the concurrency tests run the reconciler on
+        // one thread while a simulated user mutation runs on another; only
+        // the chat-list value is protected by the shared lock, so the OUTER
+        // containers must tolerate cross-thread access like real
+        // per-file SharedPreferences instances do.
+        val locked = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+        val encrypted = java.util.concurrent.ConcurrentHashMap<String, MutableMap<String, Any?>>()
+        val outage = java.util.concurrent.ConcurrentHashMap<String, MutableMap<String, Any?>>()
+        val markers = java.util.concurrent.ConcurrentHashMap<String, String>()
+        val snapshots = java.util.concurrent.ConcurrentHashMap<String, Map<String, Any?>>()
+        val logs = java.util.Collections.synchronizedList(mutableListOf<String>())
+        val ops = java.util.Collections.synchronizedList(mutableListOf<String>())
 
         var failPut = false
         var failSnapshot = false
@@ -437,5 +442,72 @@ class OutageReconcilerTest {
         val merged = JSONArray(f.encrypted["rename_journal"]!!["pending"] as String)
         assertEquals(1, merged.length())
         assertEquals("a", merged.getJSONObject(0).getString("old"))
+    }
+
+    // ---- Round 4 correction: concurrency under the shared chat-list lock ----
+
+    /** Simulates ChatPreferences.addChat: a read-modify-write of the list
+     *  under the SAME monitor the reconciler holds for its list merge. */
+    private fun userAddsChat(f: FakeFiles, lock: Any, id: String, name: String) {
+        synchronized(lock) {
+            val cur = f.encrypted.getOrPut("chat_list") { mutableMapOf() }
+            val arr = try {
+                JSONArray((cur["data"] as? String) ?: "[]")
+            } catch (_: Exception) {
+                JSONArray()
+            }
+            arr.put(JSONObject().put("id", id).put("name", name).put("pinned", "false"))
+            cur["data"] = arr.toString()
+        }
+    }
+
+    @Test fun concurrentListMutation_cannotEraseReconciledEntries() {
+        // Many schedules: a user list-write races the merge. Under the
+        // shared lock the outcome must ALWAYS contain the pre-existing
+        // chat, the outage chat, and the user's new chat — no interleaving
+        // may land the user write between the merge's verify and delete.
+        repeat(200) { i ->
+            val f = FakeFiles()
+            f.encrypted["chat_list"] = mutableMapOf("data" to chatListJson("idA" to "A"))
+            f.outage["chat_list"] = mutableMapOf("data" to chatListJson("idOut" to "Outage chat"))
+            val lock = Any()
+
+            val mutator = Thread { userAddsChat(f, lock, "idUser$i", "User chat") }
+            mutator.start()
+            val r = OutageReconciler.reconcile(f, lock)
+            mutator.join()
+
+            assertEquals(listOf("chat_list"), r.merged)
+            val ids = idsIn(f.encrypted["chat_list"]!!["data"] as String)
+            assertTrue("lost idA on iteration $i: $ids", "idA" in ids)
+            assertTrue("lost reconciled idOut on iteration $i: $ids", "idOut" in ids)
+            assertTrue("lost user write on iteration $i: $ids", "idUser$i" in ids)
+            assertFalse(f.outage.containsKey("chat_list"))
+        }
+    }
+
+    @Test fun concurrentMutation_cannotLeaveHistoriesWithoutListEntries() {
+        // The end state a racing write used to produce: a merged history
+        // file whose list entry was erased — an invisible chat. Under the
+        // lock, every merged outage chat's id must be present in the final
+        // list whenever the list merge reports success.
+        repeat(100) { i ->
+            val f = FakeFiles()
+            f.encrypted["chat_list"] = mutableMapOf("data" to "[]")
+            f.outage["chat_id1"] = mutableMapOf("chat" to "[{\"m\":1}]")
+            f.outage["chat_list"] = mutableMapOf("data" to chatListJson("id1" to "C1"))
+            val lock = Any()
+
+            val mutator = Thread { userAddsChat(f, lock, "idUser", "User chat") }
+            mutator.start()
+            val r = OutageReconciler.reconcile(f, lock)
+            mutator.join()
+
+            assertTrue("chat_list" in r.merged && "chat_id1" in r.merged)
+            val ids = idsIn(f.encrypted["chat_list"]!!["data"] as String)
+            assertTrue("merged history orphaned on iteration $i: $ids", "id1" in ids)
+            assertTrue("idUser" in ids)
+            assertEquals("[{\"m\":1}]", f.encrypted["chat_id1"]!!["chat"])
+        }
     }
 }

@@ -105,14 +105,15 @@ class MainApplication : Application() {
         // not wait on SQLCipher.
         Thread {
             try {
-                // Merge back anything written while chat storage was locked
-                // (Keystore outage → writes redirected to outage.* files; see
-                // SecurePrefs / OutageReconciler). MUST run before
-                // RenameJournal.reconcile — rename recovery derives authority
-                // from the live chat list, and this pass may be the thing
-                // restoring chats (and outage-era journal entries) into it.
-                // Idempotent and per-file; anything still locked stays
-                // untouched for a later start.
+                // Recover anything the FIRST Round-4 build wrote to legacy
+                // outage.* files during a storage lock (that plaintext
+                // redirection was rejected and removed July 12 2026 — LOCKED
+                // now blocks — but data already in those files must still be
+                // merged back). MUST run before RenameJournal.reconcile —
+                // rename recovery derives authority from the live chat list,
+                // and this pass may be the thing restoring chats (and
+                // outage-era journal entries) into it. Idempotent, per-file;
+                // anything still locked stays untouched for a later start.
                 SecurePrefs.reconcileOutageAtStartup(this)
             } catch (e: Exception) {
                 MemoryLog.log(this, "SecurePrefs", "error", "Storage-outage reconciliation at startup failed: ${e.message}")

@@ -346,44 +346,72 @@ Everything is on-device. No cloud sync, no accounts.
      directly for these names — data would silently split between the
      plaintext and encrypted files. The global `settings` file (shared with
      `GlobalPreferences`) stays plaintext.
-   - **Keystore-outage state machine (silent-failure audit Round 4, July 12
-     2026):** when an `enc.<name>` file EXISTS but cannot be opened (Keystore
-     key unavailable — transient failure, cleared credentials, restore onto
-     new hardware), the file is **LOCKED**, per file — never "empty".
-     `SecurePrefs` classifies every open via the pure
-     `ChatStorageHealth.classify` (HEALTHY / LOCKED / LEGACY_PLAINTEXT /
-     FRESH_UNENCRYPTED; the old single plaintext fallback let locked data
-     masquerade as an empty chat list and then destroyed outage-era writes at
-     migration). While LOCKED, reads/writes are redirected to a separate
-     `outage.<name>` plaintext file — the encrypted file is never read,
-     written, cleared or migrated in that state — the lock is recorded in the
-     plaintext `storage_health` journal (deliberately raw prefs: it must work
-     while encryption is down; state metadata only, never chat content), and
-     one line per process goes to the Error Log. On the next start with a
-     working key, `SecurePrefs.reconcileOutageAtStartup` (ordered BEFORE
-     `RenameJournal.reconcile` — rename recovery consults the chat list this
-     pass may be restoring) merges outage files back via the pure, unit-tested
-     `OutageReconciler`: copy-if-absent per key; the chat list merged
-     structurally by id (outage-only chats appended; processed LAST so
-     histories land before their list entries); the rename journal
-     union-merged; and any real conflict (non-empty differing values,
-     colliding chat ids) preserves the WHOLE outage copy as an encrypted
-     `<name>_recovered_<ts>` snapshot while the encrypted side stays
-     presented — neither side is ever silently chosen or deleted. Snapshot
-     markers in `storage_health` make every re-run idempotent (restartable at
-     every boundary; unit-tested in OutageReconcilerTest). A value that
-     exists but fails to DECRYPT inside an otherwise-open file
-     (`getChatList`/`getChatById`) preserves the ciphertext file byte-for-byte
-     into `files/storage_recovery/` before returning empty and records a
-     `readfail` journal entry — a later save can no longer destroy the only
-     copy. `MemoryExporter` marks exports taken during degradation
-     (`export_meta.app_chats_complete: false`, absent = complete) and
-     suspends backup rotation so the last complete backups survive the
-     outage. No orphan/cleanup pass may touch `outage.*` files,
-     `files/storage_recovery/`, or `*_recovered_*`/`*_conflict_*` snapshots.
-     Surfacing lock/read-fail states in UI is an OPEN owner wording decision —
-     the states are queryable (`ChatStorageHealth.lockedNames` /
-     `readFailureNames` / `anyChatDataDegraded`), nothing is shown yet.
+   - **Keystore-outage state machine (silent-failure audit Round 4; corrected
+     to the owner's approved lock policy, July 12 2026):** when an
+     `enc.<name>` file EXISTS but cannot be opened (Keystore key unavailable —
+     transient failure, cleared credentials, restore onto new hardware), the
+     file is **LOCKED**, per file — never "empty". `SecurePrefs` classifies
+     every open via the pure `ChatStorageHealth.classify` (HEALTHY / LOCKED /
+     LEGACY_PLAINTEXT / FRESH_UNENCRYPTED; the old single plaintext fallback
+     let locked data masquerade as an empty chat list and then destroyed
+     outage-era writes at migration). **While LOCKED, chat activity is
+     BLOCKED, never redirected to plaintext (owner policy — the first Round-4
+     build's automatic `outage.<name>` plaintext redirection was rejected and
+     removed):** `SecurePrefs.get` returns an inert read-only view (reads
+     present nothing, `commit()` returns false), every `ChatPreferences`
+     mutation refuses through the `chatWriteBlocked` gate with one Error Log
+     line per process per file, and reads are RESULT-TYPED —
+     `getChatListResult`/`getChatByIdResult` return an explicit
+     `ChatStorageHealth.ReadState` (OK / EMPTY / MISSING / LOCKED / CORRUPT /
+     FAILED; only OK/EMPTY/MISSING are authoritative,
+     `ChatStorageHealth.isAuthoritative`) so locked/corrupt can never be
+     consumed as an ordinary empty list. UI: `MainActivity.preInit` and
+     `ChatActivity.onCreate` gate on `SecurePrefs.isChatStorageLocked` and
+     show the full-screen `ChatStorageLockedActivity` (owner-approved copy:
+     "Encrypted chats unavailable" / Try Again via `SecurePrefs.retryUnlock` /
+     View Error Log) BEFORE the API-key check — a locked account must never
+     see WelcomeActivity or look like a fresh install. A single chat whose
+     value fails to DECRYPT inside an open file gets the owner-approved
+     "Chat unavailable" blocking dialog in ChatActivity, its ciphertext file
+     preserved byte-for-byte into `files/storage_recovery/` and its writes
+     refused until the user explicitly deletes it — a save can no longer
+     replace the only copy. All approved wording lives in `strings.xml`
+     (`chat_storage_locked_*`, `chat_unavailable_*`,
+     `chat_backup_unavailable_*`) — do not reword without asking. LEGACY
+     outage files from the first Round-4 build are still reconciled at
+     startup (`SecurePrefs.reconcileOutageAtStartup`, ordered BEFORE
+     `RenameJournal.reconcile`) via the pure `OutageReconciler`: copy-if-
+     absent per key; the chat list merged structurally by id UNDER
+     `ChatPreferences.CHAT_LIST_LOCK` — the same monitor every normal list
+     mutation holds (add/delete/pin/timestamp/rename and MainActivity's
+     new-user wipe), which closes the verify-then-delete race that could
+     orphan reconciled chats; the rename journal union-merged; conflicts
+     preserve the WHOLE outage copy as an encrypted `<name>_recovered_<id>`
+     snapshot while the encrypted side stays presented. Nothing writes new
+     `outage.*` files anymore. `RenameJournal.reconcile` DEFERS (entries
+     kept) whenever the chat list's read state is not authoritative — a
+     masked list must never drive discard decisions. Every preserved
+     artifact (read-failure ciphertext copies, `_conflict_`/`_recovered_`/
+     `_corrupt_` snapshots) is indexed in **`SnapshotRegistry`**
+     (`registry.*` keys in `storage_health`; collision-proof
+     `SnapshotRegistry.uniqueSuffix()` names, never timestamp-only; entries
+     are metadata only and never deleted; pre-registry files discovered as
+     `legacy_unindexed`). The plaintext `storage_health` journal stores
+     SANITIZED error categories only (`StorageErrorSanitizer` — exception
+     class names, never messages), state metadata, and registry entries —
+     never content. Backups: while the chat list is unavailable,
+     `MemoryExporter.autoExportIfDue` pauses entirely (existing complete
+     backups preserved, nothing rotated), `writeBackupNow` refuses (null →
+     reset aborts), and the manual flows show the approved "Chat backup
+     unavailable" dialog; with only individual chats corrupt, exports
+     proceed marked incomplete (`export_meta.app_chats_complete: false`,
+     absent = complete) carrying identifier-only `"unavailable": true`
+     entries for unreadable chats — never fabricated empty histories.
+     `TranscriptRecorder.backfillExistingChats` refuses to complete against
+     a non-authoritative list. No orphan/cleanup pass may touch `outage.*`
+     files, `files/storage_recovery/`, or `*_recovered_*`/`*_conflict_*`/
+     `*_corrupt_*` snapshots. Still OPEN: the snapshot restore/inspection UI
+     (registry exists, no surface yet).
    - `PersonaPreferences.kt` — personas, flat keys `<personaId>_<field>` where
      `personaId = Hash.hash(label)`. **Renaming a persona changes its id**
      (edit = delete + recreate); lorebook links survive only because the edit
@@ -1366,19 +1394,33 @@ Everything is on-device. No cloud sync, no accounts.
   at startup; never assume the prefs rename and the memory re-point committed
   atomically together, and never let a future orphan sweep prune rows while
   `RenameJournal.hasPending` is true.
-- **The chat-storage outage state machine** (`SecurePrefs` /
-  `ChatStorageHealth` / `OutageReconciler`, Round 4 — see the storage
-  section): never reintroduce a plaintext fallback for a name whose
-  `enc.<name>` file exists on disk (that is the LOCKED state — the old
-  fallback is exactly how locked chats read as empty and outage writes got
-  destroyed), never modify/clear/delete an encrypted file that failed to
-  open, never resolve an encrypted-vs-outage conflict automatically (both
-  copies are preserved; the snapshot files `*_recovered_*`/`*_conflict_*`,
-  the `outage.*` files and `files/storage_recovery/` are recovery data — no
-  cleanup pass may touch them), and keep `reconcileOutageAtStartup` ordered
-  before `RenameJournal.reconcile` in `MainApplication`. The `storage_health`
+- **The chat-storage lock state machine** (`SecurePrefs` /
+  `ChatStorageHealth` / `OutageReconciler` / `SnapshotRegistry`, Round 4 —
+  see the storage section): LOCKED means BLOCKED (owner policy, July 12
+  2026) — never reintroduce ANY plaintext fallback or redirection for a
+  name whose `enc.<name>` file exists on disk (the first Round-4 build's
+  automatic `outage.*` writing was rejected and removed; no code may create
+  or write `outage.*` files), never modify/clear/delete an encrypted file
+  that failed to open, never let a locked/corrupt read surface as an
+  ordinary empty result (use the result-typed reads; only
+  `ChatStorageHealth.isAuthoritative` states may drive authority decisions
+  — RenameJournal reconciliation, backfill completion, export
+  completeness), never resolve an encrypted-vs-outage conflict
+  automatically (both copies preserved; `*_recovered_*`/`*_conflict_*`/
+  `*_corrupt_*` snapshots, legacy `outage.*` files and
+  `files/storage_recovery/` are recovery data — no cleanup pass may touch
+  them, and every one is indexed in `SnapshotRegistry`, whose entries are
+  never deleted). Every chat-list read-modify-write must hold
+  `ChatPreferences.CHAT_LIST_LOCK` (lock order: CHAT_LIST_LOCK →
+  RenameJournal monitor → SecurePrefs monitor — never take them in another
+  order). Keep `reconcileOutageAtStartup` ordered before
+  `RenameJournal.reconcile` in `MainApplication`. The `storage_health`
   prefs file is deliberately raw/plaintext (must work while the Keystore is
-  down) and must never hold chat content.
+  down) and must only ever hold state metadata, registry entries and
+  SANITIZED error categories (`StorageErrorSanitizer`) — never chat
+  content, prompts, keys, or raw exception messages. The locked-state UI
+  wording in `strings.xml` is owner-approved verbatim — never reword
+  without asking.
 - **`ChatActivity` handles rotation itself** (`android:configChanges`
   includes orientation/screenSize etc., July 10 2026): recreation runs
   onDestroy, which kills TTS readback and the hands-free loop — tilting the

@@ -1741,4 +1741,17 @@
     <string name="tile_roleplay_title">Roleplay</string>
     <string name="tile_roleplay_desc">Worlds, campaigns and the characters you play.</string>
     <string name="title_roleplay">Roleplay</string>
+
+    <!-- ============ Round 4: locked chat storage (owner-approved copy, July 12 2026 —
+         do not reword without explicit approval in chat) ============ -->
+    <string name="chat_storage_locked_title">Encrypted chats unavailable</string>
+    <string name="chat_storage_locked_body">The app could not open your encrypted chat storage. Your chats have not been deleted. To protect them, creating and saving chats is paused until storage is available again.</string>
+    <string name="chat_storage_locked_retry">Try Again</string>
+    <string name="chat_storage_locked_view_log">View Error Log</string>
+    <string name="chat_unavailable_title">Chat unavailable</string>
+    <string name="chat_unavailable_body">The app could not read this chat. Its encrypted data was preserved and will not be overwritten.</string>
+    <string name="chat_unavailable_back">Back</string>
+    <string name="chat_backup_unavailable_title">Chat backup unavailable</string>
+    <string name="chat_backup_unavailable_body">The app cannot create a complete chat backup while encrypted chat storage is unavailable. Your existing backups have not been deleted.</string>
+    <string name="chat_backup_unavailable_ok">OK</string>
 </resources>
