@@ -745,49 +745,72 @@ throttle), but when it does run it serializes the whole memory DB + all
 chats to JSON on the startup background thread — it competes for disk with
 the other startup work but does not block the UI thread.
 
-### 15.2 Mandatory database-issue dialog + repair flow (owner-directed)
+### 15.2 Database-issue detection → repair flow (owner-directed, RESOLVED)
+
+Applies to **both** SQLite databases (`companion_memory.db` and
+`lorebook.db` — both are SQLite; "the sqlite thing" and "the lorebook" are
+the two of them). The framework is shared; the user-facing effect names
+whichever database is affected (memory features vs lorebooks).
 
 Replaces the vanishing Toast (F3). When a database integrity problem is
 detected:
 
 1. **A blocking dialog the user must actively dismiss** appears (not a Toast,
-   not a banner). It states, in plain terms to be worded later: a database
-   problem was found, whether the app can repair it automatically, and what
-   repair involves.
-2. **If the app CAN repair it without user involvement** (e.g. restore the
-   affected database from the last good automatic backup, or salvage-and-
-   rebuild from the readable pages), it does so — but the user is still shown
-   the dialog *first* so they know it happened and what it means (e.g. "some
-   very recent memories may be missing because they were restored from
-   yesterday's backup").
-3. **If repair needs the user to trigger it**, the dialog offers a **Repair
-   Database** action. The user may choose to repair **now** or **later**:
-   - **Now** → repair runs. During the repair the user is clearly warned
-     **not to close the app**, because interrupting it mid-write could worsen
-     corruption. (Design must make repair itself restartable/idempotent so an
-     accidental kill is survivable — see §5 common laws.)
-   - **Later** → the app **force-closes itself** after the user dismisses the
-     dialog. Rationale (owner): continuing to run against a known-corrupt
-     database risks compounding the corruption with more writes. Force-close
-     stops all further writes until the user is ready to repair. The user is
-     told this is why it's closing, so it doesn't feel like a crash.
-4. The dialog must distinguish **repairable** from **not repairable on this
-   device**. If a database is corrupt and there is no usable backup and no
-   salvage is possible, the honest state is "this database can't be repaired
-   here" — the app must say so rather than pretend a repair will work. What
-   happens next (start fresh, keep the corrupt file preserved for manual
-   export, etc.) is an open owner decision — see §15.6.
+   not a snackbar — a real dialog). It states, in plain words to be written
+   later: which database has a problem, what the app is going to try, and
+   what the consequences are.
+2. **The app tries to REPAIR first, automatically** (owner order, Flag 2):
+   attempt an in-place salvage/rebuild of the corrupt database from its
+   readable pages. If that succeeds, the user is told it was repaired.
+3. **If repair is not possible, the app offers to REPLACE the database with
+   the last good backup** — and the dialog must spell out the complications
+   *before* the user agrees: specifically what that restore would cost (e.g.
+   "memories added since [backup date] would be lost," or for lorebooks
+   "lorebook edits since [date] would be lost"). The user chooses whether to
+   accept the restore.
+4. **During any repair or restore, the user is clearly warned NOT to close
+   the app** — interrupting a mid-write could worsen corruption. (The repair
+   itself must still be built restartable/idempotent so an accidental kill or
+   an Android kill is survivable — §5 common laws.)
+5. **The dialog must distinguish repairable / restorable / not recoverable on
+   this device.** It must never promise a repair it cannot deliver. The
+   not-recoverable path is §15.6.
 
-**Flag for owner (impact of force-close-on-decline):** the memory database
-being corrupt does **not** break ordinary chatting — chats live in separate
-storage that still works. So force-closing the *entire* app because the
-*memory* database is corrupt also takes away chat, which was fine. Two
-choices to weigh (§15.6): (a) force-close the whole app on decline, simplest
-and safest against compounding corruption but heaviest; or (b) enter a
-"memory features off until repaired" degraded mode that still lets you chat,
-lighter but means running with a known-bad memory DB (writes to it must then
-be fully blocked, not just discouraged). The owner asked for (a); this flag
-records the trade so it's a conscious choice.
+**If the user declines all repair/restore → DEGRADED MODE, not force-close
+(owner decision — §15.2a).** This REVERSES the earlier force-close direction.
+
+### 15.2a Degraded mode — memory/lorebooks disabled until repaired (RESOLVED)
+
+When a database problem exists and the user has not repaired it, the app does
+**not** shut down. Chatting still works (chat storage is separate). But the
+affected feature is turned **fully off** — no reads and no writes to the
+corrupt database — until it is repaired. (Reading a corrupt SQLite file is
+itself unsafe, so "disabled" means genuinely off, not just read-only.)
+
+While in degraded mode:
+
+- **Every new chat shows a persistent, dismissible notice at the top**
+  stating that memory (or lorebooks) is currently disabled because of
+  database corruption, with two actions: **Repair** and **OK**. It is a
+  persistent banner the user dismisses — NOT a vanishing snackbar/Toast
+  (this honors the app-wide no-Toast rule; the owner's "snack bar" is
+  implemented as a persistent acknowledged banner). It reappears on each new
+  chat so the user keeps being reminded and must re-acknowledge — they can't
+  forget memory is off, and they can't make it stick around forever either.
+- **The Archivist / "Analyze Conversations" action is DISABLED and not
+  clickable** whenever there is *any* database problem — the owner rule is
+  the Archivist must never run against a bad database (it writes to it). The
+  disabled control carries an inline note saying why and pointing to the
+  repair/replace choice. (This is stronger than the normal not-ready state:
+  it is a hard block tied to DB health.)
+- Rationale (owner): if memory isn't being used, the user must KNOW; and if
+  the only loss is that new memories can't be made, the button that makes
+  them must be visibly, explicitly blocked with the reason — never silently
+  inert.
+
+Open sub-point: the banner names "memory" vs "lorebooks" depending on which
+database is corrupt (they are separate features on separate databases).
+Final wording is Phase 2.
 
 ### 15.3 Crash-triggered checking (owner-directed)
 
@@ -819,41 +842,121 @@ Recorded so the implementation keeps them separate:
 - **Ongoing risk** (corruption) is the only thing that justifies a repeated
   check, and even that is now crash-triggered (§15.3), not every launch.
 
-### 15.5 Lorebook backup + integrity gap (owner-flagged)
+### 15.5 Lorebook backup + integrity — DECIDED: extend coverage (owner: "Absolutely")
 
-Surfaced during the walkthrough and recorded as open work:
+- `lorebook.db` today has **no automatic backup and no integrity check**.
+- **Decision: fold `lorebook.db` into the same protection** as
+  `companion_memory.db` — include it in the automatic rotating backup, and
+  give it an integrity check on the same crash-triggered schedule (§15.3).
+  Low-risk: the backup + rotation + verify machinery already exists; this
+  adds a second database to it.
+- Consequence: the §15.2 repair/replace flow and §15.2a degraded mode apply
+  to lorebooks too (a corrupt lorebook DB disables lorebooks, names them in
+  the banner, and can be restored from the same backup set).
 
-- `lorebook.db` has **no automatic backup and no integrity check**. If it
-  corrupts, there is today no detection and no restore point.
-- Options to weigh (Phase 2 / owner): fold `lorebook.db` into the same
-  automatic rotating backup that already protects `companion_memory.db`, and
-  give it an integrity check on the same crash-triggered schedule. This is a
-  natural, low-risk extension since the backup machinery already exists.
-- Until decided, the plan must not *claim* lorebooks are protected — they
-  are not.
+### 15.6 Not-recoverable handling — the professional pattern (RESOLVED)
 
-### 15.6 Open owner decisions introduced by §15
+Owner asked "what is the professional way of handling this?" The professional
+pattern, and the owner's instinct, agree. When a database is corrupt:
 
-1. **Force-close whole app vs memory-features-off degraded mode** on repair-
-   declined (§15.2 flag). Owner asked for force-close; trade recorded.
-2. **Not-repairable path** (§15.2.4): what the app does when a database is
-   corrupt, un-backed-up, and unsalvageable on this device.
-3. **Lorebook coverage** (§15.5): extend auto-backup + integrity to
-   `lorebook.db` — yes/no.
-4. **Backup visibility** (§15.1): the auto-backup is silent today. Does the
-   owner want any persistent (non-Toast) indication that backups are
-   happening / last succeeded / are failing? (Ties to the ungated-health-
-   line decision in §14.1.)
-5. **Backup frequency** (§15.1): once-per-day means a memory-DB restore can
-   lose up to ~24 h of memories. Keep daily, or back up more often /
-   before risky operations?
+1. **Never delete the corrupt file.** Move it aside, renamed with a date and a
+   clear "corrupt" marker (e.g. `companion_memory.corrupt-2026-07-12.db`),
+   into a findable recovery folder (parallel to Round 4's
+   `files/storage_recovery/`). A user who wants to attempt manual rescue can
+   find it; everyone else can ignore it.
+2. **Try repair first** (§15.2 step 2).
+3. **If repair fails, walk the backups newest-to-oldest**, verifying each
+   before trusting it — if the newest backup is *also* bad (corruption can be
+   captured into a backup), fall back to the next older one, and so on, until
+   one passes an integrity check. That verified backup is the restore source
+   (with the loss warning of §15.2 step 3, dated to that backup).
+4. **Only if NO backup is usable, start a fresh empty database** so the app is
+   functional again — but the renamed corrupt file from step 1 stays
+   preserved. This is the honest last resort: most users do need a working
+   (fresh) instance to keep going, and the old data is not destroyed, just
+   set aside. The app must *say* it started fresh and that the old data was
+   preserved — never present a fresh empty database as if nothing happened.
 
-### 15.7 What §15 does NOT change
+This is exactly the industry pattern: quarantine the bad file, restore from
+the newest *verified* backup, reinitialize only as a last resort, and never
+silently discard.
+
+### 15.7 Backup-failure surfacing — 3-strikes dialog (RESOLVED)
+
+The auto-backup is silent today; a backup failing repeatedly is invisible.
+
+- **After 3 consecutive failed automatic backups, show a blocking dialog**
+  (persistent, must be dismissed — not a Toast). Three strikes filters out a
+  one-off transient glitch and only speaks up when something is genuinely
+  wrong.
+- **What the user can actually do** (the owner's open question — "I don't know
+  what I would do"): a repeatedly failing backup almost always means the
+  device is **out of storage space**, or the backup folder isn't writable. So
+  the dialog should (a) say the likely cause in plain words (free space), and
+  (b) offer a **"Save a backup somewhere else now"** action that runs the
+  existing manual SAF export, letting the user drop a backup onto their own
+  storage / cloud folder that isn't full. That gives them a concrete escape
+  hatch instead of a dead-end warning.
+
+### 15.8 Backup cap — already exists; why more than one (RESOLVED)
+
+- **There is already a cap: the newest 5 backups are kept, older ones deleted
+  automatically** (`ROTATION_KEEP = 5`). Backups do not pile up to a hundred —
+  the owner's requirement is already met by existing code; this just makes it
+  an explicit, named policy.
+- **Why keep more than one** (the owner asked): because corruption can be
+  silently copied *into* a backup. If only the single newest backup were kept
+  and it captured already-corrupt data, there would be nothing clean to fall
+  back to. Keeping ~5 days of history means §15.6 step 3 can walk back to an
+  older, still-clean backup. That is the whole reason a rotation exists rather
+  than a single overwrite. Five is a reasonable default; it is a tunable
+  constant if the owner later wants more or fewer.
+
+### 15.9 Memory Controls screen — backup status + manual backup (owner-directed)
+
+Under the existing "save a rotating backup every day" area on the Memory
+Controls screen (final wording Phase 2; the owner's requested text is
+recorded as the intent):
+
+- A **"Create Database Backup"** button directly under that text. Pressing it
+  runs a backup immediately (the manual path already exists as
+  `writeBackupNow`). **Status text appears underneath it** showing in-progress
+  and then whether it completed or failed.
+- A **"Last successful Database Backup: [date]"** line under the "Backups"
+  area, so a working backup is visibly confirmed and a stale date is a visible
+  warning.
+- **If the most recent backup FAILED, an additional line ABOVE that one reads
+  "Database Backup Failed: [date]"** — so a failure is stated outright, not
+  merely implied by a stale success date. (This line is present only when the
+  last attempt failed; it clears when a backup next succeeds.)
+
+These are persistent on-screen status lines (not Toasts), consistent with the
+app-wide no-Toast rule.
+
+### 15.10 Remaining open decisions
+
+Resolved this round: force-close→degraded mode (§15.2a), repair-then-replace
+order (§15.2), not-recoverable handling (§15.6), lorebook coverage (§15.5),
+backup-failure surfacing (§15.7), backup cap (§15.8), Memory Controls status
++ manual button (§15.9), frequency stays daily (§15.1).
+
+Still open / to confirm at build time:
+1. **Final wording** for the DB-issue dialog, the degraded-mode banner, the
+   disabled-Archivist note, the 3-strikes dialog, and the Memory Controls
+   status lines (Phase 2, owner-approved copy).
+2. **Banner scope wording** — naming "memory" vs "lorebooks" per which
+   database is affected (§15.2a).
+3. **Whether the manual "Check database now" action** (§15.3) lives on Memory
+   Controls next to the backup button, or on Advanced Memory Settings.
+4. Interaction with §14.1 (ungated health log lines) — the on-screen status
+   lines partly satisfy "the user must be able to tell backups are healthy,"
+   so the ungated-log question can be revisited in that light.
+
+### 15.11 What §15 does NOT change
 
 No app code, strings, or UI are written by this update — it is design text
-only, consistent with the "stop after the design" instruction. The mandatory
-dialog, repair action, force-close, and any lorebook coverage remain subject
-to owner approval of both behavior and wording before implementation.
+only, consistent with the "stop after the design" instruction. Every behavior
+and every word above remains subject to owner approval before implementation.
 
 ---
 
