@@ -1,0 +1,214 @@
+I am continuing a silent-failure repair audit on my Android companion app, Phosphor Shines. This is a fresh conversation. Inspect the current repository, current Main branch, recent commits, and CLAUDE.md before reasoning about the design. Do not assume earlier conversation context.
+
+Completed work already merged or awaiting final merge into Main:
+
+* Round 1 repaired chat rename atomicity, complete per-chat settings preservation, and backup-before-reset safety.
+* Round 1B moved rename work off the Android main thread, added durable recovery for memory-store chat-ID repointing, and fixed persistent corruption logging.
+* Round 2 repaired the local Whisper capture lifecycle, stuck-capture recovery, bounded retries, state-dependent listening watchdogs, permission checks, service-failure logging, Cloud Whisper setup crash prevention, Bluetooth diagnostic wording, phantom stop-source attribution, and Google TTS startup tuning reapplication.
+* Round 3 added persisted assistant-message completion states so interrupted, stopped, failed, or unknown streamed replies cannot masquerade as complete. It also protects memory extraction and model context from treating incomplete assistant fragments as reliable finished replies.
+
+Do not redesign or revisit those systems unless the current storage design directly requires an interaction to be documented.
+
+ROUND 4: KEYSTORE LOSS, STORAGE LOCK, AND CHAT RECOVERY DESIGN
+
+This round is design only. Do not edit code, create migrations, add UI, or commit changes.
+
+Verified problem:
+
+Chat history is stored through SecurePrefs and Android Keystore-backed encryption. If the key becomes unavailable or encrypted data cannot be decrypted, the current fallback can make chats appear empty. The app may then accept writes into plaintext or fallback storage. If encryption later becomes available, migration rules may prefer the older encrypted copy and silently discard data written during the outage.
+
+The memory database already has an explicit locked-store concept. Chat history does not have an equivalent reliable storage state.
+
+The goal is to design a recovery-safe storage state machine that never presents unreadable encrypted data as ordinary empty data and never silently deletes either side of an encrypted/plaintext conflict.
+
+PHASE 1: CURRENT-STATE INSPECTION
+
+Inspect and document:
+
+* SecurePrefs.get, put, migration, fallback, clear, and verification behavior.
+* The exact encrypted and plaintext file formats and naming.
+* Which chat data is stored as whole JSON blobs versus individual keys.
+* The chat list, per-chat history, per-chat settings, and any global indexes.
+* Every caller that can read or write chat data while encryption is unavailable.
+* Android Keystore key creation, aliasing, invalidation, and recovery behavior.
+* Device restore and app reinstall behavior.
+* Lock-screen credential changes and biometric or secure-lock changes where relevant.
+* How EncryptedSharedPreferences failures are currently surfaced or swallowed.
+* Existing corruption preservation and logging.
+* Backup, export, import, rename, delete, auto-name, and startup migration interactions.
+* Whether file modification timestamps are trustworthy enough for any recovery decision.
+* Whether multiple processes or concurrent readers can touch these files.
+* What the memory database’s locked-store pattern does differently.
+
+Report any conflict between the earlier audit description and the current code.
+
+PHASE 2: REQUIRED STORAGE STATES
+
+Design explicit states for at least:
+
+1. Healthy encrypted storage.
+2. New installation with no encrypted data.
+3. Encrypted data exists and decrypts normally.
+4. Encrypted data exists but the key is temporarily unavailable.
+5. Encrypted data exists but the key is permanently lost.
+6. Encrypted data is corrupt while the key remains valid.
+7. Only plaintext fallback data exists.
+8. Both encrypted and plaintext data exist and agree.
+9. Both encrypted and plaintext data exist and differ.
+10. Data was written while encrypted storage was unavailable.
+11. Encryption becomes available again after an outage.
+12. App restored onto a new device without the original Keystore key.
+13. Only some encrypted chat files fail while others remain readable.
+14. A migration or reconciliation operation is interrupted.
+15. A pending chat rename or message-state write exists during storage failure.
+16. A backup or export is attempted while storage is locked.
+
+For every state, specify:
+
+* What internal state is recorded.
+* What the user sees conceptually, without final wording.
+* Whether reads are allowed.
+* Whether writes are allowed.
+* Whether chat generation is allowed.
+* Where new data may be written, if anywhere.
+* Whether the app must enter read-only mode.
+* What recovery action is attempted.
+* What is logged persistently.
+* What requires explicit user choice.
+* What data is preserved.
+* What data may never be deleted automatically.
+
+PHASE 3: TRANSITIONS AND AUTHORITY RULES
+
+Provide a transition table covering:
+
+* App startup.
+* Successful decrypt.
+* Temporary decrypt failure.
+* Repeated decrypt failure.
+* Confirmed key invalidation.
+* Corruption detection.
+* User creates or edits a chat during a lock state.
+* Encryption returns.
+* Conflicting encrypted and plaintext copies.
+* Successful reconciliation.
+* Failed reconciliation.
+* Process death during reconciliation.
+* Device restore.
+* Import or backup during a lock.
+* Chat deletion while recovery data exists.
+* Rename while storage is locked.
+* Recovery after app update.
+
+Define exact source-of-truth rules.
+
+Hard requirements:
+
+* Existing encrypted files that cannot be decrypted must never appear as a normal empty chat list.
+* Empty data, locked data, missing data, and corrupt data must be distinct states.
+* Do not overwrite, clear, migrate, or replace unreadable encrypted data automatically.
+* Do not silently discard plaintext data written during an outage.
+* Do not decide conflicts using only whole-file modification timestamps unless the current format proves that safe.
+* Do not automatically declare the encrypted copy authoritative merely because it exists.
+* Do not automatically declare the plaintext copy authoritative merely because it is newer.
+* Do not merge whole chat JSON blobs by naïve last-write-wins.
+* Do not permit normal chat writes during a lock unless the recovery and merge rules for those writes are explicit and durable.
+* Any reconciliation operation must be restartable and idempotent.
+* Recovery metadata must survive process death.
+* Pending rename journals and incomplete-message states must be respected.
+* Recovery must work per affected file or chat where possible rather than treating one failure as proof that all chats are lost.
+* No cleanup or orphan pruning may run against data involved in a pending recovery.
+* Preserve the last known valid backup.
+* Never describe unavailable data as deleted unless deletion is confirmed.
+
+PHASE 4: CONFLICT RESOLUTION DESIGN
+
+For encrypted and plaintext copies that differ, design rules for:
+
+* Chat-list conflicts.
+* Same chat ID with different message histories.
+* Same chat ID with different settings.
+* Chats that exist only on one side.
+* Renamed chats.
+* Deleted chats.
+* Partial streamed replies.
+* Different message lengths or edit histories.
+* Conflicting per-chat personas, lorebooks, voices, and model settings.
+* Pending rename-journal entries.
+* Data created during a lock interval.
+* Old backups imported during recovery.
+
+For each conflict type, specify whether the safe behavior is:
+
+* automatic reconciliation,
+* preserve both as separate recoverable copies,
+* read-only presentation,
+* explicit user selection,
+* or refusal to proceed.
+
+Prefer preserving both over silently choosing when intent cannot be proved.
+
+PHASE 5: INTERNAL DESIGN
+
+Propose:
+
+* A structured storage-health result type instead of returning empty values on failure.
+* A persistent storage-lock or recovery journal.
+* Per-file or per-chat recovery metadata.
+* APIs that force callers to handle locked, missing, corrupt, and readable states separately.
+* How writes are blocked or redirected during lock.
+* How startup reconciliation is ordered relative to rename reconciliation, auto-export, memory startup, and orphan cleanup.
+* How retries are bounded.
+* How repeated failure is surfaced internally without log spam.
+* How temporary plaintext recovery data would be encrypted or protected at rest, if such writes are allowed at all.
+* How successful recovery proves data integrity before old copies are cleared.
+* How backups and exports identify incomplete or locked content.
+* How older app versions and older backups behave.
+
+Do not introduce a broad new storage framework unless the current architecture genuinely cannot support the required guarantees. Prefer the smallest design that safely closes the failure class.
+
+PHASE 6: USER-EXPERIENCE SHAPE, WITHOUT WORDING
+
+Describe the minimum UI states needed, but do not write final copy or implement UI.
+
+Cover:
+
+* Storage temporarily locked.
+* Storage permanently unrecoverable on this device.
+* Some chats readable and some locked.
+* Conflicting recoverable copies.
+* Read-only access.
+* Backup available.
+* Recovery in progress.
+* Recovery failed.
+* User decision required.
+
+For each, state:
+
+* where it appears,
+* whether it blocks the app,
+* what actions are available,
+* and what must be true before it disappears.
+
+Do not add toasts, dialogs, banners, notifications, or exact wording without later approval.
+
+DELIVERABLES
+
+Provide:
+
+1. Current storage flow and verified failure points.
+2. Storage-state table.
+3. Transition table.
+4. Source-of-truth rules.
+5. Conflict-resolution matrix.
+6. Data-retention and deletion rules.
+7. Proposed internal result types and APIs.
+8. Recovery journal design.
+9. Startup ordering.
+10. Backup, export, import, rename, and incomplete-message interactions.
+11. Test matrix, including process interruption at every destructive boundary.
+12. Android Keystore limitations that code cannot solve automatically.
+13. Risks and unresolved owner decisions.
+14. Exact files likely to change if the design is later approved.
+
+Stop after the design. Do not implement, commit, or modify user-facing wording.
