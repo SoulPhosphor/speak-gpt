@@ -121,6 +121,12 @@ class ChatPreferences private constructor() {
 
         val settings2: SharedPreferences = SecurePrefs.get(context, "chat_${Hash.hash(chatName)}")
         settings2.edit { clear() }
+
+        // A user-confirmed delete settles this chat's unreadable-value state
+        // (the preserved ciphertext copy under files/storage_recovery/ is
+        // never touched); without this the journal row would keep reporting
+        // degraded chat storage forever.
+        ChatStorageHealth.clearReadFailure(context, "chat_${Hash.hash(chatName)}")
     }
 
     /**
@@ -637,5 +643,8 @@ class ChatPreferences private constructor() {
 
         val settings2: SharedPreferences = SecurePrefs.get(context, "chat_$chatId")
         settings2.edit { clear() }
+
+        // Same journal settlement as deleteChat — see the comment there.
+        ChatStorageHealth.clearReadFailure(context, "chat_$chatId")
     }
 }

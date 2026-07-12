@@ -310,6 +310,14 @@ object SecurePrefs {
         if (names.isEmpty()) return
 
         val result = OutageReconciler.reconcile(androidFiles(appContext, names))
+        // A merged file's encrypted side opened and absorbed the outage data:
+        // its lock record is finished business. (Locks for files that are
+        // simply read again also clear in get(); this covers files nothing
+        // reads anymore, which would otherwise pin anyChatDataDegraded — and
+        // with it the exporter's incomplete marking — forever.)
+        for (name in result.merged) {
+            ChatStorageHealth.clearLock(appContext, name)
+        }
         if (result.merged.isNotEmpty() || result.deferred.isNotEmpty()) {
             val msg = "Storage-outage recovery: ${result.merged.size} file(s) merged back" +
                 (if (result.conflictsPreserved.isNotEmpty()) ", ${result.conflictsPreserved.size} with both copies preserved" else "") +
