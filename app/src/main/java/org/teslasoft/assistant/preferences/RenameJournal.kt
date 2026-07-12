@@ -111,6 +111,18 @@ object RenameJournal {
     fun hasPending(context: Context): Boolean = read(context).isNotEmpty()
 
     /**
+     * Pure gate for authority decisions (Round 4 correction): the plan may
+     * only run against an AUTHORITATIVE chat-list view. A LOCKED, CORRUPT or
+     * otherwise masked list looks empty, and planReconcile would read
+     * "neither id live" as "chat deleted" and discard entries that are
+     * actually still valid — a silent, wrong, permanent decision. Deferring
+     * costs nothing: entries keep retrying every start until the list is
+     * readable, and repointChat stays idempotent.
+     */
+    fun canDecideAuthority(state: ChatStorageHealth.ReadState): Boolean =
+        ChatStorageHealth.isAuthoritative(state)
+
+    /**
      * Finish (or discard) every pending rename. Runs the memory re-point for
      * entries whose rename became authoritative, then drops them; drops the
      * rest. A re-point that throws (database still failing) leaves its entry in
@@ -122,11 +134,19 @@ object RenameJournal {
         val entries = read(context)
         if (entries.isEmpty()) return
 
-        val liveIds = try {
-            ChatPreferences.getChatPreferences().getChatList(context).mapNotNull { it["id"] }.toSet()
+        val listResult = try {
+            ChatPreferences.getChatPreferences().getChatListResult(context)
         } catch (_: Exception) {
             return // can't establish authority without the chat list; retry next start
         }
+        if (!canDecideAuthority(listResult.state)) {
+            Logger.log(
+                context, "crash", "RenameJournal", "warning",
+                "Rename recovery deferred: the chat list is currently unavailable (${listResult.state}), so no rename can be judged completed or abandoned. Entries are kept for the next start."
+            )
+            return
+        }
+        val liveIds = listResult.chats.mapNotNull { it["id"] }.toSet()
         val provisioned = try {
             MemoryStore.isProvisioned(context)
         } catch (_: Exception) {

@@ -48,7 +48,37 @@ class ChatPreferences private constructor() {
          * persistent channel — see LoggerTypeTest.
          */
         const val CORRUPT_DATA_LOG_TYPE = "crash"
+
+        /**
+         * The single monitor every chat-list read-modify-write holds — both
+         * the normal mutations here (add/delete/pin/timestamp/rename) and
+         * the startup outage reconciliation's list merge
+         * (SecurePrefs.reconcileOutageAtStartup passes this same object into
+         * OutageReconciler). Without it, a list write landing between the
+         * merge's verify and its outage-file delete could permanently erase
+         * freshly reconciled entries, stranding their histories invisibly.
+         * Lock ordering: this monitor may be held while taking
+         * RenameJournal's monitor (editChat does), never the reverse —
+         * RenameJournal.reconcile reads the list without mutating it and
+         * takes no list lock.
+         */
+        @JvmField val CHAT_LIST_LOCK = Any()
     }
+
+    /** Result of a chat-list read: the caller-visible storage state plus
+     *  the entries (empty unless state is OK). LOCKED/CORRUPT/FAILED must
+     *  never be treated as "no chats exist" — that is the exact masquerade
+     *  Round 4 exists to end. */
+    data class ChatListResult(
+        val state: ChatStorageHealth.ReadState,
+        val chats: ArrayList<HashMap<String, String>>
+    )
+
+    /** Result of a chat-history read; same contract as [ChatListResult]. */
+    data class ChatHistoryResult(
+        val state: ChatStorageHealth.ReadState,
+        val messages: ArrayList<HashMap<String, Any>>
+    )
 
     /**
      * Called when a stored JSON blob fails to parse. Copies the raw payload
@@ -63,9 +93,13 @@ class ChatPreferences private constructor() {
     private fun preserveCorruptData(context: Context, prefsName: String, key: String, raw: String?, what: String): Boolean {
         if (raw.isNullOrBlank() || raw == "[]" || raw == "null") return false
 
-        val backupName = "${prefsName}_corrupt_${System.currentTimeMillis()}"
+        val backupName = "${prefsName}_corrupt_${SnapshotRegistry.uniqueSuffix()}"
         SecurePrefs.get(context, backupName)
             .edit(commit = true) { putString(key, raw) }
+        SnapshotRegistry.record(
+            context, backupName, prefsName,
+            SnapshotRegistry.ORIGIN_CORRUPT_JSON, "unparseable_json"
+        )
         // Reset only after the backup is committed.
         SecurePrefs.get(context, prefsName)
             .edit(commit = true) { putString(key, "[]") }
@@ -95,6 +129,7 @@ class ChatPreferences private constructor() {
      * @param chatId The ID of the chat to clear.
      */
     fun clearChat(context: Context, chatId: String) {
+        if (chatWriteBlocked(context, "chat_$chatId", "clear a chat")) return
         SecurePrefs.get(context, "chat_$chatId").edit { putString("chat", "[]") }
     }
 
@@ -105,22 +140,31 @@ class ChatPreferences private constructor() {
      * @param chatName The name of the chat to delete.
      */
     fun deleteChat(context: Context, chatName: String) {
-        val list = getChatList(context)
+        if (chatWriteBlocked(context, "chat_list", "delete a chat")) return
+        synchronized(CHAT_LIST_LOCK) {
+            val list = getChatList(context)
 
-        for (map: HashMap<String, String> in list) {
-            if (map["name"] == chatName) {
-                list.remove(map)
-                break
+            for (map: HashMap<String, String> in list) {
+                if (map["name"] == chatName) {
+                    list.remove(map)
+                    break
+                }
             }
+
+            val json: String = Gson().toJson(list)
+
+            val settings: SharedPreferences = SecurePrefs.get(context, "chat_list")
+            settings.edit { putString("data", json) }
         }
-
-        val json: String = Gson().toJson(list)
-
-        val settings: SharedPreferences = SecurePrefs.get(context, "chat_list")
-        settings.edit { putString("data", json) }
 
         val settings2: SharedPreferences = SecurePrefs.get(context, "chat_${Hash.hash(chatName)}")
         settings2.edit { clear() }
+
+        // A user-confirmed delete settles this chat's unreadable-value state
+        // (the preserved ciphertext copy under files/storage_recovery/ is
+        // never touched); without this the journal row would keep reporting
+        // degraded chat storage forever.
+        ChatStorageHealth.clearReadFailure(context, "chat_${Hash.hash(chatName)}")
     }
 
     /**
@@ -129,25 +173,51 @@ class ChatPreferences private constructor() {
      * @param context The context of the application.
      * @return An ArrayList of HashMap objects, where each HashMap represents a chat with key-value pairs for the chat name and ID.
      */
-    fun getChatList(context: Context) : ArrayList<HashMap<String, String>> {
+    /**
+     * Result-typed chat-list read (Round 4 correction). LOCKED and CORRUPT
+     * come back as explicit states with an empty payload — callers that make
+     * decisions on the list (rename reconciliation, backfill, export, UI
+     * gates) must check the state; only OK/EMPTY/MISSING are authoritative
+     * views of what exists (ChatStorageHealth.isAuthoritative).
+     */
+    fun getChatListResult(context: Context): ChatListResult {
         val settings: SharedPreferences = SecurePrefs.get(context, "chat_list")
+        if (SecurePrefs.isLockedName("chat_list")) {
+            return ChatListResult(ChatStorageHealth.ReadState.LOCKED, arrayListOf())
+        }
+
+        val keyPresent = try { settings.contains("data") } catch (_: Exception) { true }
+        val json = try {
+            settings.getString("data", "[]")
+        } catch (e: Exception) {
+            // The stored value exists but cannot be DECRYPTED — a different
+            // state from a parse failure of decrypted JSON (handled below).
+            // Preserve the ciphertext file before any later save can replace
+            // the only copy, record the unreadable state persistently, and
+            // surface CORRUPT — never plain empty.
+            onUndecryptableValue(context, "chat_list", "chat list", e)
+            return ChatListResult(ChatStorageHealth.ReadState.CORRUPT, arrayListOf())
+        }
+        ChatStorageHealth.clearReadFailure(context, "chat_list")
 
         val gson = Gson()
-        val json = settings.getString("data", "[]")
         val type: Type = TypeToken.getParameterized(ArrayList::class.java, HashMap::class.java).type
-
-        var list: ArrayList<HashMap<String, String>> = try {
+        var list: ArrayList<HashMap<String, String>>? = try {
+            @Suppress("UNCHECKED_CAST")
             gson.fromJson<Any>(json, type) as ArrayList<HashMap<String, String>>
         } catch (e: Exception) {
             preserveCorruptData(context, "chat_list", "data", json, "chat list")
-            arrayListOf()
+            return ChatListResult(ChatStorageHealth.ReadState.CORRUPT, arrayListOf())
         }
 
         // Bugfix for R8 minifier, yes It make no sense for regular programmer, but it's a bug in R8 minifier
         if (list == null) list = arrayListOf()
 
-        // Dumb things goes gere
-        if (list.isNullOrEmpty()) return arrayListOf()
+        val state = ChatStorageHealth.readStateFor(
+            locked = false, decryptFailed = false, parseFailed = false,
+            keyPresent = keyPresent, hasEntries = list.isNotEmpty()
+        )
+        if (list.isEmpty()) return ChatListResult(state, arrayListOf())
 
         for (chat in list) {
             val messagesList = getChatById(context, Hash.hash(chat["name"].toString()))
@@ -160,30 +230,40 @@ class ChatPreferences private constructor() {
             }
         }
 
-        // Bugfix for R8 minifier, yes It make no sense for regular programmer, but it's a bug in R8 minifier
-        if (list == null) list = arrayListOf()
-
-        return list
+        return ChatListResult(state, list)
     }
 
+    /**
+     * Legacy list read. Delegates to [getChatListResult] and returns only
+     * the payload — safe ONLY for display paths that sit behind the
+     * locked-storage UI gates (MainActivity/ChatActivity redirect to the
+     * locked screen before any of them run). Anything that DECIDES based on
+     * emptiness must call [getChatListResult] and check the state.
+     */
+    fun getChatList(context: Context) : ArrayList<HashMap<String, String>> =
+        getChatListResult(context).chats
+
     fun switchPinState(context: Context, chatId: String) {
-        val list = getChatList(context)
+        if (chatWriteBlocked(context, "chat_list", "pin or unpin a chat")) return
+        synchronized(CHAT_LIST_LOCK) {
+            val list = getChatList(context)
 
-        for (map in list) {
-            if (Hash.hash(map["name"].toString()) == chatId) {
-                if (map["pinned"] == "true") {
-                    map["pinned"] = "false"
-                } else {
-                    map["pinned"] = "true"
+            for (map in list) {
+                if (Hash.hash(map["name"].toString()) == chatId) {
+                    if (map["pinned"] == "true") {
+                        map["pinned"] = "false"
+                    } else {
+                        map["pinned"] = "true"
+                    }
+                    break
                 }
-                break
             }
+
+            val json: String = Gson().toJson(list)
+
+            val settings: SharedPreferences = SecurePrefs.get(context, "chat_list")
+            settings.edit { putString("data", json) }
         }
-
-        val json: String = Gson().toJson(list)
-
-        val settings: SharedPreferences = SecurePrefs.get(context, "chat_list")
-        settings.edit { putString("data", json) }
     }
 
     fun putTimestampToChatById(context: Context, chatId: String) {
@@ -193,19 +273,22 @@ class ChatPreferences private constructor() {
     }
 
     private fun putMetadataToChatById(context: Context, chatId: String, key: String, value: String) {
-        val list = getChatList(context)
+        if (chatWriteBlocked(context, "chat_list", "update chat metadata")) return
+        synchronized(CHAT_LIST_LOCK) {
+            val list = getChatList(context)
 
-        for (map in list) {
-            if (Hash.hash(map["name"].toString()) == chatId) {
-                map[key] = value
-                break
+            for (map in list) {
+                if (Hash.hash(map["name"].toString()) == chatId) {
+                    map[key] = value
+                    break
+                }
             }
+
+            val json: String = Gson().toJson(list)
+
+            val settings: SharedPreferences = SecurePrefs.get(context, "chat_list")
+            settings.edit { putString("data", json) }
         }
-
-        val json: String = Gson().toJson(list)
-
-        val settings: SharedPreferences = SecurePrefs.get(context, "chat_list")
-        settings.edit { putString("data", json) }
     }
 
     /**
@@ -215,31 +298,133 @@ class ChatPreferences private constructor() {
      * @param chatId The ID of the chat to retrieve messages for.
      * @return An ArrayList of HashMap objects, where each HashMap represents a message with key-value pairs for the message content and sender ID.
      */
-    fun getChatById(context: Context, chatId: String) : ArrayList<HashMap<String, Any>> {
-        val chat: SharedPreferences = SecurePrefs.get(context, "chat_$chatId")
+    /**
+     * Result-typed history read (Round 4 correction) — same contract as
+     * [getChatListResult]: LOCKED/CORRUPT are explicit states, never a plain
+     * empty conversation. ChatActivity shows the owner-approved "Chat
+     * unavailable" state on CORRUPT and blocks saving into that chat.
+     */
+    fun getChatByIdResult(context: Context, chatId: String): ChatHistoryResult {
+        val name = "chat_$chatId"
+        val chat: SharedPreferences = SecurePrefs.get(context, name)
+        if (SecurePrefs.isLockedName(name)) {
+            return ChatHistoryResult(ChatStorageHealth.ReadState.LOCKED, arrayListOf())
+        }
 
-        var list: ArrayList<HashMap<String, Any>> = try {
-            val gson = Gson()
-            val json = chat.getString("chat", "[]")
-            val type: Type = TypeToken.getParameterized(ArrayList::class.java, HashMap::class.java).type
-
-            try {
-                gson.fromJson<Any>(json, type) as ArrayList<HashMap<String, Any>>
-            } catch (e: Exception) {
-                preserveCorruptData(context, "chat_$chatId", "chat", json, "chat history")
-                arrayListOf()
-            }
+        val keyPresent = try { chat.contains("chat") } catch (_: Exception) { true }
+        val json = try {
+            chat.getString("chat", "[]")
         } catch (e: Exception) {
-            arrayListOf()
+            // Decrypt failure on an open encrypted file (the outer catch here
+            // used to swallow this into a silent empty chat, and the next save
+            // then overwrote the only ciphertext copy). Preserve the encrypted
+            // file first, record the unreadable state, and surface CORRUPT —
+            // the chat stays write-blocked until an explicit user action
+            // (see chatWriteBlocked) resolves it.
+            onUndecryptableValue(context, name, "chat history", e)
+            return ChatHistoryResult(ChatStorageHealth.ReadState.CORRUPT, arrayListOf())
+        }
+        ChatStorageHealth.clearReadFailure(context, name)
+
+        var list: ArrayList<HashMap<String, Any>>? = try {
+            val gson = Gson()
+            val type: Type = TypeToken.getParameterized(ArrayList::class.java, HashMap::class.java).type
+            @Suppress("UNCHECKED_CAST")
+            gson.fromJson<Any>(json, type) as ArrayList<HashMap<String, Any>>
+        } catch (e: Exception) {
+            preserveCorruptData(context, name, "chat", json, "chat history")
+            return ChatHistoryResult(ChatStorageHealth.ReadState.CORRUPT, arrayListOf())
         }
 
         // Bugfix for R8 minifier
         if (list == null) list = arrayListOf()
 
-        return list
+        val state = ChatStorageHealth.readStateFor(
+            locked = false, decryptFailed = false, parseFailed = false,
+            keyPresent = keyPresent, hasEntries = list.isNotEmpty()
+        )
+        return ChatHistoryResult(state, list)
+    }
+
+    /** Legacy history read — payload only; see [getChatList]'s contract note. */
+    fun getChatById(context: Context, chatId: String) : ArrayList<HashMap<String, Any>> =
+        getChatByIdResult(context, chatId).messages
+
+    /**
+     * Shared handling for a value that exists but cannot be decrypted even
+     * though its file opened (Keystore valid, ciphertext damaged — storage
+     * state distinct from LOCKED and from corrupt-JSON). The ciphertext
+     * file is copied aside before anything can overwrite it, the state is
+     * recorded durably, and one persistent Error Log line is written per
+     * process. Nothing is deleted here, ever — and while the read-failure
+     * record stands, every write to this file is refused
+     * ([chatWriteBlocked]) so the unreadable value cannot be replaced just
+     * because its read presented no messages.
+     */
+    private fun onUndecryptableValue(context: Context, prefsName: String, what: String, e: Exception) {
+        SecurePrefs.preserveEncryptedFileCopy(context, prefsName)
+        ChatStorageHealth.recordReadFailure(context, prefsName, e)
+        if (ChatStorageHealth.shouldLogOnce("readfail.$prefsName")) {
+            Logger.log(
+                context, CORRUPT_DATA_LOG_TYPE, "ChatPreferences", "error",
+                "Stored $what exists but could not be decrypted. A copy of the encrypted file was preserved on the device; the original was not modified or deleted, and saving to it is paused."
+            )
+        }
+    }
+
+    /**
+     * The write gate (Round 4 correction): every chat-content mutation
+     * checks it first. Locked storage and preserved-but-unresolved corrupt
+     * values are never overwritten; the refusal is logged once per process
+     * per file (never silent) and recorded nowhere else — the data already
+     * has its journal entry.
+     */
+    private fun chatWriteBlocked(context: Context, prefsName: String, operation: String): Boolean {
+        SecurePrefs.get(context, prefsName) // classify on first touch
+        val locked = SecurePrefs.isLockedName(prefsName)
+        val readFailed = prefsName in ChatStorageHealth.readFailureNames(context)
+        if (ChatStorageHealth.writeAllowed(locked, readFailed)) return false
+        if (ChatStorageHealth.shouldLogOnce("writeblock.$prefsName")) {
+            Logger.log(
+                context, CORRUPT_DATA_LOG_TYPE, "ChatPreferences", "error",
+                "Refused to $operation: storage for '$prefsName' is " +
+                    (if (locked) "locked" else "preserved after a failed read") +
+                    " and must not be overwritten."
+            )
+        }
+        return true
+    }
+
+    /**
+     * Guarded history save — THE way chat content is persisted
+     * (ChatActivity.saveSettings goes through here). Returns an explicit
+     * outcome instead of silently writing into a locked or corrupt slot.
+     */
+    fun saveChatHistory(
+        context: Context,
+        chatId: String,
+        messages: List<HashMap<String, Any>>
+    ): ChatStorageHealth.WriteOutcome {
+        val name = "chat_$chatId"
+        SecurePrefs.get(context, name)
+        if (SecurePrefs.isLockedName(name)) {
+            chatWriteBlocked(context, name, "save chat history")
+            return ChatStorageHealth.WriteOutcome.LOCKED
+        }
+        if (name in ChatStorageHealth.readFailureNames(context)) {
+            chatWriteBlocked(context, name, "save chat history")
+            return ChatStorageHealth.WriteOutcome.BLOCKED_CORRUPT
+        }
+        return try {
+            SecurePrefs.get(context, name).edit { putString("chat", Gson().toJson(messages)) }
+            ChatStorageHealth.WriteOutcome.OK
+        } catch (_: Exception) {
+            ChatStorageHealth.WriteOutcome.FAILED
+        }
     }
 
     fun clearChatById(context: Context, chatId: String) {
+        if (chatWriteBlocked(context, "chat_$chatId", "clear a chat")) return
         val chat: SharedPreferences = SecurePrefs.get(context, "chat_$chatId")
 
         chat.edit { putString("chat", "[]") }
@@ -303,6 +488,7 @@ class ChatPreferences private constructor() {
     }
 
     fun editMessage(context: Context, chatId: String, position: Int, newMessage: String) {
+        if (chatWriteBlocked(context, "chat_$chatId", "edit a message")) return
         val list = getChatById(context, chatId)
 
         // The position comes from the in-memory adapter list, which can briefly
@@ -333,6 +519,7 @@ class ChatPreferences private constructor() {
     }
 
     fun deleteMessage(context: Context, chatId: String, position: Int) {
+        if (chatWriteBlocked(context, "chat_$chatId", "delete a message")) return
         val list = getChatById(context, chatId)
 
         // Same desync guard as editMessage: removeAt(position) on a stale/shorter
@@ -389,20 +576,23 @@ class ChatPreferences private constructor() {
      * @param chatName The name of the chat to add.
      */
     fun addChat(context: Context, chatName: String) {
-        val list = getChatList(context)
+        if (chatWriteBlocked(context, "chat_list", "create a chat")) return
+        synchronized(CHAT_LIST_LOCK) {
+            val list = getChatList(context)
 
-        val map: HashMap<String, String> = HashMap()
+            val map: HashMap<String, String> = HashMap()
 
-        map["name"] = chatName
-        map["id"] = Hash.hash(chatName)
-        map["timestamp"] = System.currentTimeMillis().toString()
-        map["pinned"] = "false"
+            map["name"] = chatName
+            map["id"] = Hash.hash(chatName)
+            map["timestamp"] = System.currentTimeMillis().toString()
+            map["pinned"] = "false"
 
-        list.add(map)
-        val json: String = Gson().toJson(list)
+            list.add(map)
+            val json: String = Gson().toJson(list)
 
-        val settings: SharedPreferences = SecurePrefs.get(context, "chat_list")
-        settings.edit { putString("data", json) }
+            val settings: SharedPreferences = SecurePrefs.get(context, "chat_list")
+            settings.edit { putString("data", json) }
+        }
 
         val settings2: SharedPreferences = SecurePrefs.get(context, "chat_${Hash.hash(chatName)}")
         settings2.edit { putString("chat", "[]") }
@@ -466,39 +656,55 @@ class ChatPreferences private constructor() {
         val oldId = Hash.hash(previousName)
         val newId = Hash.hash(chatName)
 
-        val list = getChatList(context)
-        val entry = list.firstOrNull { it["id"] == oldId } ?: return false
-
-        // Renaming onto an id another chat already owns would silently
-        // overwrite that chat's history. Refuse instead (the rename dialog
-        // pre-checks duplicates; auto-naming may retry with another title).
-        if (list.any { it !== entry && it["id"] == newId }) {
-            Logger.log(
-                context, "crash", "ChatPreferences", "error",
-                "Rename refused: a chat named \"$chatName\" already exists; \"$previousName\" was left unchanged."
-            )
+        // A rename touches the list pointer and both chat files: refuse the
+        // whole operation if any of them is locked or preserved-corrupt.
+        // Refusal is the documented "nothing changed" contract (returns
+        // false, chat intact under the old name).
+        if (chatWriteBlocked(context, "chat_list", "rename a chat") ||
+            chatWriteBlocked(context, "chat_$oldId", "rename a chat") ||
+            chatWriteBlocked(context, "chat_$newId", "rename a chat")
+        ) {
             return false
         }
 
-        entry["name"] = chatName
-        entry["id"] = newId
-        val newListJson: String = Gson().toJson(list)
+        val outcome: ChatRenameTransaction.Outcome
+        synchronized(CHAT_LIST_LOCK) {
+            val list = getChatList(context)
+            val entry = list.firstOrNull { it["id"] == oldId } ?: return false
 
-        // Journal the rename BEFORE touching prefs. The prefs pointer flip is
-        // the authoritative moment, but a process death right after it would
-        // leave the memory re-point (a separate store) undone and the chat's
-        // transcripts stranded under the old id. The journal makes that window
-        // recoverable at next start; recovery consults the live chat list, so
-        // an entry written for a rename that then fails pre-flip is safely
-        // discarded (the old id is still live). Committed synchronously to
-        // encrypted prefs, outside the memory DB, so it survives even when the
-        // DB is the thing failing.
-        RenameJournal.record(context, oldId, newId)
+            // Renaming onto an id another chat already owns would silently
+            // overwrite that chat's history. Refuse instead (the rename dialog
+            // pre-checks duplicates; auto-naming may retry with another title).
+            if (list.any { it !== entry && it["id"] == newId }) {
+                Logger.log(
+                    context, "crash", "ChatPreferences", "error",
+                    "Rename refused: a chat named \"$chatName\" already exists; \"$previousName\" was left unchanged."
+                )
+                return false
+            }
 
-        val outcome = try {
-            ChatRenameTransaction.rename(securePrefsFileAccess(context), oldId, newId, newListJson)
-        } catch (e: Exception) {
-            ChatRenameTransaction.Outcome(false, "unexpected error: ${e.message}")
+            entry["name"] = chatName
+            entry["id"] = newId
+            val newListJson: String = Gson().toJson(list)
+
+            // Journal the rename BEFORE touching prefs. The prefs pointer flip is
+            // the authoritative moment, but a process death right after it would
+            // leave the memory re-point (a separate store) undone and the chat's
+            // transcripts stranded under the old id. The journal makes that window
+            // recoverable at next start; recovery consults the live chat list, so
+            // an entry written for a rename that then fails pre-flip is safely
+            // discarded (the old id is still live). Committed synchronously to
+            // encrypted prefs, outside the memory DB, so it survives even when the
+            // DB is the thing failing. (Lock ordering: CHAT_LIST_LOCK →
+            // RenameJournal's monitor; RenameJournal.reconcile never takes
+            // CHAT_LIST_LOCK, so there is no inversion.)
+            RenameJournal.record(context, oldId, newId)
+
+            outcome = try {
+                ChatRenameTransaction.rename(securePrefsFileAccess(context), oldId, newId, newListJson)
+            } catch (e: Exception) {
+                ChatRenameTransaction.Outcome(false, "unexpected error: ${e.message}")
+            }
         }
 
         if (!outcome.success) {
@@ -582,21 +788,27 @@ class ChatPreferences private constructor() {
     }
 
     fun deleteChatById(context: Context, chatId: String) {
-        val list = getChatList(context)
+        if (chatWriteBlocked(context, "chat_list", "delete a chat")) return
+        synchronized(CHAT_LIST_LOCK) {
+            val list = getChatList(context)
 
-        for (map: HashMap<String, String> in list) {
-            if (map["id"] == chatId) {
-                list.remove(map)
-                break
+            for (map: HashMap<String, String> in list) {
+                if (map["id"] == chatId) {
+                    list.remove(map)
+                    break
+                }
             }
+
+            val json: String = Gson().toJson(list)
+
+            val settings: SharedPreferences = SecurePrefs.get(context, "chat_list")
+            settings.edit { putString("data", json) }
         }
-
-        val json: String = Gson().toJson(list)
-
-        val settings: SharedPreferences = SecurePrefs.get(context, "chat_list")
-        settings.edit { putString("data", json) }
 
         val settings2: SharedPreferences = SecurePrefs.get(context, "chat_$chatId")
         settings2.edit { clear() }
+
+        // Same journal settlement as deleteChat — see the comment there.
+        ChatStorageHealth.clearReadFailure(context, "chat_$chatId")
     }
 }

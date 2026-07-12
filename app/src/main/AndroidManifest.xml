@@ -405,6 +405,13 @@
         </activity>
 
         <activity
+            android:name=".ui.activities.ChatStorageLockedActivity"
+            android:exported="false"
+            android:label="@string/chat_storage_locked_title"
+            android:launchMode="singleTask">
+        </activity>
+
+        <activity
             android:name=".ui.debug.DebugActivity"
             android:exported="false"
             android:enabled="false"

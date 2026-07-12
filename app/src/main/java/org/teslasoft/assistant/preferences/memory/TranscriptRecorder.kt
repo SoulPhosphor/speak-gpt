@@ -20,6 +20,7 @@ import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
 import org.teslasoft.assistant.preferences.ChatPreferences
+import org.teslasoft.assistant.preferences.ChatStorageHealth
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.util.Hash
 
@@ -135,12 +136,20 @@ object TranscriptRecorder {
             if (!MemoryStore.isProvisioned(context)) return BackfillOutcome(false, 0)
             val store = MemoryStore.getInstance(context)
             val chatPrefs = ChatPreferences.getChatPreferences()
+            // A masked chat-list view (locked/corrupt storage, Round 4) must
+            // not complete the backfill: iterating the masked (empty) list
+            // would set the done-flag and pre-existing chats would never
+            // become eligible for memory review. Not a completed pass.
+            val listResult = chatPrefs.getChatListResult(context)
+            if (!ChatStorageHealth.isAuthoritative(listResult.state)) {
+                return BackfillOutcome(false, 0)
+            }
             var created = 0
             // A single insert reporting failure means the pass did not fully
             // complete: leave the flag unset so that chat (which still has no
             // transcript) re-qualifies and is retried next start.
             var allSucceeded = true
-            for (chat in chatPrefs.getChatList(context)) {
+            for (chat in listResult.chats) {
                 val name = chat["name"] ?: continue
                 val chatId = Hash.hash(name)
                 if (store.hasAnyTranscriptForChat(chatId)) continue

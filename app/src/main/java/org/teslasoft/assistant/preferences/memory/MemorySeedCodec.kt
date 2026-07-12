@@ -441,7 +441,12 @@ object MemorySeedCodec {
 
     /* ----------------------------- serialize ----------------------------- */
 
-    fun serialize(data: MemoryStoreData, appChats: JSONArray? = null, exportedAtIso: String? = null): String {
+    fun serialize(
+        data: MemoryStoreData,
+        appChats: JSONArray? = null,
+        exportedAtIso: String? = null,
+        appChatsComplete: Boolean = true
+    ): String {
         val root = JSONObject()
         root.put("schema_version", data.schemaVersion)
 
@@ -836,6 +841,13 @@ object MemorySeedCodec {
             put("app", "Phosphor Shines")
             put("format", EXPORT_FORMAT)
             putIfNotNull("exported_at", exportedAtIso)
+            // Absent = complete (same convention as message completion
+            // states, so every older export stays trusted). Written only
+            // when chat storage was locked or partially unreadable at
+            // export time — this file must never be mistaken for a full
+            // copy of the user's chats, and older app versions simply
+            // ignore the extra key.
+            if (!appChatsComplete) put("app_chats_complete", false)
         })
 
         return root.toString(2)
