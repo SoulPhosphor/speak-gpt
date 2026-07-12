@@ -222,6 +222,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         // action and handled by the live ChatActivity. Package-scoped and
         // non-exported; see hangUpReceiver.
         const val ACTION_HANG_UP = "org.teslasoft.assistant.action.HANG_UP"
+
+        // Once-per-PROCESS guard for the soft memory-degraded notice
+        // (notifyMemoryDegradedOnce). Static so a new ChatActivity instance —
+        // e.g. after a rotation/recreation mid-session — does not re-arm it and
+        // toast the same degraded session again. compareAndSet keeps it correct
+        // if the notice ever fires off more than one thread.
+        private val memoryDegradedNotified = java.util.concurrent.atomic.AtomicBoolean(false)
     }
 
     // Init UI
@@ -4186,11 +4193,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     // One soft notification per process when the full memory system degrades
     // mid-conversation (enforcer spec: "user notified once, softly") — the
     // Event/Memory log carries the details, the toast just says it happened.
-    private var memoryDegradedNotified = false
-
+    // The flag lives on the companion object (memoryDegradedNotified below), so
+    // it is genuinely once PER PROCESS: an instance field re-armed on every
+    // ChatActivity recreation (e.g. rotation), turning "once, softly" into a
+    // repeat toast for the same degraded session.
     private fun notifyMemoryDegradedOnce() {
-        if (memoryDegradedNotified) return
-        memoryDegradedNotified = true
+        if (!memoryDegradedNotified.compareAndSet(false, true)) return
         runOnUiThread {
             Toast.makeText(this, getString(R.string.memory_degraded_notice), Toast.LENGTH_SHORT).show()
         }

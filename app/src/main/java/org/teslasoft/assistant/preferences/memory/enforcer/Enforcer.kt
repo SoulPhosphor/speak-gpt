@@ -226,8 +226,9 @@ class Enforcer private constructor(private val appContext: Context) {
 
         // Near-duplicate suppression (coexistence rule): a retrieved memory
         // that duplicates an injected lore entry is dropped — user-authored
-        // wins — and the pair is flagged for the next Archivist run report
-        // (silent disagreement between the tiers is the one thing never allowed).
+        // wins — and the pair is recorded via flagContradictions (silent
+        // disagreement between the tiers is the one thing never allowed). Those
+        // flags are write-only today; see flagContradictions for the details.
         val suppressed = ArrayList<Pair<AssembledMemory, LoreNote>>()
         if (loreNotes.isNotEmpty() && retrieved.isNotEmpty()) {
             val loreVectors = loreNotes.map { note ->
@@ -654,8 +655,18 @@ class Enforcer private constructor(private val appContext: Context) {
         return out
     }
 
-    /** Persist suppressed memory↔lore pairs for the next Archivist run report
-     *  (Phase 6 reads and clears this list). */
+    /** Persist suppressed memory↔lore pairs — a silent disagreement between the
+     *  user's hand-written lore and a retrieved memory is the one thing the
+     *  coexistence rule never allows, so the pair is recorded when the memory
+     *  is dropped in the lore note's favour.
+     *
+     *  NOTE (corrected July 2026): these flags are currently WRITE-ONLY. No
+     *  code reads or clears `enforcer.contradiction_flags` — the earlier claim
+     *  that the Phase 6 Archivist "reads and clears this list" was never true
+     *  (the built Archivist does not touch it). The list only accumulates,
+     *  bounded to MAX_CONTRADICTION_FLAGS (newest kept). A consumer — surfacing
+     *  the disagreements and a lifecycle for retiring resolved ones — is future
+     *  work; until it exists nothing here changes contradiction behaviour. */
     private fun flagContradictions(store: MemoryStore, pairs: List<Pair<AssembledMemory, LoreNote>>) {
         try {
             val arr = try {
