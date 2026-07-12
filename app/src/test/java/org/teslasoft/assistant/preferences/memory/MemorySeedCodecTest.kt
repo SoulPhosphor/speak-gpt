@@ -19,6 +19,7 @@ package org.teslasoft.assistant.preferences.memory
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -299,5 +300,30 @@ class MemorySeedCodecTest {
         assertTrue(out.has("companions"))
         assertTrue(out.has("memories"))
         assertTrue(out.has("retrieval_policy"))
+    }
+
+    @Test
+    fun completeExportOmitsTheChatsCompleteFlag() {
+        // Absent = complete (the message-completion-state convention): every
+        // export ever written before the flag existed must stay trusted.
+        val data = MemorySeedCodec.parse(fixtureJson())
+        val out = JSONObject(MemorySeedCodec.serialize(data, appChats = JSONArray()))
+        assertFalse(out.getJSONObject("export_meta").has("app_chats_complete"))
+    }
+
+    @Test
+    fun exportDuringStorageOutageIsMarkedIncomplete() {
+        // An export taken while chat storage is locked or partially
+        // unreadable must never be mistaken for a full copy of the chats.
+        val data = MemorySeedCodec.parse(fixtureJson())
+        val out = JSONObject(
+            MemorySeedCodec.serialize(data, appChats = JSONArray(), appChatsComplete = false)
+        )
+        assertFalse(out.getJSONObject("export_meta").getBoolean("app_chats_complete"))
+        // The parser must not choke on the extra meta key (older versions
+        // simply ignore it).
+        MemorySeedCodec.parse(
+            MemorySeedCodec.serialize(data, appChats = JSONArray(), appChatsComplete = false)
+        )
     }
 }

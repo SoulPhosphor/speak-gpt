@@ -133,7 +133,19 @@ class ChatPreferences private constructor() {
         val settings: SharedPreferences = SecurePrefs.get(context, "chat_list")
 
         val gson = Gson()
-        val json = settings.getString("data", "[]")
+        val json = try {
+            settings.getString("data", "[]")
+        } catch (e: Exception) {
+            // The stored value exists but cannot be DECRYPTED — a different
+            // state from a parse failure of decrypted JSON (handled below).
+            // Preserve the ciphertext file before any later save can replace
+            // the only copy, record the unreadable state persistently, and
+            // return empty to keep the UI alive. The data is journaled as
+            // unreadable, never treated as absent or deleted.
+            onUndecryptableValue(context, "chat_list", "chat list", e)
+            return arrayListOf()
+        }
+        ChatStorageHealth.clearReadFailure(context, "chat_list")
         val type: Type = TypeToken.getParameterized(ArrayList::class.java, HashMap::class.java).type
 
         var list: ArrayList<HashMap<String, String>> = try {
@@ -218,18 +230,26 @@ class ChatPreferences private constructor() {
     fun getChatById(context: Context, chatId: String) : ArrayList<HashMap<String, Any>> {
         val chat: SharedPreferences = SecurePrefs.get(context, "chat_$chatId")
 
+        val json = try {
+            chat.getString("chat", "[]")
+        } catch (e: Exception) {
+            // Decrypt failure on an open encrypted file (the outer catch here
+            // used to swallow this into a silent empty chat, and the next save
+            // then overwrote the only ciphertext copy). Preserve the encrypted
+            // file first, record the unreadable state, and only then return
+            // empty so the UI stays alive.
+            onUndecryptableValue(context, "chat_$chatId", "chat history", e)
+            return arrayListOf()
+        }
+        ChatStorageHealth.clearReadFailure(context, "chat_$chatId")
+
         var list: ArrayList<HashMap<String, Any>> = try {
             val gson = Gson()
-            val json = chat.getString("chat", "[]")
             val type: Type = TypeToken.getParameterized(ArrayList::class.java, HashMap::class.java).type
 
-            try {
-                gson.fromJson<Any>(json, type) as ArrayList<HashMap<String, Any>>
-            } catch (e: Exception) {
-                preserveCorruptData(context, "chat_$chatId", "chat", json, "chat history")
-                arrayListOf()
-            }
+            gson.fromJson<Any>(json, type) as ArrayList<HashMap<String, Any>>
         } catch (e: Exception) {
+            preserveCorruptData(context, "chat_$chatId", "chat", json, "chat history")
             arrayListOf()
         }
 
@@ -237,6 +257,25 @@ class ChatPreferences private constructor() {
         if (list == null) list = arrayListOf()
 
         return list
+    }
+
+    /**
+     * Shared handling for a value that exists but cannot be decrypted even
+     * though its file opened (Keystore valid, ciphertext damaged — storage
+     * state distinct from LOCKED and from corrupt-JSON). The ciphertext
+     * file is copied aside before anything can overwrite it, the state is
+     * recorded durably, and one persistent Error Log line is written per
+     * process. Nothing is deleted here, ever.
+     */
+    private fun onUndecryptableValue(context: Context, prefsName: String, what: String, e: Exception) {
+        SecurePrefs.preserveEncryptedFileCopy(context, prefsName)
+        ChatStorageHealth.recordReadFailure(context, prefsName, e.message ?: e.javaClass.simpleName)
+        if (ChatStorageHealth.shouldLogOnce("readfail.$prefsName")) {
+            Logger.log(
+                context, CORRUPT_DATA_LOG_TYPE, "ChatPreferences", "error",
+                "Stored $what exists but could not be decrypted (${e.message}). A copy of the encrypted file was preserved on the device; the original was not modified or deleted."
+            )
+        }
     }
 
     fun clearChatById(context: Context, chatId: String) {

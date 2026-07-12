@@ -21,6 +21,7 @@ import com.google.gson.Gson
 import org.json.JSONArray
 import org.json.JSONObject
 import org.teslasoft.assistant.preferences.ChatPreferences
+import org.teslasoft.assistant.preferences.ChatStorageHealth
 import org.teslasoft.assistant.util.AtomicFileWriter
 import org.teslasoft.assistant.util.Hash
 import java.io.File
@@ -79,11 +80,23 @@ object MemoryExporter {
 
     fun buildExportJson(context: Context): String {
         val store = MemoryStore.getInstance(context)
+        // If any chat file is locked or unreadable right now, the chats this
+        // export can see are NOT the full set — mark the envelope so the
+        // backup is never mistaken for a complete copy (absent = complete;
+        // older exports and older app versions are unaffected).
+        val chatsComplete = !chatStorageDegraded(context)
         return MemorySeedCodec.serialize(
             store.exportData(),
             appChats = buildAppChats(context),
-            exportedAtIso = MemoryStore.nowIso()
+            exportedAtIso = MemoryStore.nowIso(),
+            appChatsComplete = chatsComplete
         )
+    }
+
+    private fun chatStorageDegraded(context: Context): Boolean = try {
+        ChatStorageHealth.anyChatDataDegraded(context)
+    } catch (_: Exception) {
+        false
     }
 
     /**
@@ -142,11 +155,21 @@ object MemoryExporter {
             }
             store.setMeta(MemoryStore.META_LAST_AUTO_EXPORT_AT, MemoryStore.nowIso())
 
-            val backups = dir.listFiles { f -> f.name.startsWith("memory-export-") && f.name.endsWith(".json") }
-            if (backups != null && backups.size > ROTATION_KEEP) {
-                backups.sortedBy { it.name }.dropLast(ROTATION_KEEP).forEach { it.delete() }
+            // Rotation is suspended while chat storage is degraded: the
+            // exports written during an outage carry an incomplete chat
+            // envelope, and rotating on schedule would age out the last
+            // backups that still hold the full chat set. Extra files
+            // accumulate at most one per day until the outage ends.
+            if (chatStorageDegraded(context)) {
+                MemoryLog.log(context, "MemoryExport", "warning",
+                    "Automatic memory backup written with an incomplete chat set (chat storage is currently locked or partially unreadable): ${file.name}. Older backups are being kept until a complete backup succeeds.")
+            } else {
+                val backups = dir.listFiles { f -> f.name.startsWith("memory-export-") && f.name.endsWith(".json") }
+                if (backups != null && backups.size > ROTATION_KEEP) {
+                    backups.sortedBy { it.name }.dropLast(ROTATION_KEEP).forEach { it.delete() }
+                }
+                MemoryLog.log(context, "MemoryExport", "info", "Automatic memory backup written: ${file.name}")
             }
-            MemoryLog.log(context, "MemoryExport", "info", "Automatic memory backup written: ${file.name}")
         } catch (e: Exception) {
             MemoryLog.log(context, "MemoryExport", "error", "Automatic memory backup failed: ${e.message}")
         }
