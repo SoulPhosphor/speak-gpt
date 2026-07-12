@@ -912,45 +912,98 @@ The auto-backup is silent today; a backup failing repeatedly is invisible.
   than a single overwrite. Five is a reasonable default; it is a tunable
   constant if the owner later wants more or fewer.
 
-### 15.9 Memory Controls screen — backup status + manual backup (owner-directed)
+### 15.9 Memory Controls screen — layout + exact wording (owner-directed, VERBATIM)
 
-Under the existing "save a rotating backup every day" area on the Memory
-Controls screen (final wording Phase 2; the owner's requested text is
-recorded as the intent):
+**Date format (owner requirement):** every user-facing date in this feature is
+shown as **`Month D, YYYY`** (e.g. `July 5, 2026`) — full month name, day,
+comma, four-digit year. This governs every date line below. (Internal
+*filenames*, such as the quarantined corrupt-DB copy in §15.6, keep a sortable
+date for correct ordering and are not user-facing display text.)
 
-- A **"Create Database Backup"** button directly under that text. Pressing it
-  runs a backup immediately (the manual path already exists as
-  `writeBackupNow`). **Status text appears underneath it** showing in-progress
-  and then whether it completed or failed.
-- A **"Last successful Database Backup: [date]"** line under the "Backups"
-  area, so a working backup is visibly confirmed and a stale date is a visible
-  warning.
-- **If the most recent backup FAILED, an additional line ABOVE that one reads
-  "Database Backup Failed: [date]"** — so a failure is stated outright, not
-  merely implied by a stale success date. (This line is present only when the
-  last attempt failed; it clears when a backup next succeeds.)
+The following strings are **owner-approved verbatim** — do not reword them
+without asking. Placement is in the Backups area of the Memory Controls
+screen, under the existing "save a rotating backup every day" text.
 
-These are persistent on-screen status lines (not Toasts), consistent with the
-app-wide no-Toast rule.
+**Top-to-bottom order and exact text:**
 
-### 15.10 Remaining open decisions
+1. **`Check Database Integrity`** — a button. It sits **ABOVE** the Create
+   Database Backup button.
+   - When pressed, the text beneath the button reads, VERBATIM:
+     **`Checking database integrity. Do not close your app. Please wait.`**
+   - When the check finishes, that text is **REPLACED** by the result, one of,
+     VERBATIM:
+     **`Database Integrity Passed`** or **`Database Integrity Failed`**.
+   - On **`Database Integrity Failed`**, the app then offers the two §15.2
+     recovery actions: **Repair**, or **update to the newest best database**
+     (restore from the newest verified backup, carrying the §15.2 loss
+     warning). On **`Database Integrity Passed`**, no action is offered.
 
-Resolved this round: force-close→degraded mode (§15.2a), repair-then-replace
-order (§15.2), not-recoverable handling (§15.6), lorebook coverage (§15.5),
-backup-failure surfacing (§15.7), backup cap (§15.8), Memory Controls status
-+ manual button (§15.9), frequency stays daily (§15.1).
+2. **`Create Database Backup`** — a button, **BELOW** the integrity button.
+   Pressing it runs a backup immediately (existing `writeBackupNow`). Status
+   text appears underneath it: in-progress, then whether it completed or
+   failed.
 
-Still open / to confirm at build time:
-1. **Final wording** for the DB-issue dialog, the degraded-mode banner, the
-   disabled-Archivist note, the 3-strikes dialog, and the Memory Controls
-   status lines (Phase 2, owner-approved copy).
-2. **Banner scope wording** — naming "memory" vs "lorebooks" per which
-   database is affected (§15.2a).
-3. **Whether the manual "Check database now" action** (§15.3) lives on Memory
-   Controls next to the backup button, or on Advanced Memory Settings.
-4. Interaction with §14.1 (ungated health log lines) — the on-screen status
-   lines partly satisfy "the user must be able to tell backups are healthy,"
-   so the ungated-log question can be revisited in that light.
+3. **`Database Backup Failed: [Month D, YYYY]`** — a line shown **ONLY** when
+   the most recent backup attempt failed. It sits **ABOVE** the last-success
+   line. It clears when a backup next succeeds.
+
+4. **`Last successful Database Backup: [Month D, YYYY]`** — always shown, under
+   the "Backups" area. A stale date is itself a visible warning.
+
+All of the above are persistent on-screen controls/text — never Toasts,
+consistent with the app-wide no-Toast rule.
+
+### 15.10 Decision ledger — resolved vs still open
+
+**RESOLVED (owner-directed, do not re-open without the owner):**
+degraded mode not force-close (§15.2a); repair-then-replace order (§15.2);
+not-recoverable handling — quarantine/rename, walk backups newest-to-oldest,
+fresh only as last resort (§15.6); lorebook folded into backup + integrity
+(§15.5); 3-strikes backup-failure dialog with a "save elsewhere" escape
+(§15.7); backup cap = newest 5 (§15.8); daily frequency (§15.1); Memory
+Controls layout with the `Check Database Integrity` button ABOVE the
+`Create Database Backup` button (§15.9); the manual-check verbatim strings
+(`Checking database integrity. Do not close your app. Please wait.` →
+`Database Integrity Passed` / `Database Integrity Failed`) (§15.9); the two
+backup status lines and their order — failed ABOVE last-success (§15.9);
+date display format `Month D, YYYY` (§15.9); Archivist hard-disabled on any
+DB problem (§15.2a); banner is persistent + re-acknowledged per new chat with
+Repair / OK (§15.2a).
+
+**STILL OPEN — final wording not yet written (Phase 2 owner copy):**
+1. The AUTOMATIC (crash-triggered) DB-issue dialog text — the one that pops up
+   on detection at startup, distinct from the manual-check strings already set
+   in §15.9.
+2. The degraded-mode per-new-chat banner sentence (the Repair / OK button
+   labels are set; the sentence naming "memory" vs "lorebooks" is not).
+3. The disabled-Archivist inline note text.
+4. The 3-strikes backup-failure dialog text, and the label of its
+   "save a backup somewhere else now" button.
+5. The restore loss-warning wording (what a restore would cost), for the
+   memory database and for lorebooks.
+6. The last-resort "started fresh; your old data was preserved" message text.
+7. The exact button label for the **update to the newest best database**
+   action (owner gave the phrase; confirm it is the literal on-screen label or
+   a shorter one).
+
+**STILL OPEN — behavior/placement to confirm at build time:**
+8. Does one press of `Check Database Integrity` check BOTH databases, and is
+   the result one combined pass/fail or one per database? (Integrity is
+   per-database; the button is singular.)
+9. WHEN does the automatic blocking dialog appear — only at startup after an
+   abnormal exit, or also immediately if corruption is detected mid-session?
+10. Does degraded mode persist across app restarts until repaired? (Assumed
+    yes; confirm.)
+11. The automatic backup is now ONE file covering both databases + chats, so
+    there is ONE "last successful backup" date — but integrity is per-database.
+    Confirm the single combined backup-date line is intended (vs a line per
+    database).
+12. The Advanced Memory Settings screen already shows an integrity result and
+    row counts. Decide whether that stays, is removed, or defers to the new
+    Memory Controls controls, to avoid two competing homes.
+13. Interaction with §14.1 (ungated health log lines): the new on-screen status
+    lines partly satisfy "the user can tell backups are healthy," so the
+    ungated-log question can be revisited in that light.
 
 ### 15.11 What §15 does NOT change
 
