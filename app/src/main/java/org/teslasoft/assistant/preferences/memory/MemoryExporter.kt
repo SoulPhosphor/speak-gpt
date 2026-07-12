@@ -57,35 +57,37 @@ object MemoryExporter {
      * rename) and read back before success is reported. A null return means
      * the reset must not proceed.
      */
-    fun writeBackupNow(context: Context): String? = try {
-        if (isChatListUnavailable(context)) {
-            // No backup while the chat list is unreadable: it would carry no
-            // chats and could later be mistaken for the newest good copy.
-            // Returning null aborts the caller (the reset gate already
-            // treats null as "do not proceed"); the manual UI shows the
-            // owner-approved dialog before ever calling here.
-            MemoryLog.log(context, "MemoryExport", "error",
-                "Backup refused: encrypted chat storage is unavailable, so a complete chat backup cannot be created. Existing backups are untouched.")
-            return null
-        }
-        val dir = File(context.getExternalFilesDir(null), BACKUP_DIR)
-        if (!dir.exists() && !dir.mkdirs()) {
-            MemoryLog.log(context, "MemoryExport", "error", "Backup-before-reset failed: the backup folder could not be created.")
-            null
-        } else {
-            val stamp = MemoryStore.nowIso().replace(":", "-")
-            val file = File(dir, "memory-backup-$stamp.json")
-            if (AtomicFileWriter.writeAndVerify(file, buildExportJson(context))) {
-                MemoryLog.log(context, "MemoryExport", "info", "Backup written before reset: ${file.name}")
-                file.name
-            } else {
-                MemoryLog.log(context, "MemoryExport", "error", "Backup-before-reset failed: the file did not verify after writing.")
-                null
+    fun writeBackupNow(context: Context): String? {
+        return try {
+            if (isChatListUnavailable(context)) {
+                // No backup while the chat list is unreadable: it would carry
+                // no chats and could later be mistaken for the newest good
+                // copy. Returning null aborts the caller (the reset gate
+                // already treats null as "do not proceed"); the manual UI
+                // shows the owner-approved dialog before ever calling here.
+                MemoryLog.log(context, "MemoryExport", "error",
+                    "Backup refused: encrypted chat storage is unavailable, so a complete chat backup cannot be created. Existing backups are untouched.")
+                return null
             }
+            val dir = File(context.getExternalFilesDir(null), BACKUP_DIR)
+            if (!dir.exists() && !dir.mkdirs()) {
+                MemoryLog.log(context, "MemoryExport", "error", "Backup-before-reset failed: the backup folder could not be created.")
+                null
+            } else {
+                val stamp = MemoryStore.nowIso().replace(":", "-")
+                val file = File(dir, "memory-backup-$stamp.json")
+                if (AtomicFileWriter.writeAndVerify(file, buildExportJson(context))) {
+                    MemoryLog.log(context, "MemoryExport", "info", "Backup written before reset: ${file.name}")
+                    file.name
+                } else {
+                    MemoryLog.log(context, "MemoryExport", "error", "Backup-before-reset failed: the file did not verify after writing.")
+                    null
+                }
+            }
+        } catch (e: Exception) {
+            MemoryLog.log(context, "MemoryExport", "error", "Backup-before-reset failed: ${e.message}")
+            null
         }
-    } catch (e: Exception) {
-        MemoryLog.log(context, "MemoryExport", "error", "Backup-before-reset failed: ${e.message}")
-        null
     }
 
     /**
