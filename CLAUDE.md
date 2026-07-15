@@ -785,7 +785,20 @@ Everything is on-device. No cloud sync, no accounts.
   the previous process died* (low memory / force-stop / crash / ANR vs. clean
   exit) — a hard kill runs no code on the way out, so this after-the-fact query
   is the only trace a screen-off readback killed mid-sentence leaves; deduped by
-  exit timestamp.
+  exit timestamp. One line always goes to the Event (Voice Debug) log; and
+  since July 15 2026, **an app-breaking exit ALSO writes an entry to the Error
+  Log** (`"crash"` channel) so a freeze or hard death isn't invisible where a
+  user actually looks — an ANR isn't a JVM exception, so `CrashHandler` never
+  fires and nothing reached the Error Log before. `isAppBreakingExit` gates it
+  to ANR / native crash / low-memory kill / excessive-resource / init-failure
+  (memory-related = warning, the rest = error); `REASON_CRASH` (an ordinary
+  exception) is deliberately excluded because `CrashHandler` already logs it
+  there with a full trace. When the system kept a trace
+  (`ApplicationExitInfo.getTraceInputStream`, chiefly for ANR + native crash)
+  `readMainThreadTrace` extracts and caps the **main thread's** stack only
+  (no full all-thread dump; owner-approved scope) and appends it — indented so
+  it can't masquerade as a `trimByEntries` header. There is deliberately NO
+  live ANR watchdog; this is purely the after-the-fact record.
   Voice diagnostics: with any VAD-logging toggle on (Energy, WebRTC or Silero
   — each detector has its own toggle, in the Audio Debugging screen), every
   loop decision (mic open/close + why, readback, failures, loop stop reasons)

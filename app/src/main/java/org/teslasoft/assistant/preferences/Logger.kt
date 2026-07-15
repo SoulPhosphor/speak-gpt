@@ -313,6 +313,124 @@ class Logger {
                 else -> "info"
             }
             log(context, "event", "ProcessExit", level, message)
+
+            // A crash or serious freeze that makes the app unusable must ALSO
+            // leave a record in the Error Log (the "crash" channel) — where a
+            // user looks after "the app just died" — not only in the Voice
+            // Debug log above. A hard kill (an ANR = frozen main thread, a
+            // native crash, an out-of-memory kill) runs no app code on the way
+            // out and throws no JVM exception, so CrashHandler never fires and
+            // nothing reaches the Error Log at the time. This after-the-fact
+            // report, read on the next launch, is the only place that can put
+            // it there. Ordinary JVM-exception crashes (REASON_CRASH) are
+            // deliberately NOT copied here — CrashHandler already writes those
+            // with a full stack trace, so duplicating them would only bury the
+            // Error Log.
+            if (isAppBreakingExit(info.reason)) {
+                val errorLevel = when (info.reason) {
+                    // Memory / resource kills are environmental, not code
+                    // faults, so they are warnings; a freeze or native crash
+                    // is an error.
+                    ApplicationExitInfo.REASON_LOW_MEMORY,
+                    ApplicationExitInfo.REASON_EXCESSIVE_RESOURCE_USAGE -> "warning"
+                    else -> "error"
+                }
+                val trace = readMainThreadTrace(info)
+                val errorMessage = if (trace != null) "$message\nMain thread at termination:\n$trace" else message
+                log(context, "crash", "ProcessExit", errorLevel, errorMessage)
+            }
+        }
+
+        /**
+         * The abnormal, app-breaking exit reasons that must also reach the Error
+         * Log. A hard system kill runs no app code and throws no exception, so
+         * these would otherwise leave the Error Log empty. REASON_CRASH (an
+         * ordinary JVM exception) is excluded on purpose — CrashHandler already
+         * records it there with a full stack trace, so copying it would only
+         * duplicate. Normal or user-initiated exits (clean exit, force-stop,
+         * user stop, dependency died, freezer) never reach the Error Log.
+         */
+        @RequiresApi(Build.VERSION_CODES.R)
+        private fun isAppBreakingExit(reason: Int): Boolean = when (reason) {
+            ApplicationExitInfo.REASON_ANR,
+            ApplicationExitInfo.REASON_CRASH_NATIVE,
+            ApplicationExitInfo.REASON_LOW_MEMORY,
+            ApplicationExitInfo.REASON_EXCESSIVE_RESOURCE_USAGE,
+            ApplicationExitInfo.REASON_INITIALIZATION_FAILURE -> true
+            else -> false
+        }
+
+        // Trace excerpt limits. The frozen main thread's stack is the single
+        // most useful piece of an ANR report; we keep ONLY that thread's
+        // section (approved scope: main thread, never a full all-thread dump)
+        // and cap it so a large report can neither flood the Error Log nor slow
+        // the one-time read on the launch after a death.
+        private const val TRACE_MAX_LINES = 60
+        private const val TRACE_MAX_CHARS = 6000
+        // The main thread is first in an ANR dump, so this scan bound is ample
+        // while keeping the startup read cheap and finite.
+        private const val TRACE_SCAN_MAX_LINES = 400
+
+        /**
+         * The main thread's stack from the system's saved report for this exit,
+         * if one exists. Android keeps an ANR thread dump (and a native-crash
+         * tombstone) reachable via [ApplicationExitInfo.getTraceInputStream];
+         * for most other reasons it is null, so the Error Log entry then carries
+         * just the reason and description. Best-effort — any failure omits the
+         * trace and never disturbs startup. Only ever called after a deduped
+         * abnormal exit, so the read happens at most once per death, not on a
+         * normal launch.
+         */
+        @RequiresApi(Build.VERSION_CODES.R)
+        private fun readMainThreadTrace(info: ApplicationExitInfo): String? {
+            return try {
+                val lines = ArrayList<String>(TRACE_SCAN_MAX_LINES)
+                info.traceInputStream?.bufferedReader()?.use { reader ->
+                    var line = reader.readLine()
+                    var scanned = 0
+                    while (line != null && scanned < TRACE_SCAN_MAX_LINES) {
+                        lines.add(line)
+                        line = reader.readLine()
+                        scanned++
+                    }
+                } ?: return null
+                extractMainThread(lines)
+            } catch (_: Throwable) {
+                null
+            }
+        }
+
+        /**
+         * Pull just the main thread's block out of a thread dump: the line that
+         * names the "main" thread through to the blank line or the next thread
+         * header. Falls back to a capped head of the dump if the main thread
+         * cannot be located (still bounded, never the whole all-thread dump).
+         * Every kept line is indented two spaces so none can accidentally match
+         * the "[yyyy-MM-dd HH:mm:ss] " entry header and split this record when
+         * the log is later trimmed by [trimByEntries].
+         */
+        private fun extractMainThread(lines: List<String>): String? {
+            if (lines.isEmpty()) return null
+            val startIdx = lines.indexOfFirst { it.trimStart().startsWith("\"main\"") }
+            val section: List<String> = if (startIdx >= 0) {
+                val out = ArrayList<String>()
+                out.add(lines[startIdx])
+                var i = startIdx + 1
+                while (i < lines.size) {
+                    val l = lines[i]
+                    if (l.isBlank()) break
+                    // The next thread header (e.g. "Signal Catcher" prio=5 ...).
+                    if (l.trimStart().startsWith("\"") && l.contains("prio=")) break
+                    out.add(l)
+                    i++
+                }
+                out
+            } else {
+                lines
+            }
+            var text = section.take(TRACE_MAX_LINES).joinToString("\n") { "  $it" }.trimEnd()
+            if (text.length > TRACE_MAX_CHARS) text = text.take(TRACE_MAX_CHARS) + "\n  … (truncated)"
+            return text.ifBlank { null }
         }
 
         @RequiresApi(Build.VERSION_CODES.R)
