@@ -812,6 +812,29 @@ Open sub-point: the banner names "memory" vs "lorebooks" depending on which
 database is corrupt (they are separate features on separate databases).
 Final wording is Phase 2.
 
+### 15.2b Restore-from-backup is a confirmed, verified action (owner Q, July 15 2026)
+
+Owner asked whether the restore-from-backup dialog acts as a "secondary
+check" when they tap **Revert to Last Good Database**. Yes — restoring
+overwrites the current database, so it is a deliberate two-part safeguard, not
+an instant action:
+
+1. **Verify first (behind the scenes).** When Revert is tapped, the app picks
+   the newest backup and CHECKS that the backup itself is actually good before
+   trusting it (§15.6 step 3). If the newest backup is also damaged, it walks
+   to the next-older one until one passes. This prevents "restoring" from one
+   corrupt file onto another.
+2. **Confirm second (the secondary check the owner means).** Before it
+   overwrites anything, the app shows a **confirmation dialog** stating which
+   backup date it will restore and what will be lost (memories / lorebook
+   entries added since that date), and that the damaged database is kept aside
+   (§15.6). Only on confirm does the restore run. This is **A5** — its wording
+   is not yet approved. It also satisfies the app's standing rule that
+   destructive actions always get a confirm dialog.
+
+So: tapping Revert → (verify the backup is good) → **A5 confirmation** →
+restore. A5 is exactly that secondary check.
+
 ### 15.3 Crash-triggered checking (owner-directed)
 
 The integrity check should **not** run on every launch (that is part of why
@@ -938,15 +961,13 @@ screen, under the existing "save a rotating backup every day" text.
    - When pressed, the text beneath the button reads, VERBATIM:
      **`Checking database integrity. Do not close your app. Please wait.`**
    - When the check finishes, that text is **REPLACED** by the result:
-     **`Database Integrity Passed`** or **`Database Integrity Failed`**.
+     **`Database Check Passed`** or **`Database Check Failed`**.
+     (Naming unified to "Database Check" per owner, July 15 2026 — this
+     supersedes the earlier "Database Integrity Passed/Failed".)
    - On a failed result, the app offers the §15.2 recovery buttons:
      **`Repair`**, **`Revert to Last Good Database`** (restore from the newest
-     verified backup, with the §15.2 loss warning). On a passed result, no
-     action is offered.
-   - ⚠️ **CONFIRM (naming consistency):** A4 (§15.12) names the same flow
-     `Checking Database...` / `Database Check Passed` / `Database Check Failed`.
-     Here it is `Checking database integrity...` / `Database Integrity
-     Passed/Failed`. Owner to pick ONE set of names for the whole app.
+     verified backup, with the §15.2 loss warning + confirmation — see §15.2b).
+     On a passed result, no action is offered.
 
 2. **`Create Database Backup`** — a button (Title Case), **BELOW** the
    integrity button. Pressing it runs a backup immediately (existing
@@ -1002,10 +1023,10 @@ non-storage path is answered (inline integrity check → repair flow).
    `Revert to Last Good Database` (A1/A3/A4), which supersedes the earlier
    `update to the newest best database` phrasing. Confirm this label is used
    everywhere (Memory Controls manual-check flow included).
-8. **Check naming consistency:** pick ONE name set for the integrity check —
-   A4's `Checking Database...` / `Database Check Passed` / `Database Check
-   Failed`, or §15.9's `Checking database integrity...` / `Database Integrity
-   Passed` / `Database Integrity Failed`. They describe the same check.
+8. ~~Check naming consistency~~ — **RESOLVED:** the app uses "Database Check"
+   everywhere (`Database Check Passed` / `Database Check Failed`); the button
+   stays `Check Database Integrity`. Restore-from-backup is a verified +
+   confirmed action (§15.2b); only the A5 confirmation wording is still open.
 
 **STILL OPEN — behavior/placement to confirm at build time:**
 8. Does one press of `Check Database Integrity` check BOTH databases, and is
@@ -1099,12 +1120,11 @@ Inline integrity check inside A4 (under the `Check Database Integrity` button):
   > `Until then, lorebooks will be unavailable to use or save to prevent further corruption.`
   > **Buttons:** `Repair` | `Revert to Last Good Database` | `Not Now`
 
-- ⚠️ **CONFIRM (naming consistency, whole app):** A4 uses
-  `Checking Database...` / `Database Check Passed` / `Database Check Failed`,
-  while §15.9's Memory Controls check uses `Checking database integrity. Do
-  not close your app. Please wait.` / `Database Integrity Passed` /
-  `Database Integrity Failed`. These describe the SAME check. Owner to pick one
-  consistent set of names so the app doesn't use two.
+- **Naming (RESOLVED, owner July 15 2026):** the whole app uses the
+  **"Database Check"** name — `Database Check Passed` / `Database Check Failed`
+  (the Memory Controls result strings in §15.9 were updated to match; the
+  earlier "Database Integrity Passed/Failed" is superseded). The button that
+  starts it stays `Check Database Integrity`.
 
 **A5 — NOT approved** (restore loss-warning). Still open; owner has not signed
 off. Do not implement.
