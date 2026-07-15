@@ -180,7 +180,7 @@ class ChatPreferences private constructor() {
      * gates) must check the state; only OK/EMPTY/MISSING are authoritative
      * views of what exists (ChatStorageHealth.isAuthoritative).
      */
-    fun getChatListResult(context: Context): ChatListResult {
+    fun getChatListResult(context: Context, includeFirstMessage: Boolean = true): ChatListResult {
         val settings: SharedPreferences = SecurePrefs.get(context, "chat_list")
         if (SecurePrefs.isLockedName("chat_list")) {
             return ChatListResult(ChatStorageHealth.ReadState.LOCKED, arrayListOf())
@@ -219,14 +219,25 @@ class ChatPreferences private constructor() {
         )
         if (list.isEmpty()) return ChatListResult(state, arrayListOf())
 
-        for (chat in list) {
-            val messagesList = getChatById(context, Hash.hash(chat["name"].toString()))
+        // Computing first_message reads and parses each chat's ENTIRE history —
+        // O(all conversations on the device). Only the chat-list UI displays it.
+        // Callers that need just the list's state or its id/metadata (the
+        // auto-export availability gate, rename recovery, the one-time backfill)
+        // pass includeFirstMessage = false and skip that whole-store parse. It
+        // is load-bearing: this loop used to run on EVERY app start via the
+        // export's availability check on the background thread, contending with
+        // the main thread's own list load on the encrypted-prefs monitor and
+        // freezing the UI past the ANR threshold once histories grew large.
+        if (includeFirstMessage) {
+            for (chat in list) {
+                val messagesList = getChatById(context, Hash.hash(chat["name"].toString()))
 
-            if (messagesList.isNotEmpty()) {
-                val firstMessage = messagesList[0]["message"].toString()
-                chat["first_message"] = firstMessage
-            } else {
-                chat["first_message"] = "No messages yet."
+                if (messagesList.isNotEmpty()) {
+                    val firstMessage = messagesList[0]["message"].toString()
+                    chat["first_message"] = firstMessage
+                } else {
+                    chat["first_message"] = "No messages yet."
+                }
             }
         }
 

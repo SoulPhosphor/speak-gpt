@@ -135,7 +135,9 @@ object RenameJournal {
         if (entries.isEmpty()) return
 
         val listResult = try {
-            ChatPreferences.getChatPreferences().getChatListResult(context)
+            // Only the state and the chats' ids are used below — skip the
+            // per-chat history parse (this runs on the startup thread).
+            ChatPreferences.getChatPreferences().getChatListResult(context, includeFirstMessage = false)
         } catch (_: Exception) {
             return // can't establish authority without the chat list; retry next start
         }

@@ -98,8 +98,11 @@ object MemoryExporter {
      * manual flows show the owner-approved "Chat backup unavailable" dialog.
      */
     fun isChatListUnavailable(context: Context): Boolean = try {
+        // State only — this runs on every app start (before the daily throttle)
+        // and must NOT parse every chat's history. includeFirstMessage = false
+        // keeps it O(list size), not O(all conversations).
         !ChatStorageHealth.isAuthoritative(
-            ChatPreferences.getChatPreferences().getChatListResult(context).state
+            ChatPreferences.getChatPreferences().getChatListResult(context, includeFirstMessage = false).state
         )
     } catch (_: Exception) {
         true // unknown state fails conservatively: no backup claimed complete
@@ -144,7 +147,10 @@ object MemoryExporter {
         val chats = JSONArray()
         var complete = true
         val chatPreferences = ChatPreferences.getChatPreferences()
-        for (chat in chatPreferences.getChatList(context)) {
+        // first_message is discarded below (line skips it); read the list
+        // without the whole-store history parse and read each chat's history
+        // exactly once, via getChatByIdResult.
+        for (chat in chatPreferences.getChatListResult(context, includeFirstMessage = false).chats) {
             val name = chat["name"] ?: continue
             val obj = JSONObject()
             obj.put("name", name)

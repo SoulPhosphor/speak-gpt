@@ -1378,6 +1378,22 @@ Everything is on-device. No cloud sync, no accounts.
   identical prefix — the ordering discipline is what earns the caching.)
 - **`ChatPreferences` parse-failure handling**: chat data must be preserved,
   never wiped, on JSON parse errors (regression fixed in c72853a).
+- **`getChatListResult(context, includeFirstMessage)` must stay cheap for
+  state-only callers (July 15 2026, ANR fix).** Computing each chat's
+  `first_message` reads and Gson-parses that chat's ENTIRE history, so the
+  loop is O(all conversations on the device). ONLY the chat-list UI displays
+  `first_message`; every other caller (the auto-export availability gate
+  `MemoryExporter.isChatListUnavailable`/`buildAppChats`, `RenameJournal`
+  recovery, `TranscriptRecorder` backfill) passes `includeFirstMessage = false`
+  and must keep doing so. Round 4 regressed this by calling
+  `isChatListUnavailable` — which parsed every history — at the TOP of
+  `autoExportIfDue` on **every** app start (before the daily throttle), on the
+  startup housekeeping thread, concurrently with the main thread's own list
+  load; once histories grew large the two whole-store parses starved the main
+  thread past the 5 s input-dispatch deadline (the "Waited 5005ms for
+  FocusEvent" MainActivity ANR). Never make a state-only or id/metadata-only
+  chat-list read compute `first_message`, and never move a history-parsing
+  read ahead of the export throttle.
 - **Native layer** (`app/src/main/cpp`, CPU gating in `NativeCpuSupport`):
   lib loading is gated on armv8.2 dotprod+fp16 to prevent SIGILL on older
   arm64 — keep the gate if you touch JNI loading.

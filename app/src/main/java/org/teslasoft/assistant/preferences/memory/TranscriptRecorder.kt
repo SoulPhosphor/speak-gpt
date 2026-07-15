@@ -140,7 +140,10 @@ object TranscriptRecorder {
             // not complete the backfill: iterating the masked (empty) list
             // would set the done-flag and pre-existing chats would never
             // become eligible for memory review. Not a completed pass.
-            val listResult = chatPrefs.getChatListResult(context)
+            // Only the state and each chat's name/id are used; this loop reads
+            // histories itself for chats missing a transcript, so don't parse
+            // every history twice by computing first_message here.
+            val listResult = chatPrefs.getChatListResult(context, includeFirstMessage = false)
             if (!ChatStorageHealth.isAuthoritative(listResult.state)) {
                 return BackfillOutcome(false, 0)
             }
