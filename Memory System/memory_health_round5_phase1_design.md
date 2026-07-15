@@ -920,13 +920,12 @@ comma, four-digit year. This governs every date line below. (Internal
 *filenames*, such as the quarantined corrupt-DB copy in §15.6, keep a sortable
 date for correct ordering and are not user-facing display text.)
 
-**CASING RULE (style guide — owner, July 15 2026):** dialog/screen **TITLES**
-and **BUTTON LABELS** render in **ALL CAPS**. Body text, status text, banner
-sentences, and helper/notes stay **sentence case** (matches the repo specs'
-"Title/labels vs sentence-case explanations" and the existing sentence-case
-string resources, which the Material `textAllCaps` styling uppercases at
-display). Below, button labels are written in caps; status/result lines are
-sentence case unless the owner rules them "labels" (see the two ⚠️ below).
+**CASING RULE (style guide — owner, July 15 2026, CORRECTED):** dialog/screen
+**TITLES** and **BUTTON LABELS** are **Title Case** — capitalize the first
+letter of each major word (minor words like "to", "in", "the" stay lowercase),
+NOT full uppercase. Body text, status text, banner sentences, and helper/notes
+stay **sentence case**. (An earlier version of this file used full ALL CAPS —
+that was wrong and is corrected here.)
 
 The following strings are **owner-approved verbatim** — do not reword them
 without asking. Placement is in the Backups area of the Memory Controls
@@ -934,32 +933,34 @@ screen, under the existing "save a rotating backup every day" text.
 
 **Top-to-bottom order and exact text:**
 
-1. **`CHECK DATABASE INTEGRITY`** — a button (label ALL CAPS). It sits
-   **ABOVE** the Create Database Backup button.
-   - When pressed, the text beneath the button reads, VERBATIM (status text,
-     sentence case): **`Checking database integrity. Do not close your app. Please wait.`**
-   - When the check finishes, that text is **REPLACED** by the result, one of:
+1. **`Check Database Integrity`** — a button (Title Case). It sits **ABOVE**
+   the Create Database Backup button.
+   - When pressed, the text beneath the button reads, VERBATIM:
+     **`Checking database integrity. Do not close your app. Please wait.`**
+   - When the check finishes, that text is **REPLACED** by the result:
      **`Database Integrity Passed`** or **`Database Integrity Failed`**.
-     ⚠️ **CONFIRM:** these two are status results — owner to say whether they
-     are "labels" (→ ALL CAPS) or status text (→ as written).
-   - On a failed result, the app then offers the two §15.2 recovery actions
-     as buttons: **`REPAIR`**, or **`REVERT TO LAST GOOD DATABASE`** (restore
-     from the newest verified backup, carrying the §15.2 loss warning). On a
-     passed result, no action is offered.
+   - On a failed result, the app offers the §15.2 recovery buttons:
+     **`Repair`**, **`Revert to Last Good Database`** (restore from the newest
+     verified backup, with the §15.2 loss warning). On a passed result, no
+     action is offered.
+   - ⚠️ **CONFIRM (naming consistency):** A4 (§15.12) names the same flow
+     `Checking Database...` / `Database Check Passed` / `Database Check Failed`.
+     Here it is `Checking database integrity...` / `Database Integrity
+     Passed/Failed`. Owner to pick ONE set of names for the whole app.
 
-2. **`CREATE DATABASE BACKUP`** — a button (label ALL CAPS), **BELOW** the
+2. **`Create Database Backup`** — a button (Title Case), **BELOW** the
    integrity button. Pressing it runs a backup immediately (existing
    `writeBackupNow`). Status text appears underneath it: in-progress, then
    whether it completed or failed.
 
 3. **`Database Backup Failed: [Month D, YYYY]`** — a status line shown **ONLY**
    when the most recent backup attempt failed. It sits **ABOVE** the
-   last-success line. It clears when a backup next succeeds. ⚠️ **CONFIRM:**
-   status line (sentence case as written) vs "label" (→ caps).
+   last-success line. It clears when a backup next succeeds. (Cased exactly as
+   the owner wrote it.)
 
 4. **`Last successful Database Backup: [Month D, YYYY]`** — a status line,
    always shown under the "Backups" area. A stale date is itself a visible
-   warning. Same ⚠️ confirm as item 3.
+   warning. (Cased exactly as the owner wrote it.)
 
 All of the above are persistent on-screen controls/text — never Toasts,
 consistent with the app-wide no-Toast rule.
@@ -982,24 +983,29 @@ DB problem (§15.2a); banner is persistent + re-acknowledged per new chat with
 Repair / OK (§15.2a).
 
 **APPROVED wording (owner, July 15 2026 — recorded verbatim in §15.12):**
-A1 automatic dialog (both the could-not-repair and the self-repaired
-variants), A2 degraded-mode banner, A3 blocked-Analyze note + working
-buttons, A4 repeated-backup-failure dialog. Two A1 confirms are still pending
-(the `...Save` button word, and the memory-vs-lorebook loss noun) — see
-§15.12.
+A1 automatic dialog (both variants), A2 degraded-mode banner, A3
+blocked-Analyze note + working buttons, A4 repeated-backup-failure dialog
+(now a two-stage dialog with an inline integrity check that escalates to the
+repair flow on failure). **Resolved this round:** casing is Title Case not
+ALL CAPS; the revert button is `Revert to Last Good Database` ("Save"
+dropped); the loss noun follows the database ("recent memories" / "recent
+lorebook entries"); A1 now says the broken database is "unavailable to use or
+save" so a corrupt DB can't be auto-backed-up over good backups; A4's
+non-storage path is answered (inline integrity check → repair flow).
 
 **STILL OPEN — final wording not yet written (Phase 2 owner copy):**
 5. The restore loss-warning wording (what a restore would cost), for the
    memory database and for lorebooks. **A5 NOT approved** (owner hit enter
    early).
 6. The last-resort "started fresh; your old data was preserved" message text.
-7. **Button-label standardization:** the revert/restore action is now written
-   `Revert to Last Good Database` (A1/A3), which supersedes the earlier
-   `update to the newest best database` phrasing in §15.9. Confirm one label
-   is used everywhere (Memory Controls manual-check flow included).
-8. **A4 non-storage guidance:** whether the repeated-backup-failure dialog
-   should route to database repair when the cause isn't storage (§15.12 A4
-   note).
+7. **Button-label standardization:** the revert/restore action is written
+   `Revert to Last Good Database` (A1/A3/A4), which supersedes the earlier
+   `update to the newest best database` phrasing. Confirm this label is used
+   everywhere (Memory Controls manual-check flow included).
+8. **Check naming consistency:** pick ONE name set for the integrity check —
+   A4's `Checking Database...` / `Database Check Passed` / `Database Check
+   Failed`, or §15.9's `Checking database integrity...` / `Database Integrity
+   Passed` / `Database Integrity Failed`. They describe the same check.
 
 **STILL OPEN — behavior/placement to confirm at build time:**
 8. Does one press of `Check Database Integrity` check BOTH databases, and is
@@ -1025,65 +1031,80 @@ buttons, A4 repeated-backup-failure dialog. Two A1 confirms are still pending
 These strings are **owner-approved verbatim**. Record and implement them
 exactly; do not reword without asking. Dates render `Month D, YYYY`.
 
-**CASING (style guide):** dialog **TITLES** and **BUTTON LABELS** are ALL
-CAPS; **body text stays sentence case**. Titles and labels below are shown in
-caps to match on-screen appearance; bodies are left sentence case as the
-owner wrote them. (The owner's earlier Title-Case typing of these titles is
-superseded by the all-caps style-guide rule.)
+**CASING (style guide, CORRECTED):** dialog **TITLES** and **BUTTON LABELS**
+are **Title Case** (first letter of each major word capitalized), NOT full
+uppercase. **Body text stays sentence case.**
+
+**Database name is variable:** every string below is written with the
+affected database named ("lorebooks" / "memory"). At build time the app fills
+in whichever database is actually affected — and the loss noun matches it
+("recent memories" for the memory database; "recent lorebook entries" for the
+lorebook database).
 
 **A1 — Automatic database-problem dialog (problem found, could NOT auto-repair).**
 Appears at startup after a crash when the integrity check finds a damaged
-database and repair was not possible. Blocking; user must choose.
-> **Title:** `DATABASE PROBLEM FOUND!`
+database and repair was not possible. Blocking; user must choose. (Lorebook
+variant shown; memory variant swaps the database name and loss noun.)
+> **Title:** `Database Problem Found!`
 > **Body (sentence case):**
-> `Your lorebooks database is damaged and couldn't be repaired automatically. You can try a repair, or replace it with your latest good backup. This may cause recent memories to be lost.`
+> `Your lorebooks database is damaged and couldn't be repaired automatically. You can try a repair, or replace it with your latest good backup. This may cause recent lorebook entries to be lost.`
 >
-> `Until then, lorebooks will be unavailable to prevent further corruption.`
-> **Buttons (ALL CAPS, AS TYPED — see confirm note):** `REPAIR` | `REVERT TO LAST GOOD DATABASE SAVE` | `NOT NOW`
+> `Until then, lorebooks will be unavailable to use or save to prevent further corruption.`
+> **Buttons:** `Repair` | `Revert to Last Good Database` | `Not Now`
 
-- ⚠️ **CONFIRM (buttons):** the middle button was typed
-  `Revert to Last Good Database Save`, but A3 (below) uses
-  `Revert to Last Good Database` (no "Save"). Recorded exactly as typed;
-  owner to confirm whether the button is `REVERT TO LAST GOOD DATABASE` and
-  "Save" was a stray word. NOT resolved by the agent.
-- ⚠️ **CONFIRM (memory vs lorebook noun):** this example is the lorebook
-  variant, but its loss clause says "recent memories." For the memory
-  database the whole thing swaps to "memory"; for the lorebook database the
-  loss clause may need to read "recent lorebook changes" instead of "recent
-  memories." Owner to confirm the per-database noun.
+- **"...unavailable to use or save..."** (owner addition): the broken database
+  is blocked from being SAVED too, not just used. This is deliberate and
+  important when automatic daily backups are ON — otherwise the auto-backup
+  could copy the corrupt database over the good backups. (Consistent with
+  §15.1/§15.6: backups pause while a database is degraded.)
 
 **A1 — Automatic dialog (the app repaired it itself).** Informational.
-> **Title:** `DATABASE REPAIRED`
+> **Title:** `Database Repaired`
 > **Body (sentence case):** `A problem was found in your [memory / lorebook] database and repaired automatically. Everything should be working normally.`
 > **Button:** `OK`
 
 **A2 — Degraded-mode banner (top of every new chat while disabled).**
 Persistent, dismissible, re-shown per new chat. Banner text is a sentence
-(sentence case); its buttons are ALL CAPS.
+(sentence case); its buttons are Title Case.
 > **Memory variant:** `Memory is currently turned off because of a database problem. Tap Repair to fix it.`
 > **Lorebook variant:** `Lorebooks are currently turned off because of a database problem. Tap Repair to fix it.`
-> **Buttons:** `REPAIR` | `OK`
+> **Buttons:** `Repair` | `OK`
 
 **A3 — Blocked "Analyze Conversations" note + working actions.** Shown where
 the Analyze/Archivist action would be; the action stays blocked while any DB
 problem exists, and these buttons are FUNCTIONAL (owner: "make those buttons
-that work"). Note text is sentence case; buttons ALL CAPS.
+that work"). Note text is sentence case; buttons Title Case.
 > **Text (sentence case):** `Unable to analyze conversations due to current memory database corruption. You may try to repair it again or revert to last known good database. Caution reverting may cause recent memories to be lost.`
-> **Buttons (working):** `REPAIR` | `REVERT TO LAST GOOD DATABASE`
+> **Buttons (working):** `Repair` | `Revert to Last Good Database`
 
 **A4 — Repeated-backup-failure dialog (after 3 consecutive failed backups).**
-Blocking.
-> **Title:** `BACKUP ATTEMPTS FAILED`
+Blocking. Owner expanded this into a two-stage dialog: first the storage
+message with an inline integrity check; if the check fails, it escalates to
+the corruption/repair flow.
+> **Title:** `Backup Attempts Failed`
 > **Body (sentence case):** `Your device may be low on storage space. Please choose another location or free up space.`
-> **Buttons:** `SAVE BACK UP IN NEW LOCATION` | `RETRY` | `OKAY`
+> `If you have enough storage space, try checking the database integrity.`
+> **Buttons:** `Save Back Up in New Location` | `Retry` | `Okay` | `Check Database Integrity`
 
-- **OPEN (owner asked):** what the user should do if the failure is NOT a
-  storage problem — see §15.10 open item and the chat answer. The
-  `Save Back Up in New Location` button already covers folder-permission /
-  unavailable-location causes (it uses the system picker to a writable spot);
-  if even that fails, the source database itself is likely unreadable, which
-  is a corruption problem and should route to Check Database Integrity /
-  Repair (A1/A3). Whether A4 should say so is not yet decided.
+Inline integrity check inside A4 (under the `Check Database Integrity` button):
+- While running (status text, sentence case): `Checking Database...`
+- Then it disappears and shows the result: `Database Check Passed` or
+  `Database Check Failed`.
+- On **`Database Check Failed`**, A4 escalates to the corruption/repair flow
+  (same content as A1-could-not-repair):
+  > **Heading:** `Database check failed and could not be repaired.`
+  > **Body (sentence case):**
+  > `Your lorebooks database is damaged and couldn't be repaired automatically. You can try a repair, or replace it with your latest good backup. This may cause recent lorebook entries to be lost.`
+  >
+  > `Until then, lorebooks will be unavailable to use or save to prevent further corruption.`
+  > **Buttons:** `Repair` | `Revert to Last Good Database` | `Not Now`
+
+- ⚠️ **CONFIRM (naming consistency, whole app):** A4 uses
+  `Checking Database...` / `Database Check Passed` / `Database Check Failed`,
+  while §15.9's Memory Controls check uses `Checking database integrity. Do
+  not close your app. Please wait.` / `Database Integrity Passed` /
+  `Database Integrity Failed`. These describe the SAME check. Owner to pick one
+  consistent set of names so the app doesn't use two.
 
 **A5 — NOT approved** (restore loss-warning). Still open; owner has not signed
 off. Do not implement.
