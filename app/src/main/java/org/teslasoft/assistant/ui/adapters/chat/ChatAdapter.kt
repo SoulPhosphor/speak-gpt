@@ -338,10 +338,11 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         }
 
         /**
-         * Small persistent inline marker shown on an assistant reply that did
-         * not finish streaming (interrupted / stopped / failed / an
-         * unrecognized non-complete state). The partial text stays visible
-         * above it. For a failed reply, the coded error is shown next to the
+         * Small persistent inline marker shown after an assistant reply did
+         * not finish (interrupted / stopped / failed / an unrecognized
+         * non-complete state). It stays hidden while the reply is still
+         * streaming. The partial text stays visible above it. For a failed
+         * reply, the coded error is shown next to the
          * marker ONLY when "Show chat errors" is on, and always separately from
          * the model's own words (it lives in a different field). No toast,
          * dialog, notification, or sound — just this line.
@@ -349,7 +350,10 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         private fun updateStatusMarker(chatMessage: HashMap<String, Any>) {
             val marker = statusMarker ?: return
             val state = chatMessage[MessageCompletionState.KEY_STATE]?.toString()
-            if (chatMessage["isBot"] != true || MessageCompletionState.isComplete(state)) {
+            if (chatMessage["isBot"] != true ||
+                MessageCompletionState.isComplete(state) ||
+                state == MessageCompletionState.STREAMING
+            ) {
                 marker.visibility = View.GONE
                 return
             }
