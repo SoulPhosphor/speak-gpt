@@ -1015,14 +1015,13 @@ save" so a corrupt DB can't be auto-backed-up over good backups; A4's
 non-storage path is answered (inline integrity check → repair flow).
 
 **STILL OPEN — final wording not yet written (Phase 2 owner copy):**
-5. The restore loss-warning wording (what a restore would cost), for the
-   memory database and for lorebooks. **A5 NOT approved** (owner hit enter
-   early).
-6. The last-resort "started fresh; your old data was preserved" message text.
-7. **Button-label standardization:** the revert/restore action is written
-   `Revert to Last Good Database` (A1/A3/A4), which supersedes the earlier
-   `update to the newest best database` phrasing. Confirm this label is used
-   everywhere (Memory Controls manual-check flow included).
+5. ~~restore loss-warning~~ — **A5 APPROVED** (§15.12), "Backup" capitalized.
+6. **(A6)** The last-resort "started fresh; your old data was preserved"
+   message text — shown only when a database is corrupt, unrepairable, AND has
+   no usable backup.
+7. **(A7)** Button-label standardization: confirm `Revert to Last Good
+   Database` (A1/A3/A4/A5) is THE label used everywhere, retiring the earlier
+   `update to the newest best database` phrasing.
 8. ~~Check naming consistency~~ — **RESOLVED:** the app uses "Database Check"
    everywhere (`Database Check Passed` / `Database Check Failed`); the button
    stays `Check Database Integrity`. Restore-from-backup is a verified +
@@ -1126,8 +1125,16 @@ Inline integrity check inside A4 (under the `Check Database Integrity` button):
   earlier "Database Integrity Passed/Failed" is superseded). The button that
   starts it stays `Check Database Integrity`.
 
-**A5 — NOT approved** (restore loss-warning). Still open; owner has not signed
-off. Do not implement.
+**A5 — Restore-from-backup confirmation dialog (APPROVED, owner July 15 2026).**
+The §15.2b secondary check: appears when the user taps `Revert to Last Good
+Database`, after the app has verified the backup is good, before it overwrites
+anything. Blocking confirm. (Lorebook variant shown alongside memory; the app
+fills in the affected database, the real backup date in `Month D, YYYY`, and
+the matching loss noun.)
+> **Title:** `Restore from Backup?`
+> **Body — memory (sentence case):** `This replaces your damaged memory database with your last good Backup from [Month D, YYYY]. Any memories added after that date will be lost. Your damaged database will be kept aside, not deleted.`
+> **Body — lorebook (sentence case):** `This replaces your damaged lorebook database with your last good Backup from [Month D, YYYY]. Any lorebook entries added after that date will be lost. Your damaged database will be kept aside, not deleted.`
+> **Buttons:** `Restore` | `Cancel`
 
 ### 15.11 What §15 does NOT change
 
