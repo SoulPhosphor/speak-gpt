@@ -970,21 +970,25 @@ date display format `Month D, YYYY` (§15.9); Archivist hard-disabled on any
 DB problem (§15.2a); banner is persistent + re-acknowledged per new chat with
 Repair / OK (§15.2a).
 
+**APPROVED wording (owner, July 15 2026 — recorded verbatim in §15.12):**
+A1 automatic dialog (both the could-not-repair and the self-repaired
+variants), A2 degraded-mode banner, A3 blocked-Analyze note + working
+buttons, A4 repeated-backup-failure dialog. Two A1 confirms are still pending
+(the `...Save` button word, and the memory-vs-lorebook loss noun) — see
+§15.12.
+
 **STILL OPEN — final wording not yet written (Phase 2 owner copy):**
-1. The AUTOMATIC (crash-triggered) DB-issue dialog text — the one that pops up
-   on detection at startup, distinct from the manual-check strings already set
-   in §15.9.
-2. The degraded-mode per-new-chat banner sentence (the Repair / OK button
-   labels are set; the sentence naming "memory" vs "lorebooks" is not).
-3. The disabled-Archivist inline note text.
-4. The 3-strikes backup-failure dialog text, and the label of its
-   "save a backup somewhere else now" button.
 5. The restore loss-warning wording (what a restore would cost), for the
-   memory database and for lorebooks.
+   memory database and for lorebooks. **A5 NOT approved** (owner hit enter
+   early).
 6. The last-resort "started fresh; your old data was preserved" message text.
-7. The exact button label for the **update to the newest best database**
-   action (owner gave the phrase; confirm it is the literal on-screen label or
-   a shorter one).
+7. **Button-label standardization:** the revert/restore action is now written
+   `Revert to Last Good Database` (A1/A3), which supersedes the earlier
+   `update to the newest best database` phrasing in §15.9. Confirm one label
+   is used everywhere (Memory Controls manual-check flow included).
+8. **A4 non-storage guidance:** whether the repeated-backup-failure dialog
+   should route to database repair when the cause isn't storage (§15.12 A4
+   note).
 
 **STILL OPEN — behavior/placement to confirm at build time:**
 8. Does one press of `Check Database Integrity` check BOTH databases, and is
@@ -1004,6 +1008,68 @@ Repair / OK (§15.2a).
 13. Interaction with §14.1 (ungated health log lines): the new on-screen status
     lines partly satisfy "the user can tell backups are healthy," so the
     ungated-log question can be revisited in that light.
+
+### 15.12 Approved verbatim wording — owner, July 15 2026
+
+These strings are **owner-approved verbatim**. Record and implement them
+exactly; do not reword without asking. Buttons are listed by their labels
+(the parentheses are not part of the label). Dates render `Month D, YYYY`.
+
+**A1 — Automatic database-problem dialog (problem found, could NOT auto-repair).**
+Appears at startup after a crash when the integrity check finds a damaged
+database and repair was not possible. Blocking; user must choose.
+> **Title:** `Database problem found!`
+> **Body:**
+> `Your lorebooks database is damaged and couldn't be repaired automatically. You can try a repair, or replace it with your latest good backup. This may cause recent memories to be lost.`
+>
+> `Until then, lorebooks will be unavailable to prevent further corruption.`
+> **Buttons (AS TYPED — see confirm note):** `Repair` | `Revert to Last Good Database Save` | `Not Now`
+
+- ⚠️ **CONFIRM (buttons):** the middle button was typed
+  `Revert to Last Good Database Save`, but A3 (below) uses
+  `Revert to Last Good Database` (no "Save"). Recorded exactly as typed;
+  owner to confirm whether the button is `Revert to Last Good Database` and
+  "Save" was a stray word. NOT resolved by the agent.
+- ⚠️ **CONFIRM (memory vs lorebook noun):** this example is the lorebook
+  variant, but its loss clause says "recent memories." For the memory
+  database the whole thing swaps to "memory"; for the lorebook database the
+  loss clause may need to read "recent lorebook changes" instead of "recent
+  memories." Owner to confirm the per-database noun.
+
+**A1 — Automatic dialog (the app repaired it itself).** Informational.
+> **Title:** `Database Repaired`
+> **Body:** `A problem was found in your [memory / lorebook] database and repaired automatically. Everything should be working normally.`
+> **Button:** `OK`
+
+**A2 — Degraded-mode banner (top of every new chat while disabled).**
+Persistent, dismissible, re-shown per new chat.
+> **Memory variant:** `Memory is currently turned off because of a database problem. Tap Repair to fix it.`
+> **Lorebook variant:** `Lorebooks are currently turned off because of a database problem. Tap Repair to fix it.`
+> **Buttons:** `Repair` | `OK`
+
+**A3 — Blocked "Analyze Conversations" note + working actions.** Shown where
+the Analyze/Archivist action would be; the action stays blocked while any DB
+problem exists, and these buttons are FUNCTIONAL (owner: "make those buttons
+that work").
+> **Text:** `Unable to analyze conversations due to current memory database corruption. You may try to repair it again or revert to last known good database. Caution reverting may cause recent memories to be lost.`
+> **Buttons (working):** `Repair` | `Revert to Last Good Database`
+
+**A4 — Repeated-backup-failure dialog (after 3 consecutive failed backups).**
+Blocking.
+> **Title:** `Backup Attempts Failed`
+> **Body:** `Your device may be low on storage space. Please choose another location or free up space.`
+> **Buttons:** `Save Back Up in New Location` | `Retry` | `Okay`
+
+- **OPEN (owner asked):** what the user should do if the failure is NOT a
+  storage problem — see §15.10 open item and the chat answer. The
+  `Save Back Up in New Location` button already covers folder-permission /
+  unavailable-location causes (it uses the system picker to a writable spot);
+  if even that fails, the source database itself is likely unreadable, which
+  is a corruption problem and should route to Check Database Integrity /
+  Repair (A1/A3). Whether A4 should say so is not yet decided.
+
+**A5 — NOT approved** (restore loss-warning). Still open; owner has not signed
+off. Do not implement.
 
 ### 15.11 What §15 does NOT change
 
