@@ -3403,10 +3403,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     private fun resumeHandsFreeForManualTurn() {
         if (preferences?.getHandsFreeMode() != true) return
         if (!handsFreeStopped && !cancelState) return
-        logVoiceEvent("manual turn while hands-free is on — resuming the loop a prior error/hang-up had stopped")
         handsFreeStopped = false
         cancelState = false
         handsFreeTurnRetries = 0
+        startHandsFreeService()
+        logVoiceEvent("manual turn restored the hands-free loop and restarted its keep-alive service after a prior error/hang-up")
     }
 
     private fun parseMessage(message: String, shouldAdd: Boolean = true) {
