@@ -808,9 +808,9 @@ While in degraded mode:
   them must be visibly, explicitly blocked with the reason — never silently
   inert.
 
-Open sub-point: the banner names "memory" vs "lorebooks" depending on which
-database is corrupt (they are separate features on separate databases).
-Final wording is Phase 2.
+Open sub-point: the banner names **Memory**, **Lorebooks**, or **both**
+depending on which database(s) failed (they are separate features on separate
+databases; both can fail at once). Final wording is Phase 2.
 
 ### 15.2b Restore-from-backup is a confirmed, verified action (owner Q, July 15 2026)
 
@@ -834,6 +834,31 @@ an instant action:
 
 So: tapping Revert → (verify the backup is good) → **A5 confirmation** →
 restore. A5 is exactly that secondary check.
+
+### 15.2c Mid-conversation detection — audio warning + existing banner (B9 RESOLVED, owner July 15 2026)
+
+If a memory or lorebook database failure is detected **mid-conversation**:
+
+1. **Immediately play a distinct audio warning.** Its purpose is to notify
+   hands-free users who may not be looking at the screen. "Distinct" = not
+   confusable with the existing chimes (error / done / no-speech two-tone).
+2. **Then show the already-approved persistent top banner (§15.2a / A2)** —
+   unchanged.
+
+Hard constraints (owner):
+- **Do NOT add a new dialog** for the mid-conversation case.
+- **Do NOT redesign the existing warning behavior.** The banner is exactly
+  §15.2a / A2: stays visible until dismissed; `Repair` and `OK` buttons;
+  reappears in each new chat while the affected database stays disabled; names
+  **Memory**, **Lorebooks**, or **both** depending on what failed.
+
+This is the mid-session path only; the startup behavior in §15.2 is unchanged.
+
+⚠️ **One build detail to pin down** (owner may answer now or at build): the
+audio warning's stated purpose is hands-free users not looking at the screen —
+should it therefore play **only during hands-free/voice sessions**, or **always**
+on mid-session detection (typed sessions too)? Recorded as "play immediately"
+per the instruction; this only scopes WHEN.
 
 ### 15.3 Crash-triggered checking (owner-directed)
 
@@ -1033,10 +1058,10 @@ non-storage path is answered (inline integrity check → repair flow).
    approved in §15.12 (`Database Check Complete` / `Database Check Incomplete`,
    per-database status lines). Buttons for that result + adopting the format in
    A4/§15.9 still to confirm (see §15.12 B8 notes).
-9. **(B9) OPEN — needs re-framing (owner asked for specifics, July 15 2026).**
-   NOTE: this is NOT about re-adding startup work — the "don't check every
-   launch" decision (§15.3) stands. B9 only asks, once a problem is found,
-   WHERE the alerting happens. See the chat re-explanation.
+9. ~~(B9) mid-session alerting~~ — **B9 RESOLVED (owner July 15 2026, §15.2c):**
+   mid-conversation detection plays a distinct audio warning immediately, then
+   shows the existing §15.2a/A2 banner — NO new dialog, no redesign. One build
+   detail open: whether the audio plays only in hands-free sessions or always.
 10. Does degraded mode persist across app restarts until repaired? (Assumed
     yes; confirm.)
 11. The automatic backup is now ONE file covering both databases + chats, so
