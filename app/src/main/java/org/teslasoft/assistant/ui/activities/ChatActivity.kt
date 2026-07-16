@@ -192,8 +192,11 @@ import org.teslasoft.assistant.ui.onboarding.WelcomeActivity
 import org.teslasoft.assistant.ui.permission.CameraPermissionActivity
 import org.teslasoft.assistant.ui.permission.MicrophonePermissionActivity
 import org.teslasoft.assistant.util.Hash
+import org.teslasoft.assistant.util.GenFailureKind
 import org.teslasoft.assistant.util.GenErrorResult
 import org.teslasoft.assistant.util.GenerationErrorClassifier
+import org.teslasoft.assistant.util.GenerationErrorSanitizer
+import org.teslasoft.assistant.util.GenerationRequestState
 import org.teslasoft.assistant.util.LocaleParser
 import org.teslasoft.assistant.util.WindowInsetsUtil
 import org.teslasoft.assistant.util.chatMessage
@@ -3947,6 +3950,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         // socket, and the request dies with "Software caused connection abort").
         GenerationForegroundService.begin(this, chatId, chatName)
 
+        var requestState: GenerationRequestState? = null
         try {
             var response = ""
 
@@ -4002,14 +4006,24 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     )
                 }
 
+                requestState = newGenerationRequestState(
+                    operation = "chat completion with image",
+                    provider = currentProviderName(),
+                    requestModel = "gpt-4o",
+                    streaming = true,
+                )
                 val completions: Flow<ChatCompletionChunk> = ai!!.chatCompletions(chatCompletionRequest)
 
                 scroll(true)
 
                 completions.flowOn(Dispatchers.IO).collect { v ->
                     run {
+                        requestState?.firstStreamEventArrived = true
                         if (!currentCoroutineContext().isActive) throw CancellationException()
                         else if (v.choices[0].delta != null && v.choices[0].delta?.content != null && v.choices[0].delta?.content.toString() != "null") {
+                            if (v.choices[0].delta?.content.toString().isNotEmpty()) {
+                                requestState?.responseTextArrived = true
+                            }
                             response += v.choices[0].delta?.content
                             if (response != "null") {
                                 messages[messages.size - 1]["message"] = response
@@ -4071,12 +4085,22 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     )
                 }
 
+                requestState = newGenerationRequestState(
+                    operation = "legacy text completion",
+                    provider = currentProviderName(),
+                    requestModel = model,
+                    streaming = true,
+                )
                 val completions: Flow<TextCompletion> = ai!!.completions(completionRequest)
 
                 completions.flowOn(Dispatchers.IO).collect { v ->
                     run {
+                        requestState?.firstStreamEventArrived = true
                         if (!currentCoroutineContext().isActive) throw CancellationException()
                         else if (v.choices[0] != null && v.choices[0].text != null && v.choices[0].text.toString() != "null") {
+                            if (v.choices[0].text.toString().isNotEmpty()) {
+                                requestState?.responseTextArrived = true
+                            }
                             response += v.choices[0].text
                             messages[messages.size - 1]["message"] = response
                             if (messages.size > 2) {
@@ -4160,7 +4184,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                         toolChoice = ToolChoice.Auto
                     }
 
+                    requestState = newGenerationRequestState(
+                        operation = "function-routing request",
+                        provider = currentProviderName(),
+                        requestModel = "gpt-4o",
+                        streaming = false,
+                    )
                     val response1 = openAIAI?.chatCompletion(functionRequest)
+                    if (response1 != null) requestState?.responseTextArrived = true
 
                     val message = response1?.choices?.first()?.message
 
@@ -4168,7 +4199,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                         val toolsCalls = message.toolCalls!!
 
                         if (toolsCalls.isEmpty()) {
-                            regularGPTResponse(shouldPronounce)
+                            regularGPTResponse(shouldPronounce) { requestState = it }
                         } else {
                             for (toolCall in toolsCalls) {
                                 require(toolCall is ToolCall.Function) { "Tool call is not a function" }
@@ -4179,7 +4210,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                             ChatPreferences.getChatPreferences().putTimestampToChatById(this, chatId)
                         }
                     } else {
-                        regularGPTResponse(shouldPronounce)
+                        regularGPTResponse(shouldPronounce) { requestState = it }
                     }
                 } else if (functionCallingEnabled) {
                     putMessage("Function calling requires OpenAI endpoint which is missing on your device. Please go to the settings and add OpenAI endpoint or disable Function Calling. OpenAI base url (host) is: https://api.openai.com/v1/ (don't forget to add slash at the end otherwise you will receive an error).", true)
@@ -4194,7 +4225,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                         .setNegativeButton("Cancel") { _, _ -> }
                         .show()
                 } else {
-                    regularGPTResponse(shouldPronounce)
+                    regularGPTResponse(shouldPronounce) { requestState = it }
                 }
             }
         } catch (_: CancellationException) {
@@ -4221,10 +4252,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             stopHandsFreeOnError()
             // Single funnel: classify the failure to a stable code, always write
             // the diagnostic Error Log entry, and show the user the short coded
-            // message (no profile/URL/model/trace — those live in the log). See
+            // message (request details and safe exception structure stay in the log). See
             // ERROR_CODES.md.
-            val genError = GenerationErrorClassifier.classify(e)
-            logGenerationError(genError, e, "message")
+            val genError = GenerationErrorClassifier.classify(e, requestState)
+            logGenerationError(genError, e, "message", requestState)
             val response = genError.chatMessage(this)
 
             if (messages.isEmpty() || messages[messages.size - 1]["isBot"] == false) {
@@ -4371,41 +4402,61 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     private fun isVoiceLive(): Boolean =
         preferences?.getHandsFreeMode() == true || isRecording || handsFreeReadbackExpected
 
+    private fun newGenerationRequestState(
+        operation: String,
+        provider: String,
+        requestModel: String,
+        streaming: Boolean,
+    ): GenerationRequestState = GenerationRequestState(
+        startedAtMillis = android.os.SystemClock.elapsedRealtime(),
+        operation = operation,
+        provider = provider,
+        model = requestModel,
+        streaming = streaming,
+    )
+
+    private fun currentProviderName(endpoint: ApiEndpointObject? = apiEndpointObject): String =
+        endpoint?.label?.takeIf { it.isNotBlank() } ?: "unlabeled endpoint"
+
     /**
-     * Write the always-on Error Log entry for a classified generation failure
-     * (ERROR_CODES.md). Unlike the chat message, this carries the diagnostic
-     * context the chat deliberately omits — profile, Base URL, model, voice flag,
-     * HTTP status — plus the exception detail, or the full stack trace for the
-     * ambiguous/unknown codes (S2/U0). Written on every error regardless of the
-     * "Show chat errors" toggle, which controls only the chat display. Never logs
-     * the API key, headers, or prompt text.
-     *
-     * The entry is written to the "crash" channel, which is the user-facing Error
-     * Log. `trigger` is which generation path failed (e.g. "message",
-     * "image-generation"); finer values (regenerate/continue) can be threaded
-     * through the funnel later. When voice is live a compact snapshot is appended,
-     * and the full last-known voice info is left in the Voice Debug Log too (see
-     * logVoiceFailureSnapshot) so a clue is there even with per-turn logging off.
+     * Write the always-on Error Log entry for a classified generation failure.
+     * Only structured request facts, exception classes, and message-free stack
+     * frames are recorded. Raw exception messages, URLs, headers, prompts,
+     * responses, and provider error bodies never enter this log entry.
      */
-    private fun logGenerationError(result: GenErrorResult, e: Throwable, trigger: String) {
+    private fun logGenerationError(
+        result: GenErrorResult,
+        e: Throwable,
+        trigger: String,
+        requestState: GenerationRequestState?,
+    ) {
         val voiceLive = isVoiceLive()
         try {
             val sb = StringBuilder()
             sb.append(result.chatMessage(this)).append('\n')
-            sb.append("Profile: ${apiEndpointObject?.label ?: "unknown"}\n")
-            sb.append("Base URL: ${apiEndpointObject?.host ?: "unknown"}\n")
-            sb.append("Model: ${model.ifBlank { "unknown" }}\n")
+            sb.append("Error code: ${result.code.code}\n")
+            sb.append("Operation: ${safeDiagnosticField(requestState?.operation ?: trigger)}\n")
+            sb.append("Provider: ${safeDiagnosticField(requestState?.provider ?: currentProviderName())}\n")
+            sb.append("Model: ${safeDiagnosticField(requestState?.model ?: model.ifBlank { "unknown" })}\n")
+            sb.append("Streaming request: ${requestState?.streaming?.toString() ?: "unknown"}\n")
+            sb.append("First stream event arrived: ${requestState?.firstStreamEventArrived?.toString() ?: "unknown"}\n")
+            sb.append("Response text arrived: ${requestState?.responseTextArrived?.toString() ?: "unknown"}\n")
+            sb.append("Elapsed: ${elapsedDescription(requestState)}\n")
+            sb.append("Timeout type: ${timeoutTypeDescription(result)}\n")
+            sb.append("Configured timeout: ${configuredTimeoutDescription(result)}\n")
             sb.append("Voice: ${if (voiceLive) "active" else "inactive"}\n")
             sb.append("Trigger: $trigger\n")
             sb.append("Screen: ${screenState()}\n")
             sb.append("Network: ${networkState()}\n")
             sb.append("Power save: ${powerSaveState()}")
             result.httpStatus?.let { sb.append("\nHTTP status: $it") }
+            sb.append("\nException classes: ")
+                .append(GenerationErrorSanitizer.exceptionClassNames(e).joinToString(" -> "))
+            sb.append("\nSanitized detail: ").append(GenerationErrorSanitizer.safeDetail(result))
             if (voiceLive) sb.append('\n').append(compactVoiceContext())
             if (result.code.includeStackTrace) {
-                sb.append("\n\n").append(e.stackTraceToString())
-            } else {
-                e.message?.takeIf { it.isNotBlank() }?.let { sb.append("\nDetail: $it") }
+                sb.append("\n\nSanitized stack frames:\n")
+                    .append(GenerationErrorSanitizer.safeStackTrace(e))
             }
             org.teslasoft.assistant.preferences.Logger.log(this, "crash", "GenError", "error", sb.toString())
         } catch (_: Throwable) { /* never let diagnostics crash the error path */ }
@@ -4413,6 +4464,37 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         // Failure clue into the Voice Debug Log even when per-turn voice logging is
         // off (ERROR_CODES.md section 5). No-op when voice wasn't live.
         logVoiceFailureSnapshot(result.code.code)
+    }
+
+    private fun safeDiagnosticField(value: String): String = value
+        .replace(Regex("""https?://\S+""", RegexOption.IGNORE_CASE), "[URL omitted]")
+        .replace(Regex("""[\r\n\t]+"""), " ")
+        .take(160)
+        .ifBlank { "unknown" }
+
+    private fun elapsedDescription(state: GenerationRequestState?): String {
+        if (state == null) return "unknown"
+        val elapsed = (android.os.SystemClock.elapsedRealtime() - state.startedAtMillis).coerceAtLeast(0L)
+        return "$elapsed ms (${String.format(Locale.US, "%.1f", elapsed / 1000.0)} seconds)"
+    }
+
+    private fun timeoutTypeDescription(result: GenErrorResult): String = when (result.kind) {
+        GenFailureKind.CONNECT_TIMEOUT -> "connect"
+        GenFailureKind.NO_RESPONSE_DATA_TIMEOUT -> "read/socket before response data"
+        GenFailureKind.STREAM_INACTIVITY_TIMEOUT -> "streaming inactivity"
+        GenFailureKind.OVERALL_TIMEOUT -> "call/overall"
+        else -> "not applicable"
+    }
+
+    private fun configuredTimeoutDescription(result: GenErrorResult): String {
+        val millis = result.configuredTimeoutMillis ?: return when (result.kind) {
+            GenFailureKind.CONNECT_TIMEOUT,
+            GenFailureKind.NO_RESPONSE_DATA_TIMEOUT,
+            GenFailureKind.STREAM_INACTIVITY_TIMEOUT,
+            GenFailureKind.OVERALL_TIMEOUT -> "client default or not reported by the exception"
+            else -> "not applicable"
+        }
+        return "$millis ms (${String.format(Locale.US, "%.1f", millis / 1000.0)} seconds)"
     }
 
     /** "on"/"off"/"unknown" — whether the screen was interactive at failure time.
@@ -4724,7 +4806,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         }
     }
 
-    private suspend fun regularGPTResponse(shouldPronounce: Boolean) {
+    private suspend fun regularGPTResponse(
+        shouldPronounce: Boolean,
+        onRequestStarted: (GenerationRequestState) -> Unit,
+    ) {
         disableAutoScroll = false
 
         var response = ""
@@ -4943,6 +5028,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             )
         }
 
+        val requestState = newGenerationRequestState(
+            operation = "chat completion",
+            provider = currentProviderName(),
+            requestModel = model,
+            streaming = true,
+        )
+        onRequestStarted(requestState)
         val completions: Flow<ChatCompletionChunk> =
             ai!!.chatCompletions(chatCompletionRequest)
 
@@ -4950,8 +5042,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
         completions.flowOn(Dispatchers.IO).collect { v ->
             run {
+                requestState.firstStreamEventArrived = true
                 if (!currentCoroutineContext().isActive) throw CancellationException()
                 else if (v.choices[0].delta != null && v.choices[0].delta?.content != null && v.choices[0].delta?.content.toString() != "null") {
+                    if (v.choices[0].delta?.content.toString().isNotEmpty()) {
+                        requestState.responseTextArrived = true
+                    }
                     response += v.choices[0].delta?.content
                     messages[messages.size - 1]["message"] = response
                     if (messages.size > 2) {
@@ -5369,6 +5465,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     fun generateImageAsync(
         client: OpenAIClient,
         params: ImageGenerateParams,
+        requestState: GenerationRequestState,
         onSuccess: (String) -> Unit,
         onError: (Throwable) -> Unit
     ) : Job {
@@ -5381,6 +5478,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             try {
                 var imageId: String
                 val response = client.images().generate(params)
+                requestState.responseTextArrived = true
                 val data: Optional<List<Image>> = response.data()
                 val images = data.orElse(emptyList())
 
@@ -5417,12 +5515,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         chat?.setOnTouchListener(null)
         disableAutoScroll = false
         // chat?.transcriptMode = ListView.TRANSCRIPT_MODE_ALWAYS_SCROLL
+        var requestState: GenerationRequestState? = null
         try {
             if (preferences!!.getImageModel().contains("gpt-image-")) {
+                val endpoint = apiEndpointPreferences!!.getApiEndpoint(this, preferences!!.getApiEndpointId())
                 val client: OpenAIClient = OpenAIOkHttpClient
                     .builder()
-                    .baseUrl(apiEndpointPreferences!!.getApiEndpoint(this, preferences!!.getApiEndpointId()).host)
-                    .apiKey(apiEndpointPreferences!!.getApiEndpoint(this, preferences!!.getApiEndpointId()).apiKey)
+                    .baseUrl(endpoint.host)
+                    .apiKey(endpoint.apiKey)
                     .build()
 
                 val params = ImageGenerateParams.builder()
@@ -5433,9 +5533,17 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     .size(ImageGenerateParams.Size._1024X1024) // Settings param "resolution" is ignored as this model supports only 1024x1024 resolution
                     .build()
 
+                val gptImageRequestState = newGenerationRequestState(
+                    operation = "GPT Image generation",
+                    provider = currentProviderName(endpoint),
+                    requestModel = preferences!!.getImageModel(),
+                    streaming = false,
+                )
+                requestState = gptImageRequestState
                 generateGptImageJob = generateImageAsync(
                     client,
                     params,
+                    gptImageRequestState,
                     onSuccess = { file ->
                         if (file == "cancelled") {
                             runOnUiThread {
@@ -5475,12 +5583,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     },
                     onError = { error ->
                         runOnUiThread {
+                            playErrorSignal()
+                            stopHandsFreeOnError()
+                            val genError = GenerationErrorClassifier.classify(error, gptImageRequestState)
+                            logGenerationError(genError, error, "gpt-image-generation", gptImageRequestState)
                             if (preferences?.showChatErrors() == true) {
-                                putMessage(
-                                    when (error) {
-                                        else -> error.stackTraceToString()
-                                    }, true
-                                )
+                                putMessage(genError.chatMessage(this), true)
                             }
                             btnMicro?.isEnabled = true
                             btnSend?.isEnabled = true
@@ -5490,6 +5598,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     }
                 )
             } else {
+                requestState = newGenerationRequestState(
+                    operation = "image generation",
+                    provider = currentProviderName(),
+                    requestModel = preferences!!.getImageModel(),
+                    streaming = false,
+                )
                 val images = openAIAI?.imageURL(
                     creation = ImageCreation(
                         prompt = p,
@@ -5498,11 +5612,18 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                         size = ImageSize(resolution)
                     )
                 )
+                if (images != null) requestState?.responseTextArrived = true
 
                 val imageUrl = images?.get(0)?.url!!
 
                 val url = URL(imageUrl)
 
+                requestState = newGenerationRequestState(
+                    operation = "generated image download",
+                    provider = url.host.ifBlank { "image download endpoint" },
+                    requestModel = preferences!!.getImageModel(),
+                    streaming = false,
+                )
                 val `is` = withContext(Dispatchers.IO) {
                     url.openStream()
                 }
@@ -5559,8 +5680,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             stopHandsFreeOnError()
             // Same funnel as the text path: classify, always log, show the coded
             // message only when the user has chat errors enabled. See ERROR_CODES.md.
-            val genError = GenerationErrorClassifier.classify(e)
-            logGenerationError(genError, e, "image-generation")
+            val genError = GenerationErrorClassifier.classify(e, requestState)
+            logGenerationError(genError, e, "image-generation", requestState)
             if (preferences?.showChatErrors() == true) {
                 putMessage(genError.chatMessage(this), true)
             }

@@ -16,6 +16,10 @@
 
 package org.teslasoft.assistant.util
 
+import com.aallam.openai.api.exception.OpenAIAPIException
+import com.openai.errors.OpenAIServiceException
+import io.ktor.client.plugins.ResponseException
+import java.io.InterruptedIOException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 
@@ -39,18 +43,31 @@ enum class GenErrorCode(val code: String, val includeStackTrace: Boolean) {
     S1("S1", false), // bare HTTP 404 / Not Found
     S2("S2", true),  // response could not be read as the expected stream
     S3("S3", false), // request rejected as inappropriate content
+    S4("S4", false), // explicit transient HTTP response (408/502/503/504)
     U0("U0", true);  // anything unmatched
 }
 
-/** Result of classifying a failure: the code, plus the HTTP status when the
- *  server actually answered (null for transport drops, which have no status). */
-data class GenErrorResult(val code: GenErrorCode, val httpStatus: Int?)
+enum class GenFailureKind {
+    CONNECT_TIMEOUT,
+    NO_RESPONSE_DATA_TIMEOUT,
+    STREAM_INACTIVITY_TIMEOUT,
+    OVERALL_TIMEOUT,
+    HTTP_RESPONSE,
+    OTHER,
+}
+
+/** Result of classifying a failure, retaining typed HTTP and timeout evidence. */
+data class GenErrorResult(
+    val code: GenErrorCode,
+    val httpStatus: Int?,
+    val kind: GenFailureKind = GenFailureKind.OTHER,
+    val configuredTimeoutMillis: Long? = null,
+)
 
 /**
- * Pure, framework-free classifier that maps a generation failure to a
- * [GenErrorCode]. Deliberately free of Android and of the OpenAI client's types:
- * it is unit-tested on a plain JVM, and must not fail to load if a client
- * exception class is renamed in a dependency bump.
+ * Android-free classifier that maps a generation failure to a [GenErrorCode].
+ * It reads typed status fields from both pinned HTTP clients and is unit-tested
+ * on a plain JVM.
  *
  * It follows the hybrid strategy in ERROR_CODES.md section 7 — strongest signal
  * first: exception **type** (the `java.net` transport types are matched directly;
@@ -61,44 +78,108 @@ data class GenErrorResult(val code: GenErrorCode, val httpStatus: Int?)
  */
 object GenerationErrorClassifier {
 
-    fun classify(error: Throwable): GenErrorResult {
+    private const val KTOR_ANDROID_DEFAULT_CONNECT_TIMEOUT_MS = 100_000L
+    private const val OPENAI_JAVA_DEFAULT_CONNECT_TIMEOUT_MS = 60_000L
+    private const val OPENAI_JAVA_DEFAULT_REQUEST_TIMEOUT_MS = 600_000L
+
+    fun classify(error: Throwable, requestState: GenerationRequestState? = null): GenErrorResult {
         val chain = causeChain(error)
         val text = buildString {
             for (t in chain) {
                 append(t::class.qualifiedName ?: ""); append('\n')
                 append(t.message ?: ""); append('\n')
             }
-            append(error.stackTraceToString())
         }
-        val status = extractHttpStatus(text)
+        // Prefer actual status fields carried by the two HTTP clients. Text
+        // scraping remains only a compatibility fallback for untyped wrappers.
+        val status = extractTypedHttpStatus(chain) ?: extractHttpStatus(text)
 
         // 1. Auth.
         if (status == 401 || text.contains("Incorrect API key") || hasType(chain, "AuthenticationException")) {
             return GenErrorResult(GenErrorCode.A1, status)
         }
-        // 2. Quota.
+        // 2. Rate/usage limiting. HTTP 429 means "too many requests"; it does
+        //    not by itself prove that the account's paid quota is exhausted.
         if (status == 429 || text.contains("You exceeded your current quota") || hasType(chain, "RateLimitException")) {
-            return GenErrorResult(GenErrorCode.Q1, status)
+            return GenErrorResult(
+                GenErrorCode.Q1,
+                status,
+                if (status == 429) GenFailureKind.HTTP_RESPONSE else GenFailureKind.OTHER,
+            )
         }
-        // 3. Network / transport. No HTTP response exists for these, so status is
-        //    forced null even if a stray number appeared in the trace.
+        // 3. Explicit server/service responses. These are deliberately checked
+        //    before local timeout types: an HTTP status is proof that the remote
+        //    endpoint answered, while a local timeout alone is not.
+        if (status in setOf(408, 502, 503, 504)) {
+            return GenErrorResult(GenErrorCode.S4, status, GenFailureKind.HTTP_RESPONSE)
+        }
+
+        // 4. Network / transport.
         if (chain.any { it is UnknownHostException } || hasType(chain, "UnknownHostException") ||
             text.contains("No address associated with hostname")) {
-            return GenErrorResult(GenErrorCode.N3, null)
+            return GenErrorResult(GenErrorCode.N3, status)
         }
         if (text.contains("Software caused connection abort")) {
-            return GenErrorResult(GenErrorCode.N1, null)
+            return GenErrorResult(GenErrorCode.N1, status)
         }
-        if (chain.any { it is SocketTimeoutException } || text.contains("Connect timeout has expired") ||
-            text.contains("SocketTimeoutException") || hasType(chain, "ConnectTimeoutException") ||
-            hasType(chain, "HttpRequestTimeoutException")) {
-            return GenErrorResult(GenErrorCode.N2, null)
+
+        if (hasType(chain, "ConnectTimeoutException") ||
+            text.contains("Connect timeout has expired", ignoreCase = true) ||
+            text.contains("connect timed out", ignoreCase = true)) {
+            return GenErrorResult(
+                GenErrorCode.N2,
+                status,
+                GenFailureKind.CONNECT_TIMEOUT,
+                extractTimeoutMillis(text, "connect_timeout")
+                    ?: when {
+                        requestState?.operation == "GPT Image generation" -> OPENAI_JAVA_DEFAULT_CONNECT_TIMEOUT_MS
+                        hasType(chain, "ConnectTimeoutException") -> KTOR_ANDROID_DEFAULT_CONNECT_TIMEOUT_MS
+                        else -> null
+                    },
+            )
         }
-        // 4. Context length.
+
+        val openAIJavaCallTimeout = requestState?.operation == "GPT Image generation" &&
+            chain.any { it is InterruptedIOException && it !is SocketTimeoutException } &&
+            text.contains("timeout", ignoreCase = true)
+        if (hasType(chain, "HttpRequestTimeoutException") ||
+            hasType(chain, "CallTimeoutException") ||
+            text.contains("Request timeout has expired", ignoreCase = true) ||
+            openAIJavaCallTimeout) {
+            return GenErrorResult(
+                GenErrorCode.N2,
+                status,
+                GenFailureKind.OVERALL_TIMEOUT,
+                extractTimeoutMillis(text, "request_timeout")
+                    ?: if (requestState?.operation == "GPT Image generation") {
+                        OPENAI_JAVA_DEFAULT_REQUEST_TIMEOUT_MS
+                    } else null,
+            )
+        }
+
+        if (chain.any { it is SocketTimeoutException } ||
+            hasType(chain, "SocketTimeoutException") ||
+            text.contains("Socket timeout has expired", ignoreCase = true) ||
+            hasType(chain, "OpenAITimeoutException")) {
+            val responseStarted = requestState?.firstStreamEventArrived == true ||
+                requestState?.responseTextArrived == true
+            return GenErrorResult(
+                GenErrorCode.N2,
+                status,
+                if (responseStarted) GenFailureKind.STREAM_INACTIVITY_TIMEOUT
+                else GenFailureKind.NO_RESPONSE_DATA_TIMEOUT,
+                extractTimeoutMillis(text, "socket_timeout")
+                    ?: if (requestState?.operation == "GPT Image generation") {
+                        OPENAI_JAVA_DEFAULT_REQUEST_TIMEOUT_MS
+                    } else null,
+            )
+        }
+
+        // 5. Context length.
         if (text.contains("This model's maximum")) {
             return GenErrorResult(GenErrorCode.M3, status)
         }
-        // 5. Model-specific. A model-not-found body is M2 even when the HTTP
+        // 6. Model-specific. A model-not-found body is M2 even when the HTTP
         //    status is 404, so this is checked before the bare-404 rule below.
         if (text.contains("invalid model") || text.contains("you must provide a model")) {
             return GenErrorResult(GenErrorCode.M1, status)
@@ -106,18 +187,19 @@ object GenerationErrorClassifier {
         if (text.contains("does not exist")) {
             return GenErrorResult(GenErrorCode.M2, status)
         }
-        // 6. Bare HTTP 404 with no model-specific body.
+        // 7. Bare HTTP 404 with no model-specific body.
         if (status == 404 || text.contains("Not Found")) {
             return GenErrorResult(GenErrorCode.S1, 404)
         }
-        // 7. Response-shape failure / content rejection.
+        // 8. Response-shape failure / content rejection.
         if (text.contains("NoTransformationFoundException") || text.contains("Expected response body of the type")) {
             return GenErrorResult(GenErrorCode.S2, status)
         }
         if (text.contains("Your request was rejected")) {
             return GenErrorResult(GenErrorCode.S3, status)
         }
-        // 8. Unknown catch-all.
+        // 9. Unknown catch-all. Preserve a typed status even when the app has
+        //    no dedicated user-facing category for it yet.
         return GenErrorResult(GenErrorCode.U0, status)
     }
 
@@ -138,6 +220,26 @@ object GenerationErrorClassifier {
     private fun hasType(chain: List<Throwable>, simpleName: String): Boolean =
         chain.any { (it::class.simpleName ?: "").contains(simpleName) }
 
+    private fun extractTypedHttpStatus(chain: List<Throwable>): Int? {
+        for (error in chain) {
+            val status = when (error) {
+                is OpenAIAPIException -> error.statusCode
+                is ResponseException -> error.response.status.value
+                is OpenAIServiceException -> error.statusCode()
+                else -> null
+            }
+            if (status != null && status in 100..599) return status
+        }
+        return null
+    }
+
+    private fun extractTimeoutMillis(text: String, field: String): Long? =
+        Regex("""\b${Regex.escape(field)}\s*=\s*(\d+)""", RegexOption.IGNORE_CASE)
+            .find(text)
+            ?.groupValues
+            ?.getOrNull(1)
+            ?.toLongOrNull()
+
     /**
      * Best-effort HTTP status from common phrasings ("status code 401",
      * "HTTP/1.1 404", "429 Too Many Requests"). Conservative on purpose: a status
@@ -151,7 +253,7 @@ object GenerationErrorClassifier {
             Regex("""\bHTTP/?\d?(?:\.\d)?\s+(\d{3})\b"""),
             Regex(
                 """\b(\d{3})\s+(?:Unauthorized|Forbidden|Not Found|Bad Request|Too Many Requests|""" +
-                    """Internal Server Error|Bad Gateway|Service Unavailable|Gateway Timeout)\b"""
+                    """Request Timeout|Internal Server Error|Bad Gateway|Service Unavailable|Gateway Timeout)\b"""
             )
         )
         for (p in patterns) {

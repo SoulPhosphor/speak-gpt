@@ -34,12 +34,12 @@ entry and the known cause.
 **Design rules for the Error Log entry:**
 
 - Include only what is genuinely useful for troubleshooting. Do not bloat it.
-- Always: the code, a one-line plain-English cause, and the request context
-  (profile, Base URL, model) that the user message deliberately omits.
-- The full exception text / stack trace is included **only** where it adds
-  information the code alone does not (the unknown catch-all, and the
-  ambiguous server-rejection cases). For well-understood failures (e.g. being
-  offline) the stack trace is noise and is omitted.
+- Always: the code, a one-line plain-English cause, operation, provider, model,
+  streaming state, elapsed time, timeout evidence, HTTP status when present,
+  and the exception/cause-chain classes.
+- Raw exception messages and raw stack traces are never copied into the Error
+  Log. Unknown/ambiguous failures receive message-free stack frames instead, so
+  URLs, headers, prompts, responses, and provider error bodies cannot leak.
 
 ---
 
@@ -81,9 +81,8 @@ as everything else (see §5).
 
 ## 3. The codes
 
-Conditions below are the exact substrings the **current** code matches in
-`e.stackTraceToString()` (text/voice path at `ChatActivity.kt` ~3408, image path
-~4317), plus the dedicated `connectionAbortMessage` helper.
+Conditions below summarize the typed exceptions/statuses and fallback text the
+current shared classifier uses for text, voice, and image generation.
 
 > **These substrings are the legacy clues, not the implementation target.** They
 > are listed so each code is grounded in a real failure that happens today. The
@@ -93,24 +92,25 @@ Conditions below are the exact substrings the **current** code matches in
 > more reliably than the substring, the typed signal wins; the substring is the
 > fallback for cases that arrive untyped (chiefly the transport drops).
 
-> In every Error Log entry, `Profile`, `Base URL`, `Model` and `Voice` are the
+> In every Error Log entry, `Operation`, `Provider`, `Model` and `Voice` are the
 > standard context block defined in §4. To avoid repetition the table lists only
 > what is **added beyond** that standard block.
 
 | Code | Technical cause | Matching condition | User-facing message (exact) | Error Log adds beyond standard block |
 |------|-----------------|--------------------|------------------------------|---------------------------------------|
-| `[N1]` | Socket torn down mid-request (`ECONNABORTED`) | `"Software caused connection abort"` | `[N1] The connection closed before the response finished. Try again, or switch models if this only happens with one model.` | Exception message (the raw "Software caused connection abort" detail). No stack trace. |
-| `[N2]` | Connect / read timeout | `"Connect timeout has expired"` or `"SocketTimeoutException"` | `[N2] The server did not respond in time. The connection may be slow or the model busy — try again, or switch models.` | Which timeout (connect vs socket) from the exception message. No stack trace. |
-| `[N3]` | Host could not be reached / resolved (offline, bad DNS, or wrong Base URL) | `"No address associated with hostname"` (typically `UnknownHostException`) | `[N3] The app could not reach the server address. Check your connection or the Base URL, then try again.` | Nothing extra; standard block only. No stack trace (cause is fully known). The Base URL in the standard block is the value to verify. |
+| `[N1]` | Socket torn down mid-request (`ECONNABORTED`) | `"Software caused connection abort"` | `[N1] The connection closed before the response finished. Try again, or switch models if this only happens with one model.` | Cause-chain classes plus a structural connection-closed detail. |
+| `[N2]` | Connect, read/socket inactivity, streaming inactivity, or overall request timeout | Typed connect/socket/request timeout exception, with text fallback | A short category-specific sentence: connection timeout, no response data before read timeout, response began then stalled, or overall time limit | Timeout type and configured duration; request elapsed time; whether a stream event or response text arrived. |
+| `[N3]` | Host could not be reached / resolved (offline, bad DNS, or wrong Base URL) | `"No address associated with hostname"` (typically `UnknownHostException`) | `[N3] The app could not reach the server address. Check your connection or the Base URL, then try again.` | Cause-chain classes plus a structural lookup/reachability detail; no hostname is copied from the exception. |
 | `[A1]` | API key rejected | `"Incorrect API key"` | `[A1] The API key was rejected. Update the key in Settings.` | Nothing extra. **Never log the key itself.** No stack trace. |
 | `[M1]` | No model set on the request | `"invalid model"` or `"you must provide a model"` | `[M1] No model is set for this chat. Choose a model in this chat's settings.` | Nothing extra; the Model field in the standard block carries it. |
-| `[M2]` | Named model not available on endpoint | `"does not exist"` | `[M2] The selected model is not available on this endpoint. Check the model name in this chat's settings, or choose another.` | Exception message (server's own wording, which sometimes distinguishes "no access" from "no such model"). |
-| `[M3]` | Context length exceeded | `"This model's maximum"` | `[M3] The conversation is too long for this model's limit. Start a new chat or shorten the input.` | Exception message (often states the token limit and overflow). |
-| `[Q1]` | Quota / usage limit reached | `"You exceeded your current quota"` | `[Q1] The account's quota or usage limit has been reached. Check the account's billing and usage limits.` | Nothing extra. |
-| `[S1]` | Endpoint returned HTTP 404 | `"404"` or `"Not Found"` | `[S1] The endpoint was not found (HTTP 404). Check the Base URL in this profile's settings.` | Nothing extra; the Base URL in the standard block is the thing to check. |
-| `[S2]` | Response could not be read as the expected stream (often a non-streaming error body, usually HTTP 400) | `"NoTransformationFoundException"` or `"Expected response body of the type"` | `[S2] The server returned a response the app could not read as a stream. Check whether this endpoint and model support streaming.` | **Full stack trace** plus **HTTP status if available** — this case is ambiguous and the trace is often the only place the underlying HTTP error survives. |
+| `[M2]` | Named model not available on endpoint | `"does not exist"` | `[M2] The selected model is not available on this endpoint. Check the model name in this chat's settings, or choose another.` | Actual request model and exception classes; provider body omitted. |
+| `[M3]` | Context length exceeded | `"This model's maximum"` | `[M3] The conversation is too long for this model's limit. Start a new chat or shorten the input.` | Actual request model and exception classes; provider body omitted. |
+| `[Q1]` | Rate or usage limiting | Typed HTTP 429 / `RateLimitException`, or explicit quota text | HTTP 429 is shown as `too many requests`; a status-less usage-limit response gets neutral rate/usage wording. | Typed HTTP status when present. |
+| `[S1]` | Endpoint returned HTTP 404 | `"404"` or `"Not Found"` | `[S1] The endpoint was not found (HTTP 404). Check the Base URL in this profile's settings.` | Typed HTTP status, provider label, model, and exception classes. |
+| `[S2]` | Response could not be read as the expected stream (often a non-streaming error body, usually HTTP 400) | `"NoTransformationFoundException"` or `"Expected response body of the type"` | `[S2] The server returned a response the app could not read as a stream. Check whether this endpoint and model support streaming.` | HTTP status if available plus message-free stack frames; response/error body omitted. |
 | `[S3]` | Prompt rejected as inappropriate content | `"Your request was rejected"` | `[S3] The request was rejected as inappropriate content and could not be processed.` | Nothing extra. Do **not** log the prompt text. |
-| `[U0]` | Anything not matched above | `else` branch (catch-all) | `[U0] An unexpected error occurred. The technical details were saved to the Error Log.` | **Full exception class, message, and stack trace.** This is the only thing the user can hand over, so the log must carry everything. |
+| `[S4]` | Endpoint returned HTTP 408, 502, 503, or 504 | Typed HTTP status first, text fallback only for untyped wrappers | `[S4] The service returned HTTP <status> (<reason>).` | Typed HTTP status; provider body omitted. |
+| `[U0]` | Anything not matched above | `else` branch (catch-all) | `[U0] An unexpected error occurred. The technical details were saved to the Error Log.` | Exception/cause classes and message-free stack frames. |
 
 ### Notes on specific wording
 
@@ -190,22 +190,28 @@ the message body.
 
 ```
 [N1] Connection closed before the response finished.
-Profile: <profile label>
-Base URL: <full sanitized base URL>
+Error code: <stable code>
+Operation: <actual request operation>
+Provider: <profile/provider label>
 Model: <model>
+Streaming request: <true | false | unknown>
+First stream event arrived: <true | false | unknown>
+Response text arrived: <true | false | unknown>
+Elapsed: <milliseconds and seconds | unknown>
+Timeout type: <connect | read/socket before response data | streaming inactivity | call/overall | not applicable>
+Configured timeout: <milliseconds and seconds | client default/not reported | not applicable>
 Voice: <active | inactive>
-Trigger: <first-send | regenerate | continue | image-generation>
+Trigger: <message | image-generation | gpt-image-generation>
 Screen: <on | off | unknown>
 Network: <e.g. wifi | cellular | none | unknown>   (only if cheaply/safely available)
 Power save: <on | off | unknown>                   (only if cheaply/safely available)
+HTTP status: <status when present>
+Exception classes: <outer class -> cause class -> ...>
+Sanitized detail: <structural summary only>
 ```
 
-- `Profile`, `Base URL`, `Model` come from `apiEndpointObject` and `model`, the
-  same values the old chat message used to print.
-- **`Base URL` is the full, sanitized base URL** — scheme, host, port, and path
-  (e.g. `https://api.z.ai/api/coding/paas/v4`), not just the bare host. The app
-  already stores and prints the full base URL, so this is the existing value;
-  query parameters are stripped so no secrets ride along in the URL.
+- `Operation`, `Provider`, and `Model` describe the actual network call that
+  failed, including fixed-model and image-generation paths. No URL is logged.
 - `Voice` records whether the hands-free / voice loop was active when the error
   occurred. When it is **active**, the entry also appends a **compact voice
   context block** (§5) — a short snapshot of voice state at the moment of the
@@ -227,14 +233,12 @@ Power save: <on | off | unknown>                   (only if cheaply/safely avail
 
 **Conditional additions**, per the last column of the §3 table:
 
-- **HTTP status**: appended as `HTTP status: <code>` whenever the failure carried
-  one — i.e. the server actually answered (`A1`, `Q1`, `S1`, `S2`, `S3`, and the
-  body-based `M2` cases). Transport failures (`N1`, `N2`, `N3`) have **no** HTTP
-  status because the socket died before a response arrived; the field is simply
-  omitted for them rather than logged as "unknown".
-- Exception message: appended as `Detail: <e.message>` where the table calls for
-  it.
-- Full stack trace: appended for `[S2]` and `[U0]` only.
+- **HTTP status**: retained from typed client exceptions whenever one exists.
+  This is independent of the final app code; the status is not forcibly erased.
+- **Exception detail**: a structural, privacy-safe summary only. Provider error
+  text is omitted.
+- **Stack trace**: `[S2]` and `[U0]` receive class/method/file/line frames without
+  exception messages.
 
 ### 4.5 What must NOT be written to either log
 
@@ -394,8 +398,8 @@ trust the detection code for *what* happened and the context flags for *why*.
   profile/URL). Both converge on `[U0]` with the trace going to the log instead.
 - **Catch-all (`U0`).** Any exception not matched by a known condition maps to
   `[U0]`; the chat shows the fixed one-line message, and the Error Log gets the
-  exception class, message, and full stack trace. No raw trace ever reaches the
-  chat.
+  cause-chain classes plus message-free stack frames. No raw trace or provider
+  error body reaches either surface.
 - **Error Log always written.** Today errors are only shown in chat, and only
   when `showChatErrors()` is on. Under this design the `GenError` entry is written
   on **every** error path regardless of the `showChatErrors()` setting, because
@@ -455,5 +459,5 @@ trust the detection code for *what* happened and the context flags for *why*.
    context. **Detailed / per-turn voice diagnostics stay only in the Voice Debug
    Log.** Voice-facing error *wording* and the per-turn voice logging are **out of
    scope for this pass** and are not changed.
-4. **Standard Error Log block (§4): approved** as listed — Profile, Base URL,
-   Model, Voice, Trigger, Screen, Network, Power save.
+4. **Standard Error Log block (§4): superseded by the structured, privacy-safe
+   request diagnostics listed in §4.4.**

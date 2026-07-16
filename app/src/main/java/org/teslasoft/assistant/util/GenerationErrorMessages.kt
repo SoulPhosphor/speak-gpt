@@ -38,10 +38,59 @@ fun GenErrorCode.messageRes(): Int = when (this) {
     GenErrorCode.S1 -> R.string.gen_error_s1
     GenErrorCode.S2 -> R.string.gen_error_s2
     GenErrorCode.S3 -> R.string.gen_error_s3
+    GenErrorCode.S4 -> R.string.gen_error_s4
     GenErrorCode.U0 -> R.string.gen_error_u0
 }
 
 /** The exact text shown in chat: `[N1] <neutral sentence>`. No profile, Base
  *  URL, model, or stack trace — those go only to the Error Log. */
-fun GenErrorResult.chatMessage(context: Context): String =
-    "[${code.code}] " + context.getString(code.messageRes())
+fun GenErrorResult.chatMessage(context: Context): String {
+    val timeout = configuredTimeoutMillis?.let(::formatTimeoutDuration)
+    val message = when (kind) {
+        GenFailureKind.CONNECT_TIMEOUT -> if (timeout != null) {
+            context.getString(R.string.gen_error_n2_connect_duration, timeout)
+        } else {
+            context.getString(R.string.gen_error_n2_connect)
+        }
+        GenFailureKind.NO_RESPONSE_DATA_TIMEOUT -> if (timeout != null) {
+            context.getString(R.string.gen_error_n2_read_duration, timeout)
+        } else {
+            context.getString(R.string.gen_error_n2_read)
+        }
+        GenFailureKind.STREAM_INACTIVITY_TIMEOUT -> if (timeout != null) {
+            context.getString(R.string.gen_error_n2_stream_duration, timeout)
+        } else {
+            context.getString(R.string.gen_error_n2_stream)
+        }
+        GenFailureKind.OVERALL_TIMEOUT -> if (timeout != null) {
+            context.getString(R.string.gen_error_n2_overall_duration, timeout)
+        } else {
+            context.getString(R.string.gen_error_n2_overall)
+        }
+        GenFailureKind.HTTP_RESPONSE -> {
+            val status = httpStatus
+            if (status != null) {
+                context.getString(R.string.gen_error_http_status, status, httpReason(status))
+            } else {
+                context.getString(code.messageRes())
+            }
+        }
+        GenFailureKind.OTHER -> context.getString(code.messageRes())
+    }
+    return "[${code.code}] $message"
+}
+
+private fun formatTimeoutDuration(millis: Long): String = when {
+    millis % 60_000L == 0L -> "${millis / 60_000L}-minute"
+    millis % 1_000L == 0L -> "${millis / 1_000L}-second"
+    else -> "$millis-millisecond"
+}
+
+private fun httpReason(status: Int): String = when (status) {
+    408 -> "request timeout"
+    429 -> "too many requests"
+    502 -> "bad gateway"
+    503 -> "service unavailable"
+    504 -> "gateway timeout"
+    else -> "HTTP error"
+}
