@@ -1099,6 +1099,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     // Init TTS
     private var tts: TextToSpeech? = null
     private var pendingSpeak: String? = null
+    private var pendingSpeakSession: Int? = null
     private var ttsUtteranceCounter: Long = 0
     // Readback session stamp, bumped by every user stop (stopReadback()).
     // speak() can be reached through async hops — ML Kit language detection,
@@ -1135,9 +1136,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 ttsPostInit()
                 tts?.setOnUtteranceProgressListener(ttsProgressListener)
                 isTTSInitialized = true
-                pendingSpeak?.let {
+                val retainedText = pendingSpeak
+                val retainedSession = pendingSpeakSession
+                if (retainedText != null && retainedSession != null) {
                     pendingSpeak = null
-                    Handler(Looper.getMainLooper()).post { speak(it) }
+                    pendingSpeakSession = null
+                    Handler(Looper.getMainLooper()).post {
+                        speak(retainedText, retainedSession)
+                    }
                 }
             } else {
                 isTTSInitialized = false
@@ -1184,13 +1190,22 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
      * the same as before.
      */
     private fun handleTtsReadbackError(utteranceId: String?, errorCode: Int?) {
-        // QUEUE_FLUSH can deliver a late cancellation callback for an older
-        // utterance. It does not belong to the readback currently on screen.
-        if (utteranceId != null && !ttsUtteranceText.containsKey(utteranceId)) return
         // Ignore any extra callbacks after this readback has already given up.
         if (ttsErrorRetries >= TTS_MAX_ERROR_RETRIES) return
-        // This utterance failed, so no later chunk may start behind it.
+
+        // Claim this queued chunk exactly once. Some engines invoke both
+        // onError overloads; removing the entry makes the duplicate a no-op.
+        val failedText = if (utteranceId != null) {
+            ttsUtteranceText.remove(utteranceId) ?: return
+        } else {
+            val entry = ttsUtteranceText.entries.firstOrNull() ?: return
+            if (!ttsUtteranceText.remove(entry.key, entry.value)) return
+            entry.value
+        }
+        val retrySession = ttsChunkSession
+        val unsaidText = failedText + ttsRemainingText
         ttsRemainingText = ""
+        finalTtsUtteranceId = null
         ttsErrorRetries++
         val codeText = errorCode?.let { "$it ${ttsErrorName(it)}" } ?: "unknown"
         val maxLen = try { TextToSpeech.getMaxSpeechInputLength() } catch (_: Throwable) { -1 }
@@ -1201,7 +1216,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         // keep the sample short and newline-free so it's one readable line. A
         // blank text or a non-ASCII character are the usual content causes of a
         // -8, and "started" tells reject-outright apart from fail-mid-synthesis.
-        val failedText = utteranceId?.let { ttsUtteranceText[it] }.orEmpty()
         val len = failedText.length
         val blank = failedText.isBlank()
         val nonAscii = failedText.any { it.code > 127 }
@@ -1218,7 +1232,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         }
         if (ttsErrorRetries >= TTS_MAX_ERROR_RETRIES) {
             pendingSpeak = null
-            finalTtsUtteranceId = null
+            pendingSpeakSession = null
             ttsUtteranceText.clear()
             runOnUiThread {
                 logVoiceEventAlways("TTS gave up on this readback after $ttsErrorRetries failures; continuing without reading it aloud")
@@ -1227,8 +1241,19 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             onHandsFreeReadbackFinished()
             return
         }
-        Handler(Looper.getMainLooper()).post { reinitTTS() }
-        onHandsFreeReadbackFinished()
+        pendingSpeak = unsaidText
+        pendingSpeakSession = retrySession
+        // The current playback watchdog must not mistake the retry gap for a
+        // completed readback and reopen the mic.
+        handsFreeReadbackToken++
+        Handler(Looper.getMainLooper()).post {
+            if (retrySession == readbackSession &&
+                pendingSpeak != null &&
+                pendingSpeakSession == retrySession
+            ) {
+                reinitTTS()
+            }
+        }
     }
 
     private fun ttsErrorName(code: Int): String = when (code) {
@@ -3681,6 +3706,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     private fun stopReadback() {
         readbackSession++
         pendingSpeak = null
+        pendingSpeakSession = null
         ttsRemainingText = ""
         finalTtsUtteranceId = null
         ttsUtteranceText.clear()
@@ -5169,6 +5195,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             val engine = tts
             if (engine == null || !isTTSInitialized) {
                 pendingSpeak = message
+                pendingSpeakSession = session
                 if (engine == null) {
                     Handler(Looper.getMainLooper()).post { initTTS() }
                 }
@@ -5194,12 +5221,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 finalTtsUtteranceId = if (ttsRemainingText.isEmpty()) utteranceId else null
                 val result = engine.speak(chunk, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
                 if (result == TextToSpeech.ERROR) {
-                    Log.w("TTS", "speak() returned ERROR; re-initialising engine and queueing unsaid text")
-                    ttsRemainingText = ""
-                    finalTtsUtteranceId = null
-                    ttsUtteranceText.clear()
-                    pendingSpeak = message
-                    reinitTTS()
+                    Log.w("TTS", "speak() returned ERROR")
+                    handleTtsReadbackError(utteranceId, TextToSpeech.ERROR)
                 } else {
                     beginHandsFreeReadbackWatch()
                 }
