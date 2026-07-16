@@ -1016,23 +1016,27 @@ non-storage path is answered (inline integrity check → repair flow).
 
 **STILL OPEN — final wording not yet written (Phase 2 owner copy):**
 5. ~~restore loss-warning~~ — **A5 APPROVED** (§15.12), "Backup" capitalized.
-6. **(A6)** The last-resort "started fresh; your old data was preserved"
-   message text — shown only when a database is corrupt, unrepairable, AND has
-   no usable backup.
-7. **(A7)** Button-label standardization: confirm `Revert to Last Good
-   Database` (A1/A3/A4/A5) is THE label used everywhere, retiring the earlier
-   `update to the newest best database` phrasing.
+6. ~~(A6) started-fresh message~~ — **A6 APPROVED** (§15.12): title
+   `Database Recovery Failed`, body + preserved file path, buttons
+   `Open File Location` / `OK`.
+7. ~~(A7) button-label standardization~~ — **A7 RESOLVED (owner: yes):**
+   `Revert to Last Good Database` is THE label everywhere; the earlier
+   `update to the newest best database` phrasing is retired.
 8. ~~Check naming consistency~~ — **RESOLVED:** the app uses "Database Check"
    everywhere (`Database Check Passed` / `Database Check Failed`); the button
    stays `Check Database Integrity`. Restore-from-backup is a verified +
    confirmed action (§15.2b); only the A5 confirmation wording is still open.
 
 **STILL OPEN — behavior/placement to confirm at build time:**
-8. Does one press of `Check Database Integrity` check BOTH databases, and is
-   the result one combined pass/fail or one per database? (Integrity is
-   per-database; the button is singular.)
-9. WHEN does the automatic blocking dialog appear — only at startup after an
-   abnormal exit, or also immediately if corruption is detected mid-session?
+8. ~~(B8) one press = both databases?~~ — **B8 RESOLVED (owner July 15
+   2026):** one press checks BOTH databases and reports per database; wording
+   approved in §15.12 (`Database Check Complete` / `Database Check Incomplete`,
+   per-database status lines). Buttons for that result + adopting the format in
+   A4/§15.9 still to confirm (see §15.12 B8 notes).
+9. **(B9) OPEN — needs re-framing (owner asked for specifics, July 15 2026).**
+   NOTE: this is NOT about re-adding startup work — the "don't check every
+   launch" decision (§15.3) stands. B9 only asks, once a problem is found,
+   WHERE the alerting happens. See the chat re-explanation.
 10. Does degraded mode persist across app restarts until repaired? (Assumed
     yes; confirm.)
 11. The automatic backup is now ONE file covering both databases + chats, so
@@ -1135,6 +1139,45 @@ the matching loss noun.)
 > **Body — memory (sentence case):** `This replaces your damaged memory database with your last good Backup from [Month D, YYYY]. Any memories added after that date will be lost. Your damaged database will be kept aside, not deleted.`
 > **Body — lorebook (sentence case):** `This replaces your damaged lorebook database with your last good Backup from [Month D, YYYY]. Any lorebook entries added after that date will be lost. Your damaged database will be kept aside, not deleted.`
 > **Buttons:** `Restore` | `Cancel`
+
+**A6 — Recovery-failed / started-fresh dialog (APPROVED, owner July 15 2026).**
+Shown ONLY when a database is corrupt, could not be repaired, AND had no usable
+backup — the app started that database over empty and preserved the damaged
+file.
+> **Title:** `Database Recovery Failed`
+> **Body (sentence case):**
+> `The [memory / lorebook] database was damaged and could not be repaired. No usable backup was available, so the app created a new, empty database to keep working.`
+>
+> `The damaged database was not deleted. It was saved here in case it can be recovered later:`
+>
+> `[full file path or folder location]`
+> **Buttons:** `Open File Location` | `OK`
+
+**B8 — `Check Database Integrity` checks BOTH databases in one press; results
+are reported per database (APPROVED wording, owner July 15 2026).** One press
+runs the check on both the memory and lorebook databases and lists each
+result. This **supersedes** the earlier single-line `Database Check Passed` /
+`Database Check Failed` result.
+> **When the check ran fully:**
+> **Title:** `Database Check Complete`
+> `Memory database: No problems found`
+> `Lorebook database: Damage detected`
+> `Your lorebook data may need repair.`
+>
+> **When a database could not be checked (partial failure):**
+> **Title:** `Database Check Incomplete`
+> `Memory database: No problems found`
+> `Lorebook database: Could not be checked`
+> `Try again or view the error log for details.`
+
+- The per-database status lines are examples — each database shows its own real
+  result (`No problems found` / `Damage detected` / `Could not be checked`).
+- ⚠️ **Buttons for this result screen were not specified** — owner to confirm
+  (likely `Repair` / `Revert to Last Good Database` when damage is detected;
+  `Try Again` / `View Error Log` on incomplete).
+- ⚠️ **Consistency:** this per-database report should also replace the simpler
+  `Database Check Passed/Failed` strings used by A4's inline check and §15.9's
+  Memory Controls check. Owner to confirm they adopt this same format.
 
 ### 15.11 What §15 does NOT change
 
