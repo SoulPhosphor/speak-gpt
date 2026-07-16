@@ -1115,6 +1115,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     // Only the final chunk completing means the whole reply finished. Earlier
     // chunks must not reopen the hands-free mic.
     private var finalTtsUtteranceId: String? = null
+    // Text not yet handed to the engine. Queue it only after the current chunk
+    // finishes so recovery cannot replay completed text.
+    private var ttsRemainingText = ""
+    private var ttsChunkSession = 0
     // Did the current utterance actually begin speaking (onStart) before it
     // failed? Distinguishes "engine rejected it outright" from "failed
     // mid-synthesis" — the two have very different causes for the same -8.
@@ -1144,8 +1148,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     private val ttsProgressListener = object : UtteranceProgressListener() {
         override fun onStart(utteranceId: String?) { lastTtsUtteranceStarted = true }
         override fun onDone(utteranceId: String?) {
-            utteranceId?.let { ttsUtteranceText.remove(it) }
-            if (utteranceId != finalTtsUtteranceId) return
+            if (utteranceId == null || ttsUtteranceText.remove(utteranceId) == null) return
+            if (utteranceId != finalTtsUtteranceId) {
+                val remainingText = ttsRemainingText
+                ttsRemainingText = ""
+                Handler(Looper.getMainLooper()).post {
+                    if (remainingText.isNotEmpty()) speak(remainingText, ttsChunkSession)
+                }
+                return
+            }
             finalTtsUtteranceId = null
             // A real readback completed — clear the failure budget.
             ttsErrorRetries = 0
@@ -1178,6 +1189,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         if (utteranceId != null && !ttsUtteranceText.containsKey(utteranceId)) return
         // Ignore any extra callbacks after this readback has already given up.
         if (ttsErrorRetries >= TTS_MAX_ERROR_RETRIES) return
+        // This utterance failed, so no later chunk may start behind it.
+        ttsRemainingText = ""
         ttsErrorRetries++
         val codeText = errorCode?.let { "$it ${ttsErrorName(it)}" } ?: "unknown"
         val maxLen = try { TextToSpeech.getMaxSpeechInputLength() } catch (_: Throwable) { -1 }
@@ -3668,6 +3681,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     private fun stopReadback() {
         readbackSession++
         pendingSpeak = null
+        ttsRemainingText = ""
+        finalTtsUtteranceId = null
+        ttsUtteranceText.clear()
         try { tts?.stop() } catch (_: Exception) { /* ignore */ }
         try {
             if (mediaPlayer?.isPlaying == true) {
@@ -5070,6 +5086,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
         if (willReadAloud) {
             ttsErrorRetries = 0
+            ttsRemainingText = ""
             finalTtsUtteranceId = null
             ttsUtteranceText.clear()
         }
@@ -5167,25 +5184,25 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     4000
                 }
                 val chunks = splitTtsText(message, maxLength.coerceAtLeast(1))
+                val chunk = chunks.first()
+                ttsRemainingText = chunks.drop(1).joinToString("")
+                ttsChunkSession = session
                 ttsUtteranceCounter++
-                val readbackId = ttsUtteranceCounter
+                val utteranceId = "speakgpt-$ttsUtteranceCounter"
                 lastTtsUtteranceStarted = false
-                for ((index, chunk) in chunks.withIndex()) {
-                    val utteranceId = "speakgpt-$readbackId-${index + 1}-${chunks.size}"
-                    ttsUtteranceText[utteranceId] = chunk
-                    if (index == chunks.lastIndex) finalTtsUtteranceId = utteranceId
-                    val queueMode = if (index == 0) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD
-                    val result = engine.speak(chunk, queueMode, null, utteranceId)
-                    if (result == TextToSpeech.ERROR) {
-                        Log.w("TTS", "speak() returned ERROR for chunk ${index + 1}/${chunks.size}; re-initialising engine and queueing message")
-                        finalTtsUtteranceId = null
-                        ttsUtteranceText.clear()
-                        pendingSpeak = message
-                        reinitTTS()
-                        return@runSpeak
-                    }
+                ttsUtteranceText[utteranceId] = chunk
+                finalTtsUtteranceId = if (ttsRemainingText.isEmpty()) utteranceId else null
+                val result = engine.speak(chunk, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
+                if (result == TextToSpeech.ERROR) {
+                    Log.w("TTS", "speak() returned ERROR; re-initialising engine and queueing unsaid text")
+                    ttsRemainingText = ""
+                    finalTtsUtteranceId = null
+                    ttsUtteranceText.clear()
+                    pendingSpeak = message
+                    reinitTTS()
+                } else {
+                    beginHandsFreeReadbackWatch()
                 }
-                beginHandsFreeReadbackWatch()
             }
             if (Looper.myLooper() == Looper.getMainLooper()) {
                 runSpeak()
@@ -5601,6 +5618,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         if (preferences?.getHandsFreeMode() != true) acquireReadbackKeepAlive()
         // Fresh manual readback → fresh TTS failure budget.
         ttsErrorRetries = 0
+        ttsRemainingText = ""
         finalTtsUtteranceId = null
         ttsUtteranceText.clear()
         speak(message)
