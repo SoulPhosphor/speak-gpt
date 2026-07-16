@@ -745,6 +745,12 @@ throttle), but when it does run it serializes the whole memory DB + all
 chats to JSON on the startup background thread — it competes for disk with
 the other startup work but does not block the UI thread.
 
+> **SUPERSEDED (owner July 15 2026):** the single-combined-file design
+> described above is being REPLACED by separate per-type backup files (memory
+> / lorebook / chats), each written, verified, rotated, and restored
+> independently. See **§15.13** — it is authoritative for the backup design
+> from here on.
+
 ### 15.2 Database-issue detection → repair flow (owner-directed, RESOLVED)
 
 Applies to **both** SQLite databases (`companion_memory.db` and
@@ -786,6 +792,14 @@ When a database problem exists and the user has not repaired it, the app does
 affected feature is turned **fully off** — no reads and no writes to the
 corrupt database — until it is repaired. (Reading a corrupt SQLite file is
 itself unsafe, so "disabled" means genuinely off, not just read-only.)
+
+**Persists across restarts (B10, owner July 15 2026: yes).** The disabled
+state is STORED and survives closing/reopening the app: a damaged database
+stays off — banner shown — until a repair or restore actually succeeds.
+Reopening never silently re-uses a corrupt database. Because a mid-session
+failure is not a crash, this is a stored "disabled pending repair" flag,
+independent of the crash-triggered check (§15.3) — it does not rely on the
+next launch happening to re-run a check.
 
 While in degraded mode:
 
@@ -999,14 +1013,15 @@ screen, under the existing "save a rotating backup every day" text.
    `writeBackupNow`). Status text appears underneath it: in-progress, then
    whether it completed or failed.
 
-3. **`Database Backup Failed: [Month D, YYYY]`** — a status line shown **ONLY**
-   when the most recent backup attempt failed. It sits **ABOVE** the
-   last-success line. It clears when a backup next succeeds. (Cased exactly as
-   the owner wrote it.)
-
-4. **`Last successful Database Backup: [Month D, YYYY]`** — a status line,
-   always shown under the "Backups" area. A stale date is itself a visible
-   warning. (Cased exactly as the owner wrote it.)
+3. **Backup status lines — NOW PER TYPE (superseded by §15.13, owner July 15
+   2026).** The single `Last successful Database Backup` / `Database Backup
+   Failed` lines are replaced by independent per-database lines:
+   > `Last successful memory database backup: [date and time]`
+   > `Last successful lorebook database backup: [date and time]`
+   A per-type "backup failed" line appears above the matching success line only
+   when that type's most recent backup failed, and clears when it next
+   succeeds. Chats' backup status lives separately (§15.13). Lines now show
+   date AND time. See §15.13 for the full backup architecture.
 
 All of the above are persistent on-screen controls/text — never Toasts,
 consistent with the app-wide no-Toast rule.
@@ -1062,12 +1077,15 @@ non-storage path is answered (inline integrity check → repair flow).
    mid-conversation detection plays a distinct audio warning immediately, then
    shows the existing §15.2a/A2 banner — NO new dialog, no redesign. One build
    detail open: whether the audio plays only in hands-free sessions or always.
-10. Does degraded mode persist across app restarts until repaired? (Assumed
-    yes; confirm.)
-11. The automatic backup is now ONE file covering both databases + chats, so
-    there is ONE "last successful backup" date — but integrity is per-database.
-    Confirm the single combined backup-date line is intended (vs a line per
-    database).
+10. ~~degraded mode persists across restarts?~~ — **B10 RESOLVED (owner: yes):**
+    stored "disabled pending repair" flag; stays off + banner until a repair
+    or restore succeeds (§15.2a).
+11. ~~one combined backup date?~~ — **B11 RESOLVED, and REDESIGNED (owner July
+    15 2026, §15.13):** backups are now SEPARATE per-type files (memory /
+    lorebook / chats) in an `App Backups/` folder, each written-verified-
+    rotated-restored independently; per-database status lines with date+time;
+    any backup error shows the folder + `Open Backup Folder`. No combined
+    single-file backup. Supersedes §15.1/§15.8/§15.9's single-file wording.
 12. The Advanced Memory Settings screen already shows an integrity result and
     row counts. Decide whether that stays, is removed, or defers to the new
     Memory Controls controls, to avoid two competing homes.
@@ -1133,7 +1151,11 @@ the corruption/repair flow.
 > **Title:** `Backup Attempts Failed`
 > **Body (sentence case):** `Your device may be low on storage space. Please choose another location or free up space.`
 > `If you have enough storage space, try checking the database integrity.`
-> **Buttons:** `Save Back Up in New Location` | `Retry` | `Okay` | `Check Database Integrity`
+> **Backup folder location (shown per §15.13):** `[backup folder location]`
+> **Buttons:** `Save Back Up in New Location` | `Open Backup Folder` | `Retry` | `Okay` | `Check Database Integrity`
+
+- Per §15.13: any backup-error surface must show the backup folder location and
+  an `Open Backup Folder` button — added to A4's buttons above.
 
 Inline integrity check inside A4 (under the `Check Database Integrity` button):
 - While running (status text, sentence case): `Checking Database...`
@@ -1203,6 +1225,64 @@ result. This **supersedes** the earlier single-line `Database Check Passed` /
 - ⚠️ **Consistency:** this per-database report should also replace the simpler
   `Database Check Passed/Failed` strings used by A4's inline check and §15.9's
   Memory Controls check. Owner to confirm they adopt this same format.
+
+### 15.13 Backup architecture — separate per-type files (B11 REDESIGN, owner July 15 2026)
+
+**This SUPERSEDES the single combined-file backup design.** The current app
+writes ONE JSON export holding the memory database + chats together (§15.1);
+the owner is replacing that with **separate, independent backup files per data
+type.** Do NOT implement any combined archive or single-file backup design.
+
+**Backup structure:**
+- One clearly named, easy-to-find backup folder, e.g. **`App Backups/`**.
+- Each automatic backup run creates **separate files** for:
+  - Memory database
+  - Lorebook database
+  - Chats
+- Example filenames (same timestamp across one run):
+  - `memory_backup_2026-07-15_1430.db`
+  - `lorebook_backup_2026-07-15_1430.db`
+  - `chats_backup_2026-07-15_1430.zip`
+- All files from one run share the same timestamp, but each is written,
+  verified, and **restorable independently.**
+
+**Required behavior:**
+- Do NOT combine memory, lorebooks, and chats into one backup file.
+- Write each backup to a **temporary file first**.
+- **Verify** each backup completed successfully before it replaces the
+  previous good backup of that type.
+- **Never overwrite or delete the last known-good backup** (of a given type)
+  until the new one of that type has been verified.
+- A failure backing up ONE data type must NOT invalidate or remove the
+  successful backups of the others (each type is independent).
+- Restoration must allow memory, lorebooks, or chats to be restored
+  **separately**.
+- Keep the backup folder easy for the user to locate.
+- **Any error message involving a backup must show the backup folder location
+  and provide an `Open Backup Folder` button** (applies to A4 and any future
+  backup-error surface).
+
+**Status display (per type — supersedes the single line in §15.9):**
+> `Last successful memory database backup: [date and time]`
+> `Last successful lorebook database backup: [date and time]`
+
+- A separate date+time PER database, because each backup is independent.
+- **Chats get their own backup status elsewhere** if they are not part of the
+  Database Status section (owner: chats' status lives separately).
+- Note: backup status lines now include **date AND time** (the example
+  timestamp is `2026-07-15_1430`), which extends the earlier date-only
+  `Month D, YYYY` rule for these lines. ⚠️ Confirm the exact display format for
+  the time portion.
+
+**Knock-on updates:**
+- §15.8 rotation (keep newest 5) now applies **per file type** — 5 memory, 5
+  lorebook, 5 chats — not 5 combined.
+- §15.9's single `Last successful Database Backup` and `Database Backup Failed`
+  lines are replaced by per-type lines here; the "Backup Failed" line likewise
+  becomes per type.
+- A4 (§15.12) gains the backup-folder location + `Open Backup Folder` button.
+- A6's preserved-file location (a quarantined corrupt DB) stays its own
+  `Open File Location`; that is a different location from the backup folder.
 
 ### 15.11 What §15 does NOT change
 
