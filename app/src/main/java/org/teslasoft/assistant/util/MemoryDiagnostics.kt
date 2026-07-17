@@ -18,7 +18,9 @@ package org.teslasoft.assistant.util
 
 import android.app.ActivityManager
 import android.content.Context
+import android.os.Build
 import android.os.Debug
+import android.os.PowerManager
 import android.os.SystemClock
 import java.io.File
 
@@ -68,10 +70,38 @@ object MemoryDiagnostics {
             val mi = systemMemoryInfo(context)
             val availStr = mi?.let { "${mb(it.availMem)}MB" } ?: "?"
             val lowStr = mi?.lowMemory?.toString() ?: "?"
-            "heap=$javaUsed/${javaMax}MB native=${nativeAlloc}MB avail=$availStr low=$lowStr"
+            "heap=$javaUsed/${javaMax}MB native=${nativeAlloc}MB avail=$availStr low=$lowStr " +
+                "thermal=${thermalStatus(context)}"
         } catch (_: Throwable) {
             "mem=unavailable"
         }
+    }
+
+    /**
+     * The OS thermal-throttling status ("none" through "shutdown", API 29+).
+     * A long uninterrupted voice session runs the CPU hard every turn, and
+     * thermal throttling is the one cause of a sudden decode slowdown that no
+     * memory number reveals — while a break that "fixes" the slowness is
+     * exactly what cooling down looks like (owner observation, July 17 2026:
+     * fast again after leaving and returning to the same long conversation,
+     * so conversation size itself can't be the driver). "?" when unreadable.
+     */
+    private fun thermalStatus(context: Context): String {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return "?"
+        return try {
+            val pm = context.applicationContext
+                .getSystemService(Context.POWER_SERVICE) as? PowerManager ?: return "?"
+            when (pm.currentThermalStatus) {
+                PowerManager.THERMAL_STATUS_NONE -> "none"
+                PowerManager.THERMAL_STATUS_LIGHT -> "light"
+                PowerManager.THERMAL_STATUS_MODERATE -> "moderate"
+                PowerManager.THERMAL_STATUS_SEVERE -> "severe"
+                PowerManager.THERMAL_STATUS_CRITICAL -> "critical"
+                PowerManager.THERMAL_STATUS_EMERGENCY -> "emergency"
+                PowerManager.THERMAL_STATUS_SHUTDOWN -> "shutdown"
+                else -> "unknown"
+            }
+        } catch (_: Throwable) { "?" }
     }
 
     /**
@@ -104,7 +134,8 @@ object MemoryDiagnostics {
 
             "uptime=${processUptimeMinutes()}m pss=$pssStr heap=$javaUsed/$javaTotal/${javaMax}MB " +
                 "native=$nativeAlloc/${nativeSize}MB threads=${threadCount()} " +
-                "avail=$availStr low=$lowStr lowThreshold=$thresholdStr"
+                "avail=$availStr low=$lowStr lowThreshold=$thresholdStr " +
+                "thermal=${thermalStatus(context)}"
         } catch (_: Throwable) {
             "mem=unavailable"
         }
