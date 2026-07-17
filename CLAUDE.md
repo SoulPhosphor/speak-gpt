@@ -189,8 +189,20 @@ ungated "TTS readback failed" Event-log line gained
 log. (Same session, separate issue: transcription slowed late in the long
 conversation — the known "Whisper suddenly slow" question; the
 Performance Log toggles in Alerts, Errors & Logs exist to capture that
-evidence.) Awaiting owner on-device confirmation — not done until they
-say so.
+evidence.) Same day, second owner report with Event-log proof: readback
+cut off partway "in another window", twice, each kill logged as
+`frozen by the system — [FREEZER BINDER ASYNC FULL]` ~20 s after "reply
+ready; reading it back". A freezer kill proves NO foreground service was
+up: `pronounce` skipped the readback keep-alive whenever the hands-free
+PREFERENCE was on, but `HandsFreeService` only runs while the mic loop
+is armed — pref-on with an idle loop (after an error/Hang Up, or
+typing/listening from another window) read back with no process
+protection at all, so Android froze the app and the TTS engine's
+progress callbacks overflowed the frozen process's async binder buffer.
+Fixed on the same branch: `HandsFreeService.isRunning` (set on
+successful startForeground, cleared on failure/onDestroy) now gates the
+skip — the keep-alive is held unless the service is actually up.
+Awaiting owner on-device confirmation — not done until they say so.
 
 ## App summary
 
@@ -271,9 +283,13 @@ files may linger on old devices, unread.
   `acquireReadbackKeepAlive()`/`releaseReadbackKeepAlive()` add a second ref
   driven by real playback state (`tts.isSpeaking`/`mediaPlayer.isPlaying`) plus
   a hard timeout, so leaving the app mid-readback no longer freezes the process
-  and cuts the reply off. Hands-free read-aloud is already covered by
-  `HandsFreeService`, so the readback keep-alive is skipped there (no second
-  bar). Both service notifications expose a **Hang Up** action that broadcasts
+  and cuts the reply off. Hands-free read-aloud with a LIVE loop is covered by
+  `HandsFreeService`, so the readback keep-alive is skipped only while that
+  service is actually running (`HandsFreeService.isRunning`, July 17 2026) —
+  never merely because the hands-free preference is on: the service only runs
+  while the mic loop is armed, and a pref-on/loop-idle readback used to run
+  with no foreground service at all, so the cached-apps freezer killed the app
+  mid-readback ([FREEZER BINDER ASYNC FULL]). Both service notifications expose a **Hang Up** action that broadcasts
   `ChatActivity.ACTION_HANG_UP` (package-scoped, non-exported; `hangUpReceiver`
   registered for the activity's whole life so it fires while backgrounded) →
   runs `cancelAllAiActivity()` (the same teardown as the in-app stop control).

@@ -56,6 +56,18 @@ class HandsFreeService : Service() {
         private const val NOTIFICATION_ID = 9921
         private const val WAKE_LOCK_TAG = "PhosphorShines:HandsFree"
 
+        // Liveness flag for ChatActivity's readback keep-alive decision. The
+        // hands-free PREFERENCE being on does not mean this service is up —
+        // it only runs while the mic loop is actually armed. A readback that
+        // skips its own keep-alive because "hands-free covers it" while this
+        // service is NOT running leaves the process with no foreground
+        // protection at all, and the cached-apps freezer then kills it
+        // mid-readback ([FREEZER BINDER ASYNC FULL]). True only between a
+        // successful startForeground and onDestroy.
+        @Volatile
+        var isRunning: Boolean = false
+            private set
+
         private const val EXTRA_CHAT_ID = "chatId"
         private const val EXTRA_CHAT_NAME = "chatName"
 
@@ -118,10 +130,12 @@ class HandsFreeService : Service() {
                     "startForeground failed: ${e.javaClass.simpleName}: ${e.message} — " +
                             "hands-free keep-alive unavailable (screen-off listening may be cut off)")
             } catch (_: Throwable) { /* logging must never crash the service */ }
+            isRunning = false
             stopSelf()
             return START_NOT_STICKY
         }
 
+        isRunning = true
         acquireWakeLock()
         acquireWifiLock()
         // NOT sticky: if the OS kills this service (or the app is closed), it must
@@ -228,6 +242,7 @@ class HandsFreeService : Service() {
     }
 
     override fun onDestroy() {
+        isRunning = false
         releaseLocks()
         super.onDestroy()
     }

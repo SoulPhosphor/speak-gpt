@@ -5256,11 +5256,20 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         }
 
         if (willReadAloud) {
-            // Plain read-aloud only: keep the process alive through TTS playback
-            // so leaving the app or turning the screen off doesn't cut the reply
-            // off mid-sentence. Hands-free already has HandsFreeService holding
-            // the loop, so it needs no second keep-alive (and no second bar).
-            if (!handsFree) acquireReadbackKeepAlive()
+            // Keep the process alive through TTS playback so leaving the app or
+            // turning the screen off doesn't cut the reply off mid-sentence.
+            // Hands-free with a LIVE loop is covered by HandsFreeService (no
+            // second keep-alive, no second bar) — but the hands-free PREFERENCE
+            // alone proves nothing: the service only runs while the mic loop is
+            // armed. With the pref on and the loop idle (stopped by an error or
+            // Hang Up, or the user typing/listening from another window) a
+            // readback used to run with NO foreground service at all — ~20 s
+            // after the app left the foreground the cached-apps freezer froze
+            // the process mid-readback and the TTS engine's progress callbacks
+            // overflowed its async binder buffer, so the system killed the app
+            // ([FREEZER BINDER ASYNC FULL], owner Event log, July 17 2026). Key
+            // the skip on the service actually running, never on the pref.
+            if (!handsFree || !HandsFreeService.isRunning) acquireReadbackKeepAlive()
             if (autoLangDetect) {
                 try {
                     // ML Kit clients hold native resources: re-creating one per
