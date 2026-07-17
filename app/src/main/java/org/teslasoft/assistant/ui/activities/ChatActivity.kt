@@ -1699,10 +1699,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
         initSettings(prepared.historyResult)
 
+        // The Activity window may already be attached because startup storage
+        // now loads on a worker. Apply insets explicitly once the chat views
+        // exist; onAttachedToWindow may have run before setContentView.
+        adjustPaddings()
+
         if (savedInstanceState != null) {
-            if (Build.VERSION.SDK_INT != Build.VERSION_CODES.R) {
-                adjustPaddings()
-            }
             onRestoredState(savedInstanceState)
         }
 
@@ -6076,7 +6078,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
-        adjustPaddings()
+        // Async startup can attach the window before activity_chat is set.
+        // initializeChatUi applies the insets after inflating the layout.
+        if (chatStartupComplete) adjustPaddings()
     }
 
     private fun adjustPaddings() {
@@ -6085,7 +6089,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         WindowInsetsUtil.adjustPaddings(this, R.id.keyboard_frame, EnumSet.of(WindowInsetsUtil.Companion.Flags.NAVIGATION_BAR))
         WindowInsetsUtil.adjustPaddings(this, R.id.messages, EnumSet.of(WindowInsetsUtil.Companion.Flags.NAVIGATION_BAR))
 
-        val messages = findViewById<RecyclerView>(R.id.messages)
+        val messages = findViewById<RecyclerView>(R.id.messages) ?: return
         val layoutParams = messages.layoutParams as ViewGroup.MarginLayoutParams
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {

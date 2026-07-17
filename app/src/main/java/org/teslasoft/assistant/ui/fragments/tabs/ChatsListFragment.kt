@@ -550,10 +550,30 @@ class ChatsListFragment : Fragment(), ChatListAdapter.OnInteractionListener {
         val context = mContext?.applicationContext ?: return
         val host = mContext as? Activity ?: return
         val generation = chatListLoadGeneration.incrementAndGet()
+        val showMetadataFirst = action.isEmpty() && chats.isEmpty()
 
         chatListLoader.execute {
-            val loadedChats = ChatPreferences.getChatPreferences().getChatList(context)
             val loadedPreferences = Preferences.getPreferences(context, "")
+
+            // Do not make the first visible list wait for every full chat
+            // history to decrypt just to obtain its preview line. The compact
+            // list already contains everything needed for ordering/navigation.
+            if (showMetadataFirst) {
+                val metadataChats = ChatPreferences.getChatPreferences()
+                    .getChatListResult(context, includeFirstMessage = false).chats
+
+                host.runOnUiThread {
+                    if (generation != chatListLoadGeneration.get() ||
+                        isDestroyed || !isAttached || host.isFinishing || host.isDestroyed
+                    ) return@runOnUiThread
+
+                    applySettings(metadataChats, loadedPreferences, action, position)
+                }
+            }
+
+            // Fill in the first-message previews after the usable list is on
+            // screen. This remains serialized with the metadata read.
+            val loadedChats = ChatPreferences.getChatPreferences().getChatList(context)
 
             host.runOnUiThread {
                 if (generation != chatListLoadGeneration.get() ||
