@@ -5230,7 +5230,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         }
 
         if (handsFree && willReadAloud) {
-            logVoiceEvent("reply ready; reading it back (${preferences?.getTtsEngine()})")
+            // Record WHICH mechanism is protecting the process for this
+            // readback. "Keep the app alive in the background" has now failed
+            // several separate ways, and every diagnosis had to be
+            // reconstructed by reading code because the log never said what
+            // was actually held. With this line, a future cut-off readback
+            // pairs with the ProcessExit record to prove which state slipped
+            // through instead of inviting another guess.
+            val protection = if (HandsFreeService.isRunning) "hands-free service"
+                             else "readback keep-alive (hands-free loop idle)"
+            logVoiceEvent("reply ready; reading it back (${preferences?.getTtsEngine()}); protected by: $protection")
             // This is a loop readback: its completion is what re-arms the mic.
             // (Manual speaker-button re-reads never set this flag, so they
             // never reopen the mic.)
