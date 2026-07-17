@@ -163,6 +163,35 @@ audible readback (`handsFreeReadbackExpected` / `readbackKeepAliveActive`
 the gap is a stop, never a mic-open. Awaiting owner on-device
 confirmation — not done until they say so.
 
+Update July 17 2026: new owner report — a ~3k-char reply was read back
+TWICE, once, start to finish, late in a long conversation. That's below
+the 4000-char split threshold, so the PR #58 chunking (and the PR #59
+completed-chunk replay fix) weren't the mechanism. Code read found the
+remaining hole in the SAME recovery path #59 patched:
+`handleTtsReadbackError` retried `failedText + ttsRemainingText`, where
+`failedText` is the WHOLE current chunk — including everything the engine
+had already spoken aloud. A short reply is one chunk, so an error
+delivered late in playback (in place of onDone — e.g. an output error as
+the audio track drains on a Bluetooth route) handed the entire
+already-heard reply back to the retry, which read it out again from the
+top and then stopped (retry #1 succeeded; the three-attempt budget was
+never exhausted, matching "repeats exactly once"). Fixed on branch
+`claude/tts-message-repetition-bug-nrijsh`: the utterance progress
+listener now records `onRangeStart` per utterance
+(`ttsRangeUtteranceId`/`ttsSpokenRangeStart`, id-guarded so a flushed
+utterance's late callback can't advance the current one) and the retry
+resumes from the last spoken range — at most the final word/sentence
+repeats. An engine that reports no ranges leaves the offset at 0 (old
+full-chunk retry, no regression); an error arriving after the whole text
+was spoken now finishes the readback instead of replaying it. The
+ungated "TTS readback failed" Event-log line gained
+`spokenBeforeFailure=N chars` so the next occurrence is provable from the
+log. (Same session, separate issue: transcription slowed late in the long
+conversation — the known "Whisper suddenly slow" question; the
+Performance Log toggles in Alerts, Errors & Logs exist to capture that
+evidence.) Awaiting owner on-device confirmation — not done until they
+say so.
+
 ## App summary
 
 Android voice/chat assistant (fork of TeslaSoft SpeakGPT, now independent —

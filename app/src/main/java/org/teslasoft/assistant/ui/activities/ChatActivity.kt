@@ -1135,6 +1135,17 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     // finishes so recovery cannot replay completed text.
     private var ttsRemainingText = ""
     private var ttsChunkSession = 0
+    // How far the engine actually got through the current utterance: the
+    // character offset of the last speech range it reported via onRangeStart.
+    // The failure retry resumes from here instead of replaying audio the user
+    // already heard — an error arriving late in a long single-chunk reply used
+    // to hand the ENTIRE already-spoken text back to the retry, so the whole
+    // reply was read out twice, start to finish. An engine that never reports
+    // ranges leaves this at 0, which keeps the old full-chunk retry as the
+    // fallback. Guarded by the utterance id so a late callback from a flushed
+    // utterance can't inflate the offset of the current one.
+    @Volatile private var ttsRangeUtteranceId: String? = null
+    @Volatile private var ttsSpokenRangeStart = 0
     // Did the current utterance actually begin speaking (onStart) before it
     // failed? Distinguishes "engine rejected it outright" from "failed
     // mid-synthesis" — the two have very different causes for the same -8.
@@ -1168,6 +1179,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
     private val ttsProgressListener = object : UtteranceProgressListener() {
         override fun onStart(utteranceId: String?) { lastTtsUtteranceStarted = true }
+        override fun onRangeStart(utteranceId: String?, start: Int, end: Int, frame: Int) {
+            // Progress marker for the failure retry: the engine is about to
+            // speak [start, end) of the current utterance, so everything
+            // before `start` has been said. Monotonic per utterance.
+            if (utteranceId != null && utteranceId == ttsRangeUtteranceId &&
+                start > ttsSpokenRangeStart
+            ) {
+                ttsSpokenRangeStart = start
+            }
+        }
         override fun onDone(utteranceId: String?) {
             if (utteranceId == null || ttsUtteranceText.remove(utteranceId) == null) return
             if (utteranceId != finalTtsUtteranceId) {
@@ -1210,15 +1231,28 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
         // Claim this queued chunk exactly once. Some engines invoke both
         // onError overloads; removing the entry makes the duplicate a no-op.
+        val failedId: String?
         val failedText = if (utteranceId != null) {
+            failedId = utteranceId
             ttsUtteranceText.remove(utteranceId) ?: return
         } else {
             val entry = ttsUtteranceText.entries.firstOrNull() ?: return
             if (!ttsUtteranceText.remove(entry.key, entry.value)) return
+            failedId = entry.key
             entry.value
         }
         val retrySession = ttsChunkSession
-        val unsaidText = failedText + ttsRemainingText
+        // Resume from where the engine actually stopped speaking, not from the
+        // top of the chunk. failedText is the WHOLE current chunk, so a failure
+        // near the end of a long reply used to replay everything the user had
+        // already heard ("it read the entire reply twice"). The last reported
+        // speech range is the only reliable spoken-this-far marker; resuming at
+        // its start repeats at most the final word or sentence. Offset 0 (no
+        // ranges reported) keeps the old full-chunk retry.
+        val spokenOffset = if (failedId == ttsRangeUtteranceId) {
+            ttsSpokenRangeStart.coerceIn(0, failedText.length)
+        } else 0
+        val unsaidText = failedText.substring(spokenOffset) + ttsRemainingText
         ttsRemainingText = ""
         finalTtsUtteranceId = null
         ttsErrorRetries++
@@ -1240,6 +1274,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             logVoiceEventAlways(
                 "TTS readback failed (error $codeText), attempt $ttsErrorRetries/$TTS_MAX_ERROR_RETRIES: " +
                 "text=$len chars${if (blank) " BLANK" else ""}${if (nonAscii) " has-non-ASCII" else ""}, " +
+                "spokenBeforeFailure=$spokenOffset chars, " +
                 "started=$lastTtsUtteranceStarted, engine max $maxLen, engine=$engineName, " +
                 "voice=$voiceName, lang=$langName, sample=\"$sample$sampleSuffix\""
             )
@@ -1252,6 +1287,18 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             runOnUiThread {
                 logVoiceEventAlways("TTS gave up on this readback after $ttsErrorRetries failures; continuing without reading it aloud")
                 playErrorSignal()
+            }
+            onHandsFreeReadbackFinished()
+            return
+        }
+        if (unsaidText.isBlank()) {
+            // The engine had already spoken the entire text when it failed (an
+            // error delivered in place of onDone) — there is nothing left to
+            // say, so finish the readback instead of re-initialising and
+            // replaying it.
+            runOnUiThread {
+                logVoiceEventAlways("TTS failed after speaking the whole text; treating readback as finished")
+                adapter?.clearSpeakingPosition()
             }
             onHandsFreeReadbackFinished()
             return
@@ -5282,6 +5329,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 ttsUtteranceCounter++
                 val utteranceId = "speakgpt-$ttsUtteranceCounter"
                 lastTtsUtteranceStarted = false
+                // Fresh utterance, fresh progress marker (utterance ids are
+                // monotonic, so a stale marker can never match a new failure).
+                ttsRangeUtteranceId = utteranceId
+                ttsSpokenRangeStart = 0
                 ttsUtteranceText[utteranceId] = chunk
                 finalTtsUtteranceId = if (ttsRemainingText.isEmpty()) utteranceId else null
                 val result = engine.speak(chunk, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
