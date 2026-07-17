@@ -25,9 +25,23 @@ import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.util.concurrent.Executors
 
 class Logger {
     companion object {
+        /**
+         * Persistent voice/process-exit diagnostics must never make the UI wait
+         * on Android Keystore. A single worker also preserves their enqueue
+         * order; using one new Thread per line would let encrypted read/modify/
+         * write operations race and overwrite one another.
+         *
+         * CrashHandler continues to call [log] directly: its dedicated crash
+         * screen needs the write to finish before the process can be closed.
+         */
+        private val backgroundLogWriter = Executors.newSingleThreadExecutor { task ->
+            Thread(task, "encrypted-log-writer")
+        }
+
         /**
          * Get crash log
          * */
@@ -188,6 +202,20 @@ class Logger {
             }
         }
 
+        /**
+         * Enqueue a persistent diagnostic without making the caller (often a
+         * microphone callback on the main thread) wait for Keystore or disk.
+         * Best-effort by design, matching [log]'s existing diagnostic contract.
+         */
+        fun logAsync(context: Context, type: String, tag: String, level: String, message: String) {
+            val appContext = context.applicationContext
+            backgroundLogWriter.execute {
+                try {
+                    log(appContext, type, tag, level, message)
+                } catch (_: Throwable) { /* diagnostics must never disturb the caller */ }
+            }
+        }
+
         private val LOG_TIME_FORMAT: DateTimeFormatter =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
 
@@ -273,9 +301,12 @@ class Logger {
          */
         fun logLastExitReason(context: Context) {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
-            try {
-                collectAndLogLastExitReason(context)
-            } catch (_: Throwable) { /* never let diagnostics crash startup */ }
+            val appContext = context.applicationContext
+            backgroundLogWriter.execute {
+                try {
+                    collectAndLogLastExitReason(appContext)
+                } catch (_: Throwable) { /* never let diagnostics crash startup */ }
+            }
         }
 
         private const val LAST_EXIT_TS_KEY = "last_exit_ts"

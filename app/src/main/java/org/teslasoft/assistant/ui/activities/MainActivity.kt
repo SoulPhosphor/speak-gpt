@@ -97,6 +97,12 @@ class MainActivity : FragmentActivity() {
         "monochrome_background_for_chat_list" to false
     )
 
+    private enum class StartupDestination {
+        LOCKED_STORAGE,
+        WELCOME,
+        CHAT_LIST
+    }
+
     @SuppressLint("SetTextI18n", "HardwareIds")
     override fun onCreate(savedInstanceState: Bundle?) {
         if (Build.VERSION.SDK_INT >= 30) {
@@ -194,7 +200,15 @@ class MainActivity : FragmentActivity() {
         }
 
         Thread {
+            // Resolve every Keystore-backed startup decision on this worker.
+            // The Round 4 lock gate remains first: no API-key read or migration
+            // is allowed to decide Welcome/chat-list while chat storage is
+            // locked. Only the resulting navigation is posted to the UI.
+            val startupResult = runCatching { resolveStartupDestination() }
             runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                val startupDestination = startupResult.getOrElse { throw it }
+
                 navigationBar!!.setOnItemSelectedListener(NavigationBarView.OnItemSelectedListener { item: MenuItem ->
                     when (item.itemId) {
                         R.id.menu_chat -> {
@@ -258,7 +272,7 @@ class MainActivity : FragmentActivity() {
                     devIds?.text = "${devIds?.text}\nInstall Source: $pi"
                 }
 
-                preInit()
+                applyStartupDestination(startupDestination)
 
                 if (savedInstanceState != null) {
                     adjustPaddings()
@@ -287,7 +301,12 @@ class MainActivity : FragmentActivity() {
         }.start()
     }
 
-    private fun preInit() {
+    /**
+     * Resolve the startup branch off the main thread. The ordering here is the
+     * Round 4 safety contract: storage lock first, then API-key migration/new-
+     * user checks, and only then the normal chat list.
+     */
+    private fun resolveStartupDestination(): StartupDestination {
         // LOCKED chat storage gate (Round 4): must run BEFORE the API-key
         // check. During a Keystore outage the encrypted API keys also read
         // empty, and this method would otherwise bounce an established user
@@ -295,9 +314,7 @@ class MainActivity : FragmentActivity() {
         // account whose data is locked, not gone. The locked screen blocks
         // everything until storage opens or the app closes.
         if (SecurePrefs.isChatStorageLocked(this)) {
-            startActivity(Intent(this, ChatStorageLockedActivity::class.java).setAction(Intent.ACTION_VIEW))
-            finish()
-            return
+            return StartupDestination.LOCKED_STORAGE
         }
 
         val apiEndpointPreferences = ApiEndpointPreferences.getApiEndpointPreferences(this)
@@ -305,7 +322,6 @@ class MainActivity : FragmentActivity() {
         if (apiEndpointPreferences.getApiEndpoint(this, preferences!!.getApiEndpointId()).apiKey == "") {
             if (preferences!!.getApiKey(this) == "") {
                 if (preferences!!.getOldApiKey() == "") {
-                    startActivity(Intent(this, WelcomeActivity::class.java).setAction(Intent.ACTION_VIEW))
                     // List wipe on the new-user path holds the same monitor
                     // as every other chat-list mutation (Round 4).
                     synchronized(ChatPreferences.CHAT_LIST_LOCK) {
@@ -313,18 +329,31 @@ class MainActivity : FragmentActivity() {
                             putString("data", "[]")
                         }
                     }
-                    finish()
+                    return StartupDestination.WELCOME
                 } else {
                     preferences!!.secureApiKey(this)
                     apiEndpointPreferences.migrateFromLegacyEndpoint(this)
-                    initUI()
                 }
             } else {
                 apiEndpointPreferences.migrateFromLegacyEndpoint(this)
-                initUI()
             }
-        } else {
-            initUI()
+        }
+
+        return StartupDestination.CHAT_LIST
+    }
+
+    /** Apply only the already-resolved result on the main thread. */
+    private fun applyStartupDestination(destination: StartupDestination) {
+        when (destination) {
+            StartupDestination.LOCKED_STORAGE -> {
+                startActivity(Intent(this, ChatStorageLockedActivity::class.java).setAction(Intent.ACTION_VIEW))
+                finish()
+            }
+            StartupDestination.WELCOME -> {
+                startActivity(Intent(this, WelcomeActivity::class.java).setAction(Intent.ACTION_VIEW))
+                finish()
+            }
+            StartupDestination.CHAT_LIST -> initUI()
         }
     }
 

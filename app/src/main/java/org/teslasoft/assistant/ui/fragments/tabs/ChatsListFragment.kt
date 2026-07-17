@@ -70,6 +70,8 @@ import kotlin.math.abs
 import androidx.core.net.toUri
 import org.teslasoft.assistant.util.WindowInsetsUtil
 import java.util.EnumSet
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicInteger
 import androidx.core.content.edit
 
 
@@ -100,6 +102,14 @@ class ChatsListFragment : Fragment(), ChatListAdapter.OnInteractionListener {
     private var preferences: Preferences? = null
 
     private var mContext: Context? = null
+
+    // Opening each encrypted chat to compute first_message can wait on
+    // Keystore and parse a large history. Keep those loads ordered and off the
+    // UI thread; the generation drops stale results when refreshes overlap.
+    private val chatListLoader = Executors.newSingleThreadExecutor { task ->
+        Thread(task, "chat-list-loader")
+    }
+    private val chatListLoadGeneration = AtomicInteger(0)
 
     private val appearanceFlags: HashMap<String, Boolean> = hashMapOf(
         "debug_mode" to false,
@@ -161,6 +171,7 @@ class ChatsListFragment : Fragment(), ChatListAdapter.OnInteractionListener {
 
     override fun onAttach(context: Context) {
         isAttached = true
+        isDestroyed = false
         mContext = context
 
         if (rootView != null) WindowInsetsUtil.adjustPaddings((mContext as Activity?) ?: return, rootView, R.id.root, EnumSet.of(WindowInsetsUtil.Companion.Flags.STATUS_BAR, WindowInsetsUtil.Companion.Flags.IGNORE_PADDINGS))
@@ -175,6 +186,9 @@ class ChatsListFragment : Fragment(), ChatListAdapter.OnInteractionListener {
 
     override fun onDestroy() {
         isAttached = false
+        isDestroyed = true
+        chatListLoadGeneration.incrementAndGet()
+        chatListLoader.shutdownNow()
         mContext = null
         super.onDestroy()
     }
@@ -528,10 +542,61 @@ class ChatsListFragment : Fragment(), ChatListAdapter.OnInteractionListener {
         fileIntentLauncher.launch(intent)
     }
 
-    private fun initSettings(action: String = "", position: Int = -1) {
-        chats = ChatPreferences.getChatPreferences().getChatList(mContext?: return)
+    private fun initSettings(
+        action: String = "",
+        position: Int = -1,
+        onlyIfChanged: Boolean = false
+    ) {
+        val context = mContext?.applicationContext ?: return
+        val host = mContext as? Activity ?: return
+        val generation = chatListLoadGeneration.incrementAndGet()
 
-        preferences = Preferences.getPreferences(mContext ?: return, "")
+        chatListLoader.execute {
+            val loadedChats = ChatPreferences.getChatPreferences().getChatList(context)
+            val loadedPreferences = Preferences.getPreferences(context, "")
+
+            host.runOnUiThread {
+                if (generation != chatListLoadGeneration.get() ||
+                    isDestroyed || !isAttached || host.isFinishing || host.isDestroyed
+                ) return@runOnUiThread
+
+                if (onlyIfChanged && sameDisplayedChats(loadedChats, chats)) {
+                    return@runOnUiThread
+                }
+
+                applySettings(loadedChats, loadedPreferences, action, position)
+            }
+        }
+    }
+
+    private fun sameDisplayedChats(
+        first: ArrayList<HashMap<String, String>>,
+        second: ArrayList<HashMap<String, String>>
+    ): Boolean {
+        if (first.size != second.size) return false
+
+        val sortedFirst = first.sortedWith(compareBy(
+            { (it["pinned"] ?: "false") == "true" },
+            { (it["timestamp"] ?: "0").toLong() }
+        )).asReversed()
+
+        for (i in sortedFirst.indices) {
+            if (sortedFirst[i]["name"] != second[i]["name"] ||
+                sortedFirst[i]["first_message"] != second[i]["first_message"] ||
+                sortedFirst[i]["timestamp"] != second[i]["timestamp"]
+            ) return false
+        }
+        return true
+    }
+
+    private fun applySettings(
+        loadedChats: ArrayList<HashMap<String, String>>,
+        loadedPreferences: Preferences,
+        action: String,
+        position: Int
+    ) {
+        chats = loadedChats
+        preferences = loadedPreferences
 
         appearanceFlags["debug_mode"] = preferences!!.getDebugMode()
         appearanceFlags["amoled_pitch_black"] = preferences!!.getAmoledPitchBlack()
@@ -628,40 +693,8 @@ class ChatsListFragment : Fragment(), ChatListAdapter.OnInteractionListener {
         // Nothing interesting, you may ignore this...
         if (chats == null) chats = arrayListOf()
         if (selectionProjection == null) selectionProjection = arrayListOf()
-        if (!chats.isNullOrEmpty() /* NullPointerException has been thrown here... ...HOW??? */) {
-            val chatList = ChatPreferences.getChatPreferences().getChatList(mContext?: return)
-
-            val sorted = chatList.sortedWith(compareBy(
-                { (it["pinned"] ?: "false") == "true" },
-                { (it["timestamp"] ?: "0").toLong() }
-            ))
-
-            chatList.clear()
-            chatList.addAll(sorted)
-
-            chatList.reverse()
-
-            // Compare chats and chatList and update the list if needed
-
-            var isUpdated = false
-
-            if (chatList.size != chats.size) {
-                initSettings()
-            } else {
-                var i = 0
-
-                while (i < chatList.size) {
-                    if (chatList[i]["name"] != chats[i]["name"] || chatList[i]["first_message"] != chats[i]["first_message"] || chatList[i]["timestamp"] != chats[i]["timestamp"]) {
-                        isUpdated = true
-                        break
-                    }
-                    i++
-                }
-
-                if (isUpdated) {
-                    initSettings()
-                }
-            }
+        if (!chats.isNullOrEmpty()) {
+            initSettings(onlyIfChanged = true)
         }
 
         preferences = Preferences.getPreferences(mContext ?: return, "")

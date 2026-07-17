@@ -51,7 +51,6 @@ import android.os.Bundle
 import android.os.Environment
 import android.os.Handler
 import android.os.Looper
-import android.os.StrictMode
 import android.provider.DocumentsContract
 import android.provider.MediaStore
 import android.speech.RecognitionListener
@@ -320,6 +319,22 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     private var apiEndpointPreferences: ApiEndpointPreferences? = null
     private var logitBiasPreferences: LogitBiasPreferences? = null
     private var apiEndpointObject: ApiEndpointObject? = null
+    private var chatStartupComplete = false
+
+    private data class PreparedChatStartup(
+        val chatId: String,
+        val chatName: String,
+        val preferences: Preferences,
+        val apiEndpointPreferences: ApiEndpointPreferences,
+        val logitBiasPreferences: LogitBiasPreferences,
+        val apiEndpointObject: ApiEndpointObject,
+        val historyResult: ChatPreferences.ChatHistoryResult
+    )
+
+    private data class ChatStartupResult(
+        val storageLocked: Boolean,
+        val preparedChat: PreparedChatStartup? = null
+    )
 
     // Init DALL-e
     private var resolution = "512x152"
@@ -818,7 +833,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         preloadAmoled()
         reloadAmoled()
 
-        if (chatId != "") {
+        if (chatStartupComplete && chatId != "") {
             preferences = Preferences.getPreferences(this, chatId)
             apiEndpointPreferences = ApiEndpointPreferences.getApiEndpointPreferences(this)
             logitBiasPreferences = LogitBiasPreferences(this, preferences?.getLogitBiasesConfigId()!!)
@@ -1564,14 +1579,74 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         super.onCreate(savedInstanceState)
         ThemeManager.getThemeManager().applyPalette(this)
 
-        // LOCKED chat storage gate (Round 4): a chat opened from a launcher
-        // shortcut or notification must hit the same wall as MainActivity —
-        // no chat UI, no generation, no saving over locked storage.
+        Thread {
+            // Round 4 ordering is load-bearing: resolve the storage lock before
+            // touching an encrypted API key or chat history. All Keystore-backed
+            // work stays on this worker; only the final UI branch runs on main.
+            val startupAttempt = runCatching { prepareChatStartup() }
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                val startupResult = startupAttempt.getOrElse { throw it }
+
+                if (startupResult.storageLocked) {
+                    startActivity(Intent(this, ChatStorageLockedActivity::class.java).setAction(Intent.ACTION_VIEW))
+                    finish()
+                    return@runOnUiThread
+                }
+
+                initializeChatUi(startupResult.preparedChat!!, savedInstanceState)
+            }
+        }.start()
+    }
+
+    /**
+     * Cold-start storage work for a chat. The lock gate remains first so a
+     * Keystore outage can never masquerade as an empty API key or empty chat.
+     */
+    private fun prepareChatStartup(): ChatStartupResult {
         if (SecurePrefs.isChatStorageLocked(this)) {
-            startActivity(Intent(this, ChatStorageLockedActivity::class.java).setAction(Intent.ACTION_VIEW))
-            finish()
-            return
+            return ChatStartupResult(storageLocked = true)
         }
+
+        val extras: Bundle? = intent.extras
+        val preparedChatId = extras?.getString("chatId", "") ?: ""
+        val preparedChatName = extras?.getString("name", "") ?: ""
+        val preparedPreferences = Preferences.getPreferences(this, preparedChatId)
+        val preparedEndpointPreferences = ApiEndpointPreferences.getApiEndpointPreferences(this)
+        val preparedLogitBiasPreferences = LogitBiasPreferences(
+            this,
+            preparedPreferences.getLogitBiasesConfigId()
+        )
+        val preparedEndpoint = preparedEndpointPreferences.getApiEndpoint(
+            this,
+            preparedPreferences.getApiEndpointId()
+        )
+        val historyResult = ChatPreferences.getChatPreferences()
+            .getChatByIdResult(this, preparedChatId)
+
+        return ChatStartupResult(
+            storageLocked = false,
+            preparedChat = PreparedChatStartup(
+                preparedChatId,
+                preparedChatName,
+                preparedPreferences,
+                preparedEndpointPreferences,
+                preparedLogitBiasPreferences,
+                preparedEndpoint,
+                historyResult
+            )
+        )
+    }
+
+    /** Build the chat screen only after its encrypted startup data is ready. */
+    private fun initializeChatUi(prepared: PreparedChatStartup, savedInstanceState: Bundle?) {
+        chatId = prepared.chatId
+        chatName = prepared.chatName
+        preferences = prepared.preferences
+        apiEndpointPreferences = prepared.apiEndpointPreferences
+        logitBiasPreferences = prepared.logitBiasPreferences
+        apiEndpointObject = prepared.apiEndpointObject
+        title = chatName
 
         if (Build.VERSION.SDK_INT >= 33) {
             onBackInvokedDispatcher.registerOnBackInvokedCallback(
@@ -1616,28 +1691,22 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         threadLoader = findViewById(R.id.thread_loader)
         threadLoader?.visibility = View.VISIBLE
 
-        Thread {
-            val policy = StrictMode.ThreadPolicy.Builder().permitAll().build()
-            StrictMode.setThreadPolicy(policy)
+        val chatActivityTitle: TextView = findViewById(R.id.chat_activity_title)
+        val keyboardInput: LinearLayout = findViewById(R.id.keyboard_input)
 
-            runOnUiThread {
-                val chatActivityTitle: TextView = findViewById(R.id.chat_activity_title)
-                val keyboardInput: LinearLayout = findViewById(R.id.keyboard_input)
+        chatActivityTitle.setBackgroundColor(SurfaceColors.SURFACE_4.getColor(this))
+        keyboardInput.setBackgroundColor(SurfaceColors.SURFACE_5.getColor(this))
 
-                chatActivityTitle.setBackgroundColor(SurfaceColors.SURFACE_4.getColor(this))
-                keyboardInput.setBackgroundColor(SurfaceColors.SURFACE_5.getColor(this))
+        initSettings(prepared.historyResult)
 
-                initChatId()
-                initSettings()
-
-                if (savedInstanceState != null) {
-                    if (Build.VERSION.SDK_INT != Build.VERSION_CODES.R) {
-                        adjustPaddings()
-                    }
-                    onRestoredState(savedInstanceState)
-                }
+        if (savedInstanceState != null) {
+            if (Build.VERSION.SDK_INT != Build.VERSION_CODES.R) {
+                adjustPaddings()
             }
-        }.start()
+            onRestoredState(savedInstanceState)
+        }
+
+        chatStartupComplete = true
     }
 
     public override fun onDestroy() {
@@ -1692,8 +1761,21 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     }
 
     /** SYSTEM INITIALIZATION START **/
-    @Suppress("unchecked")
+    /** Reload path used after an in-chat image update; storage stays off main. */
     private fun initSettings() {
+        val appContext = applicationContext
+        val currentChatId = chatId
+        Thread {
+            val historyResult = ChatPreferences.getChatPreferences()
+                .getChatByIdResult(appContext, currentChatId)
+            runOnUiThread {
+                if (!isFinishing && !isDestroyed) initSettings(historyResult)
+            }
+        }.start()
+    }
+
+    @Suppress("unchecked")
+    private fun initSettings(historyResult: ChatPreferences.ChatHistoryResult) {
         key = apiEndpointObject?.apiKey!!
         // The auxiliary client (cloud Whisper, TTS, image generation,
         // function calling) must follow the active chat's endpoint. It used
@@ -1713,7 +1795,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         } else {
             silenceMode = preferences!!.getSilence()
             autoLangDetect = preferences!!.getAutoLangDetect()
-            val historyResult = ChatPreferences.getChatPreferences().getChatByIdResult(this, chatId)
             messages = historyResult.messages
 
             // A LOCKED/CORRUPT/FAILED history must never render as an empty
@@ -2881,7 +2962,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         if (audioHealthOn && audioDiag.isNotEmpty()) parts.add(audioDiag)
         if (parts.isEmpty()) return
         try {
-            org.teslasoft.assistant.preferences.Logger.log(this, "event", "VoiceDiag", "debug", "$reason\n${parts.joinToString("\n")}")
+            org.teslasoft.assistant.preferences.Logger.logAsync(this, "event", "VoiceDiag", "debug", "$reason\n${parts.joinToString("\n")}")
         } catch (_: Throwable) { /* never let diagnostics crash the loop */ }
     }
 
@@ -2898,7 +2979,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         Log.i("VoiceLoop", "mic route: $diag")
         if (preferences?.getAudioHealthLogging() != true && !voiceDiagnosticsEnabled()) return
         try {
-            org.teslasoft.assistant.preferences.Logger.log(this, "event", "MicRoute", "info", diag)
+            org.teslasoft.assistant.preferences.Logger.logAsync(this, "event", "MicRoute", "info", diag)
         } catch (_: Throwable) { /* never let diagnostics crash the loop */ }
     }
 
@@ -2924,7 +3005,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         Log.i("VoiceLoop", message)
         if (!voiceDiagnosticsEnabled()) return
         try {
-            org.teslasoft.assistant.preferences.Logger.log(this, "event", "VoiceLoop", "info", message)
+            org.teslasoft.assistant.preferences.Logger.logAsync(this, "event", "VoiceLoop", "info", message)
         } catch (_: Throwable) { /* never let diagnostics crash the loop */ }
     }
 
@@ -2935,7 +3016,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     private fun logVoiceEventAlways(message: String) {
         Log.w("VoiceLoop", message)
         try {
-            org.teslasoft.assistant.preferences.Logger.log(this, "event", "VoiceLoop", "warning", message)
+            org.teslasoft.assistant.preferences.Logger.logAsync(this, "event", "VoiceLoop", "warning", message)
         } catch (_: Throwable) { /* never let diagnostics crash the loop */ }
     }
 
@@ -3187,25 +3268,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             loadModel()
             setup()
         }
-    }
-
-    private fun initChatId() {
-        val extras: Bundle? = intent.extras
-
-        if (extras != null) {
-            chatId = extras.getString("chatId", "")
-            chatName = extras.getString("name", "")
-
-            this.title = chatName
-        }
-
-        preferences = Preferences.getPreferences(this, chatId)
-        apiEndpointPreferences = ApiEndpointPreferences.getApiEndpointPreferences(this)
-        logitBiasPreferences = LogitBiasPreferences(this, preferences?.getLogitBiasesConfigId()!!)
-        apiEndpointObject = apiEndpointPreferences?.getApiEndpoint(this, preferences?.getApiEndpointId()!!)
-
-        preloadAmoled()
-        reloadAmoled()
     }
 
     /**

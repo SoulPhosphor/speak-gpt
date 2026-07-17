@@ -27,6 +27,7 @@ class EncryptedPreferences {
         private var mainKey: MasterKey? = null
         private val preferencesCache = mutableMapOf<String, SharedPreferences>()
 
+        @Synchronized
         private fun getMasterKey(context: Context): MasterKey {
             if (mainKey == null) {
                 mainKey = MasterKey.Builder(context)
@@ -36,6 +37,7 @@ class EncryptedPreferences {
             return mainKey!!
         }
 
+        @Synchronized
         private fun getEncryptedSharedPreferences(context: Context, fileName: String): SharedPreferences {
             return preferencesCache[fileName] ?: run {
                 val sharedPreferences = EncryptedSharedPreferences.create(
