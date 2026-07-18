@@ -494,8 +494,9 @@ Use Widget.App.Row.WithSubtitle.
 
 Layout:
 
-Leading shaped preview using the new Widget.App.Row.LeadingImage style
-(approximately 48dp, always vertically centered)
+Leading shaped preview using the new Widget.App.Row.ProfileImage style
+(@dimen/row_profile_image_size, approximately 48dp, always vertically
+centered)
 Title: Default User Image
 Subtitle: Used when the active My Persona or Roleplay Character has no
 image.
@@ -1224,11 +1225,11 @@ COMPANION SELECTION LIST
 
 Add a small profile image at the start of Companion selection rows.
 
-The image slot uses the shared Widget.App.Row.LeadingImage geometry —
+The image slot uses the shared Widget.App.Row.ProfileImage geometry —
 apply the style itself where the existing row layout's structure allows,
-otherwise reuse its shared size dimen — and the rest of the existing row
-layout is unchanged. Do not restyle the Companion selection rows as part
-of this feature.
+otherwise reuse @dimen/row_profile_image_size — and the rest of the
+existing row layout is unchanged. Do not restyle the Companion selection
+rows as part of this feature.
 
 When assigned:
 
@@ -1480,31 +1481,39 @@ Rows:
 - Widget.App.Row.Title
 - Widget.App.Row.Subtitle
 - Widget.App.Row.Chevron
+- Widget.App.Row.Icon (the leading 36dp icon piece, added July 18 2026;
+  used by the first four Settings entries)
 
 New shared style this feature must CREATE (owner-approved in chat,
-July 18 2026 — no leading-picture row style exists yet; the canonical
-row family today is text + chevron only):
+July 18 2026):
 
-- Widget.App.Row.LeadingImage
+- Widget.App.Row.ProfileImage
 
-Widget.App.Row.LeadingImage is the leading-picture piece of a canonical
-row. A row with a picture is otherwise identical to a
-Widget.App.Row.WithSubtitle or Widget.App.Row.TitleOnly row — same
-container, text-column, title, subtitle, and chevron styles — with the
-picture as the first child on the left, always vertically centered.
-The style is defined once in values/themes.xml alongside the other row
-piece styles and owns the picture slot's geometry:
+Widget.App.Row.ProfileImage is the leading profile-picture piece of a
+canonical row. It is completely based on Widget.App.Row.Icon — same
+formula, same slot: the first child of a Widget.App.Row.WithSubtitle or
+Widget.App.Row.TitleOnly container, before the text column, vertically
+centered by the row container exactly like the icon rows.
 
-- Size (approximately 48dp, via a shared dimen so it can be changed in
-  one place)
-- Vertical centering
-- The spacing between the picture and the text column
+Define it in values/themes.xml as a child of Widget.App.Row.Icon that
+overrides ONLY the size:
 
-It bakes in no image content or tint (unlike Widget.App.Row.Chevron,
-whose icon never varies) — the actual picture is set per instance.
-Every canonical row in this feature that shows a leading picture must
-use this style; do not hand-place ad-hoc ImageView attributes inside
-canonical rows.
+- parent: Widget.App.Row.Icon
+- android:layout_width / android:layout_height:
+  @dimen/row_profile_image_size (a new dimen, approximately 48dp)
+
+Everything else (end margin, centerCrop scale type, the
+no-baked-in-tint rule) is inherited from Widget.App.Row.Icon, so a
+future change to the shared formula flows into both automatically —
+while the two sizes stay independent variables: icons can be resized
+without affecting profile pictures, and profile pictures without
+affecting icons.
+
+It bakes in no image content or tint — the actual picture is set per
+instance. Every canonical row in this feature that shows a leading
+profile picture must use this style; do not hand-place ad-hoc ImageView
+attributes inside canonical rows, and do not use Widget.App.Row.Icon
+directly for a profile picture.
 
 The existing main Settings screen continues to use its existing
 TileFragment pattern. Do not replace the main Settings tiles with row
@@ -1673,9 +1682,10 @@ Verify:
   were added.
 - No near-duplicate feature-specific button or row styles were created.
 - Gallery tiles use one shared reusable item treatment.
-- Every canonical row with a leading picture uses
-  Widget.App.Row.LeadingImage; no ad-hoc leading ImageView attributes
-  are copied into row layouts.
+- Every canonical row with a leading profile picture uses
+  Widget.App.Row.ProfileImage (never Widget.App.Row.Icon directly, and
+  never ad-hoc ImageView attributes copied into row layouts), and the
+  style overrides only the size of its Widget.App.Row.Icon parent.
 - Every new activity calls ThemeManager.applyPalette before
   setContentView.
 - Light, dark, and AMOLED are checked in the owner test build.
@@ -1751,7 +1761,9 @@ Add empty and unavailable states.
 Phase 6: Profile Image Settings
 
 Add the normal main Settings tile.
-Create the Widget.App.Row.LeadingImage style in values/themes.xml.
+Create the Widget.App.Row.ProfileImage style (child of
+Widget.App.Row.Icon) and @dimen/row_profile_image_size in
+values/themes.xml and values/dimens.xml.
 Add row-based Profile Image Settings screen.
 Add Default User Image.
 Add Default Shape.
@@ -1777,8 +1789,9 @@ Add user-side chat precedence.
 Phase 9: Documentation, Tests, and CI
 
 Update CLAUDE.md and relevant feature/storage documents, including
-correcting the stale claims that Widget.App.Row.WithSubtitle,
-Widget.App.Row.TitleOnly, and AppButton.Secondary do not exist.
+correcting the stale claim that AppButton.Secondary is not yet defined
+(the row-style variants are already documented there) and documenting
+Widget.App.Row.ProfileImage beside Widget.App.Row.Icon.
 Update the memory schema documentation.
 Add unit and migration tests.
 Perform the Style Review Gate and include its results, naming each new
