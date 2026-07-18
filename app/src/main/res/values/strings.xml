@@ -473,6 +473,8 @@
     <string name="tile_dalle_desc">This feature allows you to set image generation model.</string>
     <string name="tile_image_resolution_title">Image resolution</string>
     <string name="tile_image_resolution_desc">This feature allows you to set image resolution. Please note that DALL-e 3 supports only 1024x1024.</string>
+    <string name="tile_images_title">Images</string>
+    <string name="tile_images_desc">Image generation settings</string>
     <string name="tile_openai_tts">Use OpenAI TTS</string>
     <string name="tile_google_tts">Google TTS is used</string>
     <string name="tile_tts_desc">This feature allows you to set TTS engine. OpenAI TTS is paid.</string>

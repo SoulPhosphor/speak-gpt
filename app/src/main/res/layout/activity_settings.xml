@@ -349,6 +349,37 @@
                     android:contentDescription="@string/tile_roleplay_title" />
             </LinearLayout>
 
+            <LinearLayout
+                android:id="@+id/tile_images"
+                style="@style/Widget.App.Row.WithSubtitle"
+                android:paddingHorizontal="20dp"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/textView31">
+
+                <ImageView
+                    style="@style/Widget.App.Row.Icon"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_image"
+                    android:tint="?attr/colorPrimary" />
+
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/tile_images_title" />
+
+                    <TextView
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:maxLines="3"
+                        android:text="@string/tile_images_desc" />
+                </LinearLayout>
+
+                <ImageView
+                    style="@style/Widget.App.Row.Chevron"
+                    android:contentDescription="@string/tile_images_title" />
+            </LinearLayout>
+
             <androidx.constraintlayout.widget.ConstraintLayout
                 android:id="@+id/constraintLayout9"
                 android:layout_width="0dp"
@@ -358,7 +389,7 @@
                 android:layout_marginEnd="8dp"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toBottomOf="@+id/textView31">
+                app:layout_constraintTop_toBottomOf="@+id/tile_images">
 
                 <LinearLayout
                     android:layout_width="0dp"
