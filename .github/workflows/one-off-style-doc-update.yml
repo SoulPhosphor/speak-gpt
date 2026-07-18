@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - style-definitions-cleanup
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: write
