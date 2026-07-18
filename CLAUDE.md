@@ -1358,46 +1358,102 @@ Everything is on-device. No cloud sync, no accounts.
   never applied to any button and are retired.
   Both defined styles share the corner radius via `@dimen/button_corner_radius`
   (`values/dimens.xml`) — change that one dimen to reshape both at once.
-- **Shared chevron-row styles (owner ruling, July 18 2026).** Every
-  "chevron row" in this app (a tappable settings-style row: a title, an
-  optional subtitle under it, and a right-facing chevron) used to be
-  hand-copied raw XML in every screen's layout file — no shared style
-  existed, so screens only matched each other by luck/care, not by
+- **Shared chevron-row styles (owner ruling, July 18 2026; expanded same
+  day — leading-icon variant, list-screen manager/picker split).** Every
+  "chevron row" in this app (a tappable settings-style row: an optional
+  leading icon, a title, an optional subtitle, and a right-facing chevron)
+  used to be hand-copied raw XML in every screen's layout file — no shared
+  style existed, so screens only matched each other by luck/care, not by
   anything enforced. There is now one set of shared styles, values taken
   from Memory Manager's rows (`activity_memory_manager.xml` — the owner's
-  named reference copy). A row is 4 separate views, so this is 5 styles,
-  one per piece — **apply all 5 together** to build a matching row:
-  - `Widget.App.Row` — the outer clickable container (a horizontal
-    `LinearLayout`).
-  - `Widget.App.Row.TextColumn` — the inner vertical column that holds the
+  named reference copy). A row is built from up to 6 pieces — **apply them
+  together, in order**, to build a matching row:
+  - Outer container — pick ONE of two variants (both share the same base
+    geometry: 56dp minimum height, 12dp vertical padding, ripple
+    background, horizontal `LinearLayout`):
+    - `Widget.App.Row.WithSubtitle` — row has a subtitle line.
+    - `Widget.App.Row.TitleOnly` — row has no subtitle.
+  - `Widget.App.Row.Icon` (optional, added July 18 2026) — a leading 36dp
+    icon/avatar slot, the row's FIRST child when present, before the text
+    column. Sized to match the leading identity icon already used on
+    memory rows (`view_memory_row.xml`). Carries **no tint of its own** —
+    today's plain vector glyphs set `android:tint` per instance (usually
+    `?attr/colorPrimary`), so a future avatar/photo (Characters, Personas
+    don't have one yet) can sit in the same slot unforced into one color.
+  - `Widget.App.Row.TextColumn` — the inner vertical column holding the
     title + subtitle (a `LinearLayout` inside the container).
-  - `Widget.App.Row.Title` — the title `TextView`.
-  - `Widget.App.Row.Subtitle` — the subtitle `TextView` (omit the whole
-    view for a row with no subtitle).
-  - `Widget.App.Row.Chevron` — the trailing chevron `ImageView`. This one
-    bakes in the icon (`ic_chevron_right`) and its tint, since those never
-    change row to row — an instance only needs its own
-    `contentDescription`.
-  Per-row content (`android:id`, the title/subtitle `android:text`, the
-  chevron's `contentDescription`, the click listener) stays on the
-  instance as always; only the repeated look attributes move into the
-  styles. The very first row on a screen additionally gets a manual
-  `android:layout_marginTop="16dp"` on the container — that is spacing
-  below the screen's header, not part of the row's own look, so it is
-  deliberately **not** baked into `Widget.App.Row` and must be added by
-  hand on whichever row is first.
+  - `Widget.App.Row.Title` — the title `TextView`. **Always this exact
+    style, regardless of subtitle or icon presence** (owner requirement,
+    July 18 2026) — every row variant points at the one shared definition,
+    never a per-variant copy, so a title's font/size/color can never drift
+    between variants.
+  - `Widget.App.Row.Subtitle` — the subtitle `TextView` (omit the view
+    entirely for a row with no subtitle). One-line ellipsis by default; a
+    genuinely long description (e.g. the Model Rules row on AI System
+    Settings) overrides `android:maxLines`/`android:ellipsize` on that one
+    instance rather than truncating real content.
+  - `Widget.App.Row.Chevron` — the trailing chevron `ImageView`. Bakes in
+    the icon (`ic_chevron_right`) and its tint; an instance only needs its
+    own `contentDescription`.
+  Per-row content (`android:id`, text, content descriptions, click
+  listener) stays on the instance as always; only the repeated look
+  attributes move into the styles. The very first row on a screen
+  additionally gets a manual `android:layout_marginTop` on the container —
+  spacing below the screen's header, not part of the row's own look,
+  deliberately not baked into the shared styles.
+  **Fragile gotcha — already crashed CharactersActivity once (July 18
+  2026):** `Widget.App.Row.Title`/`Subtitle`/`Chevron` resolve color
+  through custom theme attributes `appRowTitleColor`/`appRowSubtitleColor`
+  (`values/attrs.xml`). These MUST be given a value on
+  **`ThemeOverlay.Phosphor.Violet`** — the palette overlay
+  `ThemeManager.applyPalette` forces on top of everything at runtime, in
+  `onCreate` right after `super.onCreate()`. Defining them only on
+  `Theme.App` is not enough: the overlay is the last theme layer applied
+  and the only one guaranteed present when a row resolves its color. A
+  future palette (a second `ThemeOverlay.Phosphor.*`) must define these
+  same two items too, or its screens crash the same way the moment they
+  render a row.
+  **List-screen pattern (System Prompts / Activation Prompts libraries,
+  July 18 2026):** both are `ListView`+`BaseAdapter` screens with two
+  distinct uses — manager mode (browse/edit, opened from a settings
+  screen) and pick mode (choosing one for a chat, opened from Quick
+  Settings). Manager mode uses `Widget.App.Row.TitleOnly` + chevron (no
+  content preview — any description/preview text is dropped, owner
+  decision). Pick mode is UNTOUCHED: it keeps its own "checked tile"
+  layout (the currently-picked item drawn highlighted/filled), the same
+  scheme the Personas picker also uses, since there tapping selects rather
+  than opens something and a chevron would mislead. Each mode has its own
+  item layout XML; the adapter picks one via a `pickMode: Boolean` fixed
+  for the adapter's whole lifetime (read once from the activity's intent
+  extra), so the two never mix within one instance's recycled views.
+  Don't touch pick mode when converting a manager-mode list unless the
+  owner asks for that specifically.
   **Caveat the owner should know:** a style only fixes how a view looks —
-  it can't guarantee a new row's structure is right (that all 4 pieces
-  exist, in order, each with the correct style). Using these 5 styles
-  makes a mismatched row far less likely than raw copy-paste, but it does
-  not make one impossible; nothing yet enforces the structure itself (that
+  it can't guarantee a new row's structure is right (that all pieces
+  exist, in order, each with the correct style). Using these styles makes
+  a mismatched row far less likely than raw copy-paste, but it does not
+  make one impossible; nothing yet enforces the structure itself (that
   would need a shared reusable layout template, not yet built).
-  **Rollout status:** the styles are defined; only Characters'
-  three rows (`activity_characters.xml`) have been converted to use them
-  so far, as a deliberately small first slice for the owner to review.
-  Memory Manager's own rows — the reference the values were taken from —
-  have **not** been converted yet and still use the original raw XML.
-  Do not roll this out further without the owner's go-ahead.
+  **Rollout status (July 18 2026).** Converted: `activity_characters.xml`
+  (3 rows, WithSubtitle, no icon); `activity_ai_system_settings.xml` (3
+  rows — API endpoint profiles, System prompts, Model Specific Rules — all
+  WithSubtitle, no icon); the System Prompts library's manager mode
+  (`view_system_prompt_item_row.xml`, TitleOnly + chevron); the Activation
+  Prompts library's manager mode (`view_activation_prompt_item_row.xml`,
+  TitleOnly + chevron, no preview text); the four "General" entries on the
+  main Settings screen (`activity_settings.xml` — Characters, AI System
+  Settings, Memory Manager, Roleplay — WithSubtitle **+ Icon**, the first
+  and only use of the icon variant so far, a deliberately small review
+  slice). **Not converted:** Memory Manager's own rows (the reference the
+  values were taken from); every other tile on the main Settings screen
+  (Image Generation, Appearance, Experimental, Voice, Other, Debug
+  categories) — those are built on `TileFragment`, which supports
+  checkable/toggle tiles with long-press-for-description dialogs;
+  converting those means first deciding how a toggle reads as a plain row
+  (a trailing `MaterialSwitch`, matching the "Auto Apply Model Rules" row
+  on AI System Settings, is the leading candidate but NOT yet decided) —
+  deliberately deferred pending the owner's review of the plain-navigation
+  slice above. Do not roll this out further without the owner's go-ahead.
 - Match the existing style: nullable `var` view fields + `findViewById`,
   `DialogFragment.newInstance(Bundle)` pattern, listener interfaces with
   default no-op methods, copyright header on every file, strings ONLY in
