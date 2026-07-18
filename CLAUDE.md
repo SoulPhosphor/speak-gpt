@@ -1401,6 +1401,16 @@ Everything is on-device. No cloud sync, no accounts.
   additionally gets a manual `android:layout_marginTop` on the container —
   spacing below the screen's header, not part of the row's own look,
   deliberately not baked into the shared styles.
+  **Plain-language shorthand (owner's own words, so the owner never has to
+  say a style class name):** when the owner asks for a "title only row",
+  build it from `Widget.App.Row.TitleOnly` + `Widget.App.Row.TextColumn` +
+  `Widget.App.Row.Title` + `Widget.App.Row.Chevron`. When the owner asks
+  for a "row with a subtitle" / "row with title and subtitle", swap in
+  `Widget.App.Row.WithSubtitle` and add `Widget.App.Row.Subtitle`. Either
+  one "with an icon" / "with an image" additionally means add
+  `Widget.App.Row.Icon` as the first child, before the text column. These
+  four phrases are the complete vocabulary — there is no fifth or sixth
+  row shape today.
   **Fragile gotcha — already crashed CharactersActivity once (July 18
   2026):** `Widget.App.Row.Title`/`Subtitle`/`Chevron` resolve color
   through custom theme attributes `appRowTitleColor`/`appRowSubtitleColor`
