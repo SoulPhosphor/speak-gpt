@@ -6,6 +6,8 @@
         <item name="colorSecondary">@color/accent_100</item>
         <item name="colorOnSecondary">@color/black</item>
         <item name="colorAccent">@color/accent_900</item>
+        <item name="appRowTitleColor">@color/text</item>
+        <item name="appRowSubtitleColor">@color/text_subtitle</item>
         <item name="android:windowContentTransitions">true</item>
         <item name="android:statusBarColor">@color/window_background</item>
         <item name="android:windowLightStatusBar">true</item>
@@ -90,7 +92,7 @@
     <style name="Widget.App.Row.Title" parent="">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
-        <item name="android:textColor">@color/text</item>
+        <item name="android:textColor">?attr/appRowTitleColor</item>
         <item name="android:textSize">16sp</item>
     </style>
 
@@ -99,7 +101,7 @@
         <item name="android:layout_height">wrap_content</item>
         <item name="android:ellipsize">end</item>
         <item name="android:maxLines">1</item>
-        <item name="android:textColor">@color/text_subtitle</item>
+        <item name="android:textColor">?attr/appRowSubtitleColor</item>
         <item name="android:textSize">13sp</item>
     </style>
 
@@ -108,7 +110,7 @@
         <item name="android:layout_height">24dp</item>
         <item name="android:layout_marginStart">12dp</item>
         <item name="android:src">@drawable/ic_chevron_right</item>
-        <item name="android:tint">@color/text_subtitle</item>
+        <item name="android:tint">?attr/appRowSubtitleColor</item>
     </style>
 
     <style name="BottomNavigationView.ActiveIndicator" parent="Widget.Material3.BottomNavigationView.ActiveIndicator">
@@ -131,6 +133,8 @@
         <item name="colorSecondary">@color/accent_100</item>
         <item name="colorOnSecondary">@color/black</item>
         <item name="colorAccent">@color/accent_900</item>
+        <item name="appRowTitleColor">@color/text</item>
+        <item name="appRowSubtitleColor">@color/text_subtitle</item>
         <item name="android:windowAnimationStyle">@style/AssistantWindowAnimation</item>
         <item name="android:typeface">sans</item>
         <item name="android:fontFamily">@font/default_font</item>
@@ -175,6 +179,8 @@
         <item name="colorAccent">@color/accent_900</item>
         <item name="colorPrimary">#ff121212</item>
         <item name="colorPrimaryDark">#ff121212</item>
+        <item name="appRowTitleColor">@color/text</item>
+        <item name="appRowSubtitleColor">@color/text_subtitle</item>
         <item name="android:typeface">sans</item>
         <item name="android:fontFamily">@font/default_font</item>
     </style>
@@ -206,6 +212,8 @@
         <item name="colorSecondary">@color/pwa_accent</item>
         <item name="colorOnSecondary">@color/pwa_background</item>
         <item name="colorAccent">@color/pwa_accent</item>
+        <item name="appRowTitleColor">@color/text</item>
+        <item name="appRowSubtitleColor">@color/text_subtitle</item>
         <item name="android:statusBarColor">@color/pwa_background</item>
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:navigationBarColor">@color/pwa_background</item>
