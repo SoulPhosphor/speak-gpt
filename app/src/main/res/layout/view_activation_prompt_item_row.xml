@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+/**************************************************************************
+* Copyright (c) 2023-2026 Dmytro Ostapenko. All rights reserved.
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*  http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+**************************************************************************/
+-->
+<!-- Manager-mode row for the activation prompt library (owner request, July
+     18 2026): browsing/editing uses a plain title-only row with a chevron —
+     no prompt-text preview, just the label the user gave it. The separate
+     always-visible edit button is folded into the row's own tap target
+     (long-press still opens the editor, same as before). Pick mode
+     (choosing an activation prompt for a chat, from Quick Settings) keeps
+     the separate "checked tile" layout in view_activation_prompt_item.xml,
+     unchanged. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/ui"
+    style="@style/Widget.App.Row.TitleOnly"
+    android:paddingHorizontal="20dp">
+
+    <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+        <TextView
+            android:id="@+id/activation_label"
+            style="@style/Widget.App.Row.Title"
+            android:ellipsize="end"
+            android:lines="1"
+            android:text="Activation prompt" />
+    </LinearLayout>
+
+    <ImageView
+        android:id="@+id/activation_prompt_chevron"
+        style="@style/Widget.App.Row.Chevron"
+        android:contentDescription="@string/btn_edit_activation_prompt" />
+</LinearLayout>

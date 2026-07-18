@@ -206,7 +206,7 @@ class ActivationPromptsListActivity : FragmentActivity() {
         if (list == null) list = arrayListOf()
 
         runOnUiThread {
-            adapter = ActivationPromptListItemAdapter(list, this)
+            adapter = ActivationPromptListItemAdapter(list, this, pickMode)
             adapter!!.setOnSelectListener(onSelectListener)
             adapter!!.setSelectedId(if (pickMode) currentActivationId else "")
             listView!!.adapter = adapter
