@@ -1449,6 +1449,200 @@ than truncating it.
 Sticky bottom controls must respect navigation-bar and gesture insets and
 must not be hidden behind the system navigation area.
 
+XML STYLE AND THEME INTEGRATION REQUIREMENTS
+
+The Profile Images feature must use the app's centralized XML style
+system. Do not recreate visual styling independently in each layout and
+do not treat applying a style name as sufficient while overriding that
+style elsewhere.
+
+Approved shared styles (all verified present in values/themes.xml on
+current main):
+
+Buttons:
+
+- AppButton.Primary
+- AppButton.Secondary
+- AppButton.Destructive
+
+Rows:
+
+- Widget.App.Row.WithSubtitle
+- Widget.App.Row.TitleOnly
+- Widget.App.Row.TextColumn
+- Widget.App.Row.Title
+- Widget.App.Row.Subtitle
+- Widget.App.Row.Chevron
+
+The existing main Settings screen continues to use its existing
+TileFragment pattern. Do not replace the main Settings tiles with row
+styles as part of this feature.
+
+Implementation rules:
+
+1. Every ordinary action button introduced by this feature must use one
+   of the three approved AppButton styles.
+
+2. Do not duplicate button properties in individual layouts, including:
+
+   - Corner radius
+   - Text appearance
+   - Font
+   - Text size
+   - Capitalization
+   - Padding
+   - Minimum height
+   - Stroke
+   - Background tint
+   - Text color
+
+3. AppButton.Destructive must use the centrally defined destructive style
+   even though it currently resembles AppButton.Secondary (both are
+   outlined today; Destructive is separately named precisely so it can be
+   changed app-wide later without touching layouts). Do not hardcode a
+   red color or create a local destructive-button variation unless the
+   owner separately approves that app-wide change.
+
+4. Every normal chevron row in Profile Image Settings must use either:
+
+   - Widget.App.Row.WithSubtitle
+   - Widget.App.Row.TitleOnly
+
+5. A title-only row uses Widget.App.Row.TitleOnly. Do not insert an
+   empty, invisible, or blank subtitle merely to reuse the subtitle-row
+   layout.
+
+6. A row with explanatory text uses Widget.App.Row.WithSubtitle and the
+   shared Widget.App.Row.Title and Widget.App.Row.Subtitle styles.
+
+7. Do not copy row geometry or typography into individual layouts,
+   including:
+
+   - Minimum height
+   - Vertical padding
+   - Title size
+   - Subtitle size
+   - Title color
+   - Subtitle color
+   - Chevron size
+   - Chevron tint
+   - Text-column spacing
+
+8. Colors must be theme-driven. Use existing theme attributes and color
+   roles such as:
+
+   - ?attr/appRowTitleColor
+   - ?attr/appRowSubtitleColor
+   - Material theme color attributes already used by the app
+
+   (Both appRow attributes are verified real: declared in
+   values/attrs.xml and supplied by the theme and the palette overlay.)
+
+   Do not hardcode light-theme or dark-theme colors into these layouts
+   or Kotlin files.
+
+9. Kotlin code must not overwrite styling that belongs to XML styles.
+
+   Do not call code such as:
+
+   - setBackgroundResource(...)
+   - setBackgroundColor(...)
+   - backgroundTintList = ...
+   - setTextColor(...)
+   - setPadding(...)
+   - setting corner radii programmatically
+
+   on normally styled buttons or rows unless the property is genuinely
+   dynamic and cannot be represented by the shared style.
+
+10. Dynamic state code may change state, visibility, enabled status,
+    content, image, or selection. It must not rebuild the component's
+    normal appearance.
+
+11. When a disabled, selected, loading, or destructive state needs
+    different colors, use a theme-aware ColorStateList, selector, shared
+    style, or shared drawable. Do not place one-off literal colors in the
+    activity or adapter.
+
+12. Custom controls such as the rotation dial and crop overlay may have
+    purpose-built XML styles or theme attributes because no existing
+    shared component fits them. Their colors must still come from the
+    active theme rather than fixed light/dark values.
+
+13. Gallery image tiles may use a dedicated shared item style or drawable
+    because they are a new component. Define the reusable appearance once
+    and apply it to every gallery tile. Do not repeat the same tile
+    attributes across several layouts.
+
+14. Do not create near-duplicate styles such as:
+
+    - AppButton.ProfilePrimary
+    - ProfileImageSettingsRow
+    - ProfileRowTitle
+    - GalleryDeleteButton
+
+    when an approved shared style already provides the required
+    appearance.
+
+15. When the approved shared style is genuinely missing a property needed
+    by every instance, update the central style once rather than
+    overriding every individual view.
+
+16. Do not change the visual appearance of existing shared styles merely
+    to make this feature easier to implement. Any app-wide style change
+    requires separate owner approval.
+
+17. The feature must work correctly under every existing app palette,
+    light mode, dark mode, and AMOLED mode. No screen may assume a
+    specific background or text color.
+
+18. New layouts must support Android font scaling. Shared row and button
+    styles must not be bypassed to force text into fixed dimensions.
+
+19. Every new activity introduced by this feature
+    (ProfileImageSettingsActivity, ProfileImagesActivity,
+    ProfileImageFramingActivity) must call
+    ThemeManager.getThemeManager().applyPalette(this) in onCreate BEFORE
+    setContentView, following the app-wide pattern. The palette overlay
+    is the runtime layer that guarantees custom attributes like
+    appRowTitleColor/appRowSubtitleColor resolve; a screen that skips
+    this call can crash inflating a canonical row (this exact crash hit
+    CharactersActivity on July 18 2026 — see the comment above
+    ThemeOverlay.Phosphor.Violet in values/themes.xml and that day's git
+    history). Any new dialog or bottom sheet that inflates canonical rows
+    must likewise be hosted in a palette-applied context.
+
+STYLE REVIEW GATE
+
+Before implementation is considered complete, perform a dedicated
+XML-style review.
+
+Verify:
+
+- Every new ordinary button uses AppButton.Primary, AppButton.Secondary,
+  or AppButton.Destructive.
+- Every Profile Image Settings row uses Widget.App.Row.WithSubtitle or
+  Widget.App.Row.TitleOnly.
+- Title-only rows contain no fake subtitle view or subtitle spacing.
+- Shared row title, subtitle, text-column, and chevron styles are used
+  rather than copied attributes.
+- No new layout repeats the approved button or row styling attributes.
+- No Kotlin code overwrites shared button or row backgrounds, colors,
+  typography, padding, or corner shapes.
+- No hardcoded light-theme, dark-theme, palette, or destructive colors
+  were added.
+- No near-duplicate feature-specific button or row styles were created.
+- Gallery tiles use one shared reusable item treatment.
+- Every new activity calls ThemeManager.applyPalette before
+  setContentView.
+- Light, dark, AMOLED, and every existing palette are checked in the
+  owner test build.
+- Changing the active palette or theme correctly updates the new screens
+  without code changes or separate layouts.
+
+Include the XML-style review results in the implementation report, naming
+each new layout and the shared styles it uses.
+
 IMPLEMENTATION PHASE ORDER
 
 Phase 0: Repository Validation and Legacy Fallback Repair
@@ -1543,6 +1737,8 @@ correcting the stale claims that Widget.App.Row.WithSubtitle,
 Widget.App.Row.TitleOnly, and AppButton.Secondary do not exist.
 Update the memory schema documentation.
 Add unit and migration tests.
+Perform the Style Review Gate and include its results, naming each new
+layout and the shared styles it uses, in the implementation report.
 Run Android Checks CI.
 Prepare an owner test build.
 
