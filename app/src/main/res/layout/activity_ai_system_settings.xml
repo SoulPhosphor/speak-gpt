@@ -93,57 +93,31 @@
                  the profile currently in use. -->
             <LinearLayout
                 android:id="@+id/row_api_profiles"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="24dp"
-                android:background="?attr/selectableItemBackground"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center_vertical"
-                android:minHeight="56dp"
-                android:orientation="horizontal"
-                android:paddingVertical="12dp">
+                style="@style/Widget.App.Row.WithSubtitle"
+                android:layout_marginTop="24dp">
 
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
 
                     <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/title_api_endpoint_profiles"
-                        android:textColor="@color/text"
-                        android:textSize="16sp" />
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/title_api_endpoint_profiles" />
 
                     <TextView
                         android:id="@+id/text_api_profiles_subtitle"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:ellipsize="end"
-                        android:maxLines="1"
-                        android:textColor="@color/text_subtitle"
-                        android:textSize="13sp" />
+                        style="@style/Widget.App.Row.Subtitle" />
                 </LinearLayout>
 
                 <ImageView
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:layout_marginStart="12dp"
-                    android:contentDescription="@string/title_api_endpoint_profiles"
-                    android:src="@drawable/ic_chevron_right"
-                    android:tint="@color/text_subtitle" />
+                    style="@style/Widget.App.Row.Chevron"
+                    android:contentDescription="@string/title_api_endpoint_profiles" />
             </LinearLayout>
 
             <!-- System prompts: opens the user's library of saved system prompts
-                 (SystemPromptsListActivity). Title-only preview slice (owner
-                 request, July 18 2026): this row is going to change shape
-                 anyway, so it's shown here without a subtitle line to preview
-                 Widget.App.Row.TitleOnly rather than being fully redesigned yet. -->
+                 (SystemPromptsListActivity). The subtitle mirrors whichever
+                 prompt is currently active for the chat, or "None". -->
             <LinearLayout
                 android:id="@+id/row_system_prompt"
-                style="@style/Widget.App.Row.TitleOnly"
+                style="@style/Widget.App.Row.WithSubtitle"
                 android:layout_marginTop="8dp">
 
                 <LinearLayout style="@style/Widget.App.Row.TextColumn">
@@ -151,6 +125,11 @@
                     <TextView
                         style="@style/Widget.App.Row.Title"
                         android:text="@string/title_system_prompts" />
+
+                    <TextView
+                        android:id="@+id/text_system_prompt_subtitle"
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:text="@string/system_prompt_none" />
                 </LinearLayout>
 
                 <ImageView
@@ -161,44 +140,27 @@
             <!-- Model Specific Rules: opens the rules browser (Stage 4 slice 4). -->
             <LinearLayout
                 android:id="@+id/row_model_rules"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:background="?attr/selectableItemBackground"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center_vertical"
-                android:minHeight="56dp"
-                android:orientation="horizontal"
-                android:paddingVertical="12dp">
+                style="@style/Widget.App.Row.WithSubtitle">
 
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
 
                     <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/row_model_rules_title"
-                        android:textColor="@color/text"
-                        android:textSize="16sp" />
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/row_model_rules_title" />
 
+                    <!-- This description is long; the shared subtitle style's
+                         single-line ellipsis would cut it off, so it keeps its
+                         own unbounded wrapping instead of the style's default. -->
                     <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/row_model_rules_subtitle"
-                        android:textColor="@color/text_subtitle"
-                        android:textSize="13sp" />
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:ellipsize="none"
+                        android:maxLines="6"
+                        android:text="@string/row_model_rules_subtitle" />
                 </LinearLayout>
 
                 <ImageView
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:layout_marginStart="12dp"
-                    android:contentDescription="@string/row_model_rules_title"
-                    android:src="@drawable/ic_chevron_right"
-                    android:tint="@color/text_subtitle" />
+                    style="@style/Widget.App.Row.Chevron"
+                    android:contentDescription="@string/row_model_rules_title" />
             </LinearLayout>
 
             <!-- Global default for whether matching model rules apply. Per-chat
