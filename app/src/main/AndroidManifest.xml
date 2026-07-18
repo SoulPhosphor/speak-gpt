@@ -258,6 +258,13 @@
         </activity>
 
         <activity
+            android:name=".ui.activities.MemoryBackupRestoreActivity"
+            android:exported="false"
+            android:label="@string/title_memory_backup_restore"
+            android:launchMode="singleTask">
+        </activity>
+
+        <activity
             android:name=".ui.activities.MemoryAssistantAdvancedSettingsActivity"
             android:exported="false"
             android:label="@string/title_memory_assistant_advanced"

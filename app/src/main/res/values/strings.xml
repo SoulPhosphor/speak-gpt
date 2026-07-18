@@ -565,7 +565,7 @@
     <string name="tile_system_message_desc">Global instructions appended to every chat. Shared across all characters.</string>
 
     <!-- System prompt library (AI System Settings + Quick Settings). -->
-    <string name="title_system_prompts">System prompts</string>
+    <string name="title_system_prompts">System Prompts</string>
     <string name="label_system_prompt">System prompt</string>
     <string name="system_prompt_none">None</string>
     <string name="btn_new_system_prompt">Add System Prompt</string>
@@ -870,6 +870,13 @@
          ruling 1, July 9 2026): the row now opens the Memory Controls screen. -->
     <string name="row_memory_settings_title">Memory Controls</string>
     <string name="row_memory_settings_subtitle">Set memory defaults, models, backups, and review limits.</string>
+    <!-- Memory Manager hub, Memory Backup & Restore row + screen title (owner
+         request, July 18 2026 — the row label is the owner's exact words). The
+         Backups section and the Reset section were moved here out of Memory
+         Controls; every string inside those sections is unchanged. No row
+         subtitle is authored here — the owner has not approved subtitle wording
+         for this row. -->
+    <string name="title_memory_backup_restore">Memory Backup &amp; Restore</string>
 
     <!-- Memory Assistant (Phase 6). Every user-visible sentence here is the
          owner's approved wording (memory_assistant_design.md §1–§2 + the

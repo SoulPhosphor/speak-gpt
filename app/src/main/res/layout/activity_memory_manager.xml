@@ -254,9 +254,48 @@
                     android:tint="@color/text_subtitle" />
             </LinearLayout>
 
-            <!-- Advanced Memory Settings: diagnostics/repair. Moved here out of
-                 the Memory Controls screen (owner ruling, July 9 2026) so it
-                 sits directly under the Memory Controls row. -->
+            <!-- Memory Backup & Restore: the Backups section and the destructive
+                 Reset section were moved here out of Memory Controls (owner
+                 request, July 18 2026). Placed directly above Advanced Memory
+                 Settings (owner request, July 18 2026). Title only — no subtitle
+                 wording has been owner-approved for this row. -->
+            <LinearLayout
+                android:id="@+id/row_memory_backup_restore"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="?attr/selectableItemBackground"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center_vertical"
+                android:minHeight="56dp"
+                android:orientation="horizontal"
+                android:paddingVertical="12dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/title_memory_backup_restore"
+                        android:textColor="@color/text"
+                        android:textSize="16sp" />
+                </LinearLayout>
+
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:layout_marginStart="12dp"
+                    android:contentDescription="@string/title_memory_backup_restore"
+                    android:src="@drawable/ic_chevron_right"
+                    android:tint="@color/text_subtitle" />
+            </LinearLayout>
+
+            <!-- Advanced Memory Settings: diagnostics/repair. Moved out of the
+                 Memory Controls screen (owner ruling, July 9 2026). -->
             <LinearLayout
                 android:id="@+id/row_advanced_memory"
                 android:layout_width="match_parent"
