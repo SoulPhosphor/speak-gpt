@@ -62,20 +62,20 @@ class SettingsActivity : FragmentActivity() {
     private var rowAiSystemSettings: LinearLayout? = null
     private var rowMemorySystem: LinearLayout? = null
     private var rowRoleplay: LinearLayout? = null
-    private var tileVoiceSettings: TileFragment? = null
+    private var rowVoiceSettings: LinearLayout? = null
     private var tileImageModel: TileFragment? = null
     private var tileImageResolution: TileFragment? = null
     private var tileChatLayout: TileFragment? = null
     private var tileFunctionCalling: TileFragment? = null
     private var tileSlashCommands: TileFragment? = null
     private var tileDesktopMode: TileFragment? = null
-    private var tileAboutApp: TileFragment? = null
-    private var tileClearChat: TileFragment? = null
+    private var rowAboutApp: LinearLayout? = null
+    private var rowClearChat: LinearLayout? = null
     private var tileDocumentation: TileFragment? = null
     private var tileAmoledMode: TileFragment? = null
     private var tileCustomize: TileFragment? = null
     private var tileChatsAutoSave: TileFragment? = null
-    private var tileAlertDebugMenu: TileFragment? = null
+    private var rowAlertDebugMenu: LinearLayout? = null
     private var tileHideModelNames: TileFragment? = null
     private var tileMonochromeBackgroundForChatList: TileFragment? = null
     // private var threadLoading: LinearLayout? = null
@@ -158,7 +158,7 @@ class SettingsActivity : FragmentActivity() {
         transition.excludeTarget(R.id.textView389, true)
         transition.excludeTarget(R.id.constraintLayout8, true)
         transition.excludeTarget(R.id.constraintLayout9, true)
-        transition.excludeTarget(R.id.constraintLayout10, true)
+        transition.excludeTarget(R.id.tile_voice_settings, true)
         transition.excludeTarget(R.id.constraintLayout12, true)
         transition.excludeTarget(R.id.constraintLayout13, true)
         transition.excludeTarget(R.id.constraintLayout14, true)
@@ -209,7 +209,7 @@ class SettingsActivity : FragmentActivity() {
         transition2.excludeTarget(R.id.textView389, true)
         transition2.excludeTarget(R.id.constraintLayout8, true)
         transition2.excludeTarget(R.id.constraintLayout9, true)
-        transition2.excludeTarget(R.id.constraintLayout10, true)
+        transition2.excludeTarget(R.id.tile_voice_settings, true)
         transition2.excludeTarget(R.id.constraintLayout12, true)
         transition2.excludeTarget(R.id.constraintLayout13, true)
         transition2.excludeTarget(R.id.constraintLayout14, true)
@@ -276,12 +276,12 @@ class SettingsActivity : FragmentActivity() {
             chatId = extras.getString("chatId", "")
 
             if (chatId == "") {
-                tileClearChat?.setEnabled(false)
-                tileClearChat?.setVisibility(TileFragment.TileVisibility.GONE)
+                rowClearChat?.isEnabled = false
+                rowClearChat?.visibility = View.GONE
             }
         } else {
-            tileClearChat?.setEnabled(false)
-            tileClearChat?.setVisibility(TileFragment.TileVisibility.GONE)
+            rowClearChat?.isEnabled = false
+            rowClearChat?.visibility = View.GONE
         }
 
         preferences = Preferences.getPreferences(this, chatId)
@@ -292,7 +292,6 @@ class SettingsActivity : FragmentActivity() {
         reloadAmoled()
 
         val t1 = Thread {
-            createFragments1()
             createFragments2()
             createFragments4()
             createFragments5()
@@ -331,34 +330,14 @@ class SettingsActivity : FragmentActivity() {
                 adjustPaddings()
 
                 if (chatId == "") {
-                    tileClearChat?.setEnabled(false)
-                    tileClearChat?.setVisibility(TileFragment.TileVisibility.GONE)
+                    rowClearChat?.isEnabled = false
+                    rowClearChat?.visibility = View.GONE
                 } else {
-                    tileClearChat?.setEnabled(true)
-                    tileClearChat?.setVisibility(TileFragment.TileVisibility.VISIBLE)
+                    rowClearChat?.isEnabled = true
+                    rowClearChat?.visibility = View.VISIBLE
                 }
             }
         }.start()
-    }
-
-    private fun createFragments1() {
-        val t1 = Thread {
-            tileVoiceSettings = TileFragment.newInstance(
-                checked = false,
-                checkable = false,
-                enabledText = getString(R.string.tile_voice_settings_title),
-                disabledText = null,
-                enabledDesc = getString(R.string.tile_voice_settings_subtitle),
-                disabledDesc = null,
-                icon = R.drawable.ic_voice,
-                disabled = false,
-                chatId = chatId,
-                functionDesc = getString(R.string.tile_voice_settings_desc)
-            )
-        }
-
-        t1.start()
-        t1.join()
     }
 
     private fun createFragments2() {
@@ -469,33 +448,6 @@ class SettingsActivity : FragmentActivity() {
 
     private fun createFragments5() {
         val t5 = Thread {
-            tileAboutApp = TileFragment.newInstance(
-                checked = false,
-                checkable = false,
-                enabledText = getString(R.string.tile_about_app_title),
-                disabledText = null,
-                enabledDesc = getString(R.string.tile_about_app_subtitle),
-                disabledDesc = null,
-                icon = R.drawable.ic_info,
-                disabled = false,
-                chatId = chatId,
-                functionDesc = getString(R.string.tile_about_app_desc),
-                transitionName = "expand_about"
-            )
-
-            tileClearChat = TileFragment.newInstance(
-                checked = false,
-                checkable = false,
-                enabledText = getString(R.string.tile_clear_chat_title),
-                disabledText = null,
-                enabledDesc = getString(R.string.tile_clear_chat_subtitle),
-                disabledDesc = null,
-                icon = R.drawable.ic_close,
-                disabled = chatId == "",
-                chatId = chatId,
-                functionDesc = getString(R.string.tile_clear_chat_desc)
-            )
-
             tileDocumentation = TileFragment.newInstance(
                 checked = false,
                 checkable = false,
@@ -575,23 +527,6 @@ class SettingsActivity : FragmentActivity() {
                 chatId,
                 getString(R.string.tile_autosave_desc)
             )
-
-            // Single full-width entry under the Debug header. The two error
-            // toggles (show chat errors, error alert sound) and the crash/event
-            // logs moved into AlertDebugMenuActivity, where they read as switch
-            // rows and "label >" rows instead of a cramped tile grid.
-            tileAlertDebugMenu = TileFragment.newInstance(
-                checked = false,
-                checkable = false,
-                enabledText = getString(R.string.tile_alert_debug_menu_title),
-                disabledText = null,
-                enabledDesc = getString(R.string.tile_alert_debug_menu_subtitle),
-                disabledDesc = null,
-                icon = R.drawable.ic_bug,
-                disabled = false,
-                chatId = chatId,
-                functionDesc = getString(R.string.tile_alert_debug_menu_desc)
-            )
         }
 
         t7.start()
@@ -600,7 +535,6 @@ class SettingsActivity : FragmentActivity() {
 
     private fun placeFragments() : FragmentTransaction {
         val operation = supportFragmentManager.beginTransaction()
-            .replace(R.id.tile_voice_settings, tileVoiceSettings!!)
             .replace(R.id.tile_image_model, tileImageModel!!)
             .replace(R.id.tile_image_resolution, tileImageResolution!!)
             .replace(R.id.tile_chat_layout, tileChatLayout!!)
@@ -610,10 +544,7 @@ class SettingsActivity : FragmentActivity() {
             .replace(R.id.tile_amoled_mode, tileAmoledMode!!)
             .replace(R.id.tile_customize, tileCustomize!!)
             .replace(R.id.tile_chats_autosave, tileChatsAutoSave!!)
-            .replace(R.id.tile_about_app, tileAboutApp!!)
-            .replace(R.id.tile_clear_chat, tileClearChat!!)
             .replace(R.id.tile_documentation, tileDocumentation!!)
-            .replace(R.id.tile_alert_debug_menu, tileAlertDebugMenu!!)
             .replace(R.id.tile_hide_model_names, tileHideModelNames!!)
             .replace(R.id.tile_monochrome_background_for_chat_list, tileMonochromeBackgroundForChatList!!)
 
@@ -629,6 +560,10 @@ class SettingsActivity : FragmentActivity() {
         rowAiSystemSettings = findViewById(R.id.tile_ai_system_settings)
         rowMemorySystem = findViewById(R.id.tile_memory_system)
         rowRoleplay = findViewById(R.id.tile_roleplay)
+        rowVoiceSettings = findViewById(R.id.tile_voice_settings)
+        rowAboutApp = findViewById(R.id.tile_about_app)
+        rowClearChat = findViewById(R.id.tile_clear_chat)
+        rowAlertDebugMenu = findViewById(R.id.tile_alert_debug_menu)
 
         rowCharacters?.setOnClickListener {
             startActivity(Intent(this, CharactersActivity::class.java).putExtra("chatId", chatId))
@@ -646,8 +581,30 @@ class SettingsActivity : FragmentActivity() {
             startActivity(Intent(this, org.teslasoft.assistant.ui.activities.memory.RoleplayHubActivity::class.java).putExtra("chatId", chatId))
         }
 
-        tileVoiceSettings?.setOnTileClickListener {
+        rowVoiceSettings?.setOnClickListener {
             startActivity(Intent(this, VoiceSettingsActivity::class.java).putExtra("chatId", chatId))
+        }
+
+        rowAboutApp?.setOnClickListener {
+            startActivity(Intent(this, AboutActivity::class.java).putExtra("chatId", chatId))
+        }
+
+        rowClearChat?.setOnClickListener {
+            MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+                .setTitle(R.string.label_clear_chat)
+                .setMessage(R.string.msg_clear_chat)
+                .setPositiveButton(R.string.yes) { _, _ ->
+                    run {
+                        ChatPreferences.getChatPreferences().clearChat(this, chatId)
+                        Toast.makeText(this, getString(R.string.submsg_chat_cleared), Toast.LENGTH_SHORT).show()
+                    }
+                }
+                .setNegativeButton(R.string.no) { _, _ -> }
+                .show()
+        }
+
+        rowAlertDebugMenu?.setOnClickListener {
+            startActivity(Intent(this, AlertDebugMenuActivity::class.java).putExtra("chatId", chatId))
         }
 
         tileImageModel?.setOnTileClickListener {
@@ -728,30 +685,8 @@ class SettingsActivity : FragmentActivity() {
             }
         }}
 
-        tileAboutApp?.setOnTileClickListener {
-            startActivity(Intent(this, AboutActivity::class.java).putExtra("chatId", chatId))
-        }
-
-        tileClearChat?.setOnTileClickListener {
-            MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-                .setTitle(R.string.label_clear_chat)
-                .setMessage(R.string.msg_clear_chat)
-                .setPositiveButton(R.string.yes) { _, _ ->
-                    run {
-                        ChatPreferences.getChatPreferences().clearChat(this, chatId)
-                        Toast.makeText(this, getString(R.string.submsg_chat_cleared), Toast.LENGTH_SHORT).show()
-                    }
-                }
-                .setNegativeButton(R.string.no) { _, _ -> }
-                .show()
-        }
-
         tileDocumentation?.setOnTileClickListener {
             startActivity(Intent(this, DocumentationActivity::class.java).putExtra("chatId", chatId))
-        }
-
-        tileAlertDebugMenu?.setOnTileClickListener {
-            startActivity(Intent(this, AlertDebugMenuActivity::class.java).putExtra("chatId", chatId))
         }
 
         tileCustomize?.setOnTileClickListener { _ ->

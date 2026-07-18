@@ -127,7 +127,7 @@
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintHorizontal_bias="0.0"
                 app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toBottomOf="@+id/constraintLayout10" />
+                app:layout_constraintTop_toBottomOf="@+id/tile_voice_settings" />
 
             <TextView
                 android:id="@+id/textView34"
@@ -175,7 +175,7 @@
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintHorizontal_bias="0.0"
                 app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toBottomOf="@+id/constraintLayout168" />
+                app:layout_constraintTop_toBottomOf="@+id/tile_alert_debug_menu" />
 
             <TextView
                 android:id="@+id/textView389"
@@ -392,27 +392,36 @@
                 </LinearLayout>
             </androidx.constraintlayout.widget.ConstraintLayout>
 
-            <androidx.constraintlayout.widget.ConstraintLayout
-                android:id="@+id/constraintLayout10"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:layout_marginTop="8dp"
-                android:layout_marginEnd="8dp"
+            <LinearLayout
+                android:id="@+id/tile_voice_settings"
+                style="@style/Widget.App.Row.WithSubtitle"
+                android:paddingHorizontal="20dp"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toBottomOf="@+id/textView32">
 
-                <androidx.constraintlayout.widget.ConstraintLayout
-                    android:id="@+id/tile_voice_settings"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="16dp"
-                    android:layout_marginEnd="16dp"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toTopOf="parent" />
-            </androidx.constraintlayout.widget.ConstraintLayout>
+                <ImageView
+                    style="@style/Widget.App.Row.Icon"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_voice"
+                    android:tint="?attr/colorPrimary" />
+
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/tile_voice_settings_title" />
+
+                    <TextView
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:maxLines="3"
+                        android:text="@string/tile_voice_settings_desc" />
+                </LinearLayout>
+
+                <ImageView
+                    style="@style/Widget.App.Row.Chevron"
+                    android:contentDescription="@string/tile_voice_settings_title" />
+            </LinearLayout>
 
             <androidx.constraintlayout.widget.ConstraintLayout
                 android:id="@+id/constraintLayout12"
@@ -619,6 +628,68 @@
                 </LinearLayout>
             </androidx.constraintlayout.widget.ConstraintLayout>
 
+            <LinearLayout
+                android:id="@+id/tile_about_app"
+                style="@style/Widget.App.Row.WithSubtitle"
+                android:paddingHorizontal="20dp"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/textView36">
+
+                <ImageView
+                    style="@style/Widget.App.Row.Icon"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_info"
+                    android:tint="?attr/colorPrimary" />
+
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/tile_about_app_title" />
+
+                    <TextView
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:maxLines="3"
+                        android:text="@string/tile_about_app_desc" />
+                </LinearLayout>
+
+                <ImageView
+                    style="@style/Widget.App.Row.Chevron"
+                    android:contentDescription="@string/tile_about_app_title" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/tile_clear_chat"
+                style="@style/Widget.App.Row.WithSubtitle"
+                android:paddingHorizontal="20dp"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/tile_about_app">
+
+                <ImageView
+                    style="@style/Widget.App.Row.Icon"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_close"
+                    android:tint="?attr/colorPrimary" />
+
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/tile_clear_chat_title" />
+
+                    <TextView
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:maxLines="3"
+                        android:text="@string/tile_clear_chat_desc" />
+                </LinearLayout>
+
+                <ImageView
+                    style="@style/Widget.App.Row.Chevron"
+                    android:contentDescription="@string/tile_clear_chat_title" />
+            </LinearLayout>
+
             <androidx.constraintlayout.widget.ConstraintLayout
                 android:id="@+id/constraintLayout16"
                 android:layout_width="0dp"
@@ -626,89 +697,13 @@
                 android:layout_marginStart="8dp"
                 android:layout_marginTop="8dp"
                 android:layout_marginEnd="8dp"
+                android:visibility="gone"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toBottomOf="@+id/textView36">
-
-                <LinearLayout
-                    android:id="@+id/linearLayout17"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="12dp"
-                    android:layout_marginEnd="12dp"
-                    android:baselineAligned="false"
-                    android:orientation="horizontal"
-                    android:weightSum="2"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toTopOf="parent">
-
-                    <androidx.constraintlayout.widget.ConstraintLayout
-                        android:id="@+id/tile_about_app"
-                        android:layout_width="0dp"
-                        android:layout_height="match_parent"
-                        android:layout_marginHorizontal="4dp"
-                        android:layout_weight="1" />
-
-                    <androidx.constraintlayout.widget.ConstraintLayout
-                        android:id="@+id/tile_clear_chat"
-                        android:layout_width="0dp"
-                        android:layout_height="match_parent"
-                        android:layout_marginHorizontal="4dp"
-                        android:layout_weight="1">
-
-                    </androidx.constraintlayout.widget.ConstraintLayout>
-
-                </LinearLayout>
-
-                <LinearLayout
-                    android:id="@+id/linearLayout18"
-                    android:layout_width="0dp"
-                    android:layout_height="84dp"
-                    android:layout_marginStart="12dp"
-                    android:layout_marginTop="8dp"
-                    android:layout_marginEnd="12dp"
-                    android:baselineAligned="false"
-                    android:orientation="horizontal"
-                    android:visibility="gone"
-                    android:weightSum="2"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toBottomOf="@+id/linearLayout17">
-
-                    <androidx.constraintlayout.widget.ConstraintLayout
-                        android:id="@+id/tile_documentation"
-                        android:layout_width="0dp"
-                        android:layout_height="match_parent"
-                        android:layout_marginHorizontal="4dp"
-                        android:layout_weight="1" />
-
-                    <androidx.constraintlayout.widget.ConstraintLayout
-                        android:id="@+id/tile_empty_2"
-                        android:layout_width="0dp"
-                        android:layout_height="match_parent"
-                        android:layout_marginHorizontal="4dp"
-                        android:layout_weight="1">
-
-                    </androidx.constraintlayout.widget.ConstraintLayout>
-
-                </LinearLayout>
-
-            </androidx.constraintlayout.widget.ConstraintLayout>
-
-            <androidx.constraintlayout.widget.ConstraintLayout
-                android:id="@+id/constraintLayout168"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:layout_marginTop="8dp"
-                android:layout_marginEnd="8dp"
-                app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toBottomOf="@+id/textView389">
+                app:layout_constraintTop_toBottomOf="@+id/tile_clear_chat">
 
                 <androidx.constraintlayout.widget.ConstraintLayout
-                    android:id="@+id/tile_alert_debug_menu"
+                    android:id="@+id/tile_documentation"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="16dp"
@@ -717,6 +712,37 @@
                     app:layout_constraintStart_toStartOf="parent"
                     app:layout_constraintTop_toTopOf="parent" />
             </androidx.constraintlayout.widget.ConstraintLayout>
+
+            <LinearLayout
+                android:id="@+id/tile_alert_debug_menu"
+                style="@style/Widget.App.Row.WithSubtitle"
+                android:paddingHorizontal="20dp"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/textView389">
+
+                <ImageView
+                    style="@style/Widget.App.Row.Icon"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_bug"
+                    android:tint="?attr/colorPrimary" />
+
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/tile_alert_debug_menu_title" />
+
+                    <TextView
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:maxLines="3"
+                        android:text="@string/tile_alert_debug_menu_desc" />
+                </LinearLayout>
+
+                <ImageView
+                    style="@style/Widget.App.Row.Chevron"
+                    android:contentDescription="@string/tile_alert_debug_menu_title" />
+            </LinearLayout>
 
         </androidx.constraintlayout.widget.ConstraintLayout>
     </ScrollView>
