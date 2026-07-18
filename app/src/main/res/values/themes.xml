@@ -242,11 +242,19 @@
 
     <!-- Preset color palettes (ui-redesign-plan.md, Phase 0). Each palette is a
          ThemeOverlay applied on top of the activity theme by
-         ThemeManager.applyPalette before setContentView. Violet is the app's
-         original look and stays EMPTY on purpose: until the Phase 1
-         theme-attribute migration lands, colors are still defined by Theme.App
-         and hard-coded @color references, so a non-empty overlay here would
-         have no visible effect anyway. New palettes get their own overlay
-         redefining the Material color roles, never edits to Theme.App. -->
-    <style name="ThemeOverlay.Phosphor.Violet" parent=""/>
+         ThemeManager.applyPalette before setContentView. This overlay is
+         forced on top of everything else (including the Material dynamic-color
+         overlay) as the LAST theme layer applied at runtime, so it is the only
+         layer guaranteed to be present when a screen resolves a custom
+         attribute like appRowTitleColor/appRowSubtitleColor — defining them on
+         Theme.App alone is not enough, since that base layer can sit underneath
+         layers that don't carry the attribute forward (this crashed
+         CharactersActivity, see git history July 18 2026). Violet reproduces
+         the app's original row colors unchanged; a future palette overlay
+         redefines these same two items (plus the Material color roles) to
+         retheme every canonical row with no layout or style changes. -->
+    <style name="ThemeOverlay.Phosphor.Violet" parent="">
+        <item name="appRowTitleColor">@color/text</item>
+        <item name="appRowSubtitleColor">@color/text_subtitle</item>
+    </style>
 </resources>
