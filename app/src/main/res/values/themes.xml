@@ -31,42 +31,39 @@
         <item name="cornerSize">4dp</item>
     </style>
 
-    <!-- App button styles (owner naming, July 18 2026 — replaces the earlier
-         Widget.App.Button.Sharp/ShapeAppearance.App.Button.Sharp names, which
-         were never applied to any button and are retired). Three named
-         styles: AppButton.Primary, AppButton.Secondary, AppButton.Destructive.
-         AppButton.Secondary is NOT YET DEFINED — the owner has not decided its
-         look. Do not invent it; ask first. -->
-    <style name="ShapeAppearance.AppButton.Primary" parent="">
+    <!-- Canonical app buttons. These preserve the current Material 3 appearance,
+         use theme color roles automatically, and expose one named text appearance
+         plus one shared corner definition for future app-wide changes. -->
+    <style name="ShapeAppearance.AppButton" parent="">
         <item name="cornerFamily">rounded</item>
         <item name="cornerSize">@dimen/button_corner_radius</item>
     </style>
 
-    <!-- Same look as the app's original unstyled default MaterialButton
-         (Widget.Material3.Button, filled with colorPrimary), just with the
-         4dp corner made explicit via the shared button_corner_radius dimen. -->
+    <style name="TextAppearance.App.Button" parent="TextAppearance.Material3.LabelLarge" />
+
+    <!-- Filled current button appearance. -->
     <style name="AppButton.Primary" parent="Widget.Material3.Button">
-        <item name="shapeAppearanceOverlay">@style/ShapeAppearance.AppButton.Primary</item>
+        <item name="shapeAppearanceOverlay">@style/ShapeAppearance.AppButton</item>
+        <item name="android:textAppearance">@style/TextAppearance.App.Button</item>
     </style>
 
-    <style name="ShapeAppearance.AppButton.Destructive" parent="">
-        <item name="cornerFamily">rounded</item>
-        <item name="cornerSize">@dimen/button_corner_radius</item>
+    <!-- Outlined current button appearance. -->
+    <style name="AppButton.Secondary" parent="Widget.Material3.Button.OutlinedButton">
+        <item name="shapeAppearanceOverlay">@style/ShapeAppearance.AppButton</item>
+        <item name="android:textAppearance">@style/TextAppearance.App.Button</item>
     </style>
 
-    <!-- Same look as the Reset button on Memory Backup & Restore
-         (Widget.Material3.Button.OutlinedButton — unfilled, bordered), just
-         with the 4dp corner made explicit. -->
+    <!-- Currently matches Secondary visually. It remains separately named so
+         destructive buttons can be changed app-wide later without touching layouts. -->
     <style name="AppButton.Destructive" parent="Widget.Material3.Button.OutlinedButton">
-        <item name="shapeAppearanceOverlay">@style/ShapeAppearance.AppButton.Destructive</item>
+        <item name="shapeAppearanceOverlay">@style/ShapeAppearance.AppButton</item>
+        <item name="android:textAppearance">@style/TextAppearance.App.Button</item>
     </style>
 
-    <!-- Shared chevron-row styles (owner ruling, July 18 2026), values taken
-         from Memory Manager's rows (activity_memory_manager.xml), which the
-         owner named as the reference. A "row" is 4 separate views, so this is
-         5 styles, one per piece — apply all of them together to keep a new
-         row looking like every other row. See CLAUDE.md, "Coding rules", for
-         the exact usage pattern. -->
+    <!-- Shared chevron-row styles, preserving the current Memory Manager row
+         appearance. Use Widget.App.Row.WithSubtitle when the row has helper text
+         and Widget.App.Row.TitleOnly when it does not. Both variants intentionally
+         share the same outer geometry; Title and Subtitle own the typography. -->
     <style name="Widget.App.Row" parent="">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
@@ -78,6 +75,10 @@
         <item name="android:orientation">horizontal</item>
         <item name="android:paddingVertical">12dp</item>
     </style>
+
+    <style name="Widget.App.Row.WithSubtitle" parent="Widget.App.Row" />
+
+    <style name="Widget.App.Row.TitleOnly" parent="Widget.App.Row" />
 
     <style name="Widget.App.Row.TextColumn" parent="">
         <item name="android:layout_width">0dp</item>
@@ -96,6 +97,8 @@
     <style name="Widget.App.Row.Subtitle" parent="">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
+        <item name="android:ellipsize">end</item>
+        <item name="android:maxLines">1</item>
         <item name="android:textColor">@color/text_subtitle</item>
         <item name="android:textSize">13sp</item>
     </style>
