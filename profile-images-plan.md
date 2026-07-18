@@ -494,7 +494,8 @@ Use Widget.App.Row.WithSubtitle.
 
 Layout:
 
-Leading shaped preview, approximately 48dp
+Leading shaped preview using the new Widget.App.Row.LeadingImage style
+(approximately 48dp, always vertically centered)
 Title: Default User Image
 Subtitle: Used when the active My Persona or Roleplay Character has no
 image.
@@ -1223,6 +1224,12 @@ COMPANION SELECTION LIST
 
 Add a small profile image at the start of Companion selection rows.
 
+The image slot uses the shared Widget.App.Row.LeadingImage geometry —
+apply the style itself where the existing row layout's structure allows,
+otherwise reuse its shared size dimen — and the rest of the existing row
+layout is unchanged. Do not restyle the Companion selection rows as part
+of this feature.
+
 When assigned:
 
 Show the Companion image with Default Shape.
@@ -1474,6 +1481,31 @@ Rows:
 - Widget.App.Row.Subtitle
 - Widget.App.Row.Chevron
 
+New shared style this feature must CREATE (owner-approved in chat,
+July 18 2026 — no leading-picture row style exists yet; the canonical
+row family today is text + chevron only):
+
+- Widget.App.Row.LeadingImage
+
+Widget.App.Row.LeadingImage is the leading-picture piece of a canonical
+row. A row with a picture is otherwise identical to a
+Widget.App.Row.WithSubtitle or Widget.App.Row.TitleOnly row — same
+container, text-column, title, subtitle, and chevron styles — with the
+picture as the first child on the left, always vertically centered.
+The style is defined once in values/themes.xml alongside the other row
+piece styles and owns the picture slot's geometry:
+
+- Size (approximately 48dp, via a shared dimen so it can be changed in
+  one place)
+- Vertical centering
+- The spacing between the picture and the text column
+
+It bakes in no image content or tint (unlike Widget.App.Row.Chevron,
+whose icon never varies) — the actual picture is set per instance.
+Every canonical row in this feature that shows a leading picture must
+use this style; do not hand-place ad-hoc ImageView attributes inside
+canonical rows.
+
 The existing main Settings screen continues to use its existing
 TileFragment pattern. Do not replace the main Settings tiles with row
 styles as part of this feature.
@@ -1592,9 +1624,17 @@ Implementation rules:
     to make this feature easier to implement. Any app-wide style change
     requires separate owner approval.
 
-17. The feature must work correctly under every existing app palette,
-    light mode, dark mode, and AMOLED mode. No screen may assume a
-    specific background or text color.
+17. The feature must work correctly in light mode, dark mode, and AMOLED
+    mode. No screen may assume a specific background or text color.
+
+    User-selectable palettes are NOT yet developed: the only palette
+    overlay today is ThemeOverlay.Phosphor.Violet, which deliberately
+    reproduces the app's current colors. The point of these rules is
+    palette-readiness — every color in the new screens resolves through
+    theme attributes and Material color roles, so future palettes can
+    retheme them by redefining those attributes alone, with no layout,
+    style, or code changes. Do not test against palettes that do not
+    exist; do not add any palette machinery in this feature.
 
 18. New layouts must support Android font scaling. Shared row and button
     styles must not be bypassed to force text into fixed dimensions.
@@ -1633,12 +1673,15 @@ Verify:
   were added.
 - No near-duplicate feature-specific button or row styles were created.
 - Gallery tiles use one shared reusable item treatment.
+- Every canonical row with a leading picture uses
+  Widget.App.Row.LeadingImage; no ad-hoc leading ImageView attributes
+  are copied into row layouts.
 - Every new activity calls ThemeManager.applyPalette before
   setContentView.
-- Light, dark, AMOLED, and every existing palette are checked in the
-  owner test build.
-- Changing the active palette or theme correctly updates the new screens
-  without code changes or separate layouts.
+- Light, dark, and AMOLED are checked in the owner test build.
+- Every color in the new screens resolves through theme attributes or
+  Material color roles, so a future palette can retheme them without
+  code changes or separate layouts.
 
 Include the XML-style review results in the implementation report, naming
 each new layout and the shared styles it uses.
@@ -1708,6 +1751,7 @@ Add empty and unavailable states.
 Phase 6: Profile Image Settings
 
 Add the normal main Settings tile.
+Create the Widget.App.Row.LeadingImage style in values/themes.xml.
 Add row-based Profile Image Settings screen.
 Add Default User Image.
 Add Default Shape.
