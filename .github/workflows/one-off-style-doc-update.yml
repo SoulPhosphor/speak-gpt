@@ -1,0 +1,93 @@
+name: One-off Style Documentation Update
+
+on:
+  push:
+    branches:
+      - style-definitions-cleanup
+
+permissions:
+  contents: write
+
+jobs:
+  update-claude-md:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: style-definitions-cleanup
+          fetch-depth: 0
+
+      - name: Replace stale button and row guidance
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('CLAUDE.md')
+          text = path.read_text(encoding='utf-8')
+          start_marker = '- **App button styles (owner naming, July 18 2026'
+          end_marker = '- Match the existing style:'
+          start = text.index(start_marker)
+          end = text.index(end_marker, start)
+
+          replacement = '''- **Canonical app button styles (owner ruling, July 18 2026).** For normal
+  full-size `MaterialButton`s, use one of these three named styles from
+  `values/themes.xml`; do not invent a fourth visual treatment when one of
+  these applies:
+  - `AppButton.Primary` — the approved current filled button appearance.
+  - `AppButton.Secondary` — the approved current outlined button appearance.
+  - `AppButton.Destructive` — currently intentionally identical to Secondary.
+    It has its own name so every destructive action can be changed app-wide
+    later without editing layouts. Do not make it red unless the owner asks.
+  All three preserve the current Material 3 appearance, inherit palette colors
+  through theme roles, share `ShapeAppearance.AppButton` and
+  `@dimen/button_corner_radius`, and share `TextAppearance.App.Button` for
+  typography. Change those shared definitions for an app-wide update; do not
+  copy text size, font, shape, fill, or outline properties into individual
+  layouts. Only Import/Export/Reset on Memory Backup & Restore currently use
+  the named button styles; do not migrate additional buttons without the
+  owner's approval.
+- **Canonical chevron-row styles (owner ruling, July 18 2026).** Use
+  `Widget.App.Row.WithSubtitle` for a tappable row containing a title plus one
+  line of helper text. Use `Widget.App.Row.TitleOnly` for the same row with no
+  subtitle. Do not reserve blank subtitle space and do not generate previews
+  from long body text. Both variants intentionally preserve the approved
+  Memory Manager appearance: 56dp minimum height, 12dp vertical padding,
+  16sp title, 13sp one-line ellipsized subtitle, and the same trailing
+  chevron. A row still consists of these styled pieces, applied together:
+  - outer container: `Widget.App.Row.WithSubtitle` or
+    `Widget.App.Row.TitleOnly`
+  - text column: `Widget.App.Row.TextColumn`
+  - title: `Widget.App.Row.Title`
+  - optional subtitle: `Widget.App.Row.Subtitle`
+  - chevron: `Widget.App.Row.Chevron`
+  Per-row content (`android:id`, text, content description, click listener)
+  stays on the instance. The first row on a screen may keep its screen-specific
+  top margin. Row title and subtitle colors route through the theme attributes
+  `appRowTitleColor` and `appRowSubtitleColor`, declared in `values/attrs.xml`,
+  so future palette overlays can replace them without editing row layouts.
+  Global title/subtitle size or color changes belong in these shared
+  definitions, never in copied per-row XML.
+  **Rollout status:** only the three rows in `activity_characters.xml` are the
+  review slice, and all three currently use `Widget.App.Row.WithSubtitle`.
+  `Widget.App.Row.TitleOnly` is defined but not yet applied. Do not migrate
+  additional rows until the owner reviews this slice and approves wider use.
+'''
+
+          path.write_text(text[:start] + replacement + text[end:], encoding='utf-8')
+          PY
+
+      - name: Commit documentation update
+        shell: bash
+        run: |
+          if git diff --quiet -- CLAUDE.md; then
+            echo 'CLAUDE.md already current.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add CLAUDE.md
+          git commit -m 'Document canonical button and row styles'
+          git push origin HEAD:style-definitions-cleanup
