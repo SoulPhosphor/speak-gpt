@@ -80,143 +80,77 @@
             android:paddingBottom="24dp">
 
             <!-- Personas: opens the persona library. Subtitle shows the persona
-                 active for this chat. -->
+                 active for this chat.
+                 Uses the shared row styles (CLAUDE.md, "Coding rules" —
+                 Widget.App.Row family), first slice, July 18 2026. -->
             <LinearLayout
                 android:id="@+id/row_personas"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
-                android:background="?attr/selectableItemBackground"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center_vertical"
-                android:minHeight="56dp"
-                android:orientation="horizontal"
-                android:paddingVertical="12dp">
+                style="@style/Widget.App.Row"
+                android:layout_marginTop="16dp">
 
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
 
                     <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/tile_personas_title"
-                        android:textColor="@color/text"
-                        android:textSize="16sp" />
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/tile_personas_title" />
 
                     <TextView
                         android:id="@+id/text_personas_subtitle"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:ellipsize="end"
-                        android:maxLines="1"
-                        android:text="@string/label_tap_to_set"
-                        android:textColor="@color/text_subtitle"
-                        android:textSize="13sp" />
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:text="@string/label_tap_to_set" />
                 </LinearLayout>
 
                 <ImageView
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:layout_marginStart="12dp"
-                    android:contentDescription="@string/tile_personas_title"
-                    android:src="@drawable/ic_chevron_right"
-                    android:tint="@color/text_subtitle" />
+                    style="@style/Widget.App.Row.Chevron"
+                    android:contentDescription="@string/tile_personas_title" />
             </LinearLayout>
 
             <!-- My Personas moved here from the memory manager (owner ruling,
                  July 6 2026): it is the user's self-presentation, an identity
-                 row, and carries no memories. -->
+                 row, and carries no memories.
+                 Uses the shared row styles (CLAUDE.md, "Coding rules" —
+                 Widget.App.Row family), first slice, July 18 2026. -->
             <LinearLayout
                 android:id="@+id/row_my_personas"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:background="?attr/selectableItemBackground"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center_vertical"
-                android:minHeight="56dp"
-                android:orientation="horizontal"
-                android:paddingVertical="12dp">
+                style="@style/Widget.App.Row">
 
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
 
                     <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/mem_pers_title_user_personas"
-                        android:textColor="@color/text"
-                        android:textSize="16sp" />
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/mem_pers_title_user_personas" />
 
                     <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:ellipsize="end"
-                        android:maxLines="1"
-                        android:text="@string/mm_user_personas_desc"
-                        android:textColor="@color/text_subtitle"
-                        android:textSize="13sp" />
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:text="@string/mm_user_personas_desc" />
                 </LinearLayout>
 
                 <ImageView
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:layout_marginStart="12dp"
-                    android:contentDescription="@string/mem_pers_title_user_personas"
-                    android:src="@drawable/ic_chevron_right"
-                    android:tint="@color/text_subtitle" />
+                    style="@style/Widget.App.Row.Chevron"
+                    android:contentDescription="@string/mem_pers_title_user_personas" />
             </LinearLayout>
 
-            <!-- Activation prompts: opens the activation prompt library. -->
+            <!-- Activation prompts: opens the activation prompt library.
+                 Uses the shared row styles (CLAUDE.md, "Coding rules" —
+                 Widget.App.Row family), first slice, July 18 2026. -->
             <LinearLayout
                 android:id="@+id/row_activation_prompts"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:background="?attr/selectableItemBackground"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center_vertical"
-                android:minHeight="56dp"
-                android:orientation="horizontal"
-                android:paddingVertical="12dp">
+                style="@style/Widget.App.Row">
 
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
 
                     <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/tile_activation_prompts_title"
-                        android:textColor="@color/text"
-                        android:textSize="16sp" />
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/tile_activation_prompts_title" />
 
                     <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:ellipsize="end"
-                        android:maxLines="1"
-                        android:text="@string/tile_activation_prompts_desc"
-                        android:textColor="@color/text_subtitle"
-                        android:textSize="13sp" />
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:text="@string/tile_activation_prompts_desc" />
                 </LinearLayout>
 
                 <ImageView
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:layout_marginStart="12dp"
-                    android:contentDescription="@string/tile_activation_prompts_title"
-                    android:src="@drawable/ic_chevron_right"
-                    android:tint="@color/text_subtitle" />
+                    style="@style/Widget.App.Row.Chevron"
+                    android:contentDescription="@string/tile_activation_prompts_title" />
             </LinearLayout>
         </LinearLayout>
     </ScrollView>

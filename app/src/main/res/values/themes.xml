@@ -31,13 +31,81 @@
         <item name="cornerSize">4dp</item>
     </style>
 
-    <style name="ShapeAppearance.App.Button.Sharp" parent="">
+    <!-- App button styles (owner naming, July 18 2026 — replaces the earlier
+         Widget.App.Button.Sharp/ShapeAppearance.App.Button.Sharp names, which
+         were never applied to any button and are retired). Three named
+         styles: AppButton.Primary, AppButton.Secondary, AppButton.Destructive.
+         AppButton.Secondary is NOT YET DEFINED — the owner has not decided its
+         look. Do not invent it; ask first. -->
+    <style name="ShapeAppearance.AppButton.Primary" parent="">
         <item name="cornerFamily">rounded</item>
-        <item name="cornerSize">4dp</item>
+        <item name="cornerSize">@dimen/button_corner_radius</item>
     </style>
 
-    <style name="Widget.App.Button.Sharp" parent="Widget.Material3.Button">
-        <item name="shapeAppearanceOverlay">@style/ShapeAppearance.App.Button.Sharp</item>
+    <!-- Same look as the app's original unstyled default MaterialButton
+         (Widget.Material3.Button, filled with colorPrimary), just with the
+         4dp corner made explicit via the shared button_corner_radius dimen. -->
+    <style name="AppButton.Primary" parent="Widget.Material3.Button">
+        <item name="shapeAppearanceOverlay">@style/ShapeAppearance.AppButton.Primary</item>
+    </style>
+
+    <style name="ShapeAppearance.AppButton.Destructive" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">@dimen/button_corner_radius</item>
+    </style>
+
+    <!-- Same look as the Reset button on Memory Backup & Restore
+         (Widget.Material3.Button.OutlinedButton — unfilled, bordered), just
+         with the 4dp corner made explicit. -->
+    <style name="AppButton.Destructive" parent="Widget.Material3.Button.OutlinedButton">
+        <item name="shapeAppearanceOverlay">@style/ShapeAppearance.AppButton.Destructive</item>
+    </style>
+
+    <!-- Shared chevron-row styles (owner ruling, July 18 2026), values taken
+         from Memory Manager's rows (activity_memory_manager.xml), which the
+         owner named as the reference. A "row" is 4 separate views, so this is
+         5 styles, one per piece — apply all of them together to keep a new
+         row looking like every other row. See CLAUDE.md, "Coding rules", for
+         the exact usage pattern. -->
+    <style name="Widget.App.Row" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:background">?attr/selectableItemBackground</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:minHeight">56dp</item>
+        <item name="android:orientation">horizontal</item>
+        <item name="android:paddingVertical">12dp</item>
+    </style>
+
+    <style name="Widget.App.Row.TextColumn" parent="">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:orientation">vertical</item>
+    </style>
+
+    <style name="Widget.App.Row.Title" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textColor">@color/text</item>
+        <item name="android:textSize">16sp</item>
+    </style>
+
+    <style name="Widget.App.Row.Subtitle" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textColor">@color/text_subtitle</item>
+        <item name="android:textSize">13sp</item>
+    </style>
+
+    <style name="Widget.App.Row.Chevron" parent="">
+        <item name="android:layout_width">24dp</item>
+        <item name="android:layout_height">24dp</item>
+        <item name="android:layout_marginStart">12dp</item>
+        <item name="android:src">@drawable/ic_chevron_right</item>
+        <item name="android:tint">@color/text_subtitle</item>
     </style>
 
     <style name="BottomNavigationView.ActiveIndicator" parent="Widget.Material3.BottomNavigationView.ActiveIndicator">

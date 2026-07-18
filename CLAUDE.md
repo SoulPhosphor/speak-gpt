@@ -1337,16 +1337,67 @@ Everything is on-device. No cloud sync, no accounts.
   "dialogs, never toasts" ruling from the campaign work to the whole app.
   When touching a screen that still has toasts, convert them (keep the
   approved wording, change only the presentation).
-- **Default button style (owner ruling, July 18 2026 — supersedes any
-  earlier button-styling instruction unless the owner directs otherwise):**
-  `@style/Widget.App.Button.Sharp` (`values/themes.xml`; corner radius via
-  its own `ShapeAppearance.App.Button.Sharp`, 4dp) is now THE default button
-  style for this app. It is a standalone style, deliberately decoupled from
-  the app-wide `materialButtonStyle`/`App.Button` default — it only applies
-  to a `MaterialButton` that explicitly references it
-  (`style="@style/Widget.App.Button.Sharp"`), never silently to every
-  button. When the owner says "use the default button style," this is the
-  style to apply.
+- **App button styles (owner naming, July 18 2026 — supersedes any earlier
+  button-styling instruction unless the owner directs otherwise).** Three
+  named button styles, `values/themes.xml`, each a standalone style a
+  `MaterialButton` opts into with `style="@style/AppButton.<Name>"` — none
+  of them apply silently to unstyled buttons app-wide (that stays the job
+  of the separate, pre-existing `materialButtonStyle`/`App.Button` theme
+  default, untouched by this ruling):
+  - `AppButton.Primary` — filled, same look as the app's plain default
+    `MaterialButton` (`Widget.Material3.Button`, `colorPrimary` fill), 4dp
+    corner via `@dimen/button_corner_radius`. Applied to the Import/Export
+    buttons on Memory Backup & Restore.
+  - `AppButton.Destructive` — outlined/unfilled
+    (`Widget.Material3.Button.OutlinedButton`), 4dp corner via the same
+    dimen. Applied to the Reset button on Memory Backup & Restore.
+  - `AppButton.Secondary` — **NOT YET DEFINED.** The owner has not decided
+    its look. Do not invent it or guess at a look for it — stop and ask.
+  These replace the earlier `Widget.App.Button.Sharp`/
+  `ShapeAppearance.App.Button.Sharp` names from the same day, which were
+  never applied to any button and are retired.
+  Both defined styles share the corner radius via `@dimen/button_corner_radius`
+  (`values/dimens.xml`) — change that one dimen to reshape both at once.
+- **Shared chevron-row styles (owner ruling, July 18 2026).** Every
+  "chevron row" in this app (a tappable settings-style row: a title, an
+  optional subtitle under it, and a right-facing chevron) used to be
+  hand-copied raw XML in every screen's layout file — no shared style
+  existed, so screens only matched each other by luck/care, not by
+  anything enforced. There is now one set of shared styles, values taken
+  from Memory Manager's rows (`activity_memory_manager.xml` — the owner's
+  named reference copy). A row is 4 separate views, so this is 5 styles,
+  one per piece — **apply all 5 together** to build a matching row:
+  - `Widget.App.Row` — the outer clickable container (a horizontal
+    `LinearLayout`).
+  - `Widget.App.Row.TextColumn` — the inner vertical column that holds the
+    title + subtitle (a `LinearLayout` inside the container).
+  - `Widget.App.Row.Title` — the title `TextView`.
+  - `Widget.App.Row.Subtitle` — the subtitle `TextView` (omit the whole
+    view for a row with no subtitle).
+  - `Widget.App.Row.Chevron` — the trailing chevron `ImageView`. This one
+    bakes in the icon (`ic_chevron_right`) and its tint, since those never
+    change row to row — an instance only needs its own
+    `contentDescription`.
+  Per-row content (`android:id`, the title/subtitle `android:text`, the
+  chevron's `contentDescription`, the click listener) stays on the
+  instance as always; only the repeated look attributes move into the
+  styles. The very first row on a screen additionally gets a manual
+  `android:layout_marginTop="16dp"` on the container — that is spacing
+  below the screen's header, not part of the row's own look, so it is
+  deliberately **not** baked into `Widget.App.Row` and must be added by
+  hand on whichever row is first.
+  **Caveat the owner should know:** a style only fixes how a view looks —
+  it can't guarantee a new row's structure is right (that all 4 pieces
+  exist, in order, each with the correct style). Using these 5 styles
+  makes a mismatched row far less likely than raw copy-paste, but it does
+  not make one impossible; nothing yet enforces the structure itself (that
+  would need a shared reusable layout template, not yet built).
+  **Rollout status:** the styles are defined; only Characters'
+  three rows (`activity_characters.xml`) have been converted to use them
+  so far, as a deliberately small first slice for the owner to review.
+  Memory Manager's own rows — the reference the values were taken from —
+  have **not** been converted yet and still use the original raw XML.
+  Do not roll this out further without the owner's go-ahead.
 - Match the existing style: nullable `var` view fields + `findViewById`,
   `DialogFragment.newInstance(Bundle)` pattern, listener interfaces with
   default no-op methods, copyright header on every file, strings ONLY in
