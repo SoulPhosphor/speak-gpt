@@ -23,21 +23,28 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.BaseAdapter
 import android.widget.TextView
-import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
 import com.google.android.material.elevation.SurfaceColors
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.dto.SystemPromptObject
 
 /**
- * Title-only rows for the system prompt library, styled like the other memory
- * manager lists. The whole row is one tap target — the owner asked for just the
- * title, no per-row settings cog. The chosen prompt (pick mode) draws inverted,
- * the same "checked tile" scheme the activation list uses.
+ * Two distinct row looks depending on why this list is open (owner ruling,
+ * July 18 2026):
+ *  - Manager mode (browsing/editing, from AI System Settings): a plain
+ *    title-only row with a chevron, since tapping opens the editor.
+ *  - Pick mode (choosing a prompt for a chat, from Quick Settings): the
+ *    existing "checked tile" scheme, unchanged — the same highlight-on-select
+ *    look the activation list uses. There's nothing to "open" here, tapping
+ *    selects, so no chevron.
+ * Each mode has its own item layout; mode is fixed for the adapter's whole
+ * lifetime (set once from the activity's intent extra), so the two never mix
+ * within one instance's recycled views.
  */
 class SystemPromptListItemAdapter(
     private val dataArray: ArrayList<SystemPromptObject>,
-    private val mContext: Context
+    private val mContext: Context,
+    private val pickMode: Boolean
 ) : BaseAdapter() {
 
     override fun getCount(): Int = dataArray.size
@@ -48,7 +55,7 @@ class SystemPromptListItemAdapter(
 
     private var listener: OnSelectListener? = null
 
-    // Id of the prompt active for the chat, drawn inverted. Empty = manager mode.
+    // Id of the prompt active for the chat, drawn inverted. Only used in pick mode.
     private var selectedId: String = ""
 
     fun setOnSelectListener(listener: OnSelectListener) {
@@ -62,24 +69,29 @@ class SystemPromptListItemAdapter(
     override fun getView(position: Int, convertView: View?, parent: ViewGroup?): View {
         val inflater = mContext.getSystemService(Context.LAYOUT_INFLATER_SERVICE) as LayoutInflater
 
-        val mView: View = convertView ?: inflater.inflate(R.layout.view_system_prompt_item, parent, false)
+        val layoutRes = if (pickMode) R.layout.view_system_prompt_item else R.layout.view_system_prompt_item_row
+        val mView: View = convertView ?: inflater.inflate(layoutRes, parent, false)
 
-        val ui: ConstraintLayout? = mView.findViewById(R.id.ui)
+        val ui: View? = mView.findViewById(R.id.ui)
         val title: TextView? = mView.findViewById(R.id.system_prompt_title)
 
         val item = dataArray[position]
         title?.text = item.title
 
-        // Recycled views must have both states set explicitly every bind.
-        val isSelected = selectedId.isNotEmpty() && item.id == selectedId
-        if (isSelected) {
-            ui?.backgroundTintList = null
-            ui?.background = ContextCompat.getDrawable(mContext, R.drawable.tile_active)
-            title?.setTextColor(mContext.getColor(R.color.text_title_inv))
+        if (pickMode) {
+            // Recycled views must have both states set explicitly every bind.
+            val isSelected = selectedId.isNotEmpty() && item.id == selectedId
+            if (isSelected) {
+                ui?.backgroundTintList = null
+                ui?.background = ContextCompat.getDrawable(mContext, R.drawable.tile_active)
+                title?.setTextColor(mContext.getColor(R.color.text_title_inv))
+            } else {
+                ui?.background = ContextCompat.getDrawable(mContext, R.drawable.btn_accent_tonal_selector_v3)
+                ui?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_2.getColor(mContext))
+                title?.setTextColor(mContext.getColor(R.color.accent_900))
+            }
         } else {
-            ui?.background = ContextCompat.getDrawable(mContext, R.drawable.btn_accent_tonal_selector_v3)
-            ui?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_2.getColor(mContext))
-            title?.setTextColor(mContext.getColor(R.color.accent_900))
+            mView.findViewById<View>(R.id.system_prompt_chevron)?.contentDescription = item.title
         }
 
         ui?.setOnClickListener {

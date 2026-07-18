@@ -175,7 +175,7 @@ class SystemPromptsListActivity : FragmentActivity() {
 
         runOnUiThread {
             emptyView?.visibility = if (list.isEmpty()) View.VISIBLE else View.GONE
-            adapter = SystemPromptListItemAdapter(list, this)
+            adapter = SystemPromptListItemAdapter(list, this, pickMode)
             adapter!!.setOnSelectListener(onSelectListener)
             adapter!!.setSelectedId(selectedId)
             listView!!.adapter = adapter
