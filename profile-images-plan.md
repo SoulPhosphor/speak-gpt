@@ -1515,6 +1515,12 @@ profile picture must use this style; do not hand-place ad-hoc ImageView
 attributes inside canonical rows, and do not use Widget.App.Row.Icon
 directly for a profile picture.
 
+The owner's separately supplied layout requirements for rows containing
+Profile Images (the Widget.App.Row.ProfileImage specification above)
+remain authoritative. The shared styles govern reusable geometry,
+typography, colors, and theme behavior; they do not erase the approved
+row-specific image placement.
+
 The existing main Settings screen continues to use its existing
 TileFragment pattern. Do not replace the main Settings tiles with row
 styles as part of this feature.
@@ -1672,6 +1678,9 @@ Verify:
   or AppButton.Destructive.
 - Every Profile Image Settings row uses Widget.App.Row.WithSubtitle or
   Widget.App.Row.TitleOnly.
+- The owner-approved image-row geometry (Widget.App.Row.ProfileImage,
+  overriding only the size of its Widget.App.Row.Icon parent) is
+  preserved.
 - Title-only rows contain no fake subtitle view or subtitle spacing.
 - Shared row title, subtitle, text-column, and chevron styles are used
   rather than copied attributes.
@@ -1695,6 +1704,48 @@ Verify:
 
 Include the XML-style review results in the implementation report, naming
 each new layout and the shared styles it uses.
+
+FINAL UX CLARIFICATIONS
+
+These nine requirements are binding. Each is also specified in full
+detail in its own topical section of this plan (named in parentheses);
+this list exists so the complete set is verifiable in one place.
+
+1. The sticky bottom Upload New button is the only Upload New action in
+   normal gallery mode. The empty All Images state shows its title and
+   body but does not add a duplicate upload button. (Empty States)
+
+2. In management mode, Select is available only when the current
+   filtered results contain at least one deletion-eligible unused image.
+   Do not allow entry into an empty selection mode. (Select
+   Availability)
+
+3. Permanent Profile Images use JPEG. Composite legitimate transparent
+   source pixels over solid white before JPEG encoding so transparent
+   PNG or WebP regions do not become black or undefined. (Transparent
+   Sources)
+
+4. Changing Default Shape immediately refreshes visible Profile Image
+   previews. Chat, chat-list, Companion-selection, settings, and editor
+   views use the new shape when rebound or resumed. No restart,
+   re-upload, or reframing is required. (Shape Change Refresh)
+
+5. All icon-only actions have accurate content descriptions and minimum
+   48dp touch targets. (Accessibility and Layout)
+
+6. Selection, In Use, Unused, unavailable, and disabled states are not
+   communicated by color alone. (Accessibility and Layout)
+
+7. Screen readers announce image usage state, selection state,
+   unavailable files, fine-rotation value, and live selection count.
+   (Accessibility and Layout)
+
+8. Font scaling must not clip essential labels or actions. Select All
+   Shown may move into the top-bar overflow menu when space is
+   insufficient. (Accessibility and Layout)
+
+9. Sticky bottom controls respect gesture and navigation-bar insets.
+   (Accessibility and Layout)
 
 IMPLEMENTATION PHASE ORDER
 
