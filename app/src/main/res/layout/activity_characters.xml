@@ -80,12 +80,11 @@
             android:paddingBottom="24dp">
 
             <!-- Personas: opens the persona library. Subtitle shows the persona
-                 active for this chat.
-                 Uses the shared row styles (CLAUDE.md, "Coding rules" —
-                 Widget.App.Row family), first slice, July 18 2026. -->
+                 active for this chat. First review slice for the canonical
+                 title-plus-subtitle row style. -->
             <LinearLayout
                 android:id="@+id/row_personas"
-                style="@style/Widget.App.Row"
+                style="@style/Widget.App.Row.WithSubtitle"
                 android:layout_marginTop="16dp">
 
                 <LinearLayout style="@style/Widget.App.Row.TextColumn">
@@ -107,12 +106,10 @@
 
             <!-- My Personas moved here from the memory manager (owner ruling,
                  July 6 2026): it is the user's self-presentation, an identity
-                 row, and carries no memories.
-                 Uses the shared row styles (CLAUDE.md, "Coding rules" —
-                 Widget.App.Row family), first slice, July 18 2026. -->
+                 row, and carries no memories. -->
             <LinearLayout
                 android:id="@+id/row_my_personas"
-                style="@style/Widget.App.Row">
+                style="@style/Widget.App.Row.WithSubtitle">
 
                 <LinearLayout style="@style/Widget.App.Row.TextColumn">
 
@@ -130,12 +127,10 @@
                     android:contentDescription="@string/mem_pers_title_user_personas" />
             </LinearLayout>
 
-            <!-- Activation prompts: opens the activation prompt library.
-                 Uses the shared row styles (CLAUDE.md, "Coding rules" —
-                 Widget.App.Row family), first slice, July 18 2026. -->
+            <!-- Activation prompts: opens the activation prompt library. -->
             <LinearLayout
                 android:id="@+id/row_activation_prompts"
-                style="@style/Widget.App.Row">
+                style="@style/Widget.App.Row.WithSubtitle">
 
                 <LinearLayout style="@style/Widget.App.Row.TextColumn">
 
