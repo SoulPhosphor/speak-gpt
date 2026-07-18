@@ -1337,6 +1337,16 @@ Everything is on-device. No cloud sync, no accounts.
   "dialogs, never toasts" ruling from the campaign work to the whole app.
   When touching a screen that still has toasts, convert them (keep the
   approved wording, change only the presentation).
+- **Default button style (owner ruling, July 18 2026 — supersedes any
+  earlier button-styling instruction unless the owner directs otherwise):**
+  `@style/Widget.App.Button.Sharp` (`values/themes.xml`; corner radius via
+  its own `ShapeAppearance.App.Button.Sharp`, 4dp) is now THE default button
+  style for this app. It is a standalone style, deliberately decoupled from
+  the app-wide `materialButtonStyle`/`App.Button` default — it only applies
+  to a `MaterialButton` that explicitly references it
+  (`style="@style/Widget.App.Button.Sharp"`), never silently to every
+  button. When the owner says "use the default button style," this is the
+  style to apply.
 - Match the existing style: nullable `var` view fields + `findViewById`,
   `DialogFragment.newInstance(Bundle)` pattern, listener interfaces with
   default no-op methods, copyright header on every file, strings ONLY in

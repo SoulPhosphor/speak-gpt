@@ -22,4 +22,6 @@
          place to tune the line spacing for all of them (owner ask, July 10
          2026 — "a variable that's the same"). -->
     <dimen name="card_section_gap">12dp</dimen>
+
+    <dimen name="button_corner_radius">4dp</dimen>
 </resources>
