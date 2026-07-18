@@ -57,10 +57,11 @@ import org.teslasoft.assistant.theme.ThemeManager
 
 class SettingsActivity : FragmentActivity() {
 
-    private var tileCharacters: TileFragment? = null
-    private var tileAiSystemSettings: TileFragment? = null
-    private var tileMemorySystem: TileFragment? = null
-    private var tileRoleplay: TileFragment? = null
+    // Plain rows (not TileFragment) -- row-style conversion review slice, July 18 2026.
+    private var rowCharacters: LinearLayout? = null
+    private var rowAiSystemSettings: LinearLayout? = null
+    private var rowMemorySystem: LinearLayout? = null
+    private var rowRoleplay: LinearLayout? = null
     private var tileVoiceSettings: TileFragment? = null
     private var tileImageModel: TileFragment? = null
     private var tileImageResolution: TileFragment? = null
@@ -351,62 +352,6 @@ class SettingsActivity : FragmentActivity() {
 
     private fun createFragments1() {
         val t1 = Thread {
-            tileCharacters = TileFragment.newInstance(
-                checked = false,
-                checkable = false,
-                enabledText = getString(R.string.tile_characters_title),
-                disabledText = null,
-                enabledDesc = getString(R.string.tile_characters_desc),
-                disabledDesc = null,
-                icon = R.drawable.ic_user,
-                disabled = false,
-                chatId = chatId,
-                functionDesc = getString(R.string.tile_characters_desc),
-                transitionName = "expand_characters"
-            )
-
-            tileAiSystemSettings = TileFragment.newInstance(
-                checked = false,
-                checkable = false,
-                enabledText = getString(R.string.tile_ai_system_settings_title),
-                disabledText = null,
-                enabledDesc = getString(R.string.tile_ai_system_settings_desc),
-                disabledDesc = null,
-                icon = R.drawable.ic_chat,
-                disabled = false,
-                chatId = chatId,
-                functionDesc = getString(R.string.tile_ai_system_settings_desc),
-                transitionName = null
-            )
-
-            tileMemorySystem = TileFragment.newInstance(
-                checked = false,
-                checkable = false,
-                enabledText = getString(R.string.tile_memory_system_title),
-                disabledText = null,
-                enabledDesc = getString(R.string.tile_memory_system_desc),
-                disabledDesc = null,
-                icon = R.drawable.ic_storage,
-                disabled = false,
-                chatId = chatId,
-                functionDesc = getString(R.string.tile_memory_system_desc),
-                transitionName = null
-            )
-
-            tileRoleplay = TileFragment.newInstance(
-                checked = false,
-                checkable = false,
-                enabledText = getString(R.string.tile_roleplay_title),
-                disabledText = null,
-                enabledDesc = getString(R.string.tile_roleplay_desc),
-                disabledDesc = null,
-                icon = R.drawable.ic_book,
-                disabled = false,
-                chatId = chatId,
-                functionDesc = getString(R.string.tile_roleplay_desc),
-                transitionName = null
-            )
-
             tileVoiceSettings = TileFragment.newInstance(
                 checked = false,
                 checkable = false,
@@ -664,10 +609,6 @@ class SettingsActivity : FragmentActivity() {
 
     private fun placeFragments() : FragmentTransaction {
         val operation = supportFragmentManager.beginTransaction()
-            .replace(R.id.tile_characters, tileCharacters!!)
-            .replace(R.id.tile_ai_system_settings, tileAiSystemSettings!!)
-            .replace(R.id.tile_memory_system, tileMemorySystem!!)
-            .replace(R.id.tile_roleplay, tileRoleplay!!)
             .replace(R.id.tile_voice_settings, tileVoiceSettings!!)
             .replace(R.id.tile_image_model, tileImageModel!!)
             .replace(R.id.tile_image_resolution, tileImageResolution!!)
@@ -693,19 +634,24 @@ class SettingsActivity : FragmentActivity() {
             finishActivity()
         }
 
-        tileCharacters?.setOnTileClickListener {
+        rowCharacters = findViewById(R.id.tile_characters)
+        rowAiSystemSettings = findViewById(R.id.tile_ai_system_settings)
+        rowMemorySystem = findViewById(R.id.tile_memory_system)
+        rowRoleplay = findViewById(R.id.tile_roleplay)
+
+        rowCharacters?.setOnClickListener {
             startActivity(Intent(this, CharactersActivity::class.java).putExtra("chatId", chatId))
         }
 
-        tileAiSystemSettings?.setOnTileClickListener {
+        rowAiSystemSettings?.setOnClickListener {
             startActivity(Intent(this, AiSystemSettingsActivity::class.java).putExtra("chatId", chatId))
         }
 
-        tileMemorySystem?.setOnTileClickListener {
+        rowMemorySystem?.setOnClickListener {
             startActivity(Intent(this, MemoryManagerActivity::class.java).putExtra("chatId", chatId))
         }
 
-        tileRoleplay?.setOnTileClickListener {
+        rowRoleplay?.setOnClickListener {
             startActivity(Intent(this, org.teslasoft.assistant.ui.activities.memory.RoleplayHubActivity::class.java).putExtra("chatId", chatId))
         }
 

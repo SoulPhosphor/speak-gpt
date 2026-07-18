@@ -113,6 +113,28 @@
         <item name="android:tint">?attr/appRowSubtitleColor</item>
     </style>
 
+    <!-- Leading row icon/avatar (owner request, July 18 2026). Not a new row
+         shape — it's one extra piece that composes with the existing
+         Widget.App.Row.WithSubtitle / Widget.App.Row.TitleOnly containers as
+         the row's first child, before Widget.App.Row.TextColumn. Title and
+         subtitle keep using the exact same Widget.App.Row.Title/Subtitle
+         styles either way, so a row's text never differs because it has (or
+         lacks) a leading icon — there's only one Title style and one
+         Subtitle style, period.
+         Sized to match the leading identity icon already used on memory rows
+         (view_memory_row.xml) for one consistent icon size app-wide.
+         Deliberately carries no tint of its own: today's plain vector icons
+         set android:tint per instance (matching Widget.App.Row.Chevron's own
+         convention), but a future avatar/photo (Characters, Personas) must
+         be able to sit in this same slot unforced into a single color, so
+         the shared style never bakes one in. -->
+    <style name="Widget.App.Row.Icon" parent="">
+        <item name="android:layout_width">36dp</item>
+        <item name="android:layout_height">36dp</item>
+        <item name="android:layout_marginEnd">16dp</item>
+        <item name="android:scaleType">centerCrop</item>
+    </style>
+
     <style name="BottomNavigationView.ActiveIndicator" parent="Widget.Material3.BottomNavigationView.ActiveIndicator">
         <item name="android:color">@color/accent_900</item>
     </style>
