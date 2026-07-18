@@ -1,7 +1,7 @@
 name: One-off Style Documentation Update
 
 on:
-  push:
+  pull_request:
     branches:
       - main
 
@@ -13,10 +13,10 @@ jobs:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout main
+      - name: Checkout PR branch
         uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ github.head_ref }}
           fetch-depth: 0
 
       - name: Replace stale button and row guidance
@@ -81,6 +81,8 @@ jobs:
 
       - name: Commit documentation update
         shell: bash
+        env:
+          HEAD_BRANCH: ${{ github.head_ref }}
         run: |
           if git diff --quiet -- CLAUDE.md; then
             echo 'CLAUDE.md already current.'
@@ -90,4 +92,4 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add CLAUDE.md
           git commit -m 'Document canonical button and row styles'
-          git push origin HEAD:main
+          git push origin HEAD:"$HEAD_BRANCH"
