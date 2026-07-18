@@ -1475,17 +1475,24 @@ Everything is on-device. No cloud sync, no accounts.
   main Settings screen (`activity_settings.xml` — Characters, AI System
   Settings, Memory Manager, Roleplay — WithSubtitle **+ Icon**, the first
   and only use of the icon variant so far, a deliberately small review
-  slice). **Not converted:** Memory Manager's own rows (the reference the
-  values were taken from); every other tile on the main Settings screen
-  (Image Generation, Appearance, Experimental, Voice, Other, Debug
-  categories) — those are built on `TileFragment`, which supports
-  checkable/toggle tiles with long-press-for-description dialogs, not just
-  a plain on/off switch (checked state also swaps title/subtitle text and
-  fades between two background drawables) — `Widget.App.Row.Toggle` covers
-  a plain switch row, not that richer behavior, so converting those tiles
-  still needs its own decision, not just reuse of this style as-is —
-  deliberately deferred pending the owner's review of the slices already
-  built. Do not roll this out further without the owner's go-ahead.
+  slice); the Memory Manager hub's own rows (`activity_memory_manager.xml`
+  — 6 rows, all WithSubtitle except Memory Backup & Restore, which stays
+  TitleOnly since no subtitle wording has ever been owner-approved for
+  it); the Roleplay hub's own rows (`activity_roleplay_hub.xml` — 5 rows,
+  all WithSubtitle). **Not converted:** every sub-screen reached from
+  Memory Manager or the Roleplay hub (Memory Browser, Memory Assistant,
+  Lorebooks, Memory Controls, Advanced Memory Settings, the roleplay card
+  lists, etc. — none of these were touched); every other tile on the main
+  Settings screen (Image Generation, Appearance, Experimental, Voice,
+  Other, Debug categories) — those are built on `TileFragment`, which
+  supports checkable/toggle tiles with long-press-for-description
+  dialogs, not just a plain on/off switch (checked state also swaps
+  title/subtitle text and fades between two background drawables) —
+  `Widget.App.Row.Toggle` covers a plain switch row, not that richer
+  behavior, so converting those tiles still needs its own decision, not
+  just reuse of this style as-is — deliberately deferred pending the
+  owner's review of the slices already built. Do not roll this out
+  further without the owner's go-ahead.
 - Match the existing style: nullable `var` view fields + `findViewById`,
   `DialogFragment.newInstance(Bundle)` pattern, listener interfaces with
   default no-op methods, copyright header on every file, strings ONLY in
