@@ -80,7 +80,6 @@ class SettingsActivity : FragmentActivity() {
     private var tileMonochromeBackgroundForChatList: TileFragment? = null
     // private var threadLoading: LinearLayout? = null
     private var root: ScrollView? = null
-    private var textGlobal: TextView? = null
     private var btnBack: ImageButton? = null
 
     private var areFragmentsInitialized = false
@@ -150,7 +149,6 @@ class SettingsActivity : FragmentActivity() {
         }
 
         transition.excludeTarget(R.id.scrollable, true)
-        transition.excludeTarget(R.id.text_global, true)
         transition.excludeTarget(R.id.textView30, true)
         transition.excludeTarget(R.id.textView31, true)
         transition.excludeTarget(R.id.textView32, true)
@@ -202,7 +200,6 @@ class SettingsActivity : FragmentActivity() {
         }
 
         transition2.excludeTarget(R.id.scrollable, true)
-        transition2.excludeTarget(R.id.text_global, true)
         transition2.excludeTarget(R.id.textView30, true)
         transition2.excludeTarget(R.id.textView31, true)
         transition2.excludeTarget(R.id.textView32, true)
@@ -272,7 +269,6 @@ class SettingsActivity : FragmentActivity() {
 
         btnBack = findViewById(R.id.btn_back)
         root = findViewById(R.id.root)
-        textGlobal = findViewById(R.id.text_global)
 
         val extras: Bundle? = intent.extras
 
@@ -282,14 +278,10 @@ class SettingsActivity : FragmentActivity() {
             if (chatId == "") {
                 tileClearChat?.setEnabled(false)
                 tileClearChat?.setVisibility(TileFragment.TileVisibility.GONE)
-                textGlobal?.visibility = TextView.VISIBLE
-            } else {
-                textGlobal?.visibility = TextView.GONE
             }
         } else {
             tileClearChat?.setEnabled(false)
             tileClearChat?.setVisibility(TileFragment.TileVisibility.GONE)
-            textGlobal?.visibility = TextView.VISIBLE
         }
 
         preferences = Preferences.getPreferences(this, chatId)
@@ -342,7 +334,6 @@ class SettingsActivity : FragmentActivity() {
                     tileClearChat?.setEnabled(false)
                     tileClearChat?.setVisibility(TileFragment.TileVisibility.GONE)
                 } else {
-                    textGlobal?.visibility = TextView.GONE
                     tileClearChat?.setEnabled(true)
                     tileClearChat?.setVisibility(TileFragment.TileVisibility.VISIBLE)
                 }
