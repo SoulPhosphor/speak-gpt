@@ -73,8 +73,8 @@ class VoiceSettingsActivity : FragmentActivity() {
     private var tileAutoSend: TileFragment? = null
     private var tileHandsFreeTiming: TileFragment? = null
     private var tileVadMethod: TileFragment? = null
-    private var tileVoiceAdvanced: TileFragment? = null
-    private var tileVoiceDebugging: TileFragment? = null
+    private var rowVoiceAdvanced: LinearLayout? = null
+    private var rowVoiceDebugging: LinearLayout? = null
 
     private var btnBack: ImageButton? = null
 
@@ -306,36 +306,6 @@ class VoiceSettingsActivity : FragmentActivity() {
             functionDesc = getString(R.string.tile_vad_method_desc)
         )
 
-        // Two full-width entry points at the bottom. Advanced Voice Settings is
-        // the dense tuning screen (VAD tuning, Whisper decoding, TTS delivery);
-        // Voice Debugging opens Audio Debugging, where all microphone/voice
-        // diagnostics (detector logging, Audio Health, the transcription chime)
-        // now live together.
-        tileVoiceAdvanced = TileFragment.newInstance(
-            checked = false,
-            checkable = false,
-            enabledText = getString(R.string.tile_voice_advanced_title),
-            disabledText = null,
-            enabledDesc = getString(R.string.tile_voice_advanced_subtitle),
-            disabledDesc = null,
-            icon = R.drawable.ic_terminal,
-            disabled = false,
-            chatId = chatId,
-            functionDesc = getString(R.string.tile_voice_advanced_desc)
-        )
-
-        tileVoiceDebugging = TileFragment.newInstance(
-            checked = false,
-            checkable = false,
-            enabledText = getString(R.string.tile_voice_debugging_title),
-            disabledText = null,
-            enabledDesc = getString(R.string.tile_voice_debugging_subtitle),
-            disabledDesc = null,
-            icon = R.drawable.ic_microphone,
-            disabled = false,
-            chatId = chatId,
-            functionDesc = getString(R.string.tile_voice_debugging_desc)
-        )
     }
 
     private fun placeTiles() {
@@ -351,8 +321,6 @@ class VoiceSettingsActivity : FragmentActivity() {
             .replace(R.id.tile_autosend, tileAutoSend!!)
             .replace(R.id.tile_hands_free_timing, tileHandsFreeTiming!!)
             .replace(R.id.tile_vad_method, tileVadMethod!!)
-            .replace(R.id.tile_voice_advanced, tileVoiceAdvanced!!)
-            .replace(R.id.tile_voice_debugging, tileVoiceDebugging!!)
             .commitNow()
     }
 
@@ -445,11 +413,14 @@ class VoiceSettingsActivity : FragmentActivity() {
             vadMethodSelector()
         }
 
-        tileVoiceAdvanced?.setOnTileClickListener {
+        rowVoiceAdvanced = findViewById(R.id.tile_voice_advanced)
+        rowVoiceDebugging = findViewById(R.id.tile_voice_debugging)
+
+        rowVoiceAdvanced?.setOnClickListener {
             startActivity(Intent(this, VoiceAdvancedSettingsActivity::class.java))
         }
 
-        tileVoiceDebugging?.setOnTileClickListener {
+        rowVoiceDebugging?.setOnClickListener {
             startActivity(Intent(this, AudioDebuggingActivity::class.java).putExtra("chatId", chatId))
         }
     }
