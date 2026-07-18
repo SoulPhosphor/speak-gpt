@@ -135,6 +135,31 @@
         <item name="android:scaleType">centerCrop</item>
     </style>
 
+    <!-- Toggle row (owner request, July 18 2026): a settings row whose
+         whole point is flipping a boolean, not navigating anywhere, so it
+         has no chevron and always carries a subtitle. Reuses the shared
+         Widget.App.Row.Title/Subtitle/TextColumn styles so its text
+         matches every other row's typography and inherits future theming
+         the same way; only the container geometry here is specific to this
+         variant. Matches, unchanged, how the app's one existing toggle row
+         (Automatically Apply Model Rules, AI System Settings) already
+         looked before conversion — no ripple, no minHeight, not clickable
+         itself, since only the switch is the tap target. -->
+    <style name="Widget.App.Row.Toggle" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:orientation">horizontal</item>
+        <item name="android:paddingTop">20dp</item>
+    </style>
+
+    <!-- Trailing switch for Widget.App.Row.Toggle. -->
+    <style name="Widget.App.Row.Switch" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginStart">12dp</item>
+    </style>
+
     <style name="BottomNavigationView.ActiveIndicator" parent="Widget.Material3.BottomNavigationView.ActiveIndicator">
         <item name="android:color">@color/accent_900</item>
     </style>

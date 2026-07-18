@@ -165,39 +165,27 @@
 
             <!-- Global default for whether matching model rules apply. Per-chat
                  override lives in Quick Settings ("Apply Model Rules"). -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:gravity="center_vertical"
-                android:orientation="horizontal"
-                android:paddingTop="20dp">
+            <LinearLayout style="@style/Widget.App.Row.Toggle">
 
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
 
                     <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/label_auto_apply_model_rules_title"
-                        android:textColor="@color/text"
-                        android:textSize="16sp" />
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/label_auto_apply_model_rules_title" />
 
+                    <!-- This description is long; the shared subtitle style's
+                         single-line ellipsis would cut it off, so it keeps its
+                         own unbounded wrapping instead of the style's default. -->
                     <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/label_auto_apply_model_rules_desc"
-                        android:textColor="@color/text_subtitle"
-                        android:textSize="13sp" />
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:ellipsize="none"
+                        android:maxLines="6"
+                        android:text="@string/label_auto_apply_model_rules_desc" />
                 </LinearLayout>
 
                 <com.google.android.material.materialswitch.MaterialSwitch
                     android:id="@+id/switch_auto_apply_model_rules"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="12dp" />
+                    style="@style/Widget.App.Row.Switch" />
             </LinearLayout>
         </LinearLayout>
     </ScrollView>

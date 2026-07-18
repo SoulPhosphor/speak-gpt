@@ -1395,6 +1395,22 @@ Everything is on-device. No cloud sync, no accounts.
   - `Widget.App.Row.Chevron` — the trailing chevron `ImageView`. Bakes in
     the icon (`ic_chevron_right`) and its tint; an instance only needs its
     own `contentDescription`.
+  A separate, parallel shape (added July 18 2026) for rows that flip a
+  boolean instead of navigating anywhere — **not built from the pieces
+  above**, since it needs neither a chevron nor the clickable/ripple/
+  minHeight geometry (only the switch itself is the tap target, not the
+  row):
+  - `Widget.App.Row.Toggle` — the outer container in place of
+    `WithSubtitle`/`TitleOnly`. Not clickable, no ripple, no minHeight —
+    matches, unchanged, how the app's one existing toggle row looked
+    before conversion. Always paired with a subtitle; there's no
+    title-only toggle variant today.
+  - Still use `Widget.App.Row.TextColumn` / `Title` / `Subtitle` inside it
+    (same styles, same theming, same drift-proofing as every other row).
+  - `Widget.App.Row.Switch` — a `MaterialSwitch` in place of the chevron,
+    trailing the text column.
+  First (and so far only) use: the "Automatically Apply Model Rules" row,
+  AI System Settings.
   Per-row content (`android:id`, text, content descriptions, click
   listener) stays on the instance as always; only the repeated look
   attributes move into the styles. The very first row on a screen
@@ -1408,9 +1424,12 @@ Everything is on-device. No cloud sync, no accounts.
   for a "row with a subtitle" / "row with title and subtitle", swap in
   `Widget.App.Row.WithSubtitle` and add `Widget.App.Row.Subtitle`. Either
   one "with an icon" / "with an image" additionally means add
-  `Widget.App.Row.Icon` as the first child, before the text column. These
-  four phrases are the complete vocabulary — there is no fifth or sixth
-  row shape today.
+  `Widget.App.Row.Icon` as the first child, before the text column. A
+  "row with a toggle and subtitle" means `Widget.App.Row.Toggle` +
+  `Widget.App.Row.TextColumn` + `Widget.App.Row.Title` +
+  `Widget.App.Row.Subtitle` + `Widget.App.Row.Switch` — no chevron, ever.
+  These five phrases are the complete vocabulary — there is no sixth or
+  seventh row shape today.
   **Fragile gotcha — already crashed CharactersActivity once (July 18
   2026):** `Widget.App.Row.Title`/`Subtitle`/`Chevron` resolve color
   through custom theme attributes `appRowTitleColor`/`appRowSubtitleColor`
@@ -1445,9 +1464,11 @@ Everything is on-device. No cloud sync, no accounts.
   make one impossible; nothing yet enforces the structure itself (that
   would need a shared reusable layout template, not yet built).
   **Rollout status (July 18 2026).** Converted: `activity_characters.xml`
-  (3 rows, WithSubtitle, no icon); `activity_ai_system_settings.xml` (3
-  rows — API endpoint profiles, System prompts, Model Specific Rules — all
-  WithSubtitle, no icon); the System Prompts library's manager mode
+  (3 rows, WithSubtitle, no icon); `activity_ai_system_settings.xml` — ALL
+  4 rows: API endpoint profiles, System prompts, Model Specific Rules
+  (WithSubtitle, no icon), plus Automatically Apply Model Rules
+  (`Widget.App.Row.Toggle`, the first and only use of the toggle shape so
+  far); the System Prompts library's manager mode
   (`view_system_prompt_item_row.xml`, TitleOnly + chevron); the Activation
   Prompts library's manager mode (`view_activation_prompt_item_row.xml`,
   TitleOnly + chevron, no preview text); the four "General" entries on the
@@ -1458,12 +1479,13 @@ Everything is on-device. No cloud sync, no accounts.
   values were taken from); every other tile on the main Settings screen
   (Image Generation, Appearance, Experimental, Voice, Other, Debug
   categories) — those are built on `TileFragment`, which supports
-  checkable/toggle tiles with long-press-for-description dialogs;
-  converting those means first deciding how a toggle reads as a plain row
-  (a trailing `MaterialSwitch`, matching the "Auto Apply Model Rules" row
-  on AI System Settings, is the leading candidate but NOT yet decided) —
-  deliberately deferred pending the owner's review of the plain-navigation
-  slice above. Do not roll this out further without the owner's go-ahead.
+  checkable/toggle tiles with long-press-for-description dialogs, not just
+  a plain on/off switch (checked state also swaps title/subtitle text and
+  fades between two background drawables) — `Widget.App.Row.Toggle` covers
+  a plain switch row, not that richer behavior, so converting those tiles
+  still needs its own decision, not just reuse of this style as-is —
+  deliberately deferred pending the owner's review of the slices already
+  built. Do not roll this out further without the owner's go-ahead.
 - Match the existing style: nullable `var` view fields + `findViewById`,
   `DialogFragment.newInstance(Bundle)` pattern, listener interfaces with
   default no-op methods, copyright header on every file, strings ONLY in
