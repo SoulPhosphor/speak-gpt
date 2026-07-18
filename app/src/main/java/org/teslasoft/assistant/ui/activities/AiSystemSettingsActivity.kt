@@ -63,7 +63,6 @@ class AiSystemSettingsActivity : FragmentActivity() {
     private var rowApiProfiles: LinearLayout? = null
     private var textApiProfilesSubtitle: TextView? = null
     private var rowSystemPrompt: LinearLayout? = null
-    private var textSystemPromptSubtitle: TextView? = null
     private var rowModelRules: LinearLayout? = null
     private var switchAutoApplyModelRules: MaterialSwitch? = null
 
@@ -102,7 +101,6 @@ class AiSystemSettingsActivity : FragmentActivity() {
         rowApiProfiles = findViewById(R.id.row_api_profiles)
         textApiProfilesSubtitle = findViewById(R.id.text_api_profiles_subtitle)
         rowSystemPrompt = findViewById(R.id.row_system_prompt)
-        textSystemPromptSubtitle = findViewById(R.id.text_system_prompt_subtitle)
         rowModelRules = findViewById(R.id.row_model_rules)
         switchAutoApplyModelRules = findViewById(R.id.switch_auto_apply_model_rules)
     }
@@ -132,7 +130,6 @@ class AiSystemSettingsActivity : FragmentActivity() {
 
     private fun loadValues() {
         textApiProfilesSubtitle?.text = activeProfileLabel()
-        textSystemPromptSubtitle?.text = systemPromptPreview()
         switchAutoApplyModelRules?.isChecked = preferences?.getAutoApplyModelRules() ?: true
     }
 
@@ -140,7 +137,6 @@ class AiSystemSettingsActivity : FragmentActivity() {
         super.onResume()
         // The library may have changed (selection/add/edit/delete) while away.
         textApiProfilesSubtitle?.text = activeProfileLabel()
-        textSystemPromptSubtitle?.text = systemPromptPreview()
     }
 
     private fun initLogic() {

@@ -137,51 +137,25 @@
             </LinearLayout>
 
             <!-- System prompts: opens the user's library of saved system prompts
-                 (SystemPromptsListActivity). -->
+                 (SystemPromptsListActivity). Title-only preview slice (owner
+                 request, July 18 2026): this row is going to change shape
+                 anyway, so it's shown here without a subtitle line to preview
+                 Widget.App.Row.TitleOnly rather than being fully redesigned yet. -->
             <LinearLayout
                 android:id="@+id/row_system_prompt"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:background="?attr/selectableItemBackground"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center_vertical"
-                android:minHeight="56dp"
-                android:orientation="horizontal"
-                android:paddingVertical="12dp">
+                style="@style/Widget.App.Row.TitleOnly"
+                android:layout_marginTop="8dp">
 
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
 
                     <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/title_system_prompts"
-                        android:textColor="@color/text"
-                        android:textSize="16sp" />
-
-                    <TextView
-                        android:id="@+id/text_system_prompt_subtitle"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:ellipsize="end"
-                        android:maxLines="1"
-                        android:text="@string/system_prompt_none"
-                        android:textColor="@color/text_subtitle"
-                        android:textSize="13sp" />
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/title_system_prompts" />
                 </LinearLayout>
 
                 <ImageView
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:layout_marginStart="12dp"
-                    android:contentDescription="@string/title_system_prompts"
-                    android:src="@drawable/ic_chevron_right"
-                    android:tint="@color/text_subtitle" />
+                    style="@style/Widget.App.Row.Chevron"
+                    android:contentDescription="@string/title_system_prompts" />
             </LinearLayout>
 
             <!-- Model Specific Rules: opens the rules browser (Stage 4 slice 4). -->
