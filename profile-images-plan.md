@@ -687,6 +687,22 @@ It never selects an in-use image.
 
 Cancel Selection clears the selection and restores normal management mode.
 
+Select Availability
+
+In management mode, enable or show Select only when the current filtered
+results contain at least one deletion-eligible unused image.
+
+Under the In Use filter, Select must be hidden or disabled because no
+displayed image is eligible for deletion.
+
+Under All Images, Select is available only when at least one displayed
+image is unused.
+
+Under Unused, Select is available when the filter is not empty.
+
+Do not allow the user to enter an empty selection mode containing no
+selectable images.
+
 FILTERS
 
 All Images
@@ -706,11 +722,15 @@ color to communicate status.
 
 EMPTY STATES
 
+The sticky bottom Upload New button is the sole upload action in normal
+assignment and management modes. Do not place a second Upload New button
+inside the empty-state content while the sticky bottom Upload New button
+is visible.
+
 All Images:
 
 Title: No Profile Images
 Body: Upload an image to add it to the gallery.
-Action: Upload New
 
 In Use:
 
@@ -721,6 +741,9 @@ Unused:
 
 Title: No Unused Images
 Body: Saved images that are no longer assigned will appear here.
+
+The In Use and Unused empty states remain informational and contain no
+action button.
 
 IMAGE DETAIL AND VIEW USAGE
 
@@ -1019,6 +1042,22 @@ Confirming produces one temporary output in the session directory.
 The gallery then performs permanent hashing, deduplication, catalog
 insertion, and assignment.
 
+Transparent Sources
+
+Permanent Profile Images are JPEG and therefore cannot preserve
+transparency.
+
+When a PNG, WebP, or other supported source contains transparent or
+partially transparent pixels, composite those pixels over a solid white
+background before encoding the final JPEG.
+
+Do not allow transparent regions to become encoder-dependent black areas
+or uninitialized colors.
+
+The no-empty-edges requirement still applies to source-image coverage.
+This transparency rule defines how legitimate transparent pixels inside
+the source are flattened.
+
 PROFILE IMAGE SHAPE RENDERING
 
 Use one shared Glide BitmapTransformation for uploaded Profile Images:
@@ -1052,6 +1091,19 @@ Apply the current profile image or the unchanged fallback icon.
 
 This prevents recycled rows from briefly showing another identity's picture
 or tint.
+
+Shape Change Refresh
+
+After Default Shape changes:
+
+- Update the Default User Image preview immediately.
+- Update other visible Profile Image previews on the current screen
+  immediately.
+- Ensure chat, chat-list, Companion-selection, and editor views use the
+  new shape when next bound or resumed.
+- Do not require an app restart, image re-upload, or image reframing.
+- Keep the selected shape in the Glide transformation cache key so cached
+  output from the prior shape cannot be reused incorrectly.
 
 EDITOR INTEGRATION AND LIFECYCLE SAFETY
 
@@ -1360,6 +1412,43 @@ Use:
 
 Do not silently fail an upload, save, assignment, deletion, or image load.
 
+ACCESSIBILITY AND LAYOUT
+
+All icon-only controls must have accurate content descriptions,
+including:
+
+- Back
+- Cancel
+- Done
+- Flip
+- Rotate
+- Cancel Selection
+
+Interactive controls must have a minimum 48dp touch target even when
+their visible icon is smaller.
+
+Selected, In Use, Unused, unavailable, and disabled states must not be
+communicated by color alone. Use an icon, label, checkmark, content
+description, or another non-color indicator.
+
+Screen readers must announce:
+
+- Image selection state
+- Whether an image is In Use or Unused
+- Whether an image file is unavailable
+- The current fine-rotation value
+- The live selection count
+
+Support normal Android font scaling without clipping essential labels or
+actions.
+
+If Select All Shown does not fit in the contextual top bar at larger font
+sizes or narrow widths, move it into the top-bar overflow menu rather
+than truncating it.
+
+Sticky bottom controls must respect navigation-bar and gesture insets and
+must not be hidden behind the system navigation area.
+
 IMPLEMENTATION PHASE ORDER
 
 Phase 0: Repository Validation and Legacy Fallback Repair
@@ -1489,6 +1578,11 @@ Newly referenced images survive a stale deletion selection.
 Removing one profile reference does not affect another profile.
 An image becomes Unused only after its final reference is removed.
 Single and bulk deletion remove the file and catalog record.
+Select is unavailable whenever the current filtered results contain no
+deletion-eligible unused image, so an empty selection mode cannot be
+entered.
+Empty states never show a second Upload New button while the sticky
+bottom Upload New button is visible.
 
 Framing
 
@@ -1505,6 +1599,8 @@ cache exist.
 Missing restored source exits safely without assignment.
 Cancel saves nothing.
 Done saves exactly one permanent library image or reuses an identical one.
+Transparent or partially transparent source pixels flatten over solid
+white in the final JPEG — never black or uninitialized color.
 
 Migration
 
@@ -1538,6 +1634,9 @@ tint.
 Legacy PNG and JPEG per-chat avatars both display.
 The per-chat avatar explanation text appears only while the active
 Companion has an assigned and available picture, and hides otherwise.
+A Default Shape change refreshes visible previews immediately and every
+other display site on next bind or resume, with no restart, re-upload,
+or reframing.
 
 UI and Wording
 
@@ -1550,6 +1649,20 @@ My Persona and Roleplay Character are always capitalized exactly.
 No "Your Picture" string remains.
 No unapproved rounded Square is introduced.
 No new Toast or Snackbar is introduced for this feature.
+
+Accessibility
+
+Every icon-only control has an accurate content description.
+Interactive controls meet the 48dp minimum touch target.
+Selected, In Use, Unused, unavailable, and disabled states are all
+communicated by a non-color indicator, never color alone.
+Screen readers announce selection state, In Use/Unused status, file
+unavailability, the current fine-rotation value, and the live selection
+count.
+Normal Android font scaling never clips essential labels or actions;
+Select All Shown moves to the top-bar overflow menu instead of
+truncating.
+Sticky bottom controls respect navigation-bar and gesture insets.
 
 OWNER TEST BUILD
 
