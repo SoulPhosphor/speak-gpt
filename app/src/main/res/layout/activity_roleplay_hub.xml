@@ -84,217 +84,112 @@
             <!-- Roleplay Characters -->
             <LinearLayout
                 android:id="@+id/row_rp_characters"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
-                android:background="?attr/selectableItemBackground"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center_vertical"
-                android:minHeight="56dp"
-                android:orientation="horizontal"
-                android:paddingVertical="12dp">
+                style="@style/Widget.App.Row.WithSubtitle"
+                android:layout_marginTop="16dp">
 
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
 
                     <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/mem_pers_title_roleplay_characters"
-                        android:textColor="@color/text"
-                        android:textSize="16sp" />
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/mem_pers_title_roleplay_characters" />
 
                     <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/mm_roleplay_desc"
-                        android:textColor="@color/text_subtitle"
-                        android:textSize="13sp" />
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:maxLines="3"
+                        android:text="@string/mm_roleplay_desc" />
                 </LinearLayout>
 
                 <ImageView
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:layout_marginStart="12dp"
-                    android:contentDescription="@string/mem_pers_title_roleplay_characters"
-                    android:src="@drawable/ic_chevron_right"
-                    android:tint="@color/text_subtitle" />
+                    style="@style/Widget.App.Row.Chevron"
+                    android:contentDescription="@string/mem_pers_title_roleplay_characters" />
             </LinearLayout>
 
             <!-- Worlds -->
             <LinearLayout
                 android:id="@+id/row_worlds"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:background="?attr/selectableItemBackground"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center_vertical"
-                android:minHeight="56dp"
-                android:orientation="horizontal"
-                android:paddingVertical="12dp">
+                style="@style/Widget.App.Row.WithSubtitle">
 
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
 
                     <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/mem_world_title"
-                        android:textColor="@color/text"
-                        android:textSize="16sp" />
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/mem_world_title" />
 
                     <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/mm_worlds_desc"
-                        android:textColor="@color/text_subtitle"
-                        android:textSize="13sp" />
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:maxLines="3"
+                        android:text="@string/mm_worlds_desc" />
                 </LinearLayout>
 
                 <ImageView
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:layout_marginStart="12dp"
-                    android:contentDescription="@string/mem_world_title"
-                    android:src="@drawable/ic_chevron_right"
-                    android:tint="@color/text_subtitle" />
+                    style="@style/Widget.App.Row.Chevron"
+                    android:contentDescription="@string/mem_world_title" />
             </LinearLayout>
 
             <!-- Party Members -->
             <LinearLayout
                 android:id="@+id/row_party_members"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:background="?attr/selectableItemBackground"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center_vertical"
-                android:minHeight="56dp"
-                android:orientation="horizontal"
-                android:paddingVertical="12dp">
+                style="@style/Widget.App.Row.WithSubtitle">
 
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
 
                     <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/mem_party_title"
-                        android:textColor="@color/text"
-                        android:textSize="16sp" />
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/mem_party_title" />
 
                     <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/mm_party_desc"
-                        android:textColor="@color/text_subtitle"
-                        android:textSize="13sp" />
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:maxLines="3"
+                        android:text="@string/mm_party_desc" />
                 </LinearLayout>
 
                 <ImageView
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:layout_marginStart="12dp"
-                    android:contentDescription="@string/mem_party_title"
-                    android:src="@drawable/ic_chevron_right"
-                    android:tint="@color/text_subtitle" />
+                    style="@style/Widget.App.Row.Chevron"
+                    android:contentDescription="@string/mem_party_title" />
             </LinearLayout>
 
             <!-- Campaigns -->
             <LinearLayout
                 android:id="@+id/row_campaigns"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:background="?attr/selectableItemBackground"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center_vertical"
-                android:minHeight="56dp"
-                android:orientation="horizontal"
-                android:paddingVertical="12dp">
+                style="@style/Widget.App.Row.WithSubtitle">
 
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
 
                     <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/mem_world_campaigns_title"
-                        android:textColor="@color/text"
-                        android:textSize="16sp" />
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/mem_world_campaigns_title" />
 
                     <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/mm_campaigns_desc"
-                        android:textColor="@color/text_subtitle"
-                        android:textSize="13sp" />
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:maxLines="3"
+                        android:text="@string/mm_campaigns_desc" />
                 </LinearLayout>
 
                 <ImageView
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:layout_marginStart="12dp"
-                    android:contentDescription="@string/mem_world_campaigns_title"
-                    android:src="@drawable/ic_chevron_right"
-                    android:tint="@color/text_subtitle" />
+                    style="@style/Widget.App.Row.Chevron"
+                    android:contentDescription="@string/mem_world_campaigns_title" />
             </LinearLayout>
 
             <!-- Tags -->
             <LinearLayout
                 android:id="@+id/row_tags"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:background="?attr/selectableItemBackground"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center_vertical"
-                android:minHeight="56dp"
-                android:orientation="horizontal"
-                android:paddingVertical="12dp">
+                style="@style/Widget.App.Row.WithSubtitle">
 
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
 
                     <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/rp_tags_title"
-                        android:textColor="@color/text"
-                        android:textSize="16sp" />
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/rp_tags_title" />
 
                     <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/mm_rp_tags_desc"
-                        android:textColor="@color/text_subtitle"
-                        android:textSize="13sp" />
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:maxLines="3"
+                        android:text="@string/mm_rp_tags_desc" />
                 </LinearLayout>
 
                 <ImageView
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:layout_marginStart="12dp"
-                    android:contentDescription="@string/rp_tags_title"
-                    android:src="@drawable/ic_chevron_right"
-                    android:tint="@color/text_subtitle" />
+                    style="@style/Widget.App.Row.Chevron"
+                    android:contentDescription="@string/rp_tags_title" />
             </LinearLayout>
         </LinearLayout>
     </ScrollView>

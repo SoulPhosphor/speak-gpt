@@ -81,88 +81,46 @@
             <!-- Memory Browser (top row): opens the single global memories browser. -->
             <LinearLayout
                 android:id="@+id/row_memory_browser"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
-                android:background="?attr/selectableItemBackground"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center_vertical"
-                android:minHeight="56dp"
-                android:orientation="horizontal"
-                android:paddingVertical="12dp">
+                style="@style/Widget.App.Row.WithSubtitle"
+                android:layout_marginTop="16dp">
 
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
 
                     <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/row_memory_browser_title"
-                        android:textColor="@color/text"
-                        android:textSize="16sp" />
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/row_memory_browser_title" />
 
                     <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/row_memory_browser_subtitle"
-                        android:textColor="@color/text_subtitle"
-                        android:textSize="13sp" />
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:maxLines="3"
+                        android:text="@string/row_memory_browser_subtitle" />
                 </LinearLayout>
 
                 <ImageView
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:layout_marginStart="12dp"
-                    android:contentDescription="@string/row_memory_browser_title"
-                    android:src="@drawable/ic_chevron_right"
-                    android:tint="@color/text_subtitle" />
+                    style="@style/Widget.App.Row.Chevron"
+                    android:contentDescription="@string/row_memory_browser_title" />
             </LinearLayout>
 
             <!-- Memory Assistant: placeholder screen for now ("Coming soon"). -->
             <LinearLayout
                 android:id="@+id/row_memory_assistant"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:background="?attr/selectableItemBackground"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center_vertical"
-                android:minHeight="56dp"
-                android:orientation="horizontal"
-                android:paddingVertical="12dp">
+                style="@style/Widget.App.Row.WithSubtitle">
 
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
 
                     <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/row_memory_assistant_title"
-                        android:textColor="@color/text"
-                        android:textSize="16sp" />
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/row_memory_assistant_title" />
 
                     <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/row_memory_assistant_subtitle"
-                        android:textColor="@color/text_subtitle"
-                        android:textSize="13sp" />
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:maxLines="3"
+                        android:text="@string/row_memory_assistant_subtitle" />
                 </LinearLayout>
 
                 <ImageView
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:layout_marginStart="12dp"
-                    android:contentDescription="@string/row_memory_assistant_title"
-                    android:src="@drawable/ic_chevron_right"
-                    android:tint="@color/text_subtitle" />
+                    style="@style/Widget.App.Row.Chevron"
+                    android:contentDescription="@string/row_memory_assistant_title" />
             </LinearLayout>
 
             <!-- Lorebooks: moved here out of the Characters hub (owner ruling,
@@ -170,88 +128,46 @@
                  only the access point moved. -->
             <LinearLayout
                 android:id="@+id/row_lorebooks"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:background="?attr/selectableItemBackground"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center_vertical"
-                android:minHeight="56dp"
-                android:orientation="horizontal"
-                android:paddingVertical="12dp">
+                style="@style/Widget.App.Row.WithSubtitle">
 
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
 
                     <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/tile_lorebooks_title"
-                        android:textColor="@color/text"
-                        android:textSize="16sp" />
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/tile_lorebooks_title" />
 
                     <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/row_lorebooks_subtitle"
-                        android:textColor="@color/text_subtitle"
-                        android:textSize="13sp" />
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:maxLines="3"
+                        android:text="@string/row_lorebooks_subtitle" />
                 </LinearLayout>
 
                 <ImageView
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:layout_marginStart="12dp"
-                    android:contentDescription="@string/tile_lorebooks_title"
-                    android:src="@drawable/ic_chevron_right"
-                    android:tint="@color/text_subtitle" />
+                    style="@style/Widget.App.Row.Chevron"
+                    android:contentDescription="@string/tile_lorebooks_title" />
             </LinearLayout>
 
             <!-- Memory Settings: the plumbing screen (status, import/export,
                  engine, librarian, reset — everything except the browser). -->
             <LinearLayout
                 android:id="@+id/row_memory_settings"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:background="?attr/selectableItemBackground"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center_vertical"
-                android:minHeight="56dp"
-                android:orientation="horizontal"
-                android:paddingVertical="12dp">
+                style="@style/Widget.App.Row.WithSubtitle">
 
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
 
                     <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/row_memory_settings_title"
-                        android:textColor="@color/text"
-                        android:textSize="16sp" />
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/row_memory_settings_title" />
 
                     <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/row_memory_settings_subtitle"
-                        android:textColor="@color/text_subtitle"
-                        android:textSize="13sp" />
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:maxLines="3"
+                        android:text="@string/row_memory_settings_subtitle" />
                 </LinearLayout>
 
                 <ImageView
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:layout_marginStart="12dp"
-                    android:contentDescription="@string/row_memory_settings_title"
-                    android:src="@drawable/ic_chevron_right"
-                    android:tint="@color/text_subtitle" />
+                    style="@style/Widget.App.Row.Chevron"
+                    android:contentDescription="@string/row_memory_settings_title" />
             </LinearLayout>
 
             <!-- Memory Backup & Restore: the Backups section and the destructive
@@ -261,81 +177,41 @@
                  wording has been owner-approved for this row. -->
             <LinearLayout
                 android:id="@+id/row_memory_backup_restore"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:background="?attr/selectableItemBackground"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center_vertical"
-                android:minHeight="56dp"
-                android:orientation="horizontal"
-                android:paddingVertical="12dp">
+                style="@style/Widget.App.Row.TitleOnly">
 
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
 
                     <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/title_memory_backup_restore"
-                        android:textColor="@color/text"
-                        android:textSize="16sp" />
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/title_memory_backup_restore" />
                 </LinearLayout>
 
                 <ImageView
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:layout_marginStart="12dp"
-                    android:contentDescription="@string/title_memory_backup_restore"
-                    android:src="@drawable/ic_chevron_right"
-                    android:tint="@color/text_subtitle" />
+                    style="@style/Widget.App.Row.Chevron"
+                    android:contentDescription="@string/title_memory_backup_restore" />
             </LinearLayout>
 
             <!-- Advanced Memory Settings: diagnostics/repair. Moved out of the
                  Memory Controls screen (owner ruling, July 9 2026). -->
             <LinearLayout
                 android:id="@+id/row_advanced_memory"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:background="?attr/selectableItemBackground"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center_vertical"
-                android:minHeight="56dp"
-                android:orientation="horizontal"
-                android:paddingVertical="12dp">
+                style="@style/Widget.App.Row.WithSubtitle">
 
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
 
                     <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/memory_controls_row_advanced"
-                        android:textColor="@color/text"
-                        android:textSize="16sp" />
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/memory_controls_row_advanced" />
 
                     <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/memory_controls_row_advanced_subtitle"
-                        android:textColor="@color/text_subtitle"
-                        android:textSize="13sp" />
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:maxLines="3"
+                        android:text="@string/memory_controls_row_advanced_subtitle" />
                 </LinearLayout>
 
                 <ImageView
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:layout_marginStart="12dp"
-                    android:contentDescription="@string/memory_controls_row_advanced"
-                    android:src="@drawable/ic_chevron_right"
-                    android:tint="@color/text_subtitle" />
+                    style="@style/Widget.App.Row.Chevron"
+                    android:contentDescription="@string/memory_controls_row_advanced" />
             </LinearLayout>
         </LinearLayout>
     </ScrollView>
