@@ -193,6 +193,66 @@
         <item name="android:layout_marginStart">12dp</item>
     </style>
 
+    <!-- Screen header (owner ruling, July 19 2026): the solid-color bar with
+         a back chevron and a centered title at the top of a full-screen
+         activity (seen today on Characters, AI System Settings, and
+         others). Until now this was hand-copied XML with no shared style,
+         which is how new screens silently drifted from it. Font, size,
+         padding, margins and positioning for the whole header now live
+         here - change them once and every screen using these styles
+         follows. A screen only needs an id on each piece (plus its own
+         title text) - everything else, including the ConstraintLayout
+         pin-to-parent/centering that makes this portable across screens
+         without per-instance constraint XML, is baked in below.
+         Deliberately excludes the old per-Activity AMOLED pitch-black
+         recolor logic (dynamic background/back-button/status-bar
+         recoloring in Kotlin) - the owner says that mechanism is being
+         removed and does not want it carried into the new style.
+         Rolled out so far only to ProfileImagePropertiesActivity and
+         DefaultImagesActivity (activity_profile_image_properties.xml,
+         activity_default_images.xml) - intentionally not yet applied to
+         any other screen; the owner wants this proven right on new
+         screens first before the rest of the app is converted. -->
+    <style name="Widget.App.ActionBar" parent="">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:background">?attr/colorSurfaceContainerHigh</item>
+        <item name="layout_constraintEnd_toEndOf">parent</item>
+        <item name="layout_constraintStart_toStartOf">parent</item>
+        <item name="layout_constraintTop_toTopOf">parent</item>
+    </style>
+
+    <!-- The leading back button inside Widget.App.ActionBar. -->
+    <style name="Widget.App.ActionBar.BackButton" parent="">
+        <item name="android:layout_width">48dp</item>
+        <item name="android:layout_height">48dp</item>
+        <item name="android:layout_marginStart">8dp</item>
+        <item name="android:layout_marginTop">8dp</item>
+        <item name="android:layout_marginBottom">8dp</item>
+        <item name="android:background">@drawable/btn_accent_icon_large_100</item>
+        <item name="android:contentDescription">@string/go_back</item>
+        <item name="android:src">@drawable/ic_back</item>
+        <item name="android:tooltipText">@string/go_back</item>
+        <item name="srcCompat">@drawable/ic_back</item>
+        <item name="layout_constraintBottom_toBottomOf">parent</item>
+        <item name="layout_constraintStart_toStartOf">parent</item>
+        <item name="layout_constraintTop_toTopOf">parent</item>
+    </style>
+
+    <!-- The centered title inside Widget.App.ActionBar. Only android:text
+         is left for the instance to set. -->
+    <style name="Widget.App.ActionBar.Title" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textColor">@color/text_title</item>
+        <item name="android:textSize">20sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="layout_constraintBottom_toBottomOf">parent</item>
+        <item name="layout_constraintEnd_toEndOf">parent</item>
+        <item name="layout_constraintStart_toStartOf">parent</item>
+        <item name="layout_constraintTop_toTopOf">parent</item>
+    </style>
+
     <style name="BottomNavigationView.ActiveIndicator" parent="Widget.Material3.BottomNavigationView.ActiveIndicator">
         <item name="android:color">@color/accent_900</item>
     </style>
