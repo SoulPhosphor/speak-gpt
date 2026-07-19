@@ -33,6 +33,7 @@ import androidx.exifinterface.media.ExifInterface
 import androidx.fragment.app.FragmentActivity
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.slider.Slider
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import kotlinx.coroutines.CoroutineScope
@@ -86,6 +87,7 @@ class ProfileImageFramingActivity : FragmentActivity() {
 
     private var framingView: FramingView? = null
     private var rotationDial: RotationDialView? = null
+    private var zoomSlider: Slider? = null
     private var readout: TextView? = null
     private var btnDone: ImageButton? = null
 
@@ -104,6 +106,7 @@ class ProfileImageFramingActivity : FragmentActivity() {
 
         framingView = findViewById(R.id.framing_view)
         rotationDial = findViewById(R.id.rotation_dial)
+        zoomSlider = findViewById(R.id.framing_zoom_slider)
         readout = findViewById(R.id.fine_rotation_readout)
         btnDone = findViewById(R.id.btn_done)
 
@@ -118,9 +121,21 @@ class ProfileImageFramingActivity : FragmentActivity() {
         }
         readout?.setOnClickListener { showFineRotationDialog() }
 
+        // Zoom bar (owner request): drives the picture's size. Only user drags
+        // move the picture; programmatic updates (from a pinch, see
+        // onZoomChangedListener) set the value with fromUser=false and are
+        // ignored here, so the two controls never loop.
+        zoomSlider?.addOnChangeListener { _, value, fromUser ->
+            if (fromUser) framingView?.setZoomFraction(value)
+        }
+        framingView?.onZoomChangedListener = { fraction ->
+            zoomSlider?.value = fraction.coerceIn(0f, 1f)
+        }
+
         framingView?.onReadyListener = {
             btnDone?.isEnabled = true
             updateReadout(framingView?.getFineAngle() ?: 0f)
+            zoomSlider?.value = (framingView?.getZoomFraction() ?: 0.5f).coerceIn(0f, 1f)
         }
         // A two-finger twist inside FramingView also changes the fine angle
         // directly (see FramingView.onTouchEvent) - keep the dial and readout
@@ -231,6 +246,7 @@ class ProfileImageFramingActivity : FragmentActivity() {
                         framingView?.setParams(restoredParams)
                         rotationDial?.setAngle(restoredParams.fineAngleDeg)
                         updateReadout(restoredParams.fineAngleDeg)
+                        zoomSlider?.value = (framingView?.getZoomFraction() ?: 0.5f).coerceIn(0f, 1f)
                     }
                 }
             }

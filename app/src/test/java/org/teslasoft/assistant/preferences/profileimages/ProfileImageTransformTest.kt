@@ -88,18 +88,70 @@ class ProfileImageTransformTest {
         assertTrue(ProfileImageTransform.isFullyCovered(p, 1000, 1000, 500f))
     }
 
-    /* ---------------- clampToCover ---------------- */
+    /* ---------------- zoom bounds and slider mapping ---------------- */
 
     @Test
-    fun clampRaisesScaleToTheFloorAndRecovers() {
-        val clamped = ProfileImageTransform.clampToCover(Params(scale = 0.4f), 1000, 1000, 500f)
-        assertEquals(0.5f, clamped.scale, 1e-4f)
-        assertTrue(ProfileImageTransform.isFullyCovered(clamped, 1000, 1000, 500f))
+    fun zoomBoundsAreTheShrinkFloorAndZoomCeiling() {
+        // 1000x1000, crop 500: floor = 0.2*500/1000 = 0.1; ceiling = 8*500/1000 = 4.0.
+        assertEquals(0.1f, ProfileImageTransform.minZoomScale(1000, 1000, 500f), 1e-4f)
+        assertEquals(4.0f, ProfileImageTransform.maxZoomScale(1000, 1000, 500f), 1e-4f)
     }
 
     @Test
-    fun clampShiftsTranslationBackWithoutChangingAValidScale() {
-        val clamped = ProfileImageTransform.clampToCover(
+    fun zoomFractionMapsEndpointsToTheBounds() {
+        assertEquals(0.1f, ProfileImageTransform.scaleForZoomFraction(0f, 0.1f, 4.0f), 1e-4f)
+        assertEquals(4.0f, ProfileImageTransform.scaleForZoomFraction(1f, 0.1f, 4.0f), 1e-4f)
+        assertEquals(0f, ProfileImageTransform.zoomFractionForScale(0.1f, 0.1f, 4.0f), 1e-4f)
+        assertEquals(1f, ProfileImageTransform.zoomFractionForScale(4.0f, 0.1f, 4.0f), 1e-4f)
+    }
+
+    @Test
+    fun zoomFractionRoundTrips() {
+        val f = 0.37f
+        val scale = ProfileImageTransform.scaleForZoomFraction(f, 0.1f, 4.0f)
+        assertEquals(f, ProfileImageTransform.zoomFractionForScale(scale, 0.1f, 4.0f), 1e-4f)
+    }
+
+    /* ---------------- clampParams (owner: shrink allowed) ---------------- */
+
+    @Test
+    fun clampKeepsAScaleBetweenTheShrinkFloorAndCoverWithoutRaisingIt() {
+        // 0.3 is below cover (0.5) but above the shrink floor (0.1): it stays,
+        // proving the crop is no longer forced to be covered.
+        val clamped = ProfileImageTransform.clampParams(Params(scale = 0.3f), 1000, 1000, 500f)
+        assertEquals(0.3f, clamped.scale, 1e-4f)
+        assertFalse(ProfileImageTransform.isFullyCovered(clamped, 1000, 1000, 500f))
+    }
+
+    @Test
+    fun clampRaisesScaleToTheShrinkFloor() {
+        val clamped = ProfileImageTransform.clampParams(Params(scale = 0.05f), 1000, 1000, 500f)
+        assertEquals(0.1f, clamped.scale, 1e-4f)
+    }
+
+    @Test
+    fun clampCapsScaleAtTheZoomCeiling() {
+        val clamped = ProfileImageTransform.clampParams(Params(scale = 10f), 1000, 1000, 500f)
+        assertEquals(4.0f, clamped.scale, 1e-4f)
+    }
+
+    @Test
+    fun clampCentersAShrunkOffCenterImage() {
+        // Smaller than the crop and shoved off-center: it is re-centered so the
+        // shrunk picture sits in the middle of the square.
+        val clamped = ProfileImageTransform.clampParams(
+            Params(scale = 0.3f, translateX = 200f, translateY = -120f), 1000, 1000, 500f
+        )
+        assertEquals(0.3f, clamped.scale, 1e-4f)
+        assertEquals(0f, clamped.translateX, 1e-3f)
+        assertEquals(0f, clamped.translateY, 1e-3f)
+    }
+
+    @Test
+    fun clampStillCoversAndRecentersAtExactlyCover() {
+        // At the cover scale there is no slack, so any offset is pulled back and
+        // the crop stays fully covered — the old guarantee still holds here.
+        val clamped = ProfileImageTransform.clampParams(
             Params(scale = 0.5f, translateX = 200f), 1000, 1000, 500f
         )
         assertEquals(0.5f, clamped.scale, 1e-4f)
@@ -108,19 +160,22 @@ class ProfileImageTransformTest {
     }
 
     @Test
-    fun clampRecoversAfterAQuarterTurnOnARectangle() {
-        val clamped = ProfileImageTransform.clampToCover(
-            Params(scale = 0.1f, quarterTurns = 1), 1000, 500, 400f
+    fun clampAllowsPanningAlongAnOverhangWhenZoomedIn() {
+        // Zoomed past cover, a within-range pan is kept and the crop stays covered.
+        val clamped = ProfileImageTransform.clampParams(
+            Params(scale = 1.0f, translateX = 100f), 1000, 1000, 500f
         )
-        assertTrue(ProfileImageTransform.isFullyCovered(clamped, 1000, 500, 400f))
+        assertEquals(100f, clamped.translateX, 1e-3f)
+        assertTrue(ProfileImageTransform.isFullyCovered(clamped, 1000, 1000, 500f))
     }
 
     @Test
-    fun clampRecoversAtAnArbitraryFineAngle() {
-        // 90-degree turn plus a fine angle, zoomed out and shoved off-center:
-        // clamp must still produce a fully covered crop.
-        val clamped = ProfileImageTransform.clampToCover(
-            Params(scale = 0.2f, translateX = 120f, translateY = -80f, quarterTurns = 1, fineAngleDeg = 12.5f),
+    fun clampCoversWhenZoomedInAtAnArbitraryFineAngle() {
+        // A covered state above cover, off-center at a fine angle, stays covered.
+        val cover = ProfileImageTransform.minScale(1200, 900, 500f, ProfileImageTransform.totalRotationDeg(
+            Params(quarterTurns = 1, fineAngleDeg = 12.5f)))
+        val clamped = ProfileImageTransform.clampParams(
+            Params(scale = cover * 1.3f, translateX = 60f, translateY = -40f, quarterTurns = 1, fineAngleDeg = 12.5f),
             1200, 900, 500f
         )
         assertTrue(ProfileImageTransform.isFullyCovered(clamped, 1200, 900, 500f))

@@ -37,9 +37,12 @@ import kotlin.math.min
  * corner guides) and turns pan / pinch / flip / 90-degree-rotate / fine-angle
  * input into transform [ProfileImageTransform.Params]. It NEVER computes the
  * transform math itself — every gesture updates the params and re-runs
- * [ProfileImageTransform.clampToCover], so the crop can never expose an empty
- * edge. No display mask (Flower/Circle/Square) is ever shown here; this editor
- * produces one square master image and display masks are applied later.
+ * [ProfileImageTransform.clampParams], which keeps the picture within its zoom
+ * bounds and either covering the crop or centred inside it (owner ruling,
+ * July 19 2026: the picture MAY be shrunk smaller than the crop; the uncovered
+ * area is the black background). No display mask (Flower/Circle/Square) is ever
+ * shown here; this editor produces one square master image and display masks
+ * are applied later.
  */
 class FramingView @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
@@ -77,7 +80,7 @@ class FramingView @JvmOverloads constructor(
                 translateX = params.translateX * f,
                 translateY = params.translateY * f
             )
-            clampAndInvalidate()
+            clampAndInvalidate(notifyZoom = true)
             return true
         }
     })
@@ -94,6 +97,12 @@ class FramingView @JvmOverloads constructor(
     /** Fired whenever a two-finger twist changes the fine angle, so the host
      *  can keep the tick dial and readout in sync with the gesture. */
     var onFineAngleChangedListener: ((Float) -> Unit)? = null
+
+    /** Fired when a PINCH changes the zoom, so the host can keep the zoom bar
+     *  in sync (as a fraction in [0,1]). Not fired for slider-driven changes
+     *  ([setZoomFraction]) — the slider is already the source there, so echoing
+     *  back would loop. */
+    var onZoomChangedListener: ((Float) -> Unit)? = null
 
     fun hasImage(): Boolean = bitmap != null
 
@@ -133,17 +142,19 @@ class FramingView @JvmOverloads constructor(
     fun getFineAngle(): Float = params.fineAngleDeg
 
     /**
-     * Renders the confirmed [outputSize] x [outputSize] result. Fills white
-     * first so transparent source pixels flatten over white (never black or
-     * undefined) before the caller JPEG-encodes it. Coverage is guaranteed by
-     * clampToCover, so the output has no empty edges.
+     * Renders the confirmed [outputSize] x [outputSize] result. Fills BLACK
+     * first (owner ruling, July 19 2026), so both any area the shrunk picture
+     * does not cover AND transparent source pixels flatten to black (never
+     * undefined) before the caller JPEG-encodes it. A pickable background
+     * colour is a possible later feature; for now the framing background is
+     * always black.
      */
     fun getResultBitmap(outputSize: Int): Bitmap? {
         val bmp = bitmap ?: return null
         if (cropSize <= 0f) return null
         val out = Bitmap.createBitmap(outputSize, outputSize, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(out)
-        canvas.drawColor(Color.WHITE)
+        canvas.drawColor(Color.BLACK)
         val m = Matrix()
         m.setValues(ProfileImageTransform.outputMatrixValues(params, bmp.width, bmp.height, cropSize, outputSize))
         canvas.drawBitmap(bmp, m, bitmapPaint)
@@ -165,18 +176,49 @@ class FramingView @JvmOverloads constructor(
     private fun initParamsForCurrentSize() {
         val bmp = bitmap ?: return
         if (cropSize <= 0f) return
-        val floor = ProfileImageTransform.minScale(bmp.width, bmp.height, cropSize, 0.0)
-        params = ProfileImageTransform.Params(scale = floor)
-        params = ProfileImageTransform.clampToCover(params, bmp.width, bmp.height, cropSize)
+        // Open at the cover fit: the picture fills the square (the user can then
+        // shrink or zoom from there).
+        val fit = ProfileImageTransform.minScale(bmp.width, bmp.height, cropSize, 0.0)
+        params = ProfileImageTransform.Params(scale = fit)
+        params = ProfileImageTransform.clampParams(params, bmp.width, bmp.height, cropSize)
         paramsInitialized = true
         invalidate()
     }
 
-    private fun clampAndInvalidate() {
+    private fun clampAndInvalidate(notifyZoom: Boolean = false) {
         val bmp = bitmap ?: return
         if (cropSize <= 0f) return
-        params = ProfileImageTransform.clampToCover(params, bmp.width, bmp.height, cropSize)
+        params = ProfileImageTransform.clampParams(params, bmp.width, bmp.height, cropSize)
+        if (notifyZoom) onZoomChangedListener?.invoke(getZoomFraction())
         invalidate()
+    }
+
+    /** Where the current zoom sits on the zoom bar, in [0,1]. */
+    fun getZoomFraction(): Float {
+        val bmp = bitmap ?: return 0f
+        if (cropSize <= 0f) return 0f
+        val minZoom = ProfileImageTransform.minZoomScale(bmp.width, bmp.height, cropSize)
+        val maxZoom = ProfileImageTransform.maxZoomScale(bmp.width, bmp.height, cropSize)
+        return ProfileImageTransform.zoomFractionForScale(params.scale, minZoom, maxZoom)
+    }
+
+    /** Sets the zoom from a bar fraction in [0,1], zooming about the crop centre
+     *  exactly like a pinch (translation scales with the zoom so the centre
+     *  stays put). Slider-driven, so it does NOT fire [onZoomChangedListener]. */
+    fun setZoomFraction(fraction: Float) {
+        val bmp = bitmap ?: return
+        if (cropSize <= 0f) return
+        val minZoom = ProfileImageTransform.minZoomScale(bmp.width, bmp.height, cropSize)
+        val maxZoom = ProfileImageTransform.maxZoomScale(bmp.width, bmp.height, cropSize)
+        val newScale = ProfileImageTransform.scaleForZoomFraction(fraction, minZoom, maxZoom)
+        val old = params.scale
+        val ratio = if (old > 0f) newScale / old else 1f
+        params = params.copy(
+            scale = newScale,
+            translateX = params.translateX * ratio,
+            translateY = params.translateY * ratio
+        )
+        clampAndInvalidate()
     }
 
     override fun onDraw(canvas: Canvas) {

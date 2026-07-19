@@ -18,31 +18,51 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
-    <!-- Top-right overlay controls: Flip then Rotate. -->
+    <!-- Top overlay: the Flip/Rotate row (top-right, unchanged) with the zoom
+         bar beneath it (owner request, July 19 2026) - a twin of the rotation
+         dial at the bottom, but for size, spanning the width above the image. -->
     <LinearLayout
         android:id="@+id/framing_top_controls"
-        android:layout_width="wrap_content"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_gravity="top|end"
-        android:orientation="horizontal"
+        android:layout_gravity="top"
+        android:orientation="vertical"
         android:padding="8dp">
 
-        <ImageButton
-            android:id="@+id/btn_flip"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/framing_flip"
-            android:src="@drawable/ic_flip" />
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="end"
+            android:orientation="horizontal">
 
-        <ImageButton
-            android:id="@+id/btn_rotate"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:layout_marginStart="8dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/framing_rotate"
-            android:src="@drawable/ic_rotate" />
+            <ImageButton
+                android:id="@+id/btn_flip"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/framing_flip"
+                android:src="@drawable/ic_flip" />
+
+            <ImageButton
+                android:id="@+id/btn_rotate"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_marginStart="8dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/framing_rotate"
+                android:src="@drawable/ic_rotate" />
+        </LinearLayout>
+
+        <com.google.android.material.slider.Slider
+            android:id="@+id/framing_zoom_slider"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:contentDescription="@string/framing_zoom"
+            android:stepSize="0"
+            android:valueFrom="0"
+            android:valueTo="1"
+            android:value="0.5" />
     </LinearLayout>
 
     <!-- Bottom stack: readout, dial, then the action bar. -->

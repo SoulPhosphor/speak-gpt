@@ -1776,6 +1776,8 @@
     <string name="framing_title">Framing</string>
     <string name="framing_flip">Flip</string>
     <string name="framing_rotate">Rotate</string>
+    <!-- Content description for the zoom bar (owner-requested control). -->
+    <string name="framing_zoom">Zoom</string>
     <string name="framing_cancel">Cancel</string>
     <string name="framing_done">Done</string>
     <!-- Fine-rotation readout: always shows the degree symbol, e.g. +7°, 0°, −12.5° -->

@@ -2148,3 +2148,36 @@ screen in any later phase.
    don't really know the UI yet." Treat this as a noted future
    direction only. When it comes up, ask in plain chat rather than
    guessing a UI for it.
+
+----------------------------------------------------------------------
+ADDENDUM 2 — owner rulings made in chat, July 19 2026 (framing)
+----------------------------------------------------------------------
+
+These supersede the sections named wherever they differ.
+
+6. THE PICTURE MAY BE SHRUNK SMALLER THAN THE CROP. This RETIRES the
+   "No Empty Edges" rule (FRAMING SCREEN / CUSTOM MATRIX REQUIREMENTS /
+   No Empty Edges / VERIFICATION - Framing). The owner could not shrink
+   a picture below the point where it filled the square, and wants to.
+   The editor no longer forces the crop to stay covered: zoom runs
+   between a shrink floor (the picture's longer side down to ~20% of the
+   crop) and a zoom-in ceiling (8x the cover scale). When the picture is
+   smaller than the crop it is centred; the still-covered case keeps its
+   old cover/pan behaviour. Do NOT restore the cover-only clamp. Built
+   in ProfileImageTransform.clampParams (renamed from clampToCover).
+
+7. THE FRAMING BACKGROUND IS BLACK, not white. This supersedes "composite
+   transparent source pixels over solid white" (TRANSPARENT SOURCES,
+   FRAMING OUTPUT). Both the area a shrunk picture does not cover AND
+   transparent source pixels now flatten to BLACK, in FramingView's
+   getResultBitmap. "It runs in better for right now" (owner). A
+   user-pickable background colour is a possible LATER feature and is
+   explicitly deferred - do NOT build it without the owner.
+
+8. A ZOOM BAR was added ABOVE the image in the Framing screen (owner
+   request) - a horizontal slider, twin of the fine-rotation dial below
+   it, for precise sizing when the two-finger pinch is too fiddly. This
+   adds a control the EXACT FRAMING CONTROL ORDER did not list; keep it.
+   The pinch is unchanged and stays in sync with the bar. The screen-
+   reader word for it ("Zoom", string framing_zoom) was chosen when
+   added; the owner may change it.
