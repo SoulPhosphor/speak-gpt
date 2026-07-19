@@ -56,4 +56,47 @@ class GlobalPreferences private constructor(private var gp: SharedPreferences) {
     fun setUiPalette(palette: String) {
         gp.edit().putString("ui_palette", palette).apply()
     }
+
+    /**
+     * The global Default User Image: the bare hash of a saved Profile Image
+     * used when the active user identity (Roleplay Character, then My Persona)
+     * has no image of its own. "" means none is set. The catalog/files live in
+     * profile_images.db; this only references.
+     *
+     * @return the image hash, or "" for none
+     * */
+    fun getDefaultUserImageRef() : String {
+        return gp.getString("default_user_image_ref", "") ?: ""
+    }
+
+    /**
+     * Set the Default User Image reference. Pass "" to clear it (Remove
+     * Picture) — this only drops the reference and never deletes the saved
+     * gallery image.
+     *
+     * @param ref the image hash, or "" for none
+     * */
+    fun setDefaultUserImageRef(ref: String) {
+        gp.edit().putString("default_user_image_ref", ref).apply()
+    }
+
+    /**
+     * Default Shape applied to uploaded Profile Images (never to built-in
+     * glyph avatars or the generic user icon). One of "flower" | "circle" |
+     * "square"; defaults to "flower" (the existing clover geometry).
+     *
+     * @return the shape key
+     * */
+    fun getProfileImageShape() : String {
+        return gp.getString("profile_image_shape", "flower") ?: "flower"
+    }
+
+    /**
+     * Set the Default Shape for uploaded Profile Images.
+     *
+     * @param shape one of "flower" | "circle" | "square"
+     * */
+    fun setProfileImageShape(shape: String) {
+        gp.edit().putString("profile_image_shape", shape).apply()
+    }
 }

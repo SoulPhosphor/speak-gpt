@@ -102,7 +102,8 @@ CREATE TABLE user_personas (                 -- presentation variants of the ONE
   name         TEXT NOT NULL,
   presentation TEXT NOT NULL,
   status       TEXT NOT NULL CHECK (status IN ('active','archived')),
-  created_at   TEXT
+  created_at   TEXT,
+  image_ref    TEXT                           -- DB v15 (Profile Images): bare hash into profile_images.db, or NULL for none. Optional in backups.
 );
 
 -- world-agnostic by design: roleplay characters travel between worlds
@@ -114,8 +115,13 @@ CREATE TABLE roleplay_characters (
   arc                TEXT,            -- ARCHIVIST-MAINTAINED story-so-far (auto); never overwrites description
   worlds_played_json TEXT DEFAULT '[]',
   status             TEXT NOT NULL CHECK (status IN ('active','archived')),
-  created_at         TEXT
+  created_at         TEXT,
+  image_ref          TEXT             -- DB v15 (Profile Images): bare hash into profile_images.db, or NULL for none. Optional in backups.
 );
+-- NOTE: the v7 world-core columns on roleplay_characters (species, char_class,
+-- core_personality, physical_description, goals_drives) are added by migration
+-- and live in the app's CREATE TABLE; they are omitted from this historical
+-- plan snapshot. image_ref (v15) is likewise an approved additive extension.
 
 -- ---------- memories ----------
 CREATE TABLE memories (

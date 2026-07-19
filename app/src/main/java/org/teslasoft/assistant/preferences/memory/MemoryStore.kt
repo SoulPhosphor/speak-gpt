@@ -49,7 +49,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
 
     companion object {
         const val DATABASE_NAME = "companion_memory.db"
-        private const val DATABASE_VERSION = 14
+        private const val DATABASE_VERSION = 15
 
         // Freshness-cooldown source types (rules §10 / Stage 3.3): the
         // composite key (chat_id, source_type, entry_id) keeps ids from
@@ -238,13 +238,17 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 "created_at TEXT)"
         )
 
+        // image_ref (v15): bare Profile Images hash, or NULL for none. Only
+        // references profile_images.db; opening the memory store never touches
+        // that catalog.
         db.execSQL(
             "CREATE TABLE user_personas (" +
                 "persona_id TEXT PRIMARY KEY, " +
                 "name TEXT NOT NULL, " +
                 "presentation TEXT NOT NULL, " +
                 "status TEXT NOT NULL CHECK (status IN ('active','archived')), " +
-                "created_at TEXT)"
+                "created_at TEXT, " +
+                "image_ref TEXT)"
         )
 
         // The five Zone 1 card columns (species..goals_drives) are the spec
@@ -264,7 +268,9 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 "char_class TEXT, " +
                 "core_personality TEXT, " +
                 "physical_description TEXT, " +
-                "goals_drives TEXT)"
+                "goals_drives TEXT, " +
+                // image_ref (v15): bare Profile Images hash, or NULL for none.
+                "image_ref TEXT)"
         )
 
         // Campaign (roleplay continuity) layer — integration plan 📌 amendment.
@@ -1161,6 +1167,19 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 arrayOf(META_DB_MIGRATION, "14")
             )
         }
+        if (oldVersion < 15) {
+            // v15 (July 2026, Profile Images): a My Persona and a user-side
+            // Roleplay Character may each reference a saved Profile Image by
+            // its bare hash. The image catalog/files live in the separate
+            // unencrypted profile_images.db — this only stores the reference.
+            // NULL means no image. Additive.
+            db.execSQL("ALTER TABLE user_personas ADD COLUMN image_ref TEXT")
+            db.execSQL("ALTER TABLE roleplay_characters ADD COLUMN image_ref TEXT")
+            db.execSQL(
+                "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                arrayOf(META_DB_MIGRATION, "15")
+            )
+        }
     }
 
     /* ---------------------------------------------------------------------- */
@@ -1872,7 +1891,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                         name = it.getString(it.getColumnIndexOrThrow("name")),
                         presentation = it.getString(it.getColumnIndexOrThrow("presentation")),
                         status = it.getString(it.getColumnIndexOrThrow("status")),
-                        createdAt = it.getStringOrNull("created_at")
+                        createdAt = it.getStringOrNull("created_at"),
+                        imageRef = it.getStringOrNull("image_ref")
                     )
                 )
             }
@@ -1895,7 +1915,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                         charClass = it.getStringOrNull("char_class"),
                         corePersonality = it.getStringOrNull("core_personality"),
                         physicalDescription = it.getStringOrNull("physical_description"),
-                        goalsDrives = it.getStringOrNull("goals_drives")
+                        goalsDrives = it.getStringOrNull("goals_drives"),
+                        imageRef = it.getStringOrNull("image_ref")
                     )
                 )
             }
@@ -2575,7 +2596,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                         name = it.getString(it.getColumnIndexOrThrow("name")),
                         presentation = it.getString(it.getColumnIndexOrThrow("presentation")),
                         status = it.getString(it.getColumnIndexOrThrow("status")),
-                        createdAt = it.getStringOrNull("created_at")
+                        createdAt = it.getStringOrNull("created_at"),
+                        imageRef = it.getStringOrNull("image_ref")
                     )
                 )
             }
@@ -2607,7 +2629,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                         charClass = it.getStringOrNull("char_class"),
                         corePersonality = it.getStringOrNull("core_personality"),
                         physicalDescription = it.getStringOrNull("physical_description"),
-                        goalsDrives = it.getStringOrNull("goals_drives")
+                        goalsDrives = it.getStringOrNull("goals_drives"),
+                        imageRef = it.getStringOrNull("image_ref")
                     )
                 )
             }
@@ -3288,6 +3311,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             put("presentation", p.presentation)
             put("status", p.status)
             put("created_at", p.createdAt ?: nowIso())
+            put("image_ref", p.imageRef)
         }, SQLiteDatabase.CONFLICT_REPLACE)
     }
 
@@ -3322,6 +3346,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             put("core_personality", r.corePersonality)
             put("physical_description", r.physicalDescription)
             put("goals_drives", r.goalsDrives)
+            put("image_ref", r.imageRef)
         }, SQLiteDatabase.CONFLICT_REPLACE)
     }
 

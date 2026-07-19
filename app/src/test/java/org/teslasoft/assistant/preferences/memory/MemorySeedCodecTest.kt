@@ -234,6 +234,72 @@ class MemorySeedCodecTest {
     }
 
     @Test
+    fun profileImageRefRoundTrips() {
+        // Profile Images (DB v15): a My Persona and a user-side Roleplay
+        // Character may each carry an image_ref (a bare hash). It must survive
+        // a backup/restore cycle for both record types.
+        val withImages = """
+            {
+              "schema_version": "1.11.0",
+              "companions": [], "entities": [], "memories": [], "modes": [],
+              "directives": [], "worlds": [], "proposals": [],
+              "user_personas": [
+                { "persona_id": "up-1", "name": "Explorer", "presentation": "curious",
+                  "status": "active", "image_ref": "aaaa1111",
+                  "created_at": "2026-07-19T00:00:00Z" }
+              ],
+              "roleplay_characters": [
+                { "roleplay_character_id": "rc-1", "name": "Mira", "played_by": "user",
+                  "description": "d", "status": "active", "image_ref": "bbbb2222",
+                  "created_at": "2026-07-19T00:00:00Z" }
+              ]
+            }
+        """.trimIndent()
+
+        val data = MemorySeedCodec.parse(withImages)
+        assertEquals("aaaa1111", data.userPersonas.first().imageRef)
+        assertEquals("bbbb2222", data.roleplayCharacters.first().imageRef)
+
+        val back = MemorySeedCodec.parse(MemorySeedCodec.serialize(data))
+        assertEquals(data, back)
+        assertEquals("aaaa1111", back.userPersonas.first().imageRef)
+        assertEquals("bbbb2222", back.roleplayCharacters.first().imageRef)
+    }
+
+    @Test
+    fun profileImageRefIsNullWhenAbsentInBackup() {
+        // Pre-v15 backups carry no image_ref key: both record types must parse
+        // it as null (not "" or "null"), so old backups import cleanly.
+        val noImages = """
+            {
+              "schema_version": "1.11.0",
+              "companions": [], "entities": [], "memories": [], "modes": [],
+              "directives": [], "worlds": [], "proposals": [],
+              "user_personas": [
+                { "persona_id": "up-1", "name": "Explorer", "presentation": "curious",
+                  "status": "active", "created_at": "2026-07-19T00:00:00Z" }
+              ],
+              "roleplay_characters": [
+                { "roleplay_character_id": "rc-1", "name": "Mira", "played_by": "user",
+                  "description": "d", "status": "active",
+                  "created_at": "2026-07-19T00:00:00Z" }
+              ]
+            }
+        """.trimIndent()
+
+        val data = MemorySeedCodec.parse(noImages)
+        assertEquals(null, data.userPersonas.first().imageRef)
+        assertEquals(null, data.roleplayCharacters.first().imageRef)
+
+        // A null image_ref is simply omitted on export (putIfNotNull), so the
+        // round-trip stays null rather than materializing an empty string.
+        val back = MemorySeedCodec.parse(MemorySeedCodec.serialize(data))
+        assertEquals(data, back)
+        assertEquals(null, back.userPersonas.first().imageRef)
+        assertEquals(null, back.roleplayCharacters.first().imageRef)
+    }
+
+    @Test
     fun modelRulesRoundTrip() {
         // Stage 4 (owner_approved_rules §11 Revision 5): model rules are user-
         // authored, so backups must carry the rules (with their own model-

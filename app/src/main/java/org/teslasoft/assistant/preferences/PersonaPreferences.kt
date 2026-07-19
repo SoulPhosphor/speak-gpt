@@ -61,9 +61,11 @@ class PersonaPreferences private constructor(private var preferences: SharedPref
         val additionalLoreBookIds = getString(id + "_additional_lorebook_ids", "")
         val autoLoadLastLoreBooks = getString(id + "_autoload_last_lorebooks", "false") == "true"
         val lastUsedLoreBookIds = getString(id + "_last_used_lorebook_ids", "")
+        val avatarRef = getString(id + "_avatar_ref", "")
         return PersonaObject(
             label, prompt, activationPromptId,
-            coreLoreBookId, additionalLoreBookIds, autoLoadLastLoreBooks, lastUsedLoreBookIds
+            coreLoreBookId, additionalLoreBookIds, autoLoadLastLoreBooks, lastUsedLoreBookIds,
+            avatarRef
         )
     }
 
@@ -89,6 +91,7 @@ class PersonaPreferences private constructor(private var preferences: SharedPref
         putString(id + "_additional_lorebook_ids", persona.additionalLoreBookIds)
         putString(id + "_autoload_last_lorebooks", if (persona.autoLoadLastLoreBooks) "true" else "false")
         putString(id + "_last_used_lorebook_ids", persona.lastUsedLoreBookIds)
+        putString(id + "_avatar_ref", persona.avatarRef)
     }
 
     /**
@@ -161,6 +164,7 @@ class PersonaPreferences private constructor(private var preferences: SharedPref
         preferences.edit { remove(id + "_additional_lorebook_ids") }
         preferences.edit { remove(id + "_autoload_last_lorebooks") }
         preferences.edit { remove(id + "_last_used_lorebook_ids") }
+        preferences.edit { remove(id + "_avatar_ref") }
     }
 
     fun getPersonasList(): ArrayList<PersonaObject> {

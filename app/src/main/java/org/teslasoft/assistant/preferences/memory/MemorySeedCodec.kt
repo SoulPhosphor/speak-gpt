@@ -235,7 +235,9 @@ object MemorySeedCodec {
                 name = p.reqStr("name"),
                 presentation = p.reqStr("presentation"),
                 status = p.reqStr("status"),
-                createdAt = p.str("created_at")
+                createdAt = p.str("created_at"),
+                // Optional (Profile Images): absent in pre-v15 backups → null.
+                imageRef = p.str("image_ref")
             )
         }
 
@@ -253,7 +255,9 @@ object MemorySeedCodec {
                 charClass = r.str("class"),
                 corePersonality = r.str("core_personality"),
                 physicalDescription = r.str("physical_description"),
-                goalsDrives = r.str("goals_drives")
+                goalsDrives = r.str("goals_drives"),
+                // Optional (Profile Images): absent in pre-v15 backups → null.
+                imageRef = r.str("image_ref")
             )
         }
 
@@ -616,6 +620,7 @@ object MemorySeedCodec {
                     put("presentation", p.presentation)
                     put("status", p.status)
                     putIfNotNull("created_at", p.createdAt)
+                    putIfNotNull("image_ref", p.imageRef)
                 })
             }
         })
@@ -636,6 +641,7 @@ object MemorySeedCodec {
                     putIfNotNull("core_personality", r.corePersonality)
                     putIfNotNull("physical_description", r.physicalDescription)
                     putIfNotNull("goals_drives", r.goalsDrives)
+                    putIfNotNull("image_ref", r.imageRef)
                 })
             }
         })

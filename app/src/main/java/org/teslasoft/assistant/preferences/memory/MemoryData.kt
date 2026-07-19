@@ -95,7 +95,10 @@ data class UserPersonaRecord(
     val name: String,
     val presentation: String,
     val status: String,                   // active | archived
-    val createdAt: String?
+    val createdAt: String?,
+    // Profile Images (DB v15): bare hash of the assigned image, or null for
+    // none. The catalog/files live in profile_images.db; this only references.
+    val imageRef: String? = null
 )
 
 data class RoleplayCharacterRecord(
@@ -113,7 +116,10 @@ data class RoleplayCharacterRecord(
     val charClass: String? = null,        // column `char_class`; UI label "Class"
     val corePersonality: String? = null,
     val physicalDescription: String? = null,
-    val goalsDrives: String? = null
+    val goalsDrives: String? = null,
+    // Profile Images (DB v15): bare hash of the assigned image, or null for
+    // none. The catalog/files live in profile_images.db; this only references.
+    val imageRef: String? = null
 )
 
 /**

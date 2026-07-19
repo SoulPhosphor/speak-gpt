@@ -36,7 +36,12 @@ class PersonaObject(
     /* Comma-separated ids of the additional lorebooks that were checked the
      * last time a chat with this persona changed its selection. Bookkeeping
      * for autoLoadLastLoreBooks; not edited directly by the user. */
-    var lastUsedLoreBookIds: String = ""
+    var lastUsedLoreBookIds: String = "",
+    /* Bare hash of the assigned Profile Image (companion picture), or "" for
+     * none. The catalog/files live in profile_images.db; this only references.
+     * Renaming a persona changes its id (edit = delete + recreate), so this
+     * must ride the PersonaObject through the edit like every other field. */
+    var avatarRef: String = ""
 ) {
     /** Parsed view of [additionalLoreBookIds]. */
     fun additionalLoreBookIdList(): ArrayList<String> = splitIds(additionalLoreBookIds)

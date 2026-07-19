@@ -344,7 +344,8 @@
           "name": { "type": "string" },
           "presentation": { "type": "string", "description": "Prose: how the user appears and carries themselves under this persona." },
           "status": { "type": "string", "enum": ["active", "archived"] },
-          "created_at": { "type": "string", "format": "date-time" }
+          "created_at": { "type": "string", "format": "date-time" },
+          "image_ref": { "type": "string", "description": "DB v15 (Profile Images): bare hash of the assigned Profile Image (profile_images.db), or omitted for none. Optional; absent in pre-v15 backups." }
         }
       }
     },
@@ -363,7 +364,8 @@
           "arc": { "type": "string", "description": "ARCHIVIST-MAINTAINED (auto): the character's story so far — what they have done and been through across sessions. Never overwrites the definition." },
           "worlds_played": { "type": "array", "items": { "type": "string" }, "description": "world_ids this character has appeared in." },
           "status": { "type": "string", "enum": ["active", "archived"] },
-          "created_at": { "type": "string", "format": "date-time" }
+          "created_at": { "type": "string", "format": "date-time" },
+          "image_ref": { "type": "string", "description": "DB v15 (Profile Images): bare hash of the assigned Profile Image (profile_images.db), or omitted for none. Optional; absent in pre-v15 backups." }
         }
       }
     },
