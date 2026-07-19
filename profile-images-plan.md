@@ -1859,7 +1859,7 @@ layout and the shared styles it uses, in the implementation report.
 Run Android Checks CI.
 Prepare an owner test build.
 
-Do not mark the work complete until the owner confirms the behavior on her
+Do not mark the work complete until the owner confirms the behavior on their
 phone.
 
 VERIFICATION
@@ -2082,6 +2082,18 @@ screen in any later phase.
    like any other Profile Image. Store its hash as the Global Default
    reference (see item 4 for where that preference lives).
 
+   When the user later changes the Global Default (owner ruling, July
+   19 2026), the picker must offer ALL FOUR of CustomizeAssistantDialog's
+   existing built-in presets as choices, not just the seeded "double
+   star" one - chatgpt_icon.xml, google_bard.xml, perplexity_ai.xml,
+   and assistant.xml (see StaticAvatarParser for how they're currently
+   identified: avatarId "gpt" / "gemini" / "perplexity" / "speakgpt").
+   Owner's words: "why take away options" - they consider the current
+   art "dumb" but want every existing choice kept available alongside
+   ordinary gallery photos, not narrowed down. Each would need the same
+   vector-to-fixed-color-bitmap treatment as the seed icon before it can
+   be a real, selectable Profile Image.
+
 3. NEW CONCEPT — Personal Default (not yet built; Phase 6+ scope). A
    second, OPTIONAL user-side-only preference, distinct from the Global
    Default: the user may set their own default separately from the
@@ -2096,14 +2108,31 @@ screen in any later phase.
    are two separate preferences now.
 
 4. PROFILE IMAGE SETTINGS SCREEN — restructured (Phase 6+ scope,
-   supersedes the flat three-row layout in that section). Owner's
-   description, in her own words: a main-Settings tile labeled "Profile
-   Image Properties", subtext "Profile image gallery and associated
-   settings can be found here." Opens a screen with (at least):
+   supersedes the flat three-row layout AND the "add one normal Settings
+   TILE" instruction in that section and in the Phase 6 work-order
+   entry). Owner's description, in their own words: a main-Settings
+   entry labeled "Profile Image Properties", subtext "Profile image
+   gallery and associated settings can be found here." Opens a screen
+   with (at least):
    - A row into the gallery (management mode).
    - A row into "Default Images" - a screen or row group where the user
      sets the Global Default (item 2) and the Personal Default (item 3)
      separately.
+
+   NOT A TILE (owner ruling, July 19 2026): "no more tiles. tiles are
+   being slowly hunted to extinction." Because this entry lives on the
+   MAIN Settings screen, it must use the row-with-leading-icon style
+   already rolled out to the other main-screen entries (Characters, AI
+   System Settings, Memory Manager, Roleplay in activity_settings.xml -
+   see CLAUDE.md's "Shared chevron-row styles" section): a
+   Widget.App.Row.WithSubtitle container with Widget.App.Row.Icon as the
+   first child, then Widget.App.Row.TextColumn / Title / Subtitle /
+   Chevron. Icon choice was left to whoever builds this ("pick an icon
+   that seems like it would fit") - recommend res/drawable/ic_photo.xml
+   (a plain picture-frame glyph, already in the app, distinct from
+   ic_image_missing.xml so it can't be confused with the gallery's
+   broken/missing-file state). Not binding if a better fit turns up.
+
    Whether Default Shape stays as a third row on this same screen was
    not revisited in this conversation - it was not removed, but Phase 6
    should confirm with the owner rather than assume either way. Exact
