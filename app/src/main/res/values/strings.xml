@@ -474,7 +474,7 @@
     <string name="tile_image_resolution_title">Image resolution</string>
     <string name="tile_image_resolution_desc">This feature allows you to set image resolution. Please note that DALL-e 3 supports only 1024x1024.</string>
     <string name="tile_images_title">Images</string>
-    <string name="tile_images_desc">Image generation settings</string>
+    <string name="tile_images_desc">Image generation settings.</string>
     <string name="tile_openai_tts">Use OpenAI TTS</string>
     <string name="tile_google_tts">Google TTS is used</string>
     <string name="tile_tts_desc">This feature allows you to set TTS engine. OpenAI TTS is paid.</string>
@@ -589,10 +589,10 @@
     <string name="tile_desktop_mode_desc">This feature allows you to enable desktop mode. When desktop mode is enabled, SpeakGPT will use keyboard shortcuts and message input will be automatically focused. Press \'Enter\' to send message, \'Shift + Enter\' to add new line and \'Shift+Esc\' to close chat. Not recommended to use on phones unless you want keyboard to be opened every time you open the chat.</string>
     <string name="tile_new_ui_title">New UI</string>
     <string name="tile_new_ui_desc">This feature allows you to enable new experimental UI. New UI is more compact and intuitive.</string>
-    <string name="tile_about_app_title">About app</string>
+    <string name="tile_about_app_title">About App</string>
     <string name="tile_about_app_desc">This feature allows you to open about SpeakGPT page.</string>
-    <string name="tile_clear_chat_title">Clear chat</string>
-    <string name="tile_clear_chat_subtitle">Clear chat history</string>
+    <string name="tile_clear_chat_title">Clear Chat</string>
+    <string name="tile_clear_chat_subtitle">Clear chat history.</string>
     <string name="tile_clear_chat_desc">This feature allows you to clear chat history.</string>
     <string name="tile_documentation_title">Documentation</string>
     <string name="tile_documentation_subtitle">Open documentation</string>
@@ -620,7 +620,7 @@
          so the dense debug grid is no longer crammed into half-width tiles. -->
     <string name="title_alert_debug_menu">Alerts, Errors &amp; Logs</string>
     <string name="tile_alert_debug_menu_title">Alerts, Errors &amp; Logs</string>
-    <string name="tile_alert_debug_menu_subtitle">Chat errors, alert sound, and logs (and a shortcut to Audio Debugging)</string>
+    <string name="tile_alert_debug_menu_subtitle">Choose diagnostic settings and review logs.</string>
     <string name="tile_alert_debug_menu_desc">Choose how model errors are surfaced in chat, toggle the error alert sound, jump to Audio Debugging for anything microphone/voice related, and open the crash and event logs.</string>
     <string name="alert_debug_intro">Settings for non-audio problems — model errors and alert sounds — plus the diagnostic logs. Anything to do with the microphone, voice detection, or transcription lives in Audio Debugging.</string>
     <string name="row_audio_debugging_title">Audio Debugging</string>
@@ -629,7 +629,7 @@
     <string name="alert_debug_section_logs">Logs</string>
     <string name="on">On</string>
     <string name="off">Off</string>
-    <string name="tile_about_app_subtitle">About SpeakGPT</string>
+    <string name="tile_about_app_subtitle">About SpeakGPT.</string>
     <string name="label_clear_chat">Clear chat</string>
     <string name="msg_clear_chat">Are you sure? This action cannot be undone.</string>
     <string name="submsg_chat_cleared">Chat cleared</string>
@@ -769,8 +769,8 @@
 
     <!-- Voice &amp; speech consolidated settings -->
     <string name="voice_settings_title">Voice &amp; speech</string>
-    <string name="tile_voice_settings_title">Voice &amp; speech</string>
-    <string name="tile_voice_settings_subtitle">Dictation, hands-free, TTS, VAD…</string>
+    <string name="tile_voice_settings_title">Voice &amp; Speech</string>
+    <string name="tile_voice_settings_subtitle">Settings related to transcription and text to speech.</string>
     <string name="tile_voice_settings_desc">Everything related to speech in one place: text-to-speech voice and engine, speech-to-text (dictation) engine, hands-free mode, voice-activity detection, and audio feedback. Tap to open.</string>
     <string name="voice_section_tts">Text-to-speech</string>
     <string name="voice_section_stt">Speech-to-text (dictation)</string>
@@ -790,11 +790,11 @@
     <!-- Advanced voice & debugging screen -->
     <string name="title_voice_advanced">Advanced Voice Settings</string>
     <string name="tile_voice_advanced_title">Advanced Voice Settings</string>
-    <string name="tile_voice_advanced_subtitle">Detection tuning, Whisper decoding, delivery</string>
+    <string name="tile_voice_advanced_subtitle">Finetune Whisper and VAD settings.</string>
     <string name="tile_voice_advanced_desc">Tune how speech is detected, how on-device Whisper decodes it, and how replies are spoken. Includes plain-language hints for fixing “it never hears me” and “it cuts me off mid-sentence”. (Diagnostic logging lives in Voice Debugging.)</string>
     <string name="title_audio_debugging">Audio Debugging</string>
     <string name="tile_voice_debugging_title">Voice Debugging</string>
-    <string name="tile_voice_debugging_subtitle">VAD logging, audio health, transcription chime</string>
+    <string name="tile_voice_debugging_subtitle">Choose voice diagnostics.</string>
     <string name="tile_voice_debugging_desc">Everything microphone/voice related in one place: turn on detector logging (Energy, WebRTC, Silero) and microphone Audio Health before reporting a voice bug, and toggle the chime that plays once your speech is transcribed.</string>
     <string name="audio_debugging_intro">Everything to do with the microphone, voice detection, and transcription. Turn the logging switches on before reporting a voice problem, then reproduce it and open the Event log.</string>
     <string name="audio_debugging_section_sounds">Sounds</string>
