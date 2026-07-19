@@ -21,7 +21,15 @@ import java.security.MessageDigest
 class Hash {
     companion object {
         fun hash(string: String): String {
-            val bytes = string.toByteArray()
+            return hash(string.toByteArray())
+        }
+
+        /**
+         * Byte-safe SHA-256, hex-encoded. Used by Profile Images, which hashes
+         * the exact encoded JPEG bytes of a saved image (never a Base64 string
+         * or a source URI) so identical images always dedupe to one file.
+         */
+        fun hash(bytes: ByteArray): String {
             val md = MessageDigest.getInstance("SHA-256")
             val digest = md.digest(bytes)
             return digest.fold("") { str, it -> str + "%02x".format(it) }
