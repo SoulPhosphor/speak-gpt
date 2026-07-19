@@ -356,9 +356,11 @@
     <string name="api_endpoint_model">Model</string>
     <string name="api_endpoint_model_help">Tap to choose from models available on this endpoint.</string>
     <string name="api_endpoint_provider">Provider</string>
-    <string name="api_endpoint_timeout">Timeout (in seconds)</string>
+    <string name="api_endpoint_connection_timeout">Connection Timeout (In Seconds)</string>
+    <string name="api_endpoint_response_time">Response Time (In Seconds)</string>
     <string name="api_endpoint_timeout_too_low">Timeouts cannot be less than 5 seconds</string>
     <string name="api_endpoint_timeout_too_high">Timeouts cannot be more than 300 seconds</string>
+    <string name="api_endpoint_response_time_too_low">Timeouts cannot be less than 45 seconds</string>
     <string name="title_api_endpoint_profiles">API Chat Endpoint Profiles</string>
     <string name="message_delete_profile">Delete profile? This can\'t be undone.</string>
     <string name="discard_changes_q">Discard changes?</string>
@@ -676,8 +678,9 @@
          profile/URL/model/config (that lives in the Error Log). The [code] prefix
          is added in code from GenErrorCode, not stored here. -->
     <string name="gen_error_n1">The connection closed before the response finished. Try again, or switch models if this only happens with one model.</string>
-    <string name="gen_error_n2">The server did not respond in time. The connection may be slow or the model busy — try again, or switch models.</string>
+    <string name="gen_error_n2">Connection Timed Out: The app could not establish a connection to the server within the connection timeout. This usually points to a slow or unstable network rather than the model. Try again, or raise the connection timeout for this endpoint.</string>
     <string name="gen_error_n3">The app could not reach the server address. Check your connection or the Base URL, then try again.</string>
+    <string name="gen_error_n4">Response Timed Out: The connection succeeded, but the server did not send a response within the response time. The model may be busy or slow to reply. Try again, switch models, or raise the response time for this endpoint.</string>
     <string name="gen_error_a1">The API key was rejected. Update the key in Settings.</string>
     <string name="gen_error_m1">No model is set for this chat. Choose a model in this chat\'s settings.</string>
     <string name="gen_error_m2">The selected model is not available on this endpoint. Check the model name in this chat\'s settings, or choose another.</string>

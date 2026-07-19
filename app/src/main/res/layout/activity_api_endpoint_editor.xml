@@ -182,8 +182,8 @@
                     android:textColorHint="@color/text_hint" />
             </com.google.android.material.textfield.TextInputLayout>
 
-            <!-- Request (socket) timeout in seconds. Sits directly under Provider.
-                 Consumed by ChatActivity.initAI() as the per-endpoint socket
+            <!-- Connection timeout in seconds. Sits directly under Provider.
+                 Consumed by ChatActivity.initAI() as the per-endpoint CONNECT
                  timeout; clamped to 5..300 on save. -->
             <com.google.android.material.textfield.TextInputLayout
                 android:id="@+id/textInputLayoutTimeout"
@@ -203,7 +203,34 @@
                     android:id="@+id/field_timeout"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:hint="@string/api_endpoint_timeout"
+                    android:hint="@string/api_endpoint_connection_timeout"
+                    android:inputType="number"
+                    android:singleLine="true"
+                    android:textColorHint="@color/text_hint" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <!-- Response time in seconds. Sits directly under Connection Timeout.
+                 Consumed by ChatActivity.initAI() as the per-endpoint SOCKET
+                 (response) timeout; floored at 45 on save, no maximum. -->
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/textInputLayoutResponseTime"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="24dp"
+                android:layout_marginTop="12dp"
+                android:layout_marginEnd="24dp"
+                android:textColorHint="@color/text_hint"
+                app:boxCornerRadiusBottomEnd="16dp"
+                app:boxCornerRadiusBottomStart="16dp"
+                app:boxCornerRadiusTopEnd="16dp"
+                app:boxCornerRadiusTopStart="16dp"
+                app:boxStrokeColor="@drawable/box_stroke_color">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/field_response_time"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="@string/api_endpoint_response_time"
                     android:inputType="number"
                     android:singleLine="true"
                     android:textColorHint="@color/text_hint" />

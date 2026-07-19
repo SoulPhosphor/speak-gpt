@@ -1160,7 +1160,8 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
             endSeparator = preferences?.getEndSeparator() ?: currentProfile.endSeparator,
             prefix = preferences?.getPrefix() ?: currentProfile.prefix,
             provider = currentProfile.provider,
-            requestTimeoutSeconds = currentProfile.requestTimeoutSeconds
+            connectTimeoutSeconds = currentProfile.connectTimeoutSeconds,
+            responseTimeoutSeconds = currentProfile.responseTimeoutSeconds
         )
         apiEndpointPreferences?.setApiEndpoint(requireContext(), updated)
         android.widget.Toast.makeText(requireContext(), R.string.msg_saved_to_profile, android.widget.Toast.LENGTH_SHORT).show()

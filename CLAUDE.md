@@ -845,13 +845,24 @@ Everything is on-device. No cloud sync, no accounts.
 - Any OpenAI-compatible endpoint; multiple endpoint profiles; streaming via
   `com.aallam.openai` (Ktor 2.3.12 — pinned, do not upgrade); secondary
   official `openai-java` client for function calling. Each endpoint profile
-  carries a **per-endpoint request timeout** (`ApiEndpointObject.requestTimeoutSeconds`,
-  pref key `<id>_timeout` in the `api_endpoint` file; default 30s, clamped to
-  5..300 via `ApiEndpointObject.coerceTimeoutSeconds`, editable on the
-  `ApiEndpointEditorActivity` page under Provider). It is the socket timeout on
-  BOTH OpenAI clients built in `ChatActivity.initAI()` — the value that decides
-  when a slow reply becomes an N2 "server did not respond in time". Older
-  profiles with no stored value read as the 30s default.
+  carries **two per-endpoint timeouts** (both editable on the
+  `ApiEndpointEditorActivity` page, directly under Provider), applied to BOTH
+  OpenAI clients built in `ChatActivity.initAI()` as
+  `Timeout(connect = …, socket = …)`:
+  - **Connection Timeout** (`ApiEndpointObject.connectTimeoutSeconds`, pref key
+    `<id>_timeout`; default 30s, clamped 5..300 via
+    `coerceConnectTimeoutSeconds`) — the Ktor CONNECT timeout; exceeding it is
+    the **N2 "Connection Timed Out"** error.
+  - **Response Time** (`ApiEndpointObject.responseTimeoutSeconds`, pref key
+    `<id>_response_timeout`; default 600s, floored at 45, NO maximum by owner
+    ruling, via `coerceResponseTimeoutSeconds`) — the Ktor SOCKET timeout;
+    exceeding it is the **N4 "Response Timed Out"** error.
+  The classifier (`GenerationErrorClassifier`) splits these: a connect timeout
+  → N2, a read/socket timeout → N4, so the chat message names which one fired
+  and which field to raise. Older profiles with no stored value read as the
+  defaults (30 / 600). The editor validates on save with a snackbar +
+  boundary-correction (Connection Timeout 5..300; Response Time floor 45, no
+  ceiling).
 - Voice: hands-free loop (VAD listen → Whisper/Google STT → generate → TTS
   readback → re-arm), manual mic button, per-message speak button, audible
   error/done chimes (plus a distinct low `playNoSpeechSignal` two-tone when the

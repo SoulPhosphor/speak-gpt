@@ -37,8 +37,16 @@ class GenerationErrorClassifierTest {
         assertEquals(GenErrorCode.N3, code(UnknownHostException("No address associated with hostname api.z.ai")))
     }
 
-    @Test fun socketTimeoutIsN2() {
-        assertEquals(GenErrorCode.N2, code(SocketTimeoutException("timeout")))
+    @Test fun connectTimeoutIsN2() {
+        assertEquals(GenErrorCode.N2, code(RuntimeException("Connect timeout has expired [url=..., connect_timeout=30000 ms]")))
+    }
+
+    @Test fun socketTimeoutIsN4() {
+        assertEquals(GenErrorCode.N4, code(SocketTimeoutException("timeout")))
+    }
+
+    @Test fun readTimeoutMessageIsN4() {
+        assertEquals(GenErrorCode.N4, code(RuntimeException("Socket timeout has expired [url=..., socket_timeout=600000 ms]")))
     }
 
     @Test fun transportFailuresHaveNoHttpStatus() {

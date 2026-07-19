@@ -92,6 +92,7 @@ class ApiEndpointEditorActivity : FragmentActivity() {
     private var fieldProvider: TextInputEditText? = null
     private var fieldMaxTokens: TextInputEditText? = null
     private var fieldTimeout: TextInputEditText? = null
+    private var fieldResponseTime: TextInputEditText? = null
     private var fieldEndSeparator: TextInputEditText? = null
     private var fieldPrefix: TextInputEditText? = null
     private var fieldHost: TextInputEditText? = null
@@ -154,6 +155,7 @@ class ApiEndpointEditorActivity : FragmentActivity() {
         fieldProvider = findViewById(R.id.field_provider)
         fieldMaxTokens = findViewById(R.id.field_max_tokens)
         fieldTimeout = findViewById(R.id.field_timeout)
+        fieldResponseTime = findViewById(R.id.field_response_time)
         fieldEndSeparator = findViewById(R.id.field_end_separator)
         fieldPrefix = findViewById(R.id.field_prefix)
         fieldHost = findViewById(R.id.field_host)
@@ -222,7 +224,8 @@ class ApiEndpointEditorActivity : FragmentActivity() {
         sliderPresencePenalty?.setLabelFormatter { "${it / 10.0}" }
 
         fieldMaxTokens?.setText(endpoint.maxTokens.toString())
-        fieldTimeout?.setText(endpoint.requestTimeoutSeconds.toString())
+        fieldTimeout?.setText(endpoint.connectTimeoutSeconds.toString())
+        fieldResponseTime?.setText(endpoint.responseTimeoutSeconds.toString())
         fieldEndSeparator?.setText(endpoint.endSeparator)
         fieldPrefix?.setText(endpoint.prefix)
 
@@ -342,8 +345,11 @@ class ApiEndpointEditorActivity : FragmentActivity() {
             endSeparator = fieldEndSeparator?.text.toString(),
             prefix = fieldPrefix?.text.toString(),
             provider = fieldProvider?.text.toString().trim(),
-            requestTimeoutSeconds = ApiEndpointObject.coerceTimeoutSeconds(
-                fieldTimeout?.text.toString().toIntOrNull() ?: ApiEndpointObject.DEFAULT_TIMEOUT_SECONDS
+            connectTimeoutSeconds = ApiEndpointObject.coerceConnectTimeoutSeconds(
+                fieldTimeout?.text.toString().toIntOrNull() ?: ApiEndpointObject.DEFAULT_CONNECT_TIMEOUT_SECONDS
+            ),
+            responseTimeoutSeconds = ApiEndpointObject.coerceResponseTimeoutSeconds(
+                fieldResponseTime?.text.toString().toIntOrNull() ?: ApiEndpointObject.DEFAULT_RESPONSE_TIMEOUT_SECONDS
             )
         )
     }
@@ -417,23 +423,31 @@ class ApiEndpointEditorActivity : FragmentActivity() {
     }
 
     /**
-     * Validate the typed timeout. A blank / non-numeric field is left to the
-     * default (in range) and passes silently. A value below the minimum or above
-     * the maximum shows the matching snackbar, rewrites the field to the boundary
-     * value, and returns false so the caller stops the save.
+     * Validate both timeout fields. A blank / non-numeric field is left to its
+     * default (in range) and passes silently. An out-of-range value shows the
+     * matching snackbar, rewrites the field to the boundary value, and returns
+     * false so the caller stops the save. Connection Timeout is bounded 5..300;
+     * Response Time has a floor of 45 and no ceiling (owner ruling).
      */
     private fun checkTimeoutInRange(): Boolean {
-        val typed = fieldTimeout?.text.toString().toIntOrNull() ?: return true
-
-        if (typed < ApiEndpointObject.MIN_TIMEOUT_SECONDS) {
-            fieldTimeout?.setText(ApiEndpointObject.MIN_TIMEOUT_SECONDS.toString())
-            showTimeoutSnackbar(R.string.api_endpoint_timeout_too_low)
-            return false
+        val connect = fieldTimeout?.text.toString().toIntOrNull()
+        if (connect != null) {
+            if (connect < ApiEndpointObject.MIN_CONNECT_TIMEOUT_SECONDS) {
+                fieldTimeout?.setText(ApiEndpointObject.MIN_CONNECT_TIMEOUT_SECONDS.toString())
+                showTimeoutSnackbar(R.string.api_endpoint_timeout_too_low)
+                return false
+            }
+            if (connect > ApiEndpointObject.MAX_CONNECT_TIMEOUT_SECONDS) {
+                fieldTimeout?.setText(ApiEndpointObject.MAX_CONNECT_TIMEOUT_SECONDS.toString())
+                showTimeoutSnackbar(R.string.api_endpoint_timeout_too_high)
+                return false
+            }
         }
 
-        if (typed > ApiEndpointObject.MAX_TIMEOUT_SECONDS) {
-            fieldTimeout?.setText(ApiEndpointObject.MAX_TIMEOUT_SECONDS.toString())
-            showTimeoutSnackbar(R.string.api_endpoint_timeout_too_high)
+        val response = fieldResponseTime?.text.toString().toIntOrNull()
+        if (response != null && response < ApiEndpointObject.MIN_RESPONSE_TIMEOUT_SECONDS) {
+            fieldResponseTime?.setText(ApiEndpointObject.MIN_RESPONSE_TIMEOUT_SECONDS.toString())
+            showTimeoutSnackbar(R.string.api_endpoint_response_time_too_low)
             return false
         }
 
@@ -533,6 +547,7 @@ class ApiEndpointEditorActivity : FragmentActivity() {
             sliderPresencePenalty?.value.toString(),
             fieldMaxTokens?.text.toString(),
             fieldTimeout?.text.toString(),
+            fieldResponseTime?.text.toString(),
             fieldEndSeparator?.text.toString(),
             fieldPrefix?.text.toString(),
             if (keyChanged) "key_changed" else "key_same"

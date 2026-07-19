@@ -30,6 +30,7 @@ fun GenErrorCode.messageRes(): Int = when (this) {
     GenErrorCode.N1 -> R.string.gen_error_n1
     GenErrorCode.N2 -> R.string.gen_error_n2
     GenErrorCode.N3 -> R.string.gen_error_n3
+    GenErrorCode.N4 -> R.string.gen_error_n4
     GenErrorCode.A1 -> R.string.gen_error_a1
     GenErrorCode.M1 -> R.string.gen_error_m1
     GenErrorCode.M2 -> R.string.gen_error_m2

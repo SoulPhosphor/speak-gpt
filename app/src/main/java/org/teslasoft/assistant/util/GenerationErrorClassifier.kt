@@ -29,8 +29,9 @@ import java.net.UnknownHostException
  */
 enum class GenErrorCode(val code: String, val includeStackTrace: Boolean) {
     N1("N1", false), // connection dropped mid-response (transport abort)
-    N2("N2", false), // connect / socket timeout
+    N2("N2", false), // connect timeout — could not establish the connection in time
     N3("N3", false), // host unreachable / DNS / offline
+    N4("N4", false), // response (read/socket) timeout — connected, but no reply in time
     A1("A1", false), // API key rejected
     M1("M1", false), // no model set on the request
     M2("M2", false), // named model not available on the endpoint
@@ -89,10 +90,19 @@ object GenerationErrorClassifier {
         if (text.contains("Software caused connection abort")) {
             return GenErrorResult(GenErrorCode.N1, null)
         }
-        if (chain.any { it is SocketTimeoutException } || text.contains("Connect timeout has expired") ||
-            text.contains("SocketTimeoutException") || hasType(chain, "ConnectTimeoutException") ||
-            hasType(chain, "HttpRequestTimeoutException")) {
+        // Connect timeout — the app could not establish the connection in time.
+        // Ktor's ConnectTimeoutException carries "Connect timeout has expired";
+        // it is NOT a java.net.SocketTimeoutException, so it is matched first and
+        // separately from the read timeout below.
+        if (text.contains("Connect timeout has expired") || hasType(chain, "ConnectTimeoutException")) {
             return GenErrorResult(GenErrorCode.N2, null)
+        }
+        // Read / response timeout — connected, but no response arrived in time.
+        // Ktor's SocketTimeoutException extends java.net's and carries "Socket
+        // timeout has expired"; a plain read timeout surfaces as either.
+        if (chain.any { it is SocketTimeoutException } || text.contains("Socket timeout has expired") ||
+            text.contains("SocketTimeoutException") || hasType(chain, "HttpRequestTimeoutException")) {
+            return GenErrorResult(GenErrorCode.N4, null)
         }
         // 4. Context length.
         if (text.contains("This model's maximum")) {

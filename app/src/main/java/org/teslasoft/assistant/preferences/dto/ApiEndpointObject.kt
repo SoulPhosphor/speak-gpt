@@ -37,15 +37,23 @@ class ApiEndpointObject(
      * in. Kept at the END of the constructor so existing positional callers stay
      * valid. */
     var provider: String = "",
-    /* Per-endpoint request (socket) timeout in seconds — how long the app waits
-     * for this server to respond before giving up with an N2 "server did not
-     * respond in time" error. Configurable because some providers/models (e.g.
-     * slow "thinking" models on a custom base URL) legitimately need longer than
-     * the default. Always coerced into [MIN_TIMEOUT_SECONDS]..[MAX_TIMEOUT_SECONDS]
+    /* Per-endpoint CONNECTION timeout in seconds — how long the app waits to
+     * establish a connection to this server before giving up with an N2
+     * "connection timed out" error. Distinct from the response timeout below:
+     * this bounds reaching the server, not waiting for the model's reply.
+     * Coerced into [MIN_CONNECT_TIMEOUT_SECONDS]..[MAX_CONNECT_TIMEOUT_SECONDS]
      * on read/write so a bad stored value can never make every request fail
-     * instantly or hang for minutes. Kept at the END of the constructor so
+     * instantly or hang for minutes. Kept near the END of the constructor so
      * existing positional callers stay valid. */
-    var requestTimeoutSeconds: Int = DEFAULT_TIMEOUT_SECONDS
+    var connectTimeoutSeconds: Int = DEFAULT_CONNECT_TIMEOUT_SECONDS,
+    /* Per-endpoint RESPONSE timeout in seconds — once connected, how long the
+     * app waits for this server to send a response before giving up with an N4
+     * "response timed out" error. Defaults high (a slow "thinking" model on a
+     * custom base URL can legitimately take minutes) and, by owner ruling, has
+     * NO maximum — only a floor: the user may set it as high as they like and
+     * stop a runaway readback with the stop button. Kept at the END of the
+     * constructor so existing positional callers stay valid. */
+    var responseTimeoutSeconds: Int = DEFAULT_RESPONSE_TIMEOUT_SECONDS
 ) {
     companion object {
         const val DEFAULT_CHAT_ENDPOINT = "/chat/completions"
@@ -59,14 +67,23 @@ class ApiEndpointObject(
         const val DEFAULT_PRESENCE_PENALTY = 0.0f
         const val DEFAULT_MAX_TOKENS = 1500
 
-        /* Request-timeout bounds. Default matches the value that was hard-coded
-         * app-wide before this became configurable. */
-        const val DEFAULT_TIMEOUT_SECONDS = 30
-        const val MIN_TIMEOUT_SECONDS = 5
-        const val MAX_TIMEOUT_SECONDS = 300
+        /* Connection-timeout bounds. Default matches the value that was
+         * hard-coded app-wide before this became configurable. */
+        const val DEFAULT_CONNECT_TIMEOUT_SECONDS = 30
+        const val MIN_CONNECT_TIMEOUT_SECONDS = 5
+        const val MAX_CONNECT_TIMEOUT_SECONDS = 300
 
-        /** Clamp any user- or disk-supplied timeout into the allowed range. */
-        fun coerceTimeoutSeconds(value: Int): Int =
-            value.coerceIn(MIN_TIMEOUT_SECONDS, MAX_TIMEOUT_SECONDS)
+        /* Response-timeout bounds. High default for slow models; a floor but
+         * NO ceiling (owner ruling — the user may set it arbitrarily high). */
+        const val DEFAULT_RESPONSE_TIMEOUT_SECONDS = 600
+        const val MIN_RESPONSE_TIMEOUT_SECONDS = 45
+
+        /** Clamp a connection timeout into its allowed range. */
+        fun coerceConnectTimeoutSeconds(value: Int): Int =
+            value.coerceIn(MIN_CONNECT_TIMEOUT_SECONDS, MAX_CONNECT_TIMEOUT_SECONDS)
+
+        /** Clamp a response timeout to its floor. No upper bound by design. */
+        fun coerceResponseTimeoutSeconds(value: Int): Int =
+            value.coerceAtLeast(MIN_RESPONSE_TIMEOUT_SECONDS)
     }
 }
