@@ -844,7 +844,14 @@ Everything is on-device. No cloud sync, no accounts.
   without asking.
 - Any OpenAI-compatible endpoint; multiple endpoint profiles; streaming via
   `com.aallam.openai` (Ktor 2.3.12 — pinned, do not upgrade); secondary
-  official `openai-java` client for function calling.
+  official `openai-java` client for function calling. Each endpoint profile
+  carries a **per-endpoint request timeout** (`ApiEndpointObject.requestTimeoutSeconds`,
+  pref key `<id>_timeout` in the `api_endpoint` file; default 30s, clamped to
+  5..300 via `ApiEndpointObject.coerceTimeoutSeconds`, editable on the
+  `ApiEndpointEditorActivity` page under Provider). It is the socket timeout on
+  BOTH OpenAI clients built in `ChatActivity.initAI()` — the value that decides
+  when a slow reply becomes an N2 "server did not respond in time". Older
+  profiles with no stored value read as the 30s default.
 - Voice: hands-free loop (VAD listen → Whisper/Google STT → generate → TTS
   readback → re-arm), manual mic button, per-message speak button, audible
   error/done chimes (plus a distinct low `playNoSpeechSignal` two-tone when the

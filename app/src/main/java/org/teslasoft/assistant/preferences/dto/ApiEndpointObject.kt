@@ -36,7 +36,16 @@ class ApiEndpointObject(
      * shown in the profiles list in place of the base URL when the user filled it
      * in. Kept at the END of the constructor so existing positional callers stay
      * valid. */
-    var provider: String = ""
+    var provider: String = "",
+    /* Per-endpoint request (socket) timeout in seconds — how long the app waits
+     * for this server to respond before giving up with an N2 "server did not
+     * respond in time" error. Configurable because some providers/models (e.g.
+     * slow "thinking" models on a custom base URL) legitimately need longer than
+     * the default. Always coerced into [MIN_TIMEOUT_SECONDS]..[MAX_TIMEOUT_SECONDS]
+     * on read/write so a bad stored value can never make every request fail
+     * instantly or hang for minutes. Kept at the END of the constructor so
+     * existing positional callers stay valid. */
+    var requestTimeoutSeconds: Int = DEFAULT_TIMEOUT_SECONDS
 ) {
     companion object {
         const val DEFAULT_CHAT_ENDPOINT = "/chat/completions"
@@ -49,5 +58,15 @@ class ApiEndpointObject(
         const val DEFAULT_FREQUENCY_PENALTY = 0.0f
         const val DEFAULT_PRESENCE_PENALTY = 0.0f
         const val DEFAULT_MAX_TOKENS = 1500
+
+        /* Request-timeout bounds. Default matches the value that was hard-coded
+         * app-wide before this became configurable. */
+        const val DEFAULT_TIMEOUT_SECONDS = 30
+        const val MIN_TIMEOUT_SECONDS = 5
+        const val MAX_TIMEOUT_SECONDS = 300
+
+        /** Clamp any user- or disk-supplied timeout into the allowed range. */
+        fun coerceTimeoutSeconds(value: Int): Int =
+            value.coerceIn(MIN_TIMEOUT_SECONDS, MAX_TIMEOUT_SECONDS)
     }
 }

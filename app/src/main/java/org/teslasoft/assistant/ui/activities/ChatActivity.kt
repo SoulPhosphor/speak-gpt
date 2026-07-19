@@ -3456,6 +3456,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 else -> emptyMap()
             }
 
+            // Per-endpoint socket timeout: how long to wait for this server to
+            // respond before an N2 "server did not respond in time". User-set on
+            // the endpoint profile (default 30s); already clamped to 5..300 on
+            // save, re-coerced here so a legacy/hand-edited value can't slip
+            // through.
+            val socketTimeout = ApiEndpointObject.coerceTimeoutSeconds(
+                apiEndpointObject?.requestTimeoutSeconds ?: ApiEndpointObject.DEFAULT_TIMEOUT_SECONDS
+            ).seconds
+
             val config = OpenAIConfig(
                 // OpenAIConfig.token unconditionally generates an
                 // "Authorization: Bearer <token>" header. When the user picks
@@ -3467,7 +3476,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 // Bearer line and lets the alternate header carry auth alone.
                 token = if (isBearerAuth) key!! else "",
                 logging = LoggingConfig(LogLevel.None, Logger.Simple),
-                timeout = Timeout(socket = 30.seconds),
+                timeout = Timeout(socket = socketTimeout),
                 organization = null,
                 headers = extraHeaders,
                 host = OpenAIHost(composeChatHost(apiEndpointObject?.host, apiEndpointObject?.chatEndpoint)),
@@ -3482,7 +3491,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             val configOpenAI = OpenAIConfig(
                 token = if (isBearerAuth) openAIKey.toString() else "",
                 logging = LoggingConfig(LogLevel.None, Logger.Simple),
-                timeout = Timeout(socket = 30.seconds),
+                timeout = Timeout(socket = socketTimeout),
                 organization = null,
                 headers = extraHeaders,
                 host = OpenAIHost(apiEndpointObject?.host!!),

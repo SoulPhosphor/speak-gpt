@@ -90,6 +90,7 @@ class ApiEndpointEditorActivity : FragmentActivity() {
     private var fieldModel: TextInputEditText? = null
     private var fieldProvider: TextInputEditText? = null
     private var fieldMaxTokens: TextInputEditText? = null
+    private var fieldTimeout: TextInputEditText? = null
     private var fieldEndSeparator: TextInputEditText? = null
     private var fieldPrefix: TextInputEditText? = null
     private var fieldHost: TextInputEditText? = null
@@ -151,6 +152,7 @@ class ApiEndpointEditorActivity : FragmentActivity() {
         fieldModel = findViewById(R.id.field_model)
         fieldProvider = findViewById(R.id.field_provider)
         fieldMaxTokens = findViewById(R.id.field_max_tokens)
+        fieldTimeout = findViewById(R.id.field_timeout)
         fieldEndSeparator = findViewById(R.id.field_end_separator)
         fieldPrefix = findViewById(R.id.field_prefix)
         fieldHost = findViewById(R.id.field_host)
@@ -219,6 +221,7 @@ class ApiEndpointEditorActivity : FragmentActivity() {
         sliderPresencePenalty?.setLabelFormatter { "${it / 10.0}" }
 
         fieldMaxTokens?.setText(endpoint.maxTokens.toString())
+        fieldTimeout?.setText(endpoint.requestTimeoutSeconds.toString())
         fieldEndSeparator?.setText(endpoint.endSeparator)
         fieldPrefix?.setText(endpoint.prefix)
 
@@ -337,7 +340,10 @@ class ApiEndpointEditorActivity : FragmentActivity() {
             maxTokens = fieldMaxTokens?.text.toString().toIntOrNull() ?: ApiEndpointObject.DEFAULT_MAX_TOKENS,
             endSeparator = fieldEndSeparator?.text.toString(),
             prefix = fieldPrefix?.text.toString(),
-            provider = fieldProvider?.text.toString().trim()
+            provider = fieldProvider?.text.toString().trim(),
+            requestTimeoutSeconds = ApiEndpointObject.coerceTimeoutSeconds(
+                fieldTimeout?.text.toString().toIntOrNull() ?: ApiEndpointObject.DEFAULT_TIMEOUT_SECONDS
+            )
         )
     }
 
@@ -486,6 +492,7 @@ class ApiEndpointEditorActivity : FragmentActivity() {
             sliderFrequencyPenalty?.value.toString(),
             sliderPresencePenalty?.value.toString(),
             fieldMaxTokens?.text.toString(),
+            fieldTimeout?.text.toString(),
             fieldEndSeparator?.text.toString(),
             fieldPrefix?.text.toString(),
             if (keyChanged) "key_changed" else "key_same"
