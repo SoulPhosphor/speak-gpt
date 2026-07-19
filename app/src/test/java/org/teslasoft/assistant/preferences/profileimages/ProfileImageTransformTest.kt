@@ -134,8 +134,10 @@ class ProfileImageTransformTest {
         // the crop, so it maps onto the full 512x512 output.
         val m = ProfileImageTransform.outputMatrixValues(Params(scale = 0.5f), 1000, 1000, 500f, 512)
 
-        fun mapX(x: Double, y: Double) = m[0] * x + m[1] * y + m[2]
-        fun mapY(x: Double, y: Double) = m[3] * x + m[4] * y + m[5]
+        // Explicit Float return: m[i] * Double promotes to Double in Kotlin,
+        // and JUnit's assertEquals has no (Float, Double, Float) overload.
+        fun mapX(x: Double, y: Double): Float = (m[0] * x + m[1] * y + m[2]).toFloat()
+        fun mapY(x: Double, y: Double): Float = (m[3] * x + m[4] * y + m[5]).toFloat()
 
         assertEquals(0f, mapX(0.0, 0.0), 1e-3f)
         assertEquals(0f, mapY(0.0, 0.0), 1e-3f)
