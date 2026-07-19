@@ -326,6 +326,76 @@
         <item name="layout_constraintTop_toTopOf">parent</item>
     </style>
 
+    <!-- THE "close panel" PATTERN (owner ruling, July 19 2026): use this,
+         not raw XML, for any slide-out/slide-in panel whose header closes
+         with an X instead of navigating back with an arrow - the shape
+         first built for the Memory Filters panel
+         (activity_memory_filter_panel.xml) and now formalized so the next
+         filter-style pop-out reuses it instead of hand-copying. Owner
+         ruling: keep this look distinct from the plain back+centered-title
+         header rather than forcing it to match - it's a different kind of
+         screen (a panel you close, not a screen you navigate back from),
+         and the existing look was already liked as-is.
+         Container: still plain Widget.App.ActionBar, unchanged - only the
+         title and the button differ from the back+title family.
+         Widget.App.ActionBar.CloseButton mirrors
+         Widget.App.ActionBar.BackButton's geometry (same size/margins/
+         background) but anchored to the bar's END, with the close icon
+         baked in the same way BackButton bakes in the back icon.
+         contentDescription/tooltipText default to the generic
+         @string/btn_close ("Close") but - like BackButton's
+         @string/go_back - an instance can override them with something
+         more specific (Memory Filters uses @string/mem_filter_close,
+         "Close Memory Filters", since a screen-reader label naming what's
+         closing is more useful than a bare "Close" on an icon-only
+         button).
+         Widget.App.ActionBar.Title.LeftAligned is the title for this
+         family: left-aligned and ellipsized (it shares the row with the
+         close button, so it can't center across the whole bar the way the
+         plain Title does) at 20sp, not 24sp - a deliberate, smaller size
+         for this variant, not a step of the size rollout the plain Title
+         went through. It is NOT a child of Widget.App.ActionBar.Title:
+         ConstraintLayout can't cleanly have both an inherited
+         layout_constraintEnd_toEndOf and an added
+         layout_constraintEnd_toStartOf on the same view (both would be
+         set, which is ambiguous), so the shared color/weight items are
+         duplicated here instead of inherited. This style HARDCODES
+         layout_constraintEnd_toStartOf="@+id/btn_close" - any screen using
+         it MUST name its close button btn_close (matching how
+         Widget.App.ActionBar.BackButton assumes screens name their back
+         button btn_back). -->
+    <style name="Widget.App.ActionBar.CloseButton" parent="">
+        <item name="android:layout_width">48dp</item>
+        <item name="android:layout_height">48dp</item>
+        <item name="android:layout_marginEnd">8dp</item>
+        <item name="android:layout_marginTop">8dp</item>
+        <item name="android:layout_marginBottom">8dp</item>
+        <item name="android:background">@drawable/btn_accent_icon_large_100</item>
+        <item name="android:contentDescription">@string/btn_close</item>
+        <item name="android:src">@drawable/ic_close</item>
+        <item name="android:tooltipText">@string/btn_close</item>
+        <item name="srcCompat">@drawable/ic_close</item>
+        <item name="layout_constraintBottom_toBottomOf">parent</item>
+        <item name="layout_constraintEnd_toEndOf">parent</item>
+        <item name="layout_constraintTop_toTopOf">parent</item>
+    </style>
+
+    <style name="Widget.App.ActionBar.Title.LeftAligned" parent="">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginStart">20dp</item>
+        <item name="android:layout_marginEnd">8dp</item>
+        <item name="android:ellipsize">end</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:textColor">@color/text_title</item>
+        <item name="android:textSize">20sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="layout_constraintBottom_toBottomOf">parent</item>
+        <item name="layout_constraintEnd_toStartOf">@+id/btn_close</item>
+        <item name="layout_constraintStart_toStartOf">parent</item>
+        <item name="layout_constraintTop_toTopOf">parent</item>
+    </style>
+
     <style name="BottomNavigationView.ActiveIndicator" parent="Widget.Material3.BottomNavigationView.ActiveIndicator">
         <item name="android:color">@color/accent_900</item>
     </style>

@@ -1698,12 +1698,55 @@ Everything is on-device. No cloud sync, no accounts.
     had no AMOLED recolor at all for its header bar/back button (there
     was no bar); both now follow the standard tint-list pattern like
     every other converted screen.
-  Deliberately NOT touched in this batch (owner said to hold off,
-  July 19 2026): the Profile Images gallery
-  (`activity_profile_images.xml`) — it has its own management-mode
-  selection icon and was explicitly excluded pending further review, so
-  it's the one entry in the July 19 audit list still on raw XML by
-  request rather than by finding a structural blocker.
+  **Deliberately kept on raw XML (owner ruling, July 19 2026) — the
+  Profile Images gallery** (`activity_profile_images.xml`): the owner
+  reviewed it and likes the current look, so it stays as-is rather than
+  being converted to the named styles. Its header is genuinely more
+  complex than any converted screen: ONE set of slots serves TWO
+  mutually exclusive modes (normal: back arrow + centered "Avatar Image
+  Gallery" title; selection mode: a cancel-X in the back slot + a live
+  "N Selected" count in the title slot), toggled by visibility in
+  `ProfileImagesActivity` — not a shape any current style variant
+  covers. Verified it still properly connects to the same underlying
+  tokens as every converted screen even though it doesn't reference the
+  named styles: `?attr/colorSurfaceContainerHigh` bar background,
+  `@drawable/btn_accent_icon_large_100` buttons, the same `ic_back`/
+  `ic_close` icons. One real divergence: its title is still **20sp**,
+  one step behind the 24sp the rest of the app was bumped to same day —
+  left alone since changing it would be a visual change beyond what was
+  asked. Also notable (not a defect, a preview of where the app is
+  headed): `ProfileImagesActivity` never calls
+  `ThemeManager.applyTheme(this, amoled)`, only `applyPalette` — like
+  `ProfileImagePropertiesActivity`/`DefaultImagesActivity`, the whole
+  Profile Images area was built without the legacy per-Activity AMOLED
+  pitch-black recolor logic the `Widget.App.ActionBar` guard comment
+  says is being phased out, rather than carrying it in and later
+  removing it.
+  **The "close panel" pattern (owner ruling, July 19 2026) — Memory
+  Filters panel** (`activity_memory_filter_panel.xml`): unlike the
+  screens above, this one intentionally does NOT match the back+
+  centered-title look — it's a slide-out filter panel closed with an X,
+  not a screen navigated back from, and the owner liked that look as
+  distinct. Formalized into its own named style family instead of
+  staying hand-copied, so the next filter-style pop-out has something to
+  reuse: `Widget.App.ActionBar.CloseButton` (mirrors `.BackButton`'s
+  geometry, end-anchored, bakes in the close icon + generic
+  `@string/btn_close`, overridable per instance — Memory Filters keeps
+  its more specific `@string/mem_filter_close`, "Close Memory Filters")
+  and `Widget.App.ActionBar.Title.LeftAligned` (left-aligned, ellipsized,
+  20sp — deliberately not a size step of the main rollout, a distinct
+  choice for this family — and NOT a child style of the plain `.Title`:
+  a ConstraintLayout view can't cleanly carry both an inherited
+  `layout_constraintEnd_toEndOf` and an added
+  `layout_constraintEnd_toStartOf`, so the shared color/weight items are
+  duplicated rather than inherited). `.Title.LeftAligned` hardcodes
+  `layout_constraintEnd_toStartOf="@+id/btn_close"` — any screen using
+  it must name its close button `btn_close`, the same convention
+  `.BackButton` assumes for `btn_back`. The container stays plain
+  `Widget.App.ActionBar`, unchanged. `MemoryFilterPanelActivity`'s
+  Kotlin already used the full standard tint-list AMOLED pattern before
+  this change, so only the XML moved to the new styles — no Kotlin
+  edits needed.
 - Match the existing style: nullable `var` view fields + `findViewById`,
   `DialogFragment.newInstance(Bundle)` pattern, listener interfaces with
   default no-op methods, copyright header on every file, strings ONLY in
