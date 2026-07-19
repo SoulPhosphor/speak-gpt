@@ -49,6 +49,9 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.textfield.TextInputEditText
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.preferences.PersonaPreferences
+import org.teslasoft.assistant.preferences.Preferences
+import org.teslasoft.assistant.preferences.profileimages.ProfileImageStore
 import org.teslasoft.assistant.util.Hash
 import org.teslasoft.assistant.util.LegacyAvatarResolver
 import org.teslasoft.assistant.util.StaticAvatarParser
@@ -154,6 +157,24 @@ class CustomizeAssistantDialog : DialogFragment() {
         btnView5 = view.findViewById(R.id.view5)
         btnSelectFile = view.findViewById(R.id.btn_file_select)
         previewFile = view.findViewById(R.id.current_avatar_cust)
+
+        // Companion-picture precedence note (profile-images-plan.md,
+        // INTERACTION WITH EXISTING PER-CHAT AVATAR CUSTOMIZATION): the active
+        // Companion's picture, when assigned and on disk, is shown in chat
+        // ahead of this per-chat avatar. Say so persistently; hide it (and keep
+        // the avatar UI exactly as before) when no Companion picture applies.
+        val companionNote = view.findViewById<TextView>(R.id.text_companion_avatar_note)
+        val chatId = requireArguments().getString("chatId").orEmpty()
+        val personaId = if (chatId.isNotEmpty()) Preferences.getPreferences(requireContext(), chatId).getPersonaId() else ""
+        val persona = if (personaId.isNotEmpty()) PersonaPreferences.getPersonaPreferences(requireContext()).getPersona(personaId) else null
+        val companionFile = persona?.avatarRef?.takeIf { it.isNotEmpty() }
+            ?.let { ProfileImageStore.getInstance(requireContext()).imageFile(it) }
+        if (persona != null && companionFile != null) {
+            companionNote.text = getString(R.string.profile_image_companion_avatar_in_use_note, persona.label)
+            companionNote.visibility = View.VISIBLE
+        } else {
+            companionNote.visibility = View.GONE
+        }
 
         btnView1?.setImageResource(R.drawable.chatgpt_icon)
         DrawableCompat.setTint(btnView1?.getDrawable()!!, ContextCompat.getColor(requireActivity(), R.color.accent_900))

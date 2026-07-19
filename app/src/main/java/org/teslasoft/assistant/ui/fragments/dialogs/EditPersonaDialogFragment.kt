@@ -17,16 +17,21 @@
 package org.teslasoft.assistant.ui.fragments.dialogs
 
 import android.app.Dialog
+import android.content.Context
 import android.content.Intent
+import android.content.res.ColorStateList
 import android.os.Bundle
+import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageButton
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
+import androidx.core.content.ContextCompat
 import androidx.fragment.app.DialogFragment
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.checkbox.MaterialCheckBox
@@ -35,12 +40,16 @@ import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.ActivationPromptPreferences
+import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.PersonaPreferences
 import org.teslasoft.assistant.preferences.dto.PersonaObject
 import org.teslasoft.assistant.preferences.lorebook.LoreBookStore
+import org.teslasoft.assistant.preferences.profileimages.ProfileImageStore
 import org.teslasoft.assistant.ui.activities.LoreBookEntriesActivity
 import org.teslasoft.assistant.ui.activities.LoreBooksListActivity
+import org.teslasoft.assistant.ui.activities.ProfileImagesActivity
 import org.teslasoft.assistant.util.Hash
+import org.teslasoft.assistant.util.ProfileImageBinder
 
 class EditPersonaDialogFragment : DialogFragment() {
     companion object {
@@ -55,12 +64,18 @@ class EditPersonaDialogFragment : DialogFragment() {
             args.putString("additionalLoreBookIds", persona.additionalLoreBookIds)
             args.putBoolean("autoLoadLastLoreBooks", persona.autoLoadLastLoreBooks)
             args.putString("lastUsedLoreBookIds", persona.lastUsedLoreBookIds)
+            args.putString("avatarRef", persona.avatarRef)
             args.putInt("position", position)
 
             editPersonaDialogFragment.arguments = args
 
             return editPersonaDialogFragment
         }
+
+        // Survives dialog/activity recreation while the gallery is open so the
+        // pending pick is not lost (plan: EDITOR INTEGRATION - "The selected
+        // avatarRef must survive activity and dialog recreation").
+        private const val STATE_AVATAR_REF = "state_avatar_ref"
     }
 
     private var textDialogTitle: TextView? = null
@@ -72,13 +87,33 @@ class EditPersonaDialogFragment : DialogFragment() {
     private var btnAddLoreBooks: MaterialButton? = null
     private var checkboxAutoload: MaterialCheckBox? = null
 
+    private var imgPersonaAvatar: ImageView? = null
+    private var btnChangePicture: MaterialButton? = null
+    private var btnRemovePicture: MaterialButton? = null
+
     private var selectedActivationPromptId: String = ""
     private var selectedCoreLoreBookId: String = ""
     private var additionalLoreBookIds: ArrayList<String> = arrayListOf()
+    /** The Companion's assigned Profile Image hash, held until the persona is
+     *  saved (buildPersonaObject). "" means no picture. */
+    private var selectedAvatarRef: String = ""
 
     private var builder: AlertDialog.Builder? = null
 
     private var listener: StateChangesListener? = null
+
+    // Lifecycle-safe: registered as a fragment field so a pending gallery
+    // result is still delivered after the dialog/activity is recreated, rather
+    // than lost with a transient listener (plan: EDITOR INTEGRATION).
+    private val pickPictureLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            val hash = result.data?.getStringExtra(ProfileImagesActivity.EXTRA_RESULT_ASSIGNED_HASH)
+            if (!hash.isNullOrEmpty()) {
+                selectedAvatarRef = hash
+                updateAvatarUi()
+            }
+        }
+    }
 
     private val pickLoreBooksLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == android.app.Activity.RESULT_OK) {
@@ -240,6 +275,9 @@ class EditPersonaDialogFragment : DialogFragment() {
         additionalLoreBooksList = view.findViewById(R.id.additional_lorebooks_list)
         btnAddLoreBooks = view.findViewById(R.id.btn_add_lorebooks)
         checkboxAutoload = view.findViewById(R.id.checkbox_autoload_lorebooks)
+        imgPersonaAvatar = view.findViewById(R.id.img_persona_avatar)
+        btnChangePicture = view.findViewById(R.id.btn_change_picture)
+        btnRemovePicture = view.findViewById(R.id.btn_remove_picture)
 
         fieldLabel?.setText(requireArguments().getString("label"))
         fieldPrompt?.setText(requireArguments().getString("prompt"))
@@ -250,6 +288,19 @@ class EditPersonaDialogFragment : DialogFragment() {
         selectedCoreLoreBookId = requireArguments().getString("coreLoreBookId") ?: ""
         additionalLoreBookIds = PersonaObject.splitIds(requireArguments().getString("additionalLoreBookIds") ?: "")
         checkboxAutoload?.isChecked = requireArguments().getBoolean("autoLoadLastLoreBooks", false)
+
+        // Restore the pending pick across recreation; fall back to the persona's
+        // saved avatarRef on first open.
+        selectedAvatarRef = savedInstanceState?.getString(STATE_AVATAR_REF)
+            ?: (requireArguments().getString("avatarRef") ?: "")
+        updateAvatarUi()
+        btnChangePicture?.setOnClickListener { openGalleryForPicture() }
+        btnRemovePicture?.setOnClickListener {
+            // Remove Picture clears only this Companion's reference; it never
+            // deletes the gallery image (plan: PERMANENT DELETION).
+            selectedAvatarRef = ""
+            updateAvatarUi()
+        }
 
         updateCoreLoreBookLabel()
         renderAdditionalLoreBooks()
@@ -298,6 +349,43 @@ class EditPersonaDialogFragment : DialogFragment() {
         renderAdditionalLoreBooks()
     }
 
+    /** Reflects [selectedAvatarRef] into the preview + buttons: a shaped
+     *  picture and Change/Remove when assigned, a placeholder glyph and Add
+     *  Picture when not. Bound through the shared [ProfileImageBinder] so the
+     *  current Default Shape and reset rules apply. */
+    private fun updateAvatarUi() {
+        val hasPicture = selectedAvatarRef.isNotEmpty()
+        btnChangePicture?.setText(if (hasPicture) R.string.profile_image_change_picture else R.string.profile_image_add_picture)
+        btnRemovePicture?.visibility = if (hasPicture) View.VISIBLE else View.GONE
+
+        val imageView = imgPersonaAvatar ?: return
+        val context = imageView.context
+        val file = if (hasPicture) ProfileImageStore.getInstance(context).imageFile(selectedAvatarRef) else null
+        val shape = GlobalPreferences.getPreferences(context).getProfileImageShape()
+        ProfileImageBinder.bind(context, imageView, file, shape) { iv ->
+            iv.setImageResource(R.drawable.ic_photo)
+            iv.imageTintList = ColorStateList.valueOf(resolveColorPrimary(iv.context))
+        }
+    }
+
+    private fun openGalleryForPicture() {
+        val intent = Intent(requireContext(), ProfileImagesActivity::class.java)
+            .putExtra(ProfileImagesActivity.EXTRA_ASSIGN_TARGET, ProfileImagesActivity.TARGET_COMPANION)
+            .putExtra(ProfileImagesActivity.EXTRA_ASSIGN_CURRENT_HASH, selectedAvatarRef)
+        pickPictureLauncher.launch(intent)
+    }
+
+    private fun resolveColorPrimary(context: Context): Int {
+        val tv = TypedValue()
+        context.theme.resolveAttribute(com.google.android.material.R.attr.colorPrimary, tv, true)
+        return if (tv.resourceId != 0) ContextCompat.getColor(context, tv.resourceId) else tv.data
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putString(STATE_AVATAR_REF, selectedAvatarRef)
+    }
+
     private fun buildPersonaObject(): PersonaObject {
         // Last-used bookkeeping survives the edit, pruned to the books that are
         // still linked.
@@ -310,7 +398,8 @@ class EditPersonaDialogFragment : DialogFragment() {
             coreLoreBookId = selectedCoreLoreBookId,
             additionalLoreBookIds = PersonaObject.joinIds(additionalLoreBookIds),
             autoLoadLastLoreBooks = checkboxAutoload?.isChecked == true,
-            lastUsedLoreBookIds = PersonaObject.joinIds(lastUsed)
+            lastUsedLoreBookIds = PersonaObject.joinIds(lastUsed),
+            avatarRef = selectedAvatarRef
         )
     }
 

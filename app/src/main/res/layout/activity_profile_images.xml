@@ -20,10 +20,10 @@
      EXACT GALLERY CONTROL ORDER). One layout serves both top-bar states
      (normal, selection) and both bottom-bar states (Upload New / Delete
      Selected) by showing/hiding pieces - see ProfileImagesActivity for
-     which views are visible in which mode. When opened from Default Images
-     (EXTRA_DEFAULT_TARGET) this is still ordinary browsing, not a separate
-     mode - only the title, the per-tile Default checkmark and the Image
-     Detail sheet's Set as Default button change. -->
+     which views are visible in which mode. When opened in Assignment mode
+     (EXTRA_ASSIGN_TARGET) Select/Delete and the Image Detail sheet are
+     suppressed, a tap assigns instead, and the assigned tile carries the
+     Assigned badge. -->
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"

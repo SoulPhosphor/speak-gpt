@@ -46,11 +46,15 @@ import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.card.MaterialCardView
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.preferences.GlobalPreferences
+import org.teslasoft.assistant.preferences.PersonaPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.memory.MemoryStore
+import org.teslasoft.assistant.preferences.profileimages.ProfileImageStore
 import org.teslasoft.assistant.ui.activities.ChatActivity
 import org.teslasoft.assistant.util.Hash
 import org.teslasoft.assistant.util.LegacyAvatarResolver
+import org.teslasoft.assistant.util.ProfileImageBinder
 import org.teslasoft.assistant.util.StaticAvatarParser
 import java.io.BufferedReader
 import java.io.File
@@ -163,12 +167,26 @@ class ChatListAdapter(private val dataArray: ArrayList<HashMap<String, String>>,
     inner class ViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val name: TextView = itemView.findViewById(R.id.name)
         private val icon: ImageView = itemView.findViewById(R.id.chat_icon)
+        // The icon's original scale type (glyph rendering). A Companion photo
+        // uses centerCrop; the no-photo path restores this so a row recycled
+        // from a photo row renders its glyph correctly.
+        private val iconInitialScaleType = icon.scaleType
         private val textFirstMessage: TextView = itemView.findViewById(R.id.chat_first_message)
         private val modelName: TextView = itemView.findViewById(R.id.model_name)
         private val root: MaterialCardView = itemView.findViewById(R.id.root)
         private val pinMarker: ImageView = itemView.findViewById(R.id.pin_marker)
         private val textModel: TextView = itemView.findViewById(R.id.textModel)
         private val memoryMarker: TextView = itemView.findViewById(R.id.memory_marker)
+
+        // The chat's Companion picture (profile-images-plan.md, CHAT AND
+        // CHAT-LIST DISPLAY): when its Companion has an assigned, available
+        // picture it takes precedence over the per-chat avatar and glyph.
+        // Resolved once in bind() (a cheap prefs read, no memory DB) and
+        // re-applied as a final override after the card/glyph styling runs
+        // (including on a bulk-select re-render), so a recycled row never
+        // keeps a stale photo or shows the glyph in its place.
+        private var companionImageFile: File? = null
+        private var companionImageShape: String = "flower"
 
         @SuppressLint("SetTextI18n")
         fun bind(chatMessage: HashMap<String, String>, projection: HashMap<String, String>, position: Int) {
@@ -198,6 +216,15 @@ class ChatListAdapter(private val dataArray: ArrayList<HashMap<String, String>>,
             val chatHash = Hash.hash(chatMessage["name"].toString())
             val chatPreferences = Preferences.getPreferences(mContext.requireActivity(), chatHash)
             val model: String = chatPreferences.getModel()
+
+            // Resolve this chat's Companion picture (prefs only) so the final
+            // override below can show it ahead of the per-chat avatar/glyph.
+            val personaId = chatPreferences.getPersonaId()
+            companionImageShape = GlobalPreferences.getPreferences(mContext.requireActivity()).getProfileImageShape()
+            companionImageFile = if (personaId.isNotEmpty()) {
+                val ref = PersonaPreferences.getPersonaPreferences(mContext.requireActivity()).getPersona(personaId).avatarRef
+                if (ref.isNotEmpty()) ProfileImageStore.getInstance(mContext.requireActivity()).imageFile(ref) else null
+            } else null
 
             // Review marker: the per-chat exclusion pref wins (it stops capture
             // itself), otherwise show what the transcript queue says.
@@ -330,7 +357,27 @@ class ChatListAdapter(private val dataArray: ArrayList<HashMap<String, String>>,
                 else -> {
                     icon.setImageResource(R.drawable.chatgpt_icon)
                     DrawableCompat.setTint(icon.getDrawable(), ContextCompat.getColor(mContext.requireActivity(), R.color.accent_900))
+                    // This branch does not route through updateCard(), so apply
+                    // the Companion override here too.
+                    applyCompanionOverride()
                 }
+            }
+        }
+
+        /** Companion picture wins over the per-chat avatar/glyph (CHAT AND
+         *  CHAT-LIST DISPLAY). Run after the card/glyph styling so it cleanly
+         *  resets and replaces the icon (through the shared binder, which
+         *  clears any prior request, tint and background) whenever the chat's
+         *  Companion has an available picture. No-op otherwise, leaving the
+         *  existing avatar/glyph in place. */
+        private fun applyCompanionOverride() {
+            val file = companionImageFile
+            if (file != null) {
+                ProfileImageBinder.bind(mContext.requireActivity(), icon, file, companionImageShape) { }
+            } else {
+                // No photo: leave the glyph/shape/tint updateCard set, only
+                // undo a centerCrop left by a recycled photo row.
+                icon.scaleType = iconInitialScaleType
             }
         }
 
@@ -351,6 +398,8 @@ class ChatListAdapter(private val dataArray: ArrayList<HashMap<String, String>>,
             if (preferences?.getAvatarTypeByChatId(Hash.hash(chatMessage["name"].toString()), mContext.requireActivity()) == "builtin") {
                 DrawableCompat.setTint(icon.getDrawable(), ContextCompat.getColor(mContext.requireActivity(), iconColor))
             }
+
+            applyCompanionOverride()
         }
 
         private fun getResourceFromModelName() : Int {

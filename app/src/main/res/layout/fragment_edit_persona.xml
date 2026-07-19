@@ -39,6 +39,58 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
 
+        <!-- Companion picture (profile-images-plan.md, EDITOR INTEGRATION -
+             Companion Editor): a shaped preview plus Add/Change Picture and,
+             when a picture is assigned, Remove Picture. The chosen avatarRef
+             is held in the fragment and written into the PersonaObject on
+             Save; the gallery is opened in Assignment mode (TARGET_COMPANION)
+             and returns the hash. Remove Picture only clears this reference,
+             never the gallery image. -->
+        <LinearLayout
+            android:id="@+id/picture_section"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="24dp"
+            android:layout_marginTop="16dp"
+            android:layout_marginEnd="24dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/text_dialog_title">
+
+            <ImageView
+                android:id="@+id/img_persona_avatar"
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:contentDescription="@string/profile_image_companion_avatar_desc"
+                android:scaleType="centerCrop" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="16dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_change_picture"
+                    style="@style/AppButton.Secondary"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/profile_image_add_picture" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_remove_picture"
+                    style="@style/AppButton.Secondary"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="@string/profile_image_remove_picture"
+                    android:visibility="gone" />
+            </LinearLayout>
+        </LinearLayout>
+
         <com.google.android.material.textfield.TextInputLayout
             android:id="@+id/textInputLayoutLabel"
             android:layout_width="0dp"
@@ -54,7 +106,7 @@
             app:boxCornerRadiusTopStart="16dp"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@+id/text_dialog_title">
+            app:layout_constraintTop_toBottomOf="@+id/picture_section">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/field_label"

@@ -113,18 +113,6 @@
             android:layout_marginTop="4dp"
             android:orientation="vertical" />
 
-        <!-- Set as Default (owner ruling, July 19 2026): only shown when this
-             sheet was opened from Default Images (Default Avatar / Default
-             Personal Avatar). Assigns directly - the gallery stays open. -->
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btn_detail_set_as_default"
-            style="@style/AppButton.Primary"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            android:text="@string/profile_image_set_as_default"
-            android:visibility="gone" />
-
         <!-- Unused branch: permanent deletion. -->
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_detail_delete_permanently"

@@ -73,6 +73,7 @@ import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.ui.activities.ImageBrowserActivity
 import org.teslasoft.assistant.ui.fragments.dialogs.EditMessageDialogFragment
 import org.teslasoft.assistant.util.LegacyAvatarResolver
+import org.teslasoft.assistant.util.ProfileImageBinder
 import org.teslasoft.assistant.util.StaticAvatarParser
 import java.io.BufferedReader
 import java.io.File
@@ -93,6 +94,24 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
     private var imageStringList = ArrayList<String>(Collections.nCopies(itemCount + 1, ""))
     private var listener: OnUpdateListener? = null
     private var bulkActionMode = false
+
+    // Assistant-side Companion picture (profile-images-plan.md, CHAT AND
+    // CHAT-LIST DISPLAY). Resolved off the main thread by ChatActivity and
+    // pushed in here - row binding never touches storage. Null means the chat
+    // falls through to the existing per-chat avatar (legacy resolver) and then
+    // the built-in glyph, exactly as before. [companionImageShape] is the
+    // current Default Shape to render the picture with.
+    private var companionImageFile: File? = null
+    private var companionImageShape: String = "flower"
+
+    /** Called by ChatActivity with the already-resolved Companion picture (or
+     *  null) plus the current Default Shape. Rebinds visible rows so the
+     *  assistant avatar reflects the new state. */
+    fun setCompanionAvatar(file: File?, shape: String) {
+        companionImageFile = file
+        companionImageShape = shape
+        notifyDataSetChanged()
+    }
 
     // Adapter position of the message currently being read aloud via its
     // speak button, or -1. Set the moment the press is registered (before the
@@ -227,6 +246,10 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
     open inner class ViewHolder(itemView: View, private val debugContext: Context) : RecyclerView.ViewHolder(itemView) {
         private val ui: ConstraintLayout = itemView.findViewById(R.id.ui)
         private val icon: ImageView = itemView.findViewById(R.id.icon)
+        // The icon's original XML backing (e.g. the assistant bubble's tonal
+        // circle). A Companion photo fills the slot and drops it; every other
+        // path restores it, so a recycled row can't keep a nulled background.
+        private val iconInitialBackground = icon.background
         private val message: TextView = itemView.findViewById(R.id.message)
         private val username: TextView = itemView.findViewById(R.id.username)
         private val bubbleBg: ConstraintLayout? = itemView.findViewById(R.id.bubble_bg)
@@ -472,7 +495,31 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             }
         }
 
+        /** Assistant-side precedence (profile-images-plan.md): Companion
+         *  picture (shaped) -> existing per-chat avatar via the legacy
+         *  resolver -> built-in glyph. When a Companion picture is present it
+         *  is bound through [ProfileImageBinder] (which fully resets the view,
+         *  so a recycled row can't keep another chat's picture or tint) and
+         *  fills the slot without the glyph's tonal backing. Otherwise the
+         *  existing legacy/built-in rendering runs unchanged, with the icon's
+         *  original XML background explicitly restored so recycling from a
+         *  photo row never leaves it blank. */
         private fun displayAvatar() {
+            val file = companionImageFile
+            if (file != null && file.exists()) {
+                ProfileImageBinder.bind(context, icon, file, companionImageShape) {
+                    // Only reachable if the file vanished between resolve and load.
+                    icon.background = iconInitialBackground
+                    displayLegacyOrBuiltinAvatar()
+                }
+            } else {
+                icon.background = iconInitialBackground
+                icon.imageTintList = null
+                displayLegacyOrBuiltinAvatar()
+            }
+        }
+
+        private fun displayLegacyOrBuiltinAvatar() {
             if (preferences.getAvatarType() == "builtin") {
                 icon.setImageResource(StaticAvatarParser.parse(preferences.getAvatarId()))
                 DrawableCompat.setTint(icon.getDrawable()!!, ContextCompat.getColor(context, R.color.accent_900))

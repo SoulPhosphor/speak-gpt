@@ -57,11 +57,6 @@ class ProfileImageDetailBottomSheetDialogFragment : BottomSheetDialogFragment() 
          *  it). [identityLines] are the same already-formatted lines shown
          *  in this sheet's usage list, e.g. "Companion: Ash". */
         fun onProfileImageDeleteWhileInUseRequested(hash: String, identityLines: List<String>)
-
-        /** The user tapped Set as Default (owner ruling, July 19 2026 - only
-         *  shown when this sheet was opened from Default Images). The host
-         *  assigns directly and keeps the gallery open. */
-        fun onProfileImageSetAsDefaultRequested(hash: String)
     }
 
     companion object {
@@ -72,7 +67,6 @@ class ProfileImageDetailBottomSheetDialogFragment : BottomSheetDialogFragment() 
         private const val ARG_USED = "used"
         private const val ARG_USAGE_TOTAL_LINE = "usage_total_line"
         private const val ARG_IDENTITY_LINES = "identity_lines"
-        private const val ARG_SHOW_SET_AS_DEFAULT = "show_set_as_default"
 
         fun newInstance(
             hash: String,
@@ -88,10 +82,7 @@ class ProfileImageDetailBottomSheetDialogFragment : BottomSheetDialogFragment() 
             /** Already formatted, e.g. "Used by 3 profiles". Ignored when !used. */
             usageTotalLine: String?,
             /** Already formatted lines, e.g. "Companion: Ash". Ignored when !used. */
-            identityLines: ArrayList<String>,
-            /** True only when opened from Default Images (Default Avatar /
-             *  Default Personal Avatar) - shows the Set as Default button. */
-            showSetAsDefault: Boolean = false
+            identityLines: ArrayList<String>
         ): ProfileImageDetailBottomSheetDialogFragment {
             val fragment = ProfileImageDetailBottomSheetDialogFragment()
             fragment.arguments = Bundle().apply {
@@ -102,7 +93,6 @@ class ProfileImageDetailBottomSheetDialogFragment : BottomSheetDialogFragment() 
                 putBoolean(ARG_USED, used)
                 putString(ARG_USAGE_TOTAL_LINE, usageTotalLine)
                 putStringArrayList(ARG_IDENTITY_LINES, identityLines)
-                putBoolean(ARG_SHOW_SET_AS_DEFAULT, showSetAsDefault)
             }
             return fragment
         }
@@ -154,14 +144,6 @@ class ProfileImageDetailBottomSheetDialogFragment : BottomSheetDialogFragment() 
         }
 
         view.findViewById<TextView>(R.id.text_detail_date_added).text = args.getString(ARG_DATE_ADDED_LINE)
-
-        view.findViewById<MaterialButton>(R.id.btn_detail_set_as_default).apply {
-            visibility = if (args.getBoolean(ARG_SHOW_SET_AS_DEFAULT)) View.VISIBLE else View.GONE
-            setOnClickListener {
-                listener?.onProfileImageSetAsDefaultRequested(hash)
-                dismiss()
-            }
-        }
 
         val used = args.getBoolean(ARG_USED)
         val usageTotal = view.findViewById<TextView>(R.id.text_detail_usage_total)

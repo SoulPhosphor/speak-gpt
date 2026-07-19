@@ -1825,7 +1825,6 @@
     <string name="filter_inactive">Inactive</string>
     <string name="profile_image_show_labels">Show Labels</string>
     <string name="profile_image_status_default">Assigned</string>
-    <string name="profile_image_set_as_default">Set as Default</string>
 
     <!-- Empty states -->
     <string name="profile_image_empty_all_title">No Profile Images</string>
@@ -1910,6 +1909,14 @@
     <string name="row_personal_default_subtitle">Used when the active My Persona or Roleplay Character has no image.</string>
 
     <string name="profile_image_remove_picture">Remove Picture</string>
+    <string name="profile_image_add_picture">Add Picture</string>
+    <string name="profile_image_change_picture">Change Picture</string>
+    <!-- Companion editor: content description for the leading avatar preview. -->
+    <string name="profile_image_companion_avatar_desc">Companion picture</string>
+    <!-- Per-chat avatar explanation shown while a Companion picture is in use
+         (profile-images-plan.md, INTERACTION WITH EXISTING PER-CHAT AVATAR
+         CUSTOMIZATION). %1$s is the Companion's name. -->
+    <string name="profile_image_companion_avatar_in_use_note">This chat is currently using %1$s\'s picture. The avatar below is used when no Companion picture is available.</string>
 
     <string name="shape_flower">Flower</string>
     <string name="shape_circle">Circle</string>

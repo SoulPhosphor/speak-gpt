@@ -35,11 +35,25 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent">
 
+        <!-- Leading Companion picture (profile-images-plan.md, COMPANION
+             SELECTION LIST): the shared Widget.App.Row.ProfileImage geometry.
+             Shows the Companion's assigned picture with the Default Shape;
+             the existing generic glyph (its styling unchanged) when there is
+             none. Vertically centred by the row's own constraints. -->
+        <ImageView
+            android:id="@+id/persona_avatar"
+            style="@style/Widget.App.Row.ProfileImage"
+            android:layout_marginStart="16dp"
+            android:contentDescription="@string/profile_image_companion_avatar_desc"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
         <TextView
             android:id="@+id/persona_label"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginStart="16dp"
+            android:layout_marginStart="12dp"
             android:layout_marginTop="12dp"
             android:layout_marginEnd="8dp"
             android:ellipsize="end"
@@ -49,14 +63,14 @@
             android:textSize="18sp"
             android:textStyle="bold"
             app:layout_constraintEnd_toStartOf="@+id/btn_edit_persona"
-            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintStart_toEndOf="@+id/persona_avatar"
             app:layout_constraintTop_toTopOf="parent" />
 
         <TextView
             android:id="@+id/persona_prompt"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginStart="16dp"
+            android:layout_marginStart="12dp"
             android:layout_marginEnd="8dp"
             android:layout_marginBottom="12dp"
             android:ellipsize="end"
@@ -66,7 +80,7 @@
             android:textSize="14sp"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toStartOf="@+id/btn_edit_persona"
-            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintStart_toEndOf="@+id/persona_avatar"
             app:layout_constraintTop_toBottomOf="@+id/persona_label" />
 
         <ImageButton

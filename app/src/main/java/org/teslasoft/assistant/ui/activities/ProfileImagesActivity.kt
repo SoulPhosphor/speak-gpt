@@ -62,16 +62,24 @@ import java.util.Locale
 
 /**
  * The Profile Images gallery (profile-images-plan.md, PROFILE IMAGES
- * GALLERY through UPLOAD FLOW). Ordinary browsing (a normal tap opens Image
- * Detail/View Usage; Select enters a deletion Selection Mode) is the only
- * behavior - there is no separate assign-and-exit mode. [EXTRA_DEFAULT_TARGET]
- * (owner ruling, July 19 2026) is an orthogonal flag, not a mode: when set to
- * [TARGET_GLOBAL] or [TARGET_PERSONAL] the title reflects which Default is
- * being browsed, the tile currently assigned to it always shows the Default
- * checkmark (see [GalleryTile.isCurrentDefault]), and the Image Detail sheet
- * gains a Set as Default button that writes the assignment directly - the
- * gallery is never auto-closed by tapping, assigning, or deleting; the user
- * leaves only via back or the top chevron.
+ * GALLERY through UPLOAD FLOW). It opens in one of two shapes, chosen by
+ * whether an assignment target ([EXTRA_ASSIGN_TARGET]) is present:
+ *
+ *  - Management (no target): ordinary housekeeping - a normal tap opens
+ *    Image Detail/View Usage, Select enters a deletion Selection Mode.
+ *
+ *  - Assignment (a target is set): the owner's tap-to-assign model
+ *    (July 19 2026 - "tapping a picture assigns it; the screen stays open;
+ *    to change it, tap a different picture"). A normal tap assigns that
+ *    image to the target and the tile takes the Assigned badge (see
+ *    [GalleryTile.isAssigned]); there is no detail sheet, no Select, and no
+ *    delete here (that all lives in Management mode). The gallery is never
+ *    auto-closed by a tap - the user leaves via back. For the two Default
+ *    targets the tap writes the preference immediately; for a Companion the
+ *    chosen hash is returned to the caller ([EXTRA_RESULT_ASSIGNED_HASH]),
+ *    which persists it when the Companion itself is saved. Upload New is
+ *    present in both shapes; in Assignment mode a freshly uploaded image is
+ *    assigned automatically so the user is not made to find and tap it again.
  *
  * Reconciliation and stale framing-session cleanup run once, here, only
  * when the gallery opens (never at app startup) - see [loadGallery].
@@ -81,10 +89,17 @@ class ProfileImagesActivity : FragmentActivity(), ProfileImageDetailBottomSheetD
     companion object {
         const val EXTRA_MODE = "mode"
         const val MODE_MANAGEMENT = "management"
-        /** "global" or "personal" - see [TARGET_GLOBAL]/[TARGET_PERSONAL]. */
-        const val EXTRA_DEFAULT_TARGET = "default_target"
+        /** Presence of this extra puts the gallery in Assignment mode.
+         *  One of [TARGET_GLOBAL] / [TARGET_PERSONAL] / [TARGET_COMPANION]. */
+        const val EXTRA_ASSIGN_TARGET = "assign_target"
         const val TARGET_GLOBAL = "global"
         const val TARGET_PERSONAL = "personal"
+        const val TARGET_COMPANION = "companion"
+        /** For [TARGET_COMPANION]: the hash the caller currently holds, so the
+         *  matching tile opens already showing the Assigned badge. */
+        const val EXTRA_ASSIGN_CURRENT_HASH = "assign_current_hash"
+        /** Result extra carrying the tapped hash back to a Companion caller. */
+        const val EXTRA_RESULT_ASSIGNED_HASH = "result_assigned_hash"
 
         private const val MIN_TILE_WIDTH_DP = 110
         private const val HORIZONTAL_ALLOWANCE_DP = 16
@@ -92,8 +107,12 @@ class ProfileImagesActivity : FragmentActivity(), ProfileImageDetailBottomSheetD
 
     private enum class Filter { ALL_IMAGES, IN_USE, UNUSED }
 
-    private var mode: String = MODE_MANAGEMENT
-    private var defaultTarget: String? = null
+    private var assignTarget: String? = null
+    /** The pending pick for a Companion assignment (TARGET_COMPANION only):
+     *  what the current tile Assigned badge tracks and what is returned on
+     *  leave. Null in Management mode and for the Default targets (those read
+     *  and write their preference directly). */
+    private var pendingAssignedHash: String? = null
     private var store: ProfileImageStore? = null
 
     private var allTiles: List<GalleryTile> = emptyList()
@@ -146,12 +165,14 @@ class ProfileImagesActivity : FragmentActivity(), ProfileImageDetailBottomSheetD
         ThemeManager.getThemeManager().applyPalette(this)
         setContentView(R.layout.activity_profile_images)
 
-        mode = intent.getStringExtra(EXTRA_MODE) ?: MODE_MANAGEMENT
-        defaultTarget = intent.getStringExtra(EXTRA_DEFAULT_TARGET)
+        assignTarget = intent.getStringExtra(EXTRA_ASSIGN_TARGET)
+        if (assignTarget == TARGET_COMPANION) {
+            pendingAssignedHash = intent.getStringExtra(EXTRA_ASSIGN_CURRENT_HASH)?.takeIf { it.isNotEmpty() }
+        }
         store = ProfileImageStore.getInstance(this)
 
         bindViews()
-        applyDefaultTargetTitle()
+        applyAssignTargetTitle()
         setupRecycler()
         setupFilterDropdown()
         setupShowLabelsToggle()
@@ -238,12 +259,17 @@ class ProfileImagesActivity : FragmentActivity(), ProfileImageDetailBottomSheetD
         return (usableWidthDp / MIN_TILE_WIDTH_DP).coerceAtLeast(2)
     }
 
+    /** Assignment mode is any launch that carries an [EXTRA_ASSIGN_TARGET]. */
+    private fun isAssignmentMode(): Boolean = assignTarget != null
+
     /** Sets the gallery title to the Default Avatar / Default Personal
-     *  Avatar row's own already-approved text when browsing for one of
-     *  those (owner ruling, July 19 2026); left as the plain "Profile
-     *  Images" title (the layout default) otherwise. */
-    private fun applyDefaultTargetTitle() {
-        val titleRes = when (defaultTarget) {
+     *  Avatar row's own already-approved text when assigning one of those
+     *  (owner ruling, July 19 2026); left as the plain gallery title (the
+     *  layout default) for a Companion assignment and for Management mode -
+     *  the user arrived from the Companion's own "Add Picture", so no new
+     *  title wording is invented here. */
+    private fun applyAssignTargetTitle() {
+        val titleRes = when (assignTarget) {
             TARGET_GLOBAL -> R.string.row_global_default_title
             TARGET_PERSONAL -> R.string.row_personal_default_title
             else -> return
@@ -423,9 +449,15 @@ class ProfileImagesActivity : FragmentActivity(), ProfileImageDetailBottomSheetD
 
     /** Select Availability (EXACT GALLERY CONTROL ORDER): only when the
      *  current filtered results contain at least one deletion-eligible
-     *  unused image - so an empty Selection Mode can never be entered. */
+     *  unused image - so an empty Selection Mode can never be entered.
+     *  Assignment mode has no selection/deletion at all, so Select never
+     *  shows there. */
     private fun updateSelectAvailability() {
         if (selectionMode) return
+        if (isAssignmentMode()) {
+            btnSelect?.visibility = View.GONE
+            return
+        }
         val hasEligible = filteredTiles().any { !it.isUsed }
         btnSelect?.visibility = if (hasEligible) View.VISIBLE else View.GONE
     }
@@ -437,7 +469,37 @@ class ProfileImagesActivity : FragmentActivity(), ProfileImageDetailBottomSheetD
             toggleSelection(tile.hash)
             return
         }
+        if (isAssignmentMode()) {
+            assignTile(tile)
+            return
+        }
         openDetail(tile)
+    }
+
+    /** Tap-to-assign (owner model, July 19 2026): assigns [tile] to the
+     *  current target and keeps the gallery open, the Assigned badge moving
+     *  to the tapped tile on reload. A Missing or Corrupted tile is not a
+     *  real choice, so a tap on one is ignored rather than assigning a broken
+     *  reference. */
+    private fun assignTile(tile: GalleryTile) {
+        if (tile.file == null || tile.corrupted) return
+        commitAssignment(tile.hash)
+        loadGallery()
+    }
+
+    /** Writes an assignment for whichever target this gallery serves: the two
+     *  Defaults write their global preference immediately; a Companion pick is
+     *  held and returned to the caller ([EXTRA_RESULT_ASSIGNED_HASH]) so the
+     *  Companion editor can persist it on its own Save. */
+    private fun commitAssignment(hash: String) {
+        when (assignTarget) {
+            TARGET_GLOBAL -> GlobalPreferences.getPreferences(this).setGlobalDefaultImageRef(hash)
+            TARGET_PERSONAL -> GlobalPreferences.getPreferences(this).setDefaultUserImageRef(hash)
+            TARGET_COMPANION -> {
+                pendingAssignedHash = hash
+                setResult(RESULT_OK, Intent().putExtra(EXTRA_RESULT_ASSIGNED_HASH, hash))
+            }
+        }
     }
 
     private fun toggleSelection(hash: String) {
@@ -465,14 +527,14 @@ class ProfileImagesActivity : FragmentActivity(), ProfileImageDetailBottomSheetD
 
     /* ------------------------------ data ------------------------------ */
 
-    /** The hash currently assigned to [defaultTarget], or "" when not
-     *  browsing for a Default (or none is set yet). */
-    private fun currentDefaultHash(): String {
-        val target = defaultTarget ?: return ""
+    /** The hash currently assigned to this gallery's target (drives the
+     *  Assigned badge), or "" in Management mode / when none is set yet. */
+    private fun assignedHash(): String {
         val preferences = GlobalPreferences.getPreferences(this)
-        return when (target) {
+        return when (assignTarget) {
             TARGET_GLOBAL -> preferences.getGlobalDefaultImageRef()
             TARGET_PERSONAL -> preferences.getDefaultUserImageRef()
+            TARGET_COMPANION -> pendingAssignedHash.orEmpty()
             else -> ""
         }
     }
@@ -497,7 +559,7 @@ class ProfileImagesActivity : FragmentActivity(), ProfileImageDetailBottomSheetD
                     // (owner ruling: "why take away options").
                     GlobalDefaultImageSeeder.ensureSeeded(this@ProfileImagesActivity)
                     val usage = ProfileImageUsage.computeAll(this@ProfileImagesActivity)
-                    val defaultHash = currentDefaultHash()
+                    val assigned = assignedHash()
                     s.listNewestFirst().map { record ->
                         val file = s.imageFile(record.hash)
                         GalleryTile(
@@ -506,7 +568,7 @@ class ProfileImagesActivity : FragmentActivity(), ProfileImageDetailBottomSheetD
                             createdAt = record.createdAt,
                             isUsed = usage.containsKey(record.hash),
                             corrupted = file != null && !isDecodableImage(file),
-                            isCurrentDefault = defaultHash.isNotEmpty() && record.hash == defaultHash
+                            isAssigned = assigned.isNotEmpty() && record.hash == assigned
                         )
                     }
                 }
@@ -572,8 +634,7 @@ class ProfileImagesActivity : FragmentActivity(), ProfileImageDetailBottomSheetD
             withContext(Dispatchers.Main) {
                 if (isFinishing || isDestroyed) return@withContext
                 ProfileImageDetailBottomSheetDialogFragment.newInstance(
-                    tile.hash, tile.file?.absolutePath, tile.corrupted, dateAddedLine, used, usageTotalLine, identityLines,
-                    showSetAsDefault = defaultTarget != null
+                    tile.hash, tile.file?.absolutePath, tile.corrupted, dateAddedLine, used, usageTotalLine, identityLines
                 ).show(supportFragmentManager, "profile_image_detail")
             }
         }
@@ -581,19 +642,6 @@ class ProfileImagesActivity : FragmentActivity(), ProfileImageDetailBottomSheetD
 
     override fun onProfileImageDeletePermanentlyRequested(hash: String) {
         confirmDeleteSingle(hash)
-    }
-
-    /** Owner ruling, July 19 2026: assigns [hash] directly to whichever
-     *  Default this gallery was opened for and refreshes the grid so the
-     *  Default checkmark moves - the gallery stays open, never auto-closes. */
-    override fun onProfileImageSetAsDefaultRequested(hash: String) {
-        val target = defaultTarget ?: return
-        val preferences = GlobalPreferences.getPreferences(this)
-        when (target) {
-            TARGET_GLOBAL -> preferences.setGlobalDefaultImageRef(hash)
-            TARGET_PERSONAL -> preferences.setDefaultUserImageRef(hash)
-        }
-        loadGallery()
     }
 
     /** Owner ruling, July 19 2026: an in-use image may be deleted directly
@@ -741,6 +789,11 @@ class ProfileImagesActivity : FragmentActivity(), ProfileImageDetailBottomSheetD
                 if (hash == null) {
                     showSaveErrorDialog(R.string.profile_image_save_error_no_space_body)
                 } else {
+                    // UPLOAD FLOW: in Assignment mode a freshly uploaded image
+                    // is assigned right away, so the user is never made to hunt
+                    // for and tap it again. In Management mode it simply joins
+                    // the grid.
+                    if (isAssignmentMode()) commitAssignment(hash)
                     loadGallery()
                 }
             }

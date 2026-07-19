@@ -169,6 +169,7 @@ import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.ChatStorageHealth
 import org.teslasoft.assistant.preferences.MessageCompletionState
 import org.teslasoft.assistant.preferences.GlobalPreferences
+import org.teslasoft.assistant.preferences.profileimages.ProfileImageStore
 import org.teslasoft.assistant.preferences.LogitBiasPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.SecurePrefs
@@ -972,6 +973,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         // a fix when one was left dangling. The delay lets a legitimate return
         // animation play out instead of snapping.
         actionBar?.postDelayed({ restoreTopBarVisibility() }, 500)
+
+        // A Companion picture / Default Shape may have changed while away (the
+        // Companion editor, Profile Image settings). Re-resolve display-only.
+        refreshCompanionAvatar()
     }
 
     /** Force the chat's top action bar and its buttons back to fully visible. */
@@ -979,6 +984,34 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         for (v in listOf(actionBar, btnBack, activityTitle, btnExport, btnSettings)) {
             v?.visibility = View.VISIBLE
             v?.alpha = 1f
+        }
+    }
+
+    /**
+     * Resolves the active Companion's assigned picture off the main thread and
+     * hands it (with the current Default Shape) to ChatAdapter, which renders
+     * it on the assistant side ahead of the legacy per-chat avatar and the
+     * built-in glyph (profile-images-plan.md, CHAT AND CHAT-LIST DISPLAY).
+     * Display-only and best-effort - it never touches generation or a turn.
+     * Called on resume and whenever the chat's companion or the Default Shape
+     * may have changed; a missing file resolves to null and falls through.
+     */
+    private fun refreshCompanionAvatar() {
+        if (adapter == null) return
+        val personaId = preferences?.getPersonaId().orEmpty()
+        val shape = GlobalPreferences.getPreferences(this).getProfileImageShape()
+        CoroutineScope(Dispatchers.Main).launch {
+            val file = withContext(Dispatchers.IO) {
+                try {
+                    if (personaId.isEmpty()) return@withContext null
+                    val ref = PersonaPreferences.getPersonaPreferences(this@ChatActivity).getPersona(personaId).avatarRef
+                    if (ref.isEmpty()) null else ProfileImageStore.getInstance(this@ChatActivity).imageFile(ref)
+                } catch (_: Exception) {
+                    null
+                }
+            }
+            if (isFinishing || isDestroyed) return@launch
+            adapter?.setCompanionAvatar(file, shape)
         }
     }
 
@@ -2159,7 +2192,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 )
             quickSettingsBottomSheetDialogFragment.setOnUpdateListener(object : QuickSettingsBottomSheetDialogFragment.OnUpdateListener {
                 override fun onUpdate() {
-                    /* for future */
+                    // The chat's Companion may have changed here without a full
+                    // reload; re-resolve the assistant-side picture (display-only).
+                    refreshCompanionAvatar()
                 }
 
                 override fun onForceUpdate() {
@@ -2181,6 +2216,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         chat?.adapter = adapter
 
         adapter?.notifyDataSetChanged()
+
+        // First paint of the assistant-side Companion picture (resolved off-main).
+        refreshCompanionAvatar()
 
         chat?.post {
             chat?.scrollToPosition(adapter?.itemCount!! - 1)

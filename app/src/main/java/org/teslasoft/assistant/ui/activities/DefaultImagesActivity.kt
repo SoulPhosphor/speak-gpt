@@ -38,10 +38,11 @@ import org.teslasoft.assistant.theme.ThemeManager
  * Default (shared with Companions; auto-seeded, see
  * [GlobalDefaultImageSeeder]) and Personal Default (user-side only,
  * optional; falls through to the Global Default when unset). Both rows
- * open the same Profile Images gallery, in ordinary browsing (owner
- * ruling, July 19 2026 - see ProfileImagesActivity.EXTRA_DEFAULT_TARGET):
- * assignment happens from inside the gallery's Image Detail sheet (Set as
- * Default), not by tapping a tile here, so there is no result to wait for.
+ * open the same Profile Images gallery in Assignment mode (owner
+ * tap-to-assign model, July 19 2026 - see
+ * ProfileImagesActivity.EXTRA_ASSIGN_TARGET): tapping a tile there assigns
+ * it as that Default and writes the preference immediately, so this screen
+ * has no result to wait for.
  * Plan item 4 approves only "a screen or row group where the user sets
  * the Global Default and the Personal Default separately" - no leading
  * preview thumbnail or Remove Picture row on this screen; do not add
@@ -61,16 +62,14 @@ class DefaultImagesActivity : FragmentActivity() {
         findViewById<LinearLayout>(R.id.row_global_default).setOnClickListener {
             startActivity(
                 Intent(this, ProfileImagesActivity::class.java)
-                    .putExtra(ProfileImagesActivity.EXTRA_MODE, ProfileImagesActivity.MODE_MANAGEMENT)
-                    .putExtra(ProfileImagesActivity.EXTRA_DEFAULT_TARGET, ProfileImagesActivity.TARGET_GLOBAL)
+                    .putExtra(ProfileImagesActivity.EXTRA_ASSIGN_TARGET, ProfileImagesActivity.TARGET_GLOBAL)
             )
         }
 
         findViewById<LinearLayout>(R.id.row_personal_default).setOnClickListener {
             startActivity(
                 Intent(this, ProfileImagesActivity::class.java)
-                    .putExtra(ProfileImagesActivity.EXTRA_MODE, ProfileImagesActivity.MODE_MANAGEMENT)
-                    .putExtra(ProfileImagesActivity.EXTRA_DEFAULT_TARGET, ProfileImagesActivity.TARGET_PERSONAL)
+                    .putExtra(ProfileImagesActivity.EXTRA_ASSIGN_TARGET, ProfileImagesActivity.TARGET_PERSONAL)
             )
         }
     }

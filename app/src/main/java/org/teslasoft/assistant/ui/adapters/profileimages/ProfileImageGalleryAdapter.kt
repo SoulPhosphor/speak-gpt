@@ -41,10 +41,11 @@ import java.io.File
  * drives both the Unused label/filter and, in Selection Mode, whether the
  * tile is selectable at all; Missing and Corrupted do not change
  * selectability on their own - a still-referenced record locks exactly
- * like a normal in-use image regardless of file health. [isCurrentDefault]
- * is only ever true when the gallery was opened from Default Images
- * (ProfileImagesActivity.EXTRA_DEFAULT_TARGET) and this tile is the hash
- * currently assigned to that target (owner ruling, July 19 2026).
+ * like a normal in-use image regardless of file health. [isAssigned]
+ * is only ever true in Assignment mode (ProfileImagesActivity.EXTRA_ASSIGN_TARGET)
+ * and marks the tile currently assigned to that target - the Default Avatar,
+ * the Default Personal Avatar, or the Companion being edited (owner
+ * tap-to-assign model, July 19 2026). It carries the "Assigned" badge.
  */
 data class GalleryTile(
     val hash: String,
@@ -52,7 +53,7 @@ data class GalleryTile(
     val createdAt: Long,
     val isUsed: Boolean,
     val corrupted: Boolean = false,
-    val isCurrentDefault: Boolean = false
+    val isAssigned: Boolean = false
 )
 
 /**
@@ -84,8 +85,8 @@ class ProfileImageGalleryAdapter(
         }
 
     /** Show Labels (owner ruling, July 19 2026): governs only the text
-     *  label at the bottom of a tile (Unused/Missing/Corrupted/Default) -
-     *  the Default checkmark badge is independent and always shows. */
+     *  label at the bottom of a tile (Unused/Missing/Corrupted/Assigned) -
+     *  the Assigned checkmark badge is independent and always shows. */
     var showLabels: Boolean = true
         set(value) {
             if (field == value) return
@@ -158,7 +159,7 @@ class ProfileImageGalleryAdapter(
                         statusLabel.visibility = View.VISIBLE
                         statusLabel.setText(R.string.profile_image_status_corrupted)
                     }
-                    tile.isCurrentDefault -> {
+                    tile.isAssigned -> {
                         statusLabel.visibility = View.VISIBLE
                         statusLabel.setText(R.string.profile_image_status_default)
                     }
@@ -168,7 +169,7 @@ class ProfileImageGalleryAdapter(
                     }
                 }
             }
-            badgeDefaultContainer.visibility = if (tile.isCurrentDefault) View.VISIBLE else View.GONE
+            badgeDefaultContainer.visibility = if (tile.isAssigned) View.VISIBLE else View.GONE
 
             val isSelected = selected.contains(tile.hash)
             // A Missing record can still be referenced (RECONCILIATION); its
@@ -225,10 +226,10 @@ class ProfileImageGalleryAdapter(
                     else -> context.getString(R.string.filter_unused)
                 }
             )
-            // The Default checkmark is always visible regardless of Show
+            // The Assigned checkmark is always visible regardless of Show
             // Labels (see bind()), so it always needs an announcement too -
             // independent of the missing/corrupted/used/unused line above.
-            if (tile.isCurrentDefault) {
+            if (tile.isAssigned) {
                 parts.add(context.getString(R.string.profile_image_status_default))
             }
             if (inSelectionMode) {

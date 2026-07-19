@@ -23,12 +23,17 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.BaseAdapter
 import android.widget.ImageButton
+import android.widget.ImageView
 import android.widget.TextView
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
 import com.google.android.material.elevation.SurfaceColors
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.preferences.GlobalPreferences
+import org.teslasoft.assistant.preferences.PersonaPreferences
+import org.teslasoft.assistant.preferences.profileimages.ProfileImageStore
 import org.teslasoft.assistant.util.Hash
+import org.teslasoft.assistant.util.ProfileImageBinder
 
 class PersonaListItemAdapter(private val dataArray: ArrayList<HashMap<String, String>>, private var mContext: Context) : BaseAdapter() {
     override fun getCount(): Int {
@@ -44,6 +49,7 @@ class PersonaListItemAdapter(private val dataArray: ArrayList<HashMap<String, St
     }
 
     private var ui: ConstraintLayout? = null
+    private var personaAvatar: ImageView? = null
     private var personaLabel: TextView? = null
     private var personaPrompt: TextView? = null
     private var btnEdit: ImageButton? = null
@@ -72,6 +78,7 @@ class PersonaListItemAdapter(private val dataArray: ArrayList<HashMap<String, St
         }
 
         ui = mView?.findViewById(R.id.ui)
+        personaAvatar = mView?.findViewById(R.id.persona_avatar)
         personaLabel = mView?.findViewById(R.id.persona_label)
         personaPrompt = mView?.findViewById(R.id.persona_prompt)
         btnEdit = mView?.findViewById(R.id.btn_edit_persona)
@@ -95,6 +102,24 @@ class PersonaListItemAdapter(private val dataArray: ArrayList<HashMap<String, St
             personaLabel?.setTextColor(mContext.getColor(R.color.accent_900))
             personaPrompt?.setTextColor(mContext.getColor(R.color.text_subtitle))
             btnEdit?.imageTintList = ColorStateList.valueOf(mContext.getColor(R.color.accent_900))
+        }
+
+        // Leading Companion picture (profile-images-plan.md, COMPANION
+        // SELECTION LIST): the assigned picture with the Default Shape, or a
+        // neutral placeholder glyph (tinted to match the row's other icons in
+        // both the selected and unselected states) when none is assigned or
+        // the file is missing. Bound through the shared binder so a recycled
+        // row never keeps another Companion's picture or tint.
+        personaAvatar?.let { avatar ->
+            val personaId = Hash.hash(item["label"] ?: "")
+            val avatarRef = PersonaPreferences.getPersonaPreferences(mContext).getPersona(personaId).avatarRef
+            val avatarFile = if (avatarRef.isNotEmpty()) ProfileImageStore.getInstance(mContext).imageFile(avatarRef) else null
+            val shape = GlobalPreferences.getPreferences(mContext).getProfileImageShape()
+            val glyphTint = if (isSelected) R.color.window_background else R.color.accent_900
+            ProfileImageBinder.bind(mContext, avatar, avatarFile, shape) { iv ->
+                iv.setImageResource(R.drawable.ic_photo)
+                iv.imageTintList = ColorStateList.valueOf(mContext.getColor(glyphTint))
+            }
         }
 
         ui?.setOnClickListener {
