@@ -2003,3 +2003,119 @@ Confirm the per-chat avatar explanation appears and hides correctly.
 Confirm UI order and appearance are acceptable.
 
 Not done until the owner approves the test build.
+
+----------------------------------------------------------------------
+ADDENDUM — owner rulings made in chat, July 19 2026 (mid Phase 5)
+----------------------------------------------------------------------
+
+These supersede the sections named wherever they differ. Read this
+before starting Phase 6, and before touching deletion or the settings
+screen in any later phase.
+
+1. PERMANENT DELETION / CONFIRMATION WORDING — an in-use image is now
+   deletable, not just an unused one (owner ruling: "people should be
+   allowed to delete if they want to"). This overrides "For an in-use
+   image: ... Do not provide permanent deletion." from IMAGE DETAIL AND
+   VIEW USAGE. BUILT on Phase 5 (branch claude/profile-images-phase-5-
+   s5qu2s): the Image Detail sheet's Delete Permanently action now also
+   appears when the image is in use, behind a stronger confirmation
+   naming every identity that uses it. Approved wording, verbatim, do
+   not reword without asking again:
+
+   Title: Are you sure you want to delete this?
+   Body: It's currently in use by:
+   <identity lines, one per line, same "Companion: Ash" / "My Persona:
+   Explorer" / "Roleplay Character: Mira" / "Default User Image" format
+   already used by View Usage>
+
+   If you delete this, it will change to the default image.
+
+   Buttons: Okay / Cancel
+
+   The "will change to the default image" claim is only fully accurate
+   once item 2 below is built (today, a Companion with no Global
+   Default in place would fall to its old per-chat avatar or a plain
+   built-in glyph, not a shared default). The owner was told this and
+   chose to ship the wording now anyway, on the understanding that item
+   2 makes it true. Do not water this wording down further without
+   asking - it is intentional, approved, and not up for re-litigation
+   ("This isn't a democracy").
+
+   Bulk deletion (Select All Shown / Delete Selected) is UNCHANGED -
+   still skips anything that became used since the gallery loaded, and
+   still never shows an in-use image as selectable in Selection Mode.
+   This ruling only opens a path for a SINGLE image, from the detail
+   sheet, where the user has already been shown exactly who uses it.
+
+2. NEW CONCEPT — Global Default Image (not yet built; this is now
+   Phase 6+ scope, not merely "Default User Image" as REFERENCE STORAGE
+   originally described it). One shared Profile Image, used as the
+   ultimate fallback for BOTH sides of the app, not just the user side:
+
+   - Assistant-side fallback order becomes: Companion image -> legacy
+     per-chat avatar -> Global Default -> old built-in assistant glyph
+     (now effectively unreachable, kept only as a final safety net).
+   - User-side fallback order becomes: Active Roleplay Character image
+     -> Active My Persona image -> Personal Default (see item 3) ->
+     Global Default -> generic user icon (now effectively unreachable).
+
+   Seeded out of the box from a repurposed BUILT-IN icon already in the
+   app - CustomizeAssistantDialog's "gemini" preset
+   (res/drawable/google_bard.xml, two overlapping sparkle/star shapes -
+   the owner calls this "the double star"), NOT a user upload. The
+   owner explicitly does not want to force any user to pick or upload
+   anything for this to work ("users shouldn't have to select images").
+   The owner considers today's shipped icon set "dumb" and plans to
+   replace it later - do not treat this specific icon choice as
+   precious; it must be easy to swap.
+
+   Technical note for whoever builds this: google_bard.xml is a vector
+   drawable with a theme-attribute fill color, normally tinted live at
+   draw time (DrawableCompat.setTint(..., R.color.accent_900) in
+   CustomizeAssistantDialog). There is no existing code path that
+   rasterizes a builtin preset to a real bitmap. To seed it as a real
+   Profile Image: render the vector to a 512x512 bitmap with a FIXED
+   color baked in (use accent_900, matching how it already looks today)
+   and save it through the normal ProfileImageStore.save() pipeline the
+   first time it's needed - it should end up as an ordinary catalog
+   entry, not a hardcoded special case, so it is viewable/replaceable
+   like any other Profile Image. Store its hash as the Global Default
+   reference (see item 4 for where that preference lives).
+
+3. NEW CONCEPT — Personal Default (not yet built; Phase 6+ scope). A
+   second, OPTIONAL user-side-only preference, distinct from the Global
+   Default: the user may set their own default separately from the
+   shared one. If unset, the user side falls through to the Global
+   Default (item 2). This sits in the user-side chain between My
+   Persona/Roleplay Character and the Global Default - see the updated
+   order in item 2. This is effectively what REFERENCE STORAGE and
+   APPROVED SCOPE called "Default User Image" / default_user_image_ref
+   before this addendum; whoever builds Phase 6 must decide whether to
+   keep that preference key name for the Personal Default or rename it,
+   and must NOT reuse the same key for the new Global Default - they
+   are two separate preferences now.
+
+4. PROFILE IMAGE SETTINGS SCREEN — restructured (Phase 6+ scope,
+   supersedes the flat three-row layout in that section). Owner's
+   description, in her own words: a main-Settings tile labeled "Profile
+   Image Properties", subtext "Profile image gallery and associated
+   settings can be found here." Opens a screen with (at least):
+   - A row into the gallery (management mode).
+   - A row into "Default Images" - a screen or row group where the user
+     sets the Global Default (item 2) and the Personal Default (item 3)
+     separately.
+   Whether Default Shape stays as a third row on this same screen was
+   not revisited in this conversation - it was not removed, but Phase 6
+   should confirm with the owner rather than assume either way. Exact
+   row wording/subtitles for "Default Images" were not given verbatim
+   and must be asked for in chat before shipping, per the standing
+   wording-approval rule - do not invent them from this summary.
+
+5. DEFERRED, NOT DESIGNED - do not build without further owner input.
+   The owner wants it to eventually be possible to assign one of the
+   shipped built-in icons (not just the Global Default) directly to any
+   individual identity, independent of what the Global Default is set
+   to. Her own words: "I don't know how we would set that up ... I
+   don't really know the UI yet." Treat this as a noted future
+   direction only. When it comes up, ask in plain chat rather than
+   guessing a UI for it.
