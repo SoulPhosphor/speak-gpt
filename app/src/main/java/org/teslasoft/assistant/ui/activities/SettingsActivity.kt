@@ -62,6 +62,7 @@ class SettingsActivity : FragmentActivity() {
     private var rowAiSystemSettings: LinearLayout? = null
     private var rowMemorySystem: LinearLayout? = null
     private var rowRoleplay: LinearLayout? = null
+    private var rowProfileImageProperties: LinearLayout? = null
     private var rowVoiceSettings: LinearLayout? = null
     private var tileImageModel: TileFragment? = null
     private var tileImageResolution: TileFragment? = null
@@ -170,6 +171,7 @@ class SettingsActivity : FragmentActivity() {
         transition.excludeTarget(R.id.tile_ai_system_settings, true)
         transition.excludeTarget(R.id.tile_memory_system, true)
         transition.excludeTarget(R.id.tile_roleplay, true)
+        transition.excludeTarget(R.id.tile_profile_image_properties, true)
         transition.excludeTarget(R.id.tile_autosend, true)
         transition.excludeTarget(R.id.tile_voice, true)
         transition.excludeTarget(R.id.tile_voice_language, true)
@@ -219,6 +221,7 @@ class SettingsActivity : FragmentActivity() {
         transition2.excludeTarget(R.id.tile_ai_system_settings, true)
         transition2.excludeTarget(R.id.tile_memory_system, true)
         transition2.excludeTarget(R.id.tile_roleplay, true)
+        transition2.excludeTarget(R.id.tile_profile_image_properties, true)
         transition2.excludeTarget(R.id.tile_autosend, true)
         transition2.excludeTarget(R.id.tile_voice, true)
         transition2.excludeTarget(R.id.tile_voice_language, true)
@@ -560,6 +563,7 @@ class SettingsActivity : FragmentActivity() {
         rowAiSystemSettings = findViewById(R.id.tile_ai_system_settings)
         rowMemorySystem = findViewById(R.id.tile_memory_system)
         rowRoleplay = findViewById(R.id.tile_roleplay)
+        rowProfileImageProperties = findViewById(R.id.tile_profile_image_properties)
         rowVoiceSettings = findViewById(R.id.tile_voice_settings)
         rowAboutApp = findViewById(R.id.tile_about_app)
         rowClearChat = findViewById(R.id.tile_clear_chat)
@@ -579,6 +583,10 @@ class SettingsActivity : FragmentActivity() {
 
         rowRoleplay?.setOnClickListener {
             startActivity(Intent(this, org.teslasoft.assistant.ui.activities.memory.RoleplayHubActivity::class.java).putExtra("chatId", chatId))
+        }
+
+        rowProfileImageProperties?.setOnClickListener {
+            startActivity(Intent(this, ProfileImagePropertiesActivity::class.java))
         }
 
         rowVoiceSettings?.setOnClickListener {

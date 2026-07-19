@@ -16,15 +16,14 @@
 * limitations under the License.
 **************************************************************************/
 -->
-<resources>
-    <!-- The vertical gap that separates the Zone 2 sections on every roleplay
-         card (character, NPC, world, campaign share view_card_section). One
-         place to tune the line spacing for all of them (owner ask, July 10
-         2026 — "a variable that's the same"). -->
-    <dimen name="card_section_gap">12dp</dimen>
-
-    <dimen name="button_corner_radius">4dp</dimen>
-
-    <!-- Widget.App.Row.ProfileImage's leading preview size (profile-images-plan.md). -->
-    <dimen name="row_profile_image_size">48dp</dimen>
-</resources>
+<!-- Default Shape picker content (profile-images-plan.md: "a Material
+     single-choice dialog or bottom sheet. Each choice includes a small
+     visual preview") - set as a MaterialAlertDialogBuilder custom view.
+     The three options are inflated from view_shape_option.xml in code. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/container_shape_options"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:paddingHorizontal="8dp"
+    android:paddingVertical="8dp" />

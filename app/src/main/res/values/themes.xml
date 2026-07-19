@@ -155,6 +155,19 @@
         <item name="android:scaleType">centerCrop</item>
     </style>
 
+    <!-- Leading Profile Image preview (profile-images-plan.md, XML STYLE AND
+         THEME INTEGRATION REQUIREMENTS: "Widget.App.Row.ProfileImage").
+         Completely based on Widget.App.Row.Icon - same slot, same formula -
+         and overrides ONLY the size via @dimen/row_profile_image_size, so a
+         future change to the shared icon formula (end margin, scale type,
+         no-baked-in-tint) flows into both automatically while the two sizes
+         stay independent. Used by the Global Default / Personal Default rows
+         (Default Images screen) to show the currently assigned picture. -->
+    <style name="Widget.App.Row.ProfileImage" parent="Widget.App.Row.Icon">
+        <item name="android:layout_width">@dimen/row_profile_image_size</item>
+        <item name="android:layout_height">@dimen/row_profile_image_size</item>
+    </style>
+
     <!-- Toggle row (owner request, July 18 2026): a settings row whose
          whole point is flipping a boolean, not navigating anywhere, so it
          has no chevron and always carries a subtitle. Reuses the shared

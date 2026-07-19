@@ -207,7 +207,7 @@
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintHorizontal_bias="0.0"
                 app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toBottomOf="@+id/tile_roleplay" />
+                app:layout_constraintTop_toBottomOf="@+id/tile_profile_image_properties" />
 
             <androidx.constraintlayout.widget.ConstraintLayout
                 android:id="@+id/constraintLayout8"
@@ -347,6 +347,41 @@
                 <ImageView
                     style="@style/Widget.App.Row.Chevron"
                     android:contentDescription="@string/tile_roleplay_title" />
+            </LinearLayout>
+
+            <!-- Profile Image Properties (profile-images-plan.md ADDENDUM,
+                 Phase 6): a row, not a tile - "tiles are being slowly hunted
+                 to extinction" (owner ruling, July 19 2026). Same
+                 WithSubtitle + Icon pattern as the four rows above it. -->
+            <LinearLayout
+                android:id="@+id/tile_profile_image_properties"
+                style="@style/Widget.App.Row.WithSubtitle"
+                android:paddingHorizontal="20dp"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/tile_roleplay">
+
+                <ImageView
+                    style="@style/Widget.App.Row.Icon"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_photo"
+                    android:tint="?attr/colorPrimary" />
+
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/tile_profile_image_properties_title" />
+
+                    <TextView
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:maxLines="3"
+                        android:text="@string/tile_profile_image_properties_desc" />
+                </LinearLayout>
+
+                <ImageView
+                    style="@style/Widget.App.Row.Chevron"
+                    android:contentDescription="@string/tile_profile_image_properties_title" />
             </LinearLayout>
 
             <LinearLayout

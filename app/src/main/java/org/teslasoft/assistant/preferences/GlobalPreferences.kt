@@ -58,10 +58,14 @@ class GlobalPreferences private constructor(private var gp: SharedPreferences) {
     }
 
     /**
-     * The global Default User Image: the bare hash of a saved Profile Image
-     * used when the active user identity (Roleplay Character, then My Persona)
-     * has no image of its own. "" means none is set. The catalog/files live in
-     * profile_images.db; this only references.
+     * The Personal Default (shown in the UI as "Personal Default"; this key
+     * predates that name - it was "Default User Image" before the Global
+     * Default Image existed, see [getGlobalDefaultImageRef]): the bare hash
+     * of a saved Profile Image used when the active user identity (Roleplay
+     * Character, then My Persona) has no image of its own. Optional - if
+     * unset, the user side falls through to the Global Default. "" means
+     * none is set. The catalog/files live in profile_images.db; this only
+     * references.
      *
      * @return the image hash, or "" for none
      * */
@@ -78,6 +82,32 @@ class GlobalPreferences private constructor(private var gp: SharedPreferences) {
      * */
     fun setDefaultUserImageRef(ref: String) {
         gp.edit().putString("default_user_image_ref", ref).apply()
+    }
+
+    /**
+     * The Global Default Image (owner ruling, July 19 2026 - see the
+     * ADDENDUM in profile-images-plan.md): one shared Profile Image used as
+     * the ultimate fallback on BOTH the Companion side and the user side,
+     * when nothing more specific is available (including when
+     * [getDefaultUserImageRef] - the Personal Default - is itself unset).
+     * "" means not yet seeded; [GlobalDefaultImageSeeder] fills this in
+     * automatically the first time it is needed. A SEPARATE key from
+     * default_user_image_ref - the two are independent preferences.
+     *
+     * @return the image hash, or "" for none
+     * */
+    fun getGlobalDefaultImageRef() : String {
+        return gp.getString("global_default_image_ref", "") ?: ""
+    }
+
+    /**
+     * Set the Global Default Image reference. Pass "" to clear it - this
+     * only drops the reference and never deletes the saved gallery image.
+     *
+     * @param ref the image hash, or "" for none
+     * */
+    fun setGlobalDefaultImageRef(ref: String) {
+        gp.edit().putString("global_default_image_ref", ref).apply()
     }
 
     /**
