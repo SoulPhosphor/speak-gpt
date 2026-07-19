@@ -34,17 +34,21 @@ import java.io.File
 /**
  * One Profile Images gallery tile (profile-images-plan.md, PROFILE IMAGES
  * GALLERY). [file] is null for a Missing tile (a catalog record whose
- * permanent file is gone - RECONCILIATION). [isUsed] drives both the
- * Unused label/filter and, in Selection Mode, whether the tile is
- * selectable at all - a Missing-but-still-referenced record must stay
- * locked exactly like a normal in-use image (its usage did not change,
- * only its file did).
+ * permanent file is gone - RECONCILIATION). [corrupted] is true for a
+ * catalog record whose file EXISTS but will not decode as an image - a
+ * distinct, owner-approved state from Missing (July 19 2026): the file is
+ * there, its content is not. Always false when [file] is null. [isUsed]
+ * drives both the Unused label/filter and, in Selection Mode, whether the
+ * tile is selectable at all; Missing and Corrupted do not change
+ * selectability on their own - a still-referenced record locks exactly
+ * like a normal in-use image regardless of file health.
  */
 data class GalleryTile(
     val hash: String,
     val file: File?,
     val createdAt: Long,
-    val isUsed: Boolean
+    val isUsed: Boolean,
+    val corrupted: Boolean = false
 )
 
 /**
@@ -118,7 +122,8 @@ class ProfileImageGalleryAdapter(
             img.setImageDrawable(null)
 
             val missing = tile.file == null
-            if (missing) {
+            val corrupted = !missing && tile.corrupted
+            if (missing || corrupted) {
                 img.visibility = View.INVISIBLE
                 missingIcon.visibility = View.VISIBLE
             } else {
@@ -128,12 +133,19 @@ class ProfileImageGalleryAdapter(
             }
 
             statusLabel.visibility = View.GONE
-            if (missing) {
-                statusLabel.visibility = View.VISIBLE
-                statusLabel.setText(R.string.profile_image_status_missing)
-            } else if (!tile.isUsed) {
-                statusLabel.visibility = View.VISIBLE
-                statusLabel.setText(R.string.filter_unused)
+            when {
+                missing -> {
+                    statusLabel.visibility = View.VISIBLE
+                    statusLabel.setText(R.string.profile_image_status_missing)
+                }
+                corrupted -> {
+                    statusLabel.visibility = View.VISIBLE
+                    statusLabel.setText(R.string.profile_image_status_corrupted)
+                }
+                !tile.isUsed -> {
+                    statusLabel.visibility = View.VISIBLE
+                    statusLabel.setText(R.string.filter_unused)
+                }
             }
 
             val isSelected = selected.contains(tile.hash)
@@ -166,7 +178,7 @@ class ProfileImageGalleryAdapter(
             root.alpha = if (selectionMode && !selectable) 0.6f else 1f
             root.isEnabled = !selectionMode || selectable
 
-            root.contentDescription = buildContentDescription(tile, missing, isSelected, selectionMode)
+            root.contentDescription = buildContentDescription(tile, missing, corrupted, isSelected, selectionMode)
 
             root.setOnClickListener {
                 if (selectionMode && !selectable) return@setOnClickListener
@@ -177,6 +189,7 @@ class ProfileImageGalleryAdapter(
         private fun buildContentDescription(
             tile: GalleryTile,
             missing: Boolean,
+            corrupted: Boolean,
             isSelected: Boolean,
             inSelectionMode: Boolean
         ): String {
@@ -185,6 +198,7 @@ class ProfileImageGalleryAdapter(
             parts.add(
                 when {
                     missing -> context.getString(R.string.profile_image_status_missing)
+                    corrupted -> context.getString(R.string.profile_image_status_corrupted)
                     tile.isUsed -> context.getString(R.string.filter_in_use)
                     else -> context.getString(R.string.filter_unused)
                 }

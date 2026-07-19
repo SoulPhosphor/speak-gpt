@@ -55,6 +55,7 @@ class ProfileImageDetailBottomSheetDialogFragment : BottomSheetDialogFragment() 
     companion object {
         private const val ARG_HASH = "hash"
         private const val ARG_FILE_PATH = "file_path"
+        private const val ARG_CORRUPTED = "corrupted"
         private const val ARG_DATE_ADDED_LINE = "date_added_line"
         private const val ARG_USED = "used"
         private const val ARG_USAGE_TOTAL_LINE = "usage_total_line"
@@ -64,6 +65,10 @@ class ProfileImageDetailBottomSheetDialogFragment : BottomSheetDialogFragment() 
             hash: String,
             /** Absolute path of the permanent file, or null for a Missing record. */
             filePath: String?,
+            /** True when [filePath] is non-null but its content will not decode
+             *  as an image (Corrupted - distinct from Missing). Ignored when
+             *  [filePath] is null. */
+            corrupted: Boolean,
             /** Already formatted, e.g. "Date Added: July 5, 2026". */
             dateAddedLine: String,
             used: Boolean,
@@ -76,6 +81,7 @@ class ProfileImageDetailBottomSheetDialogFragment : BottomSheetDialogFragment() 
             fragment.arguments = Bundle().apply {
                 putString(ARG_HASH, hash)
                 putString(ARG_FILE_PATH, filePath)
+                putBoolean(ARG_CORRUPTED, corrupted)
                 putString(ARG_DATE_ADDED_LINE, dateAddedLine)
                 putBoolean(ARG_USED, used)
                 putString(ARG_USAGE_TOTAL_LINE, usageTotalLine)
@@ -112,10 +118,11 @@ class ProfileImageDetailBottomSheetDialogFragment : BottomSheetDialogFragment() 
         val hash = args.getString(ARG_HASH) ?: return
         val filePath = args.getString(ARG_FILE_PATH)
         val missing = filePath == null
+        val corrupted = !missing && args.getBoolean(ARG_CORRUPTED)
 
         val imgPreview = view.findViewById<ImageView>(R.id.img_detail_preview)
         val imgMissingIcon = view.findViewById<ImageView>(R.id.img_detail_missing_icon)
-        if (missing) {
+        if (missing || corrupted) {
             imgPreview.visibility = View.INVISIBLE
             imgMissingIcon.visibility = View.VISIBLE
         } else {
@@ -125,8 +132,8 @@ class ProfileImageDetailBottomSheetDialogFragment : BottomSheetDialogFragment() 
         }
 
         view.findViewById<TextView>(R.id.text_detail_status).apply {
-            visibility = if (missing) View.VISIBLE else View.GONE
-            setText(R.string.profile_image_status_missing)
+            visibility = if (missing || corrupted) View.VISIBLE else View.GONE
+            setText(if (corrupted) R.string.profile_image_status_corrupted else R.string.profile_image_status_missing)
         }
 
         view.findViewById<TextView>(R.id.text_detail_date_added).text = args.getString(ARG_DATE_ADDED_LINE)

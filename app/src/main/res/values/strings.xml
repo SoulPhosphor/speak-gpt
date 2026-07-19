@@ -1823,6 +1823,10 @@
     <!-- Owner-approved word, July 19 2026, for a catalog record whose
          permanent file is gone (RECONCILIATION). -->
     <string name="profile_image_status_missing">Missing</string>
+    <!-- Owner-approved word, July 19 2026: a catalog record whose permanent
+         file exists but fails to decode as an image (a distinct state from
+         Missing - the file is there, but its content is unreadable). -->
+    <string name="profile_image_status_corrupted">Corrupted</string>
 
     <!-- Usage identity list (USAGE RESOLUTION example templates). -->
     <plurals name="profile_image_usage_total">

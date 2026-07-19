@@ -431,11 +431,13 @@ class ProfileImagesActivity : FragmentActivity(), ProfileImageDetailBottomSheetD
                     s.reconcile()
                     val usage = ProfileImageUsage.computeAll(this@ProfileImagesActivity)
                     s.listNewestFirst().map { record ->
+                        val file = s.imageFile(record.hash)
                         GalleryTile(
                             hash = record.hash,
-                            file = s.imageFile(record.hash),
+                            file = file,
                             createdAt = record.createdAt,
-                            isUsed = usage.containsKey(record.hash)
+                            isUsed = usage.containsKey(record.hash),
+                            corrupted = file != null && !isDecodableImage(file)
                         )
                     }
                 }
@@ -452,6 +454,19 @@ class ProfileImagesActivity : FragmentActivity(), ProfileImageDetailBottomSheetD
                 applyFilter()
             }
         }
+    }
+
+    /** Corrupted (owner-approved word, July 19 2026): the file exists but its
+     *  content will not decode as an image - a distinct state from Missing
+     *  (the file itself is gone). Bounds-only decode, matching the same
+     *  cheap technique ProfileImageStore.reconcile() already uses to
+     *  validate files - no full bitmap is allocated just to check this. */
+    private fun isDecodableImage(file: File): Boolean = try {
+        val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(file.absolutePath, opts)
+        opts.outWidth > 0 && opts.outHeight > 0
+    } catch (_: Exception) {
+        false
     }
 
     private fun formatDate(millis: Long): String = try {
@@ -488,7 +503,7 @@ class ProfileImagesActivity : FragmentActivity(), ProfileImageDetailBottomSheetD
             withContext(Dispatchers.Main) {
                 if (isFinishing || isDestroyed) return@withContext
                 ProfileImageDetailBottomSheetDialogFragment.newInstance(
-                    tile.hash, tile.file?.absolutePath, dateAddedLine, used, usageTotalLine, identityLines
+                    tile.hash, tile.file?.absolutePath, tile.corrupted, dateAddedLine, used, usageTotalLine, identityLines
                 ).show(supportFragmentManager, "profile_image_detail")
             }
         }
