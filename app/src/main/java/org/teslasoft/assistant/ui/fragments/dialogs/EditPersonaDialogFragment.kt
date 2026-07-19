@@ -17,11 +17,9 @@
 package org.teslasoft.assistant.ui.fragments.dialogs
 
 import android.app.Dialog
-import android.content.Context
 import android.content.Intent
 import android.content.res.ColorStateList
 import android.os.Bundle
-import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -364,7 +362,11 @@ class EditPersonaDialogFragment : DialogFragment() {
         val shape = GlobalPreferences.getPreferences(context).getProfileImageShape()
         ProfileImageBinder.bind(context, imageView, file, shape) { iv ->
             iv.setImageResource(R.drawable.ic_photo)
-            iv.imageTintList = ColorStateList.valueOf(resolveColorPrimary(iv.context))
+            // accent_900 is the app's established glyph tint (see ChatAdapter /
+            // PersonaListItemAdapter) - a plain color resource, avoiding the
+            // com.google.android.material.R.attr.colorPrimary code-side
+            // resolution failure this project has hit in CI before.
+            iv.imageTintList = ColorStateList.valueOf(ContextCompat.getColor(iv.context, R.color.accent_900))
         }
     }
 
@@ -373,12 +375,6 @@ class EditPersonaDialogFragment : DialogFragment() {
             .putExtra(ProfileImagesActivity.EXTRA_ASSIGN_TARGET, ProfileImagesActivity.TARGET_COMPANION)
             .putExtra(ProfileImagesActivity.EXTRA_ASSIGN_CURRENT_HASH, selectedAvatarRef)
         pickPictureLauncher.launch(intent)
-    }
-
-    private fun resolveColorPrimary(context: Context): Int {
-        val tv = TypedValue()
-        context.theme.resolveAttribute(com.google.android.material.R.attr.colorPrimary, tv, true)
-        return if (tv.resourceId != 0) ContextCompat.getColor(context, tv.resourceId) else tv.data
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
