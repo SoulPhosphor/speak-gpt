@@ -197,9 +197,7 @@
                 app:boxCornerRadiusBottomStart="16dp"
                 app:boxCornerRadiusTopEnd="16dp"
                 app:boxCornerRadiusTopStart="16dp"
-                app:boxStrokeColor="@drawable/box_stroke_color"
-                app:helperText="@string/api_endpoint_timeout_help"
-                app:helperTextEnabled="true">
+                app:boxStrokeColor="@drawable/box_stroke_color">
 
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/field_timeout"

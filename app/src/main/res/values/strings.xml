@@ -357,7 +357,6 @@
     <string name="api_endpoint_model_help">Tap to choose from models available on this endpoint.</string>
     <string name="api_endpoint_provider">Provider</string>
     <string name="api_endpoint_timeout">Timeout (in seconds)</string>
-    <string name="api_endpoint_timeout_help">How long to wait for this server to respond before giving up (5–300 seconds). Default is 30. Raise it if this endpoint often times out on slow replies.</string>
     <string name="api_endpoint_timeout_too_low">Timeouts cannot be less than 5 seconds</string>
     <string name="api_endpoint_timeout_too_high">Timeouts cannot be more than 300 seconds</string>
     <string name="title_api_endpoint_profiles">API Chat Endpoint Profiles</string>
