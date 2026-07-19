@@ -81,10 +81,11 @@ abstract class MemoryScreenActivity : FragmentActivity(), MemoryRowAdapter.OnRow
 
     /** The layout to inflate. Default is the shared scaffold
      *  (search/list/FAB plus the button-aware action bar that screens with a
-     *  filter/mode-toggle/secondary action need); override only when a
-     *  screen never uses that reserved action-button space and should get
-     *  the plain Widget.App.ActionBar header instead (see
-     *  MemoryUserPersonasActivity + activity_memory_user_personas.xml). Any
+     *  filter/mode-toggle/secondary action need); override to
+     *  activity_memory_list_simple only when a screen never uses that
+     *  reserved action-button space and should get the plain
+     *  Widget.App.ActionBar header instead (My Personas, Roleplay
+     *  Characters, Worlds, Party Members, Campaigns, Tags all do). Any
      *  override must keep every id this class reads - ids for pieces the
      *  screen doesn't use can simply be absent; findViewById returning null
      *  for those is safe since every hook that touches them is only

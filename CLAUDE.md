@@ -1576,29 +1576,38 @@ Everything is on-device. No cloud sync, no accounts.
   `DefaultImagesActivity`, `activity_characters.xml` (Characters),
   `activity_persona_list.xml` (Companions), and
   `activity_activation_prompt_list.xml` (Activation Prompts) all use it
-  directly — same three style references, same look. **My Personas**
-  (`MemoryUserPersonasActivity`) also uses it, but needed a **new
-  dedicated layout** (`activity_memory_user_personas.xml`) instead of
-  applying the style in place: its header used to come from the shared
-  `activity_memory_list.xml` scaffold, which **11 other** screens built on
-  the same `MemoryScreenActivity` base class also use (Memory Browser,
-  Model Rules, Tags, Worlds, Campaigns, Party Members, Roleplay
-  Characters, etc.) — several of those genuinely need that scaffold's
-  reserved trailing action-button/filter/mode-toggle space, so that shared
-  file couldn't just be restyled without affecting them. My Personas never
-  uses any of that (no action icon, no filter, no mode toggle), so
+  directly — same three style references, same look.
+  **`MemoryScreenActivity`-based screens** (Memory Browser, Model Rules,
+  Tags, Worlds, Campaigns, Party Members, Roleplay Characters, My
+  Personas, etc. — 12 screens total) all share one scaffold layout,
+  `activity_memory_list.xml`, whose header reserves trailing space for an
+  action icon, a secondary action icon, a filter button and a mode
+  toggle — several screens (e.g. Memory Browser) genuinely need that, so
+  the shared file couldn't just be restyled without affecting them. Six of
+  the twelve never wire any of that (no action icon, no secondary action,
+  no filter, no mode toggle): **My Personas, Roleplay Characters, Worlds,
+  Party Members, Campaigns, and Tags.** For those six,
   `MemoryScreenActivity` gained one small override hook,
-  `contentLayoutRes()` (default `R.layout.activity_memory_list`), and
-  `MemoryUserPersonasActivity` overrides it to point at the new file
-  instead — every other `MemoryScreenActivity` subclass is untouched and
-  still gets the original scaffold. The new layout keeps every id the
-  base class reads for the pieces My Personas actually uses (action bar/
+  `contentLayoutRes()` (default `R.layout.activity_memory_list`), and each
+  of the six overrides it to point at a second, shared scaffold instead —
+  **`activity_memory_list_simple.xml`** — which uses the plain
+  `Widget.App.ActionBar` header (same as Characters/Companions/Activation
+  Prompts) instead of the button-aware title. The other six
+  `MemoryScreenActivity` screens are untouched and still get the original
+  scaffold. `activity_memory_list_simple.xml` keeps every id the base
+  class reads for the pieces these six screens actually use (action bar/
   back/title, search bar, empty view, list view, add FAB) and simply omits
-  the ids for pieces it doesn't (action/secondary-action buttons, filter
-  bar/button, mode-toggle row) — safe because the base class's
+  the ids for pieces none of them use (action/secondary-action buttons,
+  filter bar/button, mode-toggle row) — safe because the base class's
   `findViewById` calls for those are all null-tolerant and only reachable
-  when a screen opts into that feature. **Not yet applied anywhere else**
-  — keep rolling it out screen by screen, same as the row styles.
+  when a screen opts into that feature; it's one file so a header tweak
+  still only needs one place changed, matching the six screens exactly
+  the same way the row styles keep rows in sync. Before adding a new
+  `contentLayoutRes()` override to a screen, check it doesn't override
+  `actionIcon()`/`secondaryActionIcon()`/`showFilterBar()`/
+  `showFilterButton()`/`showModeToggle()` first — any of those means it
+  still needs the original scaffold. **Not yet applied to the rest of the
+  app** — keep rolling it out screen by screen, same as the row styles.
 - Match the existing style: nullable `var` view fields + `findViewById`,
   `DialogFragment.newInstance(Bundle)` pattern, listener interfaces with
   default no-op methods, copyright header on every file, strings ONLY in

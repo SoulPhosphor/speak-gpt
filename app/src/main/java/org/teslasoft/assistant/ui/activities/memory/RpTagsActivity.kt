@@ -35,6 +35,7 @@ import org.teslasoft.assistant.ui.adapters.memory.MemoryRow
  */
 class RpTagsActivity : MemoryScreenActivity() {
 
+    override fun contentLayoutRes(): Int = R.layout.activity_memory_list_simple
     override fun screenTitle(): String = getString(R.string.rp_tags_title)
     override fun showSearch(): Boolean = true
 

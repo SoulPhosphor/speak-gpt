@@ -38,6 +38,7 @@ import org.teslasoft.assistant.ui.adapters.memory.MemoryRow
  */
 class MemoryRoleplayCharactersActivity : MemoryScreenActivity() {
 
+    override fun contentLayoutRes(): Int = R.layout.activity_memory_list_simple
     override fun screenTitle(): String = getString(R.string.mem_pers_title_roleplay_characters)
     override fun showSearch(): Boolean = false
     override fun addButtonText(): String = getString(R.string.mem_pers_fab_add_character)

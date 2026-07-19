@@ -16,19 +16,28 @@
 * limitations under the License.
 **************************************************************************/
 -->
-<!-- My Personas' own scaffold (owner ruling, July 19 2026): this screen never
-     uses the shared activity_memory_list.xml scaffold's reserved
-     action-button/filter/mode-toggle/pending-banner space, so it gets the
-     same plain Widget.App.ActionBar header as Characters/Companions/
-     Activation Prompts/Profile Image Properties instead of that scaffold's
-     button-aware title. Only action_bar/btn_back/activity_title,
-     search_bar/field_search, empty_view, list_view and btn_add carry ids
-     MemoryScreenActivity reads - the ids for the pieces this screen doesn't
-     use (btn_action, btn_action_secondary, filter_bar, chips_filter,
-     pending_banner, btn_filter, mode_toggle_container, btn_mode_memories,
-     btn_mode_pending, mode_pending_count) are simply absent; the base
-     class's null-safe findViewById calls make that safe. See
-     MemoryScreenActivity.contentLayoutRes(). -->
+<!-- Shared "simple" scaffold (owner ruling, July 19 2026, generalized from
+     the one-off activity_memory_user_personas.xml): for every
+     MemoryScreenActivity screen that never uses the main scaffold's
+     reserved action-button/filter/mode-toggle/pending-banner space, so it
+     gets the same plain Widget.App.ActionBar header as Characters/
+     Companions/Activation Prompts/Profile Image Properties instead of the
+     button-aware title in activity_memory_list.xml. Only action_bar/
+     btn_back/activity_title, search_bar/field_search, empty_view, list_view
+     and btn_add carry ids MemoryScreenActivity reads - the ids for pieces
+     no screen on this layout uses (btn_action, btn_action_secondary,
+     filter_bar, chips_filter, pending_banner, btn_filter,
+     mode_toggle_container, btn_mode_memories, btn_mode_pending,
+     mode_pending_count) are simply absent; the base class's null-safe
+     findViewById calls make that safe. search_bar/btn_add stay in the XML
+     even for a screen that hides one of them (showSearch()==false /
+     addButtonText()==null) - the base class already toggles their
+     visibility itself, so one shared file covers every combination without
+     per-screen duplication. See MemoryScreenActivity.contentLayoutRes().
+     Used by: My Personas, Roleplay Characters, Worlds, Party Members,
+     Campaigns, Tags - none of the five Roleplay-hub screens wire an action
+     icon, secondary action, filter or mode toggle either, so none of them
+     needed the reserved space they'd been getting from the main scaffold. -->
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/root"
@@ -43,8 +52,9 @@
         android:layout_marginEnd="24dp"
         android:layout_marginBottom="24dp"
         android:clickable="true"
-        android:text="@string/mem_pers_fab_add_persona"
-        android:tooltipText="@string/mem_pers_fab_add_persona"
+        android:text="@string/btn_new_memory"
+        android:tooltipText="@string/btn_new_memory"
+        android:visibility="gone"
         app:elevation="6dp"
         app:icon="@drawable/ic_add"
         app:layout_constraintBottom_toBottomOf="parent"
@@ -61,8 +71,7 @@
 
         <TextView
             android:id="@+id/activity_title"
-            style="@style/Widget.App.ActionBar.Title"
-            android:text="@string/mem_pers_title_user_personas" />
+            style="@style/Widget.App.ActionBar.Title" />
     </androidx.constraintlayout.widget.ConstraintLayout>
 
     <com.google.android.material.textfield.TextInputLayout

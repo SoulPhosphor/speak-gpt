@@ -32,6 +32,7 @@ import org.teslasoft.assistant.ui.adapters.memory.MemoryRow
  */
 class MemoryWorldsActivity : MemoryScreenActivity() {
 
+    override fun contentLayoutRes(): Int = R.layout.activity_memory_list_simple
     override fun screenTitle(): String = getString(R.string.mem_world_title)
     override fun showSearch(): Boolean = false
     override fun addButtonText(): String = getString(R.string.mem_world_add)
