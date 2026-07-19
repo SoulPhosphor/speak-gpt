@@ -28,6 +28,7 @@ import android.view.MotionEvent
 import android.view.ScaleGestureDetector
 import android.view.View
 import org.teslasoft.assistant.preferences.profileimages.ProfileImageTransform
+import kotlin.math.atan2
 import kotlin.math.min
 
 /**
@@ -84,8 +85,15 @@ class FramingView @JvmOverloads constructor(
     private var lastPanX = 0f
     private var lastPanY = 0f
 
+    private var rotationAnchorDeg = 0f
+    private var isTwoFingerRotating = false
+
     /** Fired when the crop first becomes valid (a bitmap is loaded) so the host can enable Done. */
     var onReadyListener: (() -> Unit)? = null
+
+    /** Fired whenever a two-finger twist changes the fine angle, so the host
+     *  can keep the tick dial and readout in sync with the gesture. */
+    var onFineAngleChangedListener: ((Float) -> Unit)? = null
 
     fun hasImage(): Boolean = bitmap != null
 
@@ -220,6 +228,12 @@ class FramingView @JvmOverloads constructor(
                 lastPanX = event.x
                 lastPanY = event.y
             }
+            MotionEvent.ACTION_POINTER_DOWN -> {
+                if (event.pointerCount == 2) {
+                    rotationAnchorDeg = twoFingerAngleDeg(event)
+                    isTwoFingerRotating = true
+                }
+            }
             MotionEvent.ACTION_MOVE -> {
                 if (!scaleDetector.isInProgress && event.pointerCount == 1) {
                     val dx = event.x - lastPanX
@@ -227,16 +241,44 @@ class FramingView @JvmOverloads constructor(
                     lastPanX = event.x
                     lastPanY = event.y
                     params = params.copy(translateX = params.translateX + dx, translateY = params.translateY + dy)
-                    clampAndInvalidate()
                 } else {
                     // A second pointer landed; reset the pan anchor so the next
                     // single-finger move doesn't jump.
                     lastPanX = event.x
                     lastPanY = event.y
+
+                    // Pinch pans/zooms and twists at once, same as any photo
+                    // editor - scale is already handled above by
+                    // scaleDetector; the twist between the two fingers feeds
+                    // the same fine angle the tick dial controls, clamped the
+                    // same way.
+                    if (isTwoFingerRotating && event.pointerCount >= 2) {
+                        val currentDeg = twoFingerAngleDeg(event)
+                        var delta = currentDeg - rotationAnchorDeg
+                        while (delta > 180f) delta -= 360f
+                        while (delta < -180f) delta += 360f
+                        rotationAnchorDeg = currentDeg
+                        if (delta != 0f) {
+                            val newAngle = (params.fineAngleDeg + delta).coerceIn(-45f, 45f)
+                            params = params.copy(fineAngleDeg = newAngle)
+                            onFineAngleChangedListener?.invoke(newAngle)
+                        }
+                    }
                 }
+                clampAndInvalidate()
+            }
+            MotionEvent.ACTION_POINTER_UP -> {
+                isTwoFingerRotating = false
             }
         }
         return true
+    }
+
+    /** Angle in degrees of the line between the first two pointers. */
+    private fun twoFingerAngleDeg(event: MotionEvent): Float {
+        val dx = event.getX(1) - event.getX(0)
+        val dy = event.getY(1) - event.getY(0)
+        return Math.toDegrees(atan2(dy, dx).toDouble()).toFloat()
     }
 
     override fun performClick(): Boolean {

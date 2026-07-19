@@ -17,24 +17,23 @@
 package org.teslasoft.assistant.ui.activities
 
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.view.View
+import android.view.WindowInsets
 import android.widget.ImageButton
-import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.FragmentActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.profileimages.GlobalDefaultImageSeeder
-import org.teslasoft.assistant.preferences.profileimages.ProfileImageStore
 import org.teslasoft.assistant.theme.ThemeManager
-import org.teslasoft.assistant.util.ProfileImageBinder
 
 /**
  * Default Images (profile-images-plan.md ADDENDUM, Phase 6): Global
@@ -42,17 +41,16 @@ import org.teslasoft.assistant.util.ProfileImageBinder
  * [GlobalDefaultImageSeeder]) and Personal Default (user-side only,
  * optional; falls through to the Global Default when unset). Both are
  * assigned through the same Profile Images gallery, in assignment mode.
+ * Plan item 4 approves only "a screen or row group where the user sets
+ * the Global Default and the Personal Default separately" - no leading
+ * preview thumbnail or Remove Picture row on this screen; do not add
+ * either without asking first.
  */
 class DefaultImagesActivity : FragmentActivity() {
 
     companion object {
         private const val STATE_PENDING_ASSIGNMENT = "pending_assignment"
     }
-
-    private var imgGlobalPreview: ImageView? = null
-    private var imgPersonalPreview: ImageView? = null
-    private var rowGlobalRemove: LinearLayout? = null
-    private var rowPersonalRemove: LinearLayout? = null
 
     private val ioScope = CoroutineScope(Dispatchers.IO)
 
@@ -71,7 +69,6 @@ class DefaultImagesActivity : FragmentActivity() {
                 Target.GLOBAL -> preferences.setGlobalDefaultImageRef(hash)
                 Target.PERSONAL -> preferences.setDefaultUserImageRef(hash)
             }
-            refresh()
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -86,33 +83,51 @@ class DefaultImagesActivity : FragmentActivity() {
             runCatching { Target.valueOf(it) }.getOrNull()
         }
 
-        imgGlobalPreview = findViewById(R.id.img_global_default_preview)
-        imgPersonalPreview = findViewById(R.id.img_personal_default_preview)
-        rowGlobalRemove = findViewById(R.id.row_global_default_remove)
-        rowPersonalRemove = findViewById(R.id.row_personal_default_remove)
-
         findViewById<ImageButton>(R.id.btn_back).setOnClickListener { finish() }
 
         findViewById<LinearLayout>(R.id.row_global_default).setOnClickListener {
             launchAssignment(Target.GLOBAL)
         }
-        rowGlobalRemove?.setOnClickListener {
-            GlobalPreferences.getPreferences(this).setGlobalDefaultImageRef("")
-            refresh()
-        }
 
         findViewById<LinearLayout>(R.id.row_personal_default).setOnClickListener {
             launchAssignment(Target.PERSONAL)
-        }
-        rowPersonalRemove?.setOnClickListener {
-            GlobalPreferences.getPreferences(this).setDefaultUserImageRef("")
-            refresh()
         }
     }
 
     override fun onResume() {
         super.onResume()
-        refresh()
+        // Ensures the Global Default is seeded so the assignment gallery
+        // always has it as a catalog entry - off the main thread, since
+        // seeding may write a permanent file.
+        ioScope.launch { GlobalDefaultImageSeeder.ensureSeeded(this@DefaultImagesActivity) }
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        adjustPaddings()
+    }
+
+    private fun adjustPaddings() {
+        if (Build.VERSION.SDK_INT < 35) return
+        try {
+            findViewById<View>(R.id.action_bar)?.setPadding(
+                0,
+                window.decorView.rootWindowInsets.getInsets(WindowInsets.Type.statusBars()).top,
+                0,
+                0
+            )
+            findViewById<ScrollView>(R.id.scroll)?.setPadding(
+                0,
+                0,
+                0,
+                window.decorView.rootWindowInsets.getInsets(WindowInsets.Type.navigationBars()).bottom + pxToDp(24)
+            )
+        } catch (_: Exception) { /* unused */ }
+    }
+
+    private fun pxToDp(px: Int): Int {
+        val density = resources.displayMetrics.density
+        return (px * density).toInt()
     }
 
     override fun onDestroy() {
@@ -133,36 +148,4 @@ class DefaultImagesActivity : FragmentActivity() {
         )
     }
 
-    /** Ensures the Global Default is seeded, then binds both previews from
-     *  live preferences - off the main thread, since seeding may write a
-     *  permanent file and both lookups touch ProfileImageStore. */
-    private fun refresh() {
-        ioScope.launch {
-            val globalHash = GlobalDefaultImageSeeder.ensureSeeded(this@DefaultImagesActivity)
-            val preferences = GlobalPreferences.getPreferences(this@DefaultImagesActivity)
-            val personalHash = preferences.getDefaultUserImageRef()
-            val store = ProfileImageStore.getInstance(this@DefaultImagesActivity)
-            val globalFile = if (globalHash.isNotEmpty()) store.imageFile(globalHash) else null
-            val personalFile = if (personalHash.isNotEmpty()) store.imageFile(personalHash) else null
-            val shape = preferences.getProfileImageShape()
-
-            withContext(Dispatchers.Main) {
-                if (isFinishing || isDestroyed) return@withContext
-
-                imgGlobalPreview?.let { iv ->
-                    ProfileImageBinder.bind(this@DefaultImagesActivity, iv, globalFile, shape) { fallback ->
-                        fallback.setImageResource(R.drawable.ic_user)
-                    }
-                }
-                rowGlobalRemove?.visibility = if (globalFile != null) View.VISIBLE else View.GONE
-
-                imgPersonalPreview?.let { iv ->
-                    ProfileImageBinder.bind(this@DefaultImagesActivity, iv, personalFile, shape) { fallback ->
-                        fallback.setImageResource(R.drawable.ic_user)
-                    }
-                }
-                rowPersonalRemove?.visibility = if (personalFile != null) View.VISIBLE else View.GONE
-            }
-        }
-    }
 }

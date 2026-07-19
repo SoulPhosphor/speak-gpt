@@ -19,12 +19,14 @@ package org.teslasoft.assistant.preferences.profileimages
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffXfermode
 import android.graphics.Rect
 import android.graphics.RectF
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.drawable.DrawableCompat
 import com.bumptech.glide.load.engine.bitmap_recycle.BitmapPool
 import com.bumptech.glide.load.resource.bitmap.BitmapTransformation
 import org.teslasoft.assistant.R
@@ -66,9 +68,22 @@ class ProfileShapeTransformation(context: Context, shape: String) : BitmapTransf
         when (shape) {
             ProfileImageShape.CIRCLE -> canvas.drawOval(RectF(rect), paint)
             else -> { // FLOWER
+                // Only the mask's alpha is ever used (SRC_IN below clips the
+                // source bitmap, the mask's own color never reaches the
+                // output) - so it is tinted to a fixed opaque color here
+                // instead of its declared ?attr/colorPrimary fill. The
+                // drawable is loaded through the Application context
+                // (appContext), which does not carry the per-Activity
+                // palette theme; resolving a theme attribute against it was
+                // silently failing and leaving the mask fully transparent -
+                // i.e. this shape's preview and any Flower-shaped image
+                // rendered nothing at all.
                 val mask = ContextCompat.getDrawable(appContext, R.drawable.mtrl_shape_clover)?.mutate()
-                mask?.setBounds(0, 0, width, height)
-                mask?.draw(canvas)
+                if (mask != null) {
+                    DrawableCompat.setTint(mask, Color.BLACK)
+                    mask.setBounds(0, 0, width, height)
+                    mask.draw(canvas)
+                }
             }
         }
 

@@ -17,12 +17,15 @@
 package org.teslasoft.assistant.ui.activities
 
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
+import android.view.WindowInsets
 import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import androidx.fragment.app.FragmentActivity
 import com.bumptech.glide.Glide
@@ -69,6 +72,34 @@ class ProfileImagePropertiesActivity : FragmentActivity() {
         findViewById<LinearLayout>(R.id.row_default_shape).setOnClickListener {
             showShapePicker()
         }
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        adjustPaddings()
+    }
+
+    private fun adjustPaddings() {
+        if (Build.VERSION.SDK_INT < 35) return
+        try {
+            findViewById<View>(R.id.action_bar)?.setPadding(
+                0,
+                window.decorView.rootWindowInsets.getInsets(WindowInsets.Type.statusBars()).top,
+                0,
+                0
+            )
+            findViewById<ScrollView>(R.id.scroll)?.setPadding(
+                0,
+                0,
+                0,
+                window.decorView.rootWindowInsets.getInsets(WindowInsets.Type.navigationBars()).bottom + pxToDp(24)
+            )
+        } catch (_: Exception) { /* unused */ }
+    }
+
+    private fun pxToDp(px: Int): Int {
+        val density = resources.displayMetrics.density
+        return (px * density).toInt()
     }
 
     /** Default Shape (plan: "a Material single-choice dialog... each choice

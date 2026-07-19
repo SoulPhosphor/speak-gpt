@@ -16,10 +16,12 @@
 * limitations under the License.
 **************************************************************************/
 -->
-<!-- Default Images (profile-images-plan.md ADDENDUM, Phase 6): Global
-     Default and Personal Default, each with a leading shaped preview
-     (Widget.App.Row.ProfileImage) and a Remove Picture row that appears
-     only once a picture is assigned. -->
+<!-- Default Images (profile-images-plan.md ADDENDUM, Phase 6): a row each
+     for Global Default and Personal Default, tapping into the gallery in
+     assignment mode. Plan item 4 specifies only "a screen or row group
+     where the user sets the Global Default and the Personal Default
+     separately" - no leading preview thumbnail or Remove Picture row was
+     ever approved for this screen; do not re-add either without asking. -->
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/root"
@@ -86,11 +88,6 @@
                 style="@style/Widget.App.Row.WithSubtitle"
                 android:layout_marginTop="16dp">
 
-                <ImageView
-                    android:id="@+id/img_global_default_preview"
-                    style="@style/Widget.App.Row.ProfileImage"
-                    android:contentDescription="@null" />
-
                 <LinearLayout style="@style/Widget.App.Row.TextColumn">
 
                     <TextView
@@ -109,26 +106,8 @@
             </LinearLayout>
 
             <LinearLayout
-                android:id="@+id/row_global_default_remove"
-                style="@style/Widget.App.Row.TitleOnly"
-                android:visibility="gone">
-
-                <LinearLayout style="@style/Widget.App.Row.TextColumn">
-
-                    <TextView
-                        style="@style/Widget.App.Row.Title"
-                        android:text="@string/profile_image_remove_picture" />
-                </LinearLayout>
-            </LinearLayout>
-
-            <LinearLayout
                 android:id="@+id/row_personal_default"
                 style="@style/Widget.App.Row.WithSubtitle">
-
-                <ImageView
-                    android:id="@+id/img_personal_default_preview"
-                    style="@style/Widget.App.Row.ProfileImage"
-                    android:contentDescription="@null" />
 
                 <LinearLayout style="@style/Widget.App.Row.TextColumn">
 
@@ -145,19 +124,6 @@
                 <ImageView
                     style="@style/Widget.App.Row.Chevron"
                     android:contentDescription="@string/row_personal_default_title" />
-            </LinearLayout>
-
-            <LinearLayout
-                android:id="@+id/row_personal_default_remove"
-                style="@style/Widget.App.Row.TitleOnly"
-                android:visibility="gone">
-
-                <LinearLayout style="@style/Widget.App.Row.TextColumn">
-
-                    <TextView
-                        style="@style/Widget.App.Row.Title"
-                        android:text="@string/profile_image_remove_picture" />
-                </LinearLayout>
             </LinearLayout>
         </LinearLayout>
     </ScrollView>

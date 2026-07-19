@@ -22,9 +22,12 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.view.View
+import android.view.WindowInsets
 import android.widget.ImageButton
+import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.exifinterface.media.ExifInterface
 import androidx.fragment.app.FragmentActivity
@@ -119,6 +122,13 @@ class ProfileImageFramingActivity : FragmentActivity() {
             btnDone?.isEnabled = true
             updateReadout(framingView?.getFineAngle() ?: 0f)
         }
+        // A two-finger twist inside FramingView also changes the fine angle
+        // directly (see FramingView.onTouchEvent) - keep the dial and readout
+        // in sync with whatever the gesture just set.
+        framingView?.onFineAngleChangedListener = { deg ->
+            rotationDial?.setAngle(deg)
+            updateReadout(deg)
+        }
 
         updateReadout(0f)
 
@@ -131,6 +141,41 @@ class ProfileImageFramingActivity : FragmentActivity() {
             }
             startFreshSession(Uri.parse(uriString))
         }
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        adjustPaddings()
+    }
+
+    /**
+     * A full-bleed editor over the whole screen (edge-to-edge, no
+     * action_bar/scroll shell) - so unlike the plain row-list screens, only
+     * the two overlay control bars need system-bar clearance, not a scrolled
+     * content area. The top-right Flip/Rotate buttons were rendering behind
+     * the status bar (undraggable and invisible); the bottom Cancel/Framing/
+     * Done bar was rendering under the gesture nav bar.
+     */
+    private fun adjustPaddings() {
+        if (Build.VERSION.SDK_INT < 35) return
+        try {
+            val insets = window.decorView.rootWindowInsets
+            val statusBarTop = insets.getInsets(WindowInsets.Type.statusBars()).top
+            val navBarBottom = insets.getInsets(WindowInsets.Type.navigationBars()).bottom
+            val extra8dp = pxToDp(8)
+
+            findViewById<LinearLayout>(R.id.framing_top_controls)?.setPadding(
+                extra8dp, statusBarTop + extra8dp, extra8dp, extra8dp
+            )
+            findViewById<LinearLayout>(R.id.framing_bottom)?.setPadding(
+                extra8dp, 0, extra8dp, navBarBottom + extra8dp
+            )
+        } catch (_: Exception) { /* unused */ }
+    }
+
+    private fun pxToDp(px: Int): Int {
+        val density = resources.displayMetrics.density
+        return (px * density).toInt()
     }
 
     /* ----------------------------- loading ----------------------------- */
