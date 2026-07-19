@@ -1660,6 +1660,50 @@ Everything is on-device. No cloud sync, no accounts.
     `getDisabledDrawable`/`getDisabledColor` "muted" look Logs also had —
     this pre-shared-style convention appeared in both places and is now
     retired in favor of the standard look).
+  **Next batch (July 19 2026), after an app-wide audit for every screen
+  with a raw header — chat screens excluded, they're inherently
+  different):**
+  - `LocalWhisperManageActivity`/`LocalWhisperModelsActivity`
+    (`activity_local_whisper_manage.xml`/`activity_local_whisper_models.xml`)
+    — the same old floating-title-no-bar look Logs had; converted the same
+    way, `getDisabledDrawable`/`getDisabledColor` dropped from both in
+    favor of the tint-list pattern.
+  - `LoreBookEntriesActivity`/`LoreBooksListActivity`
+    (`activity_lorebook_entries.xml`/`activity_lorebooks_list.xml`) — both
+    already used the exact tint-list AMOLED pattern and
+    `btn_accent_icon_large_100`-based icon geometry, so this was a pure
+    XML swap with zero Kotlin changes. Entries has two chained icons
+    (edit-book, debug); per `Widget.App.ActionBar.SecondaryButton`'s own
+    doc comment, only the edge-anchored one (`btn_debug`) uses the style —
+    the inner one (`btn_edit_book`) keeps its geometry written out
+    directly since it chains `layout_constraintEnd_toStartOf` the other
+    icon instead of the parent edge.
+  - `LogitBiasConfigListActivity`/`LogitBiasConfigActivity`
+    (`activity_logit_bias_config_list.xml`/`activity_logit_bias_list.xml`)
+    — same trio + `SecondaryButton` for the help icon; also dropped a
+    redundant `android:backgroundTint="?attr/colorSurfaceContainerHigh"`
+    on the back/help buttons that the `btn_accent_icon_large_100` drawable
+    already bakes in as its own fill color — removing it changes nothing
+    visually. `LogitBiasConfigActivity` (the single-set editor) does no
+    AMOLED recoloring at all for this screen and still doesn't; that gap
+    predates this change and wasn't introduced by it.
+  - `VoiceSettingsActivity` (`activity_voice_settings.xml`, "Voice &
+    Speech") — the same `expandable_window` slide-in-panel header-scrolls-
+    away shape Settings had, fixed the same way (header pinned above the
+    `ScrollView`, `adjustPaddings()` split between `action_bar` and
+    `scrollable`). Only one child under `expandable_window` here (no
+    `thread_loading`-style overlay to preserve stacking order for), so the
+    outer `LinearLayout` converts to `ConstraintLayout` directly instead
+    of needing Settings' extra `content` wrapper. This screen previously
+    had no AMOLED recolor at all for its header bar/back button (there
+    was no bar); both now follow the standard tint-list pattern like
+    every other converted screen.
+  Deliberately NOT touched in this batch (owner said to hold off,
+  July 19 2026): the Profile Images gallery
+  (`activity_profile_images.xml`) — it has its own management-mode
+  selection icon and was explicitly excluded pending further review, so
+  it's the one entry in the July 19 audit list still on raw XML by
+  request rather than by finding a structural blocker.
 - Match the existing style: nullable `var` view fields + `findViewById`,
   `DialogFragment.newInstance(Bundle)` pattern, listener interfaces with
   default no-op methods, copyright header on every file, strings ONLY in

@@ -226,15 +226,35 @@
          (activity_audio_debugging.xml, "Voice Debugging" tile); LogsActivity
          (activity_logs.xml, all four log pages) via this trio PLUS
          Widget.App.ActionBar.SecondaryButton below (its Event-log-only
-         voice-advanced shortcut icon); and SettingsActivity
+         voice-advanced shortcut icon); SettingsActivity
          (activity_settings.xml, main Settings screen), restructured same
          day so the header pins above the ScrollView instead of scrolling
          away with it (see the CLAUDE.md rollout-status note for the
-         restructure details). Title size raised 20sp -> 24sp same day to
-         match the size these screens already used before conversion
-         (owner ruling: match the existing look, not the smaller size
-         introduced with the first two screens). Not yet applied to the
-         rest of the app; keep rolling out screen by screen. -->
+         restructure details); LocalWhisperManageActivity and
+         LocalWhisperModelsActivity (activity_local_whisper_manage.xml/
+         activity_local_whisper_models.xml - the old floating-title-no-bar
+         look, now gets the colored bar for the first time);
+         LoreBookEntriesActivity and LoreBooksListActivity
+         (activity_lorebook_entries.xml/activity_lorebooks_list.xml,
+         via this trio plus SecondaryButton for their debug/edit-book
+         icons - entries has two chained icons, see SecondaryButton's own
+         doc comment below for how the inner one is handled); and
+         LogitBiasConfigListActivity/LogitBiasConfigActivity
+         (activity_logit_bias_config_list.xml/activity_logit_bias_list.xml,
+         via this trio plus SecondaryButton for their help icon - also
+         dropped a redundant android:backgroundTint on the buttons that
+         just re-stated the same colorSurfaceContainerHigh the drawable
+         already bakes in) - and VoiceSettingsActivity
+         (activity_voice_settings.xml, "Voice & Speech"), restructured the
+         same way as Settings so its header pins too (same
+         expandable_window slide-in-panel shape, but only one child, so
+         the outer LinearLayout converts to ConstraintLayout directly
+         instead of needing Settings' extra wrapper). Title size raised
+         20sp -> 24sp same day to match the size these screens already
+         used before conversion (owner ruling: match the existing look,
+         not the smaller size introduced with the first two screens).
+         Not yet applied to the rest of the app; keep rolling out screen
+         by screen. -->
     <style name="Widget.App.ActionBar" parent="">
         <item name="android:layout_width">0dp</item>
         <item name="android:layout_height">wrap_content</item>

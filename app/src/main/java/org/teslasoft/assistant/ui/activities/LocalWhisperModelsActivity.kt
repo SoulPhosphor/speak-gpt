@@ -17,8 +17,8 @@
 package org.teslasoft.assistant.ui.activities
 
 import android.content.Intent
+import android.content.res.ColorStateList
 import android.content.res.Configuration
-import android.graphics.drawable.Drawable
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -27,7 +27,6 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
-import androidx.core.graphics.drawable.DrawableCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.button.MaterialButton
@@ -58,6 +57,7 @@ class LocalWhisperModelsActivity : FragmentActivity() {
 
     private var preferences: Preferences? = null
     private var root: ConstraintLayout? = null
+    private var actionBar: ConstraintLayout? = null
     private var btnBack: ImageButton? = null
     private var btnManage: MaterialButton? = null
     private var activeModelLabel: TextView? = null
@@ -87,6 +87,7 @@ class LocalWhisperModelsActivity : FragmentActivity() {
         preferences = Preferences.getPreferences(this, "")
 
         root = findViewById(R.id.root)
+        actionBar = findViewById(R.id.action_bar)
         btnBack = findViewById(R.id.btn_back)
         btnManage = findViewById(R.id.btn_manage_models)
         activeModelLabel = findViewById(R.id.active_model_label)
@@ -300,11 +301,13 @@ class LocalWhisperModelsActivity : FragmentActivity() {
             if (isDarkThemeEnabled() && preferences?.getAmoledPitchBlack() == true) {
                 window.setBackgroundDrawableResource(R.color.amoled_window_background)
                 root?.setBackgroundColor(ResourcesCompat.getColor(resources, R.color.amoled_window_background, theme))
-                btnBack?.setBackgroundResource(R.drawable.btn_accent_icon_large_amoled)
+                actionBar?.setBackgroundColor(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
+                btnBack?.backgroundTintList = ColorStateList.valueOf(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
             } else {
                 window.setBackgroundDrawableResource(R.color.window_background)
                 root?.setBackgroundColor(SurfaceColors.SURFACE_0.getColor(this))
-                btnBack?.background = getDisabledDrawable(ResourcesCompat.getDrawable(resources, R.drawable.btn_accent_icon_large, theme)!!)
+                actionBar?.setBackgroundColor(SurfaceColors.SURFACE_4.getColor(this))
+                btnBack?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(this))
             }
         } catch (_: Exception) {
             window.setBackgroundDrawableResource(R.color.window_background)
@@ -317,16 +320,4 @@ class LocalWhisperModelsActivity : FragmentActivity() {
         Configuration.UI_MODE_NIGHT_YES -> true
         else -> false
     }
-
-    private fun getDisabledDrawable(drawable: Drawable): Drawable {
-        DrawableCompat.setTint(DrawableCompat.wrap(drawable), getDisabledColor())
-        return drawable
-    }
-
-    private fun getDisabledColor(): Int =
-        if (isDarkThemeEnabled() && preferences?.getAmoledPitchBlack() == true) {
-            ResourcesCompat.getColor(resources, R.color.accent_50, theme)
-        } else {
-            SurfaceColors.SURFACE_5.getColor(this)
-        }
 }
