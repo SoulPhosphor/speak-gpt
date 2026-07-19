@@ -32,6 +32,7 @@ import androidx.core.widget.doAfterTextChanged
 import androidx.fragment.app.FragmentActivity
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.elevation.SurfaceColors
+import com.google.android.material.snackbar.Snackbar
 import com.google.android.material.slider.Slider
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
@@ -393,6 +394,13 @@ class ApiEndpointEditorActivity : FragmentActivity() {
             return
         }
 
+        // Timeout out of range: tell the user with a snackbar, correct the field
+        // to the boundary, and stop this save so they can see the corrected value
+        // and save again.
+        if (!checkTimeoutInRange()) {
+            return
+        }
+
         // Plain-http endpoints send the key and all content unencrypted. Allowed
         // (local/LAN servers are legitimate), but only after explicit consent.
         if (host.startsWith("http://")) {
@@ -406,6 +414,38 @@ class ApiEndpointEditorActivity : FragmentActivity() {
         }
 
         commitSave()
+    }
+
+    /**
+     * Validate the typed timeout. A blank / non-numeric field is left to the
+     * default (in range) and passes silently. A value below the minimum or above
+     * the maximum shows the matching snackbar, rewrites the field to the boundary
+     * value, and returns false so the caller stops the save.
+     */
+    private fun checkTimeoutInRange(): Boolean {
+        val typed = fieldTimeout?.text.toString().toIntOrNull() ?: return true
+
+        if (typed < ApiEndpointObject.MIN_TIMEOUT_SECONDS) {
+            fieldTimeout?.setText(ApiEndpointObject.MIN_TIMEOUT_SECONDS.toString())
+            showTimeoutSnackbar(R.string.api_endpoint_timeout_too_low)
+            return false
+        }
+
+        if (typed > ApiEndpointObject.MAX_TIMEOUT_SECONDS) {
+            fieldTimeout?.setText(ApiEndpointObject.MAX_TIMEOUT_SECONDS.toString())
+            showTimeoutSnackbar(R.string.api_endpoint_timeout_too_high)
+            return false
+        }
+
+        return true
+    }
+
+    /** Snackbar with an Okay button that stays until the user dismisses it. */
+    private fun showTimeoutSnackbar(messageRes: Int) {
+        val root = findViewById<android.view.View>(R.id.root) ?: return
+        Snackbar.make(root, getString(messageRes), Snackbar.LENGTH_INDEFINITE)
+            .setAction(R.string.okay) { /* dismiss */ }
+            .show()
     }
 
     private fun commitSave() {
