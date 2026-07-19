@@ -1789,10 +1789,20 @@
     <string name="framing_load_error_body">This image is no longer available or could not be opened. Please try a new image.</string>
     <string name="framing_load_error_button">Return to Gallery</string>
 
-    <!-- ============ Profile Images: Gallery (owner-approved copy, July 19
-         2026 — verbatim from profile-images-plan.md unless noted; do not
-         reword without explicit approval in chat) ============ -->
-    <string name="title_profile_images">Profile Images</string>
+    <!-- ============ Avatar Image Gallery (formerly "Profile Images", owner
+         ruling July 19 2026 - see below). This block was originally copied
+         verbatim from profile-images-plan.md and labeled "owner-approved"
+         on that basis - the owner has since corrected that: text existing
+         only in the plan document is NOT approved, only what the owner
+         actually said in chat is. Do not reword any of this without
+         explicit chat approval, and do not treat the plan document as a
+         substitute for it. ============ -->
+    <!-- Renamed from "Profile Images" to "Avatar Image Gallery" (owner
+         instruction, July 19 2026). Other strings that use the phrase
+         "Profile Images" descriptively (profile_image_empty_all_title,
+         profile_image_delete_confirm_body_one) were deliberately left
+         alone pending the owner's word on whether those should follow. -->
+    <string name="title_profile_images">Avatar Image Gallery</string>
     <string name="profile_image_cancel_selection">Cancel Selection</string>
     <string name="profile_image_select">Select</string>
     <!-- Live selection count, e.g. "4 Selected" (plan example). -->
