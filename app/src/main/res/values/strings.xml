@@ -1824,7 +1824,7 @@
     <string name="filter_active">Active</string>
     <string name="filter_inactive">Inactive</string>
     <string name="profile_image_show_labels">Show Labels</string>
-    <string name="profile_image_status_default">Default</string>
+    <string name="profile_image_status_default">Assigned</string>
     <string name="profile_image_set_as_default">Set as Default</string>
 
     <!-- Empty states -->
