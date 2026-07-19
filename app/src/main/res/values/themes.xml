@@ -219,7 +219,11 @@
          icon, secondary action, filter or mode toggle, so none of them
          needed the reserved space activity_memory_list.xml's button-aware
          title still gives the OTHER MemoryScreenActivity screens that do
-         (e.g. Memory Browser, Model Rules). Title size raised 20sp -> 24sp same day to match the size these
+         (e.g. Memory Browser, Model Rules); AlertDebugMenuActivity
+         (activity_alert_debug_menu.xml, "Alerts, Errors & Logs"),
+         VoiceAdvancedSettingsActivity (activity_voice_advanced.xml,
+         "Advanced Voice Settings") and AudioDebuggingActivity
+         (activity_audio_debugging.xml, "Voice Debugging" tile). Title size raised 20sp -> 24sp same day to match the size these
          screens already used before conversion (owner ruling: match the
          existing look, not the smaller size introduced with the first two
          screens). Not yet applied to the rest of the app; keep rolling out

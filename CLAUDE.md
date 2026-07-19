@@ -1606,8 +1606,31 @@ Everything is on-device. No cloud sync, no accounts.
   `contentLayoutRes()` override to a screen, check it doesn't override
   `actionIcon()`/`secondaryActionIcon()`/`showFilterBar()`/
   `showFilterButton()`/`showModeToggle()` first — any of those means it
-  still needs the original scaffold. **Not yet applied to the rest of the
-  app** — keep rolling it out screen by screen, same as the row styles.
+  still needs the original scaffold. Also converted directly (plain
+  screens, same three-style pattern as Characters/Companions/Activation
+  Prompts, no structural quirks): `activity_alert_debug_menu.xml`
+  (Alerts, Errors & Logs), `activity_voice_advanced.xml` (Advanced Voice
+  Settings), `activity_audio_debugging.xml` (Voice Debugging tile).
+  **Deliberately NOT converted — flagged to the owner, July 19 2026,
+  rather than restyled in place:**
+  - `activity_logs.xml` (the four log pages — Crash/Error, Event/Voice
+    Debug, Memory, Performance — all share this one layout via
+    `LogsActivity`) has no `action_bar` bar at all (title floats directly
+    on the screen background) and, on the Event log only, a real second
+    icon button (`btn_voice_advanced`, the terminal-icon jump to Advanced
+    Voice Settings) that `Widget.App.ActionBar` has no slot for — this is
+    exactly the "wiring for an icon" case the owner said to stop on rather
+    than convert.
+  - `activity_settings.xml` (the main Settings screen, `title_control_center`
+    — renamed from "Control center" to "Settings" July 19 2026, string
+    change only) is a slide-in side panel, not a plain full-screen
+    activity: its back button + title live INSIDE the same big
+    scrollable `ConstraintLayout` as every category header and tile, so
+    they currently scroll away with the body. `Widget.App.ActionBar`
+    assumes a header pinned above a separate `ScrollView` — applying it
+    here isn't a same-look restyle, it would change scroll behavior
+    (header becomes fixed, currently it isn't) and needs a real layout
+    restructure, not a style swap.
 - Match the existing style: nullable `var` view fields + `findViewById`,
   `DialogFragment.newInstance(Bundle)` pattern, listener interfaces with
   default no-op methods, copyright header on every file, strings ONLY in
