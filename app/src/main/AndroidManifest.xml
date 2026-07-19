@@ -108,6 +108,21 @@
             android:exported="false"
             android:label="@string/framing_title" />
 
+        <activity
+            android:name=".ui.activities.ProfileImagesActivity"
+            android:exported="false"
+            android:label="@string/title_profile_images" />
+
+        <activity
+            android:name=".ui.activities.ProfileImagePropertiesActivity"
+            android:exported="false"
+            android:label="@string/tile_profile_image_properties_title" />
+
+        <activity
+            android:name=".ui.activities.DefaultImagesActivity"
+            android:exported="false"
+            android:label="@string/row_default_images_title" />
+
 
         <activity
             android:name=".ui.activities.LoreBookEntriesActivity"
