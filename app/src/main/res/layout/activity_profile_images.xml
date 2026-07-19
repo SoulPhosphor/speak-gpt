@@ -170,12 +170,12 @@
         </FrameLayout>
     </androidx.constraintlayout.widget.ConstraintLayout>
 
-    <!-- Show Labels (left, plain text + switch, tapping the text also
-         toggles it - never a chip/tile) and the Filter dropdown (right:
-         All / Active / Inactive) replacing the old filter chip row (owner
-         ruling, July 19 2026). Both stay enabled/disabled together with
-         Selection Mode exactly like the old chips did, so filtering cannot
-         silently discard the current selection. -->
+    <!-- Filter dropdown (left: All / Active / Inactive) and Show Labels
+         (right, plain text + switch, tapping the text also toggles it -
+         never a chip/tile) replacing the old filter chip row (owner ruling,
+         July 19 2026). Both stay enabled/disabled together with Selection
+         Mode exactly like the old chips did, so filtering cannot silently
+         discard the current selection. -->
     <LinearLayout
         android:id="@+id/labels_filter_row"
         android:layout_width="0dp"
@@ -186,6 +186,26 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/action_bar">
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/filter_dropdown_layout"
+            style="@style/App.ExposedTextField"
+            android:layout_width="130dp"
+            android:layout_height="wrap_content"
+            android:hint="@string/profile_image_filter_label">
+
+            <AutoCompleteTextView
+                android:id="@+id/filter_dropdown"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:inputType="none" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
 
         <TextView
             android:id="@+id/text_show_labels"
@@ -206,25 +226,6 @@
             android:layout_marginStart="4dp"
             android:checked="true"
             android:contentDescription="@string/profile_image_show_labels" />
-
-        <View
-            android:layout_width="0dp"
-            android:layout_height="0dp"
-            android:layout_weight="1" />
-
-        <com.google.android.material.textfield.TextInputLayout
-            android:id="@+id/filter_dropdown_layout"
-            style="@style/App.ExposedTextField"
-            android:layout_width="130dp"
-            android:layout_height="wrap_content"
-            android:hint="@string/profile_image_filter_label">
-
-            <AutoCompleteTextView
-                android:id="@+id/filter_dropdown"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:inputType="none" />
-        </com.google.android.material.textfield.TextInputLayout>
     </LinearLayout>
 
     <LinearLayout
