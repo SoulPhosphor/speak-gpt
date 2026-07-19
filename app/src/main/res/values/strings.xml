@@ -1788,4 +1788,71 @@
     <string name="framing_load_error_title">Unable to Open Image</string>
     <string name="framing_load_error_body">This image is no longer available or could not be opened. Please try a new image.</string>
     <string name="framing_load_error_button">Return to Gallery</string>
+
+    <!-- ============ Profile Images: Gallery (owner-approved copy, July 19
+         2026 — verbatim from profile-images-plan.md unless noted; do not
+         reword without explicit approval in chat) ============ -->
+    <string name="title_profile_images">Profile Images</string>
+    <string name="profile_image_cancel_selection">Cancel Selection</string>
+    <string name="profile_image_select">Select</string>
+    <!-- Live selection count, e.g. "4 Selected" (plan example). -->
+    <string name="profile_image_selection_count">%1$d Selected</string>
+    <string name="profile_image_select_all_shown">Select All Shown</string>
+    <string name="profile_image_upload_new">Upload New</string>
+    <string name="profile_image_delete_selected">Delete Selected</string>
+
+    <string name="filter_all_images">All Images</string>
+    <string name="filter_in_use">In Use</string>
+    <string name="filter_unused">Unused</string>
+
+    <!-- Empty states -->
+    <string name="profile_image_empty_all_title">No Profile Images</string>
+    <string name="profile_image_empty_all_body">Upload an image to add it to the gallery.</string>
+    <string name="profile_image_empty_in_use_title">No Images in Use</string>
+    <string name="profile_image_empty_in_use_body">Images assigned to profiles will appear here.</string>
+    <string name="profile_image_empty_unused_title">No Unused Images</string>
+    <string name="profile_image_empty_unused_body">Saved images that are no longer assigned will appear here.</string>
+
+    <!-- Image Detail and View Usage -->
+    <string name="profile_image_view_usage">View Usage</string>
+    <string name="profile_image_delete_permanently">Delete Permanently</string>
+    <!-- Owner-approved, July 19 2026: exact capitalization/format is
+         "Date Added: July 5, 2026" - the date itself is formatted in code
+         with the same MMMM d, yyyy pattern already used elsewhere in the app. -->
+    <string name="profile_image_date_added">Date Added: %1$s</string>
+    <!-- Owner-approved word, July 19 2026, for a catalog record whose
+         permanent file is gone (RECONCILIATION). -->
+    <string name="profile_image_status_missing">Missing</string>
+
+    <!-- Usage identity list (USAGE RESOLUTION example templates). -->
+    <plurals name="profile_image_usage_total">
+        <item quantity="one">Used by %1$d profile</item>
+        <item quantity="other">Used by %1$d profiles</item>
+    </plurals>
+    <string name="profile_image_usage_companion">Companion: %1$s</string>
+    <string name="profile_image_usage_my_persona">My Persona: %1$s</string>
+    <string name="profile_image_usage_roleplay_character">Roleplay Character: %1$s</string>
+    <string name="profile_image_usage_default_user_image">Default User Image</string>
+
+    <!-- CONFIRMATION WORDING -->
+    <string name="profile_image_delete_confirm_title_one">Permanently delete this image?</string>
+    <string name="profile_image_delete_confirm_body_one">This removes the image from Profile Images. It cannot be restored unless you upload it again.</string>
+    <string name="profile_image_delete_confirm_title_many">Permanently delete %1$d images?</string>
+    <string name="profile_image_delete_confirm_body_many">These images are not currently assigned to any profiles. They cannot be restored unless you upload them again.</string>
+    <string name="profile_image_delete_confirm_button_many">Delete %1$d Images</string>
+    <string name="profile_image_delete_confirm_title_all_shown">Delete all %1$d unused images?</string>
+    <string name="profile_image_delete_confirm_body_all_shown">This permanently removes every unused image currently shown. Images assigned to profiles will not be deleted.</string>
+    <string name="profile_image_delete_confirm_button_all_shown">Delete All %1$d Images</string>
+    <string name="profile_image_some_not_deleted">Some images were not deleted because they are now in use.</string>
+
+    <!-- Upload/save failure (owner-approved copy, July 19 2026). Same title
+         for both; the body differs by whether the cause is known. -->
+    <string name="profile_image_save_error_title">Image Failed to Save</string>
+    <string name="profile_image_save_error_no_space_body">Not enough free space on device to save image. Please try again after making space.</string>
+    <string name="profile_image_save_error_generic_body">Something went wrong. Please try again.</string>
+
+    <!-- Accessibility: content descriptions and announcements. -->
+    <string name="profile_image_content_description">Profile Image, added %1$s</string>
+    <string name="profile_image_state_selected">Selected</string>
+    <string name="profile_image_state_not_selected">Not selected</string>
 </resources>
