@@ -38,8 +38,9 @@ class ProfileImageShapeTest {
     }
 
     @Test
-    fun defaultIsFlower() {
-        assertEquals(ProfileImageShape.FLOWER, ProfileImageShape.DEFAULT)
+    fun defaultIsCircle() {
+        // Owner ruling (July 19 2026): Circle is the default shape.
+        assertEquals(ProfileImageShape.CIRCLE, ProfileImageShape.DEFAULT)
     }
 
     @Test

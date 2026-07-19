@@ -2181,3 +2181,31 @@ These supersede the sections named wherever they differ.
    The pinch is unchanged and stays in sync with the bar. The screen-
    reader word for it ("Zoom", string framing_zoom) was chosen when
    added; the owner may change it.
+
+----------------------------------------------------------------------
+ADDENDUM 3 — owner rulings made in chat, July 19 2026 (evening)
+----------------------------------------------------------------------
+
+9.  DEFAULT SHAPE IS CIRCLE, not Flower (ProfileImageShape.DEFAULT and
+    GlobalPreferences.getProfileImageShape default). Supersedes "Default
+    value: flower" in REFERENCE STORAGE / Default Shape.
+
+10. THE FLOWER (CLOVER) SHAPE IS DRAWN FROM ITS PATH, not from the
+    mtrl_shape_clover drawable. The drawable's ?attr/colorPrimary fill did
+    not resolve against the Application context the Glide transformation
+    runs on, so the mask came out transparent and Flower-shaped pictures
+    rendered nothing. ProfileShapeTransformation now fills the clover path
+    directly with an opaque paint (path copied from the drawable). Do not
+    reintroduce a theme-attr dependency in that mask.
+
+11. THE COMPANION EDITOR/LIST WORDING says "Companion", not "persona"
+    (owner: "called a companion instead of a persona"). Applied
+    selectively to the Companion editor/list strings only - the separate
+    "My Persona" feature and the strings that explain companions are built
+    from personas were deliberately left unchanged.
+
+12. THE COMPANION LIST ROWS are image + title only: the prompt-preview
+    subtitle was dropped from view_persona_item.xml. Avatar-picture rows
+    already use a larger leading slot (Widget.App.Row.ProfileImage, 48dp)
+    than icon rows (Widget.App.Row.Icon, 36dp); whether to enlarge it
+    further is deferred pending the owner seeing the title-only row.

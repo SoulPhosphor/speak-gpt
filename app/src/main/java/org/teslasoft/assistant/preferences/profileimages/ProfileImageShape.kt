@@ -29,8 +29,9 @@ object ProfileImageShape {
     const val CIRCLE = "circle"
     const val SQUARE = "square"
 
-    /** The GlobalPreferences default (plan: "Default value: flower"). */
-    const val DEFAULT = FLOWER
+    /** The GlobalPreferences default. Owner ruling (July 19 2026): Circle is
+     *  the default shape when none has been chosen (was Flower). */
+    const val DEFAULT = CIRCLE
 
     private val KNOWN = setOf(FLOWER, CIRCLE, SQUARE)
 

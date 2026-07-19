@@ -199,7 +199,7 @@
     <string name="btn_new_api_endpoint">Add profile</string>
     <string name="label_persona">Persona</string>
     <string name="title_personas">Companions</string>
-    <string name="btn_new_persona">Add persona</string>
+    <string name="btn_new_persona">Add Companion</string>
     <string name="label_add_persona">Add persona</string>
     <!-- Full-screen Companion editor header (owner-approved words, July 19 2026):
          "Edit Companion" when editing, "Companion Creation" for a new one. -->
@@ -214,7 +214,7 @@
     <string name="title_lorebooks">Lorebooks</string>
     <string name="lorebook_subtitle">Check the lorebooks to use in this chat</string>
     <string name="lorebook_core_always_active">Core: %1$s (always active)</string>
-    <string name="lorebook_none_linked">No additional lorebooks are linked to this persona yet. Link them from the persona\'s edit screen.</string>
+    <string name="lorebook_none_linked">No additional lorebooks are linked to this Companion yet. Link them from the Companion\'s edit screen.</string>
     <string name="lorebook_none_yet">No lorebooks yet. Create them under Characters &#8594; Lorebooks.</string>
     <string name="lorebook_tag_hint">Type tag (optional)</string>
     <string name="lorebook_tag_help">One word or phrase describing the kind of book, e.g. Characters, World, Plot. Used for filtering.</string>
@@ -224,10 +224,10 @@
     <string name="title_add_lorebooks">Add lorebooks</string>
     <string name="btn_save_and_close">Save and close</string>
     <string name="btn_add_lorebooks">Add lorebooks</string>
-    <string name="btn_unlink_lorebook">Unlink from this persona</string>
+    <string name="btn_unlink_lorebook">Unlink from this Companion</string>
     <string name="btn_delete_lorebook">Delete lorebook</string>
     <string name="persona_core_lorebook_hint">Core lorebook</string>
-    <string name="persona_core_lorebook_help">Always active while this persona is used. Optional.</string>
+    <string name="persona_core_lorebook_help">Always active while this Companion is used. Optional.</string>
     <string name="persona_additional_lorebooks">Additional lorebooks</string>
     <string name="persona_no_additional_lorebooks">No lorebooks linked yet.</string>
     <string name="persona_autoload_lorebooks">Automatically enable the last-used lorebooks in new chats</string>
@@ -272,13 +272,13 @@
     <string name="lorebook_debug_empty">No memories have been injected yet. Create a memory with a trigger, then send a message containing that trigger.</string>
     <string name="lorebook_debug_clear">Clear</string>
     <string name="label_edit_persona">Edit persona</string>
-    <string name="label_delete_persona">Delete persona</string>
-    <string name="message_delete_persona">Are you sure you want to delete this persona? This action cannot be undone.</string>
-    <string name="persona_friendly_name">Persona name</string>
-    <string name="persona_prompt_hint">Persona prompt</string>
+    <string name="label_delete_persona">Delete Companion</string>
+    <string name="message_delete_persona">Are you sure you want to delete this Companion? This action cannot be undone.</string>
+    <string name="persona_friendly_name">Companion name</string>
+    <string name="persona_prompt_hint">Companion prompt</string>
     <string name="persona_prompt_help">Sent before your system message at the start of every request.</string>
-    <string name="label_error_persona_empty">Please enter a persona name</string>
-    <string name="label_persona_none">No persona</string>
+    <string name="label_error_persona_empty">Please enter a Companion name</string>
+    <string name="label_persona_none">No Companion</string>
     <string name="create_first_companion_message">Please create a new companion to begin a chat.</string>
     <string name="create_first_companion_button">Create Companion</string>
     <string name="btn_attach">Attach</string>
@@ -454,7 +454,7 @@
     <string name="tile_characters_desc">Companions, activation prompts and your system message — all in one place.</string>
     <string name="title_characters">Characters</string>
     <string name="tile_activation_prompts_title">Activation Prompts</string>
-    <string name="tile_activation_prompts_desc">Reusable opening messages. Create several, give each a title, and attach one to a persona.</string>
+    <string name="tile_activation_prompts_desc">Reusable opening messages. Create several, give each a title, and attach one to a Companion.</string>
     <string name="title_activation_prompts">Activation Prompts</string>
     <string name="btn_new_activation_prompt">Add activation prompt</string>
     <string name="label_add_activation_prompt">Add activation prompt</string>
@@ -467,9 +467,9 @@
     <string name="label_error_activation_prompt_empty">Please enter a title</string>
     <string name="label_activation_none">None</string>
     <string name="persona_activation_hint">Activation prompt</string>
-    <string name="persona_activation_help">The activation prompt to use with this persona. None is always available.</string>
+    <string name="persona_activation_help">The activation prompt to use with this Companion. None is always available.</string>
     <string name="label_activation">Activation</string>
-    <string name="btn_edit_persona">Edit persona</string>
+    <string name="btn_edit_persona">Edit Companion</string>
     <string name="btn_edit_activation_prompt">Edit activation prompt</string>
     <string name="tile_api_endpoint_title">API endpoint</string>
     <string name="tile_api_endpoint_desc">This feature allows you to set your API endpoint.</string>

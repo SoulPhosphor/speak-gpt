@@ -118,7 +118,8 @@ class GlobalPreferences private constructor(private var gp: SharedPreferences) {
      * @return the shape key
      * */
     fun getProfileImageShape() : String {
-        return gp.getString("profile_image_shape", "flower") ?: "flower"
+        // Owner ruling (July 19 2026): Circle is the default when none is set.
+        return gp.getString("profile_image_shape", "circle") ?: "circle"
     }
 
     /**
