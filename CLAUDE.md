@@ -1560,6 +1560,21 @@ Everything is on-device. No cloud sync, no accounts.
   just reuse of this style as-is — deliberately deferred pending the
   owner's review of the slices already built. Do not roll this out
   further without the owner's go-ahead.
+- **Screen/menu titles are Title Case (owner ruling, July 19 2026).** A
+  window title and its corresponding menu-row label (e.g. the
+  "Activation Prompts" row on Characters vs. the Activation Prompts
+  screen's own title) must read the same and both use Title Case —
+  found and fixed because they'd drifted to sentence case in two
+  places: `tile_activation_prompts_title`/`title_activation_prompts`
+  ("Activation prompts" → "Activation Prompts") and
+  `voice_settings_title` ("Voice & speech" → "Voice & Speech"; its menu
+  row, `tile_voice_settings_title`, was already correct — only the
+  screen's own title string had drifted). Same day, the main Settings
+  screen's title (`title_control_center`) was renamed from
+  "Control center" to "Settings" (plain wording call, not a casing
+  fix) — the one other place that named it, the `tip_12` onboarding
+  string, was updated to match so it doesn't call the screen
+  "Control center" after the screen itself no longer does.
 - **Shared screen-header styles (owner ruling, July 19 2026).** The solid
   bar with a back chevron and a title at the top of a full-screen activity
   used to be hand-copied raw XML in every screen, same problem the row
