@@ -168,6 +168,12 @@
                 android:layout_width="match_parent"
                 android:layout_height="match_parent">
 
+<!-- Primary action button (rightmost). Doubles as the hands-free CONVERSATION
+                     control and the SEND control: it shows the conversation waveform while the
+                     input box is empty (tap engages/stops hands-free) and switches to the
+                     upward-arrow send glyph while there is text (tap sends). The field is still
+                     called btnSend in code. Default icon is the waveform; the text watcher and
+                     click wiring that flip it live are added in the behavior phase. -->
                 <ImageButton
                     android:id="@+id/btn_send"
                     android:layout_width="48dp"
@@ -177,8 +183,7 @@
                     android:layout_marginBottom="16dp"
                     android:background="@drawable/btn_accent_tonal_v5"
                     android:contentDescription="@string/btn_send"
-                    android:src="@drawable/ic_send"
-                    android:visibility="gone"
+                    android:src="@drawable/ic_conversation"
                     app:layout_constraintBottom_toBottomOf="parent"
                     app:layout_constraintEnd_toEndOf="parent"
                     app:layout_constraintTop_toTopOf="parent" />
@@ -189,7 +194,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginStart="76dp"
                     android:layout_marginTop="16dp"
-                    android:layout_marginEnd="76dp"
+                    android:layout_marginEnd="128dp"
                     android:layout_marginBottom="16dp"
                     android:autofillHints="message"
                     android:background="@drawable/btn_accent_tonal_selector_v6"
@@ -225,19 +230,22 @@
                     app:layout_constraintEnd_toEndOf="parent"
                     app:layout_constraintTop_toTopOf="parent" />
 
+<!-- Single-turn transcription button. Sits immediately LEFT of the primary
+                     conversation/send button; both stay in the bar together. Anchored to the
+                     start edge of btn_send so the two never overlap. -->
                 <ImageButton
                     android:id="@+id/btn_micro"
                     android:layout_width="48dp"
                     android:layout_height="48dp"
                     android:layout_marginTop="16dp"
-                    android:layout_marginEnd="16dp"
+                    android:layout_marginEnd="8dp"
                     android:layout_marginBottom="16dp"
                     android:background="@drawable/btn_accent_tonal_v5"
                     android:clickable="true"
                     android:contentDescription="@string/btn_speak"
                     android:elevation="0.01dip"
                     app:layout_constraintBottom_toBottomOf="parent"
-                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintEnd_toStartOf="@id/btn_send"
                     app:layout_constraintTop_toTopOf="parent"
                     app:srcCompat="@drawable/ic_microphone" />
 

@@ -1,0 +1,12 @@
+<!--
+  Upward-arrow send glyph. Shown on the primary action button when the input box
+  has text (the button otherwise carries the conversation waveform). Tinted
+  through the theme (?attr/colorPrimary) like every other input-bar icon, so a
+  palette change recolors it automatically.
+-->
+<vector android:height="24dp" android:tint="?attr/colorPrimary"
+    android:viewportHeight="24" android:viewportWidth="24"
+    android:width="24dp" xmlns:android="http://schemas.android.com/apk/res/android">
+    <path android:fillColor="@android:color/white"
+        android:pathData="M4,12l1.41,1.41L11,7.83V20h2V7.83l5.58,5.59L20,12l-8,-8 -8,8z" />
+</vector>

@@ -1,0 +1,21 @@
+<!--
+  Ongoing-voice-conversation icon: an audio waveform of five rounded bars
+  (short/tall/tallest/tall/short). Used for the hands-free conversation button
+  in the chat input bar. Tinted through the theme (?attr/colorPrimary) exactly
+  like the sibling mic/send icons, so a palette change recolors it for free —
+  the bars are drawn white and the tint multiplies over them.
+-->
+<vector android:height="24dp" android:tint="?attr/colorPrimary"
+    android:viewportHeight="24" android:viewportWidth="24"
+    android:width="24dp" xmlns:android="http://schemas.android.com/apk/res/android">
+    <path android:strokeColor="@android:color/white" android:strokeWidth="2"
+        android:strokeLineCap="round" android:pathData="M4,9.5L4,14.5" />
+    <path android:strokeColor="@android:color/white" android:strokeWidth="2"
+        android:strokeLineCap="round" android:pathData="M8,6.5L8,17.5" />
+    <path android:strokeColor="@android:color/white" android:strokeWidth="2"
+        android:strokeLineCap="round" android:pathData="M12,3.5L12,20.5" />
+    <path android:strokeColor="@android:color/white" android:strokeWidth="2"
+        android:strokeLineCap="round" android:pathData="M16,6.5L16,17.5" />
+    <path android:strokeColor="@android:color/white" android:strokeWidth="2"
+        android:strokeLineCap="round" android:pathData="M20,9.5L20,14.5" />
+</vector>
