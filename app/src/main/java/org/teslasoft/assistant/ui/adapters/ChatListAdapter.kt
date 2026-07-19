@@ -50,6 +50,7 @@ import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.ui.activities.ChatActivity
 import org.teslasoft.assistant.util.Hash
+import org.teslasoft.assistant.util.LegacyAvatarResolver
 import org.teslasoft.assistant.util.StaticAvatarParser
 import java.io.BufferedReader
 import java.io.File
@@ -176,7 +177,12 @@ class ChatListAdapter(private val dataArray: ArrayList<HashMap<String, String>>,
             if (preferences?.getAvatarTypeByChatId(Hash.hash(chatMessage["name"].toString()), mContext.requireActivity()) == "builtin") {
                 icon.setImageResource(StaticAvatarParser.parse(preferences?.getAvatarIdByChatId(Hash.hash(chatMessage["name"].toString()), mContext.requireActivity())!!))
             } else {
-                readAndDisplay(Uri.fromFile(File(mContext.requireActivity().getExternalFilesDir("images")?.absolutePath + "/avatar_" + preferences?.getAvatarIdByChatId(Hash.hash(chatMessage["name"].toString()), mContext.requireActivity()) + ".png")), icon)
+                val legacyAvatarId = preferences?.getAvatarIdByChatId(Hash.hash(chatMessage["name"].toString()), mContext.requireActivity())
+                val legacyAvatarFile = if (legacyAvatarId != null) LegacyAvatarResolver.resolve(mContext.requireActivity().getExternalFilesDir("images"), legacyAvatarId) else null
+
+                if (legacyAvatarFile != null) {
+                    readAndDisplay(Uri.fromFile(legacyAvatarFile), icon)
+                }
             }
 
             if (chatMessage["pinned"] == "true") {

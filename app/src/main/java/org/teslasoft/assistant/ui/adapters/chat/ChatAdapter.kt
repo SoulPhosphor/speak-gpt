@@ -72,6 +72,7 @@ import org.teslasoft.assistant.preferences.MessageCompletionState
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.ui.activities.ImageBrowserActivity
 import org.teslasoft.assistant.ui.fragments.dialogs.EditMessageDialogFragment
+import org.teslasoft.assistant.util.LegacyAvatarResolver
 import org.teslasoft.assistant.util.StaticAvatarParser
 import java.io.BufferedReader
 import java.io.File
@@ -476,7 +477,11 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 icon.setImageResource(StaticAvatarParser.parse(preferences.getAvatarId()))
                 DrawableCompat.setTint(icon.getDrawable()!!, ContextCompat.getColor(context, R.color.accent_900))
             } else {
-                readAndDisplay(Uri.fromFile(File(context.getExternalFilesDir("images")?.absolutePath + "/avatar_" + preferences.getAvatarId() + ".png")))
+                val legacyAvatarFile = LegacyAvatarResolver.resolve(context.getExternalFilesDir("images"), preferences.getAvatarId())
+
+                if (legacyAvatarFile != null) {
+                    readAndDisplay(Uri.fromFile(legacyAvatarFile))
+                }
             }
         }
 

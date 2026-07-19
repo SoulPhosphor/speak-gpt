@@ -50,6 +50,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.textfield.TextInputEditText
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.util.Hash
+import org.teslasoft.assistant.util.LegacyAvatarResolver
 import org.teslasoft.assistant.util.StaticAvatarParser
 import java.io.BufferedReader
 import java.io.ByteArrayOutputStream
@@ -172,7 +173,11 @@ class CustomizeAssistantDialog : DialogFragment() {
             previewFile?.setImageResource(StaticAvatarParser.parse(requireArguments().getString("avatarId")!!))
             DrawableCompat.setTint(previewFile?.getDrawable()!!, ContextCompat.getColor(requireActivity(), R.color.accent_900))
         } else if (requireArguments().getString("avatarType") == "file") {
-            readAndDisplay(Uri.fromFile(File(requireActivity().getExternalFilesDir("images")?.absolutePath + "/avatar_" + requireArguments().getString("avatarId")!! + ".png")))
+            val legacyAvatarFile = LegacyAvatarResolver.resolve(requireActivity().getExternalFilesDir("images"), requireArguments().getString("avatarId")!!)
+
+            if (legacyAvatarFile != null) {
+                readAndDisplay(Uri.fromFile(legacyAvatarFile))
+            }
         }
 
         btnView1?.setOnClickListener {

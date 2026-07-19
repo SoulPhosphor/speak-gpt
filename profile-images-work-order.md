@@ -85,9 +85,15 @@ Steps:
    class names, MemoryStore version — it must still be 14; if it moved,
    STOP and tell the owner before proceeding).
 2. Create the shared legacy-avatar resolver (one small utility): given
-   the avatar id, check `avatar_<id>.png` then `avatar_<id>.jpeg` in
+   the avatar id, check `avatar_<id>.png` then `avatar_<id>.jpg` in
    getExternalFilesDir("images"); return the first existing file, else
-   null. Note the literal extension is "jpeg", not "jpg".
+   null. CORRECTED July 19 2026: the literal extension actually written
+   by CustomizeAssistantDialog.writeImageToCache is "jpg" (from the
+   selectedImageType field), not "jpeg" — the plan's original ".jpeg"
+   claim confused that field with an unrelated same-purpose-sounding
+   local variable used only for the in-memory Base64 data URI. No
+   ".jpeg" file has ever been written per the history visible in this
+   (shallow) checkout, so do not add a ".jpeg" fallback speculatively.
 3. Use the resolver at all three display sites: ChatAdapter,
    ChatListAdapter, CustomizeAssistantDialog's preview. Change only the
    file-path construction — no other behavior, no preference keys.
@@ -104,9 +110,36 @@ Steps:
 Must not: rewrite the avatar feature, touch avatar preference keys,
 add any UI.
 
-Done when: all three display sites resolve both extensions, tests
-pass, CI green, the cropper decision is recorded, and the owner has
-been told (in user terms) that old JPEG avatars will reappear.
+Done when: all three display sites resolve both extensions (.png and
+.jpg), tests pass, CI green, the cropper decision is recorded, and the
+owner has been told (in user terms) that old JPG avatars will reappear.
+
+DECISION (Phase 0, recorded July 19 2026): custom Matrix implementation.
+
+The repository already resolves com.github.* artifacts through JitPack
+(settings.gradle) alongside google() and mavenCentral(), and the app
+already depends on PhotoView (com.github.chrisbanes.photoview) the same
+way, so a maintained crop library was genuinely reachable if one fit.
+The two maintained candidates considered were uCrop (Yalantis) and
+Android-Image-Cropper (CanHub, the maintained fork of ArthurHub's
+library). Neither satisfies the plan's full requirement set without
+forking or relying on private/internal APIs: uCrop exposes no public
+horizontal-flip API on its gesture-crop view (req. 3 fails without
+reaching into internals), and both libraries expose rotation only as
+their own gesture/90-degree-step controls rather than a value a host
+Activity can drive from an external dial widget and a numeric-entry
+dialog while the library recomputes minimum scale and edge coverage for
+that exact combined state (req. 4 and req. 10 fail together — neither
+library's public API guarantees no uncovered crop edges for an
+arbitrary fine angle combined with flip, zoom, and pan at once). Both
+also ship their own crop-screen chrome, which does not match the plan's
+exact top-right Flip/Rotate, degree-readout, and tick-dial layout (req.
+6) without substantial fighting-the-library rework. Since forking or
+using private APIs is explicitly disallowed by the plan, and the plan's
+own text already anticipates this outcome, Phase 4 will build the pure
+transform-math core plus a custom view as specified in FRAMING SCREEN
+through CUSTOM MATRIX REQUIREMENTS, using AndroidX ExifInterface for
+orientation. No crop library dependency will be added.
 
 ----------------------------------------------------------------------
 PHASE 1 — Storage and catalog (no UI)

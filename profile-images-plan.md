@@ -155,13 +155,22 @@ PREREQUISITE REPAIR: EXISTING PER-CHAT AVATAR FALLBACK
 The current per-chat avatar writer saves either:
 
 avatar_<hash>.png
-avatar_<hash>.jpeg
+avatar_<hash>.jpg
 
-It does not use .jpg. The literal extension for JPEG files is "jpeg"
-(CustomizeAssistantDialog maps Bitmap.CompressFormat.JPEG to the string
-"jpeg").
+CORRECTED July 19 2026 (Phase 0 repository verification): an earlier
+version of this plan claimed the second extension was literally ".jpeg",
+citing a Bitmap.CompressFormat.JPEG -> "jpeg" mapping inside
+CustomizeAssistantDialog. That mapping is real but belongs to a different,
+unrelated local variable used only to build the in-memory Base64
+data:image URI string. The value actually passed to the file writer
+(writeImageToCache) is the sibling variable selectedImageType, which is
+set to "jpg" (not "jpeg") for any non-PNG source. The file genuinely
+written to disk today is avatar_<hash>.jpg. Repository history available
+in this checkout (a shallow clone) shows no version of
+CustomizeAssistantDialog.kt that ever wrote a ".jpeg" file, so this plan
+does not add speculative ".jpeg" support.
 
-Existing display paths reconstruct only avatar_<hash>.png, so a JPEG avatar
+Existing display paths reconstruct only avatar_<hash>.png, so a JPG avatar
 saved by the writer is invisible to every reader.
 
 Because the old per-chat avatar is the approved fallback for a Companion
@@ -172,7 +181,7 @@ Create one shared legacy-avatar resolver that:
 1. Receives the existing avatar hash.
 2. Checks the legacy extensions in this deterministic order:
    1. .png
-   2. .jpeg
+   2. .jpg
 3. Returns the existing file when either is present.
 4. Is used by every existing legacy display site, including:
    - ChatAdapter (chat messages)
@@ -184,7 +193,7 @@ Create one shared legacy-avatar resolver that:
 Do not rewrite the existing avatar feature. Make only the narrow
 file-resolution repair necessary for a reliable fallback.
 
-Add regression verification for both old PNG and old JPEG avatar files.
+Add regression verification for both old PNG and old JPG avatar files.
 
 STORAGE PRIVACY DECISION
 
@@ -1752,7 +1761,7 @@ IMPLEMENTATION PHASE ORDER
 Phase 0: Repository Validation and Legacy Fallback Repair
 
 Confirm current paths and call sites.
-Repair legacy PNG/JPEG avatar resolution (.png then .jpeg, all three
+Repair legacy PNG/JPG avatar resolution (.png then .jpg, all three
 display sites).
 Add fallback regression tests.
 Confirm the available database architecture.
@@ -1935,7 +1944,7 @@ Missing files always fall through.
 Generic and built-in icon styling remains unchanged.
 RecyclerView recycling never displays the wrong identity image or stale
 tint.
-Legacy PNG and JPEG per-chat avatars both display.
+Legacy PNG and JPG per-chat avatars both display.
 The per-chat avatar explanation text appears only while the active
 Companion has an assigned and available picture, and hides otherwise.
 A Default Shape change refreshes visible previews immediately and every
@@ -1989,7 +1998,7 @@ Test framing with a real EXIF-rotated phone photo.
 Test exact numeric degrees and decimals.
 Test process/activity recreation.
 Confirm no exposed crop corners.
-Confirm old PNG and JPEG assistant avatars still work.
+Confirm old PNG and JPG assistant avatars still work.
 Confirm the per-chat avatar explanation appears and hides correctly.
 Confirm UI order and appearance are acceptable.
 
