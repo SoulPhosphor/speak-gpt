@@ -19,15 +19,14 @@ package org.teslasoft.assistant.ui.activities
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
+import android.content.res.ColorStateList
 import android.content.res.Configuration
-import android.graphics.drawable.Drawable
 import android.os.Bundle
 import android.widget.ImageButton
 import android.widget.TextView
 import android.widget.Toast
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
-import androidx.core.graphics.drawable.DrawableCompat
 import androidx.fragment.app.FragmentActivity
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -43,6 +42,7 @@ class LogsActivity : FragmentActivity() {
     private var btnCopyLog: MaterialButton? = null
     private var btnBack: ImageButton? = null
     private var btnVoiceAdvanced: ImageButton? = null
+    private var actionBar: ConstraintLayout? = null
     private var activityLogsTitle: TextView? = null
     private var textLog: TextView? = null
     private var logType = ""
@@ -59,6 +59,7 @@ class LogsActivity : FragmentActivity() {
         btnCopyLog = findViewById(R.id.btn_copy_log)
         btnBack = findViewById(R.id.btn_back)
         btnVoiceAdvanced = findViewById(R.id.btn_voice_advanced)
+        actionBar = findViewById(R.id.action_bar)
         activityLogsTitle = findViewById(R.id.activity_logs_title)
         textLog = findViewById(R.id.text_log)
         root = findViewById(R.id.root)
@@ -178,18 +179,23 @@ class LogsActivity : FragmentActivity() {
             if (isDarkThemeEnabled() && preferences?.getAmoledPitchBlack()!!) {
                 window.setBackgroundDrawableResource(R.color.amoled_window_background)
                 root?.setBackgroundColor(ResourcesCompat.getColor(resources, R.color.amoled_window_background, theme))
-                btnBack?.setBackgroundResource(R.drawable.btn_accent_icon_large_amoled)
-                btnVoiceAdvanced?.setBackgroundResource(R.drawable.btn_accent_icon_large_amoled)
+                actionBar?.setBackgroundColor(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
+                val tint = ColorStateList.valueOf(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
+                btnBack?.backgroundTintList = tint
+                btnVoiceAdvanced?.backgroundTintList = tint
             } else {
                 window.setBackgroundDrawableResource(R.color.window_background)
                 root?.setBackgroundColor(SurfaceColors.SURFACE_0.getColor(this))
-                btnBack?.background = getDisabledDrawable(ResourcesCompat.getDrawable(resources, R.drawable.btn_accent_icon_large, theme)!!)
-                btnVoiceAdvanced?.background = getDisabledDrawable(ResourcesCompat.getDrawable(resources, R.drawable.btn_accent_icon_large, theme)!!)
+                actionBar?.setBackgroundColor(SurfaceColors.SURFACE_4.getColor(this))
+                val tint = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(this))
+                btnBack?.backgroundTintList = tint
+                btnVoiceAdvanced?.backgroundTintList = tint
             }
         } catch (_: Exception) {
             window.setBackgroundDrawableResource(R.color.window_background)
             root?.setBackgroundColor(SurfaceColors.SURFACE_0.getColor(this))
-            btnBack?.background = getDisabledDrawable(ResourcesCompat.getDrawable(resources, R.drawable.btn_accent_icon_large, theme)!!)
+            val tint = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(this))
+            btnBack?.backgroundTintList = tint
         }
     }
 
@@ -200,19 +206,6 @@ class LogsActivity : FragmentActivity() {
             Configuration.UI_MODE_NIGHT_NO -> false
             Configuration.UI_MODE_NIGHT_UNDEFINED -> false
             else -> false
-        }
-    }
-
-    private fun getDisabledDrawable(drawable: Drawable) : Drawable {
-        DrawableCompat.setTint(DrawableCompat.wrap(drawable), getDisabledColor())
-        return drawable
-    }
-
-    private fun getDisabledColor() : Int {
-        return if (isDarkThemeEnabled() && preferences?.getAmoledPitchBlack() == true) {
-            ResourcesCompat.getColor(resources, R.color.accent_50, theme)
-        } else {
-            SurfaceColors.SURFACE_5.getColor(this)
         }
     }
 }

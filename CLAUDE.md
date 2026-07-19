@@ -1611,26 +1611,55 @@ Everything is on-device. No cloud sync, no accounts.
   Prompts, no structural quirks): `activity_alert_debug_menu.xml`
   (Alerts, Errors & Logs), `activity_voice_advanced.xml` (Advanced Voice
   Settings), `activity_audio_debugging.xml` (Voice Debugging tile).
-  **Deliberately NOT converted — flagged to the owner, July 19 2026,
-  rather than restyled in place:**
+  **The "icon on top" pattern (owner ruling, July 19 2026):** the first
+  pass through this rollout flagged two screens as not fitting the plain
+  header — both were then actually handled, not left as-is, and the fix
+  in each case is now the standing pattern:
   - `activity_logs.xml` (the four log pages — Crash/Error, Event/Voice
     Debug, Memory, Performance — all share this one layout via
-    `LogsActivity`) has no `action_bar` bar at all (title floats directly
-    on the screen background) and, on the Event log only, a real second
-    icon button (`btn_voice_advanced`, the terminal-icon jump to Advanced
-    Voice Settings) that `Widget.App.ActionBar` has no slot for — this is
-    exactly the "wiring for an icon" case the owner said to stop on rather
-    than convert.
+    `LogsActivity`) had no `action_bar` bar (title floated directly on the
+    screen background, no colored bar) and, on the Event log only, a real
+    second icon button (`btn_voice_advanced`, the terminal-icon jump to
+    Advanced Voice Settings) that plain `Widget.App.ActionBar` has no slot
+    for. Fixed with a new style, **`Widget.App.ActionBar.SecondaryButton`**
+    (`values/themes.xml`, right next to `.Title`) — same geometry/
+    background as `.BackButton`, anchored to the bar's END instead of its
+    START; `android:src`/`contentDescription`/`tooltipText` stay on the
+    instance since the icon differs per screen. Logs now uses the full
+    trio (`Widget.App.ActionBar` + `.BackButton` + `.Title`, title
+    unchanged — still centered across the WHOLE bar, ignoring the icon,
+    exactly like it already floated before conversion) plus
+    `.SecondaryButton` for the voice-advanced shortcut.
+    **Any future screen that needs a trailing icon alongside the back
+    button should use `.SecondaryButton` the same way — that is the
+    pattern, not hand-copied XML.** `LogsActivity.kt`'s AMOLED recolor was
+    also brought in line with the standard tint-list approach (`actionBar`
+    field + `backgroundTintList`, dropping the old `getDisabledDrawable`/
+    `getDisabledColor` "muted" look that predated the shared style).
   - `activity_settings.xml` (the main Settings screen, `title_control_center`
-    — renamed from "Control center" to "Settings" July 19 2026, string
-    change only) is a slide-in side panel, not a plain full-screen
-    activity: its back button + title live INSIDE the same big
-    scrollable `ConstraintLayout` as every category header and tile, so
-    they currently scroll away with the body. `Widget.App.ActionBar`
-    assumes a header pinned above a separate `ScrollView` — applying it
-    here isn't a same-look restyle, it would change scroll behavior
-    (header becomes fixed, currently it isn't) and needs a real layout
-    restructure, not a style swap.
+    — renamed from "Control center" to "Settings" July 19 2026) was a
+    slide-in side panel whose back button + title lived INSIDE the same
+    big scrollable `ConstraintLayout` as every category header and tile,
+    so the header scrolled away with the body — the owner then asked for
+    it pinned. Restructured: a new `action_bar` (the standard
+    `Widget.App.ActionBar` trio) is now a sibling ABOVE the `ScrollView`
+    (itself now wrapped, with the `ScrollView`, in a new `content`
+    ConstraintLayout so the style's `0dp`-width-via-constraints trick has
+    a `ConstraintLayout` parent — it doesn't work inside the outer
+    `LinearLayout`), and `scrollable`'s first child now anchors to its own
+    top instead of to the old (now-relocated) title view. `btn_back` and
+    `activity_new_settings_title` kept their exact ids so the screen's
+    ~50-entry shared-element-transition exclude list needed only one
+    addition (`R.id.action_bar`, mirroring how `R.id.scrollable` was
+    already excluded) — nothing else in that list changed. The status-bar
+    inset that used to land on `scrollable` now lands on `action_bar`
+    instead (`adjustPaddings()` split into two `WindowInsetsUtil` calls);
+    the nav-bar + 48dp bottom inset stays on `scrollable`, unchanged.
+    AMOLED recolor for the new bar/back-button follows the same
+    tint-list pattern as everywhere else (and drops the same
+    `getDisabledDrawable`/`getDisabledColor` "muted" look Logs also had —
+    this pre-shared-style convention appeared in both places and is now
+    retired in favor of the standard look).
 - Match the existing style: nullable `var` view fields + `findViewById`,
   `DialogFragment.newInstance(Bundle)` pattern, listener interfaces with
   default no-op methods, copyright header on every file, strings ONLY in

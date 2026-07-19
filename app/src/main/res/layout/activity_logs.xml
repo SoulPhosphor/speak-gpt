@@ -24,18 +24,32 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <TextView
-        android:id="@+id/activity_logs_title"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="24dp"
-        android:text="@string/title_logs"
-        android:textColor="@color/text_title"
-        android:textSize="24sp"
-        android:textStyle="bold"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/action_bar"
+        style="@style/Widget.App.ActionBar">
+
+        <ImageButton
+            android:id="@+id/btn_back"
+            style="@style/Widget.App.ActionBar.BackButton" />
+
+        <TextView
+            android:id="@+id/activity_logs_title"
+            style="@style/Widget.App.ActionBar.Title"
+            android:text="@string/title_logs" />
+
+        <!-- One-tap jump to the advanced voice & debugging screen, shown only on
+             the Event log (set in LogsActivity) so the user can read what's
+             wrong and then go straight to the knobs that fix it. Same icon as
+             that tile. -->
+        <ImageButton
+            android:id="@+id/btn_voice_advanced"
+            style="@style/Widget.App.ActionBar.SecondaryButton"
+            android:contentDescription="@string/btn_open_voice_advanced"
+            android:src="@drawable/ic_terminal"
+            android:tooltipText="@string/btn_open_voice_advanced"
+            android:visibility="gone"
+            app:srcCompat="@drawable/ic_terminal" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
 
     <com.google.android.material.button.MaterialButton
         android:id="@+id/btn_clear_log"
@@ -77,7 +91,7 @@
         app:layout_constraintBottom_toTopOf="@+id/btn_copy_log"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/btn_back">
+        app:layout_constraintTop_toBottomOf="@+id/action_bar">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -93,36 +107,4 @@
                 android:textIsSelectable="true" />
         </LinearLayout>
     </ScrollView>
-
-    <ImageButton
-        android:id="@+id/btn_back"
-        android:layout_width="48dp"
-        android:layout_height="48dp"
-        android:layout_marginStart="24dp"
-        android:layout_marginTop="16dp"
-        android:background="@drawable/btn_accent_icon_large"
-        android:contentDescription="@string/go_back"
-        android:src="@drawable/ic_back"
-        android:tooltipText="Go back"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent"
-        app:srcCompat="@drawable/ic_back" />
-
-    <!-- One-tap jump to the advanced voice & debugging screen, shown only on the
-         Event log (set in LogsActivity) so the user can read what's wrong and
-         then go straight to the knobs that fix it. Same icon as that tile. -->
-    <ImageButton
-        android:id="@+id/btn_voice_advanced"
-        android:layout_width="48dp"
-        android:layout_height="48dp"
-        android:layout_marginTop="16dp"
-        android:layout_marginEnd="24dp"
-        android:background="@drawable/btn_accent_icon_large"
-        android:contentDescription="@string/btn_open_voice_advanced"
-        android:src="@drawable/ic_terminal"
-        android:tooltipText="@string/btn_open_voice_advanced"
-        android:visibility="gone"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toTopOf="parent"
-        app:srcCompat="@drawable/ic_terminal" />
 </androidx.constraintlayout.widget.ConstraintLayout>

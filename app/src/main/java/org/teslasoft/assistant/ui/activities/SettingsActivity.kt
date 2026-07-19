@@ -20,7 +20,6 @@ import android.content.Intent
 import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.graphics.Color
-import android.graphics.drawable.Drawable
 import android.os.Build
 import android.os.Bundle
 import android.transition.TransitionInflater
@@ -33,8 +32,8 @@ import android.widget.Toast
 import android.window.OnBackInvokedDispatcher
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
+import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
-import androidx.core.graphics.drawable.DrawableCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.fragment.app.FragmentTransaction
 import androidx.interpolator.view.animation.FastOutLinearInInterpolator
@@ -82,6 +81,7 @@ class SettingsActivity : FragmentActivity() {
     // private var threadLoading: LinearLayout? = null
     private var root: ScrollView? = null
     private var btnBack: ImageButton? = null
+    private var actionBar: ConstraintLayout? = null
 
     private var areFragmentsInitialized = false
     private var chatId = ""
@@ -150,6 +150,7 @@ class SettingsActivity : FragmentActivity() {
         }
 
         transition.excludeTarget(R.id.scrollable, true)
+        transition.excludeTarget(R.id.action_bar, true)
         transition.excludeTarget(R.id.textView30, true)
         transition.excludeTarget(R.id.textView31, true)
         transition.excludeTarget(R.id.textView32, true)
@@ -202,6 +203,7 @@ class SettingsActivity : FragmentActivity() {
         }
 
         transition2.excludeTarget(R.id.scrollable, true)
+        transition2.excludeTarget(R.id.action_bar, true)
         transition2.excludeTarget(R.id.textView30, true)
         transition2.excludeTarget(R.id.textView31, true)
         transition2.excludeTarget(R.id.textView32, true)
@@ -271,6 +273,7 @@ class SettingsActivity : FragmentActivity() {
         }
 
         btnBack = findViewById(R.id.btn_back)
+        actionBar = findViewById(R.id.action_bar)
         root = findViewById(R.id.root)
 
         val extras: Bundle? = intent.extras
@@ -727,9 +730,11 @@ class SettingsActivity : FragmentActivity() {
             window.navigationBarColor = 0x00000000
         }
         if (isDarkThemeEnabled() && preferences?.getAmoledPitchBlack() == true) {
-            btnBack?.setBackgroundResource(R.drawable.btn_accent_icon_large_amoled)
+            actionBar?.setBackgroundColor(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
+            btnBack?.backgroundTintList = ColorStateList.valueOf(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
         } else {
-            btnBack?.background = getDisabledDrawable(ResourcesCompat.getDrawable(resources, R.drawable.btn_accent_icon_large, theme)!!)
+            actionBar?.setBackgroundColor(SurfaceColors.SURFACE_4.getColor(this))
+            btnBack?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(this))
         }
     }
 
@@ -740,30 +745,14 @@ class SettingsActivity : FragmentActivity() {
         Preferences.getPreferences(this, chatId)
     }
 
-    private fun getDisabledDrawable(drawable: Drawable) : Drawable {
-        DrawableCompat.setTint(DrawableCompat.wrap(drawable), getDisabledColor())
-        return drawable
-    }
-
-    private fun getDisabledColor() : Int {
-        return if (isDarkThemeEnabled() && preferences?.getAmoledPitchBlack() == true) {
-            ResourcesCompat.getColor(resources, R.color.accent_50, theme)
-        } else {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                SurfaceColors.SURFACE_5.getColor(this)
-            } else {
-                getColor(R.color.accent_100)
-            }
-        }
-    }
-
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         adjustPaddings()
     }
 
     private fun adjustPaddings() {
-        WindowInsetsUtil.adjustPaddings(this, R.id.scrollable, EnumSet.of(WindowInsetsUtil.Companion.Flags.STATUS_BAR, WindowInsetsUtil.Companion.Flags.NAVIGATION_BAR, WindowInsetsUtil.Companion.Flags.IGNORE_PADDINGS), customPaddingBottom = (48 * resources.displayMetrics.density).roundToInt())
+        WindowInsetsUtil.adjustPaddings(this, R.id.action_bar, EnumSet.of(WindowInsetsUtil.Companion.Flags.STATUS_BAR, WindowInsetsUtil.Companion.Flags.IGNORE_PADDINGS))
+        WindowInsetsUtil.adjustPaddings(this, R.id.scrollable, EnumSet.of(WindowInsetsUtil.Companion.Flags.NAVIGATION_BAR, WindowInsetsUtil.Companion.Flags.IGNORE_PADDINGS), customPaddingBottom = (48 * resources.displayMetrics.density).roundToInt())
     }
 
     private fun finishActivity() {

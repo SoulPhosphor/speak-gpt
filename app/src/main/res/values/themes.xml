@@ -223,11 +223,18 @@
          (activity_alert_debug_menu.xml, "Alerts, Errors & Logs"),
          VoiceAdvancedSettingsActivity (activity_voice_advanced.xml,
          "Advanced Voice Settings") and AudioDebuggingActivity
-         (activity_audio_debugging.xml, "Voice Debugging" tile). Title size raised 20sp -> 24sp same day to match the size these
-         screens already used before conversion (owner ruling: match the
-         existing look, not the smaller size introduced with the first two
-         screens). Not yet applied to the rest of the app; keep rolling out
-         screen by screen. -->
+         (activity_audio_debugging.xml, "Voice Debugging" tile); LogsActivity
+         (activity_logs.xml, all four log pages) via this trio PLUS
+         Widget.App.ActionBar.SecondaryButton below (its Event-log-only
+         voice-advanced shortcut icon); and SettingsActivity
+         (activity_settings.xml, main Settings screen), restructured same
+         day so the header pins above the ScrollView instead of scrolling
+         away with it (see the CLAUDE.md rollout-status note for the
+         restructure details). Title size raised 20sp -> 24sp same day to
+         match the size these screens already used before conversion
+         (owner ruling: match the existing look, not the smaller size
+         introduced with the first two screens). Not yet applied to the
+         rest of the app; keep rolling out screen by screen. -->
     <style name="Widget.App.ActionBar" parent="">
         <item name="android:layout_width">0dp</item>
         <item name="android:layout_height">wrap_content</item>
@@ -265,6 +272,37 @@
         <item name="layout_constraintBottom_toBottomOf">parent</item>
         <item name="layout_constraintEnd_toEndOf">parent</item>
         <item name="layout_constraintStart_toStartOf">parent</item>
+        <item name="layout_constraintTop_toTopOf">parent</item>
+    </style>
+
+    <!-- THE "icon on top" PATTERN (owner ruling, July 19 2026): use this,
+         not raw XML, any time a Widget.App.ActionBar screen needs a
+         trailing icon button (a shortcut, a settings gear, etc.) alongside
+         the back button - this was the gap that left activity_logs.xml
+         hand-copied instead of sharing the header style (see the Logs
+         entry below). Same geometry/background as
+         Widget.App.ActionBar.BackButton, anchored to the bar's END instead
+         of its START. android:src/contentDescription/tooltipText are
+         screen-specific (the icon differs per screen) and stay on the
+         instance - only geometry/background are shared here. Title stays
+         plain Widget.App.ActionBar.Title, unchanged: it's centered across
+         the WHOLE bar regardless of the icon's presence (matches how the
+         pre-conversion Logs title already floated centered, ignoring the
+         back button's position) rather than re-deriving an off-center/
+         ellipsized variant - simpler, and it already looked right. For a
+         SECOND trailing icon, constrain its layout_constraintEnd_toStartOf
+         the first icon instead of parent (see activity_memory_list.xml's
+         btn_action/btn_action_secondary chain for that shape) rather than
+         inventing a new style per icon count. -->
+    <style name="Widget.App.ActionBar.SecondaryButton" parent="">
+        <item name="android:layout_width">48dp</item>
+        <item name="android:layout_height">48dp</item>
+        <item name="android:layout_marginEnd">8dp</item>
+        <item name="android:layout_marginTop">8dp</item>
+        <item name="android:layout_marginBottom">8dp</item>
+        <item name="android:background">@drawable/btn_accent_icon_large_100</item>
+        <item name="layout_constraintBottom_toBottomOf">parent</item>
+        <item name="layout_constraintEnd_toEndOf">parent</item>
         <item name="layout_constraintTop_toTopOf">parent</item>
     </style>
 
