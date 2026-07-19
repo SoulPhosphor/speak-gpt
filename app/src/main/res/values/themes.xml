@@ -62,6 +62,26 @@
         <item name="android:textAppearance">@style/TextAppearance.App.Button</item>
     </style>
 
+    <!-- Dialog action button. Identical to AppButton.Primary in every respect
+         (fill, corner, text appearance, theme color roles) EXCEPT width: a
+         full-width (match_parent) primary button is too wide inside a dialog,
+         so this variant sizes to a percentage of the dialog content width
+         rather than a fixed pixel/dp value (owner rule, July 19 2026 — do
+         percentage, not hard px). The width lives here in ONE place; change
+         layout_constraintWidth_percent to reshape every dialog action button.
+         Requires a ConstraintLayout parent (the width is 0dp + percent, with
+         the button centred to its parent) — used by dialog_single_action.xml. -->
+    <style name="AppButton.Primary.Dialog" parent="AppButton.Primary">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="layout_constraintWidth_default">percent</item>
+        <item name="layout_constraintWidth_percent">0.6</item>
+        <item name="layout_constraintStart_toStartOf">parent</item>
+        <item name="layout_constraintEnd_toEndOf">parent</item>
+        <item name="layout_constraintTop_toTopOf">parent</item>
+        <item name="layout_constraintBottom_toBottomOf">parent</item>
+    </style>
+
     <!-- Shared chevron-row styles, preserving the current Memory Manager row
          appearance. Use Widget.App.Row.WithSubtitle when the row has helper text
          and Widget.App.Row.TitleOnly when it does not. Both variants intentionally

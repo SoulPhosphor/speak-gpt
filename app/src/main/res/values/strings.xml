@@ -1763,4 +1763,29 @@
     <string name="chat_backup_unavailable_title">Chat backup unavailable</string>
     <string name="chat_backup_unavailable_body">The app cannot create a complete chat backup while encrypted chat storage is unavailable. Your existing backups have not been deleted.</string>
     <string name="chat_backup_unavailable_ok">OK</string>
+
+    <!-- ============ Profile Images: Framing screen (owner-approved copy,
+         July 19 2026 — verbatim from profile-images-plan.md; do not reword
+         without explicit approval in chat) ============ -->
+    <string name="framing_title">Framing</string>
+    <string name="framing_flip">Flip</string>
+    <string name="framing_rotate">Rotate</string>
+    <string name="framing_cancel">Cancel</string>
+    <string name="framing_done">Done</string>
+    <!-- Fine-rotation readout: always shows the degree symbol, e.g. +7°, 0°, −12.5° -->
+    <string name="framing_fine_rotation_readout">%1$s°</string>
+    <string name="framing_fine_rotation_content_description">Fine rotation %1$s degrees</string>
+
+    <!-- Fine Rotation numeric dialog -->
+    <string name="fine_rotation_title">Fine Rotation</string>
+    <string name="fine_rotation_hint">Degrees (−45 to 45)</string>
+    <string name="fine_rotation_reset">Reset to 0°</string>
+    <string name="fine_rotation_cancel">Cancel</string>
+    <string name="fine_rotation_apply">Apply</string>
+    <string name="fine_rotation_invalid">Enter a value between −45° and 45°.</string>
+
+    <!-- Load-error dialog (owner-approved copy, July 19 2026) -->
+    <string name="framing_load_error_title">Unable to Open Image</string>
+    <string name="framing_load_error_body">This image is no longer available or could not be opened. Please try a new image.</string>
+    <string name="framing_load_error_button">Return to Gallery</string>
 </resources>

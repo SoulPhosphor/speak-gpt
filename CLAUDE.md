@@ -1358,6 +1358,29 @@ Everything is on-device. No cloud sync, no accounts.
   never applied to any button and are retired.
   Both defined styles share the corner radius via `@dimen/button_corner_radius`
   (`values/dimens.xml`) — change that one dimen to reshape both at once.
+  - `AppButton.Primary.Dialog` — **the dialog action button (owner ruling,
+    July 19 2026).** A child of `AppButton.Primary` that inherits everything
+    (fill, corner, text appearance, theme color roles) and overrides ONLY the
+    width: a full-width primary button is too wide inside a dialog, so this
+    variant sizes to a **percentage of the dialog content width** (best
+    practice: percentage, never a hard px/dp), done via `layout_width=0dp` +
+    `layout_constraintWidth_percent` (currently `0.6`) + centring constraints
+    baked into the style. The percentage lives in that ONE style item — change
+    it there to reshape every dialog action button. Requires a
+    `ConstraintLayout` parent; use the shared `layout/dialog_single_action.xml`
+    (a ConstraintLayout holding one `@id/btn_dialog_action` button with this
+    style) as a dialog's `setView`, alongside the dialog's own themed
+    title/message. First use: the Framing screen's "Unable to Open Image"
+    load-error dialog.
+- **Dialog theme (standardization, July 19 2026).** `App.MaterialAlertDialog`
+  (`values/themes.xml`, parent `MaterialAlertDialog.Material3`; referenced in
+  code as `R.style.App_MaterialAlertDialog`) is THE standard dialog theme —
+  build every `MaterialAlertDialogBuilder` with it so window/shape/title/body
+  colors resolve through Material3 roles and future palettes retheme dialogs
+  with no per-dialog changes. It wires the text-action buttons via
+  `App.PositiveButtonStyle`/`App.NegativeButtonStyle`; for a filled primary
+  action inside a dialog use a custom `setView` with `AppButton.Primary.Dialog`
+  (above) instead of a bare `setPositiveButton`.
 - **Shared chevron-row styles (owner ruling, July 18 2026; expanded same
   day — leading-icon variant, list-screen manager/picker split).** Every
   "chevron row" in this app (a tappable settings-style row: an optional

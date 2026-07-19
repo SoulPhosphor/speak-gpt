@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Reusable content view for a dialog with a single primary action button
+  (owner standardization, July 19 2026). Set as the MaterialAlertDialog's
+  custom view; the dialog's own themed title + message sit above it and the
+  button below, so title/body styling comes from App.MaterialAlertDialog and
+  future palettes retheme them automatically. The button carries the whole
+  AppButton.Primary look via AppButton.Primary.Dialog, which also supplies its
+  percentage width and centring constraints — do not set width or constraints
+  here.
+-->
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:paddingTop="8dp"
+    android:paddingBottom="8dp">
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btn_dialog_action"
+        style="@style/AppButton.Primary.Dialog" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>
