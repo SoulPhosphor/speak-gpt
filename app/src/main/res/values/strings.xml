@@ -1782,6 +1782,9 @@
     <string name="framing_title">Framing</string>
     <string name="framing_flip">Flip</string>
     <string name="framing_rotate">Rotate</string>
+    <!-- Content descriptions for the two bars (owner-approved words). -->
+    <string name="framing_zoom">Zoom</string>
+    <string name="framing_tilt">Tilt</string>
     <string name="framing_cancel">Cancel</string>
     <string name="framing_done">Done</string>
     <!-- Fine-rotation readout: always shows the degree symbol, e.g. +7°, 0°, −12.5° -->

@@ -18,7 +18,10 @@ package org.teslasoft.assistant.preferences.profileimages
 
 import kotlin.math.abs
 import kotlin.math.cos
+import kotlin.math.ln
+import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.pow
 import kotlin.math.sin
 
 /**
@@ -37,13 +40,26 @@ import kotlin.math.sin
  * rotate by (quarterTurns*90 + fineAngle), then translate. The crop window
  * never moves or resizes; the image moves under it.
  *
- * No-empty-edges is a correctness requirement, not cosmetics: the crop square
- * must stay fully covered by source pixels. The authority for that is
- * [isFullyCovered], which inverse-maps all four crop corners into image space
- * and checks each lies within the image — never a bounding-box estimate alone
- * (a cover-scale floor, [minScale], only establishes the minimum).
+ * Owner ruling (July 19 2026): the picture MAY be shrunk smaller than the crop
+ * square. The old "no empty edges" rule (the crop must always be fully covered)
+ * is retired — the editor now clamps zoom into [minZoomScale, maxZoomScale],
+ * and [clampParams] keeps the picture covering the crop only while it is big
+ * enough to, otherwise centring it so the shrunk picture sits inside the square
+ * on the framing background (the Framing view fills that background black, and
+ * the empty area is saved black). [isFullyCovered] and [minScale] (the exact
+ * cover scale) are kept: [minScale] is still the sensible OPENING fit (picture
+ * fills the square) and [isFullyCovered] still tells whether a given state
+ * happens to cover.
  */
 object ProfileImageTransform {
+
+    /** The picture may shrink until its longer side is this fraction of the
+     *  crop (small, but never a speck). Rotation-independent so the floor does
+     *  not shift as the picture is twisted. */
+    const val ZOOM_OUT_FRACTION = 0.2f
+    /** Zoom-in ceiling as a multiple of the exact cover scale, so the zoom bar
+     *  has a defined top end and the pinch gesture agrees with it. */
+    const val ZOOM_IN_FACTOR = 8f
 
     /**
      * The user-controlled transform state. Persisted across activity/process
@@ -95,6 +111,36 @@ object ProfileImageTransform {
         return (cropSize * factor / min(imgW, imgH)).toFloat()
     }
 
+    /** The smallest allowed zoom (picture at its smallest): its longer side
+     *  shrunk to [ZOOM_OUT_FRACTION] of the crop. Rotation-independent. */
+    fun minZoomScale(imgW: Int, imgH: Int, cropSize: Float): Float {
+        if (imgW <= 0 || imgH <= 0 || cropSize <= 0f) return 0f
+        return ZOOM_OUT_FRACTION * cropSize / max(imgW, imgH)
+    }
+
+    /** The largest allowed zoom: [ZOOM_IN_FACTOR] times the un-rotated cover
+     *  scale. Bounds the zoom bar and caps the pinch so the two agree. */
+    fun maxZoomScale(imgW: Int, imgH: Int, cropSize: Float): Float {
+        if (imgW <= 0 || imgH <= 0 || cropSize <= 0f) return 0f
+        return ZOOM_IN_FACTOR * cropSize / min(imgW, imgH)
+    }
+
+    /** Maps a zoom-bar fraction in [0,1] to a scale, geometrically (equal
+     *  fractions are equal zoom ratios, which reads evenly on a slider). */
+    fun scaleForZoomFraction(fraction: Float, minZoom: Float, maxZoom: Float): Float {
+        if (minZoom <= 0f || maxZoom <= minZoom) return minZoom
+        val f = fraction.coerceIn(0f, 1f)
+        return (minZoom.toDouble() * (maxZoom.toDouble() / minZoom.toDouble()).pow(f.toDouble())).toFloat()
+    }
+
+    /** The inverse of [scaleForZoomFraction], clamped to [0,1] — where a given
+     *  scale sits on the zoom bar. */
+    fun zoomFractionForScale(scale: Float, minZoom: Float, maxZoom: Float): Float {
+        if (minZoom <= 0f || maxZoom <= minZoom || scale <= 0f) return 0f
+        val f = (ln(scale.toDouble() / minZoom.toDouble()) / ln(maxZoom.toDouble() / minZoom.toDouble())).toFloat()
+        return f.coerceIn(0f, 1f)
+    }
+
     /** The four crop-square corners inverse-mapped into image space. */
     fun cropCornersInImageSpace(p: Params, imgW: Int, imgH: Int, cropSize: Float): List<Point> {
         val half = cropSize / 2.0
@@ -117,17 +163,23 @@ object ProfileImageTransform {
     }
 
     /**
-     * Clamps [p] to a valid state: scale raised to at least [minScale], then
-     * translation shifted so all four corners are covered. After this,
-     * [isFullyCovered] is true whenever the image can cover the crop at all
-     * (which it always can once scale >= minScale). Called by the view after
-     * every pan/pinch/rotate/flip/restore.
+     * Clamps [p] to a valid state (owner ruling, July 19 2026): scale is held
+     * within [[minZoomScale], [maxZoomScale]] — NOT raised to the cover scale,
+     * so the picture may be smaller than the crop — then translation is shifted
+     * per axis so that, on any axis where the picture is big enough to cover the
+     * crop, it keeps covering it (panning still allowed along an overhang), and
+     * on any axis where it is smaller than the crop it is centred (the shrunk
+     * picture sits inside the square, the rest saved as the framing background).
+     * Called by the view after every pan/pinch/rotate/flip/restore.
      */
-    fun clampToCover(p: Params, imgW: Int, imgH: Int, cropSize: Float): Params {
+    fun clampParams(p: Params, imgW: Int, imgH: Int, cropSize: Float): Params {
         if (imgW <= 0 || imgH <= 0 || cropSize <= 0f) return p
 
-        val floor = minScale(imgW, imgH, cropSize, totalRotationDeg(p))
-        val scaled = if (p.scale < floor) p.copy(scale = floor) else p
+        val minZoom = minZoomScale(imgW, imgH, cropSize)
+        val maxZoom = maxZoomScale(imgW, imgH, cropSize)
+        val scaled = if (p.scale < minZoom || p.scale > maxZoom) {
+            p.copy(scale = p.scale.coerceIn(minZoom, maxZoom))
+        } else p
 
         // The four image-space corners shift rigidly with translation, so bring
         // their bounding box inside [0,imgW]x[0,imgH] by shifting in image space,
@@ -202,13 +254,27 @@ object ProfileImageTransform {
 
     /* --------------------------- internals --------------------------- */
 
-    /** How far a [lo,hi] span must shift to sit inside [0,size]; 0 if it fits. */
+    /**
+     * The image-space shift for one axis. [lo,hi] is the crop's footprint on
+     * that axis in image space; [size] is the image extent (imgW or imgH).
+     *  - Footprint no wider than the image (picture covers this axis): keep the
+     *    footprint inside [0,size], i.e. keep the crop covered (0 if it already
+     *    is, so an overhang can still be panned).
+     *  - Footprint wider than the image (picture smaller than the crop here):
+     *    centre the image within the footprint, so the shrunk picture sits
+     *    centred in the square rather than clinging to an edge.
+     */
     private fun axisShift(lo: Double, hi: Double, size: Double): Double {
         val eps = 1e-6
-        return when {
-            lo < -eps -> -lo                 // push right until lo == 0
-            hi > size + eps -> size - hi     // push left until hi == size
-            else -> 0.0
+        val span = hi - lo
+        return if (span <= size + eps) {
+            when {
+                lo < -eps -> -lo                 // push right until lo == 0
+                hi > size + eps -> size - hi     // push left until hi == size
+                else -> 0.0
+            }
+        } else {
+            size / 2.0 - (lo + hi) / 2.0         // centre image in the footprint
         }
     }
 
