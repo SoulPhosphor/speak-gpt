@@ -44,6 +44,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Logger
+import org.teslasoft.assistant.preferences.profileimages.GlobalDefaultImageSeeder
 import org.teslasoft.assistant.preferences.profileimages.ProfileImageStore
 import org.teslasoft.assistant.preferences.profileimages.ProfileImageUsage
 import org.teslasoft.assistant.theme.ThemeManager
@@ -429,6 +430,11 @@ class ProfileImagesActivity : FragmentActivity(), ProfileImageDetailBottomSheetD
                 } else {
                     s.cleanupStaleFramingSessions()
                     s.reconcile()
+                    // Ensures the Global Default and every built-in preset
+                    // exist as ordinary, pickable catalog entries whenever
+                    // the gallery opens - not just from Default Images
+                    // (owner ruling: "why take away options").
+                    GlobalDefaultImageSeeder.ensureSeeded(this@ProfileImagesActivity)
                     val usage = ProfileImageUsage.computeAll(this@ProfileImagesActivity)
                     s.listNewestFirst().map { record ->
                         val file = s.imageFile(record.hash)

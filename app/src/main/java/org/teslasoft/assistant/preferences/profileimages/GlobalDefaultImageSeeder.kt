@@ -26,46 +26,75 @@ import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.GlobalPreferences
 
 /**
- * Seeds the Global Default Image (profile-images-plan.md ADDENDUM, owner
- * ruling July 19 2026): the app must never require a user to pick or
- * upload anything for a shared default to exist ("users shouldn't have to
- * select images"). The out-of-the-box value is a repurposed built-in icon
- * from CustomizeAssistantDialog's preset row - the "gemini" preset
- * (google_bard.xml, two overlapping sparkle/star shapes) - rendered ONCE
- * into a real, permanent 512x512 Profile Image the first time it is
- * needed, so it behaves as an ordinary catalog entry (viewable, reusable,
- * replaceable) rather than a hardcoded special case.
+ * Seeds built-in icons as ordinary, permanent Profile Images
+ * (profile-images-plan.md ADDENDUM, owner rulings July 19 2026).
  *
- * Must be called off the main thread - it renders a bitmap and writes a
- * permanent file (ProfileImageStore.save()).
+ * Two distinct rules, both implemented here:
+ *
+ * 1. The Global Default Image must never require a user to pick or upload
+ *    anything ("users shouldn't have to select images") - the out-of-the-box
+ *    value is CustomizeAssistantDialog's "gemini" preset (google_bard.xml,
+ *    two overlapping sparkle/star shapes - the owner calls this "the double
+ *    star"), rendered once into a real 512x512 Profile Image.
+ * 2. When the user later changes the Global Default, every existing
+ *    built-in preset must remain a selectable option, not just the seeded
+ *    one ("why take away options"). Rather than building a second, separate
+ *    picker UI (which would need new, unapproved wording), ALL FOUR presets
+ *    are seeded as ordinary catalog entries the existing Profile Images
+ *    gallery already shows and lets you pick, upload-alongside, or delete
+ *    like any other image - no new screen or text needed.
+ *
+ * Must be called off the main thread - it renders bitmaps and writes
+ * permanent files (ProfileImageStore.save()). Safe to call repeatedly:
+ * save() dedupes by content hash, so re-seeding an already-present icon is
+ * a no-op file-wise.
  */
 object GlobalDefaultImageSeeder {
 
     private const val SEED_SIZE = 512
+    private const val TINT_COLOR_RES = R.color.accent_900
+
+    /** avatarId -> built-in drawable, matching StaticAvatarParser's mapping. */
+    private val BUILTIN_PRESETS = listOf(
+        "gpt" to R.drawable.chatgpt_icon,
+        "gemini" to R.drawable.google_bard,
+        "perplexity" to R.drawable.perplexity_ai,
+        "speakgpt" to R.drawable.assistant
+    )
+
+    /** The preset used as the Global Default's out-of-the-box value. */
+    private const val DEFAULT_SEED_AVATAR_ID = "gemini"
 
     /**
-     * Returns the Global Default Image hash, seeding it if it is unset or
-     * the catalog no longer has it (e.g. the file was deleted). Returns ""
-     * only if rendering or saving the seed fails - callers must treat that
-     * exactly like any other absent reference, never crash.
+     * Ensures the Global Default Image is seeded, and that every built-in
+     * preset exists in the catalog as a selectable option. Returns the
+     * Global Default hash, or "" only if rendering/saving every preset
+     * failed - callers must treat that exactly like any other absent
+     * reference, never crash.
      */
     fun ensureSeeded(context: Context): String {
         val preferences = GlobalPreferences.getPreferences(context)
         val store = ProfileImageStore.getInstance(context)
 
+        val seededByAvatarId = HashMap<String, String>()
+        for ((avatarId, drawableRes) in BUILTIN_PRESETS) {
+            val bitmap = renderBuiltinIcon(context, drawableRes, TINT_COLOR_RES) ?: continue
+            val hash = store.save(bitmap) ?: continue
+            seededByAvatarId[avatarId] = hash
+        }
+
         val existing = preferences.getGlobalDefaultImageRef()
         if (existing.isNotEmpty() && store.contains(existing)) return existing
 
-        val bitmap = renderBuiltinIcon(context, R.drawable.google_bard, R.color.accent_900) ?: return ""
-        val hash = store.save(bitmap) ?: return ""
-        preferences.setGlobalDefaultImageRef(hash)
-        return hash
+        val defaultHash = seededByAvatarId[DEFAULT_SEED_AVATAR_ID] ?: return existing
+        preferences.setGlobalDefaultImageRef(defaultHash)
+        return defaultHash
     }
 
     /**
      * Rasterizes a built-in vector icon - normally tinted live at draw time
-     * (see CustomizeAssistantDialog, which applies the same accent_900 tint
-     * to this exact drawable) - into a fixed-color bitmap. A permanent
+     * (see CustomizeAssistantDialog, which applies this same accent_900
+     * tint to all four presets) - into a fixed-color bitmap. A permanent
      * Profile Image is a plain JPEG; it cannot re-tint itself later the way
      * the live vector does, so the color must be locked in now. Composited
      * over white first (FRAMING OUTPUT: transparent regions never become
