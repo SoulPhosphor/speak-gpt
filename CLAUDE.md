@@ -1530,14 +1530,31 @@ Everything is on-device. No cloud sync, no accounts.
   Settings). Manager mode uses `Widget.App.Row.TitleOnly` + chevron (no
   content preview — any description/preview text is dropped, owner
   decision). Pick mode is UNTOUCHED: it keeps its own "checked tile"
-  layout (the currently-picked item drawn highlighted/filled), the same
-  scheme the Personas picker also uses, since there tapping selects rather
-  than opens something and a chevron would mislead. Each mode has its own
-  item layout XML; the adapter picks one via a `pickMode: Boolean` fixed
-  for the adapter's whole lifetime (read once from the activity's intent
-  extra), so the two never mix within one instance's recycled views.
-  Don't touch pick mode when converting a manager-mode list unless the
-  owner asks for that specifically.
+  layout (the currently-picked item drawn highlighted/filled). Each mode
+  has its own item layout XML; the adapter picks one via a `pickMode:
+  Boolean` fixed for the adapter's whole lifetime (read once from the
+  activity's intent extra), so the two never mix within one instance's
+  recycled views. Don't touch pick mode when converting a manager-mode
+  list unless the owner asks for that specifically.
+  **The Personas/Companions list is DIFFERENT (owner ruling, July 19 2026
+  evening — supersedes the July 18 description above, which wrongly
+  called it a "checked tile" pick-mode scheme with no chevron):**
+  `PersonasListActivity`/`view_persona_item.xml` is a single screen with
+  no `pickMode` split, used identically whether reached from Characters,
+  Quick Settings, or ChatActivity's "create first companion" prompt. It
+  never shows which companion is "currently active" — no highlight, no
+  color inversion, ever; that concept lives entirely in Quick Settings and
+  the last-used-companion logic (see "New-chat companion selection" below
+  for how last-used is recorded). Tapping a row always opens that
+  Companion's edit screen (`EditPersonaActivity`) — matching System
+  Prompts' manager-mode row exactly (`Widget.App.Row.TitleOnly` +
+  `TextColumn` + `Title` + `Chevron`) but with a leading
+  `Widget.App.Row.ProfileImage` for the Companion's picture — there is no
+  separate "select" tap action on the row at all. Picking a companion from
+  Quick Settings still works: opening a row's editor and hitting Save
+  calls the same `finishWithActive` the row tap used to call directly, so
+  the result still flows back to Quick Settings/Characters — it just takes
+  an extra explicit step (open, then Save) instead of an instant tap.
   **Caveat the owner should know:** a style only fixes how a view looks —
   it can't guarantee a new row's structure is right (that all pieces
   exist, in order, each with the correct style). Using these styles makes
@@ -1578,6 +1595,22 @@ Everything is on-device. No cloud sync, no accounts.
   just reuse of this style as-is — deliberately deferred pending the
   owner's review of the slices already built. Do not roll this out
   further without the owner's go-ahead.
+  **Rollout status update (July 19 2026, evening).** Converted the
+  Personas/Companions list (`view_persona_item.xml`,
+  `PersonaListItemAdapter.kt`) from its old raw hand-built row (a custom
+  `ConstraintLayout` with a manually swapped background/text-color
+  "selected" state and a plain `ImageButton` chevron) to the shared
+  styles: `Widget.App.Row.TitleOnly` + `Widget.App.Row.ProfileImage` (the
+  leading Companion picture, unchanged in size/position — still 48dp) +
+  `Widget.App.Row.TextColumn` + `Widget.App.Row.Title` +
+  `Widget.App.Row.Chevron`. This is the **first real use of `TitleOnly` +
+  `Icon` together** (every prior icon/avatar row use — the four "General"
+  Settings entries — paired the icon with `WithSubtitle`); the
+  "with an icon" shorthand already covered this combination, it just
+  hadn't been built yet. See "The Personas/Companions list is DIFFERENT"
+  above for the interaction-model change (no highlight, tap opens the
+  editor) that came with this — it is not a pure visual conversion like
+  the other rows in this list.
 - **Screen/menu titles are Title Case (owner ruling, July 19 2026).** A
   window title and its corresponding menu-row label (e.g. the
   "Activation Prompts" row on Characters vs. the Activation Prompts
@@ -1964,10 +1997,13 @@ Everything is on-device. No cloud sync, no accounts.
   is written whenever a companion is chosen through **ANY** selection surface —
   **both Quick Settings AND the Companions list opened from Characters** (the
   July 10 rule that only Quick Settings wrote it was the bug: a companion picked
-  via Characters never carried into new chats). Recording fires only on an
-  explicit tap-to-select (the persona list returns `CANCELED` on back-out), so
-  a mere browse is never recorded. `Preferences.hasLastUsedPersonaChoice()` is
-  now unused by seeding.
+  via Characters never carried into new chats). Recording fires only when the
+  Companions list actually returns a companion — since July 19 2026 that means
+  opening a companion's editor and hitting **Save** (tapping a row just opens
+  the editor, it doesn't select by itself; see "The Personas/Companions list
+  is DIFFERENT" above), while backing out of either the list or the editor
+  still returns `CANCELED`. A mere browse is still never recorded.
+  `Preferences.hasLastUsedPersonaChoice()` is now unused by seeding.
 - Legacy/odd-named files exist (`InstructionsForDegradedTeapots…Activity`,
   `MainActivity_robo_script.json`, `experiment.json`, `desktop.ini`,
   `hub-purge.sh`) — leave them unless asked.

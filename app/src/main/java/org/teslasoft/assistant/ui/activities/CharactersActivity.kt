@@ -61,10 +61,12 @@ class CharactersActivity : FragmentActivity() {
                 // Record the companion just chosen as the last-used default so
                 // the next new chat opens with it (owner ruling, July 11 2026:
                 // "last used" must track the companion actually chosen through
-                // ANY selection surface, not only Quick Settings). This fires
-                // only on an explicit tap-to-select — backing out of the list
-                // returns CANCELED — so it never records a mere browse, which
-                // was the concern behind the earlier July 10 wording.
+                // ANY selection surface, not only Quick Settings). The
+                // Companions list (owner ruling, July 19 2026) is now pure
+                // browse/edit - tapping a row opens that companion's editor,
+                // it doesn't select on its own - so this only fires when the
+                // owner actually saves in the editor, never from merely
+                // opening a companion to look at it or backing out.
                 preferences?.setLastUsedPersonaId(personaId)
                 textPersonasSubtitle?.text = getActivePersonaLabel()
             }
@@ -130,9 +132,7 @@ class CharactersActivity : FragmentActivity() {
         textPersonasSubtitle?.text = getActivePersonaLabel()
 
         rowPersonas?.setOnClickListener {
-            val intent = Intent(this, PersonasListActivity::class.java)
-            intent.putExtra("currentPersonaId", preferences?.getPersonaId() ?: "")
-            personasActivityResultLauncher.launch(intent)
+            personasActivityResultLauncher.launch(Intent(this, PersonasListActivity::class.java))
         }
 
         rowMyPersonas?.setOnClickListener {

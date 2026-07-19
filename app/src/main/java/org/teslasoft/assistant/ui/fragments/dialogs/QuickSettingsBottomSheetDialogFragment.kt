@@ -747,9 +747,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         }
 
         btnSelectPersona?.setOnClickListener {
-            val intent = Intent(requireContext(), PersonasListActivity::class.java)
-            intent.putExtra("currentPersonaId", preferences?.getPersonaId() ?: "")
-            personaActivityResultLauncher.launch(intent)
+            personaActivityResultLauncher.launch(Intent(requireContext(), PersonasListActivity::class.java))
         }
 
         btnSelectActivation?.setOnClickListener {
