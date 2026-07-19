@@ -1542,7 +1542,11 @@ Everything is on-device. No cloud sync, no accounts.
   — 6 rows, all WithSubtitle except Memory Backup & Restore, which stays
   TitleOnly since no subtitle wording has ever been owner-approved for
   it); the Roleplay hub's own rows (`activity_roleplay_hub.xml` — 5 rows,
-  all WithSubtitle). **Not converted:** every sub-screen reached from
+  all WithSubtitle); the Profile Image Properties screen's own rows
+  (`activity_profile_image_properties.xml` — 3 rows, all WithSubtitle; built
+  this way from its Phase 6 commit, predating this rollout note — flagged
+  July 19 2026 as already matching, not newly converted). **Not converted:**
+  every sub-screen reached from
   Memory Manager or the Roleplay hub (Memory Browser, Memory Assistant,
   Lorebooks, Memory Controls, Advanced Memory Settings, the roleplay card
   lists, etc. — none of these were touched); every other tile on the main
