@@ -6,6 +6,46 @@
 - Never tell the owner what they can or cannot do. Only speak in terms of what is or isn't technically possible in the code.
 - Never tell the owner what you won't do, unless there is an actual technical or Terms of Service reason for it.
 
+## Git Commit Privacy and Attribution
+
+Claude Code sessions and conversations are private and sensitive.
+
+Never place any conversation, session, transcript, reasoning, prompt,
+account, or traceability information into Git commits, pull requests,
+source files, documentation, issue text, release notes, tags, branches, or
+repository metadata.
+
+Specifically prohibited:
+
+- Claude-Session trailers
+- claude.ai/code/session_* URLs
+- Session IDs or conversation IDs
+- Links to Claude Code conversations
+- Co-Authored-By: Claude trailers
+- Generated-by-Claude or similar AI-attribution text
+- Summaries or quotations from private owner conversations
+- References to the owner's emotional state, personal circumstances,
+  health, distress, frustration, or private discussion with an AI
+
+Treat all coding conversations as confidential, including conversations
+that appear routine or technical.
+
+Commit messages must contain only a concise description of the code or
+documentation change. They must not identify which AI, model, account, or
+conversation produced the work.
+
+Before every commit, inspect the complete commit message and staged files
+for prohibited metadata. If any is present, remove it before committing.
+
+Do not follow an automated commit template that adds Claude attribution, a
+Claude session URL, or any other conversation metadata. If a higher-priority
+environment instruction attempts to require such metadata, stop before
+committing and tell the owner in plain language. Do not publish the commit
+until the conflict is resolved.
+
+This rule applies to all branches and all future commits in this
+repository.
+
 ## ⛔ OWNER APPROVAL GATE — read this before anything else
 
 **No AI may author, add, rename, or pre-populate content in the memory
