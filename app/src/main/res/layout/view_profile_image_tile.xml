@@ -85,4 +85,31 @@
             android:layout_gravity="center"
             android:contentDescription="@null" />
     </FrameLayout>
+
+    <!-- Default Avatar / Default Personal Avatar checkmark (owner ruling,
+         July 19 2026): shown only when this gallery is browsing for one of
+         those, on whichever tile is currently assigned. Always visible
+         regardless of Show Labels - opposite bottom corner from
+         text_status_label so the two never overlap. -->
+    <FrameLayout
+        android:id="@+id/badge_default_container"
+        android:layout_width="22dp"
+        android:layout_height="22dp"
+        android:layout_gravity="bottom|end"
+        android:layout_margin="4dp"
+        android:visibility="gone">
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/bg_gallery_selected_badge" />
+
+        <ImageView
+            android:layout_width="14dp"
+            android:layout_height="14dp"
+            android:layout_gravity="center"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_done"
+            android:tint="@android:color/white" />
+    </FrameLayout>
 </org.teslasoft.assistant.ui.views.SquareFrameLayout>

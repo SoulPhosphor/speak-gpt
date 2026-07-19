@@ -24,14 +24,12 @@ import android.view.WindowInsets
 import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.ScrollView
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.FragmentActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import org.teslasoft.assistant.R
-import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.profileimages.GlobalDefaultImageSeeder
 import org.teslasoft.assistant.theme.ThemeManager
 
@@ -39,8 +37,11 @@ import org.teslasoft.assistant.theme.ThemeManager
  * Default Images (profile-images-plan.md ADDENDUM, Phase 6): Global
  * Default (shared with Companions; auto-seeded, see
  * [GlobalDefaultImageSeeder]) and Personal Default (user-side only,
- * optional; falls through to the Global Default when unset). Both are
- * assigned through the same Profile Images gallery, in assignment mode.
+ * optional; falls through to the Global Default when unset). Both rows
+ * open the same Profile Images gallery, in ordinary browsing (owner
+ * ruling, July 19 2026 - see ProfileImagesActivity.EXTRA_DEFAULT_TARGET):
+ * assignment happens from inside the gallery's Image Detail sheet (Set as
+ * Default), not by tapping a tile here, so there is no result to wait for.
  * Plan item 4 approves only "a screen or row group where the user sets
  * the Global Default and the Personal Default separately" - no leading
  * preview thumbnail or Remove Picture row on this screen; do not add
@@ -48,57 +49,37 @@ import org.teslasoft.assistant.theme.ThemeManager
  */
 class DefaultImagesActivity : FragmentActivity() {
 
-    companion object {
-        private const val STATE_PENDING_ASSIGNMENT = "pending_assignment"
-    }
-
     private val ioScope = CoroutineScope(Dispatchers.IO)
-
-    private var pendingAssignment: Target? = null
-
-    private enum class Target { GLOBAL, PERSONAL }
-
-    private val assignmentLauncher =
-        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-            val target = pendingAssignment
-            pendingAssignment = null
-            if (result.resultCode != RESULT_OK || target == null) return@registerForActivityResult
-            val hash = result.data?.getStringExtra(ProfileImagesActivity.EXTRA_RESULT_HASH) ?: return@registerForActivityResult
-            val preferences = GlobalPreferences.getPreferences(this)
-            when (target) {
-                Target.GLOBAL -> preferences.setGlobalDefaultImageRef(hash)
-                Target.PERSONAL -> preferences.setDefaultUserImageRef(hash)
-            }
-        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         ThemeManager.getThemeManager().applyPalette(this)
         setContentView(R.layout.activity_default_images)
 
-        // Survives rotation while the assignment gallery is on top - a
-        // plain field alone would silently drop the result (the plan calls
-        // out exactly this class of bug for image-assignment flows).
-        pendingAssignment = savedInstanceState?.getString(STATE_PENDING_ASSIGNMENT)?.let {
-            runCatching { Target.valueOf(it) }.getOrNull()
-        }
-
         findViewById<ImageButton>(R.id.btn_back).setOnClickListener { finish() }
 
         findViewById<LinearLayout>(R.id.row_global_default).setOnClickListener {
-            launchAssignment(Target.GLOBAL)
+            startActivity(
+                Intent(this, ProfileImagesActivity::class.java)
+                    .putExtra(ProfileImagesActivity.EXTRA_MODE, ProfileImagesActivity.MODE_MANAGEMENT)
+                    .putExtra(ProfileImagesActivity.EXTRA_DEFAULT_TARGET, ProfileImagesActivity.TARGET_GLOBAL)
+            )
         }
 
         findViewById<LinearLayout>(R.id.row_personal_default).setOnClickListener {
-            launchAssignment(Target.PERSONAL)
+            startActivity(
+                Intent(this, ProfileImagesActivity::class.java)
+                    .putExtra(ProfileImagesActivity.EXTRA_MODE, ProfileImagesActivity.MODE_MANAGEMENT)
+                    .putExtra(ProfileImagesActivity.EXTRA_DEFAULT_TARGET, ProfileImagesActivity.TARGET_PERSONAL)
+            )
         }
     }
 
     override fun onResume() {
         super.onResume()
-        // Ensures the Global Default is seeded so the assignment gallery
-        // always has it as a catalog entry - off the main thread, since
-        // seeding may write a permanent file.
+        // Ensures the Global Default is seeded so the gallery always has it
+        // as a catalog entry - off the main thread, since seeding may write
+        // a permanent file.
         ioScope.launch { GlobalDefaultImageSeeder.ensureSeeded(this@DefaultImagesActivity) }
     }
 
@@ -134,18 +115,4 @@ class DefaultImagesActivity : FragmentActivity() {
         ioScope.cancel()
         super.onDestroy()
     }
-
-    override fun onSaveInstanceState(outState: Bundle) {
-        super.onSaveInstanceState(outState)
-        pendingAssignment?.let { outState.putString(STATE_PENDING_ASSIGNMENT, it.name) }
-    }
-
-    private fun launchAssignment(target: Target) {
-        pendingAssignment = target
-        assignmentLauncher.launch(
-            Intent(this, ProfileImagesActivity::class.java)
-                .putExtra(ProfileImagesActivity.EXTRA_MODE, ProfileImagesActivity.MODE_ASSIGNMENT)
-        )
-    }
-
 }

@@ -129,4 +129,27 @@ class GlobalPreferences private constructor(private var gp: SharedPreferences) {
     fun setProfileImageShape(shape: String) {
         gp.edit().putString("profile_image_shape", shape).apply()
     }
+
+    /**
+     * Show Labels (Profile Images gallery, owner ruling July 19 2026):
+     * whether the small status label (Unused / Missing / Corrupted /
+     * Default) renders at the bottom of each gallery tile. Defaults to
+     * true. The Default checkmark badge on the current Default Avatar /
+     * Default Personal Avatar tile is independent of this and always shows
+     * regardless of this setting.
+     *
+     * @return true if labels should render
+     * */
+    fun getProfileImageShowLabels() : Boolean {
+        return gp.getBoolean("profile_image_show_labels", true)
+    }
+
+    /**
+     * Set whether Profile Images gallery tile status labels render.
+     *
+     * @param show true to show labels
+     * */
+    fun setProfileImageShowLabels(show: Boolean) {
+        gp.edit().putBoolean("profile_image_show_labels", show).apply()
+    }
 }

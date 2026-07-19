@@ -17,10 +17,13 @@
 **************************************************************************/
 -->
 <!-- Profile Images gallery (profile-images-plan.md, PROFILE IMAGES GALLERY /
-     EXACT GALLERY CONTROL ORDER). One layout serves all three top-bar states
-     (normal assignment, normal management, selection) and both bottom-bar
-     states (Upload New / Delete Selected) by showing/hiding pieces - see
-     ProfileImagesActivity for which views are visible in which mode. -->
+     EXACT GALLERY CONTROL ORDER). One layout serves both top-bar states
+     (normal, selection) and both bottom-bar states (Upload New / Delete
+     Selected) by showing/hiding pieces - see ProfileImagesActivity for
+     which views are visible in which mode. When opened from Default Images
+     (EXTRA_DEFAULT_TARGET) this is still ordinary browsing, not a separate
+     mode - only the title, the per-tile Default checkmark and the Image
+     Detail sheet's Set as Default button change. -->
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
@@ -167,46 +170,62 @@
         </FrameLayout>
     </androidx.constraintlayout.widget.ConstraintLayout>
 
-    <!-- Single-selection filter: All Images / In Use / Unused. Locked
-         (disabled, still visible) while Selection Mode is active so
-         filtering cannot silently discard the current selection. -->
-    <com.google.android.material.chip.ChipGroup
-        android:id="@+id/filter_group"
+    <!-- Show Labels (left, plain text + switch, tapping the text also
+         toggles it - never a chip/tile) and the Filter dropdown (right:
+         All / Active / Inactive) replacing the old filter chip row (owner
+         ruling, July 19 2026). Both stay enabled/disabled together with
+         Selection Mode exactly like the old chips did, so filtering cannot
+         silently discard the current selection. -->
+    <LinearLayout
+        android:id="@+id/labels_filter_row"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
-        android:paddingHorizontal="12dp"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="16dp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/action_bar"
-        app:selectionRequired="true"
-        app:singleSelection="true">
+        app:layout_constraintTop_toBottomOf="@id/action_bar">
 
-        <com.google.android.material.chip.Chip
-            android:id="@+id/chip_all_images"
-            style="@style/Widget.Material3.Chip.Filter"
+        <TextView
+            android:id="@+id/text_show_labels"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:checkable="true"
+            android:background="?attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true"
+            android:padding="4dp"
+            android:text="@string/profile_image_show_labels"
+            android:textColor="@color/text"
+            android:textSize="14sp" />
+
+        <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/switch_show_labels"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
             android:checked="true"
-            android:text="@string/filter_all_images" />
+            android:contentDescription="@string/profile_image_show_labels" />
 
-        <com.google.android.material.chip.Chip
-            android:id="@+id/chip_in_use"
-            style="@style/Widget.Material3.Chip.Filter"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:checkable="true"
-            android:text="@string/filter_in_use" />
+        <View
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
 
-        <com.google.android.material.chip.Chip
-            android:id="@+id/chip_unused"
-            style="@style/Widget.Material3.Chip.Filter"
-            android:layout_width="wrap_content"
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/filter_dropdown_layout"
+            style="@style/App.ExposedTextField"
+            android:layout_width="130dp"
             android:layout_height="wrap_content"
-            android:checkable="true"
-            android:text="@string/filter_unused" />
-    </com.google.android.material.chip.ChipGroup>
+            android:hint="@string/profile_image_filter_label">
+
+            <AutoCompleteTextView
+                android:id="@+id/filter_dropdown"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="none" />
+        </com.google.android.material.textfield.TextInputLayout>
+    </LinearLayout>
 
     <LinearLayout
         android:id="@+id/content_frame"
@@ -216,7 +235,7 @@
         app:layout_constraintBottom_toTopOf="@id/bottom_bar"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/filter_group">
+        app:layout_constraintTop_toBottomOf="@id/labels_filter_row">
 
         <!-- Persistent inline status text (ERROR PRESENTATION): partial
              deletion results and similar recoverable notices. Pushes the

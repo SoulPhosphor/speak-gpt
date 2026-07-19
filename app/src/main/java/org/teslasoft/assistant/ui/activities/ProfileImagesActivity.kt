@@ -23,6 +23,8 @@ import android.os.Build
 import android.os.Bundle
 import android.view.View
 import android.view.WindowInsets
+import android.widget.ArrayAdapter
+import android.widget.AutoCompleteTextView
 import android.widget.FrameLayout
 import android.widget.ImageButton
 import android.widget.LinearLayout
@@ -34,15 +36,16 @@ import androidx.fragment.app.FragmentActivity
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.button.MaterialButton
-import com.google.android.material.chip.Chip
-import com.google.android.material.chip.ChipGroup
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.materialswitch.MaterialSwitch
+import com.google.android.material.textfield.TextInputLayout
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.Logger
 import org.teslasoft.assistant.preferences.profileimages.GlobalDefaultImageSeeder
 import org.teslasoft.assistant.preferences.profileimages.ProfileImageStore
@@ -59,12 +62,16 @@ import java.util.Locale
 
 /**
  * The Profile Images gallery (profile-images-plan.md, PROFILE IMAGES
- * GALLERY through UPLOAD FLOW). Two launch modes read from [EXTRA_MODE]:
- * [MODE_ASSIGNMENT] (a normal tap returns the bare hash via
- * [EXTRA_RESULT_HASH] and RESULT_OK; no selection/deletion controls exist)
- * and [MODE_MANAGEMENT] (a normal tap opens Image Detail/View Usage; Select
- * enters a deletion Selection Mode). The gallery does not know or edit the
- * destination profile - callers assign the returned hash themselves.
+ * GALLERY through UPLOAD FLOW). Ordinary browsing (a normal tap opens Image
+ * Detail/View Usage; Select enters a deletion Selection Mode) is the only
+ * behavior - there is no separate assign-and-exit mode. [EXTRA_DEFAULT_TARGET]
+ * (owner ruling, July 19 2026) is an orthogonal flag, not a mode: when set to
+ * [TARGET_GLOBAL] or [TARGET_PERSONAL] the title reflects which Default is
+ * being browsed, the tile currently assigned to it always shows the Default
+ * checkmark (see [GalleryTile.isCurrentDefault]), and the Image Detail sheet
+ * gains a Set as Default button that writes the assignment directly - the
+ * gallery is never auto-closed by tapping, assigning, or deleting; the user
+ * leaves only via back or the top chevron.
  *
  * Reconciliation and stale framing-session cleanup run once, here, only
  * when the gallery opens (never at app startup) - see [loadGallery].
@@ -73,9 +80,11 @@ class ProfileImagesActivity : FragmentActivity(), ProfileImageDetailBottomSheetD
 
     companion object {
         const val EXTRA_MODE = "mode"
-        const val MODE_ASSIGNMENT = "assignment"
         const val MODE_MANAGEMENT = "management"
-        const val EXTRA_RESULT_HASH = "result_hash"
+        /** "global" or "personal" - see [TARGET_GLOBAL]/[TARGET_PERSONAL]. */
+        const val EXTRA_DEFAULT_TARGET = "default_target"
+        const val TARGET_GLOBAL = "global"
+        const val TARGET_PERSONAL = "personal"
 
         private const val MIN_TILE_WIDTH_DP = 110
         private const val HORIZONTAL_ALLOWANCE_DP = 16
@@ -84,6 +93,7 @@ class ProfileImagesActivity : FragmentActivity(), ProfileImageDetailBottomSheetD
     private enum class Filter { ALL_IMAGES, IN_USE, UNUSED }
 
     private var mode: String = MODE_MANAGEMENT
+    private var defaultTarget: String? = null
     private var store: ProfileImageStore? = null
 
     private var allTiles: List<GalleryTile> = emptyList()
@@ -101,10 +111,10 @@ class ProfileImagesActivity : FragmentActivity(), ProfileImageDetailBottomSheetD
     private var selectAllContainer: FrameLayout? = null
     private var textSelectAllShown: TextView? = null
     private var btnSelectAllOverflow: ImageButton? = null
-    private var chipGroup: ChipGroup? = null
-    private var chipAllImages: Chip? = null
-    private var chipInUse: Chip? = null
-    private var chipUnused: Chip? = null
+    private var textShowLabels: TextView? = null
+    private var switchShowLabels: MaterialSwitch? = null
+    private var filterDropdownLayout: TextInputLayout? = null
+    private var filterDropdown: AutoCompleteTextView? = null
     private var recycler: RecyclerView? = null
     private var emptyState: LinearLayout? = null
     private var textEmptyTitle: TextView? = null
@@ -137,11 +147,14 @@ class ProfileImagesActivity : FragmentActivity(), ProfileImageDetailBottomSheetD
         setContentView(R.layout.activity_profile_images)
 
         mode = intent.getStringExtra(EXTRA_MODE) ?: MODE_MANAGEMENT
+        defaultTarget = intent.getStringExtra(EXTRA_DEFAULT_TARGET)
         store = ProfileImageStore.getInstance(this)
 
         bindViews()
+        applyDefaultTargetTitle()
         setupRecycler()
-        setupFilterChips()
+        setupFilterDropdown()
+        setupShowLabelsToggle()
         setupTopBarActions()
         setupBottomBarActions()
         applyModeVisibility()
@@ -196,10 +209,10 @@ class ProfileImagesActivity : FragmentActivity(), ProfileImageDetailBottomSheetD
         selectAllContainer = findViewById(R.id.select_all_container)
         textSelectAllShown = findViewById(R.id.text_select_all_shown)
         btnSelectAllOverflow = findViewById(R.id.btn_select_all_overflow)
-        chipGroup = findViewById(R.id.filter_group)
-        chipAllImages = findViewById(R.id.chip_all_images)
-        chipInUse = findViewById(R.id.chip_in_use)
-        chipUnused = findViewById(R.id.chip_unused)
+        textShowLabels = findViewById(R.id.text_show_labels)
+        switchShowLabels = findViewById(R.id.switch_show_labels)
+        filterDropdownLayout = findViewById(R.id.filter_dropdown_layout)
+        filterDropdown = findViewById(R.id.filter_dropdown)
         recycler = findViewById(R.id.recycler_gallery)
         emptyState = findViewById(R.id.empty_state)
         textEmptyTitle = findViewById(R.id.text_empty_title)
@@ -225,17 +238,59 @@ class ProfileImagesActivity : FragmentActivity(), ProfileImageDetailBottomSheetD
         return (usableWidthDp / MIN_TILE_WIDTH_DP).coerceAtLeast(2)
     }
 
-    private fun setupFilterChips() {
-        chipGroup?.setOnCheckedStateChangeListener { _, checkedIds ->
-            val newFilter = when (checkedIds.firstOrNull()) {
-                R.id.chip_in_use -> Filter.IN_USE
-                R.id.chip_unused -> Filter.UNUSED
+    /** Sets the gallery title to the Default Avatar / Default Personal
+     *  Avatar row's own already-approved text when browsing for one of
+     *  those (owner ruling, July 19 2026); left as the plain "Profile
+     *  Images" title (the layout default) otherwise. */
+    private fun applyDefaultTargetTitle() {
+        val titleRes = when (defaultTarget) {
+            TARGET_GLOBAL -> R.string.row_global_default_title
+            TARGET_PERSONAL -> R.string.row_personal_default_title
+            else -> return
+        }
+        activityTitle?.setText(titleRes)
+    }
+
+    /** Filter dropdown (owner ruling, July 19 2026, replaced the old filter
+     *  chips): All / Active / Inactive map onto the same internal [Filter]
+     *  values the chips drove - only the presentation changed. */
+    private fun setupFilterDropdown() {
+        val labels = listOf(
+            getString(R.string.filter_all),
+            getString(R.string.filter_active),
+            getString(R.string.filter_inactive)
+        )
+        filterDropdown?.setAdapter(ArrayAdapter(this, android.R.layout.simple_list_item_1, labels))
+        filterDropdown?.setText(labels[0], false)
+        filterDropdown?.setOnItemClickListener { _, _, position, _ ->
+            val newFilter = when (position) {
+                1 -> Filter.IN_USE
+                2 -> Filter.UNUSED
                 else -> Filter.ALL_IMAGES
             }
             if (newFilter != currentFilter) {
                 currentFilter = newFilter
                 applyFilter()
             }
+        }
+    }
+
+    /** Show Labels (owner ruling, July 19 2026): plain text + switch, not a
+     *  chip/tile - tapping the text also toggles it. Persisted so it holds
+     *  across gallery visits. */
+    private fun setupShowLabelsToggle() {
+        val showLabels = GlobalPreferences.getPreferences(this).getProfileImageShowLabels()
+        switchShowLabels?.isChecked = showLabels
+        adapter.showLabels = showLabels
+
+        val toggle = {
+            val newValue = !(switchShowLabels?.isChecked ?: true)
+            switchShowLabels?.isChecked = newValue
+        }
+        textShowLabels?.setOnClickListener { toggle() }
+        switchShowLabels?.setOnCheckedChangeListener { _, checked ->
+            GlobalPreferences.getPreferences(this).setProfileImageShowLabels(checked)
+            adapter.showLabels = checked
         }
     }
 
@@ -260,7 +315,6 @@ class ProfileImagesActivity : FragmentActivity(), ProfileImageDetailBottomSheetD
     /* ------------------------------ modes ------------------------------ */
 
     private fun applyModeVisibility() {
-        val assignment = mode == MODE_ASSIGNMENT
         if (selectionMode) {
             btnBack?.visibility = View.GONE
             btnCancelSelection?.visibility = View.VISIBLE
@@ -276,14 +330,18 @@ class ProfileImagesActivity : FragmentActivity(), ProfileImageDetailBottomSheetD
             btnCancelSelection?.visibility = View.GONE
             activityTitle?.visibility = View.VISIBLE
             textSelectionCount?.visibility = View.GONE
-            btnSelect?.visibility = if (assignment) View.GONE else View.VISIBLE
+            btnSelect?.visibility = View.VISIBLE
             selectAllContainer?.visibility = View.GONE
             btnUploadNew?.visibility = View.VISIBLE
             btnDeleteSelected?.visibility = View.GONE
         }
-        chipAllImages?.isEnabled = !selectionMode
-        chipInUse?.isEnabled = !selectionMode
-        chipUnused?.isEnabled = !selectionMode
+        // Locked (disabled, still visible) while Selection Mode is active so
+        // filtering cannot silently discard the current selection - same
+        // rule the old filter chips followed.
+        filterDropdownLayout?.isEnabled = !selectionMode
+        filterDropdown?.isEnabled = !selectionMode
+        textShowLabels?.isEnabled = !selectionMode
+        switchShowLabels?.isEnabled = !selectionMode
         adapter.selectionMode = selectionMode
         updateSelectAvailability()
     }
@@ -367,7 +425,7 @@ class ProfileImagesActivity : FragmentActivity(), ProfileImageDetailBottomSheetD
      *  current filtered results contain at least one deletion-eligible
      *  unused image - so an empty Selection Mode can never be entered. */
     private fun updateSelectAvailability() {
-        if (selectionMode || mode == MODE_ASSIGNMENT) return
+        if (selectionMode) return
         val hasEligible = filteredTiles().any { !it.isUsed }
         btnSelect?.visibility = if (hasEligible) View.VISIBLE else View.GONE
     }
@@ -379,11 +437,7 @@ class ProfileImagesActivity : FragmentActivity(), ProfileImageDetailBottomSheetD
             toggleSelection(tile.hash)
             return
         }
-        if (mode == MODE_ASSIGNMENT) {
-            returnAssignmentResult(tile.hash)
-        } else {
-            openDetail(tile)
-        }
+        openDetail(tile)
     }
 
     private fun toggleSelection(hash: String) {
@@ -409,12 +463,19 @@ class ProfileImagesActivity : FragmentActivity(), ProfileImageDetailBottomSheetD
         btnDeleteSelected?.isEnabled = selectedHashes.isNotEmpty()
     }
 
-    private fun returnAssignmentResult(hash: String) {
-        setResult(RESULT_OK, Intent().putExtra(EXTRA_RESULT_HASH, hash))
-        finish()
-    }
-
     /* ------------------------------ data ------------------------------ */
+
+    /** The hash currently assigned to [defaultTarget], or "" when not
+     *  browsing for a Default (or none is set yet). */
+    private fun currentDefaultHash(): String {
+        val target = defaultTarget ?: return ""
+        val preferences = GlobalPreferences.getPreferences(this)
+        return when (target) {
+            TARGET_GLOBAL -> preferences.getGlobalDefaultImageRef()
+            TARGET_PERSONAL -> preferences.getDefaultUserImageRef()
+            else -> ""
+        }
+    }
 
     /** Reconciliation and stale framing-session cleanup run only here, when
      *  the gallery opens (RECONCILIATION, TEMPORARY FILE CLEANUP). A
@@ -436,6 +497,7 @@ class ProfileImagesActivity : FragmentActivity(), ProfileImageDetailBottomSheetD
                     // (owner ruling: "why take away options").
                     GlobalDefaultImageSeeder.ensureSeeded(this@ProfileImagesActivity)
                     val usage = ProfileImageUsage.computeAll(this@ProfileImagesActivity)
+                    val defaultHash = currentDefaultHash()
                     s.listNewestFirst().map { record ->
                         val file = s.imageFile(record.hash)
                         GalleryTile(
@@ -443,7 +505,8 @@ class ProfileImagesActivity : FragmentActivity(), ProfileImageDetailBottomSheetD
                             file = file,
                             createdAt = record.createdAt,
                             isUsed = usage.containsKey(record.hash),
-                            corrupted = file != null && !isDecodableImage(file)
+                            corrupted = file != null && !isDecodableImage(file),
+                            isCurrentDefault = defaultHash.isNotEmpty() && record.hash == defaultHash
                         )
                     }
                 }
@@ -509,7 +572,8 @@ class ProfileImagesActivity : FragmentActivity(), ProfileImageDetailBottomSheetD
             withContext(Dispatchers.Main) {
                 if (isFinishing || isDestroyed) return@withContext
                 ProfileImageDetailBottomSheetDialogFragment.newInstance(
-                    tile.hash, tile.file?.absolutePath, tile.corrupted, dateAddedLine, used, usageTotalLine, identityLines
+                    tile.hash, tile.file?.absolutePath, tile.corrupted, dateAddedLine, used, usageTotalLine, identityLines,
+                    showSetAsDefault = defaultTarget != null
                 ).show(supportFragmentManager, "profile_image_detail")
             }
         }
@@ -517,6 +581,19 @@ class ProfileImagesActivity : FragmentActivity(), ProfileImageDetailBottomSheetD
 
     override fun onProfileImageDeletePermanentlyRequested(hash: String) {
         confirmDeleteSingle(hash)
+    }
+
+    /** Owner ruling, July 19 2026: assigns [hash] directly to whichever
+     *  Default this gallery was opened for and refreshes the grid so the
+     *  Default checkmark moves - the gallery stays open, never auto-closes. */
+    override fun onProfileImageSetAsDefaultRequested(hash: String) {
+        val target = defaultTarget ?: return
+        val preferences = GlobalPreferences.getPreferences(this)
+        when (target) {
+            TARGET_GLOBAL -> preferences.setGlobalDefaultImageRef(hash)
+            TARGET_PERSONAL -> preferences.setDefaultUserImageRef(hash)
+        }
+        loadGallery()
     }
 
     /** Owner ruling, July 19 2026: an in-use image may be deleted directly
@@ -636,9 +713,8 @@ class ProfileImagesActivity : FragmentActivity(), ProfileImageDetailBottomSheetD
 
     /** UPLOAD FLOW: Framing already wrote exactly one 512x512 JPEG q92 into
      *  its session directory: this permanently saves it (dedup by content
-     *  hash), then either returns the hash (assignment) or refreshes the
-     *  grid (management). ERROR PRESENTATION: an upload/save failure is
-     *  never silent. */
+     *  hash) and refreshes the grid. ERROR PRESENTATION: an upload/save
+     *  failure is never silent. */
     private fun handleFramingResult(tempPath: String) {
         ioScope.launch {
             val tempFile = File(tempPath)
@@ -662,10 +738,10 @@ class ProfileImagesActivity : FragmentActivity(), ProfileImageDetailBottomSheetD
 
             withContext(Dispatchers.Main) {
                 if (isFinishing || isDestroyed) return@withContext
-                when {
-                    hash == null -> showSaveErrorDialog(R.string.profile_image_save_error_no_space_body)
-                    mode == MODE_ASSIGNMENT -> returnAssignmentResult(hash)
-                    else -> loadGallery()
+                if (hash == null) {
+                    showSaveErrorDialog(R.string.profile_image_save_error_no_space_body)
+                } else {
+                    loadGallery()
                 }
             }
         }

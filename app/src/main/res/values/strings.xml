@@ -1801,9 +1801,21 @@
     <string name="profile_image_upload_new">Upload New</string>
     <string name="profile_image_delete_selected">Delete Selected</string>
 
-    <string name="filter_all_images">All Images</string>
     <string name="filter_in_use">In Use</string>
     <string name="filter_unused">Unused</string>
+
+    <!-- Filter dropdown (owner ruling, July 19 2026 - replaced the old
+         All Images/In Use/Unused filter chips) and the Show Labels toggle
+         beside it. filter_all/_active/_inactive are the dropdown's own
+         option text; filter_in_use/filter_unused above stay in use for the
+         per-tile status label and its content description. -->
+    <string name="profile_image_filter_label">Filter</string>
+    <string name="filter_all">All</string>
+    <string name="filter_active">Active</string>
+    <string name="filter_inactive">Inactive</string>
+    <string name="profile_image_show_labels">Show Labels</string>
+    <string name="profile_image_status_default">Default</string>
+    <string name="profile_image_set_as_default">Set as Default</string>
 
     <!-- Empty states -->
     <string name="profile_image_empty_all_title">No Profile Images</string>

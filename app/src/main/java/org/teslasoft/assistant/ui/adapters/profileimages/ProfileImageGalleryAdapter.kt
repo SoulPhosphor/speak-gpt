@@ -41,14 +41,18 @@ import java.io.File
  * drives both the Unused label/filter and, in Selection Mode, whether the
  * tile is selectable at all; Missing and Corrupted do not change
  * selectability on their own - a still-referenced record locks exactly
- * like a normal in-use image regardless of file health.
+ * like a normal in-use image regardless of file health. [isCurrentDefault]
+ * is only ever true when the gallery was opened from Default Images
+ * (ProfileImagesActivity.EXTRA_DEFAULT_TARGET) and this tile is the hash
+ * currently assigned to that target (owner ruling, July 19 2026).
  */
 data class GalleryTile(
     val hash: String,
     val file: File?,
     val createdAt: Long,
     val isUsed: Boolean,
-    val corrupted: Boolean = false
+    val corrupted: Boolean = false,
+    val isCurrentDefault: Boolean = false
 )
 
 /**
@@ -73,6 +77,16 @@ class ProfileImageGalleryAdapter(
     var listener: Listener? = null
 
     var selectionMode: Boolean = false
+        set(value) {
+            if (field == value) return
+            field = value
+            notifyDataSetChanged()
+        }
+
+    /** Show Labels (owner ruling, July 19 2026): governs only the text
+     *  label at the bottom of a tile (Unused/Missing/Corrupted/Default) -
+     *  the Default checkmark badge is independent and always shows. */
+    var showLabels: Boolean = true
         set(value) {
             if (field == value) return
             field = value
@@ -113,6 +127,7 @@ class ProfileImageGalleryAdapter(
         private val badgeContainer: FrameLayout = itemView.findViewById(R.id.badge_container)
         private val badgeBackground: View = itemView.findViewById(R.id.badge_background)
         private val badgeIcon: ImageView = itemView.findViewById(R.id.badge_icon)
+        private val badgeDefaultContainer: FrameLayout = itemView.findViewById(R.id.badge_default_container)
 
         fun bind(tile: GalleryTile) {
             // Reset first: cancels any in-flight Glide request still
@@ -133,20 +148,27 @@ class ProfileImageGalleryAdapter(
             }
 
             statusLabel.visibility = View.GONE
-            when {
-                missing -> {
-                    statusLabel.visibility = View.VISIBLE
-                    statusLabel.setText(R.string.profile_image_status_missing)
-                }
-                corrupted -> {
-                    statusLabel.visibility = View.VISIBLE
-                    statusLabel.setText(R.string.profile_image_status_corrupted)
-                }
-                !tile.isUsed -> {
-                    statusLabel.visibility = View.VISIBLE
-                    statusLabel.setText(R.string.filter_unused)
+            if (showLabels) {
+                when {
+                    missing -> {
+                        statusLabel.visibility = View.VISIBLE
+                        statusLabel.setText(R.string.profile_image_status_missing)
+                    }
+                    corrupted -> {
+                        statusLabel.visibility = View.VISIBLE
+                        statusLabel.setText(R.string.profile_image_status_corrupted)
+                    }
+                    tile.isCurrentDefault -> {
+                        statusLabel.visibility = View.VISIBLE
+                        statusLabel.setText(R.string.profile_image_status_default)
+                    }
+                    !tile.isUsed -> {
+                        statusLabel.visibility = View.VISIBLE
+                        statusLabel.setText(R.string.filter_unused)
+                    }
                 }
             }
+            badgeDefaultContainer.visibility = if (tile.isCurrentDefault) View.VISIBLE else View.GONE
 
             val isSelected = selected.contains(tile.hash)
             // A Missing record can still be referenced (RECONCILIATION); its
@@ -203,6 +225,12 @@ class ProfileImageGalleryAdapter(
                     else -> context.getString(R.string.filter_unused)
                 }
             )
+            // The Default checkmark is always visible regardless of Show
+            // Labels (see bind()), so it always needs an announcement too -
+            // independent of the missing/corrupted/used/unused line above.
+            if (tile.isCurrentDefault) {
+                parts.add(context.getString(R.string.profile_image_status_default))
+            }
             if (inSelectionMode) {
                 parts.add(
                     context.getString(
