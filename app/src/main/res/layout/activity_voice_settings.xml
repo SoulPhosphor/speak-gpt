@@ -278,7 +278,7 @@
                     <TextView
                         style="@style/Widget.App.Row.Subtitle"
                         android:maxLines="3"
-                        android:text="@string/tile_voice_advanced_desc" />
+                        android:text="@string/tile_voice_advanced_subtitle" />
                 </LinearLayout>
 
                 <ImageView
@@ -300,7 +300,7 @@
                     <TextView
                         style="@style/Widget.App.Row.Subtitle"
                         android:maxLines="3"
-                        android:text="@string/tile_voice_debugging_desc" />
+                        android:text="@string/tile_voice_debugging_subtitle" />
                 </LinearLayout>
 
                 <ImageView

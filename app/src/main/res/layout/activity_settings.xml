@@ -446,7 +446,7 @@
                     <TextView
                         style="@style/Widget.App.Row.Subtitle"
                         android:maxLines="3"
-                        android:text="@string/tile_voice_settings_desc" />
+                        android:text="@string/tile_voice_settings_subtitle" />
                 </LinearLayout>
 
                 <ImageView
@@ -682,7 +682,7 @@
                     <TextView
                         style="@style/Widget.App.Row.Subtitle"
                         android:maxLines="3"
-                        android:text="@string/tile_about_app_desc" />
+                        android:text="@string/tile_about_app_subtitle" />
                 </LinearLayout>
 
                 <ImageView
@@ -713,7 +713,7 @@
                     <TextView
                         style="@style/Widget.App.Row.Subtitle"
                         android:maxLines="3"
-                        android:text="@string/tile_clear_chat_desc" />
+                        android:text="@string/tile_clear_chat_subtitle" />
                 </LinearLayout>
 
                 <ImageView
@@ -767,7 +767,7 @@
                     <TextView
                         style="@style/Widget.App.Row.Subtitle"
                         android:maxLines="3"
-                        android:text="@string/tile_alert_debug_menu_desc" />
+                        android:text="@string/tile_alert_debug_menu_subtitle" />
                 </LinearLayout>
 
                 <ImageView
