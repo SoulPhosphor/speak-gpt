@@ -50,6 +50,13 @@ class ProfileImageDetailBottomSheetDialogFragment : BottomSheetDialogFragment() 
          *  host is responsible for the confirmation dialog and the actual
          *  delete - this fragment only reports the request and dismisses. */
         fun onProfileImageDeletePermanentlyRequested(hash: String)
+
+        /** The user tapped Delete Permanently on an image that IS currently
+         *  in use (owner ruling, July 19 2026: in-use images may be deleted
+         *  directly from here, with a stronger confirmation naming who uses
+         *  it). [identityLines] are the same already-formatted lines shown
+         *  in this sheet's usage list, e.g. "Companion: Ash". */
+        fun onProfileImageDeleteWhileInUseRequested(hash: String, identityLines: List<String>)
     }
 
     companion object {
@@ -149,7 +156,8 @@ class ProfileImageDetailBottomSheetDialogFragment : BottomSheetDialogFragment() 
             usageTotal.text = args.getString(ARG_USAGE_TOTAL_LINE)
             usageHeader.visibility = View.VISIBLE
             identityContainer.removeAllViews()
-            for (line in args.getStringArrayList(ARG_IDENTITY_LINES).orEmpty()) {
+            val identityLines = args.getStringArrayList(ARG_IDENTITY_LINES).orEmpty()
+            for (line in identityLines) {
                 val row = TextView(requireContext())
                 row.text = line
                 row.setTextColor(resources.getColor(R.color.text, requireContext().theme))
@@ -158,7 +166,13 @@ class ProfileImageDetailBottomSheetDialogFragment : BottomSheetDialogFragment() 
                 row.setPadding(0, padding, 0, padding)
                 identityContainer.addView(row)
             }
-            btnDelete.visibility = View.GONE
+            // Owner ruling, July 19 2026: in-use images are deletable too,
+            // just with a stronger confirmation naming who uses them.
+            btnDelete.visibility = View.VISIBLE
+            btnDelete.setOnClickListener {
+                listener?.onProfileImageDeleteWhileInUseRequested(hash, identityLines)
+                dismiss()
+            }
         } else {
             usageTotal.visibility = View.GONE
             usageHeader.visibility = View.GONE

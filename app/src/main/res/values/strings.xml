@@ -1849,6 +1849,14 @@
     <string name="profile_image_delete_confirm_button_all_shown">Delete All %1$d Images</string>
     <string name="profile_image_some_not_deleted">Some images were not deleted because they are now in use.</string>
 
+    <!-- Owner-approved copy, July 19 2026: deleting an image that IS
+         currently in use, from the Image Detail sheet. %1$s is the
+         already-formatted identity list (one per line, e.g. "Companion:
+         Ash"). Do not reword without explicit approval in chat. -->
+    <string name="profile_image_delete_in_use_confirm_title">Are you sure you want to delete this?</string>
+    <string name="profile_image_delete_in_use_confirm_body">It\'s currently in use by:\n%1$s\n\nIf you delete this, it will change to the default image.</string>
+    <string name="profile_image_delete_in_use_confirm_button">Okay</string>
+
     <!-- Upload/save failure (owner-approved copy, July 19 2026). Same title
          for both; the body differs by whether the cause is known. -->
     <string name="profile_image_save_error_title">Image Failed to Save</string>

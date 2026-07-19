@@ -513,6 +513,20 @@ class ProfileImagesActivity : FragmentActivity(), ProfileImageDetailBottomSheetD
         confirmDeleteSingle(hash)
     }
 
+    /** Owner ruling, July 19 2026: an in-use image may be deleted directly
+     *  from the Image Detail sheet, with a stronger confirmation naming
+     *  every identity that uses it. */
+    override fun onProfileImageDeleteWhileInUseRequested(hash: String, identityLines: List<String>) {
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.profile_image_delete_in_use_confirm_title)
+            .setMessage(getString(R.string.profile_image_delete_in_use_confirm_body, identityLines.joinToString("\n")))
+            .setNegativeButton(R.string.btn_cancel, null)
+            .setPositiveButton(R.string.profile_image_delete_in_use_confirm_button) { _, _ ->
+                performDelete(setOf(hash), forceEvenIfUsed = true)
+            }
+            .show()
+    }
+
     /* ------------------------------ deletion ------------------------------ */
 
     private fun confirmDeleteSingle(hash: String) {
@@ -552,16 +566,28 @@ class ProfileImagesActivity : FragmentActivity(), ProfileImageDetailBottomSheetD
         }
     }
 
-    /** Unused Image Deletion Order (PERMANENT DELETION): deletion-time
-     *  usage is authoritative - anything that became used since the
-     *  gallery loaded is skipped, file deleted before the catalog record
-     *  for each survivor, and the user is told when something was skipped. */
-    private fun performDelete(hashes: Set<String>) {
+    /** Unused Image Deletion Order (PERMANENT DELETION): deletion-time usage
+     *  is authoritative for the ordinary (bulk/Select All Shown) path -
+     *  anything that became used since the gallery loaded is skipped, file
+     *  deleted before the catalog record for each survivor, and the user is
+     *  told when something was skipped. [forceEvenIfUsed] bypasses that
+     *  recheck: it is set ONLY by the single-image in-use confirmation
+     *  (owner ruling, July 19 2026), where the user has already been shown
+     *  exactly who uses the image and explicitly chosen to delete it anyway -
+     *  the recheck exists to protect the bulk flow, which never shows
+     *  per-image usage before deleting, not to block an informed choice here.
+     *  The reference left behind on the identity (avatarRef/imageRef) is not
+     *  cleared; it is architecturally the same as any other Missing record -
+     *  display code already falls through gracefully. */
+    private fun performDelete(hashes: Set<String>, forceEvenIfUsed: Boolean = false) {
         ioScope.launch {
             val s = store
             val skippedCount: Int
             if (s == null) {
                 skippedCount = 0
+            } else if (forceEvenIfUsed) {
+                skippedCount = 0
+                for (hash in hashes) s.delete(hash)
             } else {
                 val currentUsage = ProfileImageUsage.computeAll(this@ProfileImagesActivity)
                 val stillUnused = hashes.filter { !currentUsage.containsKey(it) }
