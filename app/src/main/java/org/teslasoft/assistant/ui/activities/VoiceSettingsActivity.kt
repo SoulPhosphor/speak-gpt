@@ -69,7 +69,6 @@ class VoiceSettingsActivity : FragmentActivity() {
     private var tileAlwaysSpeak: TileFragment? = null
     private var tileSTT: TileFragment? = null
     private var tileLangDetect: TileFragment? = null
-    private var tileHandsFree: TileFragment? = null
     private var tileAutoSend: TileFragment? = null
     private var tileHandsFreeTiming: TileFragment? = null
     private var tileVadMethod: TileFragment? = null
@@ -250,19 +249,6 @@ class VoiceSettingsActivity : FragmentActivity() {
             getString(R.string.tile_ale_desc)
         )
 
-        tileHandsFree = TileFragment.newInstance(
-            preferences?.getHandsFreeMode() == true,
-            true,
-            getString(R.string.tile_hands_free_title),
-            null,
-            getString(R.string.on),
-            getString(R.string.off),
-            R.drawable.ic_microphone,
-            false,
-            chatId,
-            getString(R.string.tile_hands_free_desc)
-        )
-
         tileAutoSend = TileFragment.newInstance(
             preferences?.autoSend()!!,
             true,
@@ -317,7 +303,6 @@ class VoiceSettingsActivity : FragmentActivity() {
             .replace(R.id.tile_always_speak, tileAlwaysSpeak!!)
             .replace(R.id.tile_stt, tileSTT!!)
             .replace(R.id.tile_auto_language_detection, tileLangDetect!!)
-            .replace(R.id.tile_hands_free, tileHandsFree!!)
             .replace(R.id.tile_autosend, tileAutoSend!!)
             .replace(R.id.tile_hands_free_timing, tileHandsFreeTiming!!)
             .replace(R.id.tile_vad_method, tileVadMethod!!)
@@ -382,18 +367,6 @@ class VoiceSettingsActivity : FragmentActivity() {
                 preferences?.setAutoLangDetect(true)
             } else {
                 preferences?.setAutoLangDetect(false)
-            }
-        }
-
-        tileHandsFree?.setOnCheckedChangeListener { isChecked ->
-            preferences?.setHandsFreeMode(isChecked)
-            if (isChecked) {
-                // Hands-free can't work without auto-send: the conversation
-                // loop relies on each transcript being sent automatically
-                // rather than parked in the input box. Force it on and mirror
-                // that in the auto-send tile so the dependency is visible.
-                preferences?.setAutoSend(true)
-                tileAutoSend?.setChecked(true)
             }
         }
 

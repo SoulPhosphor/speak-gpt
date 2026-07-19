@@ -203,6 +203,9 @@
                 android:textSize="18sp"
                 android:textStyle="bold" />
 
+<!-- Hands-free is engaged from the conversation button in the chat input bar
+                 now, not a settings toggle, so the on/off tile was removed. Auto-send
+                 takes this row on its own. -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -210,14 +213,7 @@
                 android:layout_marginEnd="12dp"
                 android:baselineAligned="false"
                 android:orientation="horizontal"
-                android:weightSum="2">
-
-                <androidx.constraintlayout.widget.ConstraintLayout
-                    android:id="@+id/tile_hands_free"
-                    android:layout_width="0dp"
-                    android:layout_height="match_parent"
-                    android:layout_marginHorizontal="4dp"
-                    android:layout_weight="1" />
+                android:weightSum="1">
 
                 <androidx.constraintlayout.widget.ConstraintLayout
                     android:id="@+id/tile_autosend"

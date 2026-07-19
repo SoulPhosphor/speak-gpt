@@ -503,6 +503,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             btnSend?.isEnabled = true
             isRecording = false
             micIdle()
+            // Return the conversation/send button to its resting look (waveform
+            // or up-arrow depending on the box) after any turn/cancel finishes.
+            refreshConversationButton()
             cancelState = false
             adapter?.clearSpeakingPosition()
             // The top action bar can get stuck INVISIBLE when a shared-element
@@ -542,20 +545,22 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     }
 
     /**
-     * Mic button while a hands-free conversation is live. A deep-red background
-     * (not just an icon tint) is the always-on signal that the loop is running
-     * and a tap ends it — the mic will not reopen on its own afterwards. Held
-     * for the whole session, both while listening for the user and while the
-     * reply is being read back, so the cue never flickers between turns (and so
-     * the user can stop the loop at any point, including mid-readback, where the
-     * touch listener turns the tap into a full cancel).
+     * The CONVERSATION button (btnSend, the rightmost input-bar button) while a
+     * hands-free conversation is live. A deep-red background (not just an icon
+     * tint) is the always-on signal that the loop is running and a tap ends it —
+     * the loop will not reopen on its own afterwards. Held for the whole session,
+     * both while listening for the user and while the reply is being read back,
+     * so the cue never flickers between turns (and so the user can stop the loop
+     * at any point, including mid-readback, where btnSend's touch listener turns
+     * the tap into a full cancel). The MIC button stays idle during hands-free —
+     * it is single-turn only now; the conversation button owns the loop.
      *
      * @param listening true while the mic is actually open for the user; false
      *   while the assistant's reply is being read back (no barge-in: the
      *   recognizer is closed, so user speech can't interrupt the readback).
      */
     private fun micHandsFreeActive(listening: Boolean) {
-        btnMicro?.apply {
+        btnSend?.apply {
             setImageResource(R.drawable.ic_stop_recording)
             setColorFilter(ResourcesCompat.getColor(resources, R.color.white, theme))
             backgroundTintList = ColorStateList.valueOf(
@@ -563,6 +568,35 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             )
         }
         messageInput?.hint = getString(if (listening) R.string.hint_listening else R.string.hint_message)
+    }
+
+    /** True while a hands-free conversation is engaged (started from the
+     *  conversation button and not yet stopped). The whole voice pipeline still
+     *  gates its re-arm on [Preferences.getHandsFreeMode]; the conversation
+     *  button is what flips that flag at runtime now (there is no settings
+     *  toggle), and it is reset to false on every chat open so hands-free never
+     *  auto-resumes. */
+    private fun isHandsFreeEngaged(): Boolean =
+        preferences?.getHandsFreeMode() == true && !handsFreeStopped
+
+    /**
+     * Resting look of the conversation/send button (btnSend) when NO hands-free
+     * loop is running: the upward-arrow SEND glyph when the input box has text
+     * (tap sends), otherwise the conversation waveform (tap starts hands-free).
+     * The red "loop live" look is owned by [micHandsFreeActive], which paints
+     * this same button — so this is a no-op while a conversation is engaged, to
+     * avoid stomping that cue.
+     */
+    private fun refreshConversationButton() {
+        if (isHandsFreeEngaged()) return
+        btnSend?.apply {
+            clearColorFilter()
+            backgroundTintList = null
+            setImageResource(
+                if (!messageInput?.text.isNullOrEmpty()) R.drawable.ic_arrow_up
+                else R.drawable.ic_conversation
+            )
+        }
     }
 
     /**
@@ -790,8 +824,51 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         handsFreeHandler.postDelayed(runnable, silenceMs)
     }
 
+    /**
+     * Whether a just-finished SINGLE-TURN transcription should be sent
+     * automatically. Rules (owner, July 2026):
+     *   - hands-free engaged → always send (the loop needs it; the Auto-send
+     *     setting only governs the manual mic button),
+     *   - manual mic turn → honor Auto-send ONLY when the box was empty. If the
+     *     user had already typed something, the transcript must always be left
+     *     for review and never auto-sent — it is inserted at the cursor instead.
+     * [boxWasEmpty] must be sampled BEFORE the transcript is inserted.
+     */
+    private fun shouldAutoSendTranscription(boxWasEmpty: Boolean): Boolean {
+        if (isHandsFreeEngaged()) return true
+        return preferences?.autoSend() == true && boxWasEmpty
+    }
+
+    /** Insert a transcript at the current cursor position (replacing any
+     *  selection), leaving it for the user to review/send. Used when Auto-send is
+     *  off, or whenever the box already had text (that case never auto-sends). */
+    private fun insertTranscriptIntoBox(text: String) {
+        val editable = messageInput?.text
+        if (editable == null) {
+            messageInput?.setText(text)
+            return
+        }
+        val a = (messageInput?.selectionStart ?: editable.length).coerceIn(0, editable.length)
+        val b = (messageInput?.selectionEnd ?: editable.length).coerceIn(0, editable.length)
+        val start = minOf(a, b)
+        val end = maxOf(a, b)
+        editable.replace(start, end, text)
+        messageInput?.setSelection((start + text.length).coerceAtMost(messageInput?.text?.length ?: 0))
+        messageInput?.requestFocus()
+    }
+
     private fun submitRecognizedText(recognizedText: String) {
         playTranscriptionDoneSignal()
+
+        // Sample the box BEFORE inserting: an already-typed message must never be
+        // auto-sent, even with Auto-send on.
+        val boxWasEmpty = messageInput?.text.isNullOrEmpty()
+        if (!shouldAutoSendTranscription(boxWasEmpty)) {
+            restoreUIState()
+            insertTranscriptIntoBox(recognizedText)
+            return
+        }
+
         putMessage(prefix + recognizedText + endSeparator, false)
 
         chatMessages.add(
@@ -807,23 +884,18 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         btnSend?.isEnabled = false
         progress?.visibility = View.VISIBLE
 
-        if (preferences?.autoSend() == true) {
-            onSpeechResultsScope = CoroutineScope(Dispatchers.Main)
-            onSpeechResultsScope?.launch {
-                progress?.setOnClickListener {
-                    cancel()
-                    restoreUIState()
-                }
-
-                try {
-                    generateResponse(prefix + recognizedText + endSeparator, true)
-                } catch (_: CancellationException) {
-                    restoreUIState()
-                }
+        onSpeechResultsScope = CoroutineScope(Dispatchers.Main)
+        onSpeechResultsScope?.launch {
+            progress?.setOnClickListener {
+                cancel()
+                restoreUIState()
             }
-        } else {
-            restoreUIState()
-            messageInput?.setText(recognizedText)
+
+            try {
+                generateResponse(prefix + recognizedText + endSeparator, true)
+            } catch (_: CancellationException) {
+                restoreUIState()
+            }
         }
     }
 
@@ -1695,6 +1767,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         apiEndpointObject = prepared.apiEndpointObject
         title = chatName
 
+        // Hands-free is a live, per-session control started from the conversation
+        // button — never a persisted setting (there is no settings toggle any
+        // more). Opening a chat always starts disengaged; the flag is only ever
+        // turned on by an explicit button tap, so a value left over from a
+        // previous session (or a hard kill mid-loop) can never auto-resume a
+        // conversation the moment the chat opens.
+        preferences?.setHandsFreeMode(false)
+        handsFreeStopped = false
+
         if (Build.VERSION.SDK_INT >= 33) {
             onBackInvokedDispatcher.registerOnBackInvokedCallback(
                 OnBackInvokedDispatcher.PRIORITY_DEFAULT
@@ -1986,6 +2067,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         progress?.visibility = View.GONE
 
         micIdle()
+        // Initial resting look for the conversation/send button (empty box → the
+        // conversation waveform).
+        refreshConversationButton()
         btnSettings?.setImageResource(R.drawable.ic_settings)
 
         btnSelectAll?.setOnClickListener {
@@ -2312,6 +2396,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 cancelAllAiActivity("mic button tap on this screen")
                 return@setOnClickListener
             }
+            // The mic is single-turn transcription ONLY now. While a hands-free
+            // conversation is running the conversation button owns everything, so
+            // the mic is inert (a tap here must not start a second capture).
+            if (isHandsFreeEngaged()) return@setOnClickListener
             when (preferences!!.getEffectiveAudioModel()) {
                 "google" -> handleGoogleSpeechRecognition()
                 "whisper-local" -> handleLocalWhisperSpeechRecognition()
@@ -2322,9 +2410,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         // Touch interceptor: lets a tap during AI generation cancel everything
         // even though the click handler is otherwise disabled by isEnabled=false
         // in the generation/TTS code paths. OnTouchListener fires regardless of
-        // View.isEnabled, so a stop tap always lands.
+        // View.isEnabled, so a stop tap always lands. Excludes hands-free: during
+        // a conversation the conversation button is the stop control, not the mic.
         btnMicro?.setOnTouchListener { _, event ->
-            if (event.action == MotionEvent.ACTION_UP && isAiCurrentlyBusy() && !isRecording) {
+            if (event.action == MotionEvent.ACTION_UP && isAiCurrentlyBusy() &&
+                !isRecording && !isHandsFreeEngaged()
+            ) {
                 cancelAllAiActivity("mic button touch on this screen (mid-generation)")
                 true
             } else {
@@ -2348,13 +2439,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             }
 
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                if (s.toString() == "") {
-                    btnSend?.visibility = View.GONE
-                    btnMicro?.visibility = View.VISIBLE
-                } else {
-                    btnSend?.visibility = View.VISIBLE
-                    btnMicro?.visibility = View.GONE
-                }
+                // Mic and the conversation/send button now sit side by side and
+                // both stay in the bar; only the conversation button's glyph
+                // flips: waveform when empty (start hands-free), up-arrow when
+                // there is text (send). No-op while a conversation is live.
+                refreshConversationButton()
             }
 
             override fun afterTextChanged(s: Editable?) {
@@ -2362,8 +2451,22 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             }
         })
 
+        // btnSend is the dual conversation/send control (see onConversationButtonTapped).
         btnSend?.setOnClickListener {
-            parseMessage(messageInput?.text.toString())
+            onConversationButtonTapped()
+        }
+
+        // Mirror of the mic's touch interceptor: while the button is disabled
+        // (during generation/readback) a tap still lands here so the user can
+        // stop a live conversation or cancel a busy turn. When enabled, returns
+        // false so the click listener above handles the normal tap.
+        btnSend?.setOnTouchListener { _, event ->
+            if (event.action == MotionEvent.ACTION_UP && btnSend?.isEnabled == false) {
+                onConversationButtonTapped()
+                true
+            } else {
+                false
+            }
         }
 
         btnAttachFile?.setOnClickListener {
@@ -2605,7 +2708,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 micIdle()
             } else {
                 playTranscriptionDoneSignal()
-                if (preferences?.autoSend() == true) {
+                // Sample the box BEFORE inserting (already-typed text never auto-sends).
+                val boxWasEmpty = messageInput?.text.isNullOrEmpty()
+                if (shouldAutoSendTranscription(boxWasEmpty)) {
                     putMessage(prefix + transcription + endSeparator, false)
 
                     chatMessages.add(
@@ -2637,7 +2742,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     }
                 } else {
                     restoreUIState()
-                    messageInput?.setText(transcription)
+                    insertTranscriptIntoBox(transcription)
                 }
             }
         } catch (_: Exception) {
@@ -3164,7 +3269,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             return
         }
         playTranscriptionDoneSignal()
-        if (preferences?.autoSend() == true) {
+        // Sample the box BEFORE inserting (already-typed text never auto-sends).
+        val boxWasEmpty = messageInput?.text.isNullOrEmpty()
+        if (shouldAutoSendTranscription(boxWasEmpty)) {
             putMessage(prefix + transcription + endSeparator, false)
             chatMessages.add(
                 ChatMessage(
@@ -3192,7 +3299,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             }
         } else {
             restoreUIState()
-            messageInput?.setText(transcription)
+            insertTranscriptIntoBox(transcription)
         }
     }
 
@@ -3726,6 +3833,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         try { LocalWhisperEngine.get().clearMicRouting() } catch (_: Exception) { /* ignore */ }
         isRecording = false
         micIdle()
+        // The conversation is over: clear the engaged flag (there is no settings
+        // toggle any more — the button is the only control) and return the
+        // conversation/send button from its red "live" look to resting.
+        preferences?.setHandsFreeMode(false)
+        refreshConversationButton()
         stopHandsFreeService()
     }
 
@@ -3737,6 +3849,61 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         if (preferences?.getHandsFreeMode() == true) {
             runOnUiThread { stopHandsFreeLoop("the response failed with an error") }
         }
+    }
+
+    /**
+     * The conversation/send button (btnSend) was tapped. One button, three roles
+     * decided by state:
+     *   - a hands-free conversation is live  → STOP it (tap again ends it),
+     *   - the input box has text             → SEND it (the up-arrow),
+     *   - the AI is busy (generating/reading) → cancel everything,
+     *   - otherwise (idle, empty box)        → START hands-free.
+     * Reachable from both the click listener and the touch listener (the latter
+     * catches taps while the button is disabled during generation/readback).
+     */
+    private fun onConversationButtonTapped() {
+        when {
+            isHandsFreeEngaged() -> stopHandsFreeByUser()
+            !messageInput?.text.isNullOrEmpty() -> parseMessage(messageInput?.text.toString())
+            isAiCurrentlyBusy() -> cancelAllAiActivity("conversation button tap on this screen")
+            else -> startHandsFreeByUser()
+        }
+    }
+
+    /** Engage hands-free from the conversation button. Flips the runtime flag the
+     *  pipeline gates on and starts the loop through the engine's existing
+     *  hands-free entry point (the handlers take their hands-free branch because
+     *  the flag is now on). Only Google STT and on-device Whisper can detect
+     *  end-of-speech and therefore loop; cloud Whisper cannot, so on that engine
+     *  the button just runs a single transcription turn (never engaging a loop
+     *  that could never re-arm and would strand the flag on). */
+    private fun startHandsFreeByUser() {
+        if (chatStorageUnavailable) return
+        if (isAiCurrentlyBusy()) {
+            cancelAllAiActivity("conversation button tap (busy) on this screen")
+            return
+        }
+        val engine = preferences!!.getEffectiveAudioModel()
+        if (engine != "google" && engine != "whisper-local") {
+            // Cloud Whisper: no end-of-speech detection → no loop. Fall back to a
+            // single capture, exactly like the mic button, without engaging
+            // hands-free.
+            handleWhisperSpeechRecognition()
+            return
+        }
+        preferences?.setHandsFreeMode(true)
+        handsFreeStopped = false
+        logVoiceEvent("hands-free engaged (conversation button)")
+        if (engine == "google") handleGoogleSpeechRecognition() else handleLocalWhisperSpeechRecognition()
+    }
+
+    /** Stop hands-free from the conversation button. cancelAllAiActivity is the
+     *  same full teardown the mic-tap stop and the notification Hang Up use
+     *  (cancels a still-streaming reply, silences readback, closes the mic, stops
+     *  the service) and already clears the engaged flag and resets this button. */
+    private fun stopHandsFreeByUser() {
+        logVoiceEvent("hands-free stopped (conversation button)")
+        cancelAllAiActivity("conversation button tap (stop hands-free)")
     }
 
     /** True while the AI is generating, speaking through TTS, playing back
@@ -3803,6 +3970,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         try { LocalWhisperEngine.get().cancel() } catch (_: Exception) { /* ignore */ }
         isRecording = false
         micIdle()
+        // Any stop (in-app, notification Hang Up, mid-generation tap) also ends a
+        // hands-free conversation: clear the engaged flag and reset the
+        // conversation/send button from its red "live" look to resting.
+        preferences?.setHandsFreeMode(false)
+        refreshConversationButton()
         stopHandsFreeService()
     }
 
@@ -5215,7 +5387,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
     private fun pronounce(st: Boolean, message: String) {
         val handsFree = preferences?.getHandsFreeMode() == true
-        val willReadAloud = (st && !silenceMode) || preferences!!.getNotSilence()
+        // Hands-free is a spoken conversation: it must read the reply back (that
+        // completion is also what re-arms the mic) regardless of the Always-speak
+        // setting — turning Always-speak off must never break hands-free (owner
+        // requirement). Silent mode still wins (the two are mutually exclusive in
+        // settings, so this only matters defensively). Ordinary turns are
+        // unchanged: st (a voice turn) or Always-speak drive the readback.
+        val willReadAloud = (st && !silenceMode) || preferences!!.getNotSilence() ||
+                (handsFree && !silenceMode)
 
         // Stamp this readback: if the user stops while we're still inside an
         // async hop below (ML Kit language detection), the stale stamp keeps
