@@ -35,6 +35,7 @@ import org.teslasoft.assistant.ui.fragments.dialogs.EditUserPersonaDialogFragmen
  */
 class MemoryUserPersonasActivity : MemoryScreenActivity() {
 
+    override fun contentLayoutRes(): Int = R.layout.activity_memory_user_personas
     override fun screenTitle(): String = getString(R.string.mem_pers_title_user_personas)
     override fun showSearch(): Boolean = true
     override fun addButtonText(): String = getString(R.string.mem_pers_fab_add_persona)

@@ -208,11 +208,19 @@
          recolor logic (dynamic background/back-button/status-bar
          recoloring in Kotlin) - the owner says that mechanism is being
          removed and does not want it carried into the new style.
-         Rolled out so far only to ProfileImagePropertiesActivity and
-         DefaultImagesActivity (activity_profile_image_properties.xml,
-         activity_default_images.xml) - intentionally not yet applied to
-         any other screen; the owner wants this proven right on new
-         screens first before the rest of the app is converted. -->
+         Rolled out (July 19 2026) to ProfileImagePropertiesActivity,
+         DefaultImagesActivity, CharactersActivity, PersonasListActivity
+         ("Companions"), ActivationPromptsListActivity, and
+         MemoryUserPersonasActivity ("My Personas" - see
+         MemoryScreenActivity.contentLayoutRes()/activity_memory_user_personas.xml,
+         since My Personas' old header came from the shared
+         activity_memory_list.xml scaffold that other memory-manager list
+         screens still need for their own reserved action-button space).
+         Title size raised 20sp -> 24sp same day to match the size these
+         screens already used before conversion (owner ruling: match the
+         existing look, not the smaller size introduced with the first two
+         screens). Not yet applied to the rest of the app; keep rolling out
+         screen by screen. -->
     <style name="Widget.App.ActionBar" parent="">
         <item name="android:layout_width">0dp</item>
         <item name="android:layout_height">wrap_content</item>
@@ -245,7 +253,7 @@
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:textColor">@color/text_title</item>
-        <item name="android:textSize">20sp</item>
+        <item name="android:textSize">24sp</item>
         <item name="android:textStyle">bold</item>
         <item name="layout_constraintBottom_toBottomOf">parent</item>
         <item name="layout_constraintEnd_toEndOf">parent</item>

@@ -1560,6 +1560,45 @@ Everything is on-device. No cloud sync, no accounts.
   just reuse of this style as-is — deliberately deferred pending the
   owner's review of the slices already built. Do not roll this out
   further without the owner's go-ahead.
+- **Shared screen-header styles (owner ruling, July 19 2026).** The solid
+  bar with a back chevron and a title at the top of a full-screen activity
+  used to be hand-copied raw XML in every screen, same problem the row
+  styles fixed for rows. `values/themes.xml` now has
+  `Widget.App.ActionBar` (the bar container) +
+  `Widget.App.ActionBar.BackButton` + `Widget.App.ActionBar.Title` — a
+  screen only gives each piece an id (plus its own title text); size,
+  color, padding and the pin-to-parent/centering constraints all live in
+  the styles. Title size is **24sp** (bumped up same day from the 20sp it
+  first shipped at on Profile Image Properties/Default Images, to match
+  the size every other screen's title already used — one dimen-like style
+  item, change it once and every screen using the style follows).
+  **Rollout status:** `ProfileImagePropertiesActivity`,
+  `DefaultImagesActivity`, `activity_characters.xml` (Characters),
+  `activity_persona_list.xml` (Companions), and
+  `activity_activation_prompt_list.xml` (Activation Prompts) all use it
+  directly — same three style references, same look. **My Personas**
+  (`MemoryUserPersonasActivity`) also uses it, but needed a **new
+  dedicated layout** (`activity_memory_user_personas.xml`) instead of
+  applying the style in place: its header used to come from the shared
+  `activity_memory_list.xml` scaffold, which **11 other** screens built on
+  the same `MemoryScreenActivity` base class also use (Memory Browser,
+  Model Rules, Tags, Worlds, Campaigns, Party Members, Roleplay
+  Characters, etc.) — several of those genuinely need that scaffold's
+  reserved trailing action-button/filter/mode-toggle space, so that shared
+  file couldn't just be restyled without affecting them. My Personas never
+  uses any of that (no action icon, no filter, no mode toggle), so
+  `MemoryScreenActivity` gained one small override hook,
+  `contentLayoutRes()` (default `R.layout.activity_memory_list`), and
+  `MemoryUserPersonasActivity` overrides it to point at the new file
+  instead — every other `MemoryScreenActivity` subclass is untouched and
+  still gets the original scaffold. The new layout keeps every id the
+  base class reads for the pieces My Personas actually uses (action bar/
+  back/title, search bar, empty view, list view, add FAB) and simply omits
+  the ids for pieces it doesn't (action/secondary-action buttons, filter
+  bar/button, mode-toggle row) — safe because the base class's
+  `findViewById` calls for those are all null-tolerant and only reachable
+  when a screen opts into that feature. **Not yet applied anywhere else**
+  — keep rolling it out screen by screen, same as the row styles.
 - Match the existing style: nullable `var` view fields + `findViewById`,
   `DialogFragment.newInstance(Bundle)` pattern, listener interfaces with
   default no-op methods, copyright header on every file, strings ONLY in
