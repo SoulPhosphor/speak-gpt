@@ -201,6 +201,12 @@
     <string name="title_personas">Companions</string>
     <string name="btn_new_persona">Add persona</string>
     <string name="label_add_persona">Add persona</string>
+    <!-- Full-screen Companion editor header (owner-approved words, July 19 2026):
+         "Edit Companion" when editing, "Companion Creation" for a new one. -->
+    <string name="title_edit_companion">Edit Companion</string>
+    <string name="title_companion_creation">Companion Creation</string>
+    <!-- Screen-reader label for the tappable companion picture (owner: prefers "image"). -->
+    <string name="edit_companion_image_desc">Companion image</string>
 
     <!-- Lorebook / memory system (Phase 1) -->
     <string name="label_lorebook">Lorebook</string>

@@ -25,7 +25,7 @@ import android.view.WindowInsets
 import android.widget.ImageButton
 import android.widget.ListView
 import android.widget.TextView
-import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
@@ -40,7 +40,6 @@ import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.dto.PersonaObject
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.adapters.PersonaListItemAdapter
-import org.teslasoft.assistant.ui.fragments.dialogs.EditPersonaDialogFragment
 import org.teslasoft.assistant.util.Hash
 
 class PersonasListActivity : FragmentActivity() {
@@ -60,21 +59,46 @@ class PersonasListActivity : FragmentActivity() {
     // The persona currently active for the chat, so the list can highlight it.
     private var currentPersonaId: String = ""
 
-    private fun newEditDialog(persona: PersonaObject, position: Int): EditPersonaDialogFragment {
-        return EditPersonaDialogFragment.newInstance(persona, position)
-    }
-
     private fun newEmptyPersona(): PersonaObject {
         return PersonaObject("", "")
     }
 
-    private fun openEditDialog(position: Int) {
+    // Applies the full-screen editor's result exactly as the old dialog listener
+    // did: a save adds or edits the companion then selects it and finishes
+    // (finishWithActive); a delete removes it and reloads the list.
+    private val editPersonaLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode != RESULT_OK) return@registerForActivityResult
+        val data = result.data ?: return@registerForActivityResult
+        when (data.getStringExtra(EditPersonaActivity.EXTRA_RESULT_ACTION)) {
+            EditPersonaActivity.ACTION_SAVE -> {
+                val persona = EditPersonaActivity.readResultPersona(data)
+                val pos = data.getIntExtra(EditPersonaActivity.EXTRA_POSITION, -1)
+                val oldLabel = data.getStringExtra(EditPersonaActivity.EXTRA_RESULT_OLD_LABEL) ?: ""
+                if (pos == -1) {
+                    personaPreferences!!.setPersona(persona)
+                } else {
+                    personaPreferences!!.editPersona(oldLabel, persona)
+                }
+                finishWithActive(persona.label)
+            }
+            EditPersonaActivity.ACTION_DELETE -> {
+                val id = data.getStringExtra(EditPersonaActivity.EXTRA_RESULT_ID)
+                if (id != null) {
+                    personaPreferences!!.deletePersona(id)
+                    reloadList()
+                }
+            }
+        }
+    }
+
+    private fun openEditor(position: Int) {
         val label = list[position]["label"] ?: return
         val persona = personaPreferences!!.getPersona(Hash.hash(label))
-        val dialog = newEditDialog(persona, position)
-        dialog.setListener(editDialogListener)
-        dialog.setCancelable(false)
-        dialog.show(supportFragmentManager, "EditPersonaDialogFragment")
+        editPersonaLauncher.launch(EditPersonaActivity.createIntent(this, persona, position))
+    }
+
+    private fun openCreate() {
+        editPersonaLauncher.launch(EditPersonaActivity.createIntent(this, newEmptyPersona(), -1))
     }
 
     private fun finishWithActive(label: String) {
@@ -92,42 +116,11 @@ class PersonasListActivity : FragmentActivity() {
         }
 
         override fun onLongClick(position: Int) {
-            openEditDialog(position)
+            openEditor(position)
         }
 
         override fun onSettingsClick(position: Int) {
-            openEditDialog(position)
-        }
-    }
-
-    private var editDialogListener: EditPersonaDialogFragment.StateChangesListener = object : EditPersonaDialogFragment.StateChangesListener {
-        override fun onAdd(persona: PersonaObject) {
-            personaPreferences!!.setPersona(persona)
-            finishWithActive(persona.label)
-        }
-
-        override fun onEdit(oldLabel: String, persona: PersonaObject, position: Int) {
-            personaPreferences!!.editPersona(list[position]["label"] ?: return, persona)
-            finishWithActive(persona.label)
-        }
-
-        override fun onDelete(position: Int, id: String) {
-            personaPreferences!!.deletePersona(id)
-            reloadList()
-        }
-
-        override fun onError(message: String, position: Int) {
-            Toast.makeText(this@PersonasListActivity, message, Toast.LENGTH_SHORT).show()
-            val persona = if (position == -1) {
-                newEmptyPersona()
-            } else {
-                val label = list[position]["label"] ?: return
-                personaPreferences!!.getPersona(Hash.hash(label))
-            }
-            val dialog = newEditDialog(persona, position)
-            dialog.setListener(this)
-            dialog.setCancelable(false)
-            dialog.show(supportFragmentManager, "EditPersonaDialogFragment")
+            openEditor(position)
         }
     }
 
@@ -183,10 +176,7 @@ class PersonasListActivity : FragmentActivity() {
         // rather than an empty list. Guarded on savedInstanceState so a
         // rotation doesn't reopen it.
         if (savedInstanceState == null && intent.getBooleanExtra("createOnStart", false)) {
-            val dialog = newEditDialog(newEmptyPersona(), -1)
-            dialog.setListener(editDialogListener)
-            dialog.setCancelable(false)
-            dialog.show(supportFragmentManager, "EditPersonaDialogFragment")
+            openCreate()
         }
     }
 
@@ -234,10 +224,7 @@ class PersonasListActivity : FragmentActivity() {
         }
 
         btnAdd!!.setOnClickListener {
-            val dialog = newEditDialog(newEmptyPersona(), -1)
-            dialog.setListener(editDialogListener)
-            dialog.setCancelable(false)
-            dialog.show(supportFragmentManager, "EditPersonaDialogFragment")
+            openCreate()
         }
     }
 

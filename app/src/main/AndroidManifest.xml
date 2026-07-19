@@ -98,6 +98,11 @@
         </activity>
 
         <activity
+            android:name=".ui.activities.EditPersonaActivity"
+            android:exported="false"
+            android:label="@string/title_edit_companion" />
+
+        <activity
             android:name=".ui.activities.LoreBooksListActivity"
             android:exported="false"
             android:label="@string/title_lorebooks">
