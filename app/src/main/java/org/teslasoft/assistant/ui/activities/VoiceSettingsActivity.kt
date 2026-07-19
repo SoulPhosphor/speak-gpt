@@ -31,7 +31,9 @@ import android.widget.Toast
 import android.window.OnBackInvokedDispatcher
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
+import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
+import androidx.core.content.res.ResourcesCompat
 import androidx.core.view.WindowCompat
 import androidx.fragment.app.FragmentActivity
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -76,6 +78,7 @@ class VoiceSettingsActivity : FragmentActivity() {
     private var rowVoiceDebugging: LinearLayout? = null
 
     private var btnBack: ImageButton? = null
+    private var actionBar: ConstraintLayout? = null
 
     private var chatId = ""
     private var preferences: Preferences? = null
@@ -126,11 +129,17 @@ class VoiceSettingsActivity : FragmentActivity() {
             }
         }
 
-        val expandableWindow = findViewById<LinearLayout>(R.id.expandable_window)
+        val expandableWindow = findViewById<ConstraintLayout>(R.id.expandable_window)
+        actionBar = findViewById(R.id.action_bar)
+        btnBack = findViewById(R.id.btn_back)
         if (isDarkThemeEnabled() && GlobalPreferences.getPreferences(this).getAmoledPitchBlack()) {
             expandableWindow?.backgroundTintList = ColorStateList.valueOf(getColor(R.color.amoled_window_background))
+            actionBar?.setBackgroundColor(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
+            btnBack?.backgroundTintList = ColorStateList.valueOf(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
         } else {
             expandableWindow?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_1.getColor(this))
+            actionBar?.setBackgroundColor(SurfaceColors.SURFACE_4.getColor(this))
+            btnBack?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(this))
         }
 
         chatId = intent.extras?.getString("chatId", "") ?: ""
@@ -140,7 +149,6 @@ class VoiceSettingsActivity : FragmentActivity() {
         ttsEngine = preferences?.getTtsEngine() ?: "google"
         voice = if (ttsEngine == "google") preferences?.getVoice() ?: "" else preferences?.getOpenAIVoice() ?: ""
 
-        btnBack = findViewById(R.id.btn_back)
         btnBack?.setOnClickListener { finish() }
 
         createTiles()
@@ -686,6 +694,7 @@ class VoiceSettingsActivity : FragmentActivity() {
     }
 
     private fun adjustPaddings() {
-        WindowInsetsUtil.adjustPaddings(this, R.id.scrollable, EnumSet.of(WindowInsetsUtil.Companion.Flags.STATUS_BAR, WindowInsetsUtil.Companion.Flags.NAVIGATION_BAR, WindowInsetsUtil.Companion.Flags.IGNORE_PADDINGS), customPaddingBottom = (48 * resources.displayMetrics.density).roundToInt())
+        WindowInsetsUtil.adjustPaddings(this, R.id.action_bar, EnumSet.of(WindowInsetsUtil.Companion.Flags.STATUS_BAR, WindowInsetsUtil.Companion.Flags.IGNORE_PADDINGS))
+        WindowInsetsUtil.adjustPaddings(this, R.id.scrollable, EnumSet.of(WindowInsetsUtil.Companion.Flags.NAVIGATION_BAR, WindowInsetsUtil.Companion.Flags.IGNORE_PADDINGS), customPaddingBottom = (48 * resources.displayMetrics.density).roundToInt())
     }
 }

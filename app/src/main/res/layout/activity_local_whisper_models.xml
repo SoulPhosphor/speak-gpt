@@ -7,32 +7,19 @@
     android:layout_height="match_parent"
     android:fitsSystemWindows="true">
 
-    <ImageButton
-        android:id="@+id/btn_back"
-        android:layout_width="48dp"
-        android:layout_height="48dp"
-        android:layout_marginStart="24dp"
-        android:layout_marginTop="16dp"
-        android:background="@drawable/btn_accent_icon_large"
-        android:contentDescription="@string/go_back"
-        android:src="@drawable/ic_back"
-        android:tooltipText="@string/go_back"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent"
-        app:srcCompat="@drawable/ic_back" />
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/action_bar"
+        style="@style/Widget.App.ActionBar">
 
-    <TextView
-        android:id="@+id/activity_title"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="24dp"
-        android:text="@string/title_local_whisper"
-        android:textColor="@color/text_title"
-        android:textSize="24sp"
-        android:textStyle="bold"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        <ImageButton
+            android:id="@+id/btn_back"
+            style="@style/Widget.App.ActionBar.BackButton" />
+
+        <TextView
+            android:id="@+id/activity_title"
+            style="@style/Widget.App.ActionBar.Title"
+            android:text="@string/title_local_whisper" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
 
     <TextView
         android:id="@+id/active_model_label"
@@ -42,7 +29,7 @@
         android:layout_marginTop="16dp"
         android:textColor="@color/text_subtitle"
         android:textSize="14sp"
-        app:layout_constraintTop_toBottomOf="@id/btn_back"
+        app:layout_constraintTop_toBottomOf="@id/action_bar"
         tools:text="Active model: base.en"
         xmlns:tools="http://schemas.android.com/tools" />
 

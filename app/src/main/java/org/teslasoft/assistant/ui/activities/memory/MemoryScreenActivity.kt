@@ -79,6 +79,19 @@ abstract class MemoryScreenActivity : FragmentActivity(), MemoryRowAdapter.OnRow
 
     /* ------------------------------ config hooks ------------------------------ */
 
+    /** The layout to inflate. Default is the shared scaffold
+     *  (search/list/FAB plus the button-aware action bar that screens with a
+     *  filter/mode-toggle/secondary action need); override to
+     *  activity_memory_list_simple only when a screen never uses that
+     *  reserved action-button space and should get the plain
+     *  Widget.App.ActionBar header instead (My Personas, Roleplay
+     *  Characters, Worlds, Party Members, Campaigns, Tags all do). Any
+     *  override must keep every id this class reads - ids for pieces the
+     *  screen doesn't use can simply be absent; findViewById returning null
+     *  for those is safe since every hook that touches them is only
+     *  reachable when that screen opts in. */
+    protected open fun contentLayoutRes(): Int = R.layout.activity_memory_list
+
     /** The bar title. */
     protected abstract fun screenTitle(): String
 
@@ -175,7 +188,7 @@ abstract class MemoryScreenActivity : FragmentActivity(), MemoryRowAdapter.OnRow
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         ThemeManager.getThemeManager().applyPalette(this)
-        setContentView(R.layout.activity_memory_list)
+        setContentView(contentLayoutRes())
 
         chatId = intent.extras?.getString("chatId", "") ?: ""
         preferences = Preferences.getPreferences(this, chatId)

@@ -1542,7 +1542,11 @@ Everything is on-device. No cloud sync, no accounts.
   — 6 rows, all WithSubtitle except Memory Backup & Restore, which stays
   TitleOnly since no subtitle wording has ever been owner-approved for
   it); the Roleplay hub's own rows (`activity_roleplay_hub.xml` — 5 rows,
-  all WithSubtitle). **Not converted:** every sub-screen reached from
+  all WithSubtitle); the Profile Image Properties screen's own rows
+  (`activity_profile_image_properties.xml` — 3 rows, all WithSubtitle; built
+  this way from its Phase 6 commit, predating this rollout note — flagged
+  July 19 2026 as already matching, not newly converted). **Not converted:**
+  every sub-screen reached from
   Memory Manager or the Roleplay hub (Memory Browser, Memory Assistant,
   Lorebooks, Memory Controls, Advanced Memory Settings, the roleplay card
   lists, etc. — none of these were touched); every other tile on the main
@@ -1556,6 +1560,208 @@ Everything is on-device. No cloud sync, no accounts.
   just reuse of this style as-is — deliberately deferred pending the
   owner's review of the slices already built. Do not roll this out
   further without the owner's go-ahead.
+- **Screen/menu titles are Title Case (owner ruling, July 19 2026).** A
+  window title and its corresponding menu-row label (e.g. the
+  "Activation Prompts" row on Characters vs. the Activation Prompts
+  screen's own title) must read the same and both use Title Case —
+  found and fixed because they'd drifted to sentence case in two
+  places: `tile_activation_prompts_title`/`title_activation_prompts`
+  ("Activation prompts" → "Activation Prompts") and
+  `voice_settings_title` ("Voice & speech" → "Voice & Speech"; its menu
+  row, `tile_voice_settings_title`, was already correct — only the
+  screen's own title string had drifted). Same day, the main Settings
+  screen's title (`title_control_center`) was renamed from
+  "Control center" to "Settings" (plain wording call, not a casing
+  fix) — the one other place that named it, the `tip_12` onboarding
+  string, was updated to match so it doesn't call the screen
+  "Control center" after the screen itself no longer does.
+- **Shared screen-header styles (owner ruling, July 19 2026).** The solid
+  bar with a back chevron and a title at the top of a full-screen activity
+  used to be hand-copied raw XML in every screen, same problem the row
+  styles fixed for rows. `values/themes.xml` now has
+  `Widget.App.ActionBar` (the bar container) +
+  `Widget.App.ActionBar.BackButton` + `Widget.App.ActionBar.Title` — a
+  screen only gives each piece an id (plus its own title text); size,
+  color, padding and the pin-to-parent/centering constraints all live in
+  the styles. Title size is **24sp** (bumped up same day from the 20sp it
+  first shipped at on Profile Image Properties/Default Images, to match
+  the size every other screen's title already used — one dimen-like style
+  item, change it once and every screen using the style follows).
+  **Rollout status:** `ProfileImagePropertiesActivity`,
+  `DefaultImagesActivity`, `activity_characters.xml` (Characters),
+  `activity_persona_list.xml` (Companions), and
+  `activity_activation_prompt_list.xml` (Activation Prompts) all use it
+  directly — same three style references, same look.
+  **`MemoryScreenActivity`-based screens** (Memory Browser, Model Rules,
+  Tags, Worlds, Campaigns, Party Members, Roleplay Characters, My
+  Personas, etc. — 12 screens total) all share one scaffold layout,
+  `activity_memory_list.xml`, whose header reserves trailing space for an
+  action icon, a secondary action icon, a filter button and a mode
+  toggle — several screens (e.g. Memory Browser) genuinely need that, so
+  the shared file couldn't just be restyled without affecting them. Six of
+  the twelve never wire any of that (no action icon, no secondary action,
+  no filter, no mode toggle): **My Personas, Roleplay Characters, Worlds,
+  Party Members, Campaigns, and Tags.** For those six,
+  `MemoryScreenActivity` gained one small override hook,
+  `contentLayoutRes()` (default `R.layout.activity_memory_list`), and each
+  of the six overrides it to point at a second, shared scaffold instead —
+  **`activity_memory_list_simple.xml`** — which uses the plain
+  `Widget.App.ActionBar` header (same as Characters/Companions/Activation
+  Prompts) instead of the button-aware title. The other six
+  `MemoryScreenActivity` screens are untouched and still get the original
+  scaffold. `activity_memory_list_simple.xml` keeps every id the base
+  class reads for the pieces these six screens actually use (action bar/
+  back/title, search bar, empty view, list view, add FAB) and simply omits
+  the ids for pieces none of them use (action/secondary-action buttons,
+  filter bar/button, mode-toggle row) — safe because the base class's
+  `findViewById` calls for those are all null-tolerant and only reachable
+  when a screen opts into that feature; it's one file so a header tweak
+  still only needs one place changed, matching the six screens exactly
+  the same way the row styles keep rows in sync. Before adding a new
+  `contentLayoutRes()` override to a screen, check it doesn't override
+  `actionIcon()`/`secondaryActionIcon()`/`showFilterBar()`/
+  `showFilterButton()`/`showModeToggle()` first — any of those means it
+  still needs the original scaffold. Also converted directly (plain
+  screens, same three-style pattern as Characters/Companions/Activation
+  Prompts, no structural quirks): `activity_alert_debug_menu.xml`
+  (Alerts, Errors & Logs), `activity_voice_advanced.xml` (Advanced Voice
+  Settings), `activity_audio_debugging.xml` (Voice Debugging tile).
+  **The "icon on top" pattern (owner ruling, July 19 2026):** the first
+  pass through this rollout flagged two screens as not fitting the plain
+  header — both were then actually handled, not left as-is, and the fix
+  in each case is now the standing pattern:
+  - `activity_logs.xml` (the four log pages — Crash/Error, Event/Voice
+    Debug, Memory, Performance — all share this one layout via
+    `LogsActivity`) had no `action_bar` bar (title floated directly on the
+    screen background, no colored bar) and, on the Event log only, a real
+    second icon button (`btn_voice_advanced`, the terminal-icon jump to
+    Advanced Voice Settings) that plain `Widget.App.ActionBar` has no slot
+    for. Fixed with a new style, **`Widget.App.ActionBar.SecondaryButton`**
+    (`values/themes.xml`, right next to `.Title`) — same geometry/
+    background as `.BackButton`, anchored to the bar's END instead of its
+    START; `android:src`/`contentDescription`/`tooltipText` stay on the
+    instance since the icon differs per screen. Logs now uses the full
+    trio (`Widget.App.ActionBar` + `.BackButton` + `.Title`, title
+    unchanged — still centered across the WHOLE bar, ignoring the icon,
+    exactly like it already floated before conversion) plus
+    `.SecondaryButton` for the voice-advanced shortcut.
+    **Any future screen that needs a trailing icon alongside the back
+    button should use `.SecondaryButton` the same way — that is the
+    pattern, not hand-copied XML.** `LogsActivity.kt`'s AMOLED recolor was
+    also brought in line with the standard tint-list approach (`actionBar`
+    field + `backgroundTintList`, dropping the old `getDisabledDrawable`/
+    `getDisabledColor` "muted" look that predated the shared style).
+  - `activity_settings.xml` (the main Settings screen, `title_control_center`
+    — renamed from "Control center" to "Settings" July 19 2026) was a
+    slide-in side panel whose back button + title lived INSIDE the same
+    big scrollable `ConstraintLayout` as every category header and tile,
+    so the header scrolled away with the body — the owner then asked for
+    it pinned. Restructured: a new `action_bar` (the standard
+    `Widget.App.ActionBar` trio) is now a sibling ABOVE the `ScrollView`
+    (itself now wrapped, with the `ScrollView`, in a new `content`
+    ConstraintLayout so the style's `0dp`-width-via-constraints trick has
+    a `ConstraintLayout` parent — it doesn't work inside the outer
+    `LinearLayout`), and `scrollable`'s first child now anchors to its own
+    top instead of to the old (now-relocated) title view. `btn_back` and
+    `activity_new_settings_title` kept their exact ids so the screen's
+    ~50-entry shared-element-transition exclude list needed only one
+    addition (`R.id.action_bar`, mirroring how `R.id.scrollable` was
+    already excluded) — nothing else in that list changed. The status-bar
+    inset that used to land on `scrollable` now lands on `action_bar`
+    instead (`adjustPaddings()` split into two `WindowInsetsUtil` calls);
+    the nav-bar + 48dp bottom inset stays on `scrollable`, unchanged.
+    AMOLED recolor for the new bar/back-button follows the same
+    tint-list pattern as everywhere else (and drops the same
+    `getDisabledDrawable`/`getDisabledColor` "muted" look Logs also had —
+    this pre-shared-style convention appeared in both places and is now
+    retired in favor of the standard look).
+  **Next batch (July 19 2026), after an app-wide audit for every screen
+  with a raw header — chat screens excluded, they're inherently
+  different):**
+  - `LocalWhisperManageActivity`/`LocalWhisperModelsActivity`
+    (`activity_local_whisper_manage.xml`/`activity_local_whisper_models.xml`)
+    — the same old floating-title-no-bar look Logs had; converted the same
+    way, `getDisabledDrawable`/`getDisabledColor` dropped from both in
+    favor of the tint-list pattern.
+  - `LoreBookEntriesActivity`/`LoreBooksListActivity`
+    (`activity_lorebook_entries.xml`/`activity_lorebooks_list.xml`) — both
+    already used the exact tint-list AMOLED pattern and
+    `btn_accent_icon_large_100`-based icon geometry, so this was a pure
+    XML swap with zero Kotlin changes. Entries has two chained icons
+    (edit-book, debug); per `Widget.App.ActionBar.SecondaryButton`'s own
+    doc comment, only the edge-anchored one (`btn_debug`) uses the style —
+    the inner one (`btn_edit_book`) keeps its geometry written out
+    directly since it chains `layout_constraintEnd_toStartOf` the other
+    icon instead of the parent edge.
+  - `LogitBiasConfigListActivity`/`LogitBiasConfigActivity`
+    (`activity_logit_bias_config_list.xml`/`activity_logit_bias_list.xml`)
+    — same trio + `SecondaryButton` for the help icon; also dropped a
+    redundant `android:backgroundTint="?attr/colorSurfaceContainerHigh"`
+    on the back/help buttons that the `btn_accent_icon_large_100` drawable
+    already bakes in as its own fill color — removing it changes nothing
+    visually. `LogitBiasConfigActivity` (the single-set editor) does no
+    AMOLED recoloring at all for this screen and still doesn't; that gap
+    predates this change and wasn't introduced by it.
+  - `VoiceSettingsActivity` (`activity_voice_settings.xml`, "Voice &
+    Speech") — the same `expandable_window` slide-in-panel header-scrolls-
+    away shape Settings had, fixed the same way (header pinned above the
+    `ScrollView`, `adjustPaddings()` split between `action_bar` and
+    `scrollable`). Only one child under `expandable_window` here (no
+    `thread_loading`-style overlay to preserve stacking order for), so the
+    outer `LinearLayout` converts to `ConstraintLayout` directly instead
+    of needing Settings' extra `content` wrapper. This screen previously
+    had no AMOLED recolor at all for its header bar/back button (there
+    was no bar); both now follow the standard tint-list pattern like
+    every other converted screen.
+  **Deliberately kept on raw XML (owner ruling, July 19 2026) — the
+  Profile Images gallery** (`activity_profile_images.xml`): the owner
+  reviewed it and likes the current look, so it stays as-is rather than
+  being converted to the named styles. Its header is genuinely more
+  complex than any converted screen: ONE set of slots serves TWO
+  mutually exclusive modes (normal: back arrow + centered "Avatar Image
+  Gallery" title; selection mode: a cancel-X in the back slot + a live
+  "N Selected" count in the title slot), toggled by visibility in
+  `ProfileImagesActivity` — not a shape any current style variant
+  covers. Verified it still properly connects to the same underlying
+  tokens as every converted screen even though it doesn't reference the
+  named styles: `?attr/colorSurfaceContainerHigh` bar background,
+  `@drawable/btn_accent_icon_large_100` buttons, the same `ic_back`/
+  `ic_close` icons. One real divergence: its title is still **20sp**,
+  one step behind the 24sp the rest of the app was bumped to same day —
+  left alone since changing it would be a visual change beyond what was
+  asked. Also notable (not a defect, a preview of where the app is
+  headed): `ProfileImagesActivity` never calls
+  `ThemeManager.applyTheme(this, amoled)`, only `applyPalette` — like
+  `ProfileImagePropertiesActivity`/`DefaultImagesActivity`, the whole
+  Profile Images area was built without the legacy per-Activity AMOLED
+  pitch-black recolor logic the `Widget.App.ActionBar` guard comment
+  says is being phased out, rather than carrying it in and later
+  removing it.
+  **The "close panel" pattern (owner ruling, July 19 2026) — Memory
+  Filters panel** (`activity_memory_filter_panel.xml`): unlike the
+  screens above, this one intentionally does NOT match the back+
+  centered-title look — it's a slide-out filter panel closed with an X,
+  not a screen navigated back from, and the owner liked that look as
+  distinct. Formalized into its own named style family instead of
+  staying hand-copied, so the next filter-style pop-out has something to
+  reuse: `Widget.App.ActionBar.CloseButton` (mirrors `.BackButton`'s
+  geometry, end-anchored, bakes in the close icon + generic
+  `@string/btn_close`, overridable per instance — Memory Filters keeps
+  its more specific `@string/mem_filter_close`, "Close Memory Filters")
+  and `Widget.App.ActionBar.Title.LeftAligned` (left-aligned, ellipsized,
+  20sp — deliberately not a size step of the main rollout, a distinct
+  choice for this family — and NOT a child style of the plain `.Title`:
+  a ConstraintLayout view can't cleanly carry both an inherited
+  `layout_constraintEnd_toEndOf` and an added
+  `layout_constraintEnd_toStartOf`, so the shared color/weight items are
+  duplicated rather than inherited). `.Title.LeftAligned` hardcodes
+  `layout_constraintEnd_toStartOf="@+id/btn_close"` — any screen using
+  it must name its close button `btn_close`, the same convention
+  `.BackButton` assumes for `btn_back`. The container stays plain
+  `Widget.App.ActionBar`, unchanged. `MemoryFilterPanelActivity`'s
+  Kotlin already used the full standard tint-list AMOLED pattern before
+  this change, so only the XML moved to the new styles — no Kotlin
+  edits needed.
 - Match the existing style: nullable `var` view fields + `findViewById`,
   `DialogFragment.newInstance(Bundle)` pattern, listener interfaces with
   default no-op methods, copyright header on every file, strings ONLY in

@@ -40,42 +40,22 @@
 
     <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/action_bar"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:background="?attr/colorSurfaceContainerHigh"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent">
+        style="@style/Widget.App.ActionBar">
 
         <ImageButton
             android:id="@+id/btn_back"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:layout_marginStart="8dp"
-            android:layout_marginTop="8dp"
-            android:layout_marginBottom="8dp"
-            android:background="@drawable/btn_accent_icon_large_100"
-            android:contentDescription="@string/go_back"
-            android:src="@drawable/ic_back"
-            android:tooltipText="@string/go_back"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent"
-            app:srcCompat="@drawable/ic_back" />
+            style="@style/Widget.App.ActionBar.BackButton" />
 
         <TextView
             android:id="@+id/activity_title"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/title_lorebook"
-            android:textColor="@color/text_title"
-            android:textSize="24sp"
-            android:textStyle="bold"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent" />
+            style="@style/Widget.App.ActionBar.Title"
+            android:text="@string/title_lorebook" />
 
+        <!-- Chains off btn_debug (the edge-anchored icon), so it can't share
+             Widget.App.ActionBar.SecondaryButton as-is (that style bakes in
+             layout_constraintEnd_toEndOf=parent) - same geometry written out
+             directly instead, per the style's own doc comment in
+             values/themes.xml. -->
         <ImageButton
             android:id="@+id/btn_edit_book"
             android:layout_width="48dp"
@@ -94,18 +74,10 @@
 
         <ImageButton
             android:id="@+id/btn_debug"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:layout_marginEnd="8dp"
-            android:layout_marginTop="8dp"
-            android:layout_marginBottom="8dp"
-            android:background="@drawable/btn_accent_icon_large_100"
+            style="@style/Widget.App.ActionBar.SecondaryButton"
             android:contentDescription="@string/btn_lorebook_debug"
             android:src="@drawable/ic_storage"
             android:tooltipText="@string/btn_lorebook_debug"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintTop_toTopOf="parent"
             app:srcCompat="@drawable/ic_storage" />
     </androidx.constraintlayout.widget.ConstraintLayout>
 

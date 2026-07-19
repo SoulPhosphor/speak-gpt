@@ -180,8 +180,8 @@
     <string name="global_settings_tip">You are editing global settings. This is a template for new chats and settings for assistant. These settings don\'t apply to existing chats. To edit settings for existing chat, open the chat and click the settings icon.</string>
     <string name="global_settings_title">Global settings</string>
     <string name="chat_settings_title">Chat settings</string>
-    <string name="title_control_center">Control center</string>
-    <string name="tip_12">Long press on setting tile to show function description. Works only on new settings UI. You can access new settings UI (Control center) by pressing on the \'lab\' icon in the regular settings.</string>
+    <string name="title_control_center">Settings</string>
+    <string name="tip_12">Long press on setting tile to show function description. Works only on new settings UI. You can access new settings UI (Settings) by pressing on the \'lab\' icon in the regular settings.</string>
     <string name="menu_explore">Explore</string>
     <string name="chat_role_user">User</string>
     <string name="control_center_general">General</string>
@@ -442,9 +442,9 @@
     <string name="tile_characters_title">Characters</string>
     <string name="tile_characters_desc">Companions, activation prompts and your system message — all in one place.</string>
     <string name="title_characters">Characters</string>
-    <string name="tile_activation_prompts_title">Activation prompts</string>
+    <string name="tile_activation_prompts_title">Activation Prompts</string>
     <string name="tile_activation_prompts_desc">Reusable opening messages. Create several, give each a title, and attach one to a persona.</string>
-    <string name="title_activation_prompts">Activation prompts</string>
+    <string name="title_activation_prompts">Activation Prompts</string>
     <string name="btn_new_activation_prompt">Add activation prompt</string>
     <string name="label_add_activation_prompt">Add activation prompt</string>
     <string name="label_edit_activation_prompt">Edit activation prompt</string>
@@ -768,7 +768,7 @@
     <string name="app_description_new">SpeakGPT is an advanced and highly intuitive open-source assistant that uses the powerful LLMs. You can use online models like ChatGPT, Gemini, Perplexity, or your local models with this app.</string>
 
     <!-- Voice &amp; speech consolidated settings -->
-    <string name="voice_settings_title">Voice &amp; speech</string>
+    <string name="voice_settings_title">Voice &amp; Speech</string>
     <string name="tile_voice_settings_title">Voice &amp; Speech</string>
     <string name="tile_voice_settings_subtitle">Settings related to transcription and text to speech.</string>
     <string name="tile_voice_settings_desc">Everything related to speech in one place: text-to-speech voice and engine, speech-to-text (dictation) engine, hands-free mode, voice-activity detection, and audio feedback. Tap to open.</string>

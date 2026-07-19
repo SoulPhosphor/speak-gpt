@@ -208,11 +208,53 @@
          recolor logic (dynamic background/back-button/status-bar
          recoloring in Kotlin) - the owner says that mechanism is being
          removed and does not want it carried into the new style.
-         Rolled out so far only to ProfileImagePropertiesActivity and
-         DefaultImagesActivity (activity_profile_image_properties.xml,
-         activity_default_images.xml) - intentionally not yet applied to
-         any other screen; the owner wants this proven right on new
-         screens first before the rest of the app is converted. -->
+         Rolled out (July 19 2026) to ProfileImagePropertiesActivity,
+         DefaultImagesActivity, CharactersActivity, PersonasListActivity
+         ("Companions"), ActivationPromptsListActivity, and - via the
+         shared activity_memory_list_simple.xml scaffold plus
+         MemoryScreenActivity.contentLayoutRes() - MemoryUserPersonasActivity
+         ("My Personas"), MemoryRoleplayCharactersActivity, MemoryWorldsActivity,
+         MemoryPartyMembersActivity, MemoryCampaignsActivity and RpTagsActivity
+         (the five Roleplay-hub screens). None of those six wire an action
+         icon, secondary action, filter or mode toggle, so none of them
+         needed the reserved space activity_memory_list.xml's button-aware
+         title still gives the OTHER MemoryScreenActivity screens that do
+         (e.g. Memory Browser, Model Rules); AlertDebugMenuActivity
+         (activity_alert_debug_menu.xml, "Alerts, Errors & Logs"),
+         VoiceAdvancedSettingsActivity (activity_voice_advanced.xml,
+         "Advanced Voice Settings") and AudioDebuggingActivity
+         (activity_audio_debugging.xml, "Voice Debugging" tile); LogsActivity
+         (activity_logs.xml, all four log pages) via this trio PLUS
+         Widget.App.ActionBar.SecondaryButton below (its Event-log-only
+         voice-advanced shortcut icon); SettingsActivity
+         (activity_settings.xml, main Settings screen), restructured same
+         day so the header pins above the ScrollView instead of scrolling
+         away with it (see the CLAUDE.md rollout-status note for the
+         restructure details); LocalWhisperManageActivity and
+         LocalWhisperModelsActivity (activity_local_whisper_manage.xml/
+         activity_local_whisper_models.xml - the old floating-title-no-bar
+         look, now gets the colored bar for the first time);
+         LoreBookEntriesActivity and LoreBooksListActivity
+         (activity_lorebook_entries.xml/activity_lorebooks_list.xml,
+         via this trio plus SecondaryButton for their debug/edit-book
+         icons - entries has two chained icons, see SecondaryButton's own
+         doc comment below for how the inner one is handled); and
+         LogitBiasConfigListActivity/LogitBiasConfigActivity
+         (activity_logit_bias_config_list.xml/activity_logit_bias_list.xml,
+         via this trio plus SecondaryButton for their help icon - also
+         dropped a redundant android:backgroundTint on the buttons that
+         just re-stated the same colorSurfaceContainerHigh the drawable
+         already bakes in) - and VoiceSettingsActivity
+         (activity_voice_settings.xml, "Voice & Speech"), restructured the
+         same way as Settings so its header pins too (same
+         expandable_window slide-in-panel shape, but only one child, so
+         the outer LinearLayout converts to ConstraintLayout directly
+         instead of needing Settings' extra wrapper). Title size raised
+         20sp -> 24sp same day to match the size these screens already
+         used before conversion (owner ruling: match the existing look,
+         not the smaller size introduced with the first two screens).
+         Not yet applied to the rest of the app; keep rolling out screen
+         by screen. -->
     <style name="Widget.App.ActionBar" parent="">
         <item name="android:layout_width">0dp</item>
         <item name="android:layout_height">wrap_content</item>
@@ -245,10 +287,111 @@
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:textColor">@color/text_title</item>
-        <item name="android:textSize">20sp</item>
+        <item name="android:textSize">24sp</item>
         <item name="android:textStyle">bold</item>
         <item name="layout_constraintBottom_toBottomOf">parent</item>
         <item name="layout_constraintEnd_toEndOf">parent</item>
+        <item name="layout_constraintStart_toStartOf">parent</item>
+        <item name="layout_constraintTop_toTopOf">parent</item>
+    </style>
+
+    <!-- THE "icon on top" PATTERN (owner ruling, July 19 2026): use this,
+         not raw XML, any time a Widget.App.ActionBar screen needs a
+         trailing icon button (a shortcut, a settings gear, etc.) alongside
+         the back button - this was the gap that left activity_logs.xml
+         hand-copied instead of sharing the header style (see the Logs
+         entry below). Same geometry/background as
+         Widget.App.ActionBar.BackButton, anchored to the bar's END instead
+         of its START. android:src/contentDescription/tooltipText are
+         screen-specific (the icon differs per screen) and stay on the
+         instance - only geometry/background are shared here. Title stays
+         plain Widget.App.ActionBar.Title, unchanged: it's centered across
+         the WHOLE bar regardless of the icon's presence (matches how the
+         pre-conversion Logs title already floated centered, ignoring the
+         back button's position) rather than re-deriving an off-center/
+         ellipsized variant - simpler, and it already looked right. For a
+         SECOND trailing icon, constrain its layout_constraintEnd_toStartOf
+         the first icon instead of parent (see activity_memory_list.xml's
+         btn_action/btn_action_secondary chain for that shape) rather than
+         inventing a new style per icon count. -->
+    <style name="Widget.App.ActionBar.SecondaryButton" parent="">
+        <item name="android:layout_width">48dp</item>
+        <item name="android:layout_height">48dp</item>
+        <item name="android:layout_marginEnd">8dp</item>
+        <item name="android:layout_marginTop">8dp</item>
+        <item name="android:layout_marginBottom">8dp</item>
+        <item name="android:background">@drawable/btn_accent_icon_large_100</item>
+        <item name="layout_constraintBottom_toBottomOf">parent</item>
+        <item name="layout_constraintEnd_toEndOf">parent</item>
+        <item name="layout_constraintTop_toTopOf">parent</item>
+    </style>
+
+    <!-- THE "close panel" PATTERN (owner ruling, July 19 2026): use this,
+         not raw XML, for any slide-out/slide-in panel whose header closes
+         with an X instead of navigating back with an arrow - the shape
+         first built for the Memory Filters panel
+         (activity_memory_filter_panel.xml) and now formalized so the next
+         filter-style pop-out reuses it instead of hand-copying. Owner
+         ruling: keep this look distinct from the plain back+centered-title
+         header rather than forcing it to match - it's a different kind of
+         screen (a panel you close, not a screen you navigate back from),
+         and the existing look was already liked as-is.
+         Container: still plain Widget.App.ActionBar, unchanged - only the
+         title and the button differ from the back+title family.
+         Widget.App.ActionBar.CloseButton mirrors
+         Widget.App.ActionBar.BackButton's geometry (same size/margins/
+         background) but anchored to the bar's END, with the close icon
+         baked in the same way BackButton bakes in the back icon.
+         contentDescription/tooltipText default to the generic
+         @string/btn_close ("Close") but - like BackButton's
+         @string/go_back - an instance can override them with something
+         more specific (Memory Filters uses @string/mem_filter_close,
+         "Close Memory Filters", since a screen-reader label naming what's
+         closing is more useful than a bare "Close" on an icon-only
+         button).
+         Widget.App.ActionBar.Title.LeftAligned is the title for this
+         family: left-aligned and ellipsized (it shares the row with the
+         close button, so it can't center across the whole bar the way the
+         plain Title does) at 20sp, not 24sp - a deliberate, smaller size
+         for this variant, not a step of the size rollout the plain Title
+         went through. It is NOT a child of Widget.App.ActionBar.Title:
+         ConstraintLayout can't cleanly have both an inherited
+         layout_constraintEnd_toEndOf and an added
+         layout_constraintEnd_toStartOf on the same view (both would be
+         set, which is ambiguous), so the shared color/weight items are
+         duplicated here instead of inherited. This style HARDCODES
+         layout_constraintEnd_toStartOf="@+id/btn_close" - any screen using
+         it MUST name its close button btn_close (matching how
+         Widget.App.ActionBar.BackButton assumes screens name their back
+         button btn_back). -->
+    <style name="Widget.App.ActionBar.CloseButton" parent="">
+        <item name="android:layout_width">48dp</item>
+        <item name="android:layout_height">48dp</item>
+        <item name="android:layout_marginEnd">8dp</item>
+        <item name="android:layout_marginTop">8dp</item>
+        <item name="android:layout_marginBottom">8dp</item>
+        <item name="android:background">@drawable/btn_accent_icon_large_100</item>
+        <item name="android:contentDescription">@string/btn_close</item>
+        <item name="android:src">@drawable/ic_close</item>
+        <item name="android:tooltipText">@string/btn_close</item>
+        <item name="srcCompat">@drawable/ic_close</item>
+        <item name="layout_constraintBottom_toBottomOf">parent</item>
+        <item name="layout_constraintEnd_toEndOf">parent</item>
+        <item name="layout_constraintTop_toTopOf">parent</item>
+    </style>
+
+    <style name="Widget.App.ActionBar.Title.LeftAligned" parent="">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginStart">20dp</item>
+        <item name="android:layout_marginEnd">8dp</item>
+        <item name="android:ellipsize">end</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:textColor">@color/text_title</item>
+        <item name="android:textSize">20sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="layout_constraintBottom_toBottomOf">parent</item>
+        <item name="layout_constraintEnd_toStartOf">@+id/btn_close</item>
         <item name="layout_constraintStart_toStartOf">parent</item>
         <item name="layout_constraintTop_toTopOf">parent</item>
     </style>
