@@ -52,7 +52,9 @@ import org.teslasoft.assistant.preferences.GlobalPreferences
 object GlobalDefaultImageSeeder {
 
     private const val SEED_SIZE = 512
-    private const val TINT_COLOR_RES = R.color.accent_900
+    // Not `const val`: R.* fields are non-final in this project's AGP
+    // configuration, so they are not valid Kotlin compile-time constants.
+    private val TINT_COLOR_RES = R.color.accent_900
 
     /** avatarId -> built-in drawable, matching StaticAvatarParser's mapping. */
     private val BUILTIN_PRESETS = listOf(
