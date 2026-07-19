@@ -502,7 +502,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             btnMicro?.isEnabled = true
             btnSend?.isEnabled = true
             isRecording = false
-            micIdle()
+            // If a plain read-aloud is now playing (non-hands-free), keep the mic
+            // as a STOP control rather than resetting it to idle — this runs in the
+            // generateResponse finally right after pronounce() started the readback.
+            // micIdle otherwise handles hiding the mic during a live conversation.
+            if (readbackKeepAliveActive && !isHandsFreeEngaged()) micReadbackStop() else micIdle()
             // Return the conversation/send button to its resting look (waveform
             // or up-arrow depending on the box) after any turn/cancel finishes.
             refreshConversationButton()
@@ -531,17 +535,41 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             setImageResource(R.drawable.ic_microphone)
             clearColorFilter()
             backgroundTintList = null
+            // Hidden while a hands-free conversation is live so it can't be tapped
+            // by accident (the conversation button is the only control then); it
+            // reappears the moment the loop stops. handsFreeStopped is already set
+            // true by the stop funnels before they call micIdle, so isHandsFreeEngaged
+            // is false here on a stop → the mic is shown again.
+            visibility = if (isHandsFreeEngaged()) View.GONE else View.VISIBLE
         }
         messageInput?.hint = getString(R.string.hint_message)
     }
 
     private fun micRecording() {
         btnMicro?.apply {
+            visibility = View.VISIBLE
             setImageResource(R.drawable.ic_stop_recording)
             setColorFilter(ResourcesCompat.getColor(resources, R.color.mic_listening_green, theme))
             backgroundTintList = null
         }
         messageInput?.hint = getString(R.string.hint_listening)
+    }
+
+    /**
+     * The mic button turned into a STOP control while a plain (non-hands-free)
+     * read-aloud is playing — the auto read-after-reply OR a manual speaker-button
+     * re-read. A tap stops the readback (the mic's click/touch listeners already
+     * route a tap during playback through cancelAllAiActivity, which silences it).
+     * A red stop glyph on the normal button background, distinct from hands-free's
+     * white-on-red conversation button so the two modes never look alike.
+     */
+    private fun micReadbackStop() {
+        btnMicro?.apply {
+            visibility = View.VISIBLE
+            setImageResource(R.drawable.ic_stop_recording)
+            setColorFilter(ResourcesCompat.getColor(resources, R.color.hands_free_active_red, theme))
+            backgroundTintList = null
+        }
     }
 
     /**
@@ -567,6 +595,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 ResourcesCompat.getColor(resources, R.color.hands_free_active_red, theme)
             )
         }
+        // Hide the mic entirely while the conversation is live so it can't be
+        // tapped by accident; it comes back when the loop stops (micIdle).
+        btnMicro?.visibility = View.GONE
         messageInput?.hint = getString(if (listening) R.string.hint_listening else R.string.hint_message)
     }
 
@@ -4019,6 +4050,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         if (readbackKeepAliveActive) return
         readbackKeepAliveActive = true
         GenerationForegroundService.begin(this, chatId, chatName, reading = true)
+        // A plain (non-hands-free) read-aloud is starting — the auto read-after-reply
+        // or a manual speaker re-read. Turn the mic into a STOP control so a tap
+        // stops the readback (during hands-free the mic is hidden instead, so skip).
+        if (!isHandsFreeEngaged()) runOnUiThread { micReadbackStop() }
         val token = ++readbackKeepAliveToken
         val startedAt = System.currentTimeMillis()
         var everPlaying = false
@@ -4047,6 +4082,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         readbackKeepAliveActive = false
         readbackKeepAliveToken++ // stop any in-flight poll
         GenerationForegroundService.end(this)
+        // The plain read-aloud is over — drop the mic's STOP look back to idle
+        // (unless a hands-free conversation is running, where the mic stays hidden).
+        if (!isHandsFreeEngaged()) runOnUiThread { micIdle() }
     }
 
     private val postNotificationsLauncher = registerForActivityResult(
