@@ -116,6 +116,34 @@ object MemoryCompanionSync {
         }
     }
 
+    /**
+     * Persona delete hook (owner ruling, July 20 2026). Deleting a companion
+     * from the app now ALSO deletes its memory-store record and the memories
+     * owned solely by it — memories shared with another companion survive with
+     * this companion's link removed (the sole-owner rule in
+     * [MemoryStore.deleteCompanion] / TargetTeardownPlanner). This reverses the
+     * old "profile-only delete, memories dangle" behaviour: a dangling record
+     * could only ever be reached again by recreating a companion with the exact
+     * same name, which the owner judged more surprising than useful.
+     *
+     * Best-effort like the rest of this bridge: a store failure must never
+     * break deleting the app persona, so failures are logged and swallowed.
+     * Runs nothing until the store is provisioned, and no-ops when this persona
+     * never had a companion record.
+     */
+    fun onPersonaDeleted(context: Context, personaId: String) {
+        try {
+            if (personaId.isBlank() || !MemoryStore.isProvisioned(context)) return
+            val store = MemoryStore.getInstance(context)
+            val existing = store.findCompanionByAppCharacterId(personaId) ?: return
+            store.deleteCompanion(existing.companionId, deleteMemories = true)
+        } catch (e: Exception) {
+            // Persona deletes must always succeed; an orphaned companion record
+            // can be cleaned up later and never blocks the app-side delete.
+            MemoryLog.log(context, "MemorySync", "error", "Persona->companion delete failed: ${e.message}")
+        }
+    }
+
     private fun newCompanion(appCharacterId: String, persona: PersonaObject): CompanionRecord {
         val now = MemoryStore.nowIso()
         return CompanionRecord(

@@ -223,12 +223,12 @@
     <string name="lorebook_filter_by_type">Filter by type</string>
     <string name="title_add_lorebooks">Add lorebooks</string>
     <string name="btn_save_and_close">Save and close</string>
-    <string name="btn_add_lorebooks">Add lorebooks</string>
+    <string name="btn_add_lorebooks">Add Lorebooks</string>
     <string name="btn_unlink_lorebook">Unlink from this Companion</string>
     <string name="btn_delete_lorebook">Delete lorebook</string>
-    <string name="persona_core_lorebook_hint">Core lorebook</string>
+    <string name="persona_core_lorebook_hint">Core Lorebook</string>
     <string name="persona_core_lorebook_help">Always active while this Companion is used. Optional.</string>
-    <string name="persona_additional_lorebooks">Additional lorebooks</string>
+    <string name="persona_additional_lorebooks">Additional Lorebooks</string>
     <string name="persona_no_additional_lorebooks">No lorebooks linked yet.</string>
     <string name="persona_autoload_lorebooks">Automatically enable the last-used lorebooks in new chats</string>
     <string name="label_lorebook_none">None</string>
@@ -274,8 +274,13 @@
     <string name="label_edit_persona">Edit persona</string>
     <string name="label_delete_persona">Delete Companion</string>
     <string name="message_delete_persona">Are you sure you want to delete this Companion? This action cannot be undone.</string>
-    <string name="persona_friendly_name">Companion name</string>
-    <string name="persona_prompt_hint">Companion prompt</string>
+    <!-- Delete-companion confirmation on the Edit Companion screen (owner
+         wording, July 20 2026). Deleting also removes the companion's memories
+         that aren't shared with another companion. -->
+    <string name="persona_delete_title">Delete this companion?</string>
+    <string name="persona_delete_body">The profile and all associated memories that aren\'t shared with another companion will be permanently deleted.</string>
+    <string name="persona_friendly_name">Companion Name</string>
+    <string name="persona_prompt_hint">Companion Prompt</string>
     <string name="persona_prompt_help">Sent before your system message at the start of every request.</string>
     <string name="label_error_persona_empty">Please enter a Companion name</string>
     <string name="label_persona_none">No Companion</string>
@@ -466,7 +471,7 @@
     <string name="activation_prompt_help">Sent as the first user message when this activation is applied.</string>
     <string name="label_error_activation_prompt_empty">Please enter a title</string>
     <string name="label_activation_none">None</string>
-    <string name="persona_activation_hint">Activation prompt</string>
+    <string name="persona_activation_hint">Activation Prompt</string>
     <string name="persona_activation_help">The activation prompt to use with this Companion. None is always available.</string>
     <string name="label_activation">Activation</string>
     <string name="btn_edit_persona">Edit Companion</string>

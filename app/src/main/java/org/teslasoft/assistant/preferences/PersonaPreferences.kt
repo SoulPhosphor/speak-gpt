@@ -129,12 +129,16 @@ class PersonaPreferences private constructor(private var preferences: SharedPref
         }
     }
 
-    // Deleting a persona deliberately does NOT touch the memory store: the
-    // store owns continuity, and deleting companions is a user-only action in
-    // the memory editor. The companion's app link simply dangles until the
-    // user decides there.
+    // Deleting a persona now ALSO deletes its companion memory record and the
+    // memories owned solely by it (owner ruling, July 20 2026 — supersedes the
+    // old "profile-only delete, memories dangle" behaviour). Memories shared
+    // with another companion survive with this link removed. The cascade is
+    // best-effort inside MemoryCompanionSync (a store hiccup never blocks the
+    // app-side delete) and no-ops when the store isn't provisioned.
     fun deletePersona(id: String) {
         removePersonaKeys(id)
+
+        MemoryCompanionSync.onPersonaDeleted(appContext, id)
 
         for (listener in listeners) {
             listener.onPersonaChange()

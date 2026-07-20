@@ -10,18 +10,42 @@ short pointer here instead of the full history. Read this file before
 adding or touching any shared style, and add new styles' documentation
 and rollout notes here — not back in `CLAUDE.md`.
 
-- **The standard discard-changes dialog (owner ruling, July 20 2026) —
-  use this by name, don't re-describe it.** Any full-screen editor with an
-  explicit Save action must confirm before letting the user back out
-  (toolbar back button or the system back gesture) with unsaved changes.
-  Call `org.teslasoft.assistant.ui.util.DiscardChangesDialog.show(context) {
-  onDiscard }` — it builds the one approved shape: message
-  `@string/discard_changes_q` ("Discard changes?"), positive button
-  `@string/okay` ("Okay") runs the discard callback (finish the screen,
-  changes lost), negative button `@string/btn_cancel` ("Cancel") only
-  dismisses the dialog and leaves the screen exactly as it was. Themed with
-  `R.style.App_MaterialAlertDialog`. Do not reword or restyle it without
-  asking first. First use: `CampaignDetailActivity` (both `btnBack`'s click
+- **Dialog text hierarchy — title vs. subtext (owner ruling, July 20
+  2026).** A `MaterialAlertDialogBuilder` dialog has two text roles, and
+  they must not be collapsed into one: `setTitle` is the TITLE (large,
+  bold) and `setMessage` is the SUBTEXT (smaller, regular weight) that
+  explains the title. **When a dialog is just one short question with no
+  further explanation** (e.g. "Discard changes?"), that question goes in
+  `setTitle` and `setMessage` is left unset — it must render at title size,
+  not shrink down to subtext size just because it was the only text in the
+  dialog. Only use `setMessage` when there is genuinely separate
+  explanatory text under a title (e.g. `framing_load_error_title` +
+  `framing_load_error_body`). A single-question dialog's title should also
+  be centered (see `DiscardChangesDialog` for the pattern: after
+  `dialog.show()`, `dialog.findViewById<TextView>(androidx.appcompat.R.id.alertTitle)?.gravity = Gravity.CENTER`
+  — a per-dialog runtime tweak, not a change to the shared
+  `App.MaterialAlertDialog` theme, so it never affects other dialogs' left-
+  aligned titles/bodies).
+- **The standard discard-changes dialog (owner ruling, July 20 2026;
+  restyled same day) — use this by name, don't re-describe it.** Any
+  full-screen editor with an explicit Save action must confirm before
+  letting the user back out (toolbar back button or the system back
+  gesture) with unsaved changes. Call
+  `org.teslasoft.assistant.ui.util.DiscardChangesDialog.show(context) {
+  onDiscard }` — it builds the one approved shape: `@string/discard_changes_q`
+  ("Discard changes?") as the dialog's TITLE (see the title/subtext rule
+  above — it's a single question, so no `setMessage`), centered over two
+  real buttons built from `dialog_two_actions.xml`, primary action first/
+  start (`@string/okay` "Okay", `AppButton.Primary.DialogAction` — runs the
+  discard callback, finishes the screen, changes lost) then destructive
+  action second/end (`@string/btn_cancel` "Cancel",
+  `AppButton.Destructive.DialogAction` — only dismisses the dialog and
+  leaves the screen exactly as it was). Neither button is a flat
+  `setPositiveButton`/`setNegativeButton` text button — both are real
+  `AppButton.Primary`/`AppButton.Destructive`-styled `MaterialButton`s, so
+  they retheme the same way every other primary/destructive button in the
+  app does. Themed with `R.style.App_MaterialAlertDialog`. Do not reword or
+  restyle it without asking first. First use: `CampaignDetailActivity` (both `btnBack`'s click
   listener and an `onBackPressedDispatcher.addCallback` for the system
   back gesture route through one `attemptExit()` that compares a field
   snapshot against the snapshot taken at load/last-save). Also applied,
@@ -88,15 +112,32 @@ and rollout notes here — not back in `CLAUDE.md`.
     style) as a dialog's `setView`, alongside the dialog's own themed
     title/message. First use: the Framing screen's "Unable to Open Image"
     load-error dialog.
+  - `AppButton.Primary.DialogAction` / `AppButton.Destructive.DialogAction`
+    — **the two-button dialog action row (owner ruling, July 20 2026).**
+    Same percentage-width idea as `AppButton.Primary.Dialog` above, but for
+    a primary + a destructive button side by side instead of one centered
+    button — each is `layout_width=0dp` + a shared
+    `layout_constraintWidth_percent` (currently `0.42`), with the chain
+    between the two buttons (primary first/start, destructive second/end)
+    defined in the shared layout rather than the style, since a chain needs
+    both buttons' ids. Use the shared `layout/dialog_two_actions.xml`
+    (`@id/btn_dialog_primary_action` then `@id/btn_dialog_destructive_action`)
+    as a dialog's `setView`. First use: `DiscardChangesDialog`.
 - **Dialog theme (standardization, July 19 2026).** `App.MaterialAlertDialog`
   (`values/themes.xml`, parent `MaterialAlertDialog.Material3`; referenced in
   code as `R.style.App_MaterialAlertDialog`) is THE standard dialog theme —
   build every `MaterialAlertDialogBuilder` with it so window/shape/title/body
   colors resolve through Material3 roles and future palettes retheme dialogs
   with no per-dialog changes. It wires the text-action buttons via
-  `App.PositiveButtonStyle`/`App.NegativeButtonStyle`; for a filled primary
-  action inside a dialog use a custom `setView` with `AppButton.Primary.Dialog`
-  (above) instead of a bare `setPositiveButton`.
+  `App.PositiveButtonStyle`/`App.NegativeButtonStyle` — that flat-text-button
+  pairing is still correct for ordinary dialogs (e.g. plain Yes/No delete
+  confirmations). For a filled primary action inside a dialog use a custom
+  `setView` with `AppButton.Primary.Dialog` (above) instead of a bare
+  `setPositiveButton`; for a primary+destructive pair (e.g. an unsaved-
+  changes confirm) use a custom `setView` with
+  `AppButton.Primary.DialogAction`/`AppButton.Destructive.DialogAction` via
+  `dialog_two_actions.xml` (above) instead of a bare
+  `setPositiveButton`/`setNegativeButton` pair.
 - **Shared chevron-row styles (owner ruling, July 18 2026; expanded same
   day — leading-icon variant, list-screen manager/picker split).** Every
   "chevron row" in this app (a tappable settings-style row: an optional
