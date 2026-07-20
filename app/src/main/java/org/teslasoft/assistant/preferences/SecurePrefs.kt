@@ -397,28 +397,52 @@ object SecurePrefs {
      */
     fun reconcileOutageAtStartup(context: Context) {
         val appContext = context.applicationContext
+
+        // One-time chore latch (Build Phase 1). Once the recovery scan has fully
+        // settled — no outage file left to merge, no chat rename still mid-
+        // recovery — neither the legacy-snapshot discovery nor the outage-file
+        // scan needs to run again. Before this latch, discoverLegacy re-scanned
+        // two directories and re-parsed the whole SnapshotRegistry on EVERY
+        // launch (and the registry only grows), pure startup waste after the
+        // one-time recovery work is done. New preserved artifacts are indexed
+        // when created (SnapshotRegistry.record), so nothing pre-registry can
+        // appear after the first settled scan.
+        if (StartupHealth.isRecoveryScanSettled(appContext)) return
+
         SnapshotRegistry.discoverLegacy(appContext)
         val names = listOutageNames(appContext)
-        if (names.isEmpty()) return
 
-        val result = OutageReconciler.reconcile(
-            androidFiles(appContext, names),
-            ChatPreferences.CHAT_LIST_LOCK
-        )
-        // A merged file's encrypted side opened and absorbed the outage data:
-        // its lock record is finished business. (Locks for files that are
-        // simply read again also clear in get(); this covers files nothing
-        // reads anymore, which would otherwise pin anyChatDataDegraded — and
-        // with it the exporter's incomplete marking — forever.)
-        for (name in result.merged) {
-            ChatStorageHealth.clearLock(appContext, name)
+        var deferred = 0
+        if (names.isNotEmpty()) {
+            val result = OutageReconciler.reconcile(
+                androidFiles(appContext, names),
+                ChatPreferences.CHAT_LIST_LOCK
+            )
+            // A merged file's encrypted side opened and absorbed the outage data:
+            // its lock record is finished business. (Locks for files that are
+            // simply read again also clear in get(); this covers files nothing
+            // reads anymore, which would otherwise pin anyChatDataDegraded — and
+            // with it the exporter's incomplete marking — forever.)
+            for (name in result.merged) {
+                ChatStorageHealth.clearLock(appContext, name)
+            }
+            if (result.merged.isNotEmpty() || result.deferred.isNotEmpty()) {
+                val msg = "Storage-outage recovery: ${result.merged.size} file(s) merged back" +
+                    (if (result.conflictsPreserved.isNotEmpty()) ", ${result.conflictsPreserved.size} with both copies preserved" else "") +
+                    (if (result.deferred.isNotEmpty()) "; ${result.deferred.size} still waiting for the encryption key" else "") + "."
+                MemoryLog.log(appContext, "SecurePrefs", "info", msg)
+                Logger.log(appContext, ChatPreferences.CORRUPT_DATA_LOG_TYPE, "SecurePrefs", "info", msg)
+            }
+            deferred = result.deferred.size
         }
-        if (result.merged.isNotEmpty() || result.deferred.isNotEmpty()) {
-            val msg = "Storage-outage recovery: ${result.merged.size} file(s) merged back" +
-                (if (result.conflictsPreserved.isNotEmpty()) ", ${result.conflictsPreserved.size} with both copies preserved" else "") +
-                (if (result.deferred.isNotEmpty()) "; ${result.deferred.size} still waiting for the encryption key" else "") + "."
-            MemoryLog.log(appContext, "SecurePrefs", "info", msg)
-            Logger.log(appContext, ChatPreferences.CORRUPT_DATA_LOG_TYPE, "SecurePrefs", "info", msg)
+
+        // Settle the latch only when there is genuinely nothing left to do: no
+        // outage file deferred waiting for its key, and no chat rename still
+        // mid-recovery. A masked or in-flux chat list must never drive a "done"
+        // decision (the same rule RenameJournal reconciliation follows) — while
+        // either is pending the scan simply re-runs next start (idempotent).
+        if (deferred == 0 && !RenameJournal.hasPending(appContext)) {
+            StartupHealth.markRecoveryScanSettled(appContext)
         }
     }
 

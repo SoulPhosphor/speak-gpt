@@ -1574,7 +1574,32 @@ Everything is on-device. No cloud sync, no accounts.
   SANITIZED error categories (`StorageErrorSanitizer`) — never chat
   content, prompts, keys, or raw exception messages. The locked-state UI
   wording in `strings.xml` is owner-approved verbatim — never reword
-  without asking.
+  without asking. The same `storage_health` file also holds the Database
+  Health "Build Phase 1" startup-gating booleans under a `startup.` key
+  prefix (`StartupHealth`) — state metadata only, same raw-plaintext
+  rationale.
+- **Startup housekeeping is crash-gated / latched (Database Health Build
+  Phase 1, July 20 2026 — startup-freeze work, still awaiting owner
+  on-device confirmation).** The automatic whole-database
+  `MemoryStore.integrityCheck()` in `MainApplication`'s housekeeping thread
+  no longer runs on EVERY launch: it runs only when
+  `StartupHealth.shouldRunIntegrityCheck(...)` is true — the previous exit
+  was abnormal (crash/ANR/kill, via `Logger.wasPreviousExitAbnormal`, a
+  cheap `getHistoricalProcessExitReasons` read, null on API < 30 → run as
+  the safe direction) or a check/repair is explicitly pending
+  (`StartupHealth.isIntegrityCheckPending`, a hook nothing sets until Build
+  Phase 3). A clean exit skips the check and proceeds as a previously
+  passing check did (backfill + due auto-export still run). The MANUAL
+  integrity check on the Advanced Memory Settings screen is unchanged — do
+  not gate it. `SecurePrefs.reconcileOutageAtStartup` (legacy
+  `SnapshotRegistry.discoverLegacy` + the outage-file scan) now
+  short-circuits once `StartupHealth.isRecoveryScanSettled` is set, and sets
+  that latch only when fully settled (nothing deferred +
+  `!RenameJournal.hasPending`) so recovery is never skipped while still
+  needed. This is a startup-cost reduction only; it changed no
+  backup/repair/encryption/chat/voice/UI behavior. (NOTE: only
+  `companion_memory.db` has an `integrityCheck()` today; the plan's "all
+  three databases" coverage arrives with later phases.)
 - **`ChatActivity` handles rotation itself** (`android:configChanges`
   includes orientation/screenSize etc., July 10 2026): recreation runs
   onDestroy, which kills TTS readback and the hands-free loop — tilting the

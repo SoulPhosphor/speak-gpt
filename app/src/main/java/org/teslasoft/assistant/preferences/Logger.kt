@@ -309,6 +309,55 @@ class Logger {
             }
         }
 
+        /**
+         * Whether the PREVIOUS process death was abnormal — a crash, ANR, or
+         * kill that could have interrupted a database write mid-flight — as
+         * opposed to a clean or user-driven exit. Startup housekeeping uses this
+         * to run the expensive whole-database integrity check only when it might
+         * be needed (a clean launch skips it). Cheap: an in-memory
+         * ActivityManager query, no Keystore and no disk, safe to call from any
+         * thread and independent of [logLastExitReason]'s deduped log write.
+         * Returns null when the platform cannot answer (API < 30) so the caller
+         * can choose the safe direction (run the check).
+         */
+        fun wasPreviousExitAbnormal(context: Context): Boolean? {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return null
+            return previousExitAbnormalApi30(context.applicationContext)
+        }
+
+        @RequiresApi(Build.VERSION_CODES.R)
+        private fun previousExitAbnormalApi30(context: Context): Boolean? {
+            return try {
+                val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager ?: return null
+                val reasons = am.getHistoricalProcessExitReasons(context.packageName, 0, 1)
+                // No recorded death yet (first launches since install) is not an
+                // abnormal exit — there was nothing to interrupt a write.
+                if (reasons.isEmpty()) false else isAbnormalExitReason(reasons[0].reason)
+            } catch (_: Throwable) {
+                null
+            }
+        }
+
+        /**
+         * The abnormal exit reasons for the integrity-check gate: a crash, ANR,
+         * or kill that could have left a database mid-write. Deliberately
+         * DISTINCT from [isAppBreakingExit] (which drives Error-Log copying and
+         * omits REASON_CRASH because CrashHandler already logs it there) —
+         * corruption risk does not care whether CrashHandler ran, so an ordinary
+         * JVM crash counts here. Matches the "warning"-level set used when the
+         * previous exit is described in the Event log below.
+         */
+        @RequiresApi(Build.VERSION_CODES.R)
+        private fun isAbnormalExitReason(reason: Int): Boolean = when (reason) {
+            ApplicationExitInfo.REASON_LOW_MEMORY,
+            ApplicationExitInfo.REASON_SIGNALED,
+            ApplicationExitInfo.REASON_CRASH,
+            ApplicationExitInfo.REASON_CRASH_NATIVE,
+            ApplicationExitInfo.REASON_ANR,
+            ApplicationExitInfo.REASON_EXCESSIVE_RESOURCE_USAGE -> true
+            else -> false
+        }
+
         private const val LAST_EXIT_TS_KEY = "last_exit_ts"
 
         @RequiresApi(Build.VERSION_CODES.R)
@@ -333,16 +382,9 @@ class Logger {
 
             // Low-memory / signaled / crash deaths are the ones that silently cut
             // off a readback; flag them as warnings so they stand out from a clean
-            // exit in the log.
-            val level = when (info.reason) {
-                ApplicationExitInfo.REASON_LOW_MEMORY,
-                ApplicationExitInfo.REASON_SIGNALED,
-                ApplicationExitInfo.REASON_CRASH,
-                ApplicationExitInfo.REASON_CRASH_NATIVE,
-                ApplicationExitInfo.REASON_ANR,
-                ApplicationExitInfo.REASON_EXCESSIVE_RESOURCE_USAGE -> "warning"
-                else -> "info"
-            }
+            // exit in the log. Same set the integrity-check gate treats as
+            // abnormal (see [isAbnormalExitReason]).
+            val level = if (isAbnormalExitReason(info.reason)) "warning" else "info"
             log(context, "event", "ProcessExit", level, message)
 
             // A crash or serious freeze that makes the app unusable must ALSO

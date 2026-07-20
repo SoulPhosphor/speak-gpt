@@ -32,6 +32,7 @@ import org.teslasoft.assistant.preferences.Logger
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.RenameJournal
 import org.teslasoft.assistant.preferences.SecurePrefs
+import org.teslasoft.assistant.preferences.StartupHealth
 import org.teslasoft.assistant.preferences.memory.MemoryExporter
 import org.teslasoft.assistant.preferences.memory.MemoryLog
 import org.teslasoft.assistant.preferences.memory.MemoryStore
@@ -133,19 +134,36 @@ class MainApplication : Application() {
             }
             try {
                 if (MemoryStore.isProvisioned(this)) {
-                    val problem = MemoryStore.getInstance(this).integrityCheck()
+                    val store = MemoryStore.getInstance(this)
+
+                    // Crash-triggered integrity check (Build Phase 1). The
+                    // whole-database PRAGMA integrity_check reads every page and
+                    // grows with the store, so it used to be pure every-launch
+                    // waste on a healthy app. It now runs ONLY after an abnormal
+                    // previous exit (a write could have been interrupted) or when
+                    // a check/repair is explicitly pending (a Build Phase 3 flag,
+                    // honored here already). A clean exit ran no writes to
+                    // interrupt, so the store is presumed healthy and the check
+                    // is skipped — the app proceeds exactly as it did on a
+                    // previously-passing check.
+                    val shouldCheck = StartupHealth.shouldRunIntegrityCheck(
+                        Logger.wasPreviousExitAbnormal(this),
+                        StartupHealth.isIntegrityCheckPending(this)
+                    )
+                    val problem = if (shouldCheck) store.integrityCheck() else null
+
                     if (problem != null) {
                         MemoryLog.log(this, "MemoryStore", "error", "Memory store integrity check failed: $problem")
                         Handler(Looper.getMainLooper()).post {
                             Toast.makeText(this, getString(R.string.memory_integrity_failed), Toast.LENGTH_LONG).show()
                         }
                     } else {
-                        // One-time backfill: pre-existing chats become eligible
-                        // for memory review too. The completion flag is set ONLY
-                        // when the pass actually completed — a failed or partial
-                        // pass leaves it unset and retries next start (the pass
-                        // is idempotent: already-imported chats are skipped).
-                        val store = MemoryStore.getInstance(this)
+                        // Healthy — verified just now, or presumed healthy after a
+                        // clean exit. One-time backfill: pre-existing chats become
+                        // eligible for memory review too. The completion flag is
+                        // set ONLY when the pass actually completed — a failed or
+                        // partial pass leaves it unset and retries next start (the
+                        // pass is idempotent: already-imported chats are skipped).
                         if (store.getMeta(MemoryStore.META_BACKFILL_DONE) != "1") {
                             if (TranscriptRecorder.backfillExistingChats(this).completed) {
                                 store.setMeta(MemoryStore.META_BACKFILL_DONE, "1")

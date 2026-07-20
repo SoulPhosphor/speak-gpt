@@ -103,6 +103,21 @@ anything — do not duplicate. If it has landed, verify and skip.
 **Exit:** CI green + the owner confirms on their phone that launch no
 longer freezes. (Owner rule: not "done" on any other basis.)
 
+> **STATUS (July 20 2026): proposed implementation already present; objective
+> NOT achieved; freeze remained unresolved.** A code read confirmed all three
+> Build Phase 0 changes were already on `main` before this work began:
+> `logLastExitReason` dispatches to a background single-thread executor
+> (`Logger.backgroundLogWriter`), not the UI thread; `MainActivity` resolves
+> the storage-lock/API-key branch on a real worker (`resolveStartupDestination`)
+> and `ChatActivity` on `prepareChatStartup`, both posting only the final UI
+> branch on Main with the splash held up; voice-diagnostic writes go through
+> `Logger.logAsync` (same background writer) while `CrashHandler` stays
+> synchronous. **The owner tested on-device and the startup freeze still
+> occurs**, so the Phase 0 diagnosis ("the reads are on the UI thread") was
+> incomplete — the reads are already off it. Root cause is unresolved and is
+> being pursued in Build Phase 1 (contention/every-launch-cost angle, not
+> wrong-thread).
+
 ## Build Phase 1 — Stop the every-launch waste (§15.3, §15.4)
 
 Startup-performance round; no user-facing changes.
@@ -125,6 +140,36 @@ Startup-performance round; no user-facing changes.
 
 **Exit:** CI green; Event/Error logs show integrity checks only after
 abnormal exits; startup housekeeping measurably does less on a clean start.
+
+> **STATUS (July 20 2026): items 1 and 2 CODE-COMPLETE; NOT yet confirmed —
+> awaiting CI green AND the owner's on-device startup test.** Item 3 (the
+> recovery-backup controller's state file) is Build Phase 2 scope and is
+> intentionally NOT built in this pass. Implemented, narrowly:
+> - **Item 1 — crash-triggered integrity check.** The automatic
+>   whole-database `PRAGMA integrity_check` in `MainApplication`'s housekeeping
+>   thread now runs only when `StartupHealth.shouldRunIntegrityCheck(...)` is
+>   true — i.e. the previous process exit was abnormal (crash/ANR/kill, via the
+>   new cheap `Logger.wasPreviousExitAbnormal`) or a check/repair is explicitly
+>   pending (`StartupHealth.isIntegrityCheckPending`, a hook Build Phase 3 will
+>   set). A clean exit skips the check and proceeds exactly as a previously
+>   passing check did (backfill + due auto-export still run). The manual
+>   diagnostics check on the Advanced Memory Settings screen is unchanged.
+>   *(Scope note: this pass covers `companion_memory.db`, the only database
+>   with an `integrityCheck()` today; `lorebook.db` and `profile_images.db`
+>   gain checks in later phases per the plan, so "all three databases" is not
+>   yet fully realized.)*
+> - **Item 2 — one-time chores latch.** `SecurePrefs.reconcileOutageAtStartup`
+>   (legacy `SnapshotRegistry.discoverLegacy` + the outage-file scan) now
+>   short-circuits once `StartupHealth.isRecoveryScanSettled` is true, and sets
+>   that latch only when the scan is fully settled — nothing deferred waiting
+>   for a key and `!RenameJournal.hasPending`. Recovery artifacts are never
+>   touched; a not-yet-settled state simply rescans next start.
+>
+> New: `preferences/StartupHealth.kt` (plain `storage_health`-file gating +
+> the pure, unit-tested `shouldRunIntegrityCheck`), `StartupHealthTest`.
+> Modified: `Logger.kt`, `SecurePrefs.kt`, `MainApplication.kt`. No timing
+> logs added (owner instruction). No backup/repair/encryption/chat/voice/UI
+> behavior changed.
 
 ## Build Phase 2 — Per-type recovery backups + user-chosen location (§15.13, §15.16, §15.9 order)
 
