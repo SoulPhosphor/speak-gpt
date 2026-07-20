@@ -382,6 +382,10 @@
             android:exported="false"
             android:label="@string/mem_pers_title_user_personas" />
         <activity
+            android:name=".ui.activities.memory.EditUserPersonaActivity"
+            android:exported="false"
+            android:label="@string/title_mem_pers_edit" />
+        <activity
             android:name=".ui.activities.memory.MemoryRoleplayCharactersActivity"
             android:exported="false"
             android:label="@string/mem_pers_title_roleplay_characters" />

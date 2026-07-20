@@ -1,0 +1,255 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+/**************************************************************************
+* Copyright (c) 2023-2026 Dmytro Ostapenko. All rights reserved.
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*  http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+**************************************************************************/
+-->
+<!--
+  Full-screen My Personas editor (owner ruling, July 20 2026: the old
+  EditUserPersonaDialogFragment pop-up became a full screen, matching Edit
+  Companion's header/dialogs/field styling). Deliberately no picture at the
+  top yet (unlike Edit Companion) - but label_persona_name keeps the exact
+  same top offset (24dp + 96dp + 18dp = 138dp) a companion picture would
+  occupy, so a future persona picture slots in without a relayout.
+-->
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/action_bar"
+        style="@style/Widget.App.ActionBar">
+
+        <ImageButton
+            android:id="@+id/btn_back"
+            style="@style/Widget.App.ActionBar.BackButton" />
+
+        <TextView
+            android:id="@+id/activity_title"
+            style="@style/Widget.App.ActionBar.Title"
+            android:text="@string/title_mem_pers_edit" />
+
+        <!-- Same geometry as Edit Companion's btn_delete (chains off btn_save,
+             so it can't use Widget.App.ActionBar.SecondaryButton as-is - see
+             that style's own doc comment). Hidden for a brand-new persona. -->
+        <ImageButton
+            android:id="@+id/btn_delete"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_marginEnd="8dp"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="8dp"
+            android:background="@drawable/btn_accent_icon_large_100"
+            android:contentDescription="@string/btn_delete"
+            android:src="@drawable/ic_remove_moderator"
+            android:tooltipText="@string/btn_delete"
+            android:visibility="gone"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@+id/btn_save"
+            app:layout_constraintTop_toTopOf="parent"
+            app:srcCompat="@drawable/ic_remove_moderator" />
+
+        <ImageButton
+            android:id="@+id/btn_save"
+            style="@style/Widget.App.ActionBar.SecondaryButton"
+            android:contentDescription="@string/btn_save"
+            android:src="@drawable/ic_save"
+            android:tooltipText="@string/btn_save"
+            app:srcCompat="@drawable/ic_save" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <ScrollView
+        android:id="@+id/scroll"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:clipToPadding="false"
+        android:fillViewport="true"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/action_bar">
+
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+
+            <!-- Persona name. No hint line - matches Companion Name's
+                 pre-conversion look (no hint was ever approved for it either). -->
+            <TextView
+                android:id="@+id/label_persona_name"
+                style="@style/Widget.App.Field.Label"
+                android:layout_width="0dp"
+                android:layout_marginStart="24dp"
+                android:layout_marginTop="138dp"
+                android:layout_marginEnd="24dp"
+                android:text="@string/mem_pers_field_name_label"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent" />
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/field_persona_name"
+                style="@style/Widget.App.Field.Box"
+                android:layout_width="0dp"
+                android:layout_marginStart="24dp"
+                android:layout_marginEnd="24dp"
+                android:inputType="textCapWords"
+                android:singleLine="true"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/label_persona_name" />
+
+            <!-- Persistent inline error (house rule: field errors set on the
+                 input itself, never a toast) - shown by save() when empty. -->
+            <TextView
+                android:id="@+id/text_persona_name_error"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="24dp"
+                android:layout_marginTop="4dp"
+                android:layout_marginEnd="24dp"
+                android:textColor="?attr/colorError"
+                android:textSize="13sp"
+                android:visibility="gone"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/field_persona_name" />
+
+            <!-- Short Description: shown under the persona's name on the My
+                 Personas list row (view_memory_row.xml row_subtitle, capped
+                 at 3 lines/ellipsis - it had no character maximum to reuse,
+                 so this field is capped at that same 3 lines instead, worked
+                 out live from the box's own text layout in
+                 EditUserPersonaActivity rather than a guessed character
+                 count). Not yet wired to storage - visual only for now. -->
+            <TextView
+                android:id="@+id/label_short_description"
+                style="@style/Widget.App.Field.Label"
+                android:layout_width="0dp"
+                android:layout_marginStart="24dp"
+                android:layout_marginTop="18dp"
+                android:layout_marginEnd="24dp"
+                android:text="@string/mem_pers_field_short_description"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/text_persona_name_error" />
+
+            <TextView
+                android:id="@+id/hint_short_description"
+                style="@style/Widget.App.Field.Hint"
+                android:layout_width="0dp"
+                android:layout_marginStart="24dp"
+                android:layout_marginEnd="24dp"
+                android:text="@string/mem_pers_field_short_description_hint"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/label_short_description" />
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/field_short_description"
+                style="@style/Widget.App.Field.Box"
+                android:layout_width="0dp"
+                android:layout_marginStart="24dp"
+                android:layout_marginEnd="24dp"
+                android:gravity="top|start"
+                android:inputType="textMultiLine|textCapSentences"
+                android:minLines="2"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/hint_short_description" />
+
+            <!-- Live character counter, right-aligned under the box. Plain
+                 count normally; over the 3-line mark it turns colorError and
+                 its text becomes the removal instruction instead (owner
+                 ruling: never blocks typing, only blocks Save - see the
+                 snackbar in EditUserPersonaActivity.save()). -->
+            <TextView
+                android:id="@+id/text_short_description_counter"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="24dp"
+                android:layout_marginTop="4dp"
+                android:layout_marginEnd="24dp"
+                android:gravity="end"
+                android:textColor="@color/text_subtitle"
+                android:textSize="13sp"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/field_short_description" />
+
+            <TextView
+                android:id="@+id/label_presentation"
+                style="@style/Widget.App.Field.Label"
+                android:layout_width="0dp"
+                android:layout_marginStart="24dp"
+                android:layout_marginTop="18dp"
+                android:layout_marginEnd="24dp"
+                android:text="@string/mem_pers_field_presentation"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/text_short_description_counter" />
+
+            <TextView
+                android:id="@+id/hint_presentation"
+                style="@style/Widget.App.Field.Hint"
+                android:layout_width="0dp"
+                android:layout_marginStart="24dp"
+                android:layout_marginEnd="24dp"
+                android:text="@string/mem_pers_field_presentation_hint"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/label_presentation" />
+
+            <!-- Full screen affords more room than the old pop-up's 3-line
+                 minimum - bumped to 8 (also more than Edit Companion's own
+                 5-line Prompt field, since this screen has no lorebook
+                 section competing for space below it). -->
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/field_presentation"
+                style="@style/Widget.App.Field.Box"
+                android:layout_width="0dp"
+                android:layout_marginStart="24dp"
+                android:layout_marginEnd="24dp"
+                android:gravity="top|start"
+                android:inputType="textMultiLine|textCapSentences"
+                android:minLines="8"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/hint_presentation" />
+
+            <!-- The true last element carries the bottom-of-parent anchor
+                 (not field_presentation) so the 24dp trailing gap is correct
+                 whether or not this error is showing - matches the pattern
+                 checkbox_autoload_lorebooks uses in activity_edit_persona.xml. -->
+            <TextView
+                android:id="@+id/text_presentation_error"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="24dp"
+                android:layout_marginTop="4dp"
+                android:layout_marginEnd="24dp"
+                android:layout_marginBottom="24dp"
+                android:textColor="?attr/colorError"
+                android:textSize="13sp"
+                android:visibility="gone"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/field_presentation" />
+        </androidx.constraintlayout.widget.ConstraintLayout>
+    </ScrollView>
+</androidx.constraintlayout.widget.ConstraintLayout>

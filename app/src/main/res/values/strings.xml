@@ -1441,16 +1441,29 @@
     <string name="mem_comp_deleted_toast">Companion deleted.</string>
 
     <!-- ============ Phase 5 area screens: My personas & roleplay characters ============ -->
-    <!-- My Personas (ui/activities/memory/MemoryUserPersonasActivity) -->
+    <!-- My Personas (ui/activities/memory/MemoryUserPersonasActivity /
+         EditUserPersonaActivity). The editor became a full screen July 20 2026,
+         mirroring Edit Companion's chrome/dialogs/field styling (owner
+         ruling) - title_mem_pers_edit/title_mem_pers_creation replace the old
+         dialog title strings. mem_pers_field_name ("Name") stays as-is: it is
+         shared with the roleplay character card's Name field
+         (activity_character_card.xml), so the persona editor's own field
+         label lives in the separate mem_pers_field_name_label below instead
+         of repurposing the shared string. -->
     <string name="mem_pers_title_user_personas">My Personas</string>
     <string name="mem_pers_fab_add_persona">New persona</string>
     <string name="mem_pers_field_name">Name</string>
+    <string name="mem_pers_field_name_label">Persona Name</string>
+    <string name="mem_pers_error_name_empty">Please enter a Persona name</string>
+    <string name="mem_pers_field_short_description">Short Description</string>
+    <string name="mem_pers_field_short_description_hint">Shown under persona name to help you remember which persona is which. This is not sent to the model.</string>
+    <string name="mem_pers_short_desc_over">The persona can\'t be saved until you remove %1$d characters from this box.</string>
+    <string name="mem_pers_short_desc_snackbar">You must shorten your description to save this profile.</string>
     <string name="mem_pers_field_presentation">Presentation</string>
-    <string name="mem_pers_field_presentation_hint">Appearance, voice and manner handed to the model for this presentation — the same person, same memories, just described differently.</string>
-    <string name="mem_pers_dialog_title_new_persona">New persona</string>
-    <string name="mem_pers_dialog_title_edit_persona">Edit persona</string>
-    <string name="mem_pers_validation_persona_required">A name and a presentation are both required.</string>
-    <string name="mem_pers_persona_saved">Persona saved</string>
+    <string name="mem_pers_field_presentation_hint">Include any information you want the AI to know about you specifically when using this persona. You may want to include gender, species, clothing, abilities or special statuses such as relationship.</string>
+    <string name="mem_pers_error_presentation_empty">Please enter a Presentation</string>
+    <string name="title_mem_pers_creation">Persona Creation</string>
+    <string name="title_mem_pers_edit">Edit Persona</string>
     <string name="mem_pers_persona_deleted">Persona deleted</string>
     <string name="mem_pers_delete_persona_title">Delete persona?</string>
     <string name="mem_pers_delete_persona_msg">Delete \"%1$s\"? This can\'t be undone.</string>

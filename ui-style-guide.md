@@ -546,5 +546,21 @@ and rollout notes here — not back in `CLAUDE.md`.
   persistent `TextView` (`text_field_label_error`, `?attr/colorError`,
   13sp, `GONE` until `EditPersonaActivity.save()` sets it), matching this
   file's own "field errors set on the input itself, never a toast"
-  house rule instead of Material's built-in error styling. Not yet
-  applied to any other form-field screen.
+  house rule instead of Material's built-in error styling.
+  **Second use (July 20 2026):** `activity_edit_user_persona.xml`
+  ("Edit Persona" / "Persona Creation" — the My Personas editor,
+  `EditUserPersonaActivity`, replacing the old `EditUserPersonaDialogFragment`
+  pop-up). Same three field styles, same header trio +
+  `Widget.App.ActionBar.SecondaryButton` (Save) + the Edit-Companion-style
+  `btn_delete` icon chained off it, same `DiscardChangesDialog` +
+  `dialog_two_actions` delete-confirm shape. Deliberately no picture at the
+  top (unlike Edit Companion) — the first field label keeps Edit Companion's
+  exact top offset (138dp) reserved for one anyway, so a future persona
+  picture doesn't need a relayout. One field is new to this pattern: Short
+  Description, a `Widget.App.Field.Box` capped at the My Personas list row's
+  3-line subtitle limit — read live off the box's own `Layout` (line-start of
+  the would-be 4th line) rather than a guessed character constant, since no
+  fixed character maximum existed anywhere to reuse. It only recolors a
+  counter + blocks Save with a Snackbar, never blocks typing. Not yet wired
+  to storage (no backing column yet). Not yet applied to any other
+  form-field screen beyond these two.

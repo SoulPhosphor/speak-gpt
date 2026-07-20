@@ -19,12 +19,12 @@ package org.teslasoft.assistant.ui.activities.memory
 import android.view.View
 import android.widget.PopupMenu
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.memory.UserPersonaRecord
 import org.teslasoft.assistant.ui.adapters.memory.MemoryRow
-import org.teslasoft.assistant.ui.fragments.dialogs.EditUserPersonaDialogFragment
 
 /**
  * "My Personas" (Phase 5, app_adaptation_notes.md §Tab structure): ALL
@@ -113,43 +113,63 @@ class MemoryUserPersonasActivity : MemoryScreenActivity() {
 
     /* ------------------------------ editor ------------------------------ */
 
-    private fun openEditor(personaId: String?) {
-        runOffThread {
-            val existing = personaId?.let { MemoryStore.getInstance(this).getUserPersona(it) }
-            runOnUiThread {
-                val dialog = EditUserPersonaDialogFragment.newInstance(
-                    personaId = existing?.personaId ?: "",
-                    name = existing?.name ?: "",
-                    presentation = existing?.presentation ?: ""
-                )
-                dialog.setListener(editorListener)
-                dialog.show(supportFragmentManager, "EditUserPersonaDialogFragment")
+    // Applies the full-screen editor's result the same way EditPersonaActivity's
+    // caller (PersonasListActivity) does: the editor owns no persistence, this
+    // activity does the store work and reloads the list. No save/delete toast -
+    // matches the Companion editor, which has none either (the refreshed list
+    // row is the confirmation).
+    private val editUserPersonaLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode != RESULT_OK) return@registerForActivityResult
+        val data = result.data ?: return@registerForActivityResult
+        when (data.getStringExtra(EditUserPersonaActivity.EXTRA_RESULT_ACTION)) {
+            EditUserPersonaActivity.ACTION_SAVE -> {
+                val personaId = data.getStringExtra(EditUserPersonaActivity.EXTRA_PERSONA_ID) ?: ""
+                val name = data.getStringExtra(EditUserPersonaActivity.EXTRA_RESULT_NAME) ?: ""
+                val presentation = data.getStringExtra(EditUserPersonaActivity.EXTRA_RESULT_PRESENTATION) ?: ""
+                runOffThread {
+                    val store = MemoryStore.getInstance(this)
+                    val prior = if (personaId.isNotEmpty()) store.getUserPersona(personaId) else null
+                    val record = UserPersonaRecord(
+                        personaId = prior?.personaId ?: MemoryStore.newId("up-"),
+                        name = name,
+                        presentation = presentation,
+                        status = prior?.status ?: "active",
+                        createdAt = prior?.createdAt ?: MemoryStore.nowIso(),
+                        imageRef = prior?.imageRef
+                    )
+                    store.upsertUserPersona(record)
+                    runOnUiThread { reload() }
+                }
+            }
+            EditUserPersonaActivity.ACTION_DELETE -> {
+                val personaId = data.getStringExtra(EditUserPersonaActivity.EXTRA_PERSONA_ID) ?: ""
+                if (personaId.isNotEmpty()) {
+                    runOffThread {
+                        MemoryStore.getInstance(this).deleteUserPersona(personaId)
+                        runOnUiThread { reload() }
+                    }
+                }
             }
         }
     }
 
-    private val editorListener = object : EditUserPersonaDialogFragment.Listener {
-        override fun onSave(personaId: String, name: String, presentation: String) {
-            runOffThread {
-                val store = MemoryStore.getInstance(this@MemoryUserPersonasActivity)
-                val prior = if (personaId.isNotEmpty()) store.getUserPersona(personaId) else null
-                val record = UserPersonaRecord(
-                    personaId = prior?.personaId ?: MemoryStore.newId("up-"),
-                    name = name,
-                    presentation = presentation,
-                    status = prior?.status ?: "active",
-                    createdAt = prior?.createdAt ?: MemoryStore.nowIso()
-                )
-                store.upsertUserPersona(record)
-                runOnUiThread {
-                    Toast.makeText(this@MemoryUserPersonasActivity, R.string.mem_pers_persona_saved, Toast.LENGTH_SHORT).show()
-                    reload()
-                }
-            }
+    private fun openEditor(personaId: String?) {
+        if (personaId == null) {
+            editUserPersonaLauncher.launch(EditUserPersonaActivity.createIntent(this, "", "", ""))
+            return
         }
-
-        override fun onError(message: String) {
-            Toast.makeText(this@MemoryUserPersonasActivity, message, Toast.LENGTH_LONG).show()
+        runOffThread {
+            val existing = MemoryStore.getInstance(this).getUserPersona(personaId)
+            runOnUiThread {
+                editUserPersonaLauncher.launch(
+                    EditUserPersonaActivity.createIntent(
+                        this,
+                        existing?.personaId ?: "",
+                        existing?.name ?: "",
+                        existing?.presentation ?: ""
+                    )
+                )
+            }
         }
     }
 
