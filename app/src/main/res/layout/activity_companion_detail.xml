@@ -60,6 +60,27 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
 
+        <!-- Chains off btn_companion_save (the edge-anchored icon), so it can't
+             share Widget.App.ActionBar.SecondaryButton as-is (that style bakes
+             in layout_constraintEnd_toEndOf=parent) - same geometry written
+             out directly instead, per the style's own doc comment in
+             values/themes.xml. -->
+        <ImageButton
+            android:id="@+id/btn_companion_delete"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_marginEnd="8dp"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="8dp"
+            android:background="@drawable/btn_accent_icon_large_100"
+            android:contentDescription="@string/mem_comp_delete"
+            android:src="@drawable/ic_remove_moderator"
+            android:tooltipText="@string/mem_comp_delete"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@+id/btn_companion_save"
+            app:layout_constraintTop_toTopOf="parent"
+            app:srcCompat="@drawable/ic_remove_moderator" />
+
         <ImageButton
             android:id="@+id/btn_companion_save"
             style="@style/Widget.App.ActionBar.SecondaryButton"
@@ -183,15 +204,6 @@
                 android:layout_marginTop="24dp"
                 app:icon="@drawable/ic_storage"
                 android:text="@string/title_memories" />
-
-            <!-- ============ Delete ============ -->
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_delete"
-                style="@style/Widget.Material3.Button.TextButton"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="@string/mem_comp_delete" />
         </LinearLayout>
     </ScrollView>
 </androidx.constraintlayout.widget.ConstraintLayout>

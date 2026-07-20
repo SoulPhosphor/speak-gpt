@@ -86,6 +86,34 @@ and rollout notes here — not back in `CLAUDE.md`.
   button/system-back-gesture now route through `attemptExit()` +
   `DiscardChangesDialog` against a one-field snapshot (participation is
   the only field this screen writes).
+- **Second header icon, chained to the left of the first (owner ruling,
+  July 20 2026).** When a screen needs a second action-bar icon,
+  `Widget.App.ActionBar.SecondaryButton` can't be reused as-is for it —
+  that style bakes in `layout_constraintEnd_toEndOf=parent`, so a second
+  button styled the same way would just stack on top of the first. Write
+  the second icon's geometry out directly (same 48dp/8dp-margin/
+  `btn_accent_icon_large_100` values as the style) with
+  `app:layout_constraintEnd_toStartOf="@id/<the-rightmost-icon>"` instead
+  of `layout_constraintEnd_toEndOf="parent"`. This isn't a new pattern —
+  `activity_lorebook_entries.xml`'s `btn_edit_book` (chained off
+  `btn_debug`) already did it; `CompanionDetailActivity`'s
+  `btn_companion_delete` (chained off `btn_companion_save`) follows the
+  same shape.
+  - **`CompanionDetailActivity`'s header Delete icon (owner choice, July
+    20 2026) uses `@drawable/ic_remove_moderator`** — Material Symbols
+    "remove_moderator" (filled), a shield with a line through it —
+    deliberately NOT the app's generic trash can (`ic_delete`) or an X
+    (`ic_close`/`ic_cancel`). The owner's reasoning: a companion record
+    shouldn't read as getting "thrown in the trash", and this reads more
+    like "un-protect this record". Explicitly acknowledged as
+    unconventional and may be revisited — do not treat the choice as
+    settled precedent for other delete icons without asking again.
+    **This single-tap-then-confirm header delete is `CompanionDetailActivity`-only.**
+    Do NOT copy it onto `WorldDetailActivity`/`CampaignDetailActivity`/
+    `CharacterCardActivity` — those screens' delete flows are
+    deliberately heavier (archive-vs-delete, linked-card warnings, the
+    3.6f teardown rules) and are NOT interchangeable with a plain header
+    icon without a real design conversation first.
 - **App button styles (owner naming, July 18 2026 — supersedes any earlier
   button-styling instruction unless the owner directs otherwise).** Three
   named button styles, `values/themes.xml`, each a standalone style a

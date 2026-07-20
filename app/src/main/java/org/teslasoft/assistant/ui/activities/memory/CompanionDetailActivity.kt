@@ -68,7 +68,11 @@ import org.teslasoft.assistant.ui.util.DiscardChangesDialog
  * (`Widget.App.ActionBar.SecondaryButton`) saves in place instead of a
  * bottom Save button, and backing out (toolbar back or the system back
  * gesture) with an unsaved participation change confirms via the shared
- * `DiscardChangesDialog`. See ui-style-guide.md.
+ * `DiscardChangesDialog`. Delete moved into the header too, to the save
+ * icon's left (owner ruling, same day) — a plain single-tap-and-confirm
+ * delete, unlike the roleplay cards' archive/teardown flows, so this is
+ * NOT a pattern to copy onto World/Campaign/RoleplayCharacter without
+ * asking first. See ui-style-guide.md.
  */
 class CompanionDetailActivity : FragmentActivity() {
 
@@ -93,7 +97,7 @@ class CompanionDetailActivity : FragmentActivity() {
     private var textParticipationValue: TextView? = null
     private var btnMemories: MaterialButton? = null
     private var btnSave: ImageButton? = null
-    private var btnDelete: MaterialButton? = null
+    private var btnDelete: ImageButton? = null
 
     // The loaded record; status drives the draft/approve section.
     private var record: CompanionRecord? = null
@@ -135,7 +139,7 @@ class CompanionDetailActivity : FragmentActivity() {
         textParticipationValue = findViewById(R.id.text_participation_value)
         btnMemories = findViewById(R.id.btn_memories)
         btnSave = findViewById(R.id.btn_companion_save)
-        btnDelete = findViewById(R.id.btn_delete)
+        btnDelete = findViewById(R.id.btn_companion_delete)
     }
 
     /* ------------------------------ data ------------------------------ */
@@ -323,6 +327,7 @@ class CompanionDetailActivity : FragmentActivity() {
             actionBar?.setBackgroundColor(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
             btnBack?.backgroundTintList = ColorStateList.valueOf(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
             btnSave?.backgroundTintList = ColorStateList.valueOf(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
+            btnDelete?.backgroundTintList = ColorStateList.valueOf(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
         } else {
             window.setBackgroundDrawable(SurfaceColors.SURFACE_0.getColor(this).toDrawable())
             if (Build.VERSION.SDK_INT <= 34) {
@@ -332,6 +337,7 @@ class CompanionDetailActivity : FragmentActivity() {
             actionBar?.setBackgroundColor(SurfaceColors.SURFACE_4.getColor(this))
             btnBack?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(this))
             btnSave?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(this))
+            btnDelete?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(this))
         }
     }
 
