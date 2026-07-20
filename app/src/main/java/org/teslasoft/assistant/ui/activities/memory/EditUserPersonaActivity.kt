@@ -223,7 +223,17 @@ class EditUserPersonaActivity : FragmentActivity() {
             .putExtra(EXTRA_RESULT_NAME, name)
             .putExtra(EXTRA_RESULT_PRESENTATION, presentation)
         setResult(RESULT_OK, result)
+        flashSaveButtonGreen()
         finish()
+    }
+
+    /** This screen closes on save with no toast - a brief green flash on the
+     *  save icon's own background (owner ruling, July 21 2026) is the only
+     *  save confirmation the user sees, visible during the closing
+     *  slide-out transition since it's set synchronously right before
+     *  finish(). */
+    private fun flashSaveButtonGreen() {
+        btnSave?.backgroundTintList = ColorStateList.valueOf(ResourcesCompat.getColor(resources, R.color.light_green, theme))
     }
 
     /** Serialised form of the editable fields, used only for change detection
@@ -244,19 +254,16 @@ class EditUserPersonaActivity : FragmentActivity() {
         }
     }
 
-    /** Delete confirmation. Reuses the existing "Delete persona?" wording
-     *  (already used by the My Personas list's own row menu) rather than
-     *  Edit Companion's delete-body text, which describes a memory cascade
-     *  that doesn't apply here - a persona is only a presentation variant,
-     *  it owns no memories of its own to delete. Same real Primary/
-     *  Destructive two-button shape as the discard dialog (dialog_two_actions). */
+    /** Delete confirmation (owner-specified wording, July 21 2026): title
+     *  only, no body - "Delete this persona?" / Delete / Cancel. Same real
+     *  Primary/Destructive two-button shape as the discard dialog
+     *  (dialog_two_actions); the App_MaterialAlertDialog theme centers the
+     *  title on its own. */
     private fun confirmDelete() {
-        val name = fieldName?.text?.toString().orEmpty()
         val actionsView = layoutInflater.inflate(R.layout.dialog_two_actions, null)
 
         val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.mem_pers_delete_persona_title)
-            .setMessage(getString(R.string.mem_pers_delete_persona_msg, name))
+            .setTitle(R.string.mem_pers_delete_title_full)
             .setView(actionsView)
             .create()
 

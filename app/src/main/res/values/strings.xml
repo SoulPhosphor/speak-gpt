@@ -1467,6 +1467,9 @@
     <string name="mem_pers_persona_deleted">Persona deleted</string>
     <string name="mem_pers_delete_persona_title">Delete persona?</string>
     <string name="mem_pers_delete_persona_msg">Delete \"%1$s\"? This can\'t be undone.</string>
+    <!-- EditUserPersonaActivity's header delete icon (owner-specified wording,
+         July 21 2026): title only, no body. -->
+    <string name="mem_pers_delete_title_full">Delete this persona?</string>
 
     <!-- Roleplay Characters (ui/activities/memory/MemoryRoleplayCharactersActivity) -->
     <string name="mem_pers_title_roleplay_characters">Roleplay Characters</string>

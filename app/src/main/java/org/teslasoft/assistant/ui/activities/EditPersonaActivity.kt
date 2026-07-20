@@ -465,7 +465,17 @@ class EditPersonaActivity : FragmentActivity() {
             .putExtra(EXTRA_LAST_USED_LOREBOOKS, persona.lastUsedLoreBookIds)
             .putExtra(EXTRA_AVATAR_REF, persona.avatarRef)
         setResult(RESULT_OK, result)
+        flashSaveButtonGreen()
         finish()
+    }
+
+    /** This screen closes on save with no toast - a brief green flash on the
+     *  save icon's own background (owner ruling, July 21 2026) is the only
+     *  save confirmation the user sees, visible during the closing
+     *  slide-out transition since it's set synchronously right before
+     *  finish(). */
+    private fun flashSaveButtonGreen() {
+        btnSave?.backgroundTintList = ColorStateList.valueOf(ResourcesCompat.getColor(resources, R.color.light_green, theme))
     }
 
     /** Serialised form of the editable fields, used only for change detection

@@ -16,9 +16,7 @@
 
 package org.teslasoft.assistant.ui.util
 
-import android.view.Gravity
 import android.view.LayoutInflater
-import android.widget.TextView
 import android.content.Context
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -40,7 +38,8 @@ import org.teslasoft.assistant.R
  * only dismisses the dialog, leaving the screen untouched. Built from
  * dialog_two_actions.xml (AppButton.Primary.DialogAction /
  * AppButton.Destructive.DialogAction) inside the app's standard
- * App_MaterialAlertDialog theme.
+ * App_MaterialAlertDialog theme, which centers the title on its own
+ * (materialAlertDialogTitleTextStyle) - no per-call gravity tweak needed.
  */
 object DiscardChangesDialog {
     fun show(context: Context, onDiscard: () -> Unit) {
@@ -65,7 +64,5 @@ object DiscardChangesDialog {
         }
 
         dialog.show()
-
-        dialog.findViewById<TextView>(androidx.appcompat.R.id.alertTitle)?.gravity = Gravity.CENTER
     }
 }

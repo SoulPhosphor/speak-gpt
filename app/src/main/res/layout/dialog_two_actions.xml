@@ -11,13 +11,21 @@
   which also supply their percentage width — do not set width here. The
   chain between the two buttons (spread inside, primary on the start side)
   is defined here because a chain needs both buttons' ids.
+
+  Horizontal/bottom padding (owner ruling, July 21 2026): the dialog
+  window's own corner radius is much larger than a button's 4dp corner
+  (button_corner_radius) - with no inset here the buttons sat right at the
+  window's rounded edge, so the window's curve clipped their own lower
+  outer corners. 24dp horizontal (matching this app's standard content
+  margin) + 16dp bottom keeps both buttons clear of that curve.
 -->
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
+    android:paddingHorizontal="24dp"
     android:paddingTop="8dp"
-    android:paddingBottom="8dp">
+    android:paddingBottom="16dp">
 
     <com.google.android.material.button.MaterialButton
         android:id="@+id/btn_dialog_primary_action"

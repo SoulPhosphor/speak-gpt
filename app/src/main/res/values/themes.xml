@@ -582,9 +582,24 @@
         <item name="android:activityCloseExitAnimation">@anim/mtrl_activity_close_exit</item>
     </style>
 
+    <!-- Every dialog's title is centered (owner ruling, July 21 2026 -
+         corrects the July 20 ruling below, which only centered a
+         single-question dialog's title via a per-call runtime gravity
+         tweak). Baked into the theme via materialAlertDialogTitleTextStyle
+         so a dialog built with this theme can never come out left-aligned
+         by a call site forgetting to set it - the old runtime
+         `dialog.findViewById<TextView>(androidx.appcompat.R.id.alertTitle)
+         ?.gravity = Gravity.CENTER` tweak is retired, this replaces it
+         everywhere at once. -->
+    <style name="App.MaterialAlertDialog.Title" parent="MaterialAlertDialog.Material3.Title.Text">
+        <item name="android:gravity">center</item>
+        <item name="android:textAlignment">center</item>
+    </style>
+
     <style name="App.MaterialAlertDialog" parent="MaterialAlertDialog.Material3">
         <item name="buttonBarNegativeButtonStyle">@style/App.NegativeButtonStyle</item>
         <item name="buttonBarPositiveButtonStyle">@style/App.PositiveButtonStyle</item>
+        <item name="materialAlertDialogTitleTextStyle">@style/App.MaterialAlertDialog.Title</item>
     </style>
 
     <style name="Theme.PWA" parent="Theme.Material3.Dark.NoActionBar">

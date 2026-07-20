@@ -20,12 +20,21 @@ and rollout notes here — not back in `CLAUDE.md`.
   not shrink down to subtext size just because it was the only text in the
   dialog. Only use `setMessage` when there is genuinely separate
   explanatory text under a title (e.g. `framing_load_error_title` +
-  `framing_load_error_body`). A single-question dialog's title should also
-  be centered (see `DiscardChangesDialog` for the pattern: after
-  `dialog.show()`, `dialog.findViewById<TextView>(androidx.appcompat.R.id.alertTitle)?.gravity = Gravity.CENTER`
-  — a per-dialog runtime tweak, not a change to the shared
-  `App.MaterialAlertDialog` theme, so it never affects other dialogs' left-
-  aligned titles/bodies).
+  `framing_load_error_body`).
+  **Title alignment (owner ruling, July 21 2026 — supersedes the July 20
+  wording above, which centered only a single-question dialog's title via
+  a per-dialog runtime gravity tweak).** EVERY dialog's title is centered,
+  not just single-question ones — this is now baked into the shared theme
+  itself, `App.MaterialAlertDialog.Title` (`values/themes.xml`), wired in
+  via `materialAlertDialogTitleTextStyle` on `App.MaterialAlertDialog`. Any
+  `MaterialAlertDialogBuilder(context, R.style.App_MaterialAlertDialog)`
+  gets a centered title automatically — there is no longer a per-call
+  gravity line to remember, and none should be added back; the old
+  `dialog.findViewById<TextView>(androidx.appcompat.R.id.alertTitle)
+  ?.gravity = Gravity.CENTER` tweak (`DiscardChangesDialog`,
+  `EditUserPersonaActivity.confirmDelete()`) was removed as redundant.
+  `setMessage` body text is untouched by this — still left-aligned/regular
+  weight, this ruling is about the title only.
 - **The standard discard-changes dialog (owner ruling, July 20 2026;
   restyled same day) — use this by name, don't re-describe it.** Any
   full-screen editor with an explicit Save action must confirm before
@@ -77,6 +86,15 @@ and rollout notes here — not back in `CLAUDE.md`.
   `CharacterCardActivity` (`btn_card_save`, covers both Roleplay Character
   and Party Member) and `WorldDetailActivity` (`btn_world_save`) — every
   bottom-Save-button roleplay card editor now matches.
+  **Save-confirmation flash (owner ruling, July 21 2026).** On a screen
+  whose save icon `finish()`es immediately with no toast (Edit Companion,
+  Edit Persona — the roleplay card editors above do NOT: they stay open
+  and show a toast on save, a different pattern, not covered by this),
+  `save()` sets the save icon's `backgroundTintList` to `R.color.light_green`
+  right before calling `finish()` (`flashSaveButtonGreen()` in
+  `EditPersonaActivity`/`EditUserPersonaActivity`) — set synchronously so
+  it's visible during the closing slide-out transition, since that's the
+  only save confirmation the user sees on these screens.
 - **App button styles (owner naming, July 18 2026 — supersedes any earlier
   button-styling instruction unless the owner directs otherwise).** Three
   named button styles, `values/themes.xml`, each a standalone style a
@@ -123,6 +141,16 @@ and rollout notes here — not back in `CLAUDE.md`.
     both buttons' ids. Use the shared `layout/dialog_two_actions.xml`
     (`@id/btn_dialog_primary_action` then `@id/btn_dialog_destructive_action`)
     as a dialog's `setView`. First use: `DiscardChangesDialog`.
+  **Corner clipping fix (owner ruling, July 21 2026).** Both
+  `dialog_two_actions.xml` and `dialog_single_action.xml` originally had no
+  horizontal padding and only 8dp bottom padding — the dialog window's own
+  corner radius is much larger than a button's 4dp `button_corner_radius`,
+  so with the buttons sitting right at the window's edge, the window's
+  curve clipped the buttons' own lower outer corners. Both layouts now pad
+  24dp horizontal (this app's standard content margin) + 16dp bottom,
+  keeping every dialog action button clear of that curve. Change this in
+  both files together if the dialog window's corner radius or the button
+  corner radius ever changes enough to reopen the gap.
 - **Dialog theme (standardization, July 19 2026).** `App.MaterialAlertDialog`
   (`values/themes.xml`, parent `MaterialAlertDialog.Material3`; referenced in
   code as `R.style.App_MaterialAlertDialog`) is THE standard dialog theme —

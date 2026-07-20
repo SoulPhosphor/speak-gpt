@@ -8,12 +8,18 @@
   AppButton.Primary look via AppButton.Primary.Dialog, which also supplies its
   percentage width and centring constraints — do not set width or constraints
   here.
+
+  Horizontal/bottom padding (owner ruling, July 21 2026 - same fix as
+  dialog_two_actions.xml): keeps the button clear of the dialog window's
+  own (larger) corner radius so the window's curve doesn't clip the
+  button's own lower outer corners.
 -->
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
+    android:paddingHorizontal="24dp"
     android:paddingTop="8dp"
-    android:paddingBottom="8dp">
+    android:paddingBottom="16dp">
 
     <com.google.android.material.button.MaterialButton
         android:id="@+id/btn_dialog_action"
