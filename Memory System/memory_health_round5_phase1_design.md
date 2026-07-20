@@ -952,12 +952,16 @@ The auto-backup is silent today; a backup failing repeatedly is invisible.
   wrong.
 - **What the user can actually do** (the owner's open question — "I don't know
   what I would do"): a repeatedly failing backup almost always means the
-  device is **out of storage space**, or the backup folder isn't writable. So
-  the dialog should (a) say the likely cause in plain words (free space), and
-  (b) offer a **"Save a backup somewhere else now"** action that runs the
-  existing manual SAF export, letting the user drop a backup onto their own
-  storage / cloud folder that isn't full. That gives them a concrete escape
-  hatch instead of a dead-end warning.
+  device is **out of storage space**, or the backup folder isn't writable.
+  The dialog says the likely cause in plain words and gives a concrete
+  escape hatch instead of a dead-end warning.
+- **HISTORICAL, DO NOT IMPLEMENT (superseded July 20 2026):** the original
+  escape hatch here was a "Save a backup somewhere else now" action running
+  the manual export. The ACTIVE design is the category-split dialog
+  (`Change Backup Folder | Retry | Cancel`, folder path as selectable text
+  — §15.12 A4 supersession + build plan Rev 2 Round 3 item 8): changing the
+  backup folder IS the escape hatch, and source-type failures are checked
+  and routed by store type instead of being treated as storage problems.
 
 ### 15.8 Backup cap — already exists; why more than one (RESOLVED)
 
@@ -996,13 +1000,15 @@ without asking.
 > (`MemoryBackupRestoreActivity`, a Memory Manager hub row, built July 18 by
 > the menu-reorg effort — it already holds the auto-backup toggle,
 > import/export, last-backup status, and Reset). Per §15.14 these controls go
-> THERE, in its Backups area. Everything below about relative ORDER (Check
-> above Create; failed-line above success-line) carries over unchanged.
+> THERE, in its Backups area. The one relative-order rule that remains
+> active is: `Check Database Integrity` sits ABOVE `Create Backup`. (The
+> old failed-line-above-success-line rule is HISTORICAL, DO NOT IMPLEMENT —
+> replaced by the compact one-row-per-type status display, item 3 below.)
 
 **Top-to-bottom order and exact text:**
 
 1. **`Check Database Integrity`** — a button (Title Case). It sits **ABOVE**
-   the Create Database Backup button.
+   the `Create Backup` button.
    - When pressed, the text beneath the button reads, VERBATIM:
      **`Checking database integrity. Do not close your app. Please wait.`**
    - When the check finishes, that text is **REPLACED** by the result:
@@ -1036,6 +1042,24 @@ All of the above are persistent on-screen controls/text — never Toasts,
 consistent with the app-wide no-Toast rule.
 
 ### 15.10 Decision ledger — resolved vs still open
+
+> **READ FIRST — later rulings supersede entries below (July 20 2026).**
+> The two paragraphs after this note record rulings AS MADE on July 15 and
+> are kept as history; where they conflict with the July 20 rulings, the
+> July 20 versions are the ACTIVE design (full detail:
+> `database_health_build_plan.md` Revision 2). Specifically — HISTORICAL,
+> DO NOT IMPLEMENT: the failed-line-above-success-line status layout and
+> the separate success/failure status lines (→ compact one-row-per-type
+> display, §15.9 item 3); the `Create Database Backup` button name (→
+> `Create Backup`); the `Database Integrity Passed/Failed` result strings
+> (→ `Database Check Passed/Failed`); the five-button A4 dialog, its
+> inline integrity-check flow, and its `Save Back Up in New Location`
+> action (→ the category-split dialog: `Change Backup Folder | Retry |
+> Cancel`, source failures checked then routed by store type); a fixed
+> `App Backups/` folder as the primary destination (→ user-selected SAF
+> folder, app-private fallback until selected); any reading of "daily" as
+> guaranteed scheduling (→ startup/foreground-triggered with a 24-hour
+> throttle).
 
 **RESOLVED (owner-directed, do not re-open without the owner):**
 degraded mode not force-close (§15.2a); repair-then-replace order (§15.2);
@@ -1090,11 +1114,14 @@ non-storage path is answered (inline integrity check → repair flow).
     stored "disabled pending repair" flag; stays off + banner until a repair
     or restore succeeds (§15.2a).
 11. ~~one combined backup date?~~ — **B11 RESOLVED, and REDESIGNED (owner July
-    15 2026, §15.13):** backups are now SEPARATE per-type files (memory /
-    lorebook / chats) in an `App Backups/` folder, each written-verified-
-    rotated-restored independently; per-database status lines with date+time;
-    any backup error shows the folder + `Open Backup Folder`. No combined
-    single-file backup. Supersedes §15.1/§15.8/§15.9's single-file wording.
+    15 2026, §15.13; destination + status updated July 20):** backups are
+    SEPARATE per-type files (memory / lorebook / profile image catalog /
+    chats) in a **user-selected SAF folder** (app-private fallback until
+    selected), each written-verified-rotated-restored independently;
+    compact one-row-per-type status with date+time; backup errors show the
+    folder path as selectable text (`Open Backup Folder` = secondary
+    convenience). No combined single-file backup. Supersedes
+    §15.1/§15.8/§15.9's single-file wording.
 12. The Advanced Memory Settings screen already shows an integrity result and
     row counts. **B12 RESOLVED (owner July 16 2026) — see §15.14, a new
     dedicated area.**
@@ -1115,12 +1142,13 @@ aware of this ruling so it doesn't re-decide it differently).
 
 - **New area: "Memory Backup & Restore."** ALL backup and database-restoration
   functionality lives here — this becomes the one home for: `Check Database
-  Integrity`, `Create Database Backup`, the per-database backup status lines
-  (§15.13), `Database Check` results, `Repair` / `Revert to Last Good Database`
-  actions, and the `Open Backup Folder` access. This REPLACES the "Backups"
-  section currently on the Memory Controls screen (`memory_controls_section_
-  backups` string) as the home for this functionality — Memory Controls no
-  longer holds the backup/restore controls once this area exists.
+  Integrity`, `Create Backup`, the Choose/Change Backup Folder control, the
+  compact per-type status rows (§15.9 item 3), `Database Check` results, and
+  `Repair` / `Revert to Last Good Database` actions. This REPLACES the
+  "Backups" section currently on the Memory Controls screen
+  (`memory_controls_section_backups` string) as the home for this
+  functionality — Memory Controls no longer holds the backup/restore
+  controls once this area exists.
 - **Advanced Memory Settings keeps "System Status" at the top**, unchanged in
   position — store health + row counts stay there, first thing on the screen
   (per the existing `advanced_memory_section_status` section).
@@ -1132,9 +1160,11 @@ aware of this ruling so it doesn't re-decide it differently).
   BY REALITY (July 18 2026):** the menu-reorg effort built it as
   `MemoryBackupRestoreActivity`, a row on the Memory Manager hub, already
   holding the auto-backup toggle, import/export, last-backup status, and
-  Reset (moved out of Memory Controls). The §15 controls (Check Database
-  Integrity, Create Database Backup, per-type status lines, repair/revert
-  actions, Open Backup Folder) are ADDED to that existing screen.
+  Reset (moved out of Memory Controls). The §15 controls (`Check Database
+  Integrity`, `Create Backup`, the Choose/Change Backup Folder control, the
+  compact per-type status rows, repair/revert actions) are ADDED to that
+  existing screen, which also keeps the recovery-vs-portable split legible
+  (`Export Portable Copy` / `Import Portable Copy` — build plan Rev 2).
 
 ### 15.15 Health-failure logging — write once, to the Error Log, timestamp in red (B13 RESOLVED, owner July 16 2026)
 
@@ -1207,10 +1237,14 @@ that work"). Note text is sentence case; buttons Title Case.
 > **Text (sentence case):** `Unable to analyze conversations due to current memory database corruption. You may try to repair it again or revert to last known good database. Caution reverting may cause recent memories to be lost.`
 > **Buttons (working):** `Repair` | `Revert to Last Good Database`
 
-**A4 — Repeated-backup-failure dialog (after 3 consecutive failed backups).**
-Blocking. Owner expanded this into a two-stage dialog: first the storage
-message with an inline integrity check; if the check fails, it escalates to
-the corruption/repair flow.
+**A4 — Repeated-backup-failure dialog — HISTORICAL, DO NOT IMPLEMENT
+(superseded by owner July 20 2026; see the supersession note at the end of
+this block).** The whole A4 design below — the five-button layout, the
+two-stage inline integrity check, and the `Save Back Up in New Location`
+action — is kept ONLY as the historical record of the July 15 ruling. The
+ACTIVE design is the category-split dialog (`Change Backup Folder | Retry |
+Cancel`; source failures checked then routed by store type; build plan Rev
+2, Round 3 item 8). Original July 15 text follows:
 > **Title:** `Backup Attempts Failed`
 > **Body (sentence case):** `Your device may be low on storage space. Please choose another location or free up space.`
 > `If you have enough storage space, try checking the database integrity.`
@@ -1322,7 +1356,10 @@ type.** Do NOT implement any combined archive or single-file backup design.
 > govern how these files are actually written.
 
 **Backup structure:**
-- One clearly named, easy-to-find backup folder, e.g. **`App Backups/`**.
+- A **user-selected SAF backup folder** (Choose/Change Backup Folder,
+  permission persisted; app-private fallback until selected — July 20
+  2026). ~~One clearly named `App Backups/` folder~~ as the primary
+  destination is historical.
 - Each automatic backup run creates **separate files** for:
   - Memory database
   - Lorebook database
@@ -1352,32 +1389,33 @@ type.** Do NOT implement any combined archive or single-file backup design.
   successful backups of the others (each type is independent).
 - Restoration must allow memory, lorebooks, or chats to be restored
   **separately**.
-- Keep the backup folder easy for the user to locate.
-- **Any error message involving a backup must show the backup folder location
-  and provide an `Open Backup Folder` button** (applies to A4 and any future
-  backup-error surface).
+- **Destination (updated July 20 2026):** a **user-selected SAF folder**
+  (Choose/Change Backup Folder, permission persisted), with the app-private
+  folder only as the fallback until the user has chosen. A fixed
+  `App Backups/` folder as the primary destination is HISTORICAL, DO NOT
+  IMPLEMENT. Any backup error shows the current folder path as selectable
+  text; `Open Backup Folder` is a secondary convenience action, never a
+  requirement.
+- **Trigger honesty (July 20 2026):** backups are checked at app start (and
+  optionally on return to foreground) with a 24-hour throttle — NOT
+  guaranteed background daily scheduling. Nothing may promise "daily" as a
+  guarantee.
 
-**Status display (per type — supersedes the single line in §15.9):**
-> `Last successful memory database backup: [date and time]`
-> `Last successful lorebook database backup: [date and time]`
-
-- A separate date+time PER database, because each backup is independent.
-- **Chats get their own backup status elsewhere** if they are not part of the
-  Database Status section (owner: chats' status lives separately).
-- **Time display format (RESOLVED, owner July 16 2026): 12-hour clock with
-  AM/PM**, e.g. `2:30 PM` — NOT 24-hour. Full display format for these lines:
-  `Month D, YYYY, H:MM AM/PM` (e.g. `Last successful memory database backup:
-  July 15, 2026, 2:30 PM`). This governs the display only — the underlying
-  filename timestamp (`memory_backup_2026-07-15_1430.db`) stays a sortable
-  24-hour format since it is not user-facing text (§15.13).
+**Status display — HISTORICAL, DO NOT IMPLEMENT (superseded July 20 2026):**
+the separate `Last successful … backup` lines that stood here are replaced
+by the **compact one-row-per-type display** in §15.9 item 3 (owner-approved
+example format there). Still active from this block: **12-hour AM/PM time**
+(`Month D, YYYY, H:MM AM/PM`) for display, while filename timestamps stay
+sortable 24-hour (not user-facing).
 
 **Knock-on updates:**
 - §15.8 rotation (keep newest 5) now applies **per file type** — 5 memory, 5
-  lorebook, 5 chats — not 5 combined.
-- §15.9's single `Last successful Database Backup` and `Database Backup Failed`
-  lines are replaced by per-type lines here; the "Backup Failed" line likewise
-  becomes per type.
-- A4 (§15.12) gains the backup-folder location + `Open Backup Folder` button.
+  lorebook, 5 profile-image-catalog, 5 chats — not 5 combined.
+- §15.9's single-line and two-line status layouts are HISTORICAL — the
+  compact rows (§15.9 item 3) are the active design.
+- The backup-failure dialog is the category-split design (§15.12 A4
+  supersession + build plan Rev 2 Round 3 item 8), showing the folder path
+  as text.
 - A6's preserved-file location (a quarantined corrupt DB) stays its own
   `Open File Location`; that is a different location from the backup folder.
 
@@ -1406,8 +1444,9 @@ enough** ("why not let the user know it's degraded? ... don't be a dick") —
 being easy to fix does not mean the user doesn't deserve to be told. Corrected
 design:
 
-1. **Backed up** in the same daily run as the other databases (§15.13 above),
-   not treated as optional because it's "less important."
+1. **Backed up** in the same backup runs as the other databases (§15.13
+   above — startup/foreground-triggered, 24-hour throttle, not a guaranteed
+   daily schedule), not treated as optional because it's "less important."
 2. **Checked** by the same `Check Database Integrity` action (§15.9/B8) — one
    more line in the per-database result, not a separate system. Cheap: a small
    catalog, a standard SQLite integrity check.

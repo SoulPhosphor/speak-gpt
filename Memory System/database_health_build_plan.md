@@ -11,9 +11,10 @@ Read before building any round: `CLAUDE.md` (fragile areas, no-Toast rule,
 CI-only compile gate, owner on-device confirmation rule),
 `Memory System/owner_approved_rules.md`, and the §15 sections cited per
 round. Owner-approved verbatim strings live in §15.12 — implement them
-exactly. Where this plan proposes CHANGING an already-approved string, the
-change is listed in "Owner confirmations needed" and is NOT to be built
-until the owner approves the replacement words in chat.
+exactly. The formerly-proposed changes to approved strings were all ruled
+on by the owner on July 20 2026 (see "Owner confirmations — RESOLVED");
+the only words still to be written are the Round 4 wording list, and the
+only open choices are under "Decisions still open."
 
 ## The two systems (architectural requirement — keep them separate)
 
@@ -35,7 +36,7 @@ MAY depend on this installation's encryption keys. Always labeled as
 recovery backups, never as portable exports.
 
 The Backup & Restore screen must make the distinction legible to a tired
-user: recovery backups (automatic + `Create Backup Now`) vs
+user: recovery backups (automatic + `Create Backup`) vs
 `Export Portable Copy` / `Import Portable Copy`. The portable export's UI
 must warn plainly that the exported file is readable and may contain chats
 and memories. Building recovery snapshots must not remove or degrade the
@@ -163,7 +164,11 @@ abnormal exits; startup housekeeping measurably does less on a clean start.
    - **destination-write** failure — out of space / IO error writing;
    - **verify** failure — the completed destination file failed re-read
      verification.
-   **Only source failures may escalate toward the database repair flow.**
+   **A source failure is a HEALTH SIGNAL, not confirmed corruption.** It
+   triggers the appropriate store-specific check (item 7); only a check
+   that CONFIRMS damage escalates further — a transient source read or
+   snapshot failure alone never marks a store corrupt; it is recorded with
+   its category and retried per the backup-failure policy.
    Destination/verify failures lead to Change Backup Folder / Retry /
    dismiss — they must NEVER mark the source degraded or suggest repair.
    A permission-revoked or missing folder keeps all existing backups
@@ -179,9 +184,15 @@ abnormal exits; startup housekeeping measurably does less on a clean start.
    use or save"). The chats artifact is the **encrypted-file archive by
    default** (recovery copies are same-installation; the portable JSON
    export is the readable path — no plaintext automatic backup).
-7. **Detection synergy (free):** a source-category failure during the
-   daily run is itself a corruption signal — it feeds the Round-3 flow
-   without waiting for a crash.
+7. **Detection synergy (checked, not assumed):** a source-category failure
+   during a backup run triggers the store-specific health check without
+   waiting for a crash — **routed by data type**: memory / lorebook /
+   profile-image-catalog source failure → that database's integrity check
+   (→ the Round-3 repair flow only if the check confirms damage); chat
+   source failure → the existing Round-4 chat-storage health/lock
+   machinery or the chat-recovery flow (Round 3 item 5) — chats are not a
+   database and never enter the database repair dialogs. A check that
+   finds nothing wrong → categorized failure recorded, retry per policy.
 8. **Backup & Restore screen additions** (simple rows, house style — no
    cards/tiles), §15.9's approved order preserved: `Check Database
    Integrity` ABOVE the backup button; helper text under Check Database
@@ -210,9 +221,10 @@ an induced destination failure.
 1. **Per-database degraded flag** (plain prefs, survives restarts — B10):
    blocks reads AND writes for that store, pauses its backup artifact,
    hard-disables the Archivist (A3), shows the A2 banner per new chat until
-   repaired. **Only source-category evidence** (integrity-check failure,
-   source read/snapshot failure, mid-session corruption exception) may set
-   this flag — never a destination/verify backup failure.
+   repaired. **The flag is set only by CONFIRMED damage** — a failed
+   integrity check or a mid-session corruption exception. A source backup
+   failure is only the trigger to RUN that check (Round 2 items 5/7);
+   destination/verify backup failures never touch this flag at all.
 2. **Preserve-the-original law (before ANY repair):** stop access to the
    affected store; preserve the damaged database AND its WAL/journal
    sidecar files (quarantine copy, renamed with date, indexed in
@@ -255,8 +267,12 @@ an induced destination failure.
      `Not Now`), the current folder shown as selectable text, and
      `Open Backup Folder` as a secondary text action (never another
      primary button);
-   - a source failure → no storage dialog; enter the database repair flow
-     (item 3) directly.
+   - a source failure → no storage dialog; run the store-specific check
+     and route by type (Round 2 item 7): a database whose check confirms
+     damage → the repair flow (item 3); a chat source failure → the
+     chat-storage health/lock or chat-recovery flow (item 5); damage NOT
+     confirmed → categorized failure + retry, no dialog beyond the status
+     row.
    Final body text for the storage dialog is Round 4 wording.
 9. **Profile Image Catalog specifics (§15.16):** auto-repair = rebuild the
    catalog by rescanning the image files — but per item 2, the damaged
