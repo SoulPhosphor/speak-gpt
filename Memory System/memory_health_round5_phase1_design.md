@@ -1216,6 +1216,15 @@ the corruption/repair flow.
 
 - Per §15.13: any backup-error surface must show the backup folder location and
   an `Open Backup Folder` button — added to A4's buttons above.
+- ⚠️ **PROPOSED SUPERSESSION (July 20 2026, second external review — awaiting
+  owner confirmation):** this five-button layout exceeds a standard dialog
+  and predates the failure-category split. The build plan (Rev 2, Round 3
+  item 8) proposes replacing it: destination/storage failures get at most
+  `Change Backup Folder | Retry | Not Now` (folder path as selectable text,
+  `Open Backup Folder` as a secondary text action); an actual source-damage
+  failure skips the storage dialog and enters the A1 repair flow directly.
+  The approved wording above stays authoritative UNTIL the owner approves
+  the replacement words.
 
 Inline integrity check inside A4 (under the `Check Database Integrity` button):
 - While running (status text, sentence case): `Checking Database...`
@@ -1296,6 +1305,19 @@ writes ONE JSON export holding the memory database + chats together (§15.1);
 the owner is replacing that with **separate, independent backup files per data
 type.** Do NOT implement any combined archive or single-file backup design.
 
+> **TWO SYSTEMS (clarified July 20 2026, second external review):** the
+> per-type files below are **automatic same-installation RECOVERY backups**
+> (fast rollback after corruption; may depend on this installation's keys).
+> They do NOT replace the **portable JSON export/import**
+> (`MemorySeedCodec` + `app_chats`), which stays, keeps being developed, and
+> remains the key-independent path for reinstalls, other devices, and the
+> future Windows sync (Phase 8). Portable chat import/merge is future work,
+> not abandoned scope. The Backup & Restore screen distinguishes recovery
+> backups from `Export Portable Copy` / `Import Portable Copy`. Full detail:
+> `database_health_build_plan.md` (Revision 2), which also carries the SAF
+> staging pipeline, failure categories, and honest trigger description that
+> govern how these files are actually written.
+
 **Backup structure:**
 - One clearly named, easy-to-find backup folder, e.g. **`App Backups/`**.
 - Each automatic backup run creates **separate files** for:
@@ -1364,6 +1386,14 @@ document was started). It is a small catalog (content hash + timestamp per
 image; the actual JPEG files live separately on disk) and, until this
 section, had **zero backup or integrity coverage** — not even the old
 combined export touched it.
+
+> **SCOPE + LABELING (July 20 2026, second external review):** this backup
+> artifact is the **catalog only** — `profile_images.db`. **The JPEG image
+> files themselves are NOT backed up** (owner ruling, July 16: "we just do
+> the database … that's the record"). Every user-facing label and status
+> line must therefore say **"Profile image catalog"**, and no wording may
+> imply the pictures themselves are protected. (A damaged catalog can also
+> be rebuilt by rescanning the image files — the reverse is not true.)
 
 **Owner ruling: give it the full A1/A2/A3 treatment — do NOT water it down.**
 An earlier draft of this section proposed a lighter, silent-rebuild-only
