@@ -1409,15 +1409,20 @@ Everything is on-device. No cloud sync, no accounts.
   asking first. First use: `CampaignDetailActivity` (both `btnBack`'s click
   listener and an `onBackPressedDispatcher.addCallback` for the system
   back gesture route through one `attemptExit()` that compares a field
-  snapshot against the snapshot taken at load/last-save). Second use:
-  `ApiEndpointEditorActivity`, converted the same day — it already had an
-  equivalent hand-rolled discard-changes dialog with "Yes"/"No" buttons
-  instead of "Okay"/"Cancel"; the owner asked for it to match, so its
-  `attemptExit()` now calls the shared helper too. (`R.string.yes`/
-  `R.string.no` stay in use elsewhere for ordinary delete-confirmation
-  dialogs, a different kind of prompt — this ruling is about the
-  unsaved-changes case specifically, not a blanket Yes/No → Okay/Cancel
-  sweep.)
+  snapshot against the snapshot taken at load/last-save). Also applied,
+  same day, to the other roleplay-card editors sharing that exact
+  bottom-Save-button shape: `CharacterCardActivity` (serves both the
+  Roleplay Character and Party Member cards — one screen, one fix) and
+  `WorldDetailActivity`. Second use overall: `ApiEndpointEditorActivity`,
+  converted the same day — it already had an equivalent hand-rolled
+  discard-changes dialog with "Yes"/"No" buttons instead of "Okay"/
+  "Cancel"; the owner asked for it to match, so its `attemptExit()` now
+  calls the shared helper too. (`R.string.yes`/`R.string.no` stay in use
+  elsewhere for ordinary delete-confirmation dialogs, a different kind of
+  prompt — this ruling is about the unsaved-changes case specifically,
+  not a blanket Yes/No → Okay/Cancel sweep.) `CampaignDetailActivity` is
+  covered by this same standing rule but doesn't need a fresh listing here
+  each time it's touched.
 - **The top-right disc (floppy-disk) save icon (owner ruling, July 20
   2026).** For a full-screen editor whose Save action moves from an
   inline/bottom button into the header, put a floppy-disk icon
@@ -1429,7 +1434,10 @@ Everything is on-device. No cloud sync, no accounts.
   not also close the screen). First use: `CampaignDetailActivity` (removed
   the bottom `btn_campaign_save` MaterialButton; the icon reuses that
   view's id, now an `ImageButton` in `action_bar`, recolored for AMOLED the
-  same way `btnBack` already is).
+  same way `btnBack` already is). Same day, same treatment on
+  `CharacterCardActivity` (`btn_card_save`, covers both Roleplay Character
+  and Party Member) and `WorldDetailActivity` (`btn_world_save`) — every
+  bottom-Save-button roleplay card editor now matches.
 - **App button styles (owner naming, July 18 2026 — supersedes any earlier
   button-styling instruction unless the owner directs otherwise).** Three
   named button styles, `values/themes.xml`, each a standalone style a
