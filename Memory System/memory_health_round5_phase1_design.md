@@ -868,11 +868,10 @@ Hard constraints (owner):
 
 This is the mid-session path only; the startup behavior in §15.2 is unchanged.
 
-⚠️ **One build detail to pin down** (owner may answer now or at build): the
-audio warning's stated purpose is hands-free users not looking at the screen —
-should it therefore play **only during hands-free/voice sessions**, or **always**
-on mid-session detection (typed sessions too)? Recorded as "play immediately"
-per the instruction; this only scopes WHEN.
+**Scope (RESOLVED, owner July 16 2026): hands-free sessions only.** The audio
+warning plays only when the user is in a hands-free/voice session. A typed
+session with the screen visible does not play it — the banner alone is enough
+when the user is already looking at the screen.
 
 ### 15.3 Crash-triggered checking (owner-directed)
 
@@ -1087,11 +1086,55 @@ non-storage path is answered (inline integrity check → repair flow).
     any backup error shows the folder + `Open Backup Folder`. No combined
     single-file backup. Supersedes §15.1/§15.8/§15.9's single-file wording.
 12. The Advanced Memory Settings screen already shows an integrity result and
-    row counts. Decide whether that stays, is removed, or defers to the new
-    Memory Controls controls, to avoid two competing homes.
-13. Interaction with §14.1 (ungated health log lines): the new on-screen status
-    lines partly satisfy "the user can tell backups are healthy," so the
-    ungated-log question can be revisited in that light.
+    row counts. **B12 RESOLVED (owner July 16 2026) — see §15.14, a new
+    dedicated area.**
+13. ~~ungated health log lines~~ — **B13 RESOLVED (owner July 16 2026) — see
+    §15.15.**
+
+### 15.14 Screen placement — new "Memory Backup & Restore" area (B12 RESOLVED, owner July 16 2026)
+
+Owner has been rearranging screens independently since this chat began (this
+overlaps with the separate menu-reorganization effort — keep that session
+aware of this ruling so it doesn't re-decide it differently).
+
+- **New area: "Memory Backup & Restore."** ALL backup and database-restoration
+  functionality lives here — this becomes the one home for: `Check Database
+  Integrity`, `Create Database Backup`, the per-database backup status lines
+  (§15.13), `Database Check` results, `Repair` / `Revert to Last Good Database`
+  actions, and the `Open Backup Folder` access. This REPLACES the "Backups"
+  section currently on the Memory Controls screen (`memory_controls_section_
+  backups` string) as the home for this functionality — Memory Controls no
+  longer holds the backup/restore controls once this area exists.
+- **Advanced Memory Settings keeps "System Status" at the top**, unchanged in
+  position — store health + row counts stay there, first thing on the screen
+  (per the existing `advanced_memory_section_status` section).
+- **Everything else that deals with backup and repair** (beyond System Status)
+  moves into the new Memory Backup & Restore area — e.g. the existing "Setup /
+  Repair" section's backup-adjacent content, not just the newly-designed
+  controls from this document.
+- Exact navigation entry point (a new hub row? a tab? reached from Memory
+  Controls or the Memory Manager hub?) is a menu-reorg placement detail, left
+  to that effort — this ruling fixes WHAT goes where, not the exact tap path.
+
+### 15.15 Health-failure logging — write once, to the Error Log, timestamp in red (B13 RESOLVED, owner July 16 2026)
+
+Resolves §14.1's open question (whether health-transition lines are ungated in
+the Memory log) with a more specific owner ruling that supersedes it:
+
+- **Written regardless of the diagnostics toggle** — a database-health failure
+  (corruption found, repair attempted/succeeded/failed, restore performed,
+  repeated backup failure) is recorded even when diagnostics logging is off.
+  This matches the "recovery information, not optional debug noise" principle
+  from §14.1's owner-gate discussion.
+- **Once per event, not every turn.** A health problem is logged ONCE when it
+  transitions (matches the existing §3.4/§4.1 transition-only design elsewhere
+  in this document — no repeat-occurrence spam).
+- **Goes to the Error Log** (not the Memory/Voice log) — owner's explicit
+  choice of channel. This is a change from §4.2's earlier proposal to reuse the
+  Memory Debug Log channel; the Error Log supersedes that for these entries.
+- **The date and time of the entry should render in red** so a health-failure
+  line visually stands out from ordinary Error Log entries when scanning the
+  log. Applies to the timestamp portion of the log line specifically.
 
 ### 15.12 Approved verbatim wording — owner, July 15 2026
 
@@ -1269,10 +1312,12 @@ type.** Do NOT implement any combined archive or single-file backup design.
 - A separate date+time PER database, because each backup is independent.
 - **Chats get their own backup status elsewhere** if they are not part of the
   Database Status section (owner: chats' status lives separately).
-- Note: backup status lines now include **date AND time** (the example
-  timestamp is `2026-07-15_1430`), which extends the earlier date-only
-  `Month D, YYYY` rule for these lines. ⚠️ Confirm the exact display format for
-  the time portion.
+- **Time display format (RESOLVED, owner July 16 2026): 12-hour clock with
+  AM/PM**, e.g. `2:30 PM` — NOT 24-hour. Full display format for these lines:
+  `Month D, YYYY, H:MM AM/PM` (e.g. `Last successful memory database backup:
+  July 15, 2026, 2:30 PM`). This governs the display only — the underlying
+  filename timestamp (`memory_backup_2026-07-15_1430.db`) stays a sortable
+  24-hour format since it is not user-facing text (§15.13).
 
 **Knock-on updates:**
 - §15.8 rotation (keep newest 5) now applies **per file type** — 5 memory, 5
