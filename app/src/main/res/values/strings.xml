@@ -274,6 +274,11 @@
     <string name="label_edit_persona">Edit persona</string>
     <string name="label_delete_persona">Delete Companion</string>
     <string name="message_delete_persona">Are you sure you want to delete this Companion? This action cannot be undone.</string>
+    <!-- Delete-companion confirmation on the Edit Companion screen (owner
+         wording, July 20 2026). Deleting also removes the companion's memories
+         that aren't shared with another companion. -->
+    <string name="persona_delete_title">Delete this companion?</string>
+    <string name="persona_delete_body">The profile and all associated memories that aren\'t shared with another companion will be permanently deleted.</string>
     <string name="persona_friendly_name">Companion name</string>
     <string name="persona_prompt_hint">Companion prompt</string>
     <string name="persona_prompt_help">Sent before your system message at the start of every request.</string>

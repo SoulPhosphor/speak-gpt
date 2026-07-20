@@ -29,6 +29,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import androidx.activity.addCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
@@ -49,6 +50,7 @@ import org.teslasoft.assistant.preferences.dto.PersonaObject
 import org.teslasoft.assistant.preferences.lorebook.LoreBookStore
 import org.teslasoft.assistant.preferences.profileimages.ProfileImageStore
 import org.teslasoft.assistant.theme.ThemeManager
+import org.teslasoft.assistant.ui.util.DiscardChangesDialog
 import org.teslasoft.assistant.util.Hash
 import org.teslasoft.assistant.util.ProfileImageBinder
 
@@ -130,12 +132,20 @@ class EditPersonaActivity : FragmentActivity() {
     private var btnAddLoreBooks: MaterialButton? = null
     private var checkboxAutoload: MaterialCheckBox? = null
     private var imgPersonaAvatar: ImageView? = null
-    private var btnSave: MaterialButton? = null
-    private var btnDelete: MaterialButton? = null
+    private var btnSave: ImageButton? = null
+    private var btnDelete: ImageButton? = null
 
     private var position: Int = -1
     private var originalLabel: String = ""
     private var lastUsedLoreBookIds: String = ""
+
+    /** True once the initial field values are loaded, so the unsaved-changes
+     *  check doesn't fire against a half-built screen. */
+    private var ready = false
+
+    /** Snapshot of the editable fields as first loaded, for the discard-changes
+     *  confirmation on back-out (see DiscardChangesDialog). */
+    private var initialSnapshot: String = ""
 
     private var selectedActivationPromptId: String = ""
     private var selectedCoreLoreBookId: String = ""
@@ -229,12 +239,18 @@ class EditPersonaActivity : FragmentActivity() {
         updateCoreLoreBookLabel()
         renderAdditionalLoreBooks()
 
-        btnBack?.setOnClickListener { cancel() }
+        onBackPressedDispatcher.addCallback(this) { attemptExit() }
+
+        btnBack?.setOnClickListener { attemptExit() }
         btnSave?.setOnClickListener { save() }
 
         // Delete is only for an existing companion.
         btnDelete?.visibility = if (position == -1) View.GONE else View.VISIBLE
         btnDelete?.setOnClickListener { confirmDelete() }
+
+        // Baseline for the unsaved-changes check; every field is set above.
+        ready = true
+        initialSnapshot = snapshot()
     }
 
     override fun onResume() {
@@ -446,11 +462,48 @@ class EditPersonaActivity : FragmentActivity() {
         finish()
     }
 
+    /** Serialised form of the editable fields, used only for change detection
+     *  against initialSnapshot (see attemptExit). */
+    private fun snapshot(): String = listOf(
+        fieldLabel?.text?.toString().orEmpty(),
+        fieldPrompt?.text?.toString().orEmpty(),
+        selectedActivationPromptId,
+        selectedCoreLoreBookId,
+        PersonaObject.joinIds(additionalLoreBookIds),
+        (checkboxAutoload?.isChecked == true).toString(),
+        selectedAvatarRef
+    ).joinToString("\u0001")
+
+    /** Back / cancel. Confirms first if anything changed since load
+     *  (DiscardChangesDialog — the app's standard unsaved-changes confirmation). */
+    private fun attemptExit() {
+        if (ready && snapshot() != initialSnapshot) {
+            DiscardChangesDialog.show(this) { cancel() }
+        } else {
+            cancel()
+        }
+    }
+
+    /** Delete confirmation (owner ruling, July 20 2026). Same real Primary/
+     *  Destructive two-button shape as the discard dialog (dialog_two_actions),
+     *  with its own title + explanatory subtext. Deleting returns ACTION_DELETE
+     *  to PersonasListActivity, whose deletePersona now also removes this
+     *  companion's memory record and its sole-owned memories (memories shared
+     *  with another companion survive) via MemoryCompanionSync.onPersonaDeleted
+     *  — hence the "all associated memories that aren't shared" wording. */
     private fun confirmDelete() {
-        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.label_delete_persona)
-            .setMessage(R.string.message_delete_persona)
-            .setPositiveButton(R.string.yes) { _, _ ->
+        val actionsView = layoutInflater.inflate(R.layout.dialog_two_actions, null)
+
+        val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.persona_delete_title)
+            .setMessage(R.string.persona_delete_body)
+            .setView(actionsView)
+            .create()
+
+        actionsView.findViewById<MaterialButton>(R.id.btn_dialog_primary_action).apply {
+            setText(R.string.btn_delete)
+            setOnClickListener {
+                dialog.dismiss()
                 val result = Intent()
                     .putExtra(EXTRA_RESULT_ACTION, ACTION_DELETE)
                     .putExtra(EXTRA_POSITION, position)
@@ -458,8 +511,14 @@ class EditPersonaActivity : FragmentActivity() {
                 setResult(RESULT_OK, result)
                 finish()
             }
-            .setNegativeButton(R.string.no) { _, _ -> }
-            .show()
+        }
+
+        actionsView.findViewById<MaterialButton>(R.id.btn_dialog_destructive_action).apply {
+            setText(R.string.btn_cancel)
+            setOnClickListener { dialog.dismiss() }
+        }
+
+        dialog.show()
     }
 
     private fun cancel() {
@@ -482,7 +541,10 @@ class EditPersonaActivity : FragmentActivity() {
                 window.statusBarColor = ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme)
             }
             actionBar?.setBackgroundColor(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
-            btnBack?.backgroundTintList = ColorStateList.valueOf(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
+            val amoledTint = ColorStateList.valueOf(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
+            btnBack?.backgroundTintList = amoledTint
+            btnSave?.backgroundTintList = amoledTint
+            btnDelete?.backgroundTintList = amoledTint
         } else {
             window.setBackgroundDrawable(SurfaceColors.SURFACE_0.getColor(this).toDrawable())
             if (Build.VERSION.SDK_INT <= 34) {
@@ -490,7 +552,10 @@ class EditPersonaActivity : FragmentActivity() {
                 window.statusBarColor = SurfaceColors.SURFACE_4.getColor(this)
             }
             actionBar?.setBackgroundColor(SurfaceColors.SURFACE_4.getColor(this))
-            btnBack?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(this))
+            val barTint = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(this))
+            btnBack?.backgroundTintList = barTint
+            btnSave?.backgroundTintList = barTint
+            btnDelete?.backgroundTintList = barTint
         }
     }
 
@@ -512,9 +577,9 @@ class EditPersonaActivity : FragmentActivity() {
             val insets = window.decorView.rootWindowInsets
             actionBar?.setPadding(0, insets.getInsets(WindowInsets.Type.statusBars()).top, 0, 0)
             val navBottom = insets.getInsets(WindowInsets.Type.navigationBars()).bottom
-            findViewById<LinearLayout>(R.id.bottom_bar)?.let {
-                it.setPadding(it.paddingLeft, it.paddingTop, it.paddingRight, dpToPx(12) + navBottom)
-            }
+            // Save moved into the header, so the bottom bar is gone; keep the
+            // scroll content clear of the nav bar instead.
+            findViewById<ScrollView>(R.id.scroll)?.setPadding(0, 0, 0, dpToPx(12) + navBottom)
         } catch (_: Exception) { /* unused */ }
     }
 
