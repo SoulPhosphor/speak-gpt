@@ -298,7 +298,7 @@ class CompanionDetailActivity : FragmentActivity() {
     private fun deleteCompanion() {
         val id = companionId
         runOffThread {
-            MemoryStore.getInstance(this).deleteCompanion(id, deleteMemories = true)
+            MemoryStore.getInstance(this).deleteCompanion(id)
             runOnUiThread {
                 Toast.makeText(this, R.string.mem_comp_deleted_toast, Toast.LENGTH_SHORT).show()
                 finish()

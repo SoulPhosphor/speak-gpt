@@ -3152,17 +3152,22 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
      * Removes a companion from the memory system (its persona/character card is
      * app-owned and untouched — only the memory-side record goes). Tombstone
      * for future cross-device merge. Memories follow the owner's sole-owner
-     * rule (answer 5, `phase6_owner_answers_2026-07-08.md`): [deleteMemories]
-     * removes only memories owned SOLELY by this companion — "if the other
-     * companion that it's linked to is still active or existing then the
-     * memory should not be deleted." Shared memories keep, with this
-     * companion's link removed. memory_companions has ON DELETE CASCADE on the
-     * memory side but nothing on the companion side, so surviving links are
-     * scrubbed explicitly (a dangling FK would block the companion delete).
-     * Companions have no mirror column on memories, so the planner's mirror
+     * rule (answer 5, `phase6_owner_answers_2026-07-08.md`): removes only
+     * memories owned SOLELY by this companion — "if the other companion that
+     * it's linked to is still active or existing then the memory should not
+     * be deleted." Shared memories keep, with this companion's link removed.
+     * (Restyled July 20 2026: this used to be a caller-chosen [deleteMemories]
+     * flag, but a "kept" sole-owned memory only ever ended up permanently
+     * unreachable — no future companion for the same persona can ever match
+     * its dropped link — so the choice never did what it looked like it did.
+     * Always deletes sole-owned memories now; no UI surface offers to keep
+     * them anymore.) memory_companions has ON DELETE CASCADE on the memory
+     * side but nothing on the companion side, so surviving links are scrubbed
+     * explicitly (a dangling FK would block the companion delete). Companions
+     * have no mirror column on memories, so the planner's mirror
      * reassignments are always empty here.
      */
-    fun deleteCompanion(companionId: String, deleteMemories: Boolean) {
+    fun deleteCompanion(companionId: String) {
         val db = writableDatabase
         db.beginTransaction()
         try {
@@ -3182,7 +3187,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                     owned.add(TargetTeardownPlanner.OwnedMemory(memoryId, others, mirrorId = null))
                 }
             }
-            val plan = TargetTeardownPlanner.plan(companionId, owned, deleteMemories)
+            val plan = TargetTeardownPlanner.plan(companionId, owned, deleteMemories = true)
             for (memoryId in plan.deleteMemoryIds) {
                 deleteMemoriesWhere(db, "memory_id = ?", arrayOf(memoryId))
             }
