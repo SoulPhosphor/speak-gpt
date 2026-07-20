@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Reusable content view for a dialog with two action buttons side by side —
+  a primary action first/start, a destructive action second/end (owner
+  standardization, July 20 2026; e.g. Discard Changes: "Okay" then
+  "Cancel"). Set as the MaterialAlertDialog's custom view; the dialog's own
+  themed title sits above it, so its styling comes from
+  App.MaterialAlertDialog and future palettes retheme it automatically.
+  Each button carries its whole AppButton.Primary/AppButton.Destructive
+  look via AppButton.Primary.DialogAction/AppButton.Destructive.DialogAction,
+  which also supply their percentage width — do not set width here. The
+  chain between the two buttons (spread inside, primary on the start side)
+  is defined here because a chain needs both buttons' ids.
+-->
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:paddingTop="8dp"
+    android:paddingBottom="8dp">
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btn_dialog_primary_action"
+        style="@style/AppButton.Primary.DialogAction"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toStartOf="@id/btn_dialog_destructive_action"
+        app:layout_constraintHorizontal_chainStyle="spread_inside" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btn_dialog_destructive_action"
+        style="@style/AppButton.Destructive.DialogAction"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toEndOf="@id/btn_dialog_primary_action"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>

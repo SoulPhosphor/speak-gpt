@@ -82,6 +82,31 @@
         <item name="layout_constraintBottom_toBottomOf">parent</item>
     </style>
 
+    <!-- Two-button dialog action row (owner ruling, July 20 2026): a real
+         AppButton.Primary button and a real AppButton.Destructive button
+         side by side, first/start = primary, second/end = destructive (e.g.
+         Discard Changes: "Okay" first, "Cancel" second) — never flat text
+         buttons. Same percentage-width idea as AppButton.Primary.Dialog but
+         for two buttons instead of one centered button, so each is 0dp width
+         sized by a shared percent. The chain between the two buttons needs
+         both of their ids, so it can't be baked into a style — it lives in
+         dialog_two_actions.xml; only width/height/appearance live here.
+         Change layout_constraintWidth_percent on BOTH styles together to
+         reshape the pair. -->
+    <style name="AppButton.Primary.DialogAction" parent="AppButton.Primary">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="layout_constraintWidth_default">percent</item>
+        <item name="layout_constraintWidth_percent">0.42</item>
+    </style>
+
+    <style name="AppButton.Destructive.DialogAction" parent="AppButton.Destructive">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="layout_constraintWidth_default">percent</item>
+        <item name="layout_constraintWidth_percent">0.42</item>
+    </style>
+
     <!-- Shared chevron-row styles, preserving the current Memory Manager row
          appearance. Use Widget.App.Row.WithSubtitle when the row has helper text
          and Widget.App.Row.TitleOnly when it does not. Both variants intentionally
