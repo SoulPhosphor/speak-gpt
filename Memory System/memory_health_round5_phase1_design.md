@@ -989,8 +989,15 @@ stay **sentence case**. (An earlier version of this file used full ALL CAPS —
 that was wrong and is corrected here.)
 
 The following strings are **owner-approved verbatim** — do not reword them
-without asking. Placement is in the Backups area of the Memory Controls
-screen, under the existing "save a rotating backup every day" text.
+without asking.
+
+> **PLACEMENT SUPERSEDED (July 18–20 2026):** these controls no longer land on
+> Memory Controls. The **Memory Backup & Restore** screen now EXISTS on `main`
+> (`MemoryBackupRestoreActivity`, a Memory Manager hub row, built July 18 by
+> the menu-reorg effort — it already holds the auto-backup toggle,
+> import/export, last-backup status, and Reset). Per §15.14 these controls go
+> THERE, in its Backups area. Everything below about relative ORDER (Check
+> above Create; failed-line above success-line) carries over unchanged.
 
 **Top-to-bottom order and exact text:**
 
@@ -1118,9 +1125,13 @@ aware of this ruling so it doesn't re-decide it differently).
   moves into the new Memory Backup & Restore area — e.g. the existing "Setup /
   Repair" section's backup-adjacent content, not just the newly-designed
   controls from this document.
-- Exact navigation entry point (a new hub row? a tab? reached from Memory
-  Controls or the Memory Manager hub?) is a menu-reorg placement detail, left
-  to that effort — this ruling fixes WHAT goes where, not the exact tap path.
+- ~~Exact navigation entry point left to the menu-reorg effort~~ — **ANSWERED
+  BY REALITY (July 18 2026):** the menu-reorg effort built it as
+  `MemoryBackupRestoreActivity`, a row on the Memory Manager hub, already
+  holding the auto-backup toggle, import/export, last-backup status, and
+  Reset (moved out of Memory Controls). The §15 controls (Check Database
+  Integrity, Create Database Backup, per-type status lines, repair/revert
+  actions, Open Backup Folder) are ADDED to that existing screen.
 
 ### 15.15 Health-failure logging — write once, to the Error Log, timestamp in red (B13 RESOLVED, owner July 16 2026)
 
@@ -1268,6 +1279,9 @@ result. This **supersedes** the earlier single-line `Database Check Passed` /
 
 - The per-database status lines are examples — each database shows its own real
   result (`No problems found` / `Damage detected` / `Could not be checked`).
+- **Since §15.16 there are THREE databases** — a
+  `Profile images database: …` line joins the report in the same format
+  (agent note; the owner's two example lines above are unchanged).
 - ⚠️ **Buttons for this result screen were not specified** — owner to confirm
   (likely `Repair` / `Revert to Last Good Database` when damage is detected;
   `Try Again` / `View Error Log` on incomplete).
