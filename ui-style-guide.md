@@ -114,6 +114,23 @@ and rollout notes here — not back in `CLAUDE.md`.
     deliberately heavier (archive-vs-delete, linked-card warnings, the
     3.6f teardown rules) and are NOT interchangeable with a plain header
     icon without a real design conversation first.
+    Its confirm dialog (`CompanionDetailActivity.confirmDelete()`, owner
+    wording July 20 2026) reuses `dialog_two_actions.xml` + `AppButton.
+    Primary.DialogAction`/`AppButton.Destructive.DialogAction` — the same
+    real-button shape as `DiscardChangesDialog` (primary "Delete" first,
+    destructive "Cancel" second) — but is built inline rather than
+    through that shared helper, since its title ("Delete this
+    companion?") and subtext ("The profile and all associated memories
+    that aren't shared with another companion will be permanently
+    deleted.") are dialog-specific wording, not the fixed unsaved-changes
+    text. It no longer has a "keep the memories" checkbox — deleting a
+    companion now always deletes memories solely owned by it (a memory
+    shared with another companion still survives via that other link).
+    That checkbox was removed on purpose: a "kept" memory whose only
+    owner link was just removed can never be matched by any future
+    companion (a persona's next companion record gets a fresh id), so
+    keeping it un-deleted only left inert rows nothing could ever
+    retrieve again — see `TargetTeardownPlanner.plan`.
 - **App button styles (owner naming, July 18 2026 — supersedes any earlier
   button-styling instruction unless the owner directs otherwise).** Three
   named button styles, `values/themes.xml`, each a standalone style a

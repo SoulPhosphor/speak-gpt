@@ -1427,11 +1427,12 @@
     <string name="mem_comp_saved_toast">Companion saved.</string>
     <string name="mem_comp_load_failed">Could not load this companion.</string>
 
-    <!-- Delete companion (wording from the Phase 5 rework work order 1.2) -->
+    <!-- Delete companion (restyled July 20 2026 - owner wording, no checkbox:
+         deleting a companion always deletes its sole-owned memories too,
+         since a kept-but-unlinked memory could never be retrieved again) -->
     <string name="mem_comp_delete">Delete</string>
-    <string name="mem_comp_delete_title">Delete companion?</string>
-    <string name="mem_comp_delete_body">This removes %1$s from the memory system. Its persona/character card is not affected.</string>
-    <string name="mem_comp_delete_also_memories">Also delete this companion\'s memories</string>
+    <string name="mem_comp_delete_title">Delete this companion?</string>
+    <string name="mem_comp_delete_body">The profile and all associated memories that aren\'t shared with another companion will be permanently deleted.</string>
     <string name="mem_comp_deleted_toast">Companion deleted.</string>
 
     <!-- ============ Phase 5 area screens: My personas & roleplay characters ============ -->

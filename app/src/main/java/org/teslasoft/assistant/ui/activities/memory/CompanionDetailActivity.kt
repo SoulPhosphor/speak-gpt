@@ -22,7 +22,6 @@ import android.os.Build
 import android.os.Bundle
 import android.view.View
 import android.view.WindowInsets
-import android.widget.CheckBox
 import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -261,31 +260,45 @@ class CompanionDetailActivity : FragmentActivity() {
         )
     }
 
-    /** Material confirm that spells out what disappears and lets the user pick,
-     *  per deletion, whether this companion's memories go too (checkbox, off by
-     *  default — deleting the memories is the more destructive choice). The
-     *  persona/character card is app-owned and never touched. */
+    /** Material confirm, restyled July 20 2026 (owner wording; no checkbox —
+     *  deleting a companion always deletes its sole-owned memories too, since
+     *  a memory kept-but-unlinked from every companion could never be
+     *  retrieved again anyway; a memory shared with another companion still
+     *  survives via that other link, unaffected). Same real Primary/
+     *  Destructive two-button shape as DiscardChangesDialog
+     *  (dialog_two_actions.xml), but with its own title + genuinely separate
+     *  explanatory subtext and its own wording, so it's built inline here
+     *  rather than through that shared helper. The persona/character card is
+     *  app-owned and never touched. */
     private fun confirmDelete() {
-        val name = record?.currentName ?: textName?.text?.toString().orEmpty()
-        val view = layoutInflater.inflate(R.layout.dialog_delete_companion, null)
-        view.findViewById<TextView>(R.id.text_delete_body).text =
-            getString(R.string.mem_comp_delete_body, name)
-        val checkDeleteMemories = view.findViewById<CheckBox>(R.id.check_delete_memories)
+        val actionsView = layoutInflater.inflate(R.layout.dialog_two_actions, null)
 
-        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+        val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
             .setTitle(R.string.mem_comp_delete_title)
-            .setView(view)
-            .setPositiveButton(R.string.mem_comp_delete) { _, _ ->
-                deleteCompanion(checkDeleteMemories.isChecked)
+            .setMessage(R.string.mem_comp_delete_body)
+            .setView(actionsView)
+            .create()
+
+        actionsView.findViewById<MaterialButton>(R.id.btn_dialog_primary_action).apply {
+            setText(R.string.mem_comp_delete)
+            setOnClickListener {
+                dialog.dismiss()
+                deleteCompanion()
             }
-            .setNegativeButton(android.R.string.cancel) { _, _ -> }
-            .show()
+        }
+
+        actionsView.findViewById<MaterialButton>(R.id.btn_dialog_destructive_action).apply {
+            setText(R.string.btn_cancel)
+            setOnClickListener { dialog.dismiss() }
+        }
+
+        dialog.show()
     }
 
-    private fun deleteCompanion(deleteMemories: Boolean) {
+    private fun deleteCompanion() {
         val id = companionId
         runOffThread {
-            MemoryStore.getInstance(this).deleteCompanion(id, deleteMemories)
+            MemoryStore.getInstance(this).deleteCompanion(id, deleteMemories = true)
             runOnUiThread {
                 Toast.makeText(this, R.string.mem_comp_deleted_toast, Toast.LENGTH_SHORT).show()
                 finish()
