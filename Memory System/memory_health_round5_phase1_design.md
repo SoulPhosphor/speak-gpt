@@ -1014,20 +1014,23 @@ without asking.
      verified backup, with the §15.2 loss warning + confirmation — see §15.2b).
      On a passed result, no action is offered.
 
-2. **`Create Database Backup`** — a button (Title Case), **BELOW** the
-   integrity button. Pressing it runs a backup immediately (existing
-   `writeBackupNow`). Status text appears underneath it: in-progress, then
-   whether it completed or failed.
+2. **`Create Backup`** — a button (Title Case), **BELOW** the integrity
+   button. (RENAMED by owner, July 20 2026 — was "Create Database Backup";
+   the operation also backs up chats, and the owner chose the short form
+   `Create Backup`.) Pressing it runs a recovery-backup run immediately.
+   Status text appears underneath it: in-progress, then whether it
+   completed or failed.
 
-3. **Backup status lines — NOW PER TYPE (superseded by §15.13, owner July 15
-   2026).** The single `Last successful Database Backup` / `Database Backup
-   Failed` lines are replaced by independent per-database lines:
-   > `Last successful memory database backup: [date and time]`
-   > `Last successful lorebook database backup: [date and time]`
-   A per-type "backup failed" line appears above the matching success line only
-   when that type's most recent backup failed, and clears when it next
-   succeeds. Chats' backup status lives separately (§15.13). Lines now show
-   date AND time. See §15.13 for the full backup architecture.
+3. **Backup status — COMPACT PER-TYPE ROWS (owner-approved, July 20 2026;
+   supersedes both the single lines and the two-line failed-above-success
+   layout).** One row per type: current result + last successful date/time
+   when relevant, e.g.
+   > `Memory: Backup failed today. Last good backup: July 19, 2026, 2:30 PM`
+   > `Lorebooks: Backed up July 20, 2026, 2:30 PM`
+   > `Chats: Backed up July 20, 2026, 2:31 PM`
+   > `Profile image catalog: Backed up July 20, 2026, 2:31 PM`
+   Dates `Month D, YYYY`, time 12-hour AM/PM. See §15.13 and the build plan
+   (Rev 2) for the full backup architecture.
 
 All of the above are persistent on-screen controls/text — never Toasts,
 consistent with the app-wide no-Toast rule.
@@ -1216,15 +1219,15 @@ the corruption/repair flow.
 
 - Per §15.13: any backup-error surface must show the backup folder location and
   an `Open Backup Folder` button — added to A4's buttons above.
-- ⚠️ **PROPOSED SUPERSESSION (July 20 2026, second external review — awaiting
-  owner confirmation):** this five-button layout exceeds a standard dialog
-  and predates the failure-category split. The build plan (Rev 2, Round 3
-  item 8) proposes replacing it: destination/storage failures get at most
-  `Change Backup Folder | Retry | Not Now` (folder path as selectable text,
-  `Open Backup Folder` as a secondary text action); an actual source-damage
-  failure skips the storage dialog and enters the A1 repair flow directly.
-  The approved wording above stays authoritative UNTIL the owner approves
-  the replacement words.
+- **SUPERSEDED (owner-approved, July 20 2026):** the five-button layout
+  above is REPLACED by the category-split design (build plan Rev 2, Round 3
+  item 8): destination/storage failures get exactly
+  `Change Backup Folder | Retry | Cancel` (owner: `Cancel`, not `Not Now`;
+  folder path as selectable text; `Open Backup Folder` as a secondary text
+  action); an actual source-damage failure skips the storage dialog and
+  enters the A1 repair flow directly. The wording block above is kept as
+  the historical record only; the new dialog's body text is still to be
+  owner-approved (build plan Round 4).
 
 Inline integrity check inside A4 (under the `Check Database Integrity` button):
 - While running (status text, sentence case): `Checking Database...`

@@ -193,9 +193,10 @@ abnormal exits; startup housekeeping measurably does less on a clean start.
    > `Lorebooks: Backed up July 20, 2026, 2:30 PM`
    > `Chats: Backed up July 20, 2026, 2:31 PM`
    > `Profile image catalog: Backed up July 20, 2026, 2:31 PM`
-   (Compact rows + the button rename `Create Backup Now` are CHANGES to
-   previously-approved §15.9 wording — build only after the owner confirms;
-   see "Owner confirmations needed.")
+   (**APPROVED by owner, July 20 2026:** compact rows replace the old
+   two-line failed/success layout, and the backup button is named
+   **`Create Backup`** — not "Create Database Backup", not "Create Backup
+   Now".)
 9. The existing portable JSON export/import stays untouched and clearly
    separated on the screen (`Export Portable Copy` / `Import Portable
    Copy`, with the readable-content warning — labels are Round 4 wording).
@@ -247,14 +248,16 @@ an induced destination failure.
    per-database line each (chat files are NOT checked by this button —
    helper text says so); a failed database routes into the same A1 flow.
 8. **Backup-failure dialog (3 consecutive failures of a type):** shape
-   depends on category (this SUPERSEDES the five-button A4 layout —
-   pending owner wording approval):
-   - destination/verify failures → a storage dialog with AT MOST
-     `Change Backup Folder | Retry | Not Now`, the current folder shown as
-     selectable text, and `Open Backup Folder` as a secondary text action
-     (never another primary button);
+   depends on category (**APPROVED by owner, July 20 2026 — supersedes the
+   five-button A4 layout**):
+   - destination/verify failures → a storage dialog with exactly
+     `Change Backup Folder | Retry | Cancel` (owner: `Cancel`, not
+     `Not Now`), the current folder shown as selectable text, and
+     `Open Backup Folder` as a secondary text action (never another
+     primary button);
    - a source failure → no storage dialog; enter the database repair flow
      (item 3) directly.
+   Final body text for the storage dialog is Round 4 wording.
 9. **Profile Image Catalog specifics (§15.16):** auto-repair = rebuild the
    catalog by rescanning the image files — but per item 2, the damaged
    catalog file is still preserved first, and the rebuild is always
@@ -276,12 +279,12 @@ Strings that do not exist yet or now need owner (re-)approval:
 1. A2/A3-style banner text naming the **profile image catalog**.
 2. Buttons on the B8 result (damage found → likely `Repair | Revert to
    Last Good Database`; incomplete → likely `Try Again | View Error Log`).
-3. The compact per-type status rows (exact wording; example in Round 2
-   item 8) and the chats row's placement.
-4. `Create Backup Now` (rename of the approved `Create Database Backup` —
-   the operation also backs up chats) — owner confirmation.
-5. The new category-split backup-failure dialog words (replaces approved
-   A4 text) — owner confirmation.
+3. ~~Compact status rows~~ — **APPROVED** (format per Round 2 item 8);
+   only the chats row's placement remains to confirm.
+4. ~~Button rename~~ — **RESOLVED: `Create Backup`** (owner, July 20).
+5. The category-split backup-failure dialog's **body text** (structure +
+   buttons `Change Backup Folder | Retry | Cancel` are APPROVED; the
+   sentence(s) above them still need owner words).
 6. **Chat-recovery wording set:** chat backup unavailable/damaged state;
    restore confirmation naming the exact backup date and time, warning the
    current chat collection will be REPLACED, stating current files are
@@ -312,18 +315,15 @@ Each lands only after the owner approves the words in chat.
 
 ---
 
-## Owner confirmations needed (changes to previously-approved wording)
+## Owner confirmations — RESOLVED July 20 2026
 
-1. **A4 replacement:** the approved five-button A4 dialog is superseded by
-   the category-split design (Round 3 item 8) — at most
-   `Change Backup Folder | Retry | Not Now` + folder path as text +
-   `Open Backup Folder` as secondary text action; source damage goes
-   straight to the repair flow. Needs the owner's yes + new words.
-2. **`Create Database Backup` → `Create Backup Now`** (it backs up chats
-   too). Needs the owner's yes.
-3. **Compact per-type status rows** replacing the two-line
-   failed-above-success layout (§15.9 items 3–4). Example format in Round
-   2 item 8. Needs the owner's yes on the exact strings.
+1. **A4 replacement: APPROVED.** Category-split design (Round 3 item 8);
+   storage-dialog buttons are `Change Backup Folder | Retry | Cancel`
+   (owner: `Cancel`, not `Not Now`). Body text still Round 4.
+2. **Backup button name: `Create Backup`** (owner's exact choice — not
+   "Create Database Backup", not "Create Backup Now").
+3. **Compact per-type status rows: APPROVED**, replacing the two-line
+   failed-above-success layout (§15.9 items 3–4).
 
 ## Decisions still open (unchanged)
 
