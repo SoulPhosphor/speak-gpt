@@ -235,7 +235,9 @@ an induced destination failure.
 3. **Startup path:** crash-triggered check fails → bounded staged salvage
    attempt → success: `Database Repaired` dialog (A1 variant); failure:
    `Database Problem Found!` (A1) with `Repair | Revert to Last Good
-   Database | Not Now`; `Not Now` → degraded mode, never force-close.
+   Database | Cancel` (owner, July 20: `Cancel`, never `Not Now` — no
+   dialog button anywhere uses "Not Now"); `Cancel` → degraded mode, never
+   force-close.
 4. **Revert path (§15.2b + §15.6):** verify newest recovery backup, walk
    older until one passes; A5 confirm (backup's date, the loss noun for
    that database, damaged file kept); nothing usable → fresh empty DB + A6

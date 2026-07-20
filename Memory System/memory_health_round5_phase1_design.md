@@ -1210,8 +1210,14 @@ variant shown; memory variant swaps the database name and loss noun.)
 > `Your lorebooks database is damaged and couldn't be repaired automatically. You can try a repair, or replace it with your latest good backup. This may cause recent lorebook entries to be lost.`
 >
 > `Until then, lorebooks will be unavailable to use or save to prevent further corruption.`
-> **Buttons:** `Repair` | `Revert to Last Good Database` | `Not Now`
+> **Buttons:** `Repair` | `Revert to Last Good Database` | `Cancel`
 
+- **Button correction (owner, July 20 2026): `Cancel`, never `Not Now`.**
+  The owner does not want "Not Now" — or the word "now" generally — in any
+  dialog button anywhere in this design; "Cancel" is the standing button
+  for declining an action across every dialog in §15. This applies to A1,
+  A3, A4/its replacement, and any future dialog — not just the one
+  instance already caught in the backup-failure redesign.
 - **"...unavailable to use or save..."** (owner addition): the broken database
   is blocked from being SAVED too, not just used. This is deliberate and
   important when automatic daily backups are ON — otherwise the auto-backup
@@ -1274,7 +1280,9 @@ Inline integrity check inside A4 (under the `Check Database Integrity` button):
   > `Your lorebooks database is damaged and couldn't be repaired automatically. You can try a repair, or replace it with your latest good backup. This may cause recent lorebook entries to be lost.`
   >
   > `Until then, lorebooks will be unavailable to use or save to prevent further corruption.`
-  > **Buttons:** `Repair` | `Revert to Last Good Database` | `Not Now`
+  > **Buttons:** `Repair` | `Revert to Last Good Database` | `Cancel` (historical
+  > block — `Not Now` corrected to `Cancel` per the owner's July 20 ruling
+  > against that button appearing anywhere)
 
 - **Naming (RESOLVED, owner July 15 2026):** the whole app uses the
   **"Database Check"** name — `Database Check Passed` / `Database Check Failed`
