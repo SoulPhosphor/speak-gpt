@@ -59,12 +59,9 @@ and rollout notes here — not back in `CLAUDE.md`.
   calls the shared helper too. (`R.string.yes`/`R.string.no` stay in use
   elsewhere for ordinary delete-confirmation dialogs, a different kind of
   prompt — this ruling is about the unsaved-changes case specifically,
-  not a blanket Yes/No → Okay/Cancel sweep.) Also applied, same day, to
-  `CompanionDetailActivity` (the Edit Companion screen, converted from a
-  bottom Save button to the header save icon at the same time — see the
-  save-icon bullet below). `CampaignDetailActivity` is covered by this
-  same standing rule but doesn't need a fresh listing here each time it's
-  touched.
+  not a blanket Yes/No → Okay/Cancel sweep.) `CampaignDetailActivity` is
+  covered by this same standing rule but doesn't need a fresh listing here
+  each time it's touched.
 - **The top-right disc (floppy-disk) save icon (owner ruling, July 20
   2026).** For a full-screen editor whose Save action moves from an
   inline/bottom button into the header, put a floppy-disk icon
@@ -79,58 +76,7 @@ and rollout notes here — not back in `CLAUDE.md`.
   same way `btnBack` already is). Same day, same treatment on
   `CharacterCardActivity` (`btn_card_save`, covers both Roleplay Character
   and Party Member) and `WorldDetailActivity` (`btn_world_save`) — every
-  bottom-Save-button roleplay card editor now matches. Also applied, same
-  day, to `CompanionDetailActivity` (`btn_companion_save`) — the Edit
-  Companion screen had no separate Cancel button to begin with, only the
-  bottom Save; that Save moved to the header the same way, and its back
-  button/system-back-gesture now route through `attemptExit()` +
-  `DiscardChangesDialog` against a one-field snapshot (participation is
-  the only field this screen writes).
-- **Second header icon, chained to the left of the first (owner ruling,
-  July 20 2026).** When a screen needs a second action-bar icon,
-  `Widget.App.ActionBar.SecondaryButton` can't be reused as-is for it —
-  that style bakes in `layout_constraintEnd_toEndOf=parent`, so a second
-  button styled the same way would just stack on top of the first. Write
-  the second icon's geometry out directly (same 48dp/8dp-margin/
-  `btn_accent_icon_large_100` values as the style) with
-  `app:layout_constraintEnd_toStartOf="@id/<the-rightmost-icon>"` instead
-  of `layout_constraintEnd_toEndOf="parent"`. This isn't a new pattern —
-  `activity_lorebook_entries.xml`'s `btn_edit_book` (chained off
-  `btn_debug`) already did it; `CompanionDetailActivity`'s
-  `btn_companion_delete` (chained off `btn_companion_save`) follows the
-  same shape.
-  - **`CompanionDetailActivity`'s header Delete icon (owner choice, July
-    20 2026) uses `@drawable/ic_remove_moderator`** — Material Symbols
-    "remove_moderator" (filled), a shield with a line through it —
-    deliberately NOT the app's generic trash can (`ic_delete`) or an X
-    (`ic_close`/`ic_cancel`). The owner's reasoning: a companion record
-    shouldn't read as getting "thrown in the trash", and this reads more
-    like "un-protect this record". Explicitly acknowledged as
-    unconventional and may be revisited — do not treat the choice as
-    settled precedent for other delete icons without asking again.
-    **This single-tap-then-confirm header delete is `CompanionDetailActivity`-only.**
-    Do NOT copy it onto `WorldDetailActivity`/`CampaignDetailActivity`/
-    `CharacterCardActivity` — those screens' delete flows are
-    deliberately heavier (archive-vs-delete, linked-card warnings, the
-    3.6f teardown rules) and are NOT interchangeable with a plain header
-    icon without a real design conversation first.
-    Its confirm dialog (`CompanionDetailActivity.confirmDelete()`, owner
-    wording July 20 2026) reuses `dialog_two_actions.xml` + `AppButton.
-    Primary.DialogAction`/`AppButton.Destructive.DialogAction` — the same
-    real-button shape as `DiscardChangesDialog` (primary "Delete" first,
-    destructive "Cancel" second) — but is built inline rather than
-    through that shared helper, since its title ("Delete this
-    companion?") and subtext ("The profile and all associated memories
-    that aren't shared with another companion will be permanently
-    deleted.") are dialog-specific wording, not the fixed unsaved-changes
-    text. It no longer has a "keep the memories" checkbox — deleting a
-    companion now always deletes memories solely owned by it (a memory
-    shared with another companion still survives via that other link).
-    That checkbox was removed on purpose: a "kept" memory whose only
-    owner link was just removed can never be matched by any future
-    companion (a persona's next companion record gets a fresh id), so
-    keeping it un-deleted only left inert rows nothing could ever
-    retrieve again — see `TargetTeardownPlanner.plan`.
+  bottom-Save-button roleplay card editor now matches.
 - **App button styles (owner naming, July 18 2026 — supersedes any earlier
   button-styling instruction unless the owner directs otherwise).** Three
   named button styles, `values/themes.xml`, each a standalone style a

@@ -22,12 +22,12 @@ import android.os.Build
 import android.os.Bundle
 import android.view.View
 import android.view.WindowInsets
+import android.widget.CheckBox
 import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
-import androidx.activity.addCallback
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
@@ -40,7 +40,6 @@ import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.memory.CompanionRecord
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.theme.ThemeManager
-import org.teslasoft.assistant.ui.util.DiscardChangesDialog
 
 /**
  * Phase 5 companion detail/edit page (app_adaptation_notes §Characters area).
@@ -60,31 +59,12 @@ import org.teslasoft.assistant.ui.util.DiscardChangesDialog
  *
  * All store work runs off the main thread; every failure degrades to a toast,
  * never a crash — the memory-UI contract.
- *
- * Header/save/discard shape (owner ruling, July 20 2026): matches the
- * roleplay card editors (CampaignDetailActivity / CharacterCardActivity /
- * WorldDetailActivity) — a floppy-disk save icon in the action bar
- * (`Widget.App.ActionBar.SecondaryButton`) saves in place instead of a
- * bottom Save button, and backing out (toolbar back or the system back
- * gesture) with an unsaved participation change confirms via the shared
- * `DiscardChangesDialog`. Delete moved into the header too, to the save
- * icon's left (owner ruling, same day) — a plain single-tap-and-confirm
- * delete, unlike the roleplay cards' archive/teardown flows, so this is
- * NOT a pattern to copy onto World/Campaign/RoleplayCharacter without
- * asking first. See ui-style-guide.md.
  */
 class CompanionDetailActivity : FragmentActivity() {
 
     private var preferences: Preferences? = null
     private var chatId = ""
     private var companionId = ""
-
-    /** Guards Save/dirty-checking until the record has loaded. */
-    private var ready = false
-
-    /** Snapshot of the editable fields as last loaded/saved, for the
-     *  discard-changes confirmation on back-out (see DiscardChangesDialog). */
-    private var initialSnapshot: String = ""
 
     private var actionBar: ConstraintLayout? = null
     private var btnBack: ImageButton? = null
@@ -95,8 +75,8 @@ class CompanionDetailActivity : FragmentActivity() {
     private var rowParticipation: LinearLayout? = null
     private var textParticipationValue: TextView? = null
     private var btnMemories: MaterialButton? = null
-    private var btnSave: ImageButton? = null
-    private var btnDelete: ImageButton? = null
+    private var btnSave: MaterialButton? = null
+    private var btnDelete: MaterialButton? = null
 
     // The loaded record; status drives the draft/approve section.
     private var record: CompanionRecord? = null
@@ -116,9 +96,7 @@ class CompanionDetailActivity : FragmentActivity() {
         bindViews()
         applyTheme()
 
-        onBackPressedDispatcher.addCallback(this) { attemptExit() }
-
-        btnBack?.setOnClickListener { attemptExit() }
+        btnBack?.setOnClickListener { finish() }
         rowParticipation?.setOnClickListener { showParticipationPicker() }
         btnApprove?.setOnClickListener { approve() }
         btnMemories?.setOnClickListener { openMemories() }
@@ -137,8 +115,8 @@ class CompanionDetailActivity : FragmentActivity() {
         rowParticipation = findViewById(R.id.row_participation)
         textParticipationValue = findViewById(R.id.text_participation_value)
         btnMemories = findViewById(R.id.btn_memories)
-        btnSave = findViewById(R.id.btn_companion_save)
-        btnDelete = findViewById(R.id.btn_companion_delete)
+        btnSave = findViewById(R.id.btn_save)
+        btnDelete = findViewById(R.id.btn_delete)
     }
 
     /* ------------------------------ data ------------------------------ */
@@ -166,9 +144,6 @@ class CompanionDetailActivity : FragmentActivity() {
         refreshParticipationRow()
 
         draftContainer?.visibility = if (c.status == "draft") View.VISIBLE else View.GONE
-
-        ready = true
-        initialSnapshot = snapshot()
     }
 
     /* ------------------------------ participation ------------------------------ */
@@ -202,24 +177,6 @@ class CompanionDetailActivity : FragmentActivity() {
             .show()
     }
 
-    /* ------------------------------ exit / discard ------------------------------ */
-
-    /** Serialised form of the editable fields, used only for change detection
-     *  against initialSnapshot. Participation is the only field this screen
-     *  writes. */
-    private fun snapshot(): String = participation
-
-    /** Back / cancel. Confirms first if anything changed since the last load
-     *  or save (DiscardChangesDialog — the app's standard unsaved-changes
-     *  confirmation). */
-    private fun attemptExit() {
-        if (ready && snapshot() != initialSnapshot) {
-            DiscardChangesDialog.show(this) { finish() }
-        } else {
-            finish()
-        }
-    }
-
     /* ------------------------------ actions ------------------------------ */
 
     private fun approve() {
@@ -234,7 +191,6 @@ class CompanionDetailActivity : FragmentActivity() {
     }
 
     private fun save() {
-        if (!ready) return
         // Participation is the only field this screen still writes; the
         // essence/relationship/limits/adaptations columns stay untouched.
         val id = companionId
@@ -243,8 +199,8 @@ class CompanionDetailActivity : FragmentActivity() {
         runOffThread {
             MemoryStore.getInstance(this).updateCompanionParticipation(id, part)
             runOnUiThread {
-                initialSnapshot = snapshot()
                 Toast.makeText(this, R.string.mem_comp_saved_toast, Toast.LENGTH_SHORT).show()
+                finish()
             }
         }
     }
@@ -260,45 +216,31 @@ class CompanionDetailActivity : FragmentActivity() {
         )
     }
 
-    /** Material confirm, restyled July 20 2026 (owner wording; no checkbox —
-     *  deleting a companion always deletes its sole-owned memories too, since
-     *  a memory kept-but-unlinked from every companion could never be
-     *  retrieved again anyway; a memory shared with another companion still
-     *  survives via that other link, unaffected). Same real Primary/
-     *  Destructive two-button shape as DiscardChangesDialog
-     *  (dialog_two_actions.xml), but with its own title + genuinely separate
-     *  explanatory subtext and its own wording, so it's built inline here
-     *  rather than through that shared helper. The persona/character card is
-     *  app-owned and never touched. */
+    /** Material confirm that spells out what disappears and lets the user pick,
+     *  per deletion, whether this companion's memories go too (checkbox, off by
+     *  default — deleting the memories is the more destructive choice). The
+     *  persona/character card is app-owned and never touched. */
     private fun confirmDelete() {
-        val actionsView = layoutInflater.inflate(R.layout.dialog_two_actions, null)
+        val name = record?.currentName ?: textName?.text?.toString().orEmpty()
+        val view = layoutInflater.inflate(R.layout.dialog_delete_companion, null)
+        view.findViewById<TextView>(R.id.text_delete_body).text =
+            getString(R.string.mem_comp_delete_body, name)
+        val checkDeleteMemories = view.findViewById<CheckBox>(R.id.check_delete_memories)
 
-        val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
             .setTitle(R.string.mem_comp_delete_title)
-            .setMessage(R.string.mem_comp_delete_body)
-            .setView(actionsView)
-            .create()
-
-        actionsView.findViewById<MaterialButton>(R.id.btn_dialog_primary_action).apply {
-            setText(R.string.mem_comp_delete)
-            setOnClickListener {
-                dialog.dismiss()
-                deleteCompanion()
+            .setView(view)
+            .setPositiveButton(R.string.mem_comp_delete) { _, _ ->
+                deleteCompanion(checkDeleteMemories.isChecked)
             }
-        }
-
-        actionsView.findViewById<MaterialButton>(R.id.btn_dialog_destructive_action).apply {
-            setText(R.string.btn_cancel)
-            setOnClickListener { dialog.dismiss() }
-        }
-
-        dialog.show()
+            .setNegativeButton(android.R.string.cancel) { _, _ -> }
+            .show()
     }
 
-    private fun deleteCompanion() {
+    private fun deleteCompanion(deleteMemories: Boolean) {
         val id = companionId
         runOffThread {
-            MemoryStore.getInstance(this).deleteCompanion(id)
+            MemoryStore.getInstance(this).deleteCompanion(id, deleteMemories)
             runOnUiThread {
                 Toast.makeText(this, R.string.mem_comp_deleted_toast, Toast.LENGTH_SHORT).show()
                 finish()
@@ -339,8 +281,6 @@ class CompanionDetailActivity : FragmentActivity() {
             }
             actionBar?.setBackgroundColor(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
             btnBack?.backgroundTintList = ColorStateList.valueOf(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
-            btnSave?.backgroundTintList = ColorStateList.valueOf(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
-            btnDelete?.backgroundTintList = ColorStateList.valueOf(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
         } else {
             window.setBackgroundDrawable(SurfaceColors.SURFACE_0.getColor(this).toDrawable())
             if (Build.VERSION.SDK_INT <= 34) {
@@ -349,8 +289,6 @@ class CompanionDetailActivity : FragmentActivity() {
             }
             actionBar?.setBackgroundColor(SurfaceColors.SURFACE_4.getColor(this))
             btnBack?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(this))
-            btnSave?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(this))
-            btnDelete?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(this))
         }
     }
 
