@@ -1601,10 +1601,13 @@ Everything is on-device. No cloud sync, no accounts.
   is written whenever a companion is chosen through **ANY** selection surface —
   **both Quick Settings AND the Companions list opened from Characters** (the
   July 10 rule that only Quick Settings wrote it was the bug: a companion picked
-  via Characters never carried into new chats). Recording fires only on an
-  explicit tap-to-select (the persona list returns `CANCELED` on back-out), so
-  a mere browse is never recorded. `Preferences.hasLastUsedPersonaChoice()` is
-  now unused by seeding.
+  via Characters never carried into new chats). Recording fires only when the
+  Companions list actually returns a companion — since July 19 2026 that means
+  opening a companion's editor and hitting **Save** (tapping a row just opens
+  the editor, it doesn't select by itself; see "The Personas/Companions list
+  is DIFFERENT" above), while backing out of either the list or the editor
+  still returns `CANCELED`. A mere browse is still never recorded.
+  `Preferences.hasLastUsedPersonaChoice()` is now unused by seeding.
 - Legacy/odd-named files exist (`InstructionsForDegradedTeapots…Activity`,
   `MainActivity_robo_script.json`, `experiment.json`, `desktop.ini`,
   `hub-purge.sh`) — leave them unless asked.

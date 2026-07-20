@@ -22,12 +22,9 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.BaseAdapter
-import android.widget.ImageButton
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.TextView
-import androidx.constraintlayout.widget.ConstraintLayout
-import androidx.core.content.ContextCompat
-import com.google.android.material.elevation.SurfaceColors
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.PersonaPreferences
@@ -48,23 +45,14 @@ class PersonaListItemAdapter(private val dataArray: ArrayList<HashMap<String, St
         return position.toLong()
     }
 
-    private var ui: ConstraintLayout? = null
+    private var ui: LinearLayout? = null
     private var personaAvatar: ImageView? = null
     private var personaLabel: TextView? = null
-    private var btnEdit: ImageButton? = null
 
     private var listener: OnSelectListener? = null
 
-    // Id of the persona that's currently active for the chat, so it can be drawn
-    // inverted (same scheme as a checked tile in Settings). Empty = none active.
-    private var selectedId: String = ""
-
     fun setOnSelectListener(listener: OnSelectListener) {
         this.listener = listener
-    }
-
-    fun setSelectedId(id: String) {
-        this.selectedId = id
     }
 
     override fun getView(position: Int, convertView: View?, parent: ViewGroup?): View {
@@ -79,41 +67,26 @@ class PersonaListItemAdapter(private val dataArray: ArrayList<HashMap<String, St
         ui = mView?.findViewById(R.id.ui)
         personaAvatar = mView?.findViewById(R.id.persona_avatar)
         personaLabel = mView?.findViewById(R.id.persona_label)
-        btnEdit = mView?.findViewById(R.id.btn_edit_persona)
 
         val item = dataArray[position]
 
         personaLabel?.text = item["label"]
 
-        // Recycled views must have both states set explicitly every bind.
-        val isSelected = selectedId.isNotEmpty() && Hash.hash(item["label"] ?: "") == selectedId
-        if (isSelected) {
-            ui?.backgroundTintList = null
-            ui?.background = ContextCompat.getDrawable(mContext, R.drawable.tile_active)
-            personaLabel?.setTextColor(mContext.getColor(R.color.text_title_inv))
-            btnEdit?.imageTintList = ColorStateList.valueOf(mContext.getColor(R.color.window_background))
-        } else {
-            ui?.background = ContextCompat.getDrawable(mContext, R.drawable.btn_accent_tonal_selector_v3)
-            ui?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_2.getColor(mContext))
-            personaLabel?.setTextColor(mContext.getColor(R.color.accent_900))
-            btnEdit?.imageTintList = ColorStateList.valueOf(mContext.getColor(R.color.accent_900))
-        }
-
         // Leading Companion picture (profile-images-plan.md, COMPANION
         // SELECTION LIST): the assigned picture with the Default Shape, or a
-        // neutral placeholder glyph (tinted to match the row's other icons in
-        // both the selected and unselected states) when none is assigned or
-        // the file is missing. Bound through the shared binder so a recycled
-        // row never keeps another Companion's picture or tint.
+        // neutral placeholder glyph when none is assigned or the file is
+        // missing. Bound through the shared binder so a recycled row never
+        // keeps another Companion's picture. No "currently active" state is
+        // shown here at all (owner ruling, July 19 2026) - that lives in
+        // Quick Settings and the last-used companion logic, not this list.
         personaAvatar?.let { avatar ->
             val personaId = Hash.hash(item["label"] ?: "")
             val avatarRef = PersonaPreferences.getPersonaPreferences(mContext).getPersona(personaId).avatarRef
             val avatarFile = if (avatarRef.isNotEmpty()) ProfileImageStore.getInstance(mContext).imageFile(avatarRef) else null
             val shape = GlobalPreferences.getPreferences(mContext).getProfileImageShape()
-            val glyphTint = if (isSelected) R.color.window_background else R.color.accent_900
             ProfileImageBinder.bind(mContext, avatar, avatarFile, shape) { iv ->
                 iv.setImageResource(R.drawable.ic_photo)
-                iv.imageTintList = ColorStateList.valueOf(mContext.getColor(glyphTint))
+                iv.imageTintList = ColorStateList.valueOf(mContext.getColor(R.color.accent_900))
             }
         }
 
@@ -121,21 +94,10 @@ class PersonaListItemAdapter(private val dataArray: ArrayList<HashMap<String, St
             listener?.onClick(position)
         }
 
-        ui?.setOnLongClickListener {
-            listener?.onLongClick(position)
-            return@setOnLongClickListener true
-        }
-
-        btnEdit?.setOnClickListener {
-            listener?.onSettingsClick(position)
-        }
-
         return mView!!
     }
 
     interface OnSelectListener {
         fun onClick(position: Int)
-        fun onLongClick(position: Int)
-        fun onSettingsClick(position: Int)
     }
 }

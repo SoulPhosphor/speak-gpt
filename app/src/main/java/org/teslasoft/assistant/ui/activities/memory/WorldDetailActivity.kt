@@ -29,6 +29,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.addCallback
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
@@ -47,6 +48,7 @@ import org.teslasoft.assistant.preferences.memory.RpTagRecord
 import org.teslasoft.assistant.preferences.memory.RpTagTargetType
 import org.teslasoft.assistant.preferences.memory.WorldRecord
 import org.teslasoft.assistant.theme.ThemeManager
+import org.teslasoft.assistant.ui.util.DiscardChangesDialog
 
 /**
  * The two-zone world card (roleplay_cards_and_tags_spec §6c). Zone 1 is the
@@ -75,6 +77,10 @@ class WorldDetailActivity : FragmentActivity() {
     /** Guards Save until an existing record has loaded. */
     private var ready = false
 
+    /** Snapshot of the fields as last loaded/saved, for the discard-changes
+     *  confirmation on back-out (see DiscardChangesDialog). */
+    private var initialSnapshot: String = ""
+
     private var actionBar: ConstraintLayout? = null
     private var btnBack: ImageButton? = null
     private var titleView: TextView? = null
@@ -82,7 +88,7 @@ class WorldDetailActivity : FragmentActivity() {
     private var fieldPremiseVibe: TextInputEditText? = null
     private var fieldCosmology: TextInputEditText? = null
     private var fieldMagicRules: TextInputEditText? = null
-    private var btnSave: MaterialButton? = null
+    private var btnSave: ImageButton? = null
     private var btnMemories: MaterialButton? = null
     private var btnTeardown: MaterialButton? = null
     private var textSaveFirst: TextView? = null
@@ -142,7 +148,9 @@ class WorldDetailActivity : FragmentActivity() {
 
         applyTheme()
 
-        btnBack?.setOnClickListener { finish() }
+        onBackPressedDispatcher.addCallback(this) { attemptExit() }
+
+        btnBack?.setOnClickListener { attemptExit() }
         btnSave?.setOnClickListener { save() }
         btnMemories?.setOnClickListener { openMemories() }
         btnTeardown?.setOnClickListener { showTeardownDialog() }
@@ -169,6 +177,7 @@ class WorldDetailActivity : FragmentActivity() {
         val id = worldId
         if (id == null) {
             ready = true
+            initialSnapshot = snapshot()
             return
         }
         runOffThread {
@@ -183,6 +192,7 @@ class WorldDetailActivity : FragmentActivity() {
                     fieldMagicRules?.setText(w.magicRules ?: "")
                 }
                 ready = true
+                initialSnapshot = snapshot()
                 updateExtraButtons()
             }
         }
@@ -193,6 +203,28 @@ class WorldDetailActivity : FragmentActivity() {
         val saved = worldId != null
         btnMemories?.visibility = if (saved) View.VISIBLE else View.GONE
         btnTeardown?.visibility = if (saved) View.VISIBLE else View.GONE
+    }
+
+    /* ------------------------------ exit / discard ------------------------------ */
+
+    /** Serialised form of the world-core fields, used only for change
+     *  detection against initialSnapshot. */
+    private fun snapshot(): String = listOf(
+        fieldName?.text?.toString().orEmpty(),
+        fieldPremiseVibe?.text?.toString().orEmpty(),
+        fieldCosmology?.text?.toString().orEmpty(),
+        fieldMagicRules?.text?.toString().orEmpty()
+    ).joinToString("")
+
+    /** Back / cancel. Confirms first if anything changed since the last load
+     *  or save (DiscardChangesDialog — the app's standard unsaved-changes
+     *  confirmation). */
+    private fun attemptExit() {
+        if (ready && snapshot() != initialSnapshot) {
+            DiscardChangesDialog.show(this) { finish() }
+        } else {
+            finish()
+        }
     }
 
     /* ------------------------------ save ------------------------------ */
@@ -233,6 +265,7 @@ class WorldDetailActivity : FragmentActivity() {
                 existing = record
                 titleView?.setText(R.string.mem_world_detail_title)
                 updateExtraButtons()
+                initialSnapshot = snapshot()
                 Toast.makeText(this, R.string.mem_world_saved, Toast.LENGTH_SHORT).show()
                 renderSections()
             }
@@ -496,6 +529,7 @@ class WorldDetailActivity : FragmentActivity() {
             }
             actionBar?.setBackgroundColor(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
             btnBack?.backgroundTintList = ColorStateList.valueOf(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
+            btnSave?.backgroundTintList = ColorStateList.valueOf(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
         } else {
             window.setBackgroundDrawable(SurfaceColors.SURFACE_0.getColor(this).toDrawable())
             if (Build.VERSION.SDK_INT <= 34) {
@@ -504,6 +538,7 @@ class WorldDetailActivity : FragmentActivity() {
             }
             actionBar?.setBackgroundColor(SurfaceColors.SURFACE_4.getColor(this))
             btnBack?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(this))
+            btnSave?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(this))
         }
     }
 

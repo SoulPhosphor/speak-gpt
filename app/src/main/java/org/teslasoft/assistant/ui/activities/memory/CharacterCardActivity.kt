@@ -29,6 +29,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.addCallback
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
@@ -48,6 +49,7 @@ import org.teslasoft.assistant.preferences.memory.RoleplayCharacterRecord
 import org.teslasoft.assistant.preferences.memory.RpTagRecord
 import org.teslasoft.assistant.preferences.memory.RpTagTargetType
 import org.teslasoft.assistant.theme.ThemeManager
+import org.teslasoft.assistant.ui.util.DiscardChangesDialog
 
 /**
  * The two-zone character card (roleplay_cards_and_tags_spec §6a/§6b): one
@@ -75,6 +77,10 @@ class CharacterCardActivity : FragmentActivity() {
      *  overwritten with the empty form. */
     private var ready = false
 
+    /** Snapshot of the fields as last loaded/saved, for the discard-changes
+     *  confirmation on back-out (see DiscardChangesDialog). */
+    private var initialSnapshot: String = ""
+
     private var actionBar: ConstraintLayout? = null
     private var btnBack: ImageButton? = null
     private var titleView: TextView? = null
@@ -90,7 +96,7 @@ class CharacterCardActivity : FragmentActivity() {
     private var btnStatus: MaterialButton? = null
     private var textWarning: TextView? = null
     private var textWordCount: TextView? = null
-    private var btnSave: MaterialButton? = null
+    private var btnSave: ImageButton? = null
     private var btnMemories: MaterialButton? = null
     private var textSaveFirst: TextView? = null
     private var sectionsContainer: LinearLayout? = null
@@ -149,7 +155,9 @@ class CharacterCardActivity : FragmentActivity() {
 
         applyTheme()
 
-        btnBack?.setOnClickListener { finish() }
+        onBackPressedDispatcher.addCallback(this) { attemptExit() }
+
+        btnBack?.setOnClickListener { attemptExit() }
         btnSave?.setOnClickListener { save() }
         btnStatus?.setOnClickListener { showStatusPicker() }
         btnMemories?.setOnClickListener { openMemories() }
@@ -188,6 +196,7 @@ class CharacterCardActivity : FragmentActivity() {
         val id = cardId
         if (id == null) {
             ready = true
+            initialSnapshot = snapshot()
             return
         }
         runOffThread {
@@ -208,6 +217,7 @@ class CharacterCardActivity : FragmentActivity() {
                         refreshStatus()
                     }
                     ready = true
+                    initialSnapshot = snapshot()
                 }
             } else {
                 val record = store.getRoleplayCharacter(id)
@@ -222,6 +232,7 @@ class CharacterCardActivity : FragmentActivity() {
                         fieldGoalsDrives?.setText(it.goalsDrives ?: "")
                     }
                     ready = true
+                    initialSnapshot = snapshot()
                 }
             }
         }
@@ -254,6 +265,34 @@ class CharacterCardActivity : FragmentActivity() {
             }
             .setNegativeButton(R.string.btn_cancel) { _, _ -> }
             .show()
+    }
+
+    /* ------------------------------ exit / discard ------------------------------ */
+
+    /** Serialised form of the Zone 1 fields, used only for change detection
+     *  against initialSnapshot. speechStyle/currentStatus are party-only
+     *  fields but are harmless to include unconditionally — they never
+     *  change on the (hidden) user-character form. */
+    private fun snapshot(): String = listOf(
+        fieldName?.text?.toString().orEmpty(),
+        fieldSpecies?.text?.toString().orEmpty(),
+        fieldClass?.text?.toString().orEmpty(),
+        fieldCorePersonality?.text?.toString().orEmpty(),
+        fieldPhysicalDescription?.text?.toString().orEmpty(),
+        fieldGoalsDrives?.text?.toString().orEmpty(),
+        fieldSpeechStyle?.text?.toString().orEmpty(),
+        currentStatus
+    ).joinToString("")
+
+    /** Back / cancel. Confirms first if anything changed since the last load
+     *  or save (DiscardChangesDialog — the app's standard unsaved-changes
+     *  confirmation). */
+    private fun attemptExit() {
+        if (ready && snapshot() != initialSnapshot) {
+            DiscardChangesDialog.show(this) { finish() }
+        } else {
+            finish()
+        }
     }
 
     /* ------------------------------ save ------------------------------ */
@@ -313,6 +352,7 @@ class CharacterCardActivity : FragmentActivity() {
             }
             runOnUiThread {
                 cardId = id
+                initialSnapshot = snapshot()
                 Toast.makeText(this, R.string.card_saved, Toast.LENGTH_SHORT).show()
                 refreshMemoriesButton()
                 renderSections()
@@ -441,6 +481,7 @@ class CharacterCardActivity : FragmentActivity() {
             }
             actionBar?.setBackgroundColor(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
             btnBack?.backgroundTintList = ColorStateList.valueOf(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
+            btnSave?.backgroundTintList = ColorStateList.valueOf(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
         } else {
             window.setBackgroundDrawable(SurfaceColors.SURFACE_0.getColor(this).toDrawable())
             if (Build.VERSION.SDK_INT <= 34) {
@@ -449,6 +490,7 @@ class CharacterCardActivity : FragmentActivity() {
             }
             actionBar?.setBackgroundColor(SurfaceColors.SURFACE_4.getColor(this))
             btnBack?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(this))
+            btnSave?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(this))
         }
     }
 

@@ -16,74 +16,34 @@
 * limitations under the License.
 **************************************************************************/
 -->
-<androidx.constraintlayout.widget.ConstraintLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:layout_width="match_parent"
-    android:layout_height="wrap_content">
+<!-- Companion row (owner ruling, July 19 2026 evening): plain Image + Title +
+     Chevron, the same shared style family as the System Prompts manager-mode
+     row (view_system_prompt_item_row.xml) - no highlight, no color inversion.
+     "Currently active" is not a concept this row shows at all anymore; that
+     lives in Quick Settings and the last-used companion logic. Tapping the
+     whole row opens that Companion's edit screen (PersonasListActivity routes
+     the click to openEditor); there is no separate select action here. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/ui"
+    style="@style/Widget.App.Row.TitleOnly"
+    android:paddingHorizontal="20dp">
 
-    <androidx.constraintlayout.widget.ConstraintLayout
-        android:id="@+id/ui"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:layout_marginHorizontal="16dp"
-        android:layout_marginVertical="8dp"
-        android:background="@drawable/btn_accent_tonal_selector_v3"
-        android:backgroundTint="?attr/colorSecondaryContainer"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent">
+    <ImageView
+        android:id="@+id/persona_avatar"
+        style="@style/Widget.App.Row.ProfileImage"
+        android:contentDescription="@string/profile_image_companion_avatar_desc" />
 
-        <!-- Leading Companion picture (profile-images-plan.md, COMPANION
-             SELECTION LIST): the shared Widget.App.Row.ProfileImage geometry.
-             Shows the Companion's assigned picture with the Default Shape;
-             the existing generic glyph (its styling unchanged) when there is
-             none. Vertically centred by the row's own constraints. -->
-        <ImageView
-            android:id="@+id/persona_avatar"
-            style="@style/Widget.App.Row.ProfileImage"
-            android:layout_marginStart="16dp"
-            android:contentDescription="@string/profile_image_companion_avatar_desc"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent" />
+    <LinearLayout style="@style/Widget.App.Row.TextColumn">
 
-        <!-- Companion name only (owner ruling, July 19 2026: the prompt-preview
-             subtitle was dropped so the row is image + title only). Vertically
-             centred; the avatar sets the row height. -->
         <TextView
             android:id="@+id/persona_label"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="12dp"
-            android:layout_marginTop="16dp"
-            android:layout_marginEnd="8dp"
-            android:layout_marginBottom="16dp"
+            style="@style/Widget.App.Row.Title"
             android:ellipsize="end"
             android:lines="1"
-            android:text="Persona"
-            android:textColor="?attr/colorPrimary"
-            android:textSize="18sp"
-            android:textStyle="bold"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toStartOf="@+id/btn_edit_persona"
-            app:layout_constraintStart_toEndOf="@+id/persona_avatar"
-            app:layout_constraintTop_toTopOf="parent" />
+            android:text="Persona" />
+    </LinearLayout>
 
-        <ImageButton
-            android:id="@+id/btn_edit_persona"
-            android:layout_width="42dp"
-            android:layout_height="42dp"
-            android:layout_marginEnd="12dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/btn_edit_persona"
-            android:src="@drawable/ic_chevron_right"
-            android:tooltipText="@string/btn_edit_persona"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintTop_toTopOf="parent"
-            app:srcCompat="@drawable/ic_chevron_right" />
-
-    </androidx.constraintlayout.widget.ConstraintLayout>
-</androidx.constraintlayout.widget.ConstraintLayout>
+    <ImageView
+        style="@style/Widget.App.Row.Chevron"
+        android:contentDescription="@string/btn_edit_persona" />
+</LinearLayout>

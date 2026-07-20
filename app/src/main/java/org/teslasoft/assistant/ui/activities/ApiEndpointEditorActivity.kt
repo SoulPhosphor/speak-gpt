@@ -42,6 +42,7 @@ import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.fragments.dialogs.AdvancedModelSelectorDialogFragment
+import org.teslasoft.assistant.ui.util.DiscardChangesDialog
 import org.teslasoft.assistant.util.Hash
 
 /**
@@ -514,14 +515,10 @@ class ApiEndpointEditorActivity : FragmentActivity() {
     /** Back / cancel. Confirms first if anything changed. */
     private fun attemptExit() {
         if (snapshot() != initialSnapshot) {
-            MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-                .setMessage(R.string.discard_changes_q)
-                .setPositiveButton(R.string.yes) { _, _ ->
-                    setResult(RESULT_CANCELED)
-                    finish()
-                }
-                .setNegativeButton(R.string.no) { _, _ -> }
-                .show()
+            DiscardChangesDialog.show(this) {
+                setResult(RESULT_CANCELED)
+                finish()
+            }
         } else {
             setResult(RESULT_CANCELED)
             finish()

@@ -56,9 +56,6 @@ class PersonasListActivity : FragmentActivity() {
 
     private var actionBar: ConstraintLayout? = null
 
-    // The persona currently active for the chat, so the list can highlight it.
-    private var currentPersonaId: String = ""
-
     private fun newEmptyPersona(): PersonaObject {
         return PersonaObject("", "")
     }
@@ -109,17 +106,13 @@ class PersonasListActivity : FragmentActivity() {
     }
 
     private var onSelectListener: PersonaListItemAdapter.OnSelectListener = object : PersonaListItemAdapter.OnSelectListener {
-        // Tapping the pill body selects the persona for the chat (the cog edits).
+        // Owner ruling (July 19 2026): this list is pure browse/edit, matching
+        // the System Prompts row - tapping a Companion always opens its edit
+        // screen. There is no "select this Companion" tap action here; saving
+        // in the editor already finishes with that Companion active
+        // (finishWithActive, unchanged), so picking a Companion from Quick
+        // Settings still works, via open-then-save.
         override fun onClick(position: Int) {
-            val label = list[position]["label"] ?: return
-            finishWithActive(label)
-        }
-
-        override fun onLongClick(position: Int) {
-            openEditor(position)
-        }
-
-        override fun onSettingsClick(position: Int) {
             openEditor(position)
         }
     }
@@ -166,8 +159,6 @@ class PersonasListActivity : FragmentActivity() {
 
         listView?.divider = null
 
-        currentPersonaId = intent.getStringExtra("currentPersonaId") ?: ""
-
         personaPreferences = PersonaPreferences.getPersonaPreferences(this)
         initialize()
 
@@ -199,7 +190,6 @@ class PersonasListActivity : FragmentActivity() {
         runOnUiThread {
             adapter = PersonaListItemAdapter(list, this)
             adapter!!.setOnSelectListener(onSelectListener)
-            adapter!!.setSelectedId(currentPersonaId)
             listView!!.adapter = adapter
             adapter!!.notifyDataSetChanged()
         }

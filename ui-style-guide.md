@@ -10,6 +10,49 @@ short pointer here instead of the full history. Read this file before
 adding or touching any shared style, and add new styles' documentation
 and rollout notes here — not back in `CLAUDE.md`.
 
+- **The standard discard-changes dialog (owner ruling, July 20 2026) —
+  use this by name, don't re-describe it.** Any full-screen editor with an
+  explicit Save action must confirm before letting the user back out
+  (toolbar back button or the system back gesture) with unsaved changes.
+  Call `org.teslasoft.assistant.ui.util.DiscardChangesDialog.show(context) {
+  onDiscard }` — it builds the one approved shape: message
+  `@string/discard_changes_q` ("Discard changes?"), positive button
+  `@string/okay` ("Okay") runs the discard callback (finish the screen,
+  changes lost), negative button `@string/btn_cancel` ("Cancel") only
+  dismisses the dialog and leaves the screen exactly as it was. Themed with
+  `R.style.App_MaterialAlertDialog`. Do not reword or restyle it without
+  asking first. First use: `CampaignDetailActivity` (both `btnBack`'s click
+  listener and an `onBackPressedDispatcher.addCallback` for the system
+  back gesture route through one `attemptExit()` that compares a field
+  snapshot against the snapshot taken at load/last-save). Also applied,
+  same day, to the other roleplay-card editors sharing that exact
+  bottom-Save-button shape: `CharacterCardActivity` (serves both the
+  Roleplay Character and Party Member cards — one screen, one fix) and
+  `WorldDetailActivity`. Second use overall: `ApiEndpointEditorActivity`,
+  converted the same day — it already had an equivalent hand-rolled
+  discard-changes dialog with "Yes"/"No" buttons instead of "Okay"/
+  "Cancel"; the owner asked for it to match, so its `attemptExit()` now
+  calls the shared helper too. (`R.string.yes`/`R.string.no` stay in use
+  elsewhere for ordinary delete-confirmation dialogs, a different kind of
+  prompt — this ruling is about the unsaved-changes case specifically,
+  not a blanket Yes/No → Okay/Cancel sweep.) `CampaignDetailActivity` is
+  covered by this same standing rule but doesn't need a fresh listing here
+  each time it's touched.
+- **The top-right disc (floppy-disk) save icon (owner ruling, July 20
+  2026).** For a full-screen editor whose Save action moves from an
+  inline/bottom button into the header, put a floppy-disk icon
+  (`@drawable/ic_save`, the app's existing save glyph) in the action bar's
+  top-right corner using `Widget.App.ActionBar.SecondaryButton` (the "icon
+  on top" pattern — see that style's doc comment in `themes.xml`) — the
+  same icon button geometry as every other action-bar shortcut icon in the
+  app. It performs the same save-in-place action the old button did (does
+  not also close the screen). First use: `CampaignDetailActivity` (removed
+  the bottom `btn_campaign_save` MaterialButton; the icon reuses that
+  view's id, now an `ImageButton` in `action_bar`, recolored for AMOLED the
+  same way `btnBack` already is). Same day, same treatment on
+  `CharacterCardActivity` (`btn_card_save`, covers both Roleplay Character
+  and Party Member) and `WorldDetailActivity` (`btn_world_save`) — every
+  bottom-Save-button roleplay card editor now matches.
 - **App button styles (owner naming, July 18 2026 — supersedes any earlier
   button-styling instruction unless the owner directs otherwise).** Three
   named button styles, `values/themes.xml`, each a standalone style a
@@ -145,14 +188,31 @@ and rollout notes here — not back in `CLAUDE.md`.
   Settings). Manager mode uses `Widget.App.Row.TitleOnly` + chevron (no
   content preview — any description/preview text is dropped, owner
   decision). Pick mode is UNTOUCHED: it keeps its own "checked tile"
-  layout (the currently-picked item drawn highlighted/filled), the same
-  scheme the Personas picker also uses, since there tapping selects rather
-  than opens something and a chevron would mislead. Each mode has its own
-  item layout XML; the adapter picks one via a `pickMode: Boolean` fixed
-  for the adapter's whole lifetime (read once from the activity's intent
-  extra), so the two never mix within one instance's recycled views.
-  Don't touch pick mode when converting a manager-mode list unless the
-  owner asks for that specifically.
+  layout (the currently-picked item drawn highlighted/filled). Each mode
+  has its own item layout XML; the adapter picks one via a `pickMode:
+  Boolean` fixed for the adapter's whole lifetime (read once from the
+  activity's intent extra), so the two never mix within one instance's
+  recycled views. Don't touch pick mode when converting a manager-mode
+  list unless the owner asks for that specifically.
+  **The Personas/Companions list is DIFFERENT (owner ruling, July 19 2026
+  evening — supersedes the July 18 description above, which wrongly
+  called it a "checked tile" pick-mode scheme with no chevron):**
+  `PersonasListActivity`/`view_persona_item.xml` is a single screen with
+  no `pickMode` split, used identically whether reached from Characters,
+  Quick Settings, or ChatActivity's "create first companion" prompt. It
+  never shows which companion is "currently active" — no highlight, no
+  color inversion, ever; that concept lives entirely in Quick Settings and
+  the last-used-companion logic (see "New-chat companion selection" below
+  for how last-used is recorded). Tapping a row always opens that
+  Companion's edit screen (`EditPersonaActivity`) — matching System
+  Prompts' manager-mode row exactly (`Widget.App.Row.TitleOnly` +
+  `TextColumn` + `Title` + `Chevron`) but with a leading
+  `Widget.App.Row.ProfileImage` for the Companion's picture — there is no
+  separate "select" tap action on the row at all. Picking a companion from
+  Quick Settings still works: opening a row's editor and hitting Save
+  calls the same `finishWithActive` the row tap used to call directly, so
+  the result still flows back to Quick Settings/Characters — it just takes
+  an extra explicit step (open, then Save) instead of an instant tap.
   **Caveat the owner should know:** a style only fixes how a view looks —
   it can't guarantee a new row's structure is right (that all pieces
   exist, in order, each with the correct style). Using these styles makes
@@ -193,6 +253,22 @@ and rollout notes here — not back in `CLAUDE.md`.
   just reuse of this style as-is — deliberately deferred pending the
   owner's review of the slices already built. Do not roll this out
   further without the owner's go-ahead.
+  **Rollout status update (July 19 2026, evening).** Converted the
+  Personas/Companions list (`view_persona_item.xml`,
+  `PersonaListItemAdapter.kt`) from its old raw hand-built row (a custom
+  `ConstraintLayout` with a manually swapped background/text-color
+  "selected" state and a plain `ImageButton` chevron) to the shared
+  styles: `Widget.App.Row.TitleOnly` + `Widget.App.Row.ProfileImage` (the
+  leading Companion picture, unchanged in size/position — still 48dp) +
+  `Widget.App.Row.TextColumn` + `Widget.App.Row.Title` +
+  `Widget.App.Row.Chevron`. This is the **first real use of `TitleOnly` +
+  `Icon` together** (every prior icon/avatar row use — the four "General"
+  Settings entries — paired the icon with `WithSubtitle`); the
+  "with an icon" shorthand already covered this combination, it just
+  hadn't been built yet. See "The Personas/Companions list is DIFFERENT"
+  above for the interaction-model change (no highlight, tap opens the
+  editor) that came with this — it is not a pure visual conversion like
+  the other rows in this list.
 - **Shared screen-header styles (owner ruling, July 19 2026).** The solid
   bar with a back chevron and a title at the top of a full-screen activity
   used to be hand-copied raw XML in every screen, same problem the row
