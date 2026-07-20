@@ -1090,6 +1090,12 @@ non-storage path is answered (inline integrity check → repair flow).
     dedicated area.**
 13. ~~ungated health log lines~~ — **B13 RESOLVED (owner July 16 2026) — see
     §15.15.**
+14. **NEW (owner July 16 2026) — Profile Images database, §15.16:** a THIRD
+    database (`profile_images.db`) discovered mid-design now gets the SAME
+    backup, integrity-check, persistent-banner, and repair/replace treatment
+    as memory and lorebook — not a lighter version. It differs only in not
+    needing full degraded-mode/feature-disable (nothing else depends on it to
+    function). Banner wording not yet written (Phase 2).
 
 ### 15.14 Screen placement — new "Memory Backup & Restore" area (B12 RESOLVED, owner July 16 2026)
 
@@ -1282,12 +1288,19 @@ type.** Do NOT implement any combined archive or single-file backup design.
   - Memory database
   - Lorebook database
   - Chats
+  - **Profile Images catalog** (`profile_images.db` — added §15.16, owner July
+    16 2026; a THIRD real database, discovered mid-design, was found to have
+    NO backup coverage at all)
 - Example filenames (same timestamp across one run):
   - `memory_backup_2026-07-15_1430.db`
   - `lorebook_backup_2026-07-15_1430.db`
   - `chats_backup_2026-07-15_1430.zip`
+  - `profile_images_backup_2026-07-15_1430.db`
 - All files from one run share the same timestamp, but each is written,
-  verified, and **restorable independently.**
+  verified, and **restorable independently.** Owner's reasoning (July 16
+  2026): "if there's a daily or weekly backup its negligible size so it can be
+  included" — the catalog is tiny (hashes + timestamps only, no image bytes),
+  so it rides along in the same run at effectively no cost.
 
 **Required behavior:**
 - Do NOT combine memory, lorebooks, and chats into one backup file.
@@ -1328,6 +1341,62 @@ type.** Do NOT implement any combined archive or single-file backup design.
 - A4 (§15.12) gains the backup-folder location + `Open Backup Folder` button.
 - A6's preserved-file location (a quarantined corrupt DB) stays its own
   `Open File Location`; that is a different location from the backup folder.
+
+### 15.16 Profile Images database — SAME treatment as memory/lorebook (RESOLVED, owner July 16 2026)
+
+**Discovery:** a THIRD real database, `profile_images.db`, was found mid-design
+(part of the new Profile Images gallery feature, merged to `main` after this
+document was started). It is a small catalog (content hash + timestamp per
+image; the actual JPEG files live separately on disk) and, until this
+section, had **zero backup or integrity coverage** — not even the old
+combined export touched it.
+
+**Owner ruling: give it the full A1/A2/A3 treatment — do NOT water it down.**
+An earlier draft of this section proposed a lighter, silent-rebuild-only
+path for this database on the reasoning that the catalog is easy to
+regenerate from the files on disk. **The owner rejected that as not good
+enough** ("why not let the user know it's degraded? ... don't be a dick") —
+being easy to fix does not mean the user doesn't deserve to be told. Corrected
+design:
+
+1. **Backed up** in the same daily run as the other databases (§15.13 above),
+   not treated as optional because it's "less important."
+2. **Checked** by the same `Check Database Integrity` action (§15.9/B8) — one
+   more line in the per-database result, not a separate system. Cheap: a small
+   catalog, a standard SQLite integrity check.
+3. **On a problem, the SAME persistent, must-be-acknowledged banner as A2** —
+   the owner's own words: "There should be a snackbar they have to
+   acknowledge." Not a vanishing Toast (per the app-wide rule and the existing
+   §15.2a precedent) — the same persistent top-of-new-chat banner pattern,
+   reused for this database.
+4. **The SAME repair/replace choice as the others** — owner: "potentially
+   repair replace just like the others." Two repair paths, offered together
+   like A1:
+   - **Rebuild from files** — since the catalog only records what already
+     exists on disk, the app can regenerate it by rescanning the image files
+     and relisting their hashes. This is the SAFE auto-repair path (nothing is
+     guessed or invented) and should be attempted first/automatically, the
+     same way A1's "app repaired it itself" variant works — but per the
+     owner's correction, the user is ALWAYS told when this happens (the
+     existing `Database Repaired` dialog, A1), never a silent fix.
+   - **Revert to Last Good Database** — same restore-from-backup action as
+     the other databases (§15.2b), if a rebuild-from-files isn't possible or
+     doesn't fully recover.
+5. **What's different from memory/lorebook (owner-confirmed, not a
+   downgrade):** losing this database does **not** disable chat and does
+   **not** need the full degraded-mode "feature turned off" treatment (§15.2a)
+   the way memory/lorebooks do — there's no equivalent of the Archivist-writes-
+   to-a-bad-database risk here, since nothing else in the app depends on this
+   catalog to function. So no A3-equivalent hard-block is needed. The banner
+   still names the problem and offers Repair / OK, same shape as A2, just
+   without a feature-disable behind it.
+
+**Wording:** not yet written (Phase 2, same as the other unwritten banner
+variants) — but the banner text should follow the A2 pattern
+(`[Feature] is currently turned off because of a database problem. Tap Repair
+to fix it.` → adapted to name the image catalog) once the owner is ready to
+approve it. Owner's own plain-language framing to work from: "let them know
+their images are [messed up]."
 
 ### 15.11 What §15 does NOT change
 
