@@ -365,11 +365,17 @@ class EditPersonaActivity : FragmentActivity() {
         additionalLoreBookIds = ArrayList(additionalLoreBookIds.filter { store.getBook(it) != null })
 
         if (additionalLoreBookIds.isEmpty()) {
+            // Matches Widget.App.Field.Hint's spec (13sp / text_subtitle / 2dp
+            // top margin) so this reads the same as every other explanatory
+            // line on the screen, even though it's built in code rather than
+            // XML (owner ruling, July 20 2026 - style only, wording unchanged).
             val empty = TextView(this)
             empty.text = getString(R.string.persona_no_additional_lorebooks)
             empty.setTextColor(resources.getColor(R.color.text_subtitle, theme))
-            empty.textSize = 14f
-            empty.setPadding(0, 0, 0, 16)
+            empty.textSize = 13f
+            val params = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+            params.topMargin = dpToPx(2)
+            empty.layoutParams = params
             container.addView(empty)
             return
         }
