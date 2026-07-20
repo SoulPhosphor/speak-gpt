@@ -104,22 +104,14 @@
                 android:textSize="13sp" />
 
             <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
+                style="@style/Widget.App.Field.Label"
                 android:layout_marginTop="16dp"
-                android:text="@string/mem_pers_field_name"
-                android:textColor="?attr/colorPrimary"
-                android:textSize="15sp"
-                android:textStyle="bold" />
+                android:text="@string/mem_pers_field_name" />
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/field_card_name"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:background="@drawable/bg_field_box"
+                style="@style/Widget.App.Field.Box"
                 android:inputType="textCapSentences"
-                android:padding="12dp"
                 android:singleLine="true" />
 
             <Space
@@ -127,113 +119,73 @@
                 android:layout_height="12dp" />
 
             <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/card_field_species"
-                android:textColor="?attr/colorPrimary"
-                android:textSize="15sp"
-                android:textStyle="bold" />
+                style="@style/Widget.App.Field.Label"
+                android:text="@string/card_field_species" />
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/field_card_species"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:background="@drawable/bg_field_box"
+                style="@style/Widget.App.Field.Box"
                 android:gravity="top"
-                android:inputType="textMultiLine|textCapSentences"
-                android:padding="12dp" />
+                android:inputType="textMultiLine|textCapSentences" />
 
             <Space
                 android:layout_width="match_parent"
                 android:layout_height="12dp" />
 
             <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/card_field_class"
-                android:textColor="?attr/colorPrimary"
-                android:textSize="15sp"
-                android:textStyle="bold" />
+                style="@style/Widget.App.Field.Label"
+                android:text="@string/card_field_class" />
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/field_card_class"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:background="@drawable/bg_field_box"
+                style="@style/Widget.App.Field.Box"
                 android:gravity="top"
-                android:inputType="textMultiLine|textCapSentences"
-                android:padding="12dp" />
+                android:inputType="textMultiLine|textCapSentences" />
 
             <Space
                 android:layout_width="match_parent"
                 android:layout_height="12dp" />
 
             <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/card_field_core_personality"
-                android:textColor="?attr/colorPrimary"
-                android:textSize="15sp"
-                android:textStyle="bold" />
+                style="@style/Widget.App.Field.Label"
+                android:text="@string/card_field_core_personality" />
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/field_card_core_personality"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:background="@drawable/bg_field_box"
+                style="@style/Widget.App.Field.Box"
                 android:gravity="top"
                 android:inputType="textMultiLine|textCapSentences"
-                android:minLines="2"
-                android:padding="12dp" />
+                android:minLines="2" />
 
             <Space
                 android:layout_width="match_parent"
                 android:layout_height="12dp" />
 
             <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/card_field_physical_description"
-                android:textColor="?attr/colorPrimary"
-                android:textSize="15sp"
-                android:textStyle="bold" />
+                style="@style/Widget.App.Field.Label"
+                android:text="@string/card_field_physical_description" />
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/field_card_physical_description"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:background="@drawable/bg_field_box"
+                style="@style/Widget.App.Field.Box"
                 android:gravity="top"
                 android:inputType="textMultiLine|textCapSentences"
-                android:minLines="2"
-                android:padding="12dp" />
+                android:minLines="2" />
 
             <Space
                 android:layout_width="match_parent"
                 android:layout_height="12dp" />
 
             <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/card_field_goals_drives"
-                android:textColor="?attr/colorPrimary"
-                android:textSize="15sp"
-                android:textStyle="bold" />
+                style="@style/Widget.App.Field.Label"
+                android:text="@string/card_field_goals_drives" />
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/field_card_goals_drives"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:background="@drawable/bg_field_box"
+                style="@style/Widget.App.Field.Box"
                 android:gravity="top"
                 android:inputType="textMultiLine|textCapSentences"
-                android:minLines="2"
-                android:padding="12dp" />
+                android:minLines="2" />
 
             <Space
                 android:layout_width="match_parent"
@@ -249,22 +201,14 @@
                 android:visibility="gone">
 
                 <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/card_field_speech_style"
-                    android:textColor="?attr/colorPrimary"
-                    android:textSize="15sp"
-                    android:textStyle="bold" />
+                    style="@style/Widget.App.Field.Label"
+                    android:text="@string/card_field_speech_style" />
 
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/field_card_speech_style"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp"
-                    android:background="@drawable/bg_field_box"
+                    style="@style/Widget.App.Field.Box"
                     android:gravity="top"
-                    android:inputType="textMultiLine|textCapSentences"
-                    android:padding="12dp" />
+                    android:inputType="textMultiLine|textCapSentences" />
 
                 <Space
                     android:layout_width="match_parent"

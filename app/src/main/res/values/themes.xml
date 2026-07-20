@@ -396,6 +396,33 @@
         <item name="layout_constraintTop_toTopOf">parent</item>
     </style>
 
+    <!-- Shared label-above-box form field (owner ruling, July 20 2026; see
+         ui-style-guide.md for the full writeup). First built by hand,
+         repeated per field, on the roleplay character card
+         (activity_character_card.xml) - these two styles are that same
+         look, de-duplicated. Deliberately no Material floating/embedded
+         hint anywhere: the field name is always this separate Label
+         TextView above the box, never a TextInputLayout hint.
+         Widget.App.Field.Box intentionally leaves layout_height as
+         wrap_content (not baked to a fixed size) so fields with different
+         amounts of text - a one-line name vs. a five-line description -
+         share the same skin without being forced to the same height. -->
+    <style name="Widget.App.Field.Label" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textColor">?attr/colorPrimary</item>
+        <item name="android:textSize">15sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="Widget.App.Field.Box" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">6dp</item>
+        <item name="android:background">@drawable/bg_field_box</item>
+        <item name="android:padding">12dp</item>
+    </style>
+
     <style name="BottomNavigationView.ActiveIndicator" parent="Widget.Material3.BottomNavigationView.ActiveIndicator">
         <item name="android:color">@color/accent_900</item>
     </style>
