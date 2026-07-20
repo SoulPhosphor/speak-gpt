@@ -59,9 +59,12 @@ and rollout notes here — not back in `CLAUDE.md`.
   calls the shared helper too. (`R.string.yes`/`R.string.no` stay in use
   elsewhere for ordinary delete-confirmation dialogs, a different kind of
   prompt — this ruling is about the unsaved-changes case specifically,
-  not a blanket Yes/No → Okay/Cancel sweep.) `CampaignDetailActivity` is
-  covered by this same standing rule but doesn't need a fresh listing here
-  each time it's touched.
+  not a blanket Yes/No → Okay/Cancel sweep.) Also applied, same day, to
+  `CompanionDetailActivity` (the Edit Companion screen, converted from a
+  bottom Save button to the header save icon at the same time — see the
+  save-icon bullet below). `CampaignDetailActivity` is covered by this
+  same standing rule but doesn't need a fresh listing here each time it's
+  touched.
 - **The top-right disc (floppy-disk) save icon (owner ruling, July 20
   2026).** For a full-screen editor whose Save action moves from an
   inline/bottom button into the header, put a floppy-disk icon
@@ -76,7 +79,13 @@ and rollout notes here — not back in `CLAUDE.md`.
   same way `btnBack` already is). Same day, same treatment on
   `CharacterCardActivity` (`btn_card_save`, covers both Roleplay Character
   and Party Member) and `WorldDetailActivity` (`btn_world_save`) — every
-  bottom-Save-button roleplay card editor now matches.
+  bottom-Save-button roleplay card editor now matches. Also applied, same
+  day, to `CompanionDetailActivity` (`btn_companion_save`) — the Edit
+  Companion screen had no separate Cancel button to begin with, only the
+  bottom Save; that Save moved to the header the same way, and its back
+  button/system-back-gesture now route through `attemptExit()` +
+  `DiscardChangesDialog` against a one-field snapshot (participation is
+  the only field this screen writes).
 - **App button styles (owner naming, July 18 2026 — supersedes any earlier
   button-styling instruction unless the owner directs otherwise).** Three
   named button styles, `values/themes.xml`, each a standalone style a

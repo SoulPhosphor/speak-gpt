@@ -28,6 +28,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.addCallback
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
@@ -40,6 +41,7 @@ import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.memory.CompanionRecord
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.theme.ThemeManager
+import org.teslasoft.assistant.ui.util.DiscardChangesDialog
 
 /**
  * Phase 5 companion detail/edit page (app_adaptation_notes §Characters area).
@@ -59,12 +61,27 @@ import org.teslasoft.assistant.theme.ThemeManager
  *
  * All store work runs off the main thread; every failure degrades to a toast,
  * never a crash — the memory-UI contract.
+ *
+ * Header/save/discard shape (owner ruling, July 20 2026): matches the
+ * roleplay card editors (CampaignDetailActivity / CharacterCardActivity /
+ * WorldDetailActivity) — a floppy-disk save icon in the action bar
+ * (`Widget.App.ActionBar.SecondaryButton`) saves in place instead of a
+ * bottom Save button, and backing out (toolbar back or the system back
+ * gesture) with an unsaved participation change confirms via the shared
+ * `DiscardChangesDialog`. See ui-style-guide.md.
  */
 class CompanionDetailActivity : FragmentActivity() {
 
     private var preferences: Preferences? = null
     private var chatId = ""
     private var companionId = ""
+
+    /** Guards Save/dirty-checking until the record has loaded. */
+    private var ready = false
+
+    /** Snapshot of the editable fields as last loaded/saved, for the
+     *  discard-changes confirmation on back-out (see DiscardChangesDialog). */
+    private var initialSnapshot: String = ""
 
     private var actionBar: ConstraintLayout? = null
     private var btnBack: ImageButton? = null
@@ -75,7 +92,7 @@ class CompanionDetailActivity : FragmentActivity() {
     private var rowParticipation: LinearLayout? = null
     private var textParticipationValue: TextView? = null
     private var btnMemories: MaterialButton? = null
-    private var btnSave: MaterialButton? = null
+    private var btnSave: ImageButton? = null
     private var btnDelete: MaterialButton? = null
 
     // The loaded record; status drives the draft/approve section.
@@ -96,7 +113,9 @@ class CompanionDetailActivity : FragmentActivity() {
         bindViews()
         applyTheme()
 
-        btnBack?.setOnClickListener { finish() }
+        onBackPressedDispatcher.addCallback(this) { attemptExit() }
+
+        btnBack?.setOnClickListener { attemptExit() }
         rowParticipation?.setOnClickListener { showParticipationPicker() }
         btnApprove?.setOnClickListener { approve() }
         btnMemories?.setOnClickListener { openMemories() }
@@ -115,7 +134,7 @@ class CompanionDetailActivity : FragmentActivity() {
         rowParticipation = findViewById(R.id.row_participation)
         textParticipationValue = findViewById(R.id.text_participation_value)
         btnMemories = findViewById(R.id.btn_memories)
-        btnSave = findViewById(R.id.btn_save)
+        btnSave = findViewById(R.id.btn_companion_save)
         btnDelete = findViewById(R.id.btn_delete)
     }
 
@@ -144,6 +163,9 @@ class CompanionDetailActivity : FragmentActivity() {
         refreshParticipationRow()
 
         draftContainer?.visibility = if (c.status == "draft") View.VISIBLE else View.GONE
+
+        ready = true
+        initialSnapshot = snapshot()
     }
 
     /* ------------------------------ participation ------------------------------ */
@@ -177,6 +199,24 @@ class CompanionDetailActivity : FragmentActivity() {
             .show()
     }
 
+    /* ------------------------------ exit / discard ------------------------------ */
+
+    /** Serialised form of the editable fields, used only for change detection
+     *  against initialSnapshot. Participation is the only field this screen
+     *  writes. */
+    private fun snapshot(): String = participation
+
+    /** Back / cancel. Confirms first if anything changed since the last load
+     *  or save (DiscardChangesDialog — the app's standard unsaved-changes
+     *  confirmation). */
+    private fun attemptExit() {
+        if (ready && snapshot() != initialSnapshot) {
+            DiscardChangesDialog.show(this) { finish() }
+        } else {
+            finish()
+        }
+    }
+
     /* ------------------------------ actions ------------------------------ */
 
     private fun approve() {
@@ -191,6 +231,7 @@ class CompanionDetailActivity : FragmentActivity() {
     }
 
     private fun save() {
+        if (!ready) return
         // Participation is the only field this screen still writes; the
         // essence/relationship/limits/adaptations columns stay untouched.
         val id = companionId
@@ -199,8 +240,8 @@ class CompanionDetailActivity : FragmentActivity() {
         runOffThread {
             MemoryStore.getInstance(this).updateCompanionParticipation(id, part)
             runOnUiThread {
+                initialSnapshot = snapshot()
                 Toast.makeText(this, R.string.mem_comp_saved_toast, Toast.LENGTH_SHORT).show()
-                finish()
             }
         }
     }
@@ -281,6 +322,7 @@ class CompanionDetailActivity : FragmentActivity() {
             }
             actionBar?.setBackgroundColor(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
             btnBack?.backgroundTintList = ColorStateList.valueOf(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
+            btnSave?.backgroundTintList = ColorStateList.valueOf(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
         } else {
             window.setBackgroundDrawable(SurfaceColors.SURFACE_0.getColor(this).toDrawable())
             if (Build.VERSION.SDK_INT <= 34) {
@@ -289,6 +331,7 @@ class CompanionDetailActivity : FragmentActivity() {
             }
             actionBar?.setBackgroundColor(SurfaceColors.SURFACE_4.getColor(this))
             btnBack?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(this))
+            btnSave?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(this))
         }
     }
 

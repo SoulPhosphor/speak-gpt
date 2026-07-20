@@ -59,6 +59,14 @@
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
+
+        <ImageButton
+            android:id="@+id/btn_companion_save"
+            style="@style/Widget.App.ActionBar.SecondaryButton"
+            android:contentDescription="@string/btn_save"
+            android:src="@drawable/ic_save"
+            android:tooltipText="@string/btn_save"
+            app:srcCompat="@drawable/ic_save" />
     </androidx.constraintlayout.widget.ConstraintLayout>
 
     <ScrollView
@@ -175,14 +183,6 @@
                 android:layout_marginTop="24dp"
                 app:icon="@drawable/ic_storage"
                 android:text="@string/title_memories" />
-
-            <!-- ============ Save ============ -->
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_save"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="@string/mem_comp_save" />
 
             <!-- ============ Delete ============ -->
             <com.google.android.material.button.MaterialButton

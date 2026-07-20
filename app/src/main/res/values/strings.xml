@@ -1424,7 +1424,6 @@
     <string name="mem_comp_participation_hint">Full: keeps this companion\'s own relationship history and global memory. Global only: a throwaway companion that keeps no relationship history, only shared facts. None: bypass the memory system entirely for this companion.</string>
 
     <!-- Save -->
-    <string name="mem_comp_save">Save</string>
     <string name="mem_comp_saved_toast">Companion saved.</string>
     <string name="mem_comp_load_failed">Could not load this companion.</string>
 
