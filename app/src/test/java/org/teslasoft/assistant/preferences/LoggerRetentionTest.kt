@@ -25,9 +25,9 @@ import java.time.format.DateTimeFormatter
 
 class LoggerRetentionTest {
 
-    private val fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
+    private val fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd h:mm a")
     private fun entry(ts: LocalDateTime, msg: String) = "[${ts.format(fmt)}] [Tag] [INFO] $msg\n"
-    private fun headerCount(log: String) = Regex("""(?m)^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}] """).findAll(log).count()
+    private fun headerCount(log: String) = Regex("""(?m)^\[\d{4}-\d{2}-\d{2} \d{1,2}:\d{2} [AP]M] """).findAll(log).count()
 
     @Test fun emptyStaysEmpty() {
         assertEquals("", Logger.trimByEntries("", 500, 30))

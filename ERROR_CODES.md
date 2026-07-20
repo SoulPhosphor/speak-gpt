@@ -158,7 +158,7 @@ character-count trim in `Logger` (see §7).
 
 **Trim by whole entries, never by physical lines.** A single entry is often
 multiple lines (a `GenError` block, a multi-line stack trace). An "entry" is
-defined as everything from one `[yyyy-MM-dd HH:mm:ss] …` header line up to — but
+defined as everything from one `[yyyy-MM-dd h:mm a] …` header line up to — but
 not including — the next header line. Retention counts and removes **whole
 entries**, oldest first; it must never cut a multi-line entry in half the way the
 current character-count trim can. Age is read from the entry's header timestamp.
@@ -183,7 +183,7 @@ Logger.log(context, "error", "GenError", "error", <message>)
 
 (The internal log-type key that routes to the Error Log is an implementation
 detail in §7 — the existing "crash" channel becomes the Error Log.) `Logger`
-already prefixes every line with `[yyyy-MM-dd HH:mm:ss] [GenError] [ERROR]`, so
+already prefixes every line with `[yyyy-MM-dd h:mm a] [GenError] [ERROR]`, so
 **date/time, tag, and level are automatic** — they must not be duplicated inside
 the message body.
 
@@ -429,7 +429,7 @@ trust the detection code for *what* happened and the context flags for *why*.
   (`MAX_LOG_CHARS`) with per-log limits: Error Log = 30 days **or** 500 entries,
   Voice Debug Log = 7 days **or** 1,000 entries, whichever limit is hit first.
   **Trim whole entries, not physical lines.** An entry spans from one
-  `[yyyy-MM-dd HH:mm:ss] …` header line up to the next header line, so a
+  `[yyyy-MM-dd h:mm a] …` header line up to the next header line, so a
   multi-line stack trace or `GenError` block counts as **one** entry and is
   removed or kept as a unit — never split. Split the stored log on the header
   pattern to get entries, drop oldest-first until both the age and count limits

@@ -157,10 +157,11 @@ class Logger {
             val lvl = level.lowercase()
             if (lvl != "info" && lvl != "error" && lvl != "warning" && lvl != "debug" && lvl != "verbose") return
 
-            // Local time, second precision. The ISO/UTC instant this used
+            // Local time, minute precision, 12-hour clock (owner-specified
+            // format, July 20 2026: "4:15 PM"). The ISO/UTC instant this used
             // to print ("2026-06-12T19:03:31.903759Z") was unreadable on a
-            // phone and in the wrong timezone, which made correlating a
-            // log line with "the turn that just failed" impossible.
+            // phone and in the wrong timezone, which made correlating a log
+            // line with "the turn that just failed" impossible.
             val timestamp = LocalDateTime.now().format(LOG_TIME_FORMAT)
             val logString =
                 "[$timestamp] [$tag] [${lvl.uppercase()}] $message\n"
@@ -217,7 +218,7 @@ class Logger {
         }
 
         private val LOG_TIME_FORMAT: DateTimeFormatter =
-            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
+            DateTimeFormatter.ofPattern("yyyy-MM-dd h:mm a")
 
         // Per-log retention (see ERROR_CODES.md section 4.2). Voice diagnostics are
         // far higher volume, so the Voice Debug Log keeps more entries over a
@@ -238,11 +239,18 @@ class Logger {
         // headers (it never should — every line we write starts with one).
         private const val FALLBACK_MAX_CHARS = 200_000
 
-        // A new entry begins at a line starting with the "[yyyy-MM-dd HH:mm:ss] "
+        // A new entry begins at a line starting with the "[yyyy-MM-dd h:mm a] "
         // header Logger writes; everything up to the next such line (e.g. a
-        // multi-line stack trace) belongs to the same entry.
+        // multi-line stack trace) belongs to the same entry. The seconds field
+        // and the AM/PM suffix are both optional in the regex (though not in
+        // LOG_TIME_FORMAT) so entries already on a device from before the
+        // July 20 2026 12-hour switch — either the original 24-hour format or
+        // the brief seconds-included 12-hour format — still match as header
+        // lines and split correctly; such an old-format timestamp still fails
+        // to parse against LOG_TIME_FORMAT below and is handled by the
+        // existing "unparseable timestamp is kept" rule.
         private val ENTRY_HEADER =
-            Regex("""(?m)^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})] """)
+            Regex("""(?m)^\[(\d{4}-\d{2}-\d{2} \d{1,2}:\d{2}(?::\d{2})?(?: [AP]M)?)] """)
 
         /**
          * Trim a stored log by **whole entries** — never by physical lines — so a
@@ -479,7 +487,7 @@ class Logger {
          * header. Falls back to a capped head of the dump if the main thread
          * cannot be located (still bounded, never the whole all-thread dump).
          * Every kept line is indented two spaces so none can accidentally match
-         * the "[yyyy-MM-dd HH:mm:ss] " entry header and split this record when
+         * the "[yyyy-MM-dd h:mm a] " entry header and split this record when
          * the log is later trimmed by [trimByEntries].
          */
         private fun extractMainThread(lines: List<String>): String? {
