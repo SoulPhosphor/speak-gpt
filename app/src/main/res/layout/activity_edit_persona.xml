@@ -75,124 +75,159 @@
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent" />
 
-            <com.google.android.material.textfield.TextInputLayout
-                android:id="@+id/textInputLayoutLabel"
+            <!-- Companion name (no hint line - none was ever owner-approved for
+                 this field). text_field_label_error is a persistent inline
+                 error (house rule: field errors set on the input itself, never
+                 a toast/dialog) shown by EditPersonaActivity.save() when the
+                 name is empty, in place of the old TextInputLayout.error. -->
+            <TextView
+                android:id="@+id/label_field_label"
+                style="@style/Widget.App.Field.Label"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
                 android:layout_marginStart="24dp"
                 android:layout_marginTop="16dp"
                 android:layout_marginEnd="24dp"
-                android:textColorHint="@color/text_hint"
-                app:boxStrokeColor="@drawable/box_stroke_color"
-                app:boxCornerRadiusBottomEnd="16dp"
-                app:boxCornerRadiusBottomStart="16dp"
-                app:boxCornerRadiusTopEnd="16dp"
-                app:boxCornerRadiusTopStart="16dp"
+                android:text="@string/persona_friendly_name"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toBottomOf="@+id/img_persona_avatar">
+                app:layout_constraintTop_toBottomOf="@+id/img_persona_avatar" />
 
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/field_label"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:hint="@string/persona_friendly_name"
-                    android:singleLine="true"
-                    android:textColorHint="@color/text_hint" />
-            </com.google.android.material.textfield.TextInputLayout>
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/field_label"
+                style="@style/Widget.App.Field.Box"
+                android:layout_width="0dp"
+                android:layout_marginStart="24dp"
+                android:layout_marginEnd="24dp"
+                android:singleLine="true"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/label_field_label" />
 
-            <com.google.android.material.textfield.TextInputLayout
-                android:id="@+id/textInputLayoutPrompt"
+            <TextView
+                android:id="@+id/text_field_label_error"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
+                android:layout_marginStart="24dp"
+                android:layout_marginTop="4dp"
+                android:layout_marginEnd="24dp"
+                android:textColor="?attr/colorError"
+                android:textSize="13sp"
+                android:visibility="gone"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/field_label" />
+
+            <TextView
+                android:id="@+id/label_field_prompt"
+                style="@style/Widget.App.Field.Label"
+                android:layout_width="0dp"
                 android:layout_marginStart="24dp"
                 android:layout_marginTop="12dp"
                 android:layout_marginEnd="24dp"
-                android:textColorHint="@color/text_hint"
-                app:boxStrokeColor="@drawable/box_stroke_color"
-                app:boxCornerRadiusBottomEnd="16dp"
-                app:boxCornerRadiusBottomStart="16dp"
-                app:boxCornerRadiusTopEnd="16dp"
-                app:boxCornerRadiusTopStart="16dp"
-                app:helperTextEnabled="true"
-                app:helperText="@string/persona_prompt_help"
+                android:text="@string/persona_prompt_hint"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toBottomOf="@+id/textInputLayoutLabel">
+                app:layout_constraintTop_toBottomOf="@+id/text_field_label_error" />
 
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/field_prompt"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:gravity="top|start"
-                    android:hint="@string/persona_prompt_hint"
-                    android:inputType="textMultiLine|textCapSentences"
-                    android:minLines="5"
-                    android:textColorHint="@color/text_hint" />
-            </com.google.android.material.textfield.TextInputLayout>
-
-            <com.google.android.material.textfield.TextInputLayout
-                android:id="@+id/textInputLayoutActivation"
+            <TextView
+                android:id="@+id/hint_field_prompt"
+                style="@style/Widget.App.Field.Hint"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
                 android:layout_marginStart="24dp"
                 android:layout_marginEnd="24dp"
-                android:textColorHint="@color/text_hint"
-                app:boxStrokeColor="@drawable/box_stroke_color"
-                app:boxCornerRadiusBottomEnd="16dp"
-                app:boxCornerRadiusBottomStart="16dp"
-                app:boxCornerRadiusTopEnd="16dp"
-                app:boxCornerRadiusTopStart="16dp"
-                app:helperTextEnabled="true"
-                app:helperText="@string/persona_activation_help"
+                android:text="@string/persona_prompt_help"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toBottomOf="@+id/textInputLayoutPrompt">
+                app:layout_constraintTop_toBottomOf="@+id/label_field_prompt" />
 
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/field_activation_prompt"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:clickable="true"
-                    android:cursorVisible="false"
-                    android:focusable="false"
-                    android:focusableInTouchMode="false"
-                    android:hint="@string/persona_activation_hint"
-                    android:singleLine="true"
-                    android:textColorHint="@color/text_hint" />
-            </com.google.android.material.textfield.TextInputLayout>
-
-            <com.google.android.material.textfield.TextInputLayout
-                android:id="@+id/textInputLayoutCoreLoreBook"
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/field_prompt"
+                style="@style/Widget.App.Field.Box"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
+                android:layout_marginStart="24dp"
+                android:layout_marginEnd="24dp"
+                android:gravity="top|start"
+                android:inputType="textMultiLine|textCapSentences"
+                android:minLines="5"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/hint_field_prompt" />
+
+            <TextView
+                android:id="@+id/label_field_activation_prompt"
+                style="@style/Widget.App.Field.Label"
+                android:layout_width="0dp"
                 android:layout_marginStart="24dp"
                 android:layout_marginTop="12dp"
                 android:layout_marginEnd="24dp"
-                android:textColorHint="@color/text_hint"
-                app:boxStrokeColor="@drawable/box_stroke_color"
-                app:boxCornerRadiusBottomEnd="16dp"
-                app:boxCornerRadiusBottomStart="16dp"
-                app:boxCornerRadiusTopEnd="16dp"
-                app:boxCornerRadiusTopStart="16dp"
-                app:helperTextEnabled="true"
-                app:helperText="@string/persona_core_lorebook_help"
+                android:text="@string/persona_activation_hint"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toBottomOf="@+id/textInputLayoutActivation">
+                app:layout_constraintTop_toBottomOf="@+id/field_prompt" />
 
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/field_core_lorebook"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:clickable="true"
-                    android:cursorVisible="false"
-                    android:focusable="false"
-                    android:focusableInTouchMode="false"
-                    android:hint="@string/persona_core_lorebook_hint"
-                    android:singleLine="true"
-                    android:textColorHint="@color/text_hint" />
-            </com.google.android.material.textfield.TextInputLayout>
+            <TextView
+                android:id="@+id/hint_field_activation_prompt"
+                style="@style/Widget.App.Field.Hint"
+                android:layout_width="0dp"
+                android:layout_marginStart="24dp"
+                android:layout_marginEnd="24dp"
+                android:text="@string/persona_activation_help"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/label_field_activation_prompt" />
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/field_activation_prompt"
+                style="@style/Widget.App.Field.Box"
+                android:layout_width="0dp"
+                android:layout_marginStart="24dp"
+                android:layout_marginEnd="24dp"
+                android:clickable="true"
+                android:cursorVisible="false"
+                android:focusable="false"
+                android:focusableInTouchMode="false"
+                android:singleLine="true"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/hint_field_activation_prompt" />
+
+            <TextView
+                android:id="@+id/label_field_core_lorebook"
+                style="@style/Widget.App.Field.Label"
+                android:layout_width="0dp"
+                android:layout_marginStart="24dp"
+                android:layout_marginTop="12dp"
+                android:layout_marginEnd="24dp"
+                android:text="@string/persona_core_lorebook_hint"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/field_activation_prompt" />
+
+            <TextView
+                android:id="@+id/hint_field_core_lorebook"
+                style="@style/Widget.App.Field.Hint"
+                android:layout_width="0dp"
+                android:layout_marginStart="24dp"
+                android:layout_marginEnd="24dp"
+                android:text="@string/persona_core_lorebook_help"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/label_field_core_lorebook" />
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/field_core_lorebook"
+                style="@style/Widget.App.Field.Box"
+                android:layout_width="0dp"
+                android:layout_marginStart="24dp"
+                android:layout_marginEnd="24dp"
+                android:clickable="true"
+                android:cursorVisible="false"
+                android:focusable="false"
+                android:focusableInTouchMode="false"
+                android:singleLine="true"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/hint_field_core_lorebook" />
 
             <TextView
                 android:id="@+id/text_additional_lorebooks"
@@ -207,7 +242,7 @@
                 android:textStyle="bold"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toBottomOf="@+id/textInputLayoutCoreLoreBook" />
+                app:layout_constraintTop_toBottomOf="@+id/field_core_lorebook" />
 
             <LinearLayout
                 android:id="@+id/additional_lorebooks_list"

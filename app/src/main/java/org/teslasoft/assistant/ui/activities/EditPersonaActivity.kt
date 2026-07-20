@@ -40,7 +40,6 @@ import com.google.android.material.checkbox.MaterialCheckBox
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.textfield.TextInputEditText
-import com.google.android.material.textfield.TextInputLayout
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.ActivationPromptPreferences
 import org.teslasoft.assistant.preferences.GlobalPreferences
@@ -122,7 +121,7 @@ class EditPersonaActivity : FragmentActivity() {
     private var actionBar: ConstraintLayout? = null
     private var btnBack: ImageButton? = null
     private var activityTitle: TextView? = null
-    private var fieldLabelLayout: TextInputLayout? = null
+    private var fieldLabelError: TextView? = null
     private var fieldLabel: TextInputEditText? = null
     private var fieldPrompt: TextInputEditText? = null
     private var fieldActivationPrompt: TextInputEditText? = null
@@ -177,7 +176,7 @@ class EditPersonaActivity : FragmentActivity() {
         actionBar = findViewById(R.id.action_bar)
         btnBack = findViewById(R.id.btn_back)
         activityTitle = findViewById(R.id.activity_title)
-        fieldLabelLayout = findViewById(R.id.textInputLayoutLabel)
+        fieldLabelError = findViewById(R.id.text_field_label_error)
         fieldLabel = findViewById(R.id.field_label)
         fieldPrompt = findViewById(R.id.field_prompt)
         fieldActivationPrompt = findViewById(R.id.field_activation_prompt)
@@ -215,13 +214,10 @@ class EditPersonaActivity : FragmentActivity() {
         imgPersonaAvatar?.setOnClickListener { openGalleryForPicture() }
         updateAvatarUi()
 
-        fieldLabel?.setOnFocusChangeListener { _, _ -> fieldLabelLayout?.error = null }
+        fieldLabel?.setOnFocusChangeListener { _, _ -> fieldLabelError?.visibility = View.GONE }
 
         fieldActivationPrompt?.setOnClickListener { showActivationPromptChooser() }
-        findViewById<TextInputLayout>(R.id.textInputLayoutActivation)?.setOnClickListener { showActivationPromptChooser() }
-
         fieldCoreLoreBook?.setOnClickListener { showCoreLoreBookChooser() }
-        findViewById<TextInputLayout>(R.id.textInputLayoutCoreLoreBook)?.setOnClickListener { showCoreLoreBookChooser() }
 
         btnAddLoreBooks?.setOnClickListener {
             val intent = Intent(this, LoreBooksListActivity::class.java)
@@ -428,7 +424,8 @@ class EditPersonaActivity : FragmentActivity() {
     private fun save() {
         if (fieldLabel?.text.toString().isEmpty()) {
             // Inline field error keeps the user on the screen (no lost work).
-            fieldLabelLayout?.error = getString(R.string.label_error_persona_empty)
+            fieldLabelError?.text = getString(R.string.label_error_persona_empty)
+            fieldLabelError?.visibility = View.VISIBLE
             return
         }
 

@@ -410,10 +410,24 @@ and rollout notes here — not back in `CLAUDE.md`.
   themed look for roleplay screens) is a change to that one drawable (or
   to which drawable the style points at), not a hunt through every
   field.
-  **Rollout status:** `activity_character_card.xml` only, as the
-  reference example (no visual change — same look, now shared instead
-  of copy-pasted). Not yet applied to `activity_edit_persona.xml`
-  ("Edit Companion") or any other form-field screen — that screen
-  currently uses Material `TextInputLayout` with an embedded floating
-  hint instead, a different look the owner does not want kept; changing
-  it over is a separate, not-yet-done step.
+  - `Widget.App.Field.Hint` (added July 20 2026) — an optional small
+    explanatory line under the Label, above the Box: 13sp,
+    `@color/text_subtitle`, not bold, matching the size/color this app
+    already uses for secondary text elsewhere (row subtitles, the
+    character card's zone subtext). A field with no hint simply omits
+    the `TextView`, the same way a subtitle-less row omits
+    `Widget.App.Row.Subtitle`.
+  **Rollout status:** `activity_character_card.xml` (reference example;
+  none of its fields have a hint line, so `Widget.App.Field.Hint` isn't
+  used there) and `activity_edit_persona.xml` ("Edit Companion" — Company
+  name/Prompt/Activation prompt/Core lorebook, 3 of the 4 with a hint
+  line; Company name has none, matching its pre-conversion look). Edit
+  Companion previously used Material `TextInputLayout` with an embedded
+  floating hint and `app:helperText`; both are gone now. One functional
+  piece rode along with that removal: the Company-name field's empty-name
+  validation used `TextInputLayout.error` — replaced with a plain
+  persistent `TextView` (`text_field_label_error`, `?attr/colorError`,
+  13sp, `GONE` until `EditPersonaActivity.save()` sets it), matching this
+  file's own "field errors set on the input itself, never a toast"
+  house rule instead of Material's built-in error styling. Not yet
+  applied to any other form-field screen.

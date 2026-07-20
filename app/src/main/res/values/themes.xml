@@ -415,6 +415,20 @@
         <item name="android:textStyle">bold</item>
     </style>
 
+    <!-- Optional small explanatory line under a field's Label, above its Box
+         (owner ruling, July 20 2026). Not every field has one - omit the
+         TextView entirely for a field with no hint, same as omitting
+         Widget.App.Row.Subtitle for a row with none. Same size/color this
+         app already uses for this kind of secondary text elsewhere (row
+         subtitles, the character card's zone subtext). -->
+    <style name="Widget.App.Field.Hint" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">2dp</item>
+        <item name="android:textColor">@color/text_subtitle</item>
+        <item name="android:textSize">13sp</item>
+    </style>
+
     <style name="Widget.App.Field.Box" parent="">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
