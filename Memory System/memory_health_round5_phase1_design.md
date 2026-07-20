@@ -1,29 +1,48 @@
 # Round 5, Phase 1 — Memory Health, Silent Degradation, and Recovery (DESIGN ONLY)
 
-> **STATUS: DRAFT AND PARTIALLY SUPERSEDED**
+> **STATUS: DRAFT, BROUGHT CURRENT July 12 2026 (evening). AWAITING OWNER
+> APPROVAL — nothing here is built.**
 >
-> Round 4, covering Keystore loss and storage-lock recovery, has not been
-> designed. Any proposal in this document that chooses plaintext
-> SharedPreferences or another final storage location for memory-health state
-> is withdrawn and not approved. Persistent health storage, cross-restart
-> repair state, reset-survival behavior, and handling of unreadable health
-> storage remain blocked by Round 4. Unreadable or unavailable storage must
-> never be interpreted as empty or automatically reinitialized. The pipeline
-> findings and storage-independent health logic remain useful design material.
+> **Round 4 is now BUILT AND MERGED** (merge `e2f8289`, "chat storage locks
+> instead of masquerading as empty"). The earlier caveat that Round 4 "has
+> not been designed" and that persistent health storage was "blocked by
+> Round 4" is now RESOLVED: chat storage has an explicit LOCKED/HEALTHY/
+> LEGACY_PLAINTEXT/FRESH_UNENCRYPTED state machine (`ChatStorageHealth`,
+> `SecurePrefs`, `OutageReconciler`, `SnapshotRegistry`), a blocking
+> full-screen `ChatStorageLockedActivity`, and the owner lock policy
+> (LOCKED means BLOCKED — never a plaintext fallback). This document's
+> proposal to hold memory-health state in a **plain, unencrypted**
+> `memory_health` prefs file is now consistent with Round 4's own choice to
+> keep the `storage_health` journal raw so it works while the Keystore is
+> down — the two health stores are siblings.
+>
+> Still true: **nothing in THIS document (the memory-health system) is
+> built.** Phase 2 (user-facing wording/placement) must not begin until the
+> owner approves the design. Unreadable or unavailable storage must never be
+> interpreted as empty or automatically reinitialized.
+>
+> **Owner directions added July 12 2026 (evening) live in the new §15** —
+> the mandatory database-issue dialog, the repair flow, force-close-on-
+> decline, the crash-triggered check, and the verified backup reality. §15
+> is the current owner intent and outranks anything earlier in this document
+> where they disagree. Wording is still not written; §15 records behavior
+> and choices, not final copy.
 
 **Status: DESIGN AWAITING OWNER APPROVAL. Nothing in this document is built.
 Phase 2 (user-facing wording/placement) has not begun and must not begin
 until the owner approves this design.**
 
-Date: July 12 2026. Branch: `claude/phosphor-memory-health-audit-hjw6ow`.
-Audited against the current `main` (through the Round 3 merge, a34fa7f).
-Every claim below was verified by reading the current code; file:line
-references are to that state of the tree.
+Original draft date: July 12 2026 (early), branch
+`claude/phosphor-memory-health-audit-hjw6ow`. Audited against the then-current
+`main` (through the Round 3 merge, a34fa7f). Brought current July 12 2026
+(evening) against `main` through the Round 4 merge (`e2f8289`). Every
+original claim was verified by reading the code at a34fa7f; the §15 backup
+facts were verified against `MemoryExporter.kt` at the Round 4 tree.
 
-Scope guard: Round 4 (Keystore loss / store-lock recovery) is referenced
-only where the health system must *represent* that state; its design is not
-revisited here. Rounds 1–3 machinery (rename transaction, RenameJournal,
-capture recovery, message completion states) is treated as fixed.
+Scope guard: Round 4 (Keystore loss / store-lock recovery) is now BUILT and
+is referenced where the health system must *represent* that state. Rounds
+1–3 machinery (rename transaction, RenameJournal, capture recovery, message
+completion states) is treated as fixed.
 
 ---
 
@@ -508,9 +527,13 @@ Single background thread, same as today, strictly ordered:
 3. `isProvisioned()` gate — everything below skipped if false (unchanged).
 4. `integrityCheck()` — failure now: MEMORY_DB → `USER_ACTION_REQUIRED` /
    `integrity_failed` (dataLoss=POSSIBLE), **ungated** health line; skip
-   steps 5–8 (as today). The startup Toast is retired in Phase 2 (its
-   replacement wording needs owner approval; until then the Toast stays —
-   no silent removal of the only current signal).
+   steps 5–8 (as today). **Owner direction July 12 2026 (§15): the vanishing
+   Toast is replaced by a MANDATORY blocking dialog the user must dismiss,
+   with a Repair path.** The integrity check itself should run on a
+   crash-triggered basis (§15.3), not unconditionally every launch — the
+   background thread first checks the already-computed last-exit reason and
+   only runs the PRAGMA when the previous exit was abnormal or a repair is
+   pending. See §15 for the full flow.
 5. Backfill: flag set **only when the backfill actually completed**
    (`backfillExistingChats` gains a success/failure return distinct from
    "0 chats needed"); failure → counter + retry next start.
@@ -676,6 +699,804 @@ or screen (Phase 2, owner-approved wording only); `SecurePrefs`;
     proposed ≥3 occurrences for capture failures, >7 days active for
     fallback states) are tunable constants; Phase 2 decides what
     escalation *shows*, the owner may also tune when.
+
+---
+
+## 15. Owner directions — July 12 2026 (evening)
+
+These are the owner's current instructions, recorded during the walkthrough.
+They set behavior and choices; final wording is still not written. Where they
+conflict with earlier sections, §15 wins.
+
+### 15.1 Verified backup reality (facts, not proposal)
+
+Read from the current code so the plan starts from truth:
+
+- **This app has TWO SQLite databases**, both SQLCipher-encrypted:
+  1. `companion_memory.db` — the memory system (companions, memories,
+     transcripts, roleplay cards, embeddings, run history).
+  2. `lorebook.db` — the lorebook tier (books, entries, triggers).
+  - Chats and settings are **not** SQLite — they live in
+    EncryptedSharedPreferences files (the Round 4 storage-lock machinery
+    covers those separately).
+- **Automatic backup exists, but only for ONE of the two databases.**
+  `MemoryExporter.autoExportIfDue` runs once per app start on the startup
+  background thread, throttled to at most once per 24 h. It writes a
+  rotating JSON export (keep the newest **5**; older ones deleted) into
+  `getExternalFilesDir("memory_backups")`. That export contains
+  `companion_memory.db`'s contents **plus the app's chats** (carried along
+  under `app_chats`). Writes are atomic + verified (torn file can't become
+  the newest backup).
+- **`lorebook.db` is NOT backed up by anything, automatically or on a
+  schedule.** It has no integrity check either. (Only `companion_memory.db`
+  has `integrityCheck()`.) This is a gap — see §15.5.
+- **Embeddings are never exported** (they are regenerated by re-indexing).
+- **The automatic backup is SILENT.** There is no user-facing signal that it
+  ran, succeeded, or failed — successes and failures go only to the Memory
+  log, and that log is gated off by default. The only visible hint is the
+  "last backup" time on the Memory Controls screen going stale.
+- Backup **pauses** while chat storage is locked/degraded (Round 4), so a
+  backup written during an outage can't overwrite the last complete one.
+- **Restore is manual only** (SAF file-picker Import). Nothing restores
+  automatically today.
+
+Performance note: the auto-backup is *not* an every-launch cost (24 h
+throttle), but when it does run it serializes the whole memory DB + all
+chats to JSON on the startup background thread — it competes for disk with
+the other startup work but does not block the UI thread.
+
+> **SUPERSEDED (owner July 15 2026):** the single-combined-file design
+> described above is being REPLACED by separate per-type backup files (memory
+> / lorebook / chats), each written, verified, rotated, and restored
+> independently. See **§15.13** — it is authoritative for the backup design
+> from here on.
+
+### 15.2 Database-issue detection → repair flow (owner-directed, RESOLVED)
+
+Applies to **both** SQLite databases (`companion_memory.db` and
+`lorebook.db` — both are SQLite; "the sqlite thing" and "the lorebook" are
+the two of them). The framework is shared; the user-facing effect names
+whichever database is affected (memory features vs lorebooks).
+
+Replaces the vanishing Toast (F3). When a database integrity problem is
+detected:
+
+1. **A blocking dialog the user must actively dismiss** appears (not a Toast,
+   not a snackbar — a real dialog). It states, in plain words to be written
+   later: which database has a problem, what the app is going to try, and
+   what the consequences are.
+2. **The app tries to REPAIR first, automatically** (owner order, Flag 2):
+   attempt an in-place salvage/rebuild of the corrupt database from its
+   readable pages. If that succeeds, the user is told it was repaired.
+3. **If repair is not possible, the app offers to REPLACE the database with
+   the last good backup** — and the dialog must spell out the complications
+   *before* the user agrees: specifically what that restore would cost (e.g.
+   "memories added since [backup date] would be lost," or for lorebooks
+   "lorebook edits since [date] would be lost"). The user chooses whether to
+   accept the restore.
+4. **During any repair or restore, the user is clearly warned NOT to close
+   the app** — interrupting a mid-write could worsen corruption. (The repair
+   itself must still be built restartable/idempotent so an accidental kill or
+   an Android kill is survivable — §5 common laws.)
+5. **The dialog must distinguish repairable / restorable / not recoverable on
+   this device.** It must never promise a repair it cannot deliver. The
+   not-recoverable path is §15.6.
+
+**If the user declines all repair/restore → DEGRADED MODE, not force-close
+(owner decision — §15.2a).** This REVERSES the earlier force-close direction.
+
+### 15.2a Degraded mode — memory/lorebooks disabled until repaired (RESOLVED)
+
+When a database problem exists and the user has not repaired it, the app does
+**not** shut down. Chatting still works (chat storage is separate). But the
+affected feature is turned **fully off** — no reads and no writes to the
+corrupt database — until it is repaired. (Reading a corrupt SQLite file is
+itself unsafe, so "disabled" means genuinely off, not just read-only.)
+
+**Persists across restarts (B10, owner July 15 2026: yes).** The disabled
+state is STORED and survives closing/reopening the app: a damaged database
+stays off — banner shown — until a repair or restore actually succeeds.
+Reopening never silently re-uses a corrupt database. Because a mid-session
+failure is not a crash, this is a stored "disabled pending repair" flag,
+independent of the crash-triggered check (§15.3) — it does not rely on the
+next launch happening to re-run a check.
+
+While in degraded mode:
+
+- **Every new chat shows a persistent, dismissible notice at the top**
+  stating that memory (or lorebooks) is currently disabled because of
+  database corruption, with two actions: **Repair** and **OK**. It is a
+  persistent banner the user dismisses — NOT a vanishing snackbar/Toast
+  (this honors the app-wide no-Toast rule; the owner's "snack bar" is
+  implemented as a persistent acknowledged banner). It reappears on each new
+  chat so the user keeps being reminded and must re-acknowledge — they can't
+  forget memory is off, and they can't make it stick around forever either.
+- **The Archivist / "Analyze Conversations" action is DISABLED and not
+  clickable** whenever there is *any* database problem — the owner rule is
+  the Archivist must never run against a bad database (it writes to it). The
+  disabled control carries an inline note saying why and pointing to the
+  repair/replace choice. (This is stronger than the normal not-ready state:
+  it is a hard block tied to DB health.)
+- Rationale (owner): if memory isn't being used, the user must KNOW; and if
+  the only loss is that new memories can't be made, the button that makes
+  them must be visibly, explicitly blocked with the reason — never silently
+  inert.
+
+Open sub-point: the banner names **Memory**, **Lorebooks**, or **both**
+depending on which database(s) failed (they are separate features on separate
+databases; both can fail at once). Final wording is Phase 2.
+
+### 15.2b Restore-from-backup is a confirmed, verified action (owner Q, July 15 2026)
+
+Owner asked whether the restore-from-backup dialog acts as a "secondary
+check" when they tap **Revert to Last Good Database**. Yes — restoring
+overwrites the current database, so it is a deliberate two-part safeguard, not
+an instant action:
+
+1. **Verify first (behind the scenes).** When Revert is tapped, the app picks
+   the newest backup and CHECKS that the backup itself is actually good before
+   trusting it (§15.6 step 3). If the newest backup is also damaged, it walks
+   to the next-older one until one passes. This prevents "restoring" from one
+   corrupt file onto another.
+2. **Confirm second (the secondary check the owner means).** Before it
+   overwrites anything, the app shows a **confirmation dialog** stating which
+   backup date it will restore and what will be lost (memories / lorebook
+   entries added since that date), and that the damaged database is kept aside
+   (§15.6). Only on confirm does the restore run. This is **A5** — its wording
+   is not yet approved. It also satisfies the app's standing rule that
+   destructive actions always get a confirm dialog.
+
+So: tapping Revert → (verify the backup is good) → **A5 confirmation** →
+restore. A5 is exactly that secondary check.
+
+### 15.2c Mid-conversation detection — audio warning + existing banner (B9 RESOLVED, owner July 15 2026)
+
+If a memory or lorebook database failure is detected **mid-conversation**:
+
+1. **Immediately play a distinct audio warning.** Its purpose is to notify
+   hands-free users who may not be looking at the screen. "Distinct" = not
+   confusable with the existing chimes (error / done / no-speech two-tone).
+2. **Then show the already-approved persistent top banner (§15.2a / A2)** —
+   unchanged.
+
+Hard constraints (owner):
+- **Do NOT add a new dialog** for the mid-conversation case.
+- **Do NOT redesign the existing warning behavior.** The banner is exactly
+  §15.2a / A2: stays visible until dismissed; `Repair` and `OK` buttons;
+  reappears in each new chat while the affected database stays disabled; names
+  **Memory**, **Lorebooks**, or **both** depending on what failed.
+
+This is the mid-session path only; the startup behavior in §15.2 is unchanged.
+
+**Scope (RESOLVED, owner July 16 2026): hands-free sessions only.** The audio
+warning plays only when the user is in a hands-free/voice session. A typed
+session with the screen visible does not play it — the banner alone is enough
+when the user is already looking at the screen.
+
+### 15.3 Crash-triggered checking (owner-directed)
+
+The integrity check should **not** run on every launch (that is part of why
+startup is slow — see the separate startup-performance discussion). Instead:
+
+- The app already computes, at every startup, **why the previous process
+  died** (`Logger.logLastExitReason` → Android's historical exit reasons:
+  clean exit vs crash vs low-memory kill vs ANR vs force-stop). This signal
+  exists today and costs nothing new.
+- The startup background thread runs the database integrity check **only
+  when** the last exit looked abnormal (crash / ANR / kill), **or** when a
+  repair was left pending from a previous session. On a clean previous exit,
+  the check is skipped — the common case, and the fast path.
+- A **manual "Check database now"** action (like a Windows manual disk check)
+  is available for when the user suspects a problem without a crash having
+  happened. Placement/wording is Phase 2.
+
+This directly ties the health work to the startup-speed goal: the expensive
+check becomes occasional-and-justified instead of every-single-open.
+
+### 15.4 One-time vs ongoing (carried from the startup discussion)
+
+Recorded so the implementation keeps them separate:
+
+- **One-time past-event chores** (encrypting leftover plaintext files, the
+  Round 4 outage reconcile) should run once, record "done," and never run
+  again — not re-scan every launch.
+- **Ongoing risk** (corruption) is the only thing that justifies a repeated
+  check, and even that is now crash-triggered (§15.3), not every launch.
+
+### 15.5 Lorebook backup + integrity — DECIDED: extend coverage (owner: "Absolutely")
+
+- `lorebook.db` today has **no automatic backup and no integrity check**.
+- **Decision: fold `lorebook.db` into the same protection** as
+  `companion_memory.db` — include it in the automatic rotating backup, and
+  give it an integrity check on the same crash-triggered schedule (§15.3).
+  Low-risk: the backup + rotation + verify machinery already exists; this
+  adds a second database to it.
+- Consequence: the §15.2 repair/replace flow and §15.2a degraded mode apply
+  to lorebooks too (a corrupt lorebook DB disables lorebooks, names them in
+  the banner, and can be restored from the same backup set).
+
+### 15.6 Not-recoverable handling — the professional pattern (RESOLVED)
+
+Owner asked "what is the professional way of handling this?" The professional
+pattern, and the owner's instinct, agree. When a database is corrupt:
+
+1. **Never delete the corrupt file.** Move it aside, renamed with a date and a
+   clear "corrupt" marker (e.g. `companion_memory.corrupt-2026-07-12.db`),
+   into a findable recovery folder (parallel to Round 4's
+   `files/storage_recovery/`). A user who wants to attempt manual rescue can
+   find it; everyone else can ignore it.
+2. **Try repair first** (§15.2 step 2).
+3. **If repair fails, walk the backups newest-to-oldest**, verifying each
+   before trusting it — if the newest backup is *also* bad (corruption can be
+   captured into a backup), fall back to the next older one, and so on, until
+   one passes an integrity check. That verified backup is the restore source
+   (with the loss warning of §15.2 step 3, dated to that backup).
+4. **Only if NO backup is usable, start a fresh empty database** so the app is
+   functional again — but the renamed corrupt file from step 1 stays
+   preserved. This is the honest last resort: most users do need a working
+   (fresh) instance to keep going, and the old data is not destroyed, just
+   set aside. The app must *say* it started fresh and that the old data was
+   preserved — never present a fresh empty database as if nothing happened.
+
+This is exactly the industry pattern: quarantine the bad file, restore from
+the newest *verified* backup, reinitialize only as a last resort, and never
+silently discard.
+
+### 15.7 Backup-failure surfacing — 3-strikes dialog (RESOLVED)
+
+The auto-backup is silent today; a backup failing repeatedly is invisible.
+
+- **After 3 consecutive failed automatic backups, show a blocking dialog**
+  (persistent, must be dismissed — not a Toast). Three strikes filters out a
+  one-off transient glitch and only speaks up when something is genuinely
+  wrong.
+- **What the user can actually do** (the owner's open question — "I don't know
+  what I would do"): a repeatedly failing backup almost always means the
+  device is **out of storage space**, or the backup folder isn't writable.
+  The dialog says the likely cause in plain words and gives a concrete
+  escape hatch instead of a dead-end warning.
+- **HISTORICAL, DO NOT IMPLEMENT (superseded July 20 2026):** the original
+  escape hatch here was a "Save a backup somewhere else now" action running
+  the manual export. The ACTIVE design is the category-split dialog
+  (`Change Backup Folder | Retry | Cancel`, folder path as selectable text
+  — §15.12 A4 supersession + build plan Rev 2 Round 3 item 8): changing the
+  backup folder IS the escape hatch, and source-type failures are checked
+  and routed by store type instead of being treated as storage problems.
+
+### 15.8 Backup cap — already exists; why more than one (RESOLVED)
+
+- **There is already a cap: the newest 5 backups are kept, older ones deleted
+  automatically** (`ROTATION_KEEP = 5`). Backups do not pile up to a hundred —
+  the owner's requirement is already met by existing code; this just makes it
+  an explicit, named policy.
+- **Why keep more than one** (the owner asked): because corruption can be
+  silently copied *into* a backup. If only the single newest backup were kept
+  and it captured already-corrupt data, there would be nothing clean to fall
+  back to. Keeping ~5 days of history means §15.6 step 3 can walk back to an
+  older, still-clean backup. That is the whole reason a rotation exists rather
+  than a single overwrite. Five is a reasonable default; it is a tunable
+  constant if the owner later wants more or fewer.
+
+### 15.9 Memory Controls screen — layout + exact wording (owner-directed, VERBATIM)
+
+**Date format (owner requirement):** every user-facing date in this feature is
+shown as **`Month D, YYYY`** (e.g. `July 5, 2026`) — full month name, day,
+comma, four-digit year. This governs every date line below. (Internal
+*filenames*, such as the quarantined corrupt-DB copy in §15.6, keep a sortable
+date for correct ordering and are not user-facing display text.)
+
+**CASING RULE (style guide — owner, July 15 2026, CORRECTED):** dialog/screen
+**TITLES** and **BUTTON LABELS** are **Title Case** — capitalize the first
+letter of each major word (minor words like "to", "in", "the" stay lowercase),
+NOT full uppercase. Body text, status text, banner sentences, and helper/notes
+stay **sentence case**. (An earlier version of this file used full ALL CAPS —
+that was wrong and is corrected here.)
+
+The following strings are **owner-approved verbatim** — do not reword them
+without asking.
+
+> **PLACEMENT SUPERSEDED (July 18–20 2026):** these controls no longer land on
+> Memory Controls. The **Memory Backup & Restore** screen now EXISTS on `main`
+> (`MemoryBackupRestoreActivity`, a Memory Manager hub row, built July 18 by
+> the menu-reorg effort — it already holds the auto-backup toggle,
+> import/export, last-backup status, and Reset). Per §15.14 these controls go
+> THERE, in its Backups area. The one relative-order rule that remains
+> active is: `Check Database Integrity` sits ABOVE `Create Backup`. (The
+> old failed-line-above-success-line rule is HISTORICAL, DO NOT IMPLEMENT —
+> replaced by the compact one-row-per-type status display, item 3 below.)
+
+**Top-to-bottom order and exact text:**
+
+1. **`Check Database Integrity`** — a button (Title Case). It sits **ABOVE**
+   the `Create Backup` button.
+   - When pressed, the text beneath the button reads, VERBATIM:
+     **`Checking database integrity. Do not close your app. Please wait.`**
+   - When the check finishes, that text is **REPLACED** by the result:
+     **`Database Check Passed`** or **`Database Check Failed`**.
+     (Naming unified to "Database Check" per owner, July 15 2026 — this
+     supersedes the earlier "Database Integrity Passed/Failed".)
+   - On a failed result, the app offers the §15.2 recovery buttons:
+     **`Repair`**, **`Revert to Last Good Database`** (restore from the newest
+     verified backup, with the §15.2 loss warning + confirmation — see §15.2b).
+     On a passed result, no action is offered.
+
+2. **`Create Backup`** — a button (Title Case), **BELOW** the integrity
+   button. (RENAMED by owner, July 20 2026 — was "Create Database Backup";
+   the operation also backs up chats, and the owner chose the short form
+   `Create Backup`.) Pressing it runs a recovery-backup run immediately.
+   Status text appears underneath it: in-progress, then whether it
+   completed or failed.
+
+3. **Backup status — COMPACT PER-TYPE ROWS (owner-approved, July 20 2026;
+   supersedes both the single lines and the two-line failed-above-success
+   layout).** One row per type: current result + last successful date/time
+   when relevant, e.g.
+   > `Memory: Backup failed today. Last good backup: July 19, 2026, 2:30 PM`
+   > `Lorebooks: Backed up July 20, 2026, 2:30 PM`
+   > `Chats: Backed up July 20, 2026, 2:31 PM`
+   > `Profile image catalog: Backed up July 20, 2026, 2:31 PM`
+   Dates `Month D, YYYY`, time 12-hour AM/PM. See §15.13 and the build plan
+   (Rev 2) for the full backup architecture.
+
+All of the above are persistent on-screen controls/text — never Toasts,
+consistent with the app-wide no-Toast rule.
+
+### 15.10 Decision ledger — resolved vs still open
+
+> **READ FIRST — later rulings supersede entries below (July 20 2026).**
+> The two paragraphs after this note record rulings AS MADE on July 15 and
+> are kept as history; where they conflict with the July 20 rulings, the
+> July 20 versions are the ACTIVE design (full detail:
+> `database_health_build_plan.md` Revision 2). Specifically — HISTORICAL,
+> DO NOT IMPLEMENT: the failed-line-above-success-line status layout and
+> the separate success/failure status lines (→ compact one-row-per-type
+> display, §15.9 item 3); the `Create Database Backup` button name (→
+> `Create Backup`); the `Database Integrity Passed/Failed` result strings
+> (→ `Database Check Passed/Failed`); the five-button A4 dialog, its
+> inline integrity-check flow, and its `Save Back Up in New Location`
+> action (→ the category-split dialog: `Change Backup Folder | Retry |
+> Cancel`, source failures checked then routed by store type); a fixed
+> `App Backups/` folder as the primary destination (→ user-selected SAF
+> folder, app-private fallback until selected); any reading of "daily" as
+> guaranteed scheduling (→ startup/foreground-triggered with a 24-hour
+> throttle).
+
+**RESOLVED (owner-directed, do not re-open without the owner):**
+degraded mode not force-close (§15.2a); repair-then-replace order (§15.2);
+not-recoverable handling — quarantine/rename, walk backups newest-to-oldest,
+fresh only as last resort (§15.6); lorebook folded into backup + integrity
+(§15.5); 3-strikes backup-failure dialog with a "save elsewhere" escape
+(§15.7); backup cap = newest 5 (§15.8); daily frequency (§15.1); Memory
+Controls layout with the `Check Database Integrity` button ABOVE the
+`Create Database Backup` button (§15.9); the manual-check verbatim strings
+(`Checking database integrity. Do not close your app. Please wait.` →
+`Database Integrity Passed` / `Database Integrity Failed`) (§15.9); the two
+backup status lines and their order — failed ABOVE last-success (§15.9);
+date display format `Month D, YYYY` (§15.9); Archivist hard-disabled on any
+DB problem (§15.2a); banner is persistent + re-acknowledged per new chat with
+Repair / OK (§15.2a).
+
+**APPROVED wording (owner, July 15 2026 — recorded verbatim in §15.12):**
+A1 automatic dialog (both variants), A2 degraded-mode banner, A3
+blocked-Analyze note + working buttons, A4 repeated-backup-failure dialog
+(now a two-stage dialog with an inline integrity check that escalates to the
+repair flow on failure). **Resolved this round:** casing is Title Case not
+ALL CAPS; the revert button is `Revert to Last Good Database` ("Save"
+dropped); the loss noun follows the database ("recent memories" / "recent
+lorebook entries"); A1 now says the broken database is "unavailable to use or
+save" so a corrupt DB can't be auto-backed-up over good backups; A4's
+non-storage path is answered (inline integrity check → repair flow).
+
+**STILL OPEN — final wording not yet written (Phase 2 owner copy):**
+5. ~~restore loss-warning~~ — **A5 APPROVED** (§15.12), "Backup" capitalized.
+6. ~~(A6) started-fresh message~~ — **A6 APPROVED** (§15.12): title
+   `Database Recovery Failed`, body + preserved file path, buttons
+   `Open File Location` / `OK`.
+7. ~~(A7) button-label standardization~~ — **A7 RESOLVED (owner: yes):**
+   `Revert to Last Good Database` is THE label everywhere; the earlier
+   `update to the newest best database` phrasing is retired.
+8. ~~Check naming consistency~~ — **RESOLVED:** the app uses "Database Check"
+   everywhere (`Database Check Passed` / `Database Check Failed`); the button
+   stays `Check Database Integrity`. Restore-from-backup is a verified +
+   confirmed action (§15.2b); only the A5 confirmation wording is still open.
+
+**STILL OPEN — behavior/placement to confirm at build time:**
+8. ~~(B8) one press = both databases?~~ — **B8 RESOLVED (owner July 15
+   2026):** one press checks BOTH databases and reports per database; wording
+   approved in §15.12 (`Database Check Complete` / `Database Check Incomplete`,
+   per-database status lines). Buttons for that result + adopting the format in
+   A4/§15.9 still to confirm (see §15.12 B8 notes).
+9. ~~(B9) mid-session alerting~~ — **B9 RESOLVED (owner July 15 2026, §15.2c):**
+   mid-conversation detection plays a distinct audio warning immediately, then
+   shows the existing §15.2a/A2 banner — NO new dialog, no redesign. One build
+   detail open: whether the audio plays only in hands-free sessions or always.
+10. ~~degraded mode persists across restarts?~~ — **B10 RESOLVED (owner: yes):**
+    stored "disabled pending repair" flag; stays off + banner until a repair
+    or restore succeeds (§15.2a).
+11. ~~one combined backup date?~~ — **B11 RESOLVED, and REDESIGNED (owner July
+    15 2026, §15.13; destination + status updated July 20):** backups are
+    SEPARATE per-type files (memory / lorebook / profile image catalog /
+    chats) in a **user-selected SAF folder** (app-private fallback until
+    selected), each written-verified-rotated-restored independently;
+    compact one-row-per-type status with date+time; backup errors show the
+    folder path as selectable text (`Open Backup Folder` = secondary
+    convenience). No combined single-file backup. Supersedes
+    §15.1/§15.8/§15.9's single-file wording.
+12. The Advanced Memory Settings screen already shows an integrity result and
+    row counts. **B12 RESOLVED (owner July 16 2026) — see §15.14, a new
+    dedicated area.**
+13. ~~ungated health log lines~~ — **B13 RESOLVED (owner July 16 2026) — see
+    §15.15.**
+14. **NEW (owner July 16 2026) — Profile Images database, §15.16:** a THIRD
+    database (`profile_images.db`) discovered mid-design now gets the SAME
+    backup, integrity-check, persistent-banner, and repair/replace treatment
+    as memory and lorebook — not a lighter version. It differs only in not
+    needing full degraded-mode/feature-disable (nothing else depends on it to
+    function). Banner wording not yet written (Phase 2).
+
+### 15.14 Screen placement — new "Memory Backup & Restore" area (B12 RESOLVED, owner July 16 2026)
+
+Owner has been rearranging screens independently since this chat began (this
+overlaps with the separate menu-reorganization effort — keep that session
+aware of this ruling so it doesn't re-decide it differently).
+
+- **New area: "Memory Backup & Restore."** ALL backup and database-restoration
+  functionality lives here — this becomes the one home for: `Check Database
+  Integrity`, `Create Backup`, the Choose/Change Backup Folder control, the
+  compact per-type status rows (§15.9 item 3), `Database Check` results, and
+  `Repair` / `Revert to Last Good Database` actions. This REPLACES the
+  "Backups" section currently on the Memory Controls screen
+  (`memory_controls_section_backups` string) as the home for this
+  functionality — Memory Controls no longer holds the backup/restore
+  controls once this area exists.
+- **Advanced Memory Settings keeps "System Status" at the top**, unchanged in
+  position — store health + row counts stay there, first thing on the screen
+  (per the existing `advanced_memory_section_status` section).
+- **Everything else that deals with backup and repair** (beyond System Status)
+  moves into the new Memory Backup & Restore area — e.g. the existing "Setup /
+  Repair" section's backup-adjacent content, not just the newly-designed
+  controls from this document.
+- ~~Exact navigation entry point left to the menu-reorg effort~~ — **ANSWERED
+  BY REALITY (July 18 2026):** the menu-reorg effort built it as
+  `MemoryBackupRestoreActivity`, a row on the Memory Manager hub, already
+  holding the auto-backup toggle, import/export, last-backup status, and
+  Reset (moved out of Memory Controls). The §15 controls (`Check Database
+  Integrity`, `Create Backup`, the Choose/Change Backup Folder control, the
+  compact per-type status rows, repair/revert actions) are ADDED to that
+  existing screen, which also keeps the recovery-vs-portable split legible
+  (`Export Portable Copy` / `Import Portable Copy` — build plan Rev 2).
+
+### 15.15 Health-failure logging — write once, to the Error Log, timestamp in red (B13 RESOLVED, owner July 16 2026)
+
+Resolves §14.1's open question (whether health-transition lines are ungated in
+the Memory log) with a more specific owner ruling that supersedes it:
+
+- **Written regardless of the diagnostics toggle** — a database-health failure
+  (corruption found, repair attempted/succeeded/failed, restore performed,
+  repeated backup failure) is recorded even when diagnostics logging is off.
+  This matches the "recovery information, not optional debug noise" principle
+  from §14.1's owner-gate discussion.
+- **Once per event, not every turn.** A health problem is logged ONCE when it
+  transitions (matches the existing §3.4/§4.1 transition-only design elsewhere
+  in this document — no repeat-occurrence spam).
+- **Goes to the Error Log** (not the Memory/Voice log) — owner's explicit
+  choice of channel. This is a change from §4.2's earlier proposal to reuse the
+  Memory Debug Log channel; the Error Log supersedes that for these entries.
+- **The date and time of the entry should render in red** so a health-failure
+  line visually stands out from ordinary Error Log entries when scanning the
+  log. Applies to the timestamp portion of the log line specifically.
+
+### 15.12 Approved verbatim wording — owner, July 15 2026
+
+These strings are **owner-approved verbatim**. Record and implement them
+exactly; do not reword without asking. Dates render `Month D, YYYY`.
+
+**CASING (style guide, CORRECTED):** dialog **TITLES** and **BUTTON LABELS**
+are **Title Case** (first letter of each major word capitalized), NOT full
+uppercase. **Body text stays sentence case.**
+
+**Database name is variable:** every string below is written with the
+affected database named ("lorebooks" / "memory"). At build time the app fills
+in whichever database is actually affected — and the loss noun matches it
+("recent memories" for the memory database; "recent lorebook entries" for the
+lorebook database).
+
+**A1 — Automatic database-problem dialog (problem found, could NOT auto-repair).**
+Appears at startup after a crash when the integrity check finds a damaged
+database and repair was not possible. Blocking; user must choose. (Lorebook
+variant shown; memory variant swaps the database name and loss noun.)
+> **Title:** `Database Problem Found!`
+> **Body (sentence case):**
+> `Your lorebooks database is damaged and couldn't be repaired automatically. You can try a repair, or replace it with your latest good backup. This may cause recent lorebook entries to be lost.`
+>
+> `Until then, lorebooks will be unavailable to use or save to prevent further corruption.`
+> **Buttons:** `Repair` | `Revert to Last Good Database` | `Cancel`
+
+- **Button correction (owner, July 20 2026): `Cancel`, never `Not Now`.**
+  The owner does not want "Not Now" — or the word "now" generally — in any
+  dialog button anywhere in this design; "Cancel" is the standing button
+  for declining an action across every dialog in §15. This applies to A1,
+  A3, A4/its replacement, and any future dialog — not just the one
+  instance already caught in the backup-failure redesign.
+- **"...unavailable to use or save..."** (owner addition): the broken database
+  is blocked from being SAVED too, not just used. This is deliberate and
+  important when automatic daily backups are ON — otherwise the auto-backup
+  could copy the corrupt database over the good backups. (Consistent with
+  §15.1/§15.6: backups pause while a database is degraded.)
+
+**A1 — Automatic dialog (the app repaired it itself).** Informational.
+> **Title:** `Database Repaired`
+> **Body (sentence case):** `A problem was found in your [memory / lorebook] database and repaired automatically. Everything should be working normally.`
+> **Button:** `OK`
+
+**A2 — Degraded-mode banner (top of every new chat while disabled).**
+Persistent, dismissible, re-shown per new chat. Banner text is a sentence
+(sentence case); its buttons are Title Case.
+> **Memory variant:** `Memory is currently turned off because of a database problem. Tap Repair to fix it.`
+> **Lorebook variant:** `Lorebooks are currently turned off because of a database problem. Tap Repair to fix it.`
+> **Buttons:** `Repair` | `OK`
+
+**A3 — Blocked "Analyze Conversations" note + working actions.** Shown where
+the Analyze/Archivist action would be; the action stays blocked while any DB
+problem exists, and these buttons are FUNCTIONAL (owner: "make those buttons
+that work"). Note text is sentence case; buttons Title Case.
+> **Text (sentence case):** `Unable to analyze conversations due to current memory database corruption. You may try to repair it again or revert to last known good database. Caution reverting may cause recent memories to be lost.`
+> **Buttons (working):** `Repair` | `Revert to Last Good Database`
+
+**A4 — Repeated-backup-failure dialog — HISTORICAL, DO NOT IMPLEMENT
+(superseded by owner July 20 2026; see the supersession note at the end of
+this block).** The whole A4 design below — the five-button layout, the
+two-stage inline integrity check, and the `Save Back Up in New Location`
+action — is kept ONLY as the historical record of the July 15 ruling. The
+ACTIVE design is the category-split dialog (`Change Backup Folder | Retry |
+Cancel`; source failures checked then routed by store type; build plan Rev
+2, Round 3 item 8). Original July 15 text follows:
+> **Title:** `Backup Attempts Failed`
+> **Body (sentence case):** `Your device may be low on storage space. Please choose another location or free up space.`
+> `If you have enough storage space, try checking the database integrity.`
+> **Backup folder location (shown per §15.13):** `[backup folder location]`
+> **Buttons:** `Save Back Up in New Location` | `Open Backup Folder` | `Retry` | `Okay` | `Check Database Integrity`
+
+- Per §15.13: any backup-error surface must show the backup folder location and
+  an `Open Backup Folder` button — added to A4's buttons above.
+- **SUPERSEDED (owner-approved, July 20 2026):** the five-button layout
+  above is REPLACED by the category-split design (build plan Rev 2, Round 3
+  item 8): destination/storage failures get exactly
+  `Change Backup Folder | Retry | Cancel` (owner: `Cancel`, not `Not Now`;
+  folder path as selectable text; `Open Backup Folder` as a secondary text
+  action); an actual source-damage failure skips the storage dialog and
+  enters the A1 repair flow directly. The wording block above is kept as
+  the historical record only; the new dialog's body text is still to be
+  owner-approved (build plan Round 4).
+
+Inline integrity check inside A4 (under the `Check Database Integrity` button):
+- While running (status text, sentence case): `Checking Database...`
+- Then it disappears and shows the result: `Database Check Passed` or
+  `Database Check Failed`.
+- On **`Database Check Failed`**, A4 escalates to the corruption/repair flow
+  (same content as A1-could-not-repair):
+  > **Heading:** `Database check failed and could not be repaired.`
+  > **Body (sentence case):**
+  > `Your lorebooks database is damaged and couldn't be repaired automatically. You can try a repair, or replace it with your latest good backup. This may cause recent lorebook entries to be lost.`
+  >
+  > `Until then, lorebooks will be unavailable to use or save to prevent further corruption.`
+  > **Buttons:** `Repair` | `Revert to Last Good Database` | `Cancel` (historical
+  > block — `Not Now` corrected to `Cancel` per the owner's July 20 ruling
+  > against that button appearing anywhere)
+
+- **Naming (RESOLVED, owner July 15 2026):** the whole app uses the
+  **"Database Check"** name — `Database Check Passed` / `Database Check Failed`
+  (the Memory Controls result strings in §15.9 were updated to match; the
+  earlier "Database Integrity Passed/Failed" is superseded). The button that
+  starts it stays `Check Database Integrity`.
+
+**A5 — Restore-from-backup confirmation dialog (APPROVED, owner July 15 2026).**
+The §15.2b secondary check: appears when the user taps `Revert to Last Good
+Database`, after the app has verified the backup is good, before it overwrites
+anything. Blocking confirm. (Lorebook variant shown alongside memory; the app
+fills in the affected database, the real backup date in `Month D, YYYY`, and
+the matching loss noun.)
+> **Title:** `Restore from Backup?`
+> **Body — memory (sentence case):** `This replaces your damaged memory database with your last good Backup from [Month D, YYYY]. Any memories added after that date will be lost. Your damaged database will be kept aside, not deleted.`
+> **Body — lorebook (sentence case):** `This replaces your damaged lorebook database with your last good Backup from [Month D, YYYY]. Any lorebook entries added after that date will be lost. Your damaged database will be kept aside, not deleted.`
+> **Buttons:** `Restore` | `Cancel`
+
+**A6 — Recovery-failed / started-fresh dialog (APPROVED, owner July 15 2026).**
+Shown ONLY when a database is corrupt, could not be repaired, AND had no usable
+backup — the app started that database over empty and preserved the damaged
+file.
+> **Title:** `Database Recovery Failed`
+> **Body (sentence case):**
+> `The [memory / lorebook] database was damaged and could not be repaired. No usable backup was available, so the app created a new, empty database to keep working.`
+>
+> `The damaged database was not deleted. It was saved here in case it can be recovered later:`
+>
+> `[full file path or folder location]`
+> **Buttons:** `Open File Location` | `OK`
+
+**B8 — `Check Database Integrity` checks BOTH databases in one press; results
+are reported per database (APPROVED wording, owner July 15 2026).** One press
+runs the check on both the memory and lorebook databases and lists each
+result. This **supersedes** the earlier single-line `Database Check Passed` /
+`Database Check Failed` result.
+> **When the check ran fully:**
+> **Title:** `Database Check Complete`
+> `Memory database: No problems found`
+> `Lorebook database: Damage detected`
+> `Your lorebook data may need repair.`
+>
+> **When a database could not be checked (partial failure):**
+> **Title:** `Database Check Incomplete`
+> `Memory database: No problems found`
+> `Lorebook database: Could not be checked`
+> `Try again or view the error log for details.`
+
+- The per-database status lines are examples — each database shows its own real
+  result (`No problems found` / `Damage detected` / `Could not be checked`).
+- **Since §15.16 there are THREE databases** — a
+  `Profile images database: …` line joins the report in the same format
+  (agent note; the owner's two example lines above are unchanged).
+- ⚠️ **Buttons for this result screen were not specified** — owner to confirm
+  (likely `Repair` / `Revert to Last Good Database` when damage is detected;
+  `Try Again` / `View Error Log` on incomplete).
+- ⚠️ **Consistency:** this per-database report should also replace the simpler
+  `Database Check Passed/Failed` strings used by A4's inline check and §15.9's
+  Memory Controls check. Owner to confirm they adopt this same format.
+
+### 15.13 Backup architecture — separate per-type files (B11 REDESIGN, owner July 15 2026)
+
+**This SUPERSEDES the single combined-file backup design.** The current app
+writes ONE JSON export holding the memory database + chats together (§15.1);
+the owner is replacing that with **separate, independent backup files per data
+type.** Do NOT implement any combined archive or single-file backup design.
+
+> **TWO SYSTEMS (clarified July 20 2026, second external review):** the
+> per-type files below are **automatic same-installation RECOVERY backups**
+> (fast rollback after corruption; may depend on this installation's keys).
+> They do NOT replace the **portable JSON export/import**
+> (`MemorySeedCodec` + `app_chats`), which stays, keeps being developed, and
+> remains the key-independent path for reinstalls, other devices, and the
+> future Windows sync (Phase 8). Portable chat import/merge is future work,
+> not abandoned scope. The Backup & Restore screen distinguishes recovery
+> backups from `Export Portable Copy` / `Import Portable Copy`. Full detail:
+> `database_health_build_plan.md` (Revision 2), which also carries the SAF
+> staging pipeline, failure categories, and honest trigger description that
+> govern how these files are actually written.
+
+**Backup structure:**
+- A **user-selected SAF backup folder** (Choose/Change Backup Folder,
+  permission persisted; app-private fallback until selected — July 20
+  2026). ~~One clearly named `App Backups/` folder~~ as the primary
+  destination is historical.
+- Each automatic backup run creates **separate files** for:
+  - Memory database
+  - Lorebook database
+  - Chats
+  - **Profile Images catalog** (`profile_images.db` — added §15.16, owner July
+    16 2026; a THIRD real database, discovered mid-design, was found to have
+    NO backup coverage at all)
+- Example filenames (same timestamp across one run):
+  - `memory_backup_2026-07-15_1430.db`
+  - `lorebook_backup_2026-07-15_1430.db`
+  - `chats_backup_2026-07-15_1430.zip`
+  - `profile_images_backup_2026-07-15_1430.db`
+- All files from one run share the same timestamp, but each is written,
+  verified, and **restorable independently.** Owner's reasoning (July 16
+  2026): "if there's a daily or weekly backup its negligible size so it can be
+  included" — the catalog is tiny (hashes + timestamps only, no image bytes),
+  so it rides along in the same run at effectively no cost.
+
+**Required behavior:**
+- Do NOT combine memory, lorebooks, and chats into one backup file.
+- Write each backup to a **temporary file first**.
+- **Verify** each backup completed successfully before it replaces the
+  previous good backup of that type.
+- **Never overwrite or delete the last known-good backup** (of a given type)
+  until the new one of that type has been verified.
+- A failure backing up ONE data type must NOT invalidate or remove the
+  successful backups of the others (each type is independent).
+- Restoration must allow memory, lorebooks, or chats to be restored
+  **separately**.
+- **Destination (updated July 20 2026):** a **user-selected SAF folder**
+  (Choose/Change Backup Folder, permission persisted), with the app-private
+  folder only as the fallback until the user has chosen. A fixed
+  `App Backups/` folder as the primary destination is HISTORICAL, DO NOT
+  IMPLEMENT. Any backup error shows the current folder path as selectable
+  text; `Open Backup Folder` is a secondary convenience action, never a
+  requirement.
+- **Trigger honesty (July 20 2026):** backups are checked at app start (and
+  optionally on return to foreground) with a 24-hour throttle — NOT
+  guaranteed background daily scheduling. Nothing may promise "daily" as a
+  guarantee.
+
+**Status display — HISTORICAL, DO NOT IMPLEMENT (superseded July 20 2026):**
+the separate `Last successful … backup` lines that stood here are replaced
+by the **compact one-row-per-type display** in §15.9 item 3 (owner-approved
+example format there). Still active from this block: **12-hour AM/PM time**
+(`Month D, YYYY, H:MM AM/PM`) for display, while filename timestamps stay
+sortable 24-hour (not user-facing).
+
+**Knock-on updates:**
+- §15.8 rotation (keep newest 5) now applies **per file type** — 5 memory, 5
+  lorebook, 5 profile-image-catalog, 5 chats — not 5 combined.
+- §15.9's single-line and two-line status layouts are HISTORICAL — the
+  compact rows (§15.9 item 3) are the active design.
+- The backup-failure dialog is the category-split design (§15.12 A4
+  supersession + build plan Rev 2 Round 3 item 8), showing the folder path
+  as text.
+- A6's preserved-file location (a quarantined corrupt DB) stays its own
+  `Open File Location`; that is a different location from the backup folder.
+
+### 15.16 Profile Images database — SAME treatment as memory/lorebook (RESOLVED, owner July 16 2026)
+
+**Discovery:** a THIRD real database, `profile_images.db`, was found mid-design
+(part of the new Profile Images gallery feature, merged to `main` after this
+document was started). It is a small catalog (content hash + timestamp per
+image; the actual JPEG files live separately on disk) and, until this
+section, had **zero backup or integrity coverage** — not even the old
+combined export touched it.
+
+> **SCOPE + LABELING (July 20 2026, second external review):** this backup
+> artifact is the **catalog only** — `profile_images.db`. **The JPEG image
+> files themselves are NOT backed up** (owner ruling, July 16: "we just do
+> the database … that's the record"). Every user-facing label and status
+> line must therefore say **"Profile image catalog"**, and no wording may
+> imply the pictures themselves are protected. (A damaged catalog can also
+> be rebuilt by rescanning the image files — the reverse is not true.)
+
+**Owner ruling: give it the full A1/A2/A3 treatment — do NOT water it down.**
+An earlier draft of this section proposed a lighter, silent-rebuild-only
+path for this database on the reasoning that the catalog is easy to
+regenerate from the files on disk. **The owner rejected that as not good
+enough** ("why not let the user know it's degraded? ... don't be a dick") —
+being easy to fix does not mean the user doesn't deserve to be told. Corrected
+design:
+
+1. **Backed up** in the same backup runs as the other databases (§15.13
+   above — startup/foreground-triggered, 24-hour throttle, not a guaranteed
+   daily schedule), not treated as optional because it's "less important."
+2. **Checked** by the same `Check Database Integrity` action (§15.9/B8) — one
+   more line in the per-database result, not a separate system. Cheap: a small
+   catalog, a standard SQLite integrity check.
+3. **On a problem, the SAME persistent, must-be-acknowledged banner as A2** —
+   the owner's own words: "There should be a snackbar they have to
+   acknowledge." Not a vanishing Toast (per the app-wide rule and the existing
+   §15.2a precedent) — the same persistent top-of-new-chat banner pattern,
+   reused for this database.
+4. **The SAME repair/replace choice as the others** — owner: "potentially
+   repair replace just like the others." Two repair paths, offered together
+   like A1:
+   - **Rebuild from files** — since the catalog only records what already
+     exists on disk, the app can regenerate it by rescanning the image files
+     and relisting their hashes. This is the SAFE auto-repair path (nothing is
+     guessed or invented) and should be attempted first/automatically, the
+     same way A1's "app repaired it itself" variant works — but per the
+     owner's correction, the user is ALWAYS told when this happens (the
+     existing `Database Repaired` dialog, A1), never a silent fix.
+   - **Revert to Last Good Database** — same restore-from-backup action as
+     the other databases (§15.2b), if a rebuild-from-files isn't possible or
+     doesn't fully recover.
+5. **What's different from memory/lorebook (owner-confirmed, not a
+   downgrade):** losing this database does **not** disable chat and does
+   **not** need the full degraded-mode "feature turned off" treatment (§15.2a)
+   the way memory/lorebooks do — there's no equivalent of the Archivist-writes-
+   to-a-bad-database risk here, since nothing else in the app depends on this
+   catalog to function. So no A3-equivalent hard-block is needed. The banner
+   still names the problem and offers Repair / OK, same shape as A2, just
+   without a feature-disable behind it.
+
+**Wording:** not yet written (Phase 2, same as the other unwritten banner
+variants) — but the banner text should follow the A2 pattern
+(`[Feature] is currently turned off because of a database problem. Tap Repair
+to fix it.` → adapted to name the image catalog) once the owner is ready to
+approve it. Owner's own plain-language framing to work from: "let them know
+their images are [messed up]."
+
+### 15.11 What §15 does NOT change
+
+No app code, strings, or UI are written by this update — it is design text
+only, consistent with the "stop after the design" instruction. Every behavior
+and every word above remains subject to owner approval before implementation.
 
 ---
 
