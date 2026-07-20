@@ -1,4 +1,18 @@
-# Database Health & Backups — Build Plan (Rounds 0–5), Revision 2
+# Database Health & Backups — Build Plan (Build Phases 0–5), Revision 2
+
+> ⚠️ **NAMING NOTE — read this first.** This plan numbers its own steps
+> **"Build Phase 0" through "Build Phase 5."** These are UNRELATED to the
+> app's historical **"Round 1" through "Round 5"** series tracked in
+> `CLAUDE.md` (Round 1 = chat renames, Round 2 = voice capture, Round 3 =
+> incomplete replies, Round 4 = Keystore/storage-lock, Round 5 = the memory-
+> health design in `memory_health_round5_phase1_design.md`, whose OWN
+> filename and internal headings still say "Round 5" for that historical
+> reason and are not renamed here). Where this plan says **"Round-4"**
+> (hyphenated, no Build Phase number) below, it means that historical
+> storage-lock work — an already-built dependency, not a step in this plan.
+> **When telling a fresh session to work on this plan, say "Build Phase N,"
+> never bare "Round N"** — that word is already spoken for elsewhere in this
+> project.
 
 **Status: PLAN AWAITING OWNER APPROVAL. Nothing here is built.**
 Revision 2, July 20 2026 — incorporates the second external review (11
@@ -7,13 +21,13 @@ points + the two-systems architecture requirement). Written against `main`
 `memory_health_round5_phase1_design.md` §15 (§15 outranks §1–§14 of that
 document wherever they disagree).
 
-Read before building any round: `CLAUDE.md` (fragile areas, no-Toast rule,
-CI-only compile gate, owner on-device confirmation rule),
+Read before building any Build Phase: `CLAUDE.md` (fragile areas, no-Toast
+rule, CI-only compile gate, owner on-device confirmation rule),
 `Memory System/owner_approved_rules.md`, and the §15 sections cited per
-round. Owner-approved verbatim strings live in §15.12 — implement them
+phase. Owner-approved verbatim strings live in §15.12 — implement them
 exactly. The formerly-proposed changes to approved strings were all ruled
 on by the owner on July 20 2026 (see "Owner confirmations — RESOLVED");
-the only words still to be written are the Round 4 wording list, and the
+the only words still to be written are the Build Phase 4 wording list, and the
 only open choices are under "Decisions still open."
 
 ## The two systems (architectural requirement — keep them separate)
@@ -28,7 +42,7 @@ synchronization contract. It is NOT legacy and must keep working and keep
 being developed. Current honest status: the export already carries the
 structured memory data AND chats; import currently restores memory-system
 data only; **portable chat import/merge is not yet implemented — it is
-intended future capability, not abandoned scope** (Round 5).
+intended future capability, not abandoned scope** (Build Phase 5).
 
 **2. Automatic Recovery Backups.** The per-type snapshots this plan builds.
 Same-installation recovery copies for fast rollback after corruption; they
@@ -66,7 +80,7 @@ Verified facts this plan builds on (checked against `main`, July 20):
 
 ---
 
-## Round 0 — Unfreeze the app (independent; never waits)
+## Build Phase 0 — Unfreeze the app (independent; never waits)
 
 **This round is independent of everything below. It must not wait for the
 backup/recovery rounds or any of their open decisions.** Another session
@@ -77,9 +91,10 @@ anything — do not duplicate. If it has landed, verify and skip.
    startup background thread (ordered before housekeeping steps that log).
 2. Run `MainActivity.preInit()`'s secure-storage/API-key reads and
    `ChatActivity`'s `initChatId()`/`initSettings()` genuinely off the UI
-   thread; splash/loader stays up until the result posts back. Round-4
-   ordering is INVARIANT: locked-check decision → (locked screen | Welcome |
-   chat list), decided off-thread, dispatched on Main, no reordering.
+   thread; splash/loader stays up until the result posts back. The app's
+   existing Round-4 (storage-lock, already built) ordering is INVARIANT:
+   locked-check decision → (locked screen | Welcome | chat list), decided
+   off-thread, dispatched on Main, no reordering.
 3. Voice-diagnostic log writes through one background single-thread writer;
    crash-handler writes stay synchronous.
 4. Touch nothing else: no mic/VAD, no encryption format, no keys, no
@@ -88,14 +103,14 @@ anything — do not duplicate. If it has landed, verify and skip.
 **Exit:** CI green + the owner confirms on their phone that launch no
 longer freezes. (Owner rule: not "done" on any other basis.)
 
-## Round 1 — Stop the every-launch waste (§15.3, §15.4)
+## Build Phase 1 — Stop the every-launch waste (§15.3, §15.4)
 
 Startup-performance round; no user-facing changes.
 
 1. **Crash-triggered integrity checking:** the housekeeping thread consults
    the already-computed last-exit reason; `PRAGMA integrity_check` runs
    only when the previous exit was abnormal (crash/ANR/kill) or a
-   check/repair is pending (Round 3 flag). Clean exit → skip. All three
+   check/repair is pending (Build Phase 3 flag). Clean exit → skip. All three
    databases.
 2. **One-time chores latch:** the outage-file scan and legacy snapshot
    discovery record "done" and stop rescanning every launch (respecting:
@@ -103,15 +118,15 @@ Startup-performance round; no user-facing changes.
 3. **The recovery-backup controller's state lives OUTSIDE all protected
    databases** in an independent plain prefs file (same rationale as
    `storage_health`): enabled setting, selected backup-folder URI
-   (Round 2), and per-type last-attempt / last-success / consecutive-
+   (Build Phase 2), and per-type last-attempt / last-success / consecutive-
    failure counters. **Each recorded failure carries its CATEGORY** (see
-   Round 2 item 5) — never a bare "backup failed." One damaged store can
+   Build Phase 2 item 5) — never a bare "backup failed." One damaged store can
    never disable backup attempts or status tracking for the others.
 
 **Exit:** CI green; Event/Error logs show integrity checks only after
 abnormal exits; startup housekeeping measurably does less on a clean start.
 
-## Round 2 — Per-type recovery backups + user-chosen location (§15.13, §15.16, §15.9 order)
+## Build Phase 2 — Per-type recovery backups + user-chosen location (§15.13, §15.16, §15.9 order)
 
 1. **User-chosen backup folder (requirement, not convenience):** automatic
    recovery backups write to a folder the USER selects via the Storage
@@ -155,7 +170,7 @@ abnormal exits; startup housekeeping measurably does less on a clean start.
    d. Only after the destination copy is reopened-and-verified may the
       oldest rotation candidate be deleted. Last-known-good survives every
       failure mode.
-5. **Failure categories (load-bearing — gates Round 3):** every failure is
+5. **Failure categories (load-bearing — gates Build Phase 3):** every failure is
    classified and counted per type as one of:
    - **source** failure — the database/chat storage could not be read or
      snapshotted, or its snapshot failed verification;
@@ -179,7 +194,8 @@ abnormal exits; startup housekeeping measurably does less on a clean start.
    chat list, histories, and per-chat settings are ONE consistent set. The
    archive contains a **versioned manifest, the expected file set, and
    per-file hashes** — a readable ZIP alone is not sufficient verification.
-   Locked chat storage pauses ONLY the chats artifact (Round-4 policy);
+   Locked chat storage pauses ONLY the chats artifact (the app's existing
+   Round-4 storage-lock policy);
    a degraded database pauses ONLY its own artifact (A1's "unavailable to
    use or save"). The chats artifact is the **encrypted-file archive by
    default** (recovery copies are same-installation; the portable JSON
@@ -188,9 +204,9 @@ abnormal exits; startup housekeeping measurably does less on a clean start.
    during a backup run triggers the store-specific health check without
    waiting for a crash — **routed by data type**: memory / lorebook /
    profile-image-catalog source failure → that database's integrity check
-   (→ the Round-3 repair flow only if the check confirms damage); chat
-   source failure → the existing Round-4 chat-storage health/lock
-   machinery or the chat-recovery flow (Round 3 item 5) — chats are not a
+   (→ the Build Phase 3 repair flow only if the check confirms damage); chat
+   source failure → the app's existing Round-4 chat-storage health/lock
+   machinery or the chat-recovery flow (Build Phase 3 item 5) — chats are not a
    database and never enter the database repair dialogs. A check that
    finds nothing wrong → categorized failure recorded, retry per policy.
 8. **Backup & Restore screen additions** (simple rows, house style — no
@@ -210,20 +226,20 @@ abnormal exits; startup housekeeping measurably does less on a clean start.
    Now".)
 9. The existing portable JSON export/import stays untouched and clearly
    separated on the screen (`Export Portable Copy` / `Import Portable
-   Copy`, with the readable-content warning — labels are Round 4 wording).
+   Copy`, with the readable-content warning — labels are Build Phase 4 wording).
 
 **Exit:** CI green; owner picks a folder on their phone, sees four files
 appear in it, sees the per-type status rows, and last-known-good survives
 an induced destination failure.
 
-## Round 3 — Detection → dialog → repair/replace (§15.2 family, §15.6, A1–A6, B8, §15.15)
+## Build Phase 3 — Detection → dialog → repair/replace (§15.2 family, §15.6, A1–A6, B8, §15.15)
 
 1. **Per-database degraded flag** (plain prefs, survives restarts — B10):
    blocks reads AND writes for that store, pauses its backup artifact,
    hard-disables the Archivist (A3), shows the A2 banner per new chat until
    repaired. **The flag is set only by CONFIRMED damage** — a failed
    integrity check or a mid-session corruption exception. A source backup
-   failure is only the trigger to RUN that check (Round 2 items 5/7);
+   failure is only the trigger to RUN that check (Build Phase 2 items 5/7);
    destination/verify backup failures never touch this flag at all.
 2. **Preserve-the-original law (before ANY repair):** stop access to the
    affected store; preserve the damaged database AND its WAL/journal
@@ -252,8 +268,9 @@ an induced destination failure.
    dies mid-swap) → invalidate `SecurePrefs`/cache handles → clear the
    relevant lock state only after successful validation → controlled app
    restart when required. Boundaries: repairs damaged chat FILES on this
-   phone; cannot cure a lost Keystore key (Round-4 lock system owns that
-   case). Honors `RenameJournal.hasPending` and the lock-order rules.
+   phone; cannot cure a lost Keystore key (the app's existing Round-4 lock
+   system owns that case). Honors `RenameJournal.hasPending` and the
+   lock-order rules.
 6. **Mid-session path (§15.2c):** corruption exceptions caught at the
    store layer → degraded flag → distinct audio cue (hands-free sessions
    ONLY) → A2 banner. No new dialog.
@@ -270,12 +287,12 @@ an induced destination failure.
      `Open Backup Folder` as a secondary text action (never another
      primary button);
    - a source failure → no storage dialog; run the store-specific check
-     and route by type (Round 2 item 7): a database whose check confirms
+     and route by type (Build Phase 2 item 7): a database whose check confirms
      damage → the repair flow (item 3); a chat source failure → the
      chat-storage health/lock or chat-recovery flow (item 5); damage NOT
      confirmed → categorized failure + retry, no dialog beyond the status
      row.
-   Final body text for the storage dialog is Round 4 wording.
+   Final body text for the storage dialog is Build Phase 4 wording.
 9. **Profile Image Catalog specifics (§15.16):** auto-repair = rebuild the
    catalog by rescanning the image files — but per item 2, the damaged
    catalog file is still preserved first, and the rebuild is always
@@ -291,13 +308,13 @@ journal) unit-tested in `app/src/test`; CI green; dialogs verified by the
 owner on-device. Any debug-only trigger to preview these dialogs needs the
 owner's explicit yes first.
 
-## Round 4 — Wording completion (owner copy, then wire it)
+## Build Phase 4 — Wording completion (owner copy, then wire it)
 
 Strings that do not exist yet or now need owner (re-)approval:
 1. A2/A3-style banner text naming the **profile image catalog**.
 2. Buttons on the B8 result (damage found → likely `Repair | Revert to
    Last Good Database`; incomplete → likely `Try Again | View Error Log`).
-3. ~~Compact status rows~~ — **APPROVED** (format per Round 2 item 8);
+3. ~~Compact status rows~~ — **APPROVED** (format per Build Phase 2 item 8);
    only the chats row's placement remains to confirm.
 4. ~~Button rename~~ — **RESOLVED: `Create Backup`** (owner, July 20).
 5. The category-split backup-failure dialog's **body text** (structure +
@@ -317,15 +334,15 @@ Strings that do not exist yet or now need owner (re-)approval:
 
 Each lands only after the owner approves the words in chat.
 
-## Round 5 — Deferred (explicitly NOT in this plan's scope)
+## Build Phase 5 — Deferred (explicitly NOT in this plan's scope)
 
 - **Portable chat IMPORT/merge** (into an existing collection, or from
   another device): intended future capability of the portable JSON system —
   needs its own design conversation (duplicate/merge rules). Same-device
-  recovery restore is NOT deferred (Round 3 item 5).
+  recovery restore is NOT deferred (Build Phase 3 item 5).
 - **The §1–§14 machinery** of the design doc (health episodes store,
   counters, reindex sweeper, contradiction lifecycle, run filter stats /
-  DB v15): Rounds 1–3 build only the thin slice they need (degraded flags,
+  DB v15): Build Phases 1–3 build only the thin slice they need (degraded flags,
   categorized failure counters, transition-only Error-Log lines). §15.15
   supersedes §4.2's log-channel choice; B13 closes §14.1.
 - **Guaranteed background backup scheduling** (WorkManager): possible
@@ -335,9 +352,9 @@ Each lands only after the owner approves the words in chat.
 
 ## Owner confirmations — RESOLVED July 20 2026
 
-1. **A4 replacement: APPROVED.** Category-split design (Round 3 item 8);
+1. **A4 replacement: APPROVED.** Category-split design (Build Phase 3 item 8);
    storage-dialog buttons are `Change Backup Folder | Retry | Cancel`
-   (owner: `Cancel`, not `Not Now`). Body text still Round 4.
+   (owner: `Cancel`, not `Not Now`). Body text still Build Phase 4.
 2. **Backup button name: `Create Backup`** (owner's exact choice — not
    "Create Database Backup", not "Create Backup Now").
 3. **Compact per-type status rows: APPROVED**, replacing the two-line
@@ -345,8 +362,8 @@ Each lands only after the owner approves the words in chat.
 
 ## Decisions still open (unchanged)
 
-1. **(Round 3) B8 result buttons** (labels above are suggestions).
-2. **(Round 3) Debug preview trigger** for the new dialogs: allowed or not.
+1. **(Build Phase 3) B8 result buttons** (labels above are suggestions).
+2. **(Build Phase 3) Debug preview trigger** for the new dialogs: allowed or not.
 
 (The former "chats backup format" decision is CLOSED: encrypted-file
 archive for automatic recovery; the portable JSON export is the readable
@@ -366,11 +383,11 @@ path — no plaintext automatic backups.)
   selectable text; their unreliability never blocks choosing/using a
   folder.
 - **Chat-storage replacement swap** must coordinate with `SecurePrefs`'
-  cached handles and the Round-4 lock state machine (invalidate-and-reopen
-  or controlled restart), honor `RenameJournal.hasPending`, and follow the
-  documented lock order.
+  cached handles and the app's existing Round-4 lock state machine
+  (invalidate-and-reopen or controlled restart), honor
+  `RenameJournal.hasPending`, and follow the documented lock order.
 - **"Repair" of SQLCipher databases is salvage, not magic:** a bounded
   recover-what-reads pass into a staged file. Repair failure is a normal,
   designed outcome (→ revert path); no round may promise more.
-- **Round 0 overlap:** another session owns the freeze-fix proposal.
-  Verify current `main` and open branches before Round 0 writes a line.
+- **Build Phase 0 overlap:** another session owns the freeze-fix proposal.
+  Verify current `main` and open branches before Build Phase 0 writes a line.

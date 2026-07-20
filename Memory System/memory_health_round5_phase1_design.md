@@ -959,7 +959,7 @@ The auto-backup is silent today; a backup failing repeatedly is invisible.
   escape hatch here was a "Save a backup somewhere else now" action running
   the manual export. The ACTIVE design is the category-split dialog
   (`Change Backup Folder | Retry | Cancel`, folder path as selectable text
-  — §15.12 A4 supersession + build plan Rev 2 Round 3 item 8): changing the
+  — §15.12 A4 supersession + build plan Rev 2 Build Phase 3 item 8): changing the
   backup folder IS the escape hatch, and source-type failures are checked
   and routed by store type instead of being treated as storage problems.
 
@@ -1250,7 +1250,7 @@ two-stage inline integrity check, and the `Save Back Up in New Location`
 action — is kept ONLY as the historical record of the July 15 ruling. The
 ACTIVE design is the category-split dialog (`Change Backup Folder | Retry |
 Cancel`; source failures checked then routed by store type; build plan Rev
-2, Round 3 item 8). Original July 15 text follows:
+2, Build Phase 3 item 8). Original July 15 text follows:
 > **Title:** `Backup Attempts Failed`
 > **Body (sentence case):** `Your device may be low on storage space. Please choose another location or free up space.`
 > `If you have enough storage space, try checking the database integrity.`
@@ -1260,14 +1260,14 @@ Cancel`; source failures checked then routed by store type; build plan Rev
 - Per §15.13: any backup-error surface must show the backup folder location and
   an `Open Backup Folder` button — added to A4's buttons above.
 - **SUPERSEDED (owner-approved, July 20 2026):** the five-button layout
-  above is REPLACED by the category-split design (build plan Rev 2, Round 3
+  above is REPLACED by the category-split design (build plan Rev 2, Build Phase 3
   item 8): destination/storage failures get exactly
   `Change Backup Folder | Retry | Cancel` (owner: `Cancel`, not `Not Now`;
   folder path as selectable text; `Open Backup Folder` as a secondary text
   action); an actual source-damage failure skips the storage dialog and
   enters the A1 repair flow directly. The wording block above is kept as
   the historical record only; the new dialog's body text is still to be
-  owner-approved (build plan Round 4).
+  owner-approved (build plan Build Phase 4).
 
 Inline integrity check inside A4 (under the `Check Database Integrity` button):
 - While running (status text, sentence case): `Checking Database...`
@@ -1422,7 +1422,7 @@ sortable 24-hour (not user-facing).
 - §15.9's single-line and two-line status layouts are HISTORICAL — the
   compact rows (§15.9 item 3) are the active design.
 - The backup-failure dialog is the category-split design (§15.12 A4
-  supersession + build plan Rev 2 Round 3 item 8), showing the folder path
+  supersession + build plan Rev 2 Build Phase 3 item 8), showing the folder path
   as text.
 - A6's preserved-file location (a quarantined corrupt DB) stays its own
   `Open File Location`; that is a different location from the backup folder.
