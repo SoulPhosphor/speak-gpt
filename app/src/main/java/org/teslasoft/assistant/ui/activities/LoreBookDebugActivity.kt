@@ -49,7 +49,7 @@ class LoreBookDebugActivity : FragmentActivity() {
     private var debugText: TextView? = null
     private var actionBar: ConstraintLayout? = null
 
-    private val timeFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+    private val timeFormat = SimpleDateFormat("yyyy-MM-dd h:mm:ss a", Locale.getDefault())
 
     @Suppress("DEPRECATION")
     override fun onCreate(savedInstanceState: Bundle?) {
