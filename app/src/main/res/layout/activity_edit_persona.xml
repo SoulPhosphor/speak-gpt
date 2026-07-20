@@ -117,7 +117,7 @@
                 style="@style/Widget.App.Field.Label"
                 android:layout_width="0dp"
                 android:layout_marginStart="24dp"
-                android:layout_marginTop="24dp"
+                android:layout_marginTop="18dp"
                 android:layout_marginEnd="24dp"
                 android:text="@string/persona_friendly_name"
                 app:layout_constraintEnd_toEndOf="parent"
@@ -263,15 +263,12 @@
 
             <TextView
                 android:id="@+id/text_additional_lorebooks"
+                style="@style/Widget.App.Field.Label"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
                 android:layout_marginStart="24dp"
                 android:layout_marginTop="18dp"
                 android:layout_marginEnd="24dp"
                 android:text="@string/persona_additional_lorebooks"
-                android:textColor="@color/text_title"
-                android:textSize="16sp"
-                android:textStyle="bold"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toBottomOf="@+id/field_core_lorebook" />
