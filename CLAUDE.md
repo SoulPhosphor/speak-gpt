@@ -1409,12 +1409,15 @@ Everything is on-device. No cloud sync, no accounts.
   asking first. First use: `CampaignDetailActivity` (both `btnBack`'s click
   listener and an `onBackPressedDispatcher.addCallback` for the system
   back gesture route through one `attemptExit()` that compares a field
-  snapshot against the snapshot taken at load/last-save). Note:
-  `ApiEndpointEditorActivity` already had an equivalent hand-rolled
-  discard-changes dialog before this ruling, using "Yes"/"No" buttons
-  instead of "Okay"/"Cancel" — it was left as-is (out of scope for the
-  ruling that introduced the shared helper) rather than silently changed;
-  ask the owner before converting it.
+  snapshot against the snapshot taken at load/last-save). Second use:
+  `ApiEndpointEditorActivity`, converted the same day — it already had an
+  equivalent hand-rolled discard-changes dialog with "Yes"/"No" buttons
+  instead of "Okay"/"Cancel"; the owner asked for it to match, so its
+  `attemptExit()` now calls the shared helper too. (`R.string.yes`/
+  `R.string.no` stay in use elsewhere for ordinary delete-confirmation
+  dialogs, a different kind of prompt — this ruling is about the
+  unsaved-changes case specifically, not a blanket Yes/No → Okay/Cancel
+  sweep.)
 - **The top-right disc (floppy-disk) save icon (owner ruling, July 20
   2026).** For a full-screen editor whose Save action moves from an
   inline/bottom button into the header, put a floppy-disk icon
