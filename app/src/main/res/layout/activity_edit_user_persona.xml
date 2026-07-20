@@ -40,8 +40,9 @@
 
         <TextView
             android:id="@+id/activity_title"
-            style="@style/Widget.App.ActionBar.Title"
-            android:text="@string/title_mem_pers_edit" />
+            style="@style/Widget.App.ActionBar.Title.NearBack"
+            android:text="@string/title_mem_pers_edit"
+            app:layout_constraintEnd_toStartOf="@+id/btn_delete" />
 
         <!-- Same geometry as Edit Companion's btn_delete (chains off btn_save,
              so it can't use Widget.App.ActionBar.SecondaryButton as-is - see

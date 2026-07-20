@@ -320,6 +320,34 @@
         <item name="layout_constraintTop_toTopOf">parent</item>
     </style>
 
+    <!-- Left-aligned title for any Widget.App.ActionBar header that also has
+         one or more trailing icon buttons (owner ruling, July 21 2026):
+         the title sits right after the back button with a small gap, not
+         centered across the whole bar - matches the look
+         activity_memory_list.xml's scaffold already used. NOT a child of
+         Widget.App.ActionBar.Title (same reason Title.LeftAligned below
+         isn't either: a ConstraintLayout view can't cleanly carry both an
+         inherited layout_constraintEnd_toEndOf and an added
+         layout_constraintEnd_toStartOf). layout_constraintEnd_toStartOf is
+         NOT baked in here - every screen's first trailing icon has a
+         different id, so each instance sets its own
+         app:layout_constraintEnd_toStartOf pointing at that icon (or, with
+         two or more chained icons, the one nearest the title). -->
+    <style name="Widget.App.ActionBar.Title.NearBack" parent="">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginStart">8dp</item>
+        <item name="android:ellipsize">end</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:textColor">@color/text_title</item>
+        <item name="android:textSize">24sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="layout_constraintBottom_toBottomOf">parent</item>
+        <item name="layout_constraintHorizontal_bias">0.0</item>
+        <item name="layout_constraintStart_toEndOf">@+id/btn_back</item>
+        <item name="layout_constraintTop_toTopOf">parent</item>
+    </style>
+
     <!-- THE "icon on top" PATTERN (owner ruling, July 19 2026): use this,
          not raw XML, any time a Widget.App.ActionBar screen needs a
          trailing icon button (a shortcut, a settings gear, etc.) alongside

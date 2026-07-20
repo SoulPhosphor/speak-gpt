@@ -48,8 +48,9 @@
 
         <TextView
             android:id="@+id/activity_title"
-            style="@style/Widget.App.ActionBar.Title"
-            android:text="@string/title_lorebook" />
+            style="@style/Widget.App.ActionBar.Title.NearBack"
+            android:text="@string/title_lorebook"
+            app:layout_constraintEnd_toStartOf="@+id/btn_edit_book" />
 
         <!-- Chains off btn_debug (the edge-anchored icon), so it can't share
              Widget.App.ActionBar.SecondaryButton as-is (that style bakes in

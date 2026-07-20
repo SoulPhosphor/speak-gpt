@@ -39,8 +39,9 @@
 
         <TextView
             android:id="@+id/activity_title"
-            style="@style/Widget.App.ActionBar.Title"
-            android:text="@string/title_edit_companion" />
+            style="@style/Widget.App.ActionBar.Title.NearBack"
+            android:text="@string/title_edit_companion"
+            app:layout_constraintEnd_toStartOf="@+id/btn_delete" />
 
         <!-- Chains off btn_save (the edge-anchored icon), so it can't share
              Widget.App.ActionBar.SecondaryButton as-is (that style bakes in

@@ -66,7 +66,8 @@
 
         <TextView
             android:id="@+id/activity_title"
-            style="@style/Widget.App.ActionBar.Title"
-            android:text="@string/title_logit_bias_sets" />
+            style="@style/Widget.App.ActionBar.Title.NearBack"
+            android:text="@string/title_logit_bias_sets"
+            app:layout_constraintEnd_toStartOf="@+id/btn_help" />
     </androidx.constraintlayout.widget.ConstraintLayout>
 </androidx.constraintlayout.widget.ConstraintLayout>

@@ -497,6 +497,42 @@ and rollout notes here — not back in `CLAUDE.md`.
   Kotlin already used the full standard tint-list AMOLED pattern before
   this change, so only the XML moved to the new styles — no Kotlin
   edits needed.
+- **Title alignment on headers with a trailing icon (owner ruling, July 21
+  2026 — corrects the July 19 ruling above for this case).** Any
+  `Widget.App.ActionBar` header that also has one or more trailing icon
+  buttons (Save, Delete, a debug/help shortcut, etc.) must NOT center its
+  title across the whole bar — the title sits left-aligned right after the
+  back button with a small gap, ellipsizing before the first icon.
+  `activity_memory_list.xml`'s scaffold already looked like this and is
+  the reference. New style: `Widget.App.ActionBar.Title.NearBack`
+  (`values/themes.xml`) — not a child of the plain `.Title` (same
+  dual-constraint reason `.Title.LeftAligned` above isn't either).
+  `layout_constraintEnd_toStartOf` is deliberately left off the shared
+  style (every screen's nearest icon has a different id) — each instance
+  sets it, pointing at the icon closest to the title when two or more are
+  chained. **Converted:** `activity_edit_persona.xml` (end→`btn_delete`),
+  `activity_edit_user_persona.xml` (end→`btn_delete`),
+  `activity_logs.xml` (end→`btn_voice_advanced`),
+  `activity_lorebook_entries.xml` (end→`btn_edit_book`, the icon nearer
+  the title of its two),
+  `activity_lorebooks_list.xml` (end→`btn_debug`),
+  `activity_logit_bias_config_list.xml` (end→`btn_help`),
+  `activity_logit_bias_list.xml` (end→`btn_help`) — every screen using
+  `Widget.App.ActionBar.Title` with a genuine trailing icon. Screens using
+  plain `Widget.App.ActionBar.Title` with only a back button (Settings,
+  Characters, Companions, Activation Prompts, Voice & Speech, Advanced
+  Voice Settings, Profile Image Properties, Default Images, the six
+  `activity_memory_list_simple.xml` screens, Local Whisper Manage/Models,
+  Alerts/Errors & Logs, Audio Debugging) were checked and correctly left
+  centered — none of them has a second icon. **Not yet converted:** the
+  roleplay card editors (`activity_world_detail.xml`,
+  `activity_character_card.xml`, `activity_campaign_detail.xml`) and
+  `activity_model_rule_editor.xml` — these never got the header-style
+  rollout at all (raw hand-copied 20sp centered title, not
+  `Widget.App.ActionBar.Title`); the first three also carry a save icon
+  next to back, so they likely need this same fix once/if they're pulled
+  into the shared header styles, but that's a separate conversion, not
+  done here.
 - **Shared field label + box styles (owner ruling, July 20 2026).** The
   same "hand-copied attributes on every field" problem that button/row/
   header styles fixed above also existed for the label-above-a-box form

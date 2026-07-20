@@ -34,8 +34,9 @@
 
         <TextView
             android:id="@+id/activity_logs_title"
-            style="@style/Widget.App.ActionBar.Title"
-            android:text="@string/title_logs" />
+            style="@style/Widget.App.ActionBar.Title.NearBack"
+            android:text="@string/title_logs"
+            app:layout_constraintEnd_toStartOf="@+id/btn_voice_advanced" />
 
         <!-- One-tap jump to the advanced voice & debugging screen, shown only on
              the Event log (set in LogsActivity) so the user can read what's

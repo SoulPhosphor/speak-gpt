@@ -48,8 +48,9 @@
 
         <TextView
             android:id="@+id/activity_title"
-            style="@style/Widget.App.ActionBar.Title"
-            android:text="@string/title_lorebooks" />
+            style="@style/Widget.App.ActionBar.Title.NearBack"
+            android:text="@string/title_lorebooks"
+            app:layout_constraintEnd_toStartOf="@+id/btn_debug" />
 
         <ImageButton
             android:id="@+id/btn_debug"
