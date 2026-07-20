@@ -1395,6 +1395,38 @@ Everything is on-device. No cloud sync, no accounts.
   "dialogs, never toasts" ruling from the campaign work to the whole app.
   When touching a screen that still has toasts, convert them (keep the
   approved wording, change only the presentation).
+- **The standard discard-changes dialog (owner ruling, July 20 2026) —
+  use this by name, don't re-describe it.** Any full-screen editor with an
+  explicit Save action must confirm before letting the user back out
+  (toolbar back button or the system back gesture) with unsaved changes.
+  Call `org.teslasoft.assistant.ui.util.DiscardChangesDialog.show(context) {
+  onDiscard }` — it builds the one approved shape: message
+  `@string/discard_changes_q` ("Discard changes?"), positive button
+  `@string/okay` ("Okay") runs the discard callback (finish the screen,
+  changes lost), negative button `@string/btn_cancel` ("Cancel") only
+  dismisses the dialog and leaves the screen exactly as it was. Themed with
+  `R.style.App_MaterialAlertDialog`. Do not reword or restyle it without
+  asking first. First use: `CampaignDetailActivity` (both `btnBack`'s click
+  listener and an `onBackPressedDispatcher.addCallback` for the system
+  back gesture route through one `attemptExit()` that compares a field
+  snapshot against the snapshot taken at load/last-save). Note:
+  `ApiEndpointEditorActivity` already had an equivalent hand-rolled
+  discard-changes dialog before this ruling, using "Yes"/"No" buttons
+  instead of "Okay"/"Cancel" — it was left as-is (out of scope for the
+  ruling that introduced the shared helper) rather than silently changed;
+  ask the owner before converting it.
+- **The top-right disc (floppy-disk) save icon (owner ruling, July 20
+  2026).** For a full-screen editor whose Save action moves from an
+  inline/bottom button into the header, put a floppy-disk icon
+  (`@drawable/ic_save`, the app's existing save glyph) in the action bar's
+  top-right corner using `Widget.App.ActionBar.SecondaryButton` (the "icon
+  on top" pattern — see that style's doc comment in `themes.xml`) — the
+  same icon button geometry as every other action-bar shortcut icon in the
+  app. It performs the same save-in-place action the old button did (does
+  not also close the screen). First use: `CampaignDetailActivity` (removed
+  the bottom `btn_campaign_save` MaterialButton; the icon reuses that
+  view's id, now an `ImageButton` in `action_bar`, recolored for AMOLED the
+  same way `btnBack` already is).
 - **App button styles (owner naming, July 18 2026 — supersedes any earlier
   button-styling instruction unless the owner directs otherwise).** Three
   named button styles, `values/themes.xml`, each a standalone style a

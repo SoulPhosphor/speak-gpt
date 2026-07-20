@@ -30,6 +30,7 @@ import android.widget.PopupMenu
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.addCallback
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
@@ -50,6 +51,7 @@ import org.teslasoft.assistant.preferences.memory.PartyMemberRecord
 import org.teslasoft.assistant.preferences.memory.RpTagRecord
 import org.teslasoft.assistant.preferences.memory.RpTagTargetType
 import org.teslasoft.assistant.theme.ThemeManager
+import org.teslasoft.assistant.ui.util.DiscardChangesDialog
 
 /**
  * The two-zone campaign card (roleplay_cards_and_tags_spec §6d). Zone 1 is
@@ -75,6 +77,10 @@ class CampaignDetailActivity : FragmentActivity() {
     /** Guards Save until an existing record has loaded. */
     private var ready = false
 
+    /** Snapshot of the fields as last loaded/saved, for the discard-changes
+     *  confirmation on back-out (see DiscardChangesDialog). */
+    private var initialSnapshot: String = ""
+
     // Working scope selections (nullable ids).
     private var status: String = "active"
     private var selWorldId: String? = null
@@ -98,7 +104,7 @@ class CampaignDetailActivity : FragmentActivity() {
     private var textPartyEmpty: TextView? = null
     private var partyContainer: LinearLayout? = null
     private var btnPartyAdd: MaterialButton? = null
-    private var btnSave: MaterialButton? = null
+    private var btnSave: ImageButton? = null
     private var btnMemories: MaterialButton? = null
     private var btnTeardown: MaterialButton? = null
     private var textSaveFirst: TextView? = null
@@ -143,7 +149,9 @@ class CampaignDetailActivity : FragmentActivity() {
 
         applyTheme()
 
-        btnBack?.setOnClickListener { finish() }
+        onBackPressedDispatcher.addCallback(this) { attemptExit() }
+
+        btnBack?.setOnClickListener { attemptExit() }
         rowStatus?.setOnClickListener { showStatusPicker() }
         rowWorld?.setOnClickListener { showWorldPicker() }
         rowCharacter?.setOnClickListener { showCharacterPicker() }
@@ -177,6 +185,7 @@ class CampaignDetailActivity : FragmentActivity() {
         val id = campaignId
         if (id == null) {
             ready = true
+            initialSnapshot = snapshot()
             return
         }
         runOffThread {
@@ -218,6 +227,7 @@ class CampaignDetailActivity : FragmentActivity() {
                     textCompanion?.text = companionName ?: getString(R.string.mem_world_campaign_none)
                 }
                 ready = true
+                initialSnapshot = snapshot()
                 updateExtraButtons()
             }
         }
@@ -531,6 +541,31 @@ class CampaignDetailActivity : FragmentActivity() {
         }
     }
 
+    /* ------------------------------ exit / discard ------------------------------ */
+
+    /** Serialised form of the Zone 1 bookmark fields, used only for change
+     *  detection against initialSnapshot. */
+    private fun snapshot(): String = listOf(
+        fieldName?.text?.toString().orEmpty(),
+        fieldQuestAnchor?.text?.toString().orEmpty(),
+        fieldActiveScene?.text?.toString().orEmpty(),
+        status,
+        selWorldId.orEmpty(),
+        selCharacterId.orEmpty(),
+        selCompanionId.orEmpty()
+    ).joinToString("")
+
+    /** Back / cancel. Confirms first if anything changed since the last load
+     *  or save (DiscardChangesDialog — the app's standard unsaved-changes
+     *  confirmation). */
+    private fun attemptExit() {
+        if (ready && snapshot() != initialSnapshot) {
+            DiscardChangesDialog.show(this) { finish() }
+        } else {
+            finish()
+        }
+    }
+
     /* ------------------------------ save ------------------------------ */
 
     private fun save() {
@@ -565,6 +600,7 @@ class CampaignDetailActivity : FragmentActivity() {
                 existing = record
                 titleView?.setText(R.string.mem_world_campaign_detail_title)
                 updateExtraButtons()
+                initialSnapshot = snapshot()
                 Toast.makeText(this, R.string.mem_world_campaign_saved, Toast.LENGTH_SHORT).show()
                 renderParty()
                 renderSections()
@@ -673,6 +709,7 @@ class CampaignDetailActivity : FragmentActivity() {
             }
             actionBar?.setBackgroundColor(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
             btnBack?.backgroundTintList = ColorStateList.valueOf(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
+            btnSave?.backgroundTintList = ColorStateList.valueOf(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
         } else {
             window.setBackgroundDrawable(SurfaceColors.SURFACE_0.getColor(this).toDrawable())
             if (Build.VERSION.SDK_INT <= 34) {
@@ -681,6 +718,7 @@ class CampaignDetailActivity : FragmentActivity() {
             }
             actionBar?.setBackgroundColor(SurfaceColors.SURFACE_4.getColor(this))
             btnBack?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(this))
+            btnSave?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(this))
         }
     }
 
