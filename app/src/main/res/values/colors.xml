@@ -202,6 +202,14 @@
 
     <color name="border">#33000000</color>
 
+    <!-- Quick Settings tile border (owner ruling, July 21 2026): a thin, subtle
+         line a shade lighter than the tile fill, so the top block reads as a
+         container without glaring. A low-alpha white lightens whatever fill sits
+         behind it (works on the dark/AMOLED theme the owner uses); it is a
+         deliberate placeholder to be re-themed when the glowing-border look is
+         designed - change it here in one place. -->
+    <color name="quick_tile_border">#26FFFFFF</color>
+
     <color name="pwa_background">#121417</color>
     <color name="pwa_accent">#bbd3ff</color>
 
