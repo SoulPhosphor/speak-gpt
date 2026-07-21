@@ -5511,18 +5511,17 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     // withContext suspension).
                     renameInProgress = true
                     val renamed = try {
-                        // editChat is atomic on the prefs side (ChatRenameTransaction):
-                        // it moves the history, copies the WHOLE per-chat settings
-                        // file (nothing enumerated by hand or re-derived from the
-                        // endpoint profile) and flips the chat-list pointer only
-                        // after the copies verify; the memory re-point is journalled
-                        // and recoverable. false = nothing changed anywhere — keep
-                        // the old id; a later turn may retry with a fresh title.
+                        // editChat is a NAME-only list update since the
+                        // stable-id work (chat-id-stable-identity-plan.md):
+                        // the chat's id never changes, so nothing keyed by it
+                        // — history, per-chat settings, transcripts, cooldowns
+                        // — moves. false = nothing changed anywhere; a later
+                        // turn may retry with a fresh title.
                         withContext(Dispatchers.IO) {
                             ChatPreferences.getChatPreferences().editChat(this@ChatActivity, newChatName, placeholderName)
                         }
                     } catch (e: Exception) {
-                        logVoiceEventAlways("auto-name rename threw (${e.message}); keeping the placeholder name and old chat id")
+                        logVoiceEventAlways("auto-name rename threw (${e.message}); keeping the placeholder name")
                         false
                     } finally {
                         renameInProgress = false
@@ -5532,22 +5531,18 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     // Main after the IO hop). Never touch views/intent from IO,
                     // and never apply the result to a destroyed screen.
                     if (renamed && !isFinishing && !isDestroyed) {
-                        chatId = Hash.hash(newChatName)
-
-                        // Adopt the renamed chat in place. This used to relaunch
-                        // ChatActivity (startActivity + finish) to pick up the new
-                        // chat id — but onDestroy of the old instance stops TTS,
-                        // kills the hands-free loop and releases the mic, which cut
-                        // off the first reply's readback almost immediately and
-                        // ended the voice conversation with no visible error.
-                        // Everything keyed by the chat id is re-pointed here
-                        // instead; the data itself was already moved by editChat.
+                        // Adopt the new title in place — never relaunch the
+                        // screen (onDestroy stops TTS and kills the hands-free
+                        // loop). chatId and this.preferences stay exactly as
+                        // they are: the id did not change, so the old
+                        // mid-conversation identity swap (re-pointing chatId,
+                        // preferences and the chatId intent extra) is gone —
+                        // that swap in the middle of a live voice turn was the
+                        // riskiest part of auto-naming.
                         this.chatName = newChatName
-                        this.preferences = Preferences.getPreferences(this, chatId)
                         // If the OS later recreates this screen (rotation, process
                         // restore), onCreate re-reads the intent extras — they must
-                        // name the renamed chat, not the deleted placeholder.
-                        intent.putExtra("chatId", chatId)
+                        // name the renamed chat, not the placeholder.
                         intent.putExtra("name", this.chatName)
                         activityTitle?.text = newChatName
                         logVoiceEvent("chat auto-named without restarting the screen (voice loop preserved)")

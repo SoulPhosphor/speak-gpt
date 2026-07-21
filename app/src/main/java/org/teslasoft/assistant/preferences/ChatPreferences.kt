@@ -23,9 +23,8 @@ import android.os.Looper
 import android.widget.Toast
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
-import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.util.ChatIdentity
-import org.teslasoft.assistant.util.Hash
+import org.teslasoft.assistant.util.StableId
 import java.lang.Exception
 import java.lang.reflect.Type
 import androidx.core.content.edit
@@ -59,9 +58,11 @@ class ChatPreferences private constructor() {
          * merge's verify and its outage-file delete could permanently erase
          * freshly reconciled entries, stranding their histories invisibly.
          * Lock ordering: this monitor may be held while taking
-         * RenameJournal's monitor (editChat does), never the reverse —
+         * RenameJournal's monitor, never the reverse —
          * RenameJournal.reconcile reads the list without mutating it and
-         * takes no list lock.
+         * takes no list lock. (Renames no longer journal — stable ids made
+         * the cross-store re-point unnecessary — but startup recovery of a
+         * pre-upgrade entry still runs, so the ordering rule stands.)
          */
         @JvmField val CHAT_LIST_LOCK = Any()
     }
@@ -620,32 +621,34 @@ class ChatPreferences private constructor() {
     }
 
     /**
-     * Adds a new chat to the chat list.
+     * Adds a new chat to the chat list and returns its id. The id is minted
+     * (StableId, "c-" prefix) and marked as the chat's permanent identity —
+     * never derived from the name, so a later rename is a pure list update
+     * (chat-id-stable-identity-plan.md). Callers must key everything
+     * (history file, per-chat settings, intent extras) by the RETURNED id.
      *
      * @param context The context of the application.
      * @param chatName The name of the chat to add.
+     * @return The new chat's id. When storage is write-blocked nothing is
+     *         persisted (same as before) and the returned id names an
+     *         entry that does not exist.
      */
-    fun addChat(context: Context, chatName: String) {
-        if (chatWriteBlocked(context, "chat_list", "create a chat")) return
+    fun addChat(context: Context, chatName: String): String {
+        val chatId = StableId.newId(ChatIdentity.STABLE_ID_PREFIX)
+        if (chatWriteBlocked(context, "chat_list", "create a chat")) return chatId
         synchronized(CHAT_LIST_LOCK) {
             val list = getChatList(context)
 
-            val map: HashMap<String, String> = HashMap()
-
-            map["name"] = chatName
-            map["id"] = Hash.hash(chatName)
-            map["timestamp"] = System.currentTimeMillis().toString()
-            map["pinned"] = "false"
-
-            list.add(map)
+            list.add(ChatIdentity.newEntry(chatName, chatId, System.currentTimeMillis()))
             val json: String = Gson().toJson(list)
 
             val settings: SharedPreferences = SecurePrefs.get(context, "chat_list")
             settings.edit { putString("data", json) }
         }
 
-        val settings2: SharedPreferences = SecurePrefs.get(context, "chat_${Hash.hash(chatName)}")
+        val settings2: SharedPreferences = SecurePrefs.get(context, "chat_$chatId")
         settings2.edit { putString("chat", "[]") }
+        return chatId
     }
 
     /**
@@ -660,7 +663,10 @@ class ChatPreferences private constructor() {
 
         var isFound = false
         for (map: HashMap<String, String> in list) {
-            if (map["id"] == Hash.hash(chatName)) {
+            // A NAME comparison, deliberately: comparing the stored id to a
+            // hash of the candidate name would never flag a stable-id chat,
+            // whose id is not derived from its name.
+            if (map["name"] == chatName) {
                 isFound = true
                 break
             }
@@ -684,129 +690,82 @@ class ChatPreferences private constructor() {
     }
 
     /**
-     * Renames a chat: moves the message history AND the whole per-chat
-     * settings file to the new chat id, then flips the chat-list pointer.
+     * Renames a chat. Since the stable-id work (chat-id-stable-identity-
+     * plan.md, commit 3) a chat's id never changes, so a rename is a pure
+     * NAME update on the chat-list entry: no file moves, no journal, no
+     * memory-store re-point — everything keyed by the id (history, per-chat
+     * settings, transcripts, cooldowns) stays attached by construction.
      *
-     * Runs through [ChatRenameTransaction] — write-new → verify → copy
-     * settings wholesale → verify → flip pointer → clear old, every write a
-     * synchronous commit. The old implementation cleared the old history
-     * file BEFORE the new one was written (both async), so a process kill
-     * mid-rename silently destroyed the conversation; and it did not move
-     * the settings at all, leaving that to two hand-maintained copy blocks
-     * in callers that had drifted out of sync with the real per-chat key
-     * set (see PerChatSettingKeys).
+     * Refusals ([ChatIdentity.renameDecision]):
+     *  - the entry is not stable (unmarked, §7 rule 4 — its stored id was
+     *    never verified; healing marks every healthy entry at startup, so
+     *    this is the frozen mismatch case);
+     *  - the new name is already taken (duplicate names stay disallowed —
+     *    relaxing that is an owner decision, not a side effect);
+     *  - storage is write-blocked, the old name matches no entry, or the
+     *    list commit fails.
      *
      * @return true when the rename fully applied. false means NOTHING
      *         changed — the chat is intact under [previousName] and callers
-     *         must keep using the old id. Never partially applied.
+     *         must keep using the old name. Never partially applied.
      */
     fun editChat(context: Context, chatName: String, previousName: String): Boolean {
         if (chatName == previousName) return true
 
-        val oldId = Hash.hash(previousName)
-        val newId = Hash.hash(chatName)
+        if (chatWriteBlocked(context, "chat_list", "rename a chat")) return false
 
-        // A rename touches the list pointer and both chat files: refuse the
-        // whole operation if any of them is locked or preserved-corrupt.
-        // Refusal is the documented "nothing changed" contract (returns
-        // false, chat intact under the old name).
-        if (chatWriteBlocked(context, "chat_list", "rename a chat") ||
-            chatWriteBlocked(context, "chat_$oldId", "rename a chat") ||
-            chatWriteBlocked(context, "chat_$newId", "rename a chat")
-        ) {
-            return false
-        }
-
-        val outcome: ChatRenameTransaction.Outcome
         synchronized(CHAT_LIST_LOCK) {
-            val list = getChatList(context)
-            val entry = list.firstOrNull { ChatIdentity.effectiveId(it) == oldId } ?: return false
+            val list = getChatListResult(context, includeFirstMessage = false).chats
+            when (ChatIdentity.renameDecision(list, previousName, chatName)) {
+                ChatIdentity.RenameDecision.NOT_FOUND -> return false
+                ChatIdentity.RenameDecision.NOT_STABLE -> {
+                    // Never silent: the refusal is the §7 rule-4 freeze and
+                    // the user sees the existing rename-failed dialog.
+                    Logger.log(
+                        context, "crash", "ChatPreferences", "error",
+                        "Rename refused: \"$previousName\" carries a stored id that was never verified against its name " +
+                            "(see the chat identity mismatch report). The chat is unchanged; renaming stays disabled until it is inspected manually."
+                    )
+                    return false
+                }
+                ChatIdentity.RenameDecision.DUPLICATE_NAME -> {
+                    Logger.log(
+                        context, "crash", "ChatPreferences", "error",
+                        "Rename refused: a chat named \"$chatName\" already exists; \"$previousName\" was left unchanged."
+                    )
+                    return false
+                }
+                ChatIdentity.RenameDecision.OK -> { /* fall through */ }
+            }
 
-            // Renaming onto an id another chat already owns would silently
-            // overwrite that chat's history. Refuse instead (the rename dialog
-            // pre-checks duplicates; auto-naming may retry with another title).
-            if (list.any { it !== entry && ChatIdentity.effectiveId(it) == newId }) {
+            val entry = list.first { it["name"] == previousName }
+            entry["name"] = chatName
+
+            // One synchronous commit so the boolean contract is honest —
+            // apply() could report success for a write that never lands.
+            // `list` is a fresh local parse, so a failed commit leaves no
+            // shared state mutated.
+            val committed = SecurePrefs.get(context, "chat_list")
+                .edit().putString("data", Gson().toJson(list)).commit()
+            if (!committed) {
                 Logger.log(
                     context, "crash", "ChatPreferences", "error",
-                    "Rename refused: a chat named \"$chatName\" already exists; \"$previousName\" was left unchanged."
+                    "Renaming \"$previousName\" to \"$chatName\" failed to save. The chat is unchanged under its old name."
                 )
-                return false
             }
-
-            entry["name"] = chatName
-            entry["id"] = newId
-            val newListJson: String = Gson().toJson(list)
-
-            // Journal the rename BEFORE touching prefs. The prefs pointer flip is
-            // the authoritative moment, but a process death right after it would
-            // leave the memory re-point (a separate store) undone and the chat's
-            // transcripts stranded under the old id. The journal makes that window
-            // recoverable at next start; recovery consults the live chat list, so
-            // an entry written for a rename that then fails pre-flip is safely
-            // discarded (the old id is still live). Committed synchronously to
-            // encrypted prefs, outside the memory DB, so it survives even when the
-            // DB is the thing failing. (Lock ordering: CHAT_LIST_LOCK →
-            // RenameJournal's monitor; RenameJournal.reconcile never takes
-            // CHAT_LIST_LOCK, so there is no inversion.)
-            RenameJournal.record(context, oldId, newId)
-
-            outcome = try {
-                ChatRenameTransaction.rename(securePrefsFileAccess(context), oldId, newId, newListJson)
-            } catch (e: Exception) {
-                ChatRenameTransaction.Outcome(false, "unexpected error: ${e.message}")
-            }
+            return committed
         }
-
-        if (!outcome.success) {
-            // The pointer never flipped: the old chat is still authoritative,
-            // so the journal entry would drive no re-point anyway (recovery
-            // sees the old id live) — drop it now to keep the journal clean.
-            RenameJournal.clear(context, oldId, newId)
-            // Never silent: a failed rename is recorded in the user-facing
-            // Error Log even though the data itself is safe.
-            Logger.log(
-                context, "crash", "ChatPreferences", "error",
-                "Renaming \"$previousName\" to \"$chatName\" failed at ${outcome.failedStage}. " +
-                    "The chat and its settings are untouched under the old name."
-            )
-            return false
-        }
-        for (warning in outcome.warnings) {
-            Logger.log(context, "crash", "ChatPreferences", "warning", "Chat rename: $warning")
-        }
-
-        // The rename is now authoritative (chat list names the new id). Complete
-        // the cross-store re-point of the memory rows. repointChat is one atomic
-        // DB transaction and idempotent; on success the journal entry is dropped.
-        // On failure (or a death here) the entry is LEFT for startup recovery to
-        // retry — the rename still succeeds and the chat is fully usable under
-        // the new name; only the memory re-point is deferred, and past
-        // transcripts stay preserved under the old id until it completes. We do
-        // NOT pretend the two stores committed together.
-        var repointed = false
-        try {
-            if (MemoryStore.isProvisioned(context)) {
-                MemoryStore.getInstance(context).repointChat(oldId, newId)
-            }
-            repointed = true // provisioned + moved, or nothing to move (no store)
-        } catch (e: Exception) {
-            Logger.log(
-                context, "crash", "ChatPreferences", "error",
-                "Renamed \"$previousName\" to \"$chatName\", but moving its memory records failed (${e.message}). " +
-                    "It is queued for retry on the next app start; past messages stay preserved under the old name."
-            )
-        }
-        if (repointed) RenameJournal.clear(context, oldId, newId)
-
-        return true
     }
 
     /**
-     * SharedPreferences-backed storage for [ChatRenameTransaction]. All
-     * writes are synchronous commits — the transaction's ordering guarantee
-     * (new data durable before the pointer flips, pointer durable before the
-     * old data clears) only holds if nothing here is apply()-deferred.
+     * SharedPreferences-backed storage for [ChatRenameTransaction]. The
+     * transaction is no longer reachable from renames (stable ids made the
+     * whole move-and-verify machinery unnecessary); it and this adapter are
+     * kept only so startup recovery of a PRE-upgrade interrupted rename
+     * stays diffable against the code that wrote it. Deleting both is later
+     * cleanup, deliberately not part of the stable-id change.
      */
+    @Suppress("unused")
     private fun securePrefsFileAccess(context: Context) = object : ChatRenameTransaction.FileAccess {
         override fun readAll(fileName: String): Map<String, Any?> =
             SecurePrefs.get(context, fileName).all

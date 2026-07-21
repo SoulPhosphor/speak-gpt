@@ -127,4 +127,52 @@ object ChatIdentity {
         if (!authoritative) return emptyList()
         return entries.map { healAction(it) }
     }
+
+    /** Why a rename is allowed or refused (plan commit 3). */
+    enum class RenameDecision {
+        /** Stable entry, new name free: a name-only list update. */
+        OK,
+        /** No entry carries the old name — nothing to rename. */
+        NOT_FOUND,
+        /** §7 rule 4 freeze: the entry's stored id was never verified
+         *  (unmarked and not a minted id), so a rename — which would have
+         *  to either move files under a new hash or silently adopt the
+         *  unverified id — is refused until the entry is healed or
+         *  manually inspected. */
+        NOT_STABLE,
+        /** Another chat already carries the new name. Duplicate names stay
+         *  disallowed (relaxing that is an owner decision, not a side
+         *  effect of stable ids). */
+        DUPLICATE_NAME
+    }
+
+    /** Pure rename gate — the id never changes on any outcome. */
+    fun renameDecision(
+        entries: List<Map<String, String>>,
+        previousName: String,
+        newName: String
+    ): RenameDecision {
+        val entry = entries.firstOrNull { it["name"] == previousName }
+            ?: return RenameDecision.NOT_FOUND
+        if (!isStable(entry)) return RenameDecision.NOT_STABLE
+        if (entries.any { it !== entry && it["name"] == newName }) {
+            return RenameDecision.DUPLICATE_NAME
+        }
+        return RenameDecision.OK
+    }
+
+    /**
+     * A brand-new chat-list entry: minted stable id, marker included from
+     * birth. Creation is the only place an entry is built, so the marker can
+     * never be forgotten on a new chat.
+     */
+    fun newEntry(name: String, id: String, timestampMillis: Long): HashMap<String, String> {
+        val map = HashMap<String, String>()
+        map["name"] = name
+        map["id"] = id
+        map["timestamp"] = timestampMillis.toString()
+        map["pinned"] = "false"
+        map[KEY_IDENTITY_VERSION] = IDENTITY_VERSION_STABLE
+        return map
+    }
 }

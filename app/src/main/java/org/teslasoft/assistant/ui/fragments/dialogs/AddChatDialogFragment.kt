@@ -38,7 +38,6 @@ import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.Preferences
-import org.teslasoft.assistant.util.Hash
 
 class AddChatDialogFragment : DialogFragment() {
     companion object {
@@ -212,16 +211,21 @@ class AddChatDialogFragment : DialogFragment() {
                 val newName = nameInput?.text.toString()
                 val oldName = requireArguments().getString("name").toString()
                 val position = arguments?.getInt("position") ?: -1
-                val newId = Hash.hash(newName)
 
                 act.lifecycleScope.launch {
-                    val renamed = withContext(Dispatchers.IO) {
-                        cp.editChat(act, newName, oldName)
+                    // A rename no longer changes the chat's id (stable ids:
+                    // editChat is a name-only list update). The id reported
+                    // to the listener is resolved from the renamed entry —
+                    // never derived from the new name. Null = rename refused.
+                    val renamedId: String? = withContext(Dispatchers.IO) {
+                        if (cp.editChat(act, newName, oldName)) {
+                            cp.getChatIdByName(act, newName) ?: ""
+                        } else null
                     }
                     // Resumes on Main. Only touch UI if the activity is alive.
                     if (act.isFinishing || act.isDestroyed) return@launch
-                    if (renamed) {
-                        l?.onEdit(newName, newId, position)
+                    if (renamedId != null) {
+                        l?.onEdit(newName, renamedId, position)
                     } else {
                         // false = nothing changed; the chat is intact under its
                         // old name. Say so persistently (dialog, never a toast).
@@ -235,8 +239,13 @@ class AddChatDialogFragment : DialogFragment() {
                 return
             }
 
-            chatPreferences?.addChat(requireActivity(), chatName)
-            listener!!.onAdd(chatName, Hash.hash(chatName), arguments?.getBoolean("fromFile") == true)
+            // addChat mints the chat's permanent id ("c-" + UUID); everything
+            // below — the listener (which writes an imported history under
+            // this id) and the per-chat settings file — must key by the
+            // RETURNED id, never a hash of the name.
+            val newChatId = (chatPreferences ?: ChatPreferences.getChatPreferences())
+                .addChat(requireActivity(), chatName)
+            listener!!.onAdd(chatName, newChatId, arguments?.getBoolean("fromFile") == true)
 
             // Copy settings from default
             val preferences: Preferences = Preferences.getPreferences(requireActivity(), "")
@@ -274,9 +283,9 @@ class AddChatDialogFragment : DialogFragment() {
             val avatarId = if (requireArguments().getString("avatarId") != "") requireArguments().getString("avatarId") else preferences.getAvatarId()
             val assistantName = if (requireArguments().getString("assistantName") != "") requireArguments().getString("assistantName") else preferences.getAssistantName()
 
-            val newPreferences: Preferences = Preferences.getPreferences(requireActivity(), Hash.hash(chatName))
+            val newPreferences: Preferences = Preferences.getPreferences(requireActivity(), newChatId)
 
-            newPreferences.setPreferences(Hash.hash(chatName), requireActivity())
+            newPreferences.setPreferences(newChatId, requireActivity())
             newPreferences.setResolution(resolution)
             newPreferences.setAudioModel(speech)
             newPreferences.setModel(model)

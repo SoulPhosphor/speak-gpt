@@ -39,9 +39,9 @@ class ChatIdHashGuardTest {
     /**
      * file (relative to the java source root) -> expected occurrences of
      * "Hash.hash(". Keep the categories honest when editing:
-     *  - chat-identity sanctioned: the resolver's legacy fallback plus the
-     *    legacy chat creation/rename paths (removed by the stable-creation
-     *    commit of the plan).
+     *  - chat-identity sanctioned: ONLY the resolver's legacy fallback.
+     *    Creation mints stable ids and renames are name-only, so no other
+     *    chat-name hash site exists — and none may come back.
      *  - non-chat uses: byte hashing (images) and legacy label-derived ids
      *    of OTHER record types (endpoints, logit bias, system prompts).
      *  - comments that mention the call literally.
@@ -49,9 +49,7 @@ class ChatIdHashGuardTest {
     private val allowlist = mapOf(
         // Chat identity — sanctioned.
         "org/teslasoft/assistant/util/ChatIdentity.kt" to 1,          // the resolver's legacy fallback
-        "org/teslasoft/assistant/preferences/ChatPreferences.kt" to 5, // legacy addChat (2), legacy editChat (2), checkDuplicate (1)
-        "org/teslasoft/assistant/ui/fragments/dialogs/AddChatDialogFragment.kt" to 4, // legacy create/rename paths
-        "org/teslasoft/assistant/ui/activities/ChatActivity.kt" to 5,  // 4 image-byte hashes + the legacy auto-name rename
+        "org/teslasoft/assistant/ui/activities/ChatActivity.kt" to 4,  // image-byte hashes, not chat names
 
         // Non-chat uses (bytes or other record types' legacy ids).
         "org/teslasoft/assistant/preferences/Preferences.kt" to 1,
