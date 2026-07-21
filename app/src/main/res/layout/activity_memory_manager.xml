@@ -170,20 +170,23 @@
                     android:contentDescription="@string/row_memory_settings_title" />
             </LinearLayout>
 
-            <!-- Memory Backup & Restore: the Backups section and the destructive
-                 Reset section were moved here out of Memory Controls (owner
-                 request, July 18 2026). Placed directly above Advanced Memory
-                 Settings (owner request, July 18 2026). Title only — no subtitle
-                 wording has been owner-approved for this row. -->
+            <!-- Memory Backup & Restore: Database Health & Backups (Build Phase 2).
+                 Placed directly above Advanced Memory Settings (owner request,
+                 July 18 2026). Subtitle owner-approved July 21 2026. -->
             <LinearLayout
                 android:id="@+id/row_memory_backup_restore"
-                style="@style/Widget.App.Row.TitleOnly">
+                style="@style/Widget.App.Row.WithSubtitle">
 
                 <LinearLayout style="@style/Widget.App.Row.TextColumn">
 
                     <TextView
                         style="@style/Widget.App.Row.Title"
                         android:text="@string/title_memory_backup_restore" />
+
+                    <TextView
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:maxLines="3"
+                        android:text="@string/row_memory_backup_restore_subtitle" />
                 </LinearLayout>
 
                 <ImageView

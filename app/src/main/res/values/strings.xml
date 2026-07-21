@@ -1349,6 +1349,53 @@
     <string name="memory_controls_section_reset">Reset</string>
     <string name="memory_controls_reset">Reset Memories</string>
     <string name="memory_controls_reset_hint">Delete memory content. Offer to export a backup first.</string>
+
+    <!-- Database Health & Backups, Build Phase 2 (owner-approved wording, July 21 2026).
+         Title Case for section headings, buttons, toggle labels and short field
+         labels; sentence case for complete helper sentences and warnings. -->
+    <!-- 1. Database Health -->
+    <string name="backup_db_health_section">Database Health</string>
+    <string name="backup_check_integrity">Check Database Integrity</string>
+    <string name="backup_check_integrity_hint">Checks the memory, lorebook, and user image databases for problems. Chats are not included.</string>
+    <string name="backup_db_name_memory">Memory Database</string>
+    <string name="backup_db_name_lorebook">Lorebook Database</string>
+    <string name="backup_db_name_user_image">User Image Database</string>
+    <string name="backup_check_result_ok">%1$s: No Problems Found</string>
+    <string name="backup_check_result_problem">%1$s: Problem Found</string>
+    <string name="backup_check_result_unavailable">%1$s: Could Not Be Checked</string>
+    <!-- 2. Backup Status -->
+    <string name="backup_status_section">Backup Status</string>
+    <string name="backup_type_memory">Memory</string>
+    <string name="backup_type_lorebooks">Lorebooks</string>
+    <string name="backup_type_chats">Chats</string>
+    <string name="backup_type_user_image">User Image Database</string>
+    <string name="backup_state_never">Never Backed Up</string>
+    <string name="backup_state_creating">Creating Backup…</string>
+    <string name="backup_state_backed_up">Backed Up %1$s</string>
+    <string name="backup_state_failed_last_good">Backup Failed. Last Good Backup: %1$s</string>
+    <string name="backup_state_failed_none">Backup Failed. No Successful Backup Yet.</string>
+    <!-- 3. Create Backup (manual recovery backup) -->
+    <string name="backup_create_section">Create Backup</string>
+    <string name="backup_create_hint">Creates a recovery backup of your chats, memories, lorebooks, and user image data.</string>
+    <string name="backup_current_location">Current Backup Location: %1$s</string>
+    <string name="backup_location_none">No backup folder selected</string>
+    <string name="backup_change_location">Change Backup Location</string>
+    <string name="backup_create">Create Backup</string>
+    <!-- 4. Portable Copy -->
+    <string name="backup_portable_section">Portable Copy</string>
+    <string name="backup_portable_desc">Export or import a copy for moving your data to another device or compatible app.</string>
+    <string name="backup_portable_export">Export Portable Copy</string>
+    <string name="backup_portable_import">Import Portable Copy</string>
+    <string name="backup_portable_warning">Portable copies may contain readable chats, memories, and other personal information. Store them somewhere private.</string>
+    <!-- 5. Automatic Backups -->
+    <string name="backup_auto_section">Automatic Backups</string>
+    <string name="backup_auto_hint">When enabled, the app checks whether a backup is due when it opens. Backups are not created while the app is closed.</string>
+    <string name="backup_auto_location">Automatic Backup Location: %1$s</string>
+    <string name="backup_auto_change_location">Change Automatic Backup Location</string>
+    <string name="backup_auto_enable">Enable Automatic Backups</string>
+    <!-- Memory Manager hub row subtitle -->
+    <string name="row_memory_backup_restore_subtitle">Back up and restore chats, memories, lorebooks, and user image data.</string>
+
     <string name="memory_controls_row_advanced">Advanced Memory Settings</string>
     <string name="memory_controls_row_advanced_subtitle">Diagnostics, indexing, model files, and repair tools.</string>
 

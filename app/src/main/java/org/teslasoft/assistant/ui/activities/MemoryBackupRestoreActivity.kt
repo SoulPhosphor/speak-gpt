@@ -16,11 +16,14 @@
 
 package org.teslasoft.assistant.ui.activities
 
+import android.content.Intent
 import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.DocumentsContract
+import android.view.View
 import android.view.WindowInsets
 import android.widget.ImageButton
 import android.widget.LinearLayout
@@ -39,18 +42,28 @@ import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.materialswitch.MaterialSwitch
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
+import org.teslasoft.assistant.preferences.backup.BackupStatusFormatter
+import org.teslasoft.assistant.preferences.backup.BackupType
+import org.teslasoft.assistant.preferences.backup.DatabaseHealthChecker
+import org.teslasoft.assistant.preferences.backup.RecoveryBackupManager
+import org.teslasoft.assistant.preferences.backup.RecoveryBackupState
 import org.teslasoft.assistant.preferences.memory.MemoryExporter
 import org.teslasoft.assistant.preferences.memory.MemorySeedCodec
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.theme.ThemeManager
 
 /**
- * "Memory Backup & Restore" (owner request, July 18 2026): the Backups section
- * and the destructive Reset section, moved out of the Memory Controls screen
- * into their own row on the Memory Manager hub. Nothing about how they work
- * changed — the auto-backup toggle, import/export, last-backup status, and the
- * backup-gated Reset are the exact same code that lived in
- * `MemoryControlsActivity`, only relocated.
+ * "Memory Backup & Restore" — the Database Health & Backups screen (Build
+ * Phase 2). Owner-approved order and wording (July 21 2026): Database Health,
+ * Backup Status, Create Backup (manual recovery backup), Portable Copy,
+ * Automatic Backups, Reset. The two backup LOCATIONS (manual vs automatic) are
+ * kept separate.
+ *
+ * Two distinct systems live here and stay separate on screen:
+ *  - Recovery backups (Create Backup + Automatic Backups) — same-installation
+ *    per-type snapshots written to a user-chosen folder.
+ *  - Portable Copy — the readable JSON export/import for moving data to another
+ *    device or compatible app.
  */
 class MemoryBackupRestoreActivity : FragmentActivity() {
 
@@ -60,11 +73,33 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
     private var actionBar: ConstraintLayout? = null
     private var btnBack: ImageButton? = null
 
-    private var switchAutoBackup: MaterialSwitch? = null
-    private var btnImport: MaterialButton? = null
-    private var btnExport: MaterialButton? = null
-    private var textLastBackup: TextView? = null
+    // 1. Database Health
+    private var btnCheckIntegrity: MaterialButton? = null
+    private var textResultMemory: TextView? = null
+    private var textResultLorebook: TextView? = null
+    private var textResultUserImage: TextView? = null
 
+    // 2. Backup Status
+    private var textStatusMemory: TextView? = null
+    private var textStatusLorebooks: TextView? = null
+    private var textStatusChats: TextView? = null
+    private var textStatusUserImage: TextView? = null
+
+    // 3. Create Backup (manual)
+    private var textManualLocation: TextView? = null
+    private var btnChangeManualLocation: MaterialButton? = null
+    private var btnCreateBackup: MaterialButton? = null
+
+    // 4. Portable Copy
+    private var btnPortableExport: MaterialButton? = null
+    private var btnPortableImport: MaterialButton? = null
+
+    // 5. Automatic Backups
+    private var textAutoLocation: TextView? = null
+    private var btnChangeAutoLocation: MaterialButton? = null
+    private var switchAutoBackup: MaterialSwitch? = null
+
+    // 6. Reset
     private var btnReset: MaterialButton? = null
 
     private val importSeedLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -75,6 +110,14 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         ActivityResultContracts.CreateDocument("application/json")
     ) { uri ->
         if (uri != null) exportToUri(uri)
+    }
+
+    private val manualFolderPicker = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) onFolderChosen(uri, manual = true)
+    }
+
+    private val autoFolderPicker = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) onFolderChosen(uri, manual = false)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -92,16 +135,35 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
 
     override fun onResume() {
         super.onResume()
+        refreshLocations()
         refreshBackupStatus()
     }
 
     private fun bindViews() {
         actionBar = findViewById(R.id.action_bar)
         btnBack = findViewById(R.id.btn_back)
+
+        btnCheckIntegrity = findViewById(R.id.btn_check_integrity)
+        textResultMemory = findViewById(R.id.text_result_memory)
+        textResultLorebook = findViewById(R.id.text_result_lorebook)
+        textResultUserImage = findViewById(R.id.text_result_userimage)
+
+        textStatusMemory = findViewById(R.id.text_status_memory)
+        textStatusLorebooks = findViewById(R.id.text_status_lorebooks)
+        textStatusChats = findViewById(R.id.text_status_chats)
+        textStatusUserImage = findViewById(R.id.text_status_userimage)
+
+        textManualLocation = findViewById(R.id.text_manual_location)
+        btnChangeManualLocation = findViewById(R.id.btn_change_manual_location)
+        btnCreateBackup = findViewById(R.id.btn_create_backup)
+
+        btnPortableExport = findViewById(R.id.btn_portable_export)
+        btnPortableImport = findViewById(R.id.btn_portable_import)
+
+        textAutoLocation = findViewById(R.id.text_auto_location)
+        btnChangeAutoLocation = findViewById(R.id.btn_change_auto_location)
         switchAutoBackup = findViewById(R.id.switch_auto_backup)
-        btnImport = findViewById(R.id.btn_memory_import)
-        btnExport = findViewById(R.id.btn_memory_export)
-        textLastBackup = findViewById(R.id.text_last_backup)
+
         btnReset = findViewById(R.id.btn_memory_reset)
     }
 
@@ -131,19 +193,18 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
     private fun initLogic() {
         btnBack?.setOnClickListener { finish() }
 
-        /* ---- Backups ---- */
-        switchAutoBackup?.setOnCheckedChangeListener { _, checked ->
-            if (!MemoryStore.isProvisioned(this)) return@setOnCheckedChangeListener
-            runOffThread {
-                MemoryStore.getInstance(this).setMeta(
-                    MemoryStore.META_AUTO_EXPORT_ENABLED, if (checked) "1" else "0"
-                )
-            }
-        }
-        btnImport?.setOnClickListener {
+        /* ---- 1. Database Health ---- */
+        btnCheckIntegrity?.setOnClickListener { onCheckIntegrity() }
+
+        /* ---- 3. Create Backup (manual) ---- */
+        btnChangeManualLocation?.setOnClickListener { manualFolderPicker.launch(null) }
+        btnCreateBackup?.setOnClickListener { onCreateBackup() }
+
+        /* ---- 4. Portable Copy ---- */
+        btnPortableImport?.setOnClickListener {
             importSeedLauncher.launch(arrayOf("application/json", "text/*"))
         }
-        btnExport?.setOnClickListener {
+        btnPortableExport?.setOnClickListener {
             if (!MemoryStore.isProvisioned(this)) {
                 Toast.makeText(this, R.string.memory_not_provisioned_toast, Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
@@ -151,37 +212,161 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
             val stamp = MemoryStore.nowIso().substring(0, 10)
             exportLauncher.launch("memory-export-$stamp.json")
         }
-        refreshBackupStatus()
 
-        /* ---- Reset (bottom) ---- */
+        /* ---- 5. Automatic Backups ---- */
+        btnChangeAutoLocation?.setOnClickListener { autoFolderPicker.launch(null) }
+        // Set the persisted state BEFORE attaching the listener so the
+        // programmatic set does not write back over itself.
+        switchAutoBackup?.isChecked = RecoveryBackupState.isEnabled(this)
+        switchAutoBackup?.setOnCheckedChangeListener { _, checked ->
+            RecoveryBackupState.setEnabled(this, checked)
+        }
+
+        /* ---- 6. Reset (bottom) ---- */
         btnReset?.setOnClickListener { showResetDialog() }
+
+        refreshLocations()
+        refreshBackupStatus()
     }
 
-    /* ------------------------------ backups ------------------------------ */
+    /* ------------------------------ 1. database health ------------------------------ */
 
-    private fun refreshBackupStatus() {
+    private fun onCheckIntegrity() {
+        btnCheckIntegrity?.isEnabled = false
         runOffThread {
-            var autoBackupOn = true
-            var provisioned = false
-            val lastBackup: String?
-            if (!MemoryStore.isProvisioned(this)) {
-                lastBackup = null
-            } else {
-                provisioned = true
-                val store = MemoryStore.getInstance(this)
-                autoBackupOn = store.getMeta(MemoryStore.META_AUTO_EXPORT_ENABLED) != "0"
-                lastBackup = store.getMeta(MemoryStore.META_LAST_AUTO_EXPORT_AT)
-            }
+            val results = DatabaseHealthChecker.checkAll(this)
             runOnUiThread {
-                switchAutoBackup?.isEnabled = provisioned
-                switchAutoBackup?.isChecked = autoBackupOn
-                textLastBackup?.text = getString(
-                    R.string.memory_controls_last_backup,
-                    lastBackup ?: getString(R.string.memory_controls_never)
-                )
+                btnCheckIntegrity?.isEnabled = true
+                for (r in results) {
+                    val name = when (r.type) {
+                        BackupType.MEMORY -> getString(R.string.backup_db_name_memory)
+                        BackupType.LOREBOOK -> getString(R.string.backup_db_name_lorebook)
+                        BackupType.USER_IMAGE -> getString(R.string.backup_db_name_user_image)
+                        else -> continue
+                    }
+                    val line = when (r.status) {
+                        DatabaseHealthChecker.Status.OK -> getString(R.string.backup_check_result_ok, name)
+                        DatabaseHealthChecker.Status.DAMAGED -> getString(R.string.backup_check_result_problem, name)
+                        DatabaseHealthChecker.Status.UNAVAILABLE -> getString(R.string.backup_check_result_unavailable, name)
+                    }
+                    val tv = when (r.type) {
+                        BackupType.MEMORY -> textResultMemory
+                        BackupType.LOREBOOK -> textResultLorebook
+                        BackupType.USER_IMAGE -> textResultUserImage
+                        else -> null
+                    }
+                    tv?.text = line
+                    tv?.visibility = View.VISIBLE
+                }
             }
         }
     }
+
+    /* ------------------------------ 2. backup status ------------------------------ */
+
+    private fun typeLabel(type: BackupType): String = when (type) {
+        BackupType.MEMORY -> getString(R.string.backup_type_memory)
+        BackupType.LOREBOOK -> getString(R.string.backup_type_lorebooks)
+        BackupType.CHATS -> getString(R.string.backup_type_chats)
+        BackupType.USER_IMAGE -> getString(R.string.backup_type_user_image)
+    }
+
+    private fun statusTemplates() = BackupStatusFormatter.Templates(
+        neverBackedUp = getString(R.string.backup_state_never),
+        creating = getString(R.string.backup_state_creating),
+        backedUp = getString(R.string.backup_state_backed_up),
+        failedWithLastGood = getString(R.string.backup_state_failed_last_good),
+        failedNoLastGood = getString(R.string.backup_state_failed_none)
+    )
+
+    private fun refreshBackupStatus() {
+        runOffThread {
+            val templates = statusTemplates()
+            val lines = LinkedHashMap<BackupType, String>()
+            for (type in BackupType.displayOrder) {
+                val lastSuccess = RecoveryBackupState.getLastSuccess(this, type)
+                val failed = RecoveryBackupState.getConsecutiveFailures(this, type) > 0
+                lines[type] = BackupStatusFormatter.statusLine(
+                    typeLabel(type), inProgress = false, lastSuccessMillis = lastSuccess, lastFailed = failed, templates = templates
+                )
+            }
+            runOnUiThread {
+                textStatusMemory?.text = lines[BackupType.MEMORY]
+                textStatusLorebooks?.text = lines[BackupType.LOREBOOK]
+                textStatusChats?.text = lines[BackupType.CHATS]
+                textStatusUserImage?.text = lines[BackupType.USER_IMAGE]
+            }
+        }
+    }
+
+    private fun setAllRowsCreating() {
+        val creating = getString(R.string.backup_state_creating)
+        textStatusMemory?.text = "${getString(R.string.backup_type_memory)}: $creating"
+        textStatusLorebooks?.text = "${getString(R.string.backup_type_lorebooks)}: $creating"
+        textStatusChats?.text = "${getString(R.string.backup_type_chats)}: $creating"
+        textStatusUserImage?.text = "${getString(R.string.backup_type_user_image)}: $creating"
+    }
+
+    /* ------------------------------ 3. create backup ------------------------------ */
+
+    private fun onCreateBackup() {
+        val uriStr = RecoveryBackupState.getManualFolderUri(this)
+        if (uriStr == null) {
+            // No location yet: the location line already reads "No backup folder
+            // selected". Guide the user straight into choosing one.
+            manualFolderPicker.launch(null)
+            return
+        }
+        btnCreateBackup?.isEnabled = false
+        setAllRowsCreating()
+        runOffThread {
+            try {
+                RecoveryBackupManager.createBackup(this, Uri.parse(uriStr))
+            } finally {
+                runOnUiThread {
+                    btnCreateBackup?.isEnabled = true
+                    refreshBackupStatus()
+                }
+            }
+        }
+    }
+
+    /* ------------------------------ backup locations ------------------------------ */
+
+    private fun onFolderChosen(uri: Uri, manual: Boolean) {
+        try {
+            contentResolver.takePersistableUriPermission(
+                uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            )
+        } catch (_: Exception) { /* best-effort; a lost grant surfaces later as a destination-permission failure */ }
+        if (manual) RecoveryBackupState.setManualFolderUri(this, uri.toString())
+        else RecoveryBackupState.setAutoFolderUri(this, uri.toString())
+        refreshLocations()
+    }
+
+    private fun refreshLocations() {
+        val manual = RecoveryBackupState.getManualFolderUri(this)
+        val auto = RecoveryBackupState.getAutoFolderUri(this)
+        textManualLocation?.text = if (manual == null) getString(R.string.backup_location_none)
+        else getString(R.string.backup_current_location, folderDisplayName(Uri.parse(manual)))
+        textAutoLocation?.text = if (auto == null) getString(R.string.backup_location_none)
+        else getString(R.string.backup_auto_location, folderDisplayName(Uri.parse(auto)))
+    }
+
+    /** Best-effort human name for a SAF tree URI without a ContentResolver query
+     *  (safe on the main thread): the last path component of the tree document
+     *  id, e.g. "primary:Documents/Backups" -> "Backups". */
+    private fun folderDisplayName(uri: Uri): String {
+        return try {
+            val treeId = DocumentsContract.getTreeDocumentId(uri)
+            val tail = treeId.substringAfterLast('/').substringAfterLast(':')
+            if (tail.isNotBlank()) tail else treeId
+        } catch (_: Exception) {
+            uri.toString()
+        }
+    }
+
+    /* ------------------------------ 4. portable copy ------------------------------ */
 
     private fun importSeedFromUri(uri: Uri) {
         runOffThread {
@@ -225,8 +410,6 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
             val json = MemoryExporter.buildExportJson(this)
             contentResolver.openOutputStream(uri, "wt")?.bufferedWriter()?.use { it.write(json) }
                 ?: throw IllegalStateException(getString(R.string.memory_file_unreadable))
-            // A manual export counts as a backup, so "Chats since last back-up"
-            // resets after it too (not just the automatic daily one).
             MemoryStore.getInstance(this).setMeta(MemoryStore.META_LAST_AUTO_EXPORT_AT, MemoryStore.nowIso())
             runOnUiThread {
                 Toast.makeText(this, R.string.memory_export_done, Toast.LENGTH_SHORT).show()
@@ -235,15 +418,13 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         }
     }
 
-    /* ------------------------------ reset (destructive) ------------------------------ */
+    /* ------------------------------ 6. reset (destructive) ------------------------------ */
 
     private fun showResetDialog() {
         if (!MemoryStore.isProvisioned(this)) {
             Toast.makeText(this, R.string.memory_not_provisioned_toast, Toast.LENGTH_SHORT).show()
             return
         }
-        // The user decides whether a backup is written first (starts checked); if
-        // they decline, trust them (owner_approved_rules approved UI decisions).
         val backupBox = MaterialCheckBox(this).apply {
             setText(R.string.mem_reset_backup)
             isChecked = true
@@ -267,19 +448,10 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         runOffThread {
             var backupName: String? = null
             if (backupFirst && MemoryExporter.isChatListUnavailable(this)) {
-                // The safety copy the user asked for cannot be complete while
-                // chat storage is locked — abort the reset BEFORE anything is
-                // deleted and say why with the owner-approved wording.
                 runOnUiThread { showChatBackupUnavailableDialog() }
                 return@runOffThread
             }
             if (backupFirst) {
-                // The user asked for a safety copy, so the reset must not run
-                // unless that copy is verifiably on disk. writeBackupNow
-                // returns null on ANY failure (it writes atomically and reads
-                // the file back), and a null aborts BEFORE anything is
-                // deleted — it used to only change the confirmation wording
-                // while the reset destroyed the store anyway.
                 backupName = MemoryExporter.writeBackupNow(this)
                 if (backupName == null) {
                     runOnUiThread {
@@ -298,8 +470,6 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
             runOnUiThread {
                 val msg = if (backupName != null) getString(R.string.mem_reset_done_backup, backupName)
                 else getString(R.string.mem_reset_done)
-                // Outcome as a dialog, not a toast (owner rule: persistent
-                // messages); the wording itself is unchanged.
                 if (!isFinishing) {
                     MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
                         .setMessage(msg)

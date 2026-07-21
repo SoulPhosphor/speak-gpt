@@ -30,8 +30,10 @@ import androidx.core.content.edit
  * live inside `companion_memory.db` (META_AUTO_EXPORT_ENABLED /
  * META_LAST_AUTO_EXPORT_AT).
  *
- * Contents are metadata only: an enabled flag, the user-chosen backup-folder
- * tree URI, and per-type last-attempt / last-success / consecutive-failure /
+ * Contents are metadata only: an enabled flag, the TWO user-chosen backup-folder
+ * tree URIs (the manual Create Backup location and the Automatic Backups
+ * location are kept SEPARATE — owner ruling, July 21 2026 — and never
+ * combined), and per-type last-attempt / last-success / consecutive-failure /
  * last-failure-category. Never chat content, prompts, or keys. Keys are
  * namespaced with a `backup.` prefix so they cannot collide with
  * StartupHealth's `startup.`, ChatStorageHealth's `lock.`/`readfail.`/
@@ -51,7 +53,10 @@ object RecoveryBackupState {
     const val THROTTLE_MILLIS: Long = 24L * 60L * 60L * 1000L
 
     private const val KEY_ENABLED = "backup.enabled"
-    private const val KEY_FOLDER_URI = "backup.folder_uri"
+
+    // Two separate destinations — never combined (owner ruling, July 21 2026).
+    private const val KEY_MANUAL_FOLDER_URI = "backup.manual_folder_uri"
+    private const val KEY_AUTO_FOLDER_URI = "backup.auto_folder_uri"
 
     private fun prefs(context: Context) =
         context.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)
@@ -70,18 +75,32 @@ object RecoveryBackupState {
         try { prefs(context).edit(commit = true) { putBoolean(KEY_ENABLED, enabled) } } catch (_: Exception) { }
     }
 
-    // ----- destination folder (SAF tree URI) ---------------------------------
+    // ----- destination folders (SAF tree URIs) -------------------------------
+    // The manual "Create Backup" location and the "Automatic Backups" location
+    // are kept SEPARATE and must never be combined (owner ruling, July 21 2026).
 
-    /** The persisted backup-folder tree URI string, or null when the user has
-     *  not chosen one yet (the app-private default is used until then; the
-     *  app-private default is never the ONLY destination — Build Phase 2 item 1). */
-    fun getFolderUri(context: Context): String? =
-        try { prefs(context).getString(KEY_FOLDER_URI, null) } catch (_: Exception) { null }
+    /** The persisted MANUAL (Create Backup) folder tree URI, or null when the
+     *  user has not chosen one yet. */
+    fun getManualFolderUri(context: Context): String? =
+        try { prefs(context).getString(KEY_MANUAL_FOLDER_URI, null) } catch (_: Exception) { null }
 
-    fun setFolderUri(context: Context, uri: String?) {
+    fun setManualFolderUri(context: Context, uri: String?) {
         try {
             prefs(context).edit(commit = true) {
-                if (uri.isNullOrEmpty()) remove(KEY_FOLDER_URI) else putString(KEY_FOLDER_URI, uri)
+                if (uri.isNullOrEmpty()) remove(KEY_MANUAL_FOLDER_URI) else putString(KEY_MANUAL_FOLDER_URI, uri)
+            }
+        } catch (_: Exception) { }
+    }
+
+    /** The persisted AUTOMATIC-backup folder tree URI, or null when the user has
+     *  not chosen one yet. */
+    fun getAutoFolderUri(context: Context): String? =
+        try { prefs(context).getString(KEY_AUTO_FOLDER_URI, null) } catch (_: Exception) { null }
+
+    fun setAutoFolderUri(context: Context, uri: String?) {
+        try {
+            prefs(context).edit(commit = true) {
+                if (uri.isNullOrEmpty()) remove(KEY_AUTO_FOLDER_URI) else putString(KEY_AUTO_FOLDER_URI, uri)
             }
         } catch (_: Exception) { }
     }

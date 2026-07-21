@@ -16,10 +16,10 @@
 * limitations under the License.
 **************************************************************************/
 -->
-<!-- Memory Backup & Restore (owner request, July 18 2026): the Backups section
-     and the destructive Reset section were moved here out of Memory Controls,
-     verbatim. Every string is unchanged; the two sections behave exactly as
-     they did on the Memory Controls screen. -->
+<!-- Memory Backup & Restore (Database Health & Backups, Build Phase 2). Order and
+     wording are owner-approved verbatim (July 21 2026): Database Health, Backup
+     Status, Create Backup (manual recovery backup), Portable Copy, Automatic
+     Backups, Reset. The manual and automatic backup locations are separate. -->
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/root"
@@ -82,15 +82,220 @@
             android:orientation="vertical"
             android:paddingHorizontal="20dp">
 
-            <!-- ============ Backups ============ -->
+            <!-- ============ 1. Database Health ============ -->
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:paddingTop="24dp"
-                android:text="@string/memory_controls_section_backups"
+                android:text="@string/backup_db_health_section"
                 android:textColor="?attr/colorPrimary"
                 android:textSize="18sp"
                 android:textStyle="bold" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_check_integrity"
+                style="@style/AppButton.Primary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="@string/backup_check_integrity" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="8dp"
+                android:text="@string/backup_check_integrity_hint"
+                android:textColor="@color/text_subtitle"
+                android:textSize="13sp" />
+
+            <TextView
+                android:id="@+id/text_result_memory"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="12dp"
+                android:textColor="@color/text"
+                android:textSize="15sp"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/text_result_lorebook"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="6dp"
+                android:textColor="@color/text"
+                android:textSize="15sp"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/text_result_userimage"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="6dp"
+                android:textColor="@color/text"
+                android:textSize="15sp"
+                android:visibility="gone" />
+
+            <!-- ============ 2. Backup Status ============ -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="24dp"
+                android:text="@string/backup_status_section"
+                android:textColor="?attr/colorPrimary"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/text_status_memory"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="16dp"
+                android:textColor="@color/text"
+                android:textSize="15sp" />
+
+            <TextView
+                android:id="@+id/text_status_lorebooks"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="8dp"
+                android:textColor="@color/text"
+                android:textSize="15sp" />
+
+            <TextView
+                android:id="@+id/text_status_chats"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="8dp"
+                android:textColor="@color/text"
+                android:textSize="15sp" />
+
+            <TextView
+                android:id="@+id/text_status_userimage"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="8dp"
+                android:textColor="@color/text"
+                android:textSize="15sp" />
+
+            <!-- ============ 3. Create Backup (manual) ============ -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="24dp"
+                android:text="@string/backup_create_section"
+                android:textColor="?attr/colorPrimary"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="8dp"
+                android:text="@string/backup_create_hint"
+                android:textColor="@color/text_subtitle"
+                android:textSize="13sp" />
+
+            <TextView
+                android:id="@+id/text_manual_location"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="16dp"
+                android:textColor="@color/text"
+                android:textIsSelectable="true"
+                android:textSize="15sp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_change_manual_location"
+                style="@style/AppButton.Primary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="@string/backup_change_location" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_create_backup"
+                style="@style/AppButton.Primary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="@string/backup_create" />
+
+            <!-- ============ 4. Portable Copy ============ -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="24dp"
+                android:text="@string/backup_portable_section"
+                android:textColor="?attr/colorPrimary"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="8dp"
+                android:text="@string/backup_portable_desc"
+                android:textColor="@color/text_subtitle"
+                android:textSize="13sp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_portable_export"
+                style="@style/AppButton.Primary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="@string/backup_portable_export" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_portable_import"
+                style="@style/AppButton.Primary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="@string/backup_portable_import" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="8dp"
+                android:text="@string/backup_portable_warning"
+                android:textColor="@color/text_subtitle"
+                android:textSize="13sp" />
+
+            <!-- ============ 5. Automatic Backups ============ -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="24dp"
+                android:text="@string/backup_auto_section"
+                android:textColor="?attr/colorPrimary"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="8dp"
+                android:text="@string/backup_auto_hint"
+                android:textColor="@color/text_subtitle"
+                android:textSize="13sp" />
+
+            <TextView
+                android:id="@+id/text_auto_location"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="16dp"
+                android:textColor="@color/text"
+                android:textIsSelectable="true"
+                android:textSize="15sp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_change_auto_location"
+                style="@style/AppButton.Primary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="@string/backup_auto_change_location" />
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -103,7 +308,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="@string/memory_controls_auto_backup"
+                    android:text="@string/backup_auto_enable"
                     android:textColor="@color/text"
                     android:textSize="16sp" />
 
@@ -114,56 +319,7 @@
                     android:layout_marginStart="12dp" />
             </LinearLayout>
 
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="8dp"
-                android:text="@string/memory_controls_auto_backup_hint"
-                android:textColor="@color/text_subtitle"
-                android:textSize="13sp" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_memory_import"
-                style="@style/AppButton.Primary"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
-                android:text="@string/memory_controls_import" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="8dp"
-                android:text="@string/memory_controls_import_hint"
-                android:textColor="@color/text_subtitle"
-                android:textSize="13sp" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_memory_export"
-                style="@style/AppButton.Primary"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:text="@string/memory_controls_export" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="8dp"
-                android:text="@string/memory_controls_export_hint"
-                android:textColor="@color/text_subtitle"
-                android:textSize="13sp" />
-
-            <TextView
-                android:id="@+id/text_last_backup"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="16dp"
-                android:text="@string/memory_status_loading"
-                android:textColor="@color/text"
-                android:textSize="15sp" />
-
-            <!-- ============ Reset (destructive; bottom) ============ -->
+            <!-- ============ 6. Reset (destructive; bottom, unchanged) ============ -->
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
