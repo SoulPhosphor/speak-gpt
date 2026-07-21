@@ -189,16 +189,18 @@ abnormal exits; startup housekeeping measurably does less on a clean start.
    must not promise "daily" as a guarantee. (A WorkManager-scheduled
    variant is a possible later improvement, not promised here.)
 3. **Four independent artifacts per run**, same timestamp: memory DB,
-   lorebook DB, **Profile Image Catalog**, chats. Rotation keep-5 **per
+   lorebook DB, **User Image Database**, chats. Rotation keep-5 **per
    type**; the last known-good of a type is never deleted until its
    replacement is FINAL (see item 4); one type failing never touches
    another's files.
-   - **Profile Image Catalog scope (honest labeling, owner ruling):** this
-     artifact is `profile_images.db` ONLY — the catalog. **The JPEG image
-     files themselves are NOT backed up** (owner decision: the catalog is
-     the record; a damaged catalog can also be rebuilt from the files).
-     Every label and status line says "Profile image catalog," and no
-     wording may imply the pictures themselves are protected.
+   - **User Image Database scope (honest labeling, owner ruling — renamed
+     from "Profile Image Catalog," July 21 2026: the old term was
+     confusing to a normal user):** this artifact is `profile_images.db`
+     ONLY — the catalog. **The JPEG image files themselves are NOT backed
+     up** (owner decision: the catalog is the record; a damaged catalog
+     can also be rebuilt from the files). Every label and status line says
+     "User Image Database," and no wording may imply the pictures
+     themselves are protected.
 4. **SAF-safe snapshot pipeline (per artifact):**
    a. Create the snapshot in **controlled internal staging storage** first.
       Databases: an encrypted consistent snapshot — **verify that
@@ -257,16 +259,19 @@ abnormal exits; startup housekeeping measurably does less on a clean start.
 8. **Backup & Restore screen additions** (simple rows, house style — no
    cards/tiles), §15.9's approved order preserved: `Check Database
    Integrity` ABOVE the backup button; helper text under Check Database
-   Integrity: it checks memory, lorebooks, and the profile image catalog —
+   Integrity: it checks memory, lorebooks, and the User Image Database —
    **it does not check chat files**; one **compact status row per type**
    (current result + last successful date/time when relevant, `Month D,
-   YYYY, H:MM AM/PM`), e.g.:
-   > `Memory: Backup failed today. Last good backup: July 19, 2026, 2:30 PM`
-   > `Lorebooks: Backed up July 20, 2026, 2:30 PM`
-   > `Chats: Backed up July 20, 2026, 2:31 PM`
-   > `Profile image catalog: Backed up July 20, 2026, 2:31 PM`
-   (**APPROVED by owner, July 20 2026:** compact rows replace the old
-   two-line failed/success layout, and the backup button is named
+   YYYY at H:MM AM/PM` — **owner correction, July 21 2026: "at" between
+   the year and the time, not a comma**), e.g.:
+   > `Memory: Backup failed July 20, 2026 at 2:30 PM. Last good backup: July 19, 2026 at 2:30 PM`
+   > `Lorebooks: Backed up July 20, 2026 at 2:30 PM`
+   > `Chats: Backed up July 20, 2026 at 2:31 PM`
+   > `User Image Database: Backed up July 20, 2026 at 2:31 PM`
+   (**APPROVED by owner, July 20 2026; date/time format and the failed-row
+   wording corrected by owner, July 21 2026 — see above:** compact rows
+   replace the old two-line failed/success layout, and the backup button
+   is named
    **`Create Backup`** — not "Create Database Backup", not "Create Backup
    Now".)
 9. The existing portable JSON export/import stays untouched and clearly
@@ -338,7 +343,7 @@ an induced destination failure.
      confirmed → categorized failure + retry, no dialog beyond the status
      row.
    Final body text for the storage dialog is Build Phase 4 wording.
-9. **Profile Image Catalog specifics (§15.16):** auto-repair = rebuild the
+9. **User Image Database specifics (§15.16):** auto-repair = rebuild the
    catalog by rescanning the image files — but per item 2, the damaged
    catalog file is still preserved first, and the rebuild is always
    disclosed (`Database Repaired` dialog), never silent. Same banner +
@@ -356,7 +361,7 @@ owner's explicit yes first.
 ## Build Phase 4 — Wording completion (owner copy, then wire it)
 
 Strings that do not exist yet or now need owner (re-)approval:
-1. A2/A3-style banner text naming the **profile image catalog**.
+1. A2/A3-style banner text naming the **User Image Database**.
 2. Buttons on the B8 result (damage found → likely `Repair | Revert to
    Last Good Database`; incomplete → likely `Try Again | View Error Log`).
 3. ~~Compact status rows~~ — **APPROVED** (format per Build Phase 2 item 8);
