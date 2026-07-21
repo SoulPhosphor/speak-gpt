@@ -34,12 +34,9 @@ import java.util.Locale
  *   "Memory: Backed up July 20, 2026 at 2:30 PM"
  *   "Memory: Backup failed. Last good backup: July 19, 2026 at 2:30 PM"
  *
- * NOTE (open wording): the owner supplied the failed pattern WITH a prior good
- * backup. When a type has never had a successful backup and then fails, there
- * is no date to show; [Templates.failedNoLastGood] carries that case and is a
- * plain truncation of the approved line ("Backup failed"). It is flagged for
- * the owner to confirm before shipping — the UI layer supplies the final
- * string.
+ * When a type has never had a successful backup and then fails, there is no
+ * date to show; [Templates.failedNoLastGood] carries the owner-approved line
+ * for that case (July 21 2026): "Backup failed. No successful backup yet."
  */
 object BackupStatusFormatter {
 

@@ -33,7 +33,7 @@ class BackupStatusFormatterTest {
         creating = "Creating backup…",
         backedUp = "Backed up %1\$s",
         failedWithLastGood = "Backup failed. Last good backup: %1\$s",
-        failedNoLastGood = "Backup failed"
+        failedNoLastGood = "Backup failed. No successful backup yet."
     )
 
     private val utc = ZoneOffset.UTC
@@ -75,9 +75,10 @@ class BackupStatusFormatterTest {
 
     @Test
     fun failedWithNoPriorGoodBackup() {
-        // Wording gap flagged for owner confirmation: no date to show.
+        // Owner-approved wording (July 21 2026) for a failure with no prior good
+        // backup — no date to show.
         assertEquals(
-            "Memory: Backup failed",
+            "Memory: Backup failed. No successful backup yet.",
             BackupStatusFormatter.statusLine("Memory", inProgress = false, lastSuccessMillis = 0L, lastFailed = true, templates = templates, zone = utc)
         )
     }
