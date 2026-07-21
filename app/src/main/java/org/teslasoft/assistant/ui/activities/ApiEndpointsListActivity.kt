@@ -38,7 +38,6 @@ import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.adapters.ApiEndpointListItemAdapter
-import org.teslasoft.assistant.util.Hash
 import androidx.core.graphics.drawable.toDrawable
 
 class ApiEndpointsListActivity : FragmentActivity() {
@@ -66,18 +65,18 @@ class ApiEndpointsListActivity : FragmentActivity() {
             reloadList()
         } else {
             // Saving a profile also selects it as the active endpoint (existing
-            // behaviour) — finish and hand the id back to the caller.
-            val label = result.data?.getStringExtra("apiEndpointLabel") ?: return@registerForActivityResult
-            finishWithActive(label)
+            // behaviour) — finish and hand the stable id back to the caller.
+            val id = result.data?.getStringExtra("apiEndpointId") ?: return@registerForActivityResult
+            finishWithActive(id)
         }
     }
 
     private fun openEditor(position: Int) {
-        val label = list[position]["label"] ?: return
+        val id = list[position]["id"] ?: return
         editorLauncher.launch(
             Intent(this, ApiEndpointEditorActivity::class.java)
                 .putExtra("position", position)
-                .putExtra("label", label)
+                .putExtra("id", id)
         )
     }
 
@@ -85,13 +84,13 @@ class ApiEndpointsListActivity : FragmentActivity() {
         editorLauncher.launch(
             Intent(this, ApiEndpointEditorActivity::class.java)
                 .putExtra("position", -1)
-                .putExtra("label", "")
+                .putExtra("id", "")
         )
     }
 
-    private fun finishWithActive(label: String) {
+    private fun finishWithActive(id: String) {
         val resultIntent = Intent()
-        resultIntent.putExtra("apiEndpointId", Hash.hash(label))
+        resultIntent.putExtra("apiEndpointId", id)
         setResult(RESULT_OK, resultIntent)
         finish()
     }
@@ -160,6 +159,7 @@ class ApiEndpointsListActivity : FragmentActivity() {
 
         for (i in apiList) {
             val map = HashMap<String, String>()
+            map["id"] = i.id
             map["label"] = i.label
             map["host"] = i.host
             map["provider"] = i.provider

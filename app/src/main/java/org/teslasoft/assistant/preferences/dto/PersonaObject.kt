@@ -17,7 +17,7 @@
 package org.teslasoft.assistant.preferences.dto
 
 class PersonaObject(
-    /* Friendly name. Used as the unique identifier (hashed) and shown as the card label. */
+    /* Editable display name shown as the card label. NOT the identity — see [id]. */
     var label: String,
     /* The persona prompt. Prepended before the always-on system message. */
     var prompt: String = "",
@@ -39,9 +39,15 @@ class PersonaObject(
     var lastUsedLoreBookIds: String = "",
     /* Bare hash of the assigned Profile Image (companion picture), or "" for
      * none. The catalog/files live in profile_images.db; this only references.
-     * Renaming a persona changes its id (edit = delete + recreate), so this
-     * must ride the PersonaObject through the edit like every other field. */
-    var avatarRef: String = ""
+     * Kept attached to the same companion across a rename via the stable [id]. */
+    var avatarRef: String = "",
+    /* Stable identity of this companion. Minted ONCE at creation and never
+     * recomputed from [label], so renaming keeps every reference valid (per-chat
+     * persona_id, last-used companion, avatar, activation prompt, the memory
+     * store's companion record). Empty only for a brand-new, not-yet-saved
+     * object; [PersonaPreferences.setPersona] assigns one on first save. Existing
+     * companions keep their original hashed id (the preference key). */
+    var id: String = ""
 ) {
     /** Parsed view of [additionalLoreBookIds]. */
     fun additionalLoreBookIdList(): ArrayList<String> = splitIds(additionalLoreBookIds)

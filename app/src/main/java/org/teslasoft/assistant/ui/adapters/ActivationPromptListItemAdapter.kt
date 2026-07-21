@@ -27,7 +27,6 @@ import android.widget.TextView
 import androidx.core.content.ContextCompat
 import com.google.android.material.elevation.SurfaceColors
 import org.teslasoft.assistant.R
-import org.teslasoft.assistant.util.Hash
 
 /**
  * Two distinct row looks depending on why this list is open (owner ruling,
@@ -99,7 +98,8 @@ class ActivationPromptListItemAdapter(
             activationPrompt?.text = item["prompt"]
 
             // Recycled views must have both states set explicitly every bind.
-            val isSelected = selectedId.isNotEmpty() && Hash.hash(item["label"] ?: "") == selectedId
+            // Compare by the row's stable id, never a hash of the mutable label.
+            val isSelected = selectedId.isNotEmpty() && (item["id"] ?: "") == selectedId
             if (isSelected) {
                 ui?.backgroundTintList = null
                 ui?.background = ContextCompat.getDrawable(mContext, R.drawable.tile_active)

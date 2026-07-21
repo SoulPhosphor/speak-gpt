@@ -3596,8 +3596,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 preferences?.setPersonaId(lastPersona)
             } else {
                 // Rule 2: first-ever use, or the last-used companion was since
-                // deleted — open with the companion at the top of the list.
-                preferences?.setPersonaId(Hash.hash(personasList.first().label))
+                // deleted — open with the companion at the top of the list. Use
+                // its stable id, never a hash of its (mutable) label.
+                preferences?.setPersonaId(personasList.first().id)
             }
         }
 
@@ -6280,6 +6281,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
     private fun requestAddApiEndpoint(feature: String, prompt: String) {
         val apiEndpointDialog: EditApiEndpointDialogFragment = EditApiEndpointDialogFragment.newInstance(
+            "",
             "OpenAI",
             "https://api.openai.com/v1/",
             "",

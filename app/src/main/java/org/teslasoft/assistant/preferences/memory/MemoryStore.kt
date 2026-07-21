@@ -1341,10 +1341,12 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
     }
 
     /**
-     * One-way app -> store sync (integration plan D6): re-point the app link
-     * after a persona rename (persona ids are Hash.hash(label), so renames
-     * change the id), refresh the personality mirror, and keep name_history
-     * honest when the visible name changed.
+     * One-way app -> store sync (integration plan D6): refresh the app link and
+     * personality mirror, and keep name_history honest when the visible name
+     * changed. Since the July 2026 stable-id fix a persona rename no longer
+     * changes its id, so [appCharacterId] normally already matches the stored
+     * link; it is still written so a legacy record created under an old id can
+     * be reconciled. name_history is what makes a rename visible here.
      */
     fun updateCompanionForPersona(companionId: String, appCharacterId: String, label: String, mirrorText: String) {
         val db = writableDatabase

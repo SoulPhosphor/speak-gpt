@@ -16,6 +16,8 @@
 
 package org.teslasoft.assistant.preferences.dto
 
+import org.teslasoft.assistant.util.Hash
+
 class ApiEndpointObject(
     var label: String,
     var host: String,
@@ -51,11 +53,28 @@ class ApiEndpointObject(
      * "response timed out" error. Defaults high (a slow "thinking" model on a
      * custom base URL can legitimately take minutes) and, by owner ruling, has
      * NO maximum — only a floor: the user may set it as high as they like and
-     * stop a runaway readback with the stop button. Kept at the END of the
+     * stop a runaway readback with the stop button. Kept near the END of the
      * constructor so existing positional callers stay valid. */
-    var responseTimeoutSeconds: Int = DEFAULT_RESPONSE_TIMEOUT_SECONDS
+    var responseTimeoutSeconds: Int = DEFAULT_RESPONSE_TIMEOUT_SECONDS,
+    /* Stable identity of this endpoint profile. Minted ONCE at creation and never
+     * recomputed from [label], so renaming keeps the encrypted API key, favorite
+     * models and per-chat endpoint selection attached to the same profile. Empty
+     * only for a brand-new object; [ApiEndpointPreferences.setApiEndpoint] assigns
+     * one on first save. Existing profiles keep their original hashed id (the
+     * preference key). The built-in "Default" profile uses the reserved
+     * [DEFAULT_ENDPOINT_ID] so the default per-chat reference keeps resolving.
+     * Kept at the END of the constructor so existing positional callers stay valid. */
+    var id: String = ""
 ) {
     companion object {
+        /* Reserved, fixed id for the built-in "Default" endpoint. It is NOT a
+         * name-derived identity in the mutable sense: the "Default" profile can
+         * never be renamed (the editor forbids it) and it is the value every
+         * install's default per-chat reference already points at
+         * (Preferences.getApiEndpointId defaults to it), so it is preserved
+         * verbatim as this record's permanent, constant id. */
+        val DEFAULT_ENDPOINT_ID: String = Hash.hash("Default")
+
         const val DEFAULT_CHAT_ENDPOINT = "/chat/completions"
         const val AUTH_BEARER = "bearer"
         const val AUTH_X_API_KEY = "x-api-key"

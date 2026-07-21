@@ -40,7 +40,6 @@ import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.dto.PersonaObject
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.adapters.PersonaListItemAdapter
-import org.teslasoft.assistant.util.Hash
 
 class PersonasListActivity : FragmentActivity() {
 
@@ -76,15 +75,12 @@ class PersonasListActivity : FragmentActivity() {
         val data = result.data ?: return@registerForActivityResult
         when (data.getStringExtra(EditPersonaActivity.EXTRA_RESULT_ACTION)) {
             EditPersonaActivity.ACTION_SAVE -> {
+                // The persona carries its stable id (blank for a new one, which
+                // setPersona mints in place). One save path for create AND rename
+                // — a rename updates the record under the same id.
                 val persona = EditPersonaActivity.readResultPersona(data)
-                val pos = data.getIntExtra(EditPersonaActivity.EXTRA_POSITION, -1)
-                val oldLabel = data.getStringExtra(EditPersonaActivity.EXTRA_RESULT_OLD_LABEL) ?: ""
-                if (pos == -1) {
-                    personaPreferences!!.setPersona(persona)
-                } else {
-                    personaPreferences!!.editPersona(oldLabel, persona)
-                }
-                finishWithActive(persona.label)
+                personaPreferences!!.setPersona(persona)
+                finishWithActive(persona.id)
             }
             EditPersonaActivity.ACTION_DELETE -> {
                 val id = data.getStringExtra(EditPersonaActivity.EXTRA_RESULT_ID)
@@ -97,8 +93,8 @@ class PersonasListActivity : FragmentActivity() {
     }
 
     private fun openEditor(position: Int) {
-        val label = list[position]["label"] ?: return
-        val persona = personaPreferences!!.getPersona(Hash.hash(label))
+        val id = list[position]["id"] ?: return
+        val persona = personaPreferences!!.getPersona(id)
         editPersonaLauncher.launch(EditPersonaActivity.createIntent(this, persona, position))
     }
 
@@ -106,9 +102,9 @@ class PersonasListActivity : FragmentActivity() {
         editPersonaLauncher.launch(EditPersonaActivity.createIntent(this, newEmptyPersona(), -1))
     }
 
-    private fun finishWithActive(label: String) {
+    private fun finishWithActive(personaId: String) {
         val resultIntent = Intent()
-        resultIntent.putExtra("personaId", Hash.hash(label))
+        resultIntent.putExtra("personaId", personaId)
         setResult(RESULT_OK, resultIntent)
         finish()
     }
@@ -122,8 +118,8 @@ class PersonasListActivity : FragmentActivity() {
         // chevron -> edit -> Save path selects too.
         override fun onClick(position: Int) {
             if (pickMode) {
-                val label = list[position]["label"] ?: return
-                finishWithActive(label)
+                val id = list[position]["id"] ?: return
+                finishWithActive(id)
             } else {
                 openEditor(position)
             }
@@ -200,6 +196,7 @@ class PersonasListActivity : FragmentActivity() {
 
         for (i in personasList) {
             val map = HashMap<String, String>()
+            map["id"] = i.id
             map["label"] = i.label
             map["prompt"] = i.prompt
             list.add(map)

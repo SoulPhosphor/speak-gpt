@@ -19,17 +19,19 @@ package org.teslasoft.assistant.preferences.memory
 import android.content.Context
 import org.teslasoft.assistant.preferences.PersonaPreferences
 import org.teslasoft.assistant.preferences.dto.PersonaObject
-import org.teslasoft.assistant.util.Hash
 
 /**
  * The app-persona <-> companion-record bridge (integration plan D6).
  *
  * The APP owns character configuration; the STORE owns continuity. Each app
- * persona links to a companion via companions.app_character_id =
- * Hash.hash(label). Because a persona rename changes that id (edit = delete +
- * recreate, a documented app invariant), the persona save path calls
- * [onPersonaSaved] with the old id so the link can follow the rename while the
- * stable companion_id keeps every memory attached.
+ * persona links to a companion via companions.app_character_id = the persona's
+ * STABLE id ([PersonaObject.id]). Because that id no longer changes on rename
+ * (July 2026 stable-id fix — it used to be Hash.hash(label), so a rename was a
+ * delete+recreate under a new id), the save path locates the companion by the
+ * persona's own id and a rename simply updates the existing record's name;
+ * the stable companion_id keeps every memory attached. Existing companions
+ * created before the fix keep their app_character_id = the persona's legacy
+ * hashed id, which is exactly the id existing personas still carry.
  *
  * Everything here is best-effort by design: a memory-store hiccup must never
  * break saving a persona, so failures are logged and swallowed. Nothing runs
@@ -51,8 +53,8 @@ object MemoryCompanionSync {
         val personas = PersonaPreferences.getPersonaPreferences(context).getPersonasList()
         var created = 0
         for (persona in personas) {
-            if (persona.label.isBlank()) continue
-            val appCharacterId = Hash.hash(persona.label)
+            if (persona.label.isBlank() || persona.id.isBlank()) continue
+            val appCharacterId = persona.id
             if (store.findCompanionByAppCharacterId(appCharacterId) != null) continue
             store.insertCompanion(newCompanion(appCharacterId, persona))
             created++
@@ -89,25 +91,25 @@ object MemoryCompanionSync {
     }
 
     /**
-     * Persona save hook. [oldPersonaId] is non-null only for renames (the edit
-     * path), where the companion must be found under the pre-rename id.
-     * New personas created after bootstrap get a companion automatically so
-     * the store never falls behind the app's cast.
+     * Persona save hook. The companion is located by the persona's STABLE id,
+     * so a rename (same id, new label) updates the existing record's name
+     * rather than creating a second companion. New personas created after
+     * bootstrap get a companion automatically so the store never falls behind
+     * the app's cast.
      */
-    fun onPersonaSaved(context: Context, oldPersonaId: String?, persona: PersonaObject) {
+    fun onPersonaSaved(context: Context, persona: PersonaObject) {
         try {
-            if (persona.label.isBlank()) return
+            if (persona.label.isBlank() || persona.id.isBlank()) return
             if (!MemoryStore.isProvisioned(context)) return
             val store = MemoryStore.getInstance(context)
-            val newId = Hash.hash(persona.label)
+            val appCharacterId = persona.id
 
-            val existing = (if (oldPersonaId != null) store.findCompanionByAppCharacterId(oldPersonaId) else null)
-                ?: store.findCompanionByAppCharacterId(newId)
+            val existing = store.findCompanionByAppCharacterId(appCharacterId)
 
             if (existing != null) {
-                store.updateCompanionForPersona(existing.companionId, newId, persona.label, persona.prompt)
+                store.updateCompanionForPersona(existing.companionId, appCharacterId, persona.label, persona.prompt)
             } else if (store.getMeta(MemoryStore.META_BOOTSTRAP_DONE) == "1") {
-                store.insertCompanion(newCompanion(newId, persona))
+                store.insertCompanion(newCompanion(appCharacterId, persona))
             }
         } catch (e: Exception) {
             // Persona saves must always succeed; the mirror can be re-synced on

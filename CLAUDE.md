@@ -505,13 +505,30 @@ Everything is on-device. No cloud sync, no accounts.
      files, `files/storage_recovery/`, or `*_recovered_*`/`*_conflict_*`/
      `*_corrupt_*` snapshots. Still OPEN: the snapshot restore/inspection UI
      (registry exists, no surface yet).
-   - `PersonaPreferences.kt` — personas, flat keys `<personaId>_<field>` where
-     `personaId = Hash.hash(label)`. **Renaming a persona changes its id**
-     (edit = delete + recreate); lorebook links survive only because the edit
-     dialog passes every field through. Keep that invariant.
-   - `ApiEndpointPreferences` (encrypted), `ActivationPromptPreferences`,
+   - `PersonaPreferences.kt` — personas, flat keys `<personaId>_<field>`.
+     **Stable IDs (July 2026):** identity is now an explicit `PersonaObject.id`,
+     minted ONCE (`StableId.newId("p-")`) and NEVER recomputed from the label —
+     renaming a persona keeps the same id and simply updates the record. Existing
+     personas keep their original id (the legacy `Hash.hash(label)` preference
+     key IS their permanent id — no migration, no key rename). The old
+     "rename = delete + recreate under a new hash" behaviour is GONE; every list/
+     adapter/editor/selection path carries the explicit id (never re-derives
+     `Hash.hash(label)`), so avatars, activation-prompt links, per-chat/last-used
+     selections and the memory-store companion (`app_character_id` = the stable
+     persona id) stay attached across a rename. `MemoryCompanionSync` locates the
+     companion by the stable id, so a rename updates the existing companion
+     instead of creating a second one. Same stable-ID model applies to
+     `ActivationPromptPreferences` (`ap-`), `ApiEndpointPreferences` (`ep-`, the
+     built-in "Default" profile keeps the reserved constant
+     `ApiEndpointObject.DEFAULT_ENDPOINT_ID` so the default reference resolves)
+     and `LogitBiasConfigPreferences` (`lb-`, config values stay under the same
+     `logit_bias_config_<id>` file — `movePreferences` was removed). `Chat` IDs
+     are deliberately still name-derived (a separate migration, out of scope).
+   - `ApiEndpointPreferences` (encrypted; API key behind a `SecretStore` seam,
+     keyed `<id>_api_key` — unchanged by a rename), `ActivationPromptPreferences`,
      `LogitBiasPreferences`/`LogitBiasConfigPreferences`,
-     `FavoriteModelsPreferences`, `GlobalPreferences`, `EncryptedPreferences`
+     `FavoriteModelsPreferences` (a favorite references an endpoint by its stable
+     `id`), `GlobalPreferences`, `EncryptedPreferences`
      (androidx security-crypto for API keys).
 2. **SQLite (SQLCipher)** — `lorebook.db` via `LoreBookStore` (singleton
    over `net.zetetic:sqlcipher-android`). Legacy plaintext databases are
@@ -774,8 +791,10 @@ Everything is on-device. No cloud sync, no accounts.
    the user's own exported file. **Companion records are automatic** (owner
    requirement, July 2026): the app's personas ARE the companions the user
    sees; the store's `companions` table is the memory system's continuity
-   file for each persona (`app_character_id` = `Hash.hash(label)`, stable
-   `companion_id` survives renames). A chat with a persona must ALWAYS
+   file for each persona (`app_character_id` = the persona's STABLE id — the
+   `Hash.hash(label)` legacy id for pre-existing personas, a `p-…` id for new
+   ones; it no longer changes on rename, and the stable `companion_id` survives
+   renames regardless). A chat with a persona must ALWAYS
    resolve to a companion — `MemoryCompanionSync.ensureCompanionForPersona`
    creates the record on first contact (called from `TranscriptRecorder` and
    the enforcer), the full bootstrap runs automatically when the Memory

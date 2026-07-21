@@ -48,7 +48,7 @@ data class CompanionRecord(
     val relationshipNotes: String?,
     val memoryParticipation: String,      // full | global_only | none
     val hardLimitsJson: String,           // JSON array of strings
-    val appCharacterId: String?,          // Hash.hash(persona label); may dangle after persona delete
+    val appCharacterId: String?,          // the persona's STABLE id (survives rename); may dangle after persona delete
     val mirrorText: String?,              // one-way app -> store snapshot for drift detection
     val mirrorSyncedAt: String?,
     val modelAdaptationsJson: String,     // JSON array of {model_tag, notes}

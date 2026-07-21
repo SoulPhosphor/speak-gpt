@@ -43,7 +43,6 @@ import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.fragments.dialogs.AdvancedModelSelectorDialogFragment
 import org.teslasoft.assistant.ui.util.DiscardChangesDialog
-import org.teslasoft.assistant.util.Hash
 
 /**
  * Full-page editor for a single API chat endpoint profile (replaced the old
@@ -61,7 +60,7 @@ import org.teslasoft.assistant.util.Hash
  *   existing key, even on save.
  *
  * Result contract back to the list:
- * - RESULT_OK + extra "deleted"=false + "apiEndpointLabel" → saved (list marks
+ * - RESULT_OK + extra "deleted"=false + "apiEndpointId" → saved (list marks
  *   that endpoint active and finishes).
  * - RESULT_OK + extra "deleted"=true → deleted (list just reloads).
  * - RESULT_CANCELED → nothing changed.
@@ -108,6 +107,8 @@ class ApiEndpointEditorActivity : FragmentActivity() {
     private var sliderPresencePenalty: Slider? = null
 
     private var position: Int = -1
+    /** Stable id of the profile being edited ("" for a new profile). */
+    private var endpointId: String = ""
     private var oldLabel: String = ""
     private var selectedAuthType: String = ApiEndpointObject.AUTH_BEARER
     private var selectedModel: String = ApiEndpointObject.DEFAULT_MODEL
@@ -131,7 +132,7 @@ class ApiEndpointEditorActivity : FragmentActivity() {
         apiEndpointPreferences = ApiEndpointPreferences.getApiEndpointPreferences(this)
 
         position = intent.getIntExtra("position", -1)
-        oldLabel = intent.getStringExtra("label") ?: ""
+        endpointId = intent.getStringExtra("id") ?: ""
 
         bindViews()
         applyTheme()
@@ -194,11 +195,14 @@ class ApiEndpointEditorActivity : FragmentActivity() {
     }
 
     private fun loadValues() {
-        val endpoint: ApiEndpointObject = if (position == -1 || oldLabel.isEmpty()) {
+        val endpoint: ApiEndpointObject = if (position == -1 || endpointId.isEmpty()) {
             ApiEndpointObject("", "", "")
         } else {
-            apiEndpointPreferences!!.getApiEndpoint(this, Hash.hash(oldLabel))
+            apiEndpointPreferences!!.getApiEndpoint(this, endpointId)
         }
+        // The record's current label anchors the "Default" rename guard; the id
+        // stays in [endpointId] and is what the record is saved/deleted under.
+        oldLabel = endpoint.label
 
         fieldLabel?.setText(endpoint.label)
         fieldHost?.setText(endpoint.host)
@@ -351,7 +355,10 @@ class ApiEndpointEditorActivity : FragmentActivity() {
             ),
             responseTimeoutSeconds = ApiEndpointObject.coerceResponseTimeoutSeconds(
                 fieldResponseTime?.text.toString().toIntOrNull() ?: ApiEndpointObject.DEFAULT_RESPONSE_TIMEOUT_SECONDS
-            )
+            ),
+            // Rename keeps the same id; a new profile carries "" and is minted an
+            // id (or the reserved Default id) on first save.
+            id = endpointId
         )
     }
 
@@ -465,14 +472,14 @@ class ApiEndpointEditorActivity : FragmentActivity() {
 
     private fun commitSave() {
         val endpoint = buildEndpointObject()
-        if (position == -1) {
-            apiEndpointPreferences!!.setApiEndpoint(this, endpoint)
-        } else {
-            apiEndpointPreferences!!.editEndpoint(this, oldLabel, endpoint)
-        }
+        // One save path for create AND rename — the object carries its stable id
+        // (blank for a new profile, minted in place), so a rename updates the
+        // record under the same id and the API key / favorites / per-chat
+        // selection stay attached.
+        val savedId = apiEndpointPreferences!!.setApiEndpoint(this, endpoint)
 
         val data = android.content.Intent()
-        data.putExtra("apiEndpointLabel", endpoint.label)
+        data.putExtra("apiEndpointId", savedId)
         data.putExtra("deleted", false)
         setResult(RESULT_OK, data)
         finish()
@@ -497,7 +504,7 @@ class ApiEndpointEditorActivity : FragmentActivity() {
     }
 
     private fun commitDelete() {
-        apiEndpointPreferences!!.deleteApiEndpoint(this, Hash.hash(oldLabel))
+        apiEndpointPreferences!!.deleteApiEndpoint(this, endpointId)
 
         val data = android.content.Intent()
         data.putExtra("deleted", true)

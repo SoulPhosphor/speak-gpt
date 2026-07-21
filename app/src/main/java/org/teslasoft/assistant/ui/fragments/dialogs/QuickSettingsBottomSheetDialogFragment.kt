@@ -56,7 +56,6 @@ import org.teslasoft.assistant.preferences.lorebook.LoreBookStore
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.memory.UserPersonaRecord
 import org.teslasoft.assistant.ui.activities.memory.MemoryUserPersonasActivity
-import org.teslasoft.assistant.util.Hash
 import org.teslasoft.assistant.preferences.memory.CampaignRecord
 import org.teslasoft.assistant.preferences.memory.CardEntryRecord
 import org.teslasoft.assistant.preferences.memory.CardSections
@@ -480,7 +479,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         val personas = personaPreferences?.getPersonasList() ?: return
         val labels = personas.map { it.label }
         showTileDropdown(anchor, labels) { position ->
-            val id = Hash.hash(personas[position].label)
+            val id = personas[position].id
             preferences?.setPersonaId(id)
             preferences?.setLastUsedPersonaId(id)
             updatePersonaLabel(id)
@@ -504,7 +503,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         val prompts = activationPromptPreferences?.getActivationPromptsList() ?: return
         val labels = listOf(getString(R.string.label_activation_none)) + prompts.map { it.label }
         showTileDropdown(anchor, labels) { position ->
-            val id = if (position == 0) "" else Hash.hash(prompts[position - 1].label)
+            val id = if (position == 0) "" else prompts[position - 1].id
             preferences?.setActivationPromptId(id)
             preferences?.setLastUsedActivationPromptId(id)
             val prompt = if (id != "") activationPromptPreferences?.getActivationPrompt(id)?.prompt ?: "" else ""
@@ -1275,7 +1274,10 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
             prefix = preferences?.getPrefix() ?: currentProfile.prefix,
             provider = currentProfile.provider,
             connectTimeoutSeconds = currentProfile.connectTimeoutSeconds,
-            responseTimeoutSeconds = currentProfile.responseTimeoutSeconds
+            responseTimeoutSeconds = currentProfile.responseTimeoutSeconds,
+            // Carry the stable id so this UPDATES the same profile in place;
+            // without it setApiEndpoint would mint a new id and duplicate it.
+            id = currentProfile.id
         )
         apiEndpointPreferences?.setApiEndpoint(requireContext(), updated)
         android.widget.Toast.makeText(requireContext(), R.string.msg_saved_to_profile, android.widget.Toast.LENGTH_SHORT).show()

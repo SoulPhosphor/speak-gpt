@@ -30,7 +30,6 @@ import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.PersonaPreferences
 import org.teslasoft.assistant.preferences.profileimages.ProfileImageStore
-import org.teslasoft.assistant.util.Hash
 import org.teslasoft.assistant.util.ProfileImageBinder
 
 // pickMode (owner ruling, July 21 2026): when this list is opened from Quick
@@ -87,8 +86,10 @@ class PersonaListItemAdapter(private val dataArray: ArrayList<HashMap<String, St
         // shown here at all (owner ruling, July 19 2026) - that lives in
         // Quick Settings and the last-used companion logic, not this list.
         personaAvatar?.let { avatar ->
-            val personaId = Hash.hash(item["label"] ?: "")
-            val avatarRef = PersonaPreferences.getPersonaPreferences(mContext).getPersona(personaId).avatarRef
+            // The row carries the companion's stable id; never re-derive it from
+            // the (mutable) label.
+            val personaId = item["id"] ?: ""
+            val avatarRef = if (personaId.isEmpty()) "" else PersonaPreferences.getPersonaPreferences(mContext).getPersona(personaId).avatarRef
             val avatarFile = if (avatarRef.isNotEmpty()) ProfileImageStore.getInstance(mContext).imageFile(avatarRef) else null
             val shape = GlobalPreferences.getPreferences(mContext).getProfileImageShape()
             ProfileImageBinder.bind(mContext, avatar, avatarFile, shape) { iv ->

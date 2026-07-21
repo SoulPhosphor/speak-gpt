@@ -79,10 +79,11 @@ object TranscriptRecorder {
             if (personaId.isNotBlank()) {
                 // A chat with a persona always resolves to a companion: the
                 // record is created on first contact if the bootstrap hasn't
-                // covered it. personaId is already Hash.hash(label); guard
-                // against a raw label sneaking in by hashing on lookup miss.
+                // covered it. personaId is the persona's STABLE id (the memory
+                // store's app_character_id), so it is used directly — no
+                // name-hashing fallback (that only made sense while identity was
+                // derived from the label).
                 val companion = MemoryCompanionSync.ensureCompanionForPersona(context, personaId)
-                    ?: MemoryCompanionSync.ensureCompanionForPersona(context, Hash.hash(personaId))
                 if (companion != null) {
                     companionId = companion.companionId
                     participation = companion.memoryParticipation

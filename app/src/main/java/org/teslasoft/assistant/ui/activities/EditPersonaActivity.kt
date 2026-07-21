@@ -51,7 +51,6 @@ import org.teslasoft.assistant.preferences.lorebook.LoreBookStore
 import org.teslasoft.assistant.preferences.profileimages.ProfileImageStore
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.util.DiscardChangesDialog
-import org.teslasoft.assistant.util.Hash
 import org.teslasoft.assistant.util.ProfileImageBinder
 
 /**
@@ -80,13 +79,14 @@ class EditPersonaActivity : FragmentActivity() {
         const val EXTRA_LAST_USED_LOREBOOKS = "lastUsedLoreBookIds"
         const val EXTRA_AVATAR_REF = "avatarRef"
         const val EXTRA_POSITION = "position"
+        /** The companion's stable id ("" for a brand-new companion). */
+        const val EXTRA_ID = "id"
 
         /** RESULT_OK carries one of [ACTION_SAVE] / [ACTION_DELETE]. */
         const val EXTRA_RESULT_ACTION = "result_action"
         const val ACTION_SAVE = "save"
         const val ACTION_DELETE = "delete"
-        /** Save: the original label (for editPersona); Delete: the persona id. */
-        const val EXTRA_RESULT_OLD_LABEL = "result_old_label"
+        /** Delete: the persona's stable id. */
         const val EXTRA_RESULT_ID = "result_id"
 
         private const val STATE_AVATAR_REF = "state_avatar_ref"
@@ -94,6 +94,7 @@ class EditPersonaActivity : FragmentActivity() {
         /** Builds the launch intent for [persona] at list [position] (-1 = new). */
         fun createIntent(context: Context, persona: PersonaObject, position: Int): Intent {
             return Intent(context, EditPersonaActivity::class.java)
+                .putExtra(EXTRA_ID, persona.id)
                 .putExtra(EXTRA_LABEL, persona.label)
                 .putExtra(EXTRA_PROMPT, persona.prompt)
                 .putExtra(EXTRA_ACTIVATION_ID, persona.activationPromptId)
@@ -105,7 +106,8 @@ class EditPersonaActivity : FragmentActivity() {
                 .putExtra(EXTRA_POSITION, position)
         }
 
-        /** Reconstructs the saved PersonaObject from a RESULT_OK save result. */
+        /** Reconstructs the saved PersonaObject from a RESULT_OK save result.
+         *  Carries the stable id so the caller saves under it (rename-safe). */
         fun readResultPersona(data: Intent): PersonaObject {
             return PersonaObject(
                 label = data.getStringExtra(EXTRA_LABEL) ?: "",
@@ -115,7 +117,8 @@ class EditPersonaActivity : FragmentActivity() {
                 additionalLoreBookIds = data.getStringExtra(EXTRA_ADDITIONAL_LOREBOOKS) ?: "",
                 autoLoadLastLoreBooks = data.getBooleanExtra(EXTRA_AUTOLOAD, false),
                 lastUsedLoreBookIds = data.getStringExtra(EXTRA_LAST_USED_LOREBOOKS) ?: "",
-                avatarRef = data.getStringExtra(EXTRA_AVATAR_REF) ?: ""
+                avatarRef = data.getStringExtra(EXTRA_AVATAR_REF) ?: "",
+                id = data.getStringExtra(EXTRA_ID) ?: ""
             )
         }
     }
@@ -136,6 +139,7 @@ class EditPersonaActivity : FragmentActivity() {
     private var btnDelete: ImageButton? = null
 
     private var position: Int = -1
+    private var personaId: String = ""
     private var originalLabel: String = ""
     private var lastUsedLoreBookIds: String = ""
 
@@ -201,6 +205,7 @@ class EditPersonaActivity : FragmentActivity() {
         applyAmoledChrome()
 
         position = intent.getIntExtra(EXTRA_POSITION, -1)
+        personaId = intent.getStringExtra(EXTRA_ID) ?: ""
         originalLabel = intent.getStringExtra(EXTRA_LABEL) ?: ""
         lastUsedLoreBookIds = intent.getStringExtra(EXTRA_LAST_USED_LOREBOOKS) ?: ""
 
@@ -305,7 +310,7 @@ class EditPersonaActivity : FragmentActivity() {
         val ids = arrayListOf("")
         val labels = arrayListOf(getString(R.string.label_activation_none))
         for (p in prompts) {
-            ids.add(Hash.hash(p.label))
+            ids.add(p.id)
             labels.add(p.label)
         }
 
@@ -439,7 +444,10 @@ class EditPersonaActivity : FragmentActivity() {
             additionalLoreBookIds = PersonaObject.joinIds(additionalLoreBookIds),
             autoLoadLastLoreBooks = checkboxAutoload?.isChecked == true,
             lastUsedLoreBookIds = PersonaObject.joinIds(lastUsed),
-            avatarRef = selectedAvatarRef
+            avatarRef = selectedAvatarRef,
+            // Rename keeps the same id; a new companion carries "" and is minted
+            // an id on first save.
+            id = personaId
         )
     }
 
@@ -454,7 +462,7 @@ class EditPersonaActivity : FragmentActivity() {
         val persona = buildPersonaObject()
         val result = Intent()
             .putExtra(EXTRA_RESULT_ACTION, ACTION_SAVE)
-            .putExtra(EXTRA_RESULT_OLD_LABEL, originalLabel)
+            .putExtra(EXTRA_ID, persona.id)
             .putExtra(EXTRA_POSITION, position)
             .putExtra(EXTRA_LABEL, persona.label)
             .putExtra(EXTRA_PROMPT, persona.prompt)
@@ -523,7 +531,7 @@ class EditPersonaActivity : FragmentActivity() {
                 val result = Intent()
                     .putExtra(EXTRA_RESULT_ACTION, ACTION_DELETE)
                     .putExtra(EXTRA_POSITION, position)
-                    .putExtra(EXTRA_RESULT_ID, Hash.hash(originalLabel))
+                    .putExtra(EXTRA_RESULT_ID, personaId)
                 setResult(RESULT_OK, result)
                 finish()
             }

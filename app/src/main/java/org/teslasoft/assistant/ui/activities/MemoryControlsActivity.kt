@@ -46,7 +46,6 @@ import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.preferences.memory.MemoryCompanionSync
 import org.teslasoft.assistant.preferences.memory.librarian.EmbeddingModelStorage
 import org.teslasoft.assistant.theme.ThemeManager
-import org.teslasoft.assistant.util.Hash
 
 /**
  * "Memory Controls" — the normal user-facing controls page from the Memory
@@ -330,7 +329,7 @@ class MemoryControlsActivity : FragmentActivity() {
             getString(R.string.label_endpoint_none)
         } else {
             val endpoints = apiEndpointPreferences?.getApiEndpointsList(this) ?: arrayListOf()
-            val label = endpoints.firstOrNull { Hash.hash(it.label) == endpointId }?.label
+            val label = endpoints.firstOrNull { it.id == endpointId }?.label
             if (!label.isNullOrEmpty()) label else getString(R.string.label_endpoint_none)
         }
 
@@ -347,13 +346,13 @@ class MemoryControlsActivity : FragmentActivity() {
 
         val currentId = preferences?.getArchivistEndpointId().orEmpty()
         val labels = endpoints.map { it.label }.toTypedArray()
-        val current = endpoints.indexOfFirst { Hash.hash(it.label) == currentId }.coerceAtLeast(0)
+        val current = endpoints.indexOfFirst { it.id == currentId }.coerceAtLeast(0)
 
         MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
             .setTitle(R.string.memory_archivist_endpoint_picker_title)
             .setSingleChoiceItems(labels, current) { dialog, which ->
                 val picked: ApiEndpointObject = endpoints[which]
-                preferences?.setArchivistEndpointId(Hash.hash(picked.label))
+                preferences?.setArchivistEndpointId(picked.id)
                 refreshArchivistRows()
                 dialog.dismiss()
             }

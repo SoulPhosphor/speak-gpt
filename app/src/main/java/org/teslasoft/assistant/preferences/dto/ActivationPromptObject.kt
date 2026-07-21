@@ -17,8 +17,13 @@
 package org.teslasoft.assistant.preferences.dto
 
 class ActivationPromptObject(
-    /* Friendly title. Used as the unique identifier (hashed) and shown as the card label. */
+    /* Editable display title shown as the card label. NOT the identity — see [id]. */
     var label: String,
     /* The activation prompt text, sent as a first user message when applied. */
-    var prompt: String = ""
+    var prompt: String = "",
+    /* Stable identity. Minted ONCE at creation and never recomputed from [label],
+     * so renaming keeps companion / per-chat / global references valid. Empty
+     * only for a brand-new object; [ActivationPromptPreferences.setActivationPrompt]
+     * assigns one on first save. Existing prompts keep their original hashed id. */
+    var id: String = ""
 )

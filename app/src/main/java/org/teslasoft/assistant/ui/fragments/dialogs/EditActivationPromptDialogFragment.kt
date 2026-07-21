@@ -28,11 +28,11 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.textfield.TextInputEditText
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.dto.ActivationPromptObject
-import org.teslasoft.assistant.util.Hash
 
 class EditActivationPromptDialogFragment : DialogFragment() {
     companion object {
         fun newInstance(
+            id: String,
             label: String,
             prompt: String,
             position: Int
@@ -40,6 +40,7 @@ class EditActivationPromptDialogFragment : DialogFragment() {
             val fragment = EditActivationPromptDialogFragment()
 
             val args = Bundle()
+            args.putString("id", id)
             args.putString("label", label)
             args.putString("prompt", prompt)
             args.putInt("position", position)
@@ -88,7 +89,7 @@ class EditActivationPromptDialogFragment : DialogFragment() {
                 MaterialAlertDialogBuilder(this.requireContext(), R.style.App_MaterialAlertDialog)
                     .setTitle(R.string.label_delete_activation_prompt)
                     .setMessage(R.string.message_delete_activation_prompt)
-                    .setPositiveButton(R.string.yes) { _, _ -> listener!!.onDelete(requireArguments().getInt("position"), Hash.hash(requireArguments().getString("label")!!)) }
+                    .setPositiveButton(R.string.yes) { _, _ -> listener!!.onDelete(requireArguments().getInt("position"), requireArguments().getString("id") ?: "") }
                     .setNegativeButton(R.string.no) { _, _ -> listener!!.onCancel(requireArguments().getInt("position")) }
                     .show()
             }}
@@ -97,10 +98,13 @@ class EditActivationPromptDialogFragment : DialogFragment() {
         return builder!!.create()
     }
 
+    /** Carries the stable id through the edit so a rename saves under the same
+     *  record ("" for a new prompt, which the store mints an id for). */
     private fun buildActivationPromptObject(): ActivationPromptObject {
         return ActivationPromptObject(
             label = fieldLabel?.text.toString(),
-            prompt = fieldPrompt?.text.toString()
+            prompt = fieldPrompt?.text.toString(),
+            id = requireArguments().getString("id") ?: ""
         )
     }
 
@@ -110,15 +114,7 @@ class EditActivationPromptDialogFragment : DialogFragment() {
             return
         }
 
-        if (requireArguments().getInt("position") == -1) {
-            listener!!.onAdd(buildActivationPromptObject())
-        } else {
-            listener!!.onEdit(
-                requireArguments().getString("label")!!,
-                buildActivationPromptObject(),
-                requireArguments().getInt("position")
-            )
-        }
+        listener!!.onSave(buildActivationPromptObject())
     }
 
     fun setListener(listener: StateChangesListener) {
@@ -126,8 +122,7 @@ class EditActivationPromptDialogFragment : DialogFragment() {
     }
 
     interface StateChangesListener {
-        fun onAdd(activationPrompt: ActivationPromptObject) { /* default */ }
-        fun onEdit(oldLabel: String, activationPrompt: ActivationPromptObject, position: Int) { /* default */ }
+        fun onSave(activationPrompt: ActivationPromptObject) { /* default */ }
         fun onDelete(position: Int, id: String) { /* default */ }
         fun onError(message: String, position: Int) { /* default */ }
         fun onCancel(position: Int) { /* default */ }

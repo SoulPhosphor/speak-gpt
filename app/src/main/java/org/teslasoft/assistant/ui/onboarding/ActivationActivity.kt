@@ -30,7 +30,6 @@ import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
-import org.teslasoft.assistant.util.Hash
 import androidx.core.content.edit
 import eightbitlab.com.blurview.BlurView
 import org.teslasoft.assistant.theme.ThemeManager
@@ -105,11 +104,14 @@ class ActivationActivity : FragmentActivity() {
     }
 
     private fun completeSetup(host: String) {
-        val apiEndpointObject = ApiEndpointObject("Default", host, keyInput?.text.toString())
+        // The built-in Default profile is created with the reserved constant id
+        // so the default per-chat reference (Preferences.getApiEndpointId, which
+        // defaults to the same value) resolves to it.
+        val apiEndpointObject = ApiEndpointObject("Default", host, keyInput?.text.toString(), id = ApiEndpointObject.DEFAULT_ENDPOINT_ID)
         val apiEndpointPreferences = ApiEndpointPreferences.getApiEndpointPreferences(this)
         apiEndpointPreferences.setApiEndpoint(this, apiEndpointObject)
         val gPreferences = Preferences.getPreferences(this, "")
-        gPreferences.setApiEndpointId(Hash.hash("Default"))
+        gPreferences.setApiEndpointId(ApiEndpointObject.DEFAULT_ENDPOINT_ID)
         getSharedPreferences("setup", MODE_PRIVATE).edit { putBoolean("setup", true) }
         gPreferences.setApiKey(keyInput?.text.toString(), this)
         gPreferences.setCustomHost(host)

@@ -20,7 +20,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
 import org.teslasoft.assistant.preferences.dto.ActivationPromptObject
-import org.teslasoft.assistant.util.Hash
+import org.teslasoft.assistant.util.StableId
 
 class ActivationPromptPreferences private constructor(private var preferences: SharedPreferences) {
     companion object {
@@ -33,6 +33,10 @@ class ActivationPromptPreferences private constructor(private var preferences: S
 
             return activationPromptPreferences!!
         }
+
+        /** Test seam: build against an injected (in-memory) SharedPreferences. */
+        internal fun createForTest(preferences: SharedPreferences): ActivationPromptPreferences =
+            ActivationPromptPreferences(preferences)
     }
 
     private fun getString(key: String, defValue: String): String {
@@ -46,11 +50,19 @@ class ActivationPromptPreferences private constructor(private var preferences: S
     fun getActivationPrompt(id: String): ActivationPromptObject {
         val label = getString(id + "_label", "")
         val prompt = getString(id + "_prompt", "")
-        return ActivationPromptObject(label, prompt)
+        return ActivationPromptObject(label, prompt, id)
     }
 
+    /**
+     * Save under the object's stable [ActivationPromptObject.id]. A brand-new
+     * object (blank id) is minted a fresh id ONCE, in place, so the caller can
+     * read it back; an existing prompt keeps its id, so a rename (same id, new
+     * label) updates the record instead of creating a second one under a new
+     * name-derived key.
+     */
     fun setActivationPrompt(activationPrompt: ActivationPromptObject) {
-        val id = Hash.hash(activationPrompt.label)
+        val id = StableId.resolve(activationPrompt.id, "ap-")
+        activationPrompt.id = id
         putString(id + "_label", activationPrompt.label)
         putString(id + "_prompt", activationPrompt.prompt)
     }
@@ -58,11 +70,6 @@ class ActivationPromptPreferences private constructor(private var preferences: S
     fun deleteActivationPrompt(id: String) {
         preferences.edit { remove(id + "_label") }
         preferences.edit { remove(id + "_prompt") }
-    }
-
-    fun editActivationPrompt(oldLabel: String, activationPrompt: ActivationPromptObject) {
-        deleteActivationPrompt(Hash.hash(oldLabel))
-        setActivationPrompt(activationPrompt)
     }
 
     fun getActivationPromptsList(): ArrayList<ActivationPromptObject> {

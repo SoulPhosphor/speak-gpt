@@ -19,20 +19,49 @@ package org.teslasoft.assistant.preferences
 import android.content.Context
 import android.content.SharedPreferences
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
-import org.teslasoft.assistant.util.Hash
+import org.teslasoft.assistant.util.StableId
 import androidx.core.content.edit
 
-class ApiEndpointPreferences private constructor(private var preferences: SharedPreferences) {
+class ApiEndpointPreferences private constructor(
+    private var preferences: SharedPreferences,
+    private val secrets: SecretStore
+) {
     companion object {
         private var apiEndpointPreferences: ApiEndpointPreferences? = null
 
         fun getApiEndpointPreferences(context: Context): ApiEndpointPreferences {
             if (apiEndpointPreferences == null) {
-                apiEndpointPreferences = ApiEndpointPreferences(context.getSharedPreferences("api_endpoint", Context.MODE_PRIVATE))
+                apiEndpointPreferences = ApiEndpointPreferences(
+                    context.getSharedPreferences("api_endpoint", Context.MODE_PRIVATE),
+                    EncryptedSecretStore(context.applicationContext)
+                )
             }
 
             return apiEndpointPreferences!!
         }
+
+        /** Test seam: inject an in-memory SharedPreferences and secret store. */
+        internal fun createForTest(preferences: SharedPreferences, secrets: SecretStore): ApiEndpointPreferences =
+            ApiEndpointPreferences(preferences, secrets)
+    }
+
+    /**
+     * The endpoint's API key lives in the encrypted store keyed by
+     * `<id>_api_key`. Kept behind an interface so the identity/field logic can
+     * be unit-tested without the Android Keystore, AND so credential handling
+     * during a rename is explicit: a rename no longer moves the key between
+     * ids — the id is stable, so the same encrypted entry stays in place.
+     */
+    interface SecretStore {
+        fun get(key: String): String
+        fun set(key: String, value: String)
+    }
+
+    private class EncryptedSecretStore(private val appContext: Context) : SecretStore {
+        override fun get(key: String): String =
+            EncryptedPreferences.getEncryptedPreference(appContext, "api_endpoint", key)
+        override fun set(key: String, value: String) =
+            EncryptedPreferences.setEncryptedPreference(appContext, "api_endpoint", key, value)
     }
 
     private var listeners: ArrayList<OnApiEndpointChangeListener> = ArrayList()
@@ -45,12 +74,20 @@ class ApiEndpointPreferences private constructor(private var preferences: Shared
         preferences.edit { putString(key, value) }
     }
 
-    fun getApiEndpoint(context: Context, id: String): ApiEndpointObject {
+    // The public methods keep their `context` parameter for source
+    // compatibility with the many call sites, but the API key now flows through
+    // the [secrets] seam (which captured its context at construction), so the
+    // parameter is no longer read here — the id-only overloads below do the work
+    // and are what the unit tests drive.
+
+    fun getApiEndpoint(context: Context, id: String): ApiEndpointObject = getApiEndpoint(id)
+
+    internal fun getApiEndpoint(id: String): ApiEndpointObject {
         val label = getString(id + "_label", "")
         val host = getString(id + "_host", "")
         val chatEndpoint = getString(id + "_chat_endpoint", ApiEndpointObject.DEFAULT_CHAT_ENDPOINT)
         val authType = getString(id + "_auth_type", ApiEndpointObject.AUTH_BEARER)
-        val apiKey: String = EncryptedPreferences.getEncryptedPreference(context, "api_endpoint", id + "_api_key")
+        val apiKey: String = secrets.get(id + "_api_key")
         val model = getString(id + "_model", ApiEndpointObject.DEFAULT_MODEL)
         val temperature = getString(id + "_temperature", ApiEndpointObject.DEFAULT_TEMPERATURE.toString()).toFloatOrNull()
             ?: ApiEndpointObject.DEFAULT_TEMPERATURE
@@ -78,11 +115,13 @@ class ApiEndpointPreferences private constructor(private var preferences: Shared
             label, host, apiKey, chatEndpoint, authType,
             model, temperature, topP, frequencyPenalty, presencePenalty,
             maxTokens, endSeparator, prefix, provider,
-            connectTimeoutSeconds, responseTimeoutSeconds
+            connectTimeoutSeconds, responseTimeoutSeconds, id
         )
     }
 
-    fun deleteApiEndpoint(context: Context, id: String) {
+    fun deleteApiEndpoint(context: Context, id: String) = deleteApiEndpoint(id)
+
+    internal fun deleteApiEndpoint(id: String) {
         preferences.edit { remove(id + "_label") }
         preferences.edit { remove(id + "_host") }
         preferences.edit { remove(id + "_chat_endpoint") }
@@ -98,15 +137,26 @@ class ApiEndpointPreferences private constructor(private var preferences: Shared
         preferences.edit { remove(id + "_provider") }
         preferences.edit { remove(id + "_timeout") }
         preferences.edit { remove(id + "_response_timeout") }
-        EncryptedPreferences.setEncryptedPreference(context, "api_endpoint", id + "_api_key", "null")
+        secrets.set(id + "_api_key", "null")
 
         for (listener in listeners) {
             listener.onApiEndpointChange()
         }
     }
 
-    fun setApiEndpoint(context: Context, endpoint: ApiEndpointObject) {
-        val id = Hash.hash(endpoint.label)
+    fun setApiEndpoint(context: Context, endpoint: ApiEndpointObject): String = setApiEndpoint(endpoint)
+
+    /**
+     * Save under the endpoint's stable [ApiEndpointObject.id]. A brand-new
+     * profile (blank id) is minted a fresh id ONCE, in place; an existing
+     * profile keeps its id, so a rename (same id, new label) updates the record
+     * — the encrypted API key, favorite-model links and per-chat selection all
+     * stay attached because nothing moves to a new, name-derived id. Returns the
+     * id the profile was saved under.
+     */
+    internal fun setApiEndpoint(endpoint: ApiEndpointObject): String {
+        val id = StableId.resolve(endpoint.id, "ep-")
+        endpoint.id = id
         putString(id + "_label", endpoint.label)
         putString(id + "_host", endpoint.host)
         putString(id + "_chat_endpoint", endpoint.chatEndpoint)
@@ -122,16 +172,21 @@ class ApiEndpointPreferences private constructor(private var preferences: Shared
         putString(id + "_provider", endpoint.provider)
         putString(id + "_timeout", ApiEndpointObject.coerceConnectTimeoutSeconds(endpoint.connectTimeoutSeconds).toString())
         putString(id + "_response_timeout", ApiEndpointObject.coerceResponseTimeoutSeconds(endpoint.responseTimeoutSeconds).toString())
-        EncryptedPreferences.setEncryptedPreference(context, "api_endpoint", id + "_api_key", endpoint.apiKey)
+        secrets.set(id + "_api_key", endpoint.apiKey)
 
         for (listener in listeners) {
             listener.onApiEndpointChange()
         }
+        return id
     }
 
+    /**
+     * Rename-safe edit: the endpoint carries its stable id, so this simply
+     * re-saves under it. Kept for source compatibility (older callers passed the
+     * old label); the label argument is no longer used to locate the record.
+     */
     fun editEndpoint(context: Context, label: String, endpoint: ApiEndpointObject) {
-        deleteApiEndpoint(context, Hash.hash(label))
-        setApiEndpoint(context, endpoint)
+        setApiEndpoint(endpoint)
     }
 
     fun migrateFromLegacyEndpoint(context: Context) {
@@ -141,16 +196,20 @@ class ApiEndpointPreferences private constructor(private var preferences: Shared
             val host = sp.getString("custom_host", "https://api.openai.com/v1/")
             val apiKey: String = EncryptedPreferences.getEncryptedPreference(context, "api", "api_key")
 
-            setApiEndpoint(context, ApiEndpointObject(label, host!!, apiKey))
+            // The built-in Default profile keeps the reserved constant id so the
+            // default per-chat reference (Preferences.getApiEndpointId) resolves.
+            setApiEndpoint(ApiEndpointObject(label, host!!, apiKey, id = ApiEndpointObject.DEFAULT_ENDPOINT_ID))
         }
     }
 
-    fun getApiEndpointsList(context: Context): ArrayList<ApiEndpointObject> {
+    fun getApiEndpointsList(context: Context): ArrayList<ApiEndpointObject> = getApiEndpointsList()
+
+    internal fun getApiEndpointsList(): ArrayList<ApiEndpointObject> {
         val list = ArrayList<ApiEndpointObject>()
         for (key in preferences.all.keys) {
             if (key.endsWith("_label")) {
                 val id = key.removeSuffix("_label")
-                list.add(getApiEndpoint(context, id))
+                list.add(getApiEndpoint(id))
             }
         }
 
@@ -163,7 +222,7 @@ class ApiEndpointPreferences private constructor(private var preferences: Shared
     }
 
     fun getApiEndpointByUrlOrNull(context: Context, url: String): ApiEndpointObject? {
-        val list = getApiEndpointsList(context)
+        val list = getApiEndpointsList()
         for (endpoint in list) {
             if (endpoint.host == url) {
                 return endpoint

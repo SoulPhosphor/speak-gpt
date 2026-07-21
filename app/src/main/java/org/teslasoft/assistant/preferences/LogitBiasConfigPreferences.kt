@@ -20,7 +20,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
-import org.teslasoft.assistant.util.Hash
+import org.teslasoft.assistant.util.StableId
 import java.lang.Exception
 import java.lang.reflect.Type
 import androidx.core.content.edit
@@ -36,6 +36,10 @@ class LogitBiasConfigPreferences private constructor(private var preferences: Sh
 
             return logitBiasConfigPreferences!!
         }
+
+        /** Test seam: build against an injected (in-memory) SharedPreferences. */
+        internal fun createForTest(preferences: SharedPreferences): LogitBiasConfigPreferences =
+            LogitBiasConfigPreferences(preferences)
     }
 
     private var listeners: ArrayList<OnLogitBiasConfigChangeListener> = ArrayList()
@@ -48,6 +52,12 @@ class LogitBiasConfigPreferences private constructor(private var preferences: Sh
         preferences.edit { putString(key, value) }
     }
 
+    /**
+     * Create a new config with a fresh, stable random id. The id is minted ONCE
+     * here and never recomputed from [label], so the bias values stored under
+     * `logit_bias_config_<id>` and any per-chat/global selection of this config
+     * survive a later rename.
+     */
     fun addConfig(label: String) {
         val gson = Gson()
 
@@ -56,7 +66,7 @@ class LogitBiasConfigPreferences private constructor(private var preferences: Sh
         // Bugfix for R8 minifier, yes It make no sense for regular programmer, but it's a bug in R8 minifier
         if (list == null) list = arrayListOf()
 
-        list.add(hashMapOf("label" to label, "id" to Hash.hash(label)))
+        list.add(hashMapOf("label" to label, "id" to StableId.newId("lb-")))
 
         // Bugfix for R8 minifier, yes It make no sense for regular programmer, but it's a bug in R8 minifier
         if (list == null) list = arrayListOf()
@@ -68,9 +78,30 @@ class LogitBiasConfigPreferences private constructor(private var preferences: Sh
         }
     }
 
-    fun editConfig(oldLabel: String, newLabel: String) {
-        deleteConfig(Hash.hash(oldLabel))
-        addConfig(newLabel)
+    /**
+     * Rename a config: change only its label, keeping the SAME id. The bias
+     * values stay under `logit_bias_config_<id>` — a rename no longer deletes
+     * the config and recreates it under a name-derived id, so nothing has to be
+     * moved between preference files.
+     */
+    fun editConfig(id: String, newLabel: String) {
+        val gson = Gson()
+
+        var list: ArrayList<HashMap<String, String>> = getAllConfigs()
+
+        if (list == null) list = arrayListOf()
+
+        for (config in list) {
+            if (config["id"] == id) {
+                config["label"] = newLabel
+            }
+        }
+
+        putString("configs", gson.toJson(list))
+
+        for (listener in listeners) {
+            listener.onLogitBiasConfigChange()
+        }
     }
 
     fun deleteConfig(configId: String) {
@@ -123,18 +154,9 @@ class LogitBiasConfigPreferences private constructor(private var preferences: Sh
         fun onLogitBiasConfigChange()
     }
 
-    fun movePreferences(oldId: String, newId: String, context: Context) {
-        val oldPrefs = context.getSharedPreferences("logit_bias_config_$oldId", Context.MODE_PRIVATE)
-        val newPrefs = context.getSharedPreferences("logit_bias_config_$newId", Context.MODE_PRIVATE)
-
-        val oldPrefsEditor = oldPrefs.edit()
-        val newPrefsEditor = newPrefs.edit()
-
-        oldPrefs.all.forEach {
-            newPrefsEditor.putString(it.key, it.value.toString())
-        }
-
-        newPrefsEditor.apply()
-        oldPrefsEditor.clear().apply()
-    }
+    // movePreferences(oldId, newId) was removed with the stable-id fix (July
+    // 2026). Its only caller was the rename flow, and it existed solely because
+    // a rename used to change the config id (Hash.hash(label)), which orphaned
+    // the bias values stored under logit_bias_config_<id>. The id is now stable
+    // across a rename, so nothing needs to be moved between preference files.
 }

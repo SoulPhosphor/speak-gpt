@@ -36,7 +36,6 @@ import org.teslasoft.assistant.preferences.LogitBiasConfigPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.ui.adapters.LogitBiasConfigItemAdapter
 import org.teslasoft.assistant.ui.fragments.dialogs.EditLogitBiasConfigDialogFragment
-import org.teslasoft.assistant.util.Hash
 import androidx.core.graphics.drawable.toDrawable
 import org.teslasoft.assistant.theme.ThemeManager
 
@@ -57,14 +56,15 @@ class LogitBiasConfigListActivity : FragmentActivity() {
     private var onSelectListener: LogitBiasConfigItemAdapter.OnSelectListener = object : LogitBiasConfigItemAdapter.OnSelectListener {
         override fun onClick(position: Int) {
             val resultIntent = Intent()
-            resultIntent.putExtra("configId", Hash.hash(list[position]["label"] ?: return))
+            // Return the config's stored stable id (row 0 = "disable" carries "").
+            resultIntent.putExtra("configId", list[position]["id"] ?: return)
             setResult(RESULT_OK, resultIntent)
             finish()
         }
 
         override fun onLongClick(position: Int) {
             if (position > 0) {
-                val dialog: EditLogitBiasConfigDialogFragment = EditLogitBiasConfigDialogFragment.newInstance(list[position]["label"] ?: return, position)
+                val dialog: EditLogitBiasConfigDialogFragment = EditLogitBiasConfigDialogFragment.newInstance(list[position]["id"] ?: return, list[position]["label"] ?: return, position)
                 dialog.setListener(editDialogListener)
                 dialog.show(supportFragmentManager, "EditLogitBiasConfigDialogFragment")
             }
@@ -72,7 +72,7 @@ class LogitBiasConfigListActivity : FragmentActivity() {
 
         override fun onEditBiases(position: Int) {
             startActivity(Intent(this@LogitBiasConfigListActivity, LogitBiasConfigActivity::class.java).apply {
-                putExtra("configId", Hash.hash(list[position]["label"] ?: return))
+                putExtra("configId", list[position]["id"] ?: return)
                 putExtra("label", list[position]["label"] ?: return)
             })
         }
@@ -84,9 +84,10 @@ class LogitBiasConfigListActivity : FragmentActivity() {
             reloadList()
         }
 
-        override fun onEdit(position: Int, label: String, oldId: String, newId: String) {
-            logitBiasConfigPreferences!!.editConfig(list[position]["label"] ?: return, label)
-            logitBiasConfigPreferences!!.movePreferences(oldId, newId, this@LogitBiasConfigListActivity)
+        override fun onEdit(position: Int, label: String, id: String) {
+            // Rename in place under the same id — the bias values stay put, so
+            // there is nothing to move between preference files.
+            logitBiasConfigPreferences!!.editConfig(id, label)
             reloadList()
         }
 
@@ -99,11 +100,11 @@ class LogitBiasConfigListActivity : FragmentActivity() {
         override fun onError(message: String, position: Int) {
             Toast.makeText(this@LogitBiasConfigListActivity, message, Toast.LENGTH_SHORT).show()
             if (position == -1) {
-                val dialog: EditLogitBiasConfigDialogFragment = EditLogitBiasConfigDialogFragment.newInstance("", position)
+                val dialog: EditLogitBiasConfigDialogFragment = EditLogitBiasConfigDialogFragment.newInstance("", "", position)
                 dialog.setListener(this)
                 dialog.show(supportFragmentManager, "EditLogitBiasConfigDialogFragment")
             } else {
-                val dialog: EditLogitBiasConfigDialogFragment = EditLogitBiasConfigDialogFragment.newInstance(list[position]["label"] ?: return, position)
+                val dialog: EditLogitBiasConfigDialogFragment = EditLogitBiasConfigDialogFragment.newInstance(list[position]["id"] ?: return, list[position]["label"] ?: return, position)
                 dialog.setListener(this)
                 dialog.show(supportFragmentManager, "EditLogitBiasConfigDialogFragment")
             }
@@ -209,7 +210,7 @@ class LogitBiasConfigListActivity : FragmentActivity() {
         }
 
         btnAdd!!.setOnClickListener {
-            val dialog: EditLogitBiasConfigDialogFragment = EditLogitBiasConfigDialogFragment.newInstance("", -1)
+            val dialog: EditLogitBiasConfigDialogFragment = EditLogitBiasConfigDialogFragment.newInstance("", "", -1)
             dialog.setListener(editDialogListener)
             dialog.show(supportFragmentManager, "EditLogitBiasConfigDialogFragment")
         }

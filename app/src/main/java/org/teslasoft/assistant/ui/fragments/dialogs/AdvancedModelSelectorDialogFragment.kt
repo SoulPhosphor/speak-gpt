@@ -50,7 +50,6 @@ import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.preferences.dto.FavoriteModelObject
 import org.teslasoft.assistant.ui.adapters.ModelListAdapter
-import org.teslasoft.assistant.util.Hash
 import org.teslasoft.core.api.network.RequestNetwork
 import kotlin.time.Duration.Companion.seconds
 
@@ -141,7 +140,7 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
 
                 updateProjection("")
 
-                modelListAdapter = ModelListAdapter(requireContext(), availableModelsProjection, requireArguments().getString("chatId").toString(), Hash.hash(apiEndpointObject?.label!!))
+                modelListAdapter = ModelListAdapter(requireContext(), availableModelsProjection, requireArguments().getString("chatId").toString(), apiEndpointObject?.id ?: "")
                 modelListAdapter?.setOnItemClickListener(modelSelectedListener)
                 modelList?.divider = null
                 modelList?.adapter = modelListAdapter
@@ -240,7 +239,7 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
 
                 updateProjection("")
 
-                modelListAdapter = ModelListAdapter(requireContext(), availableModelsProjection, requireArguments().getString("chatId").toString(), Hash.hash(apiEndpointObject?.label!!))
+                modelListAdapter = ModelListAdapter(requireContext(), availableModelsProjection, requireArguments().getString("chatId").toString(), apiEndpointObject?.id ?: "")
                 modelListAdapter?.setOnItemClickListener(modelSelectedListener)
                 modelList?.divider = null
                 modelList?.adapter = modelListAdapter
@@ -275,7 +274,7 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
             availableModelsProjection = availableModels.filter { item -> item == query || item.contains(query) || query.contains(item)} as ArrayList<String>
         }
 
-        modelListAdapter = ModelListAdapter(requireContext(), availableModelsProjection, requireArguments().getString("chatId").toString(), Hash.hash(apiEndpointObject?.label!!))
+        modelListAdapter = ModelListAdapter(requireContext(), availableModelsProjection, requireArguments().getString("chatId").toString(), apiEndpointObject?.id ?: "")
         modelListAdapter?.setOnItemClickListener(modelSelectedListener)
         modelList?.adapter = modelListAdapter
         modelListAdapter?.notifyDataSetChanged()

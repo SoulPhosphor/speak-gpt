@@ -27,14 +27,14 @@ import androidx.fragment.app.DialogFragment
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.textfield.TextInputEditText
 import org.teslasoft.assistant.R
-import org.teslasoft.assistant.util.Hash
 
 class EditLogitBiasConfigDialogFragment : DialogFragment() {
     companion object {
-        fun newInstance(label: String, position: Int) : EditLogitBiasConfigDialogFragment {
+        fun newInstance(id: String, label: String, position: Int) : EditLogitBiasConfigDialogFragment {
             val editLogitBiasConfigDialogFragment = EditLogitBiasConfigDialogFragment()
 
             val args = Bundle()
+            args.putString("id", id)
             args.putString("label", label)
             args.putInt("position", position)
 
@@ -74,7 +74,7 @@ class EditLogitBiasConfigDialogFragment : DialogFragment() {
                 MaterialAlertDialogBuilder(this.requireContext(), R.style.App_MaterialAlertDialog)
                     .setTitle(R.string.label_delete_logit_bias_config)
                     .setMessage(R.string.msg_delete_logit_bias_config)
-                    .setPositiveButton(R.string.yes) { _, _ -> listener!!.onDelete(requireArguments().getInt("position"), Hash.hash(requireArguments().getString("label")!!)) }
+                    .setPositiveButton(R.string.yes) { _, _ -> listener!!.onDelete(requireArguments().getInt("position"), requireArguments().getString("id") ?: "") }
                     .setNegativeButton(R.string.no) { _, _ ->  }
                     .show()
             } }
@@ -87,10 +87,12 @@ class EditLogitBiasConfigDialogFragment : DialogFragment() {
         if (fieldLogitBiasLabel?.text.toString().isEmpty()) {
             listener!!.onError(getString(R.string.label_error_logit_bias_config_name_empty), requireArguments().getInt("position"))
         } else {
-            if (requireArguments().getString("label") == "") {
+            val id = requireArguments().getString("id") ?: ""
+            if (id.isEmpty()) {
                 listener!!.onAdd(fieldLogitBiasLabel?.text.toString())
             } else {
-                listener!!.onEdit(requireArguments().getInt("position"), fieldLogitBiasLabel?.text.toString(), Hash.hash(requireArguments().getString("label")!!), Hash.hash(fieldLogitBiasLabel?.text.toString()))
+                // Rename: same id, new label. No id recomputation from the name.
+                listener!!.onEdit(requireArguments().getInt("position"), fieldLogitBiasLabel?.text.toString(), id)
             }
         }
     }
@@ -101,7 +103,7 @@ class EditLogitBiasConfigDialogFragment : DialogFragment() {
 
     interface StateChangesListener {
         fun onAdd(label: String)
-        fun onEdit(position: Int, label: String, oldId: String, newId: String)
+        fun onEdit(position: Int, label: String, id: String)
         fun onDelete(position: Int, id: String)
         fun onError(message: String, position: Int)
     }

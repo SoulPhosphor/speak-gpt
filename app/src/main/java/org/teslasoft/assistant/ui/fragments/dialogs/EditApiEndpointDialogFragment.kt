@@ -31,11 +31,11 @@ import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
-import org.teslasoft.assistant.util.Hash
 
 class EditApiEndpointDialogFragment : DialogFragment() {
     companion object {
         fun newInstance(
+            id: String,
             label: String,
             host: String,
             apiKey: String,
@@ -54,6 +54,7 @@ class EditApiEndpointDialogFragment : DialogFragment() {
             val editApiEndpointDialogFragment = EditApiEndpointDialogFragment()
 
             val args = Bundle()
+            args.putString("id", id)
             args.putString("label", label)
             args.putString("host", host)
             args.putString("apiKey", apiKey)
@@ -203,7 +204,7 @@ class EditApiEndpointDialogFragment : DialogFragment() {
                 MaterialAlertDialogBuilder(this.requireContext(), R.style.App_MaterialAlertDialog)
                     .setTitle(R.string.label_delete_api_endpoint)
                     .setMessage(R.string.message_delete_api_endpoint)
-                    .setPositiveButton(R.string.yes) { _, _ -> listener!!.onDelete(requireArguments().getInt("position"), Hash.hash(requireArguments().getString("label")!!)) }
+                    .setPositiveButton(R.string.yes) { _, _ -> listener!!.onDelete(requireArguments().getInt("position"), requireArguments().getString("id") ?: "") }
                     .setNegativeButton(R.string.no) { _, _ ->  listener!!.onCancel(requireArguments().getInt("position"))}
                     .show()
             }}
@@ -255,7 +256,8 @@ class EditApiEndpointDialogFragment : DialogFragment() {
             presencePenalty = (sliderPresencePenalty?.value ?: (ApiEndpointObject.DEFAULT_PRESENCE_PENALTY * 10f)) / 10f,
             maxTokens = fieldMaxTokens?.text.toString().toIntOrNull() ?: ApiEndpointObject.DEFAULT_MAX_TOKENS,
             endSeparator = fieldEndSeparator?.text.toString(),
-            prefix = fieldPrefix?.text.toString()
+            prefix = fieldPrefix?.text.toString(),
+            id = requireArguments().getString("id") ?: ""
         )
     }
 

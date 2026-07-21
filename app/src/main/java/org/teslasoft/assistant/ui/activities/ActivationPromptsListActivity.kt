@@ -41,7 +41,6 @@ import org.teslasoft.assistant.preferences.dto.ActivationPromptObject
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.adapters.ActivationPromptListItemAdapter
 import org.teslasoft.assistant.ui.fragments.dialogs.EditActivationPromptDialogFragment
-import org.teslasoft.assistant.util.Hash
 
 class ActivationPromptsListActivity : FragmentActivity() {
 
@@ -64,6 +63,7 @@ class ActivationPromptsListActivity : FragmentActivity() {
 
     private fun newEditDialog(activationPrompt: ActivationPromptObject, position: Int): EditActivationPromptDialogFragment {
         return EditActivationPromptDialogFragment.newInstance(
+            activationPrompt.id,
             activationPrompt.label,
             activationPrompt.prompt,
             position
@@ -75,17 +75,17 @@ class ActivationPromptsListActivity : FragmentActivity() {
     }
 
     private fun openEditDialog(position: Int) {
-        val label = list[position]["label"] ?: return
-        val activationPrompt = activationPromptPreferences!!.getActivationPrompt(Hash.hash(label))
+        val id = list[position]["id"] ?: return
+        val activationPrompt = activationPromptPreferences!!.getActivationPrompt(id)
         val dialog = newEditDialog(activationPrompt, position)
         dialog.setListener(editDialogListener)
         dialog.setCancelable(false)
         dialog.show(supportFragmentManager, "EditActivationPromptDialogFragment")
     }
 
-    private fun finishWithActive(label: String) {
+    private fun finishWithActive(id: String) {
         val resultIntent = Intent()
-        resultIntent.putExtra("activationPromptId", Hash.hash(label))
+        resultIntent.putExtra("activationPromptId", id)
         setResult(RESULT_OK, resultIntent)
         finish()
     }
@@ -93,8 +93,8 @@ class ActivationPromptsListActivity : FragmentActivity() {
     private var onSelectListener: ActivationPromptListItemAdapter.OnSelectListener = object : ActivationPromptListItemAdapter.OnSelectListener {
         override fun onClick(position: Int) {
             if (pickMode) {
-                val label = list[position]["label"] ?: return
-                finishWithActive(label)
+                val id = list[position]["id"] ?: return
+                finishWithActive(id)
             } else {
                 openEditDialog(position)
             }
@@ -110,13 +110,11 @@ class ActivationPromptsListActivity : FragmentActivity() {
     }
 
     private var editDialogListener: EditActivationPromptDialogFragment.StateChangesListener = object : EditActivationPromptDialogFragment.StateChangesListener {
-        override fun onAdd(activationPrompt: ActivationPromptObject) {
+        // One save path for add AND rename: the object carries its stable id
+        // (blank for a new prompt, minted in place by setActivationPrompt), so a
+        // rename updates the record under the same id instead of recreating it.
+        override fun onSave(activationPrompt: ActivationPromptObject) {
             activationPromptPreferences!!.setActivationPrompt(activationPrompt)
-            reloadList()
-        }
-
-        override fun onEdit(oldLabel: String, activationPrompt: ActivationPromptObject, position: Int) {
-            activationPromptPreferences!!.editActivationPrompt(list[position]["label"] ?: return, activationPrompt)
             reloadList()
         }
 
@@ -130,8 +128,8 @@ class ActivationPromptsListActivity : FragmentActivity() {
             val activationPrompt = if (position == -1) {
                 newEmptyActivationPrompt()
             } else {
-                val label = list[position]["label"] ?: return
-                activationPromptPreferences!!.getActivationPrompt(Hash.hash(label))
+                val id = list[position]["id"] ?: return
+                activationPromptPreferences!!.getActivationPrompt(id)
             }
             val dialog = newEditDialog(activationPrompt, position)
             dialog.setListener(this)
@@ -197,6 +195,7 @@ class ActivationPromptsListActivity : FragmentActivity() {
 
         for (i in promptsList) {
             val map = HashMap<String, String>()
+            map["id"] = i.id
             map["label"] = i.label
             map["prompt"] = i.prompt
             list.add(map)

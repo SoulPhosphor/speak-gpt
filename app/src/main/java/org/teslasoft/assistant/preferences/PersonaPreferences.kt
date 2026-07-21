@@ -21,9 +21,9 @@ import android.content.SharedPreferences
 import androidx.core.content.edit
 import org.teslasoft.assistant.preferences.dto.PersonaObject
 import org.teslasoft.assistant.preferences.memory.MemoryCompanionSync
-import org.teslasoft.assistant.util.Hash
+import org.teslasoft.assistant.util.StableId
 
-class PersonaPreferences private constructor(private var preferences: SharedPreferences, private val appContext: Context) {
+class PersonaPreferences private constructor(private var preferences: SharedPreferences, private val sync: CompanionSync) {
     companion object {
         private var personaPreferences: PersonaPreferences? = null
 
@@ -31,12 +31,34 @@ class PersonaPreferences private constructor(private var preferences: SharedPref
             if (personaPreferences == null) {
                 personaPreferences = PersonaPreferences(
                     context.getSharedPreferences("personas", Context.MODE_PRIVATE),
-                    context.applicationContext
+                    DefaultCompanionSync(context.applicationContext)
                 )
             }
 
             return personaPreferences!!
         }
+
+        /** Test seam: inject an in-memory SharedPreferences and a recording sync. */
+        internal fun createForTest(preferences: SharedPreferences, sync: CompanionSync): PersonaPreferences =
+            PersonaPreferences(preferences, sync)
+    }
+
+    /**
+     * The one-way app-persona -> memory-store companion bridge, behind an
+     * interface so persona identity/storage can be unit-tested without the
+     * SQLCipher store. The real bridge is best-effort (a store hiccup never
+     * blocks a persona save) and no-ops until the store is provisioned.
+     */
+    interface CompanionSync {
+        fun onPersonaSaved(persona: PersonaObject)
+        fun onPersonaDeleted(personaId: String)
+    }
+
+    private class DefaultCompanionSync(private val appContext: Context) : CompanionSync {
+        override fun onPersonaSaved(persona: PersonaObject) =
+            MemoryCompanionSync.onPersonaSaved(appContext, persona)
+        override fun onPersonaDeleted(personaId: String) =
+            MemoryCompanionSync.onPersonaDeleted(appContext, personaId)
     }
 
     private var listeners: ArrayList<OnPersonaChangeListener> = ArrayList()
@@ -65,10 +87,18 @@ class PersonaPreferences private constructor(private var preferences: SharedPref
         return PersonaObject(
             label, prompt, activationPromptId,
             coreLoreBookId, additionalLoreBookIds, autoLoadLastLoreBooks, lastUsedLoreBookIds,
-            avatarRef
+            avatarRef, id
         )
     }
 
+    /**
+     * Save under the object's stable [PersonaObject.id]. A brand-new companion
+     * (blank id) is minted a fresh id ONCE, in place; an existing companion
+     * keeps its id, so a rename (same id, new label) UPDATES the record — it no
+     * longer deletes the old keys and rewrites under a name-derived key, which
+     * is what used to orphan avatars, activation-prompt links, per-chat
+     * selections and the memory-store companion.
+     */
     fun setPersona(persona: PersonaObject) {
         writePersona(persona)
 
@@ -78,12 +108,15 @@ class PersonaPreferences private constructor(private var preferences: SharedPref
 
         // One-way app -> store sync: keep the linked companion's personality
         // mirror fresh (memory system D6). Best-effort, no-op until the memory
-        // store exists; never blocks or fails a persona save.
-        MemoryCompanionSync.onPersonaSaved(appContext, null, persona)
+        // store exists; never blocks or fails a persona save. The companion is
+        // located by the STABLE persona id, so a rename updates the existing
+        // companion instead of creating a second one.
+        sync.onPersonaSaved(persona)
     }
 
     private fun writePersona(persona: PersonaObject) {
-        val id = Hash.hash(persona.label)
+        val id = StableId.resolve(persona.id, "p-")
+        persona.id = id
         putString(id + "_label", persona.label)
         putString(id + "_prompt", persona.prompt)
         putString(id + "_activation_prompt_id", persona.activationPromptId)
@@ -138,26 +171,11 @@ class PersonaPreferences private constructor(private var preferences: SharedPref
     fun deletePersona(id: String) {
         removePersonaKeys(id)
 
-        MemoryCompanionSync.onPersonaDeleted(appContext, id)
+        sync.onPersonaDeleted(id)
 
         for (listener in listeners) {
             listener.onPersonaChange()
         }
-    }
-
-    fun editPersona(oldLabel: String, persona: PersonaObject) {
-        val oldId = Hash.hash(oldLabel)
-        removePersonaKeys(oldId)
-        writePersona(persona)
-
-        for (listener in listeners) {
-            listener.onPersonaChange()
-        }
-
-        // Renames change the persona id (edit = delete + recreate), so the
-        // companion link must be re-pointed under the OLD id — that's the whole
-        // reason the sync hook exists.
-        MemoryCompanionSync.onPersonaSaved(appContext, oldId, persona)
     }
 
     private fun removePersonaKeys(id: String) {
