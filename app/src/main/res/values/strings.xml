@@ -591,9 +591,9 @@
     <string name="title_new_system_prompt">Add System Prompt</string>
     <string name="title_edit_system_prompt">Edit System Prompt</string>
     <string name="hint_system_prompt_title">Title</string>
-    <string name="hint_system_prompt_body">System prompt</string>
+    <string name="hint_system_prompt_body">System Prompt</string>
     <string name="system_prompt_needs_title">Please enter a title.</string>
-    <string name="system_prompt_delete_title">Delete system prompt?</string>
+    <string name="system_prompt_delete_title">Delete System Prompt?</string>
     <string name="system_prompt_delete_message">This system prompt will be permanently removed.</string>
     <string name="tile_ale_title">Automatic language detection</string>
     <string name="tile_ale_desc">This feature allows you to enable automatic language detection of speech.</string>
@@ -1453,7 +1453,7 @@
          label lives in the separate mem_pers_field_name_label below instead
          of repurposing the shared string. -->
     <string name="mem_pers_title_user_personas">Glamour Studio</string>
-    <string name="mem_pers_fab_add_persona">New persona</string>
+    <string name="mem_pers_fab_add_persona">Create Glamour</string>
     <string name="mem_pers_field_name">Name</string>
     <string name="mem_pers_field_name_label">Persona Name</string>
     <string name="mem_pers_error_name_empty">Please enter a Persona name</string>
@@ -1464,8 +1464,8 @@
     <string name="mem_pers_field_presentation">Presentation</string>
     <string name="mem_pers_field_presentation_hint">Include any information you want the AI to know about you specifically when using this persona. You may want to include gender, species, clothing, abilities or special statuses such as relationship.</string>
     <string name="mem_pers_error_presentation_empty">Please enter a Presentation</string>
-    <string name="title_mem_pers_creation">Persona Creation</string>
-    <string name="title_mem_pers_edit">Edit Persona</string>
+    <string name="title_mem_pers_creation">Create Glamour</string>
+    <string name="title_mem_pers_edit">Edit Glamour</string>
     <string name="mem_pers_persona_deleted">Persona deleted</string>
     <string name="mem_pers_delete_persona_title">Delete persona?</string>
     <string name="mem_pers_delete_persona_msg">Delete \"%1$s\"? This can\'t be undone.</string>
