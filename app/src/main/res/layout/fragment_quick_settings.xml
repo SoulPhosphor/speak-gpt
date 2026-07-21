@@ -59,6 +59,14 @@
                     app:layout_constraintStart_toStartOf="parent"
                     app:layout_constraintTop_toTopOf="parent" />
 
+                <!-- Summoning Circle container block (owner ruling, July 21
+                     2026): Companion (top-rounded) -> Glamour (square) ->
+                     Activation (square) -> System Prompt (bottom-rounded), read
+                     as one bordered container. Each tile is now a label + an
+                     inline dropdown value (tap it for an anchored list, not a
+                     centered picker) + an edit button that opens that category's
+                     manager. Repeated look lives in the Widget.App.QuickTile.*
+                     styles; per-tile shape/border/constraints stay here. -->
                 <androidx.constraintlayout.widget.ConstraintLayout
                     android:id="@+id/btn_select_persona"
                     android:layout_width="0dp"
@@ -76,37 +84,67 @@
 
                     <TextView
                         android:id="@+id/textView_persona_title"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="16dp"
-                        android:layout_marginTop="12dp"
-                        android:layout_marginEnd="16dp"
+                        style="@style/Widget.App.QuickTile.Label"
                         android:text="@string/label_persona"
-                        android:textColor="?attr/colorPrimary"
-                        android:textSize="16sp"
-                        android:textStyle="bold"
                         app:layout_constraintEnd_toEndOf="parent"
                         app:layout_constraintStart_toStartOf="parent"
                         app:layout_constraintTop_toTopOf="parent" />
 
                     <TextView
                         android:id="@+id/text_persona"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="16dp"
-                        android:layout_marginEnd="16dp"
-                        android:ellipsize="marquee"
-                        android:focusable="true"
-                        android:focusableInTouchMode="true"
-                        android:freezesText="true"
-                        android:marqueeRepeatLimit="marquee_forever"
-                        android:scrollHorizontally="true"
-                        android:singleLine="true"
+                        style="@style/Widget.App.QuickTile.Value"
                         android:text="@string/label_tap_to_set"
-                        android:textColor="@color/text"
-                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintEnd_toStartOf="@+id/btn_edit_persona"
                         app:layout_constraintStart_toStartOf="parent"
                         app:layout_constraintTop_toBottomOf="@+id/textView_persona_title" />
+
+                    <ImageView
+                        android:id="@+id/btn_edit_persona"
+                        style="@style/Widget.App.QuickTile.EditButton"
+                        android:contentDescription="@string/qs_edit_companions_desc"
+                        app:layout_constraintBottom_toBottomOf="@+id/text_persona"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintTop_toTopOf="@+id/text_persona" />
+                </androidx.constraintlayout.widget.ConstraintLayout>
+
+                <androidx.constraintlayout.widget.ConstraintLayout
+                    android:id="@+id/btn_select_glamour"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="24dp"
+                    android:layout_marginTop="2dp"
+                    android:layout_marginEnd="24dp"
+                    android:background="@drawable/btn_accent_4"
+                    android:backgroundTint="?attr/colorSecondaryContainer"
+                    android:foreground="@drawable/border_quick_tile_middle"
+                    android:paddingBottom="8dp"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toBottomOf="@+id/btn_select_persona">
+
+                    <TextView
+                        android:id="@+id/textView_glamour_title"
+                        style="@style/Widget.App.QuickTile.Label"
+                        android:text="@string/label_glamour"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintTop_toTopOf="parent" />
+
+                    <TextView
+                        android:id="@+id/text_glamour"
+                        style="@style/Widget.App.QuickTile.Value"
+                        android:text="@string/label_user_persona_none"
+                        app:layout_constraintEnd_toStartOf="@+id/btn_edit_glamour"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintTop_toBottomOf="@+id/textView_glamour_title" />
+
+                    <ImageView
+                        android:id="@+id/btn_edit_glamour"
+                        style="@style/Widget.App.QuickTile.EditButton"
+                        android:contentDescription="@string/qs_edit_glamours_desc"
+                        app:layout_constraintBottom_toBottomOf="@+id/text_glamour"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintTop_toTopOf="@+id/text_glamour" />
                 </androidx.constraintlayout.widget.ConstraintLayout>
 
                 <androidx.constraintlayout.widget.ConstraintLayout
@@ -122,48 +160,35 @@
                     android:paddingBottom="8dp"
                     app:layout_constraintEnd_toEndOf="parent"
                     app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toBottomOf="@+id/btn_select_persona">
+                    app:layout_constraintTop_toBottomOf="@+id/btn_select_glamour">
 
                     <TextView
                         android:id="@+id/textView_activation_title"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="16dp"
-                        android:layout_marginTop="12dp"
-                        android:layout_marginEnd="16dp"
+                        style="@style/Widget.App.QuickTile.Label"
                         android:text="@string/label_activation"
-                        android:textColor="?attr/colorPrimary"
-                        android:textSize="16sp"
-                        android:textStyle="bold"
                         app:layout_constraintEnd_toEndOf="parent"
                         app:layout_constraintStart_toStartOf="parent"
                         app:layout_constraintTop_toTopOf="parent" />
 
                     <TextView
                         android:id="@+id/text_activation"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="16dp"
-                        android:layout_marginEnd="16dp"
-                        android:ellipsize="marquee"
-                        android:focusable="true"
-                        android:focusableInTouchMode="true"
-                        android:freezesText="true"
-                        android:marqueeRepeatLimit="marquee_forever"
-                        android:scrollHorizontally="true"
-                        android:singleLine="true"
+                        style="@style/Widget.App.QuickTile.Value"
                         android:text="@string/label_tap_to_set"
-                        android:textColor="@color/text"
-                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintEnd_toStartOf="@+id/btn_edit_activation"
                         app:layout_constraintStart_toStartOf="parent"
                         app:layout_constraintTop_toBottomOf="@+id/textView_activation_title" />
+
+                    <ImageView
+                        android:id="@+id/btn_edit_activation"
+                        style="@style/Widget.App.QuickTile.EditButton"
+                        android:contentDescription="@string/qs_edit_activation_desc"
+                        app:layout_constraintBottom_toBottomOf="@+id/text_activation"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintTop_toTopOf="@+id/text_activation" />
                 </androidx.constraintlayout.widget.ConstraintLayout>
 
-                <!-- System prompt: mirrors the Persona/Activation tile (label on
-                     top, chosen prompt's title below). Uses Activation's old
-                     bottom-rounded shape so Persona + Activation (now 4dp) +
-                     System read as one joined block. Tapping opens the library
-                     in pick mode. -->
+                <!-- System Prompt: bottom-rounded, closing the container block.
+                     The value shows the chosen prompt's title (or None). -->
                 <androidx.constraintlayout.widget.ConstraintLayout
                     android:id="@+id/btn_select_system_prompt"
                     android:layout_width="0dp"
@@ -181,37 +206,27 @@
 
                     <TextView
                         android:id="@+id/textView_system_prompt_title"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="16dp"
-                        android:layout_marginTop="12dp"
-                        android:layout_marginEnd="16dp"
+                        style="@style/Widget.App.QuickTile.Label"
                         android:text="@string/label_system_prompt"
-                        android:textColor="?attr/colorPrimary"
-                        android:textSize="16sp"
-                        android:textStyle="bold"
                         app:layout_constraintEnd_toEndOf="parent"
                         app:layout_constraintStart_toStartOf="parent"
                         app:layout_constraintTop_toTopOf="parent" />
 
                     <TextView
                         android:id="@+id/text_system_prompt"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="16dp"
-                        android:layout_marginEnd="16dp"
-                        android:ellipsize="marquee"
-                        android:focusable="true"
-                        android:focusableInTouchMode="true"
-                        android:freezesText="true"
-                        android:marqueeRepeatLimit="marquee_forever"
-                        android:scrollHorizontally="true"
-                        android:singleLine="true"
+                        style="@style/Widget.App.QuickTile.Value"
                         android:text="@string/system_prompt_none"
-                        android:textColor="@color/text"
-                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintEnd_toStartOf="@+id/btn_edit_system_prompt"
                         app:layout_constraintStart_toStartOf="parent"
                         app:layout_constraintTop_toBottomOf="@+id/textView_system_prompt_title" />
+
+                    <ImageView
+                        android:id="@+id/btn_edit_system_prompt"
+                        style="@style/Widget.App.QuickTile.EditButton"
+                        android:contentDescription="@string/qs_edit_system_prompts_desc"
+                        app:layout_constraintBottom_toBottomOf="@+id/text_system_prompt"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintTop_toTopOf="@+id/text_system_prompt" />
                 </androidx.constraintlayout.widget.ConstraintLayout>
 
                 <androidx.constraintlayout.widget.ConstraintLayout

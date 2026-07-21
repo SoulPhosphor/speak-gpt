@@ -31,6 +31,9 @@ import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
+import android.widget.ArrayAdapter
+import android.widget.ImageView
+import androidx.appcompat.widget.ListPopupWindow
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.widget.addTextChangedListener
 import com.google.android.material.bottomsheet.BottomSheetDialog
@@ -51,6 +54,9 @@ import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.preferences.dto.PersonaObject
 import org.teslasoft.assistant.preferences.lorebook.LoreBookStore
 import org.teslasoft.assistant.preferences.memory.MemoryStore
+import org.teslasoft.assistant.preferences.memory.UserPersonaRecord
+import org.teslasoft.assistant.ui.activities.memory.MemoryUserPersonasActivity
+import org.teslasoft.assistant.util.Hash
 import org.teslasoft.assistant.preferences.memory.CampaignRecord
 import org.teslasoft.assistant.preferences.memory.CardEntryRecord
 import org.teslasoft.assistant.preferences.memory.CardSections
@@ -105,6 +111,18 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
 
     private var personaPreferences: PersonaPreferences? = null
     private var textPersona: TextView? = null
+
+    // Summoning Circle tiles (owner ruling, July 21 2026): each tile's value is
+    // an inline dropdown; the edit button opens that category's manager. Glamour
+    // is the new square middle tile (the chat's user persona). cachedUserPersonas
+    // backs the Glamour dropdown - loaded off-main since it comes from the store.
+    private var btnSelectGlamour: ConstraintLayout? = null
+    private var textGlamour: TextView? = null
+    private var btnEditPersona: ImageView? = null
+    private var btnEditGlamour: ImageView? = null
+    private var btnEditActivation: ImageView? = null
+    private var btnEditSystemPrompt: ImageView? = null
+    private var cachedUserPersonas: List<UserPersonaRecord> = emptyList()
 
     private var activationPromptPreferences: ActivationPromptPreferences? = null
     private var textActivation: TextView? = null
@@ -425,6 +443,118 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         textSystemPrompt?.text = effective?.title ?: getString(R.string.system_prompt_none)
     }
 
+    // The tile edit buttons open a category's manager screen (Companions /
+    // Glamour Studio / Activation prompts / System prompts). Editing there can
+    // rename/add/remove items, so on return every tile's label is re-resolved
+    // and the Glamour list reloaded - cheaply, from prefs, plus one off-main
+    // store read for glamours. Selection itself is done by the dropdowns, not
+    // here, so this never changes what's chosen.
+    private val managerRefreshLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        if (!isAdded) return@registerForActivityResult
+        updatePersonaLabel(preferences?.getPersonaId() ?: "")
+        updateActivationLabel(preferences?.getActivationPromptId() ?: "")
+        updateSystemPromptLabel()
+        loadUserPersonasForGlamour()
+    }
+
+    /* ------------------------------ Summoning Circle dropdowns ------------------------------ */
+
+    /** Anchored dropdown list (owner ruling, July 21 2026) - a real dropdown
+     *  attached to the tapped value, not the centered picker dialog. */
+    private fun showTileDropdown(anchor: View, labels: List<String>, onPick: (Int) -> Unit) {
+        if (labels.isEmpty()) return
+        val popup = ListPopupWindow(requireContext())
+        popup.anchorView = anchor
+        popup.isModal = true
+        popup.width = anchor.width
+        popup.setAdapter(ArrayAdapter(requireContext(), android.R.layout.simple_list_item_1, labels))
+        popup.setOnItemClickListener { _, _, position, _ ->
+            popup.dismiss()
+            onPick(position)
+        }
+        popup.show()
+    }
+
+    /** Companion has no None (a chat always has a companion). */
+    private fun showCompanionDropdown(anchor: View) {
+        val personas = personaPreferences?.getPersonasList() ?: return
+        val labels = personas.map { it.label }
+        showTileDropdown(anchor, labels) { position ->
+            val id = Hash.hash(personas[position].label)
+            preferences?.setPersonaId(id)
+            preferences?.setLastUsedPersonaId(id)
+            updatePersonaLabel(id)
+            renderLoreBookList()
+            shouldForceUpdate = true
+        }
+    }
+
+    /** Glamour = the chat's user persona; None is the first entry. */
+    private fun showGlamourDropdown(anchor: View) {
+        val labels = listOf(getString(R.string.label_user_persona_none)) + cachedUserPersonas.map { it.name }
+        showTileDropdown(anchor, labels) { position ->
+            val id = if (position == 0) "" else cachedUserPersonas[position - 1].personaId
+            preferences?.setChatUserPersonaId(id)
+            updateGlamourLabel()
+            shouldForceUpdate = true
+        }
+    }
+
+    private fun showActivationDropdown(anchor: View) {
+        val prompts = activationPromptPreferences?.getActivationPromptsList() ?: return
+        val labels = listOf(getString(R.string.label_activation_none)) + prompts.map { it.label }
+        showTileDropdown(anchor, labels) { position ->
+            val id = if (position == 0) "" else Hash.hash(prompts[position - 1].label)
+            preferences?.setActivationPromptId(id)
+            preferences?.setLastUsedActivationPromptId(id)
+            val prompt = if (id != "") activationPromptPreferences?.getActivationPrompt(id)?.prompt ?: "" else ""
+            preferences?.setPrompt(prompt)
+            updateActivationLabel(id)
+            shouldForceUpdate = true
+        }
+    }
+
+    private fun showSystemPromptDropdown(anchor: View) {
+        val prompts = systemPromptsPreferences?.getSystemPrompts() ?: return
+        val labels = prompts.map { it.title }
+        showTileDropdown(anchor, labels) { position ->
+            systemPromptsPreferences?.setSelectedId(prompts[position].id)
+            preferences?.let { systemPromptsPreferences?.applyEffectiveToGlobal(it) }
+            updateSystemPromptLabel()
+            shouldForceUpdate = true
+            updateListener?.onUpdate()
+        }
+    }
+
+    private fun updateGlamourLabel() {
+        val id = preferences?.getChatUserPersonaId().orEmpty()
+        textGlamour?.text = if (id.isEmpty()) {
+            getString(R.string.label_user_persona_none)
+        } else {
+            cachedUserPersonas.firstOrNull { it.personaId == id }?.name
+                ?: getString(R.string.label_user_persona_none)
+        }
+    }
+
+    /** Loads the user personas that back the Glamour dropdown off the main
+     *  thread (they come from the SQLCipher store), then refreshes the label. */
+    private fun loadUserPersonasForGlamour() {
+        val appContext = context?.applicationContext ?: return
+        Thread {
+            val personas = try {
+                if (MemoryStore.isProvisioned(appContext)) MemoryStore.getInstance(appContext).getActiveUserPersonas()
+                else emptyList()
+            } catch (_: Exception) {
+                emptyList()
+            }
+            activity?.runOnUiThread {
+                if (!isAdded) return@runOnUiThread
+                cachedUserPersonas = personas
+                updateGlamourLabel()
+            }
+        }.start()
+    }
+
     private var modelSelectedListener: AdvancedModelSelectorDialogFragment.OnModelSelectedListener = AdvancedModelSelectorDialogFragment.OnModelSelectedListener { model ->
         preferences?.setModel(model)
         updateListener?.onUpdate()
@@ -542,8 +672,14 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         btnSelectApiEndpoint = view.findViewById(R.id.btn_select_api_endpoint)
         btnSelectPersona = view.findViewById(R.id.btn_select_persona)
         textPersona = view.findViewById(R.id.text_persona)
+        btnSelectGlamour = view.findViewById(R.id.btn_select_glamour)
+        textGlamour = view.findViewById(R.id.text_glamour)
         btnSelectActivation = view.findViewById(R.id.btn_select_activation)
         textActivation = view.findViewById(R.id.text_activation)
+        btnEditPersona = view.findViewById(R.id.btn_edit_persona)
+        btnEditGlamour = view.findViewById(R.id.btn_edit_glamour)
+        btnEditActivation = view.findViewById(R.id.btn_edit_activation)
+        btnEditSystemPrompt = view.findViewById(R.id.btn_edit_system_prompt)
         btnSelectLoreBook = view.findViewById(R.id.btn_select_lorebook)
         textLoreBook = view.findViewById(R.id.text_lorebook)
         lorebookCheckList = view.findViewById(R.id.lorebook_check_list)
@@ -615,6 +751,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         btnSelectLogitBias?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(activity ?: return))
         btnSelectApiEndpoint?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(activity ?: return))
         btnSelectPersona?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(activity ?: return))
+        btnSelectGlamour?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(activity ?: return))
         btnSelectActivation?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(activity ?: return))
         btnSelectSystemPrompt?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(activity ?: return))
         btnSelectLoreBook?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(activity ?: return))
@@ -631,6 +768,10 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         textHost?.text = if (apiEndpoint?.label != "") apiEndpoint?.label ?: getString(R.string.label_tap_to_set) else getString(R.string.label_tap_to_set)
         updatePersonaLabel(preferences?.getPersonaId() ?: "")
         updateActivationLabel(preferences?.getActivationPromptId() ?: "")
+        // Glamour (user persona) tile: label shows None until the store read
+        // returns and fills cachedUserPersonas for the dropdown.
+        updateGlamourLabel()
+        loadUserPersonasForGlamour()
         // Fold any pre-library system message into the library so the label names
         // it, then show the effective (chosen or top) prompt's title.
         preferences?.let { systemPromptsPreferences?.migrateExistingSystemMessage(it) }
@@ -690,10 +831,14 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
             }
         }
 
-        btnSelectSystemPrompt?.setOnClickListener {
-            val intent = Intent(requireContext(), SystemPromptsListActivity::class.java)
-            intent.putExtra("pickMode", true)
-            systemPromptActivityResultLauncher.launch(intent)
+        // System Prompt tile: the value is an inline dropdown of saved prompts;
+        // the edit button opens the library. NOTE: a "None" (send no system
+        // prompt) isn't offered here yet - the prompt library always keeps the
+        // selected-or-first prompt effective, so a real None needs a small
+        // per-chat mechanism that doesn't exist; deferred rather than guessed.
+        textSystemPrompt?.setOnClickListener { showSystemPromptDropdown(it) }
+        btnEditSystemPrompt?.setOnClickListener {
+            managerRefreshLauncher.launch(Intent(requireContext(), SystemPromptsListActivity::class.java))
         }
 
         fieldSeed?.addTextChangedListener { text ->
@@ -740,20 +885,23 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
             apiEndpointActivityResultLauncher.launch(Intent(requireContext(), ApiEndpointsListActivity::class.java))
         }
 
-        btnSelectPersona?.setOnClickListener {
-            // Pick mode: tapping a Companion's non-chevron area switches this
-            // chat to it (the chevron edits). Owner ruling, July 21 2026.
-            personaActivityResultLauncher.launch(
-                Intent(requireContext(), PersonasListActivity::class.java)
-                    .putExtra("pickMode", true)
-            )
+        // Companion / Glamour / Activation tiles (owner ruling, July 21 2026):
+        // the value is an inline dropdown; the edit button opens that category's
+        // manager. Companion has no None (a chat always has one); Glamour and
+        // Activation include None.
+        textPersona?.setOnClickListener { showCompanionDropdown(it) }
+        btnEditPersona?.setOnClickListener {
+            managerRefreshLauncher.launch(Intent(requireContext(), PersonasListActivity::class.java))
         }
 
-        btnSelectActivation?.setOnClickListener {
-            val intent = Intent(requireContext(), ActivationPromptsListActivity::class.java)
-            intent.putExtra("pickMode", true)
-            intent.putExtra("currentActivationId", preferences?.getActivationPromptId() ?: "")
-            activationActivityResultLauncher.launch(intent)
+        textGlamour?.setOnClickListener { showGlamourDropdown(it) }
+        btnEditGlamour?.setOnClickListener {
+            managerRefreshLauncher.launch(Intent(requireContext(), MemoryUserPersonasActivity::class.java))
+        }
+
+        textActivation?.setOnClickListener { showActivationDropdown(it) }
+        btnEditActivation?.setOnClickListener {
+            managerRefreshLauncher.launch(Intent(requireContext(), ActivationPromptsListActivity::class.java))
         }
 
         btnSaveToProfile?.setOnClickListener {

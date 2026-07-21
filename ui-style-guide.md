@@ -638,3 +638,41 @@ and rollout notes here — not back in `CLAUDE.md`.
   counter + blocks Save with a Snackbar, never blocks typing. Not yet wired
   to storage (no backing column yet). Not yet applied to any other
   form-field screen beyond these two.
+- **Summoning Circle tile styles (owner ruling, July 21 2026).** The four
+  container tiles at the top of the Summoning Circle (formerly "Quick
+  Settings") — Companion, Glamour, Activation, System Prompt — each render a
+  bold label, an inline dropdown value, and a trailing edit button. Three
+  styles in `values/themes.xml` own the repeated look so the coming theming
+  pass restyles all four (and any future tile) in one place:
+  - `Widget.App.QuickTile.Label` — the bold `?attr/colorPrimary` 16sp label.
+  - `Widget.App.QuickTile.Value` — the current selection, doubling as the
+    dropdown trigger: a trailing `ic_arrow_drop_down` caret marks it tappable,
+    and tapping opens an **anchored `ListPopupWindow`** (a real dropdown
+    attached to the value, deliberately NOT the centered picker dialog the
+    roleplay/scene rows use). One line, ellipsized.
+  - `Widget.App.QuickTile.EditButton` — the trailing edit button; opens that
+    category's manager screen (Companions / Glamour Studio / Activation
+    prompts / System prompts).
+  Per-tile pieces stay on the instance: the tile's shape drawable
+  (`btn_accent_top`/`_4`/`_bottom`), its `?attr/colorSecondaryContainer`
+  tint (overridden to `SurfaceColors.SURFACE_4` in
+  `QuickSettingsBottomSheetDialogFragment` for AMOLED consistency), its
+  border foreground (`border_quick_tile_top`/`_middle`/`_bottom` — thin
+  `@color/quick_tile_border` line, see below), and its constraints. The tiles
+  read as one container: top-rounded → square → square → bottom-rounded.
+  - **Tile border drawables.** `border_quick_tile_top/_middle/_bottom` are
+    `<shape>` overlays drawn as each tile's `android:foreground` (transparent
+    fill + a 1dp stroke, corners matching the tile) so the fill/tint stay
+    untouched. The stroke colour is the single `@color/quick_tile_border`
+    (a low-alpha white that reads as a shade lighter than the fill) — change
+    it there to retune every tile's edge, and it's the hook for the eventual
+    "glowing border" look.
+  Interaction lives in the fragment, not the styles: the value's click opens
+  the dropdown (`showTileDropdown` → `ListPopupWindow`); the edit button
+  launches the manager via `managerRefreshLauncher`, which re-resolves every
+  tile's label on return. Companion has no None (a chat always has one);
+  Glamour and Activation include None. System Prompt's inline dropdown selects
+  among saved prompts but has **no None yet** — the prompt library always
+  keeps the selected-or-first prompt effective, so a real "send no system
+  prompt" needs a small per-chat mechanism that doesn't exist; it's noted in
+  the code and deferred rather than guessed.

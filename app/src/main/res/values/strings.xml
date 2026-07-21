@@ -198,8 +198,15 @@
     <string name="title_api_endpoints">API Profiles</string>
     <string name="btn_new_api_endpoint">Add profile</string>
     <string name="label_persona">Companion</string>
+    <string name="label_glamour">Glamour</string>
     <string name="title_personas">Companions</string>
     <string name="btn_new_persona">Add Companion</string>
+    <!-- Summoning Circle tile edit buttons: content descriptions for the button
+         that opens each category's manager screen. -->
+    <string name="qs_edit_companions_desc">Manage companions</string>
+    <string name="qs_edit_glamours_desc">Open Glamour Studio</string>
+    <string name="qs_edit_activation_desc">Manage activation prompts</string>
+    <string name="qs_edit_system_prompts_desc">Manage system prompts</string>
     <string name="label_add_persona">Add persona</string>
     <!-- Full-screen Companion editor header (owner-approved words, July 19 2026):
          "Edit Companion" when editing, "Companion Creation" for a new one. -->

@@ -486,6 +486,57 @@
         <item name="android:textSize">13sp</item>
     </style>
 
+    <!-- Summoning Circle tile pieces (owner ruling, July 21 2026). The four
+         container tiles (Companion / Glamour / Activation / System Prompt) each
+         show a bold label, an inline dropdown value, and an edit button. These
+         styles own the repeated look so the coming theming pass can restyle all
+         four (and any future tile) in one place - see ui-style-guide.md. Per-tile
+         constraints (which tile sits above/below, the border foreground) stay on
+         the instance since they differ per tile. -->
+    <style name="Widget.App.QuickTile.Label" parent="">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginStart">16dp</item>
+        <item name="android:layout_marginTop">12dp</item>
+        <item name="android:layout_marginEnd">16dp</item>
+        <item name="android:textColor">?attr/colorPrimary</item>
+        <item name="android:textSize">16sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <!-- The current selection, doubling as the dropdown trigger: a trailing
+         caret marks it tappable and it opens an anchored ListPopupWindow (not
+         the centered picker dialog the roleplay rows use). -->
+    <style name="Widget.App.QuickTile.Value" parent="">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginStart">12dp</item>
+        <item name="android:layout_marginTop">2dp</item>
+        <item name="android:background">?attr/selectableItemBackground</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+        <item name="android:drawableEnd">@drawable/ic_arrow_drop_down</item>
+        <item name="android:drawableTint">@color/text</item>
+        <item name="android:drawablePadding">2dp</item>
+        <item name="android:ellipsize">end</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:paddingVertical">6dp</item>
+        <item name="android:paddingStart">4dp</item>
+        <item name="android:textColor">@color/text</item>
+    </style>
+
+    <!-- Trailing edit button: opens that category's manager screen. -->
+    <style name="Widget.App.QuickTile.EditButton" parent="">
+        <item name="android:layout_width">40dp</item>
+        <item name="android:layout_height">40dp</item>
+        <item name="android:layout_marginEnd">10dp</item>
+        <item name="android:background">?attr/selectableItemBackgroundBorderless</item>
+        <item name="android:padding">8dp</item>
+        <item name="android:scaleType">fitCenter</item>
+        <item name="android:src">@drawable/ic_edit</item>
+        <item name="android:tint">?attr/colorPrimary</item>
+    </style>
+
     <style name="Widget.App.Field.Box" parent="">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
