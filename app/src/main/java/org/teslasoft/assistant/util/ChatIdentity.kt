@@ -81,4 +81,50 @@ object ChatIdentity {
         if (isStable(entry)) return entry["id"] ?: ""
         return Hash.hash(entry["name"].toString())
     }
+
+    /** What the startup healing pass (plan §7) does to one unhealed entry. */
+    enum class HealAction {
+        /** Already stable — skip instantly; this is what makes the
+         *  every-start pass cheap and idempotent. */
+        NONE,
+        /** The stored id is verified (matches the name hash, or is a minted
+         *  "c-" id): add the marker, touch nothing else. */
+        ADD_MARKER,
+        /** No stored id at all: fill it with the entry's effective id (the
+         *  name hash — the id every reader already resolves), then mark. */
+        SET_ID_AND_MARK,
+        /** Stored id disagrees with the name hash and is not a minted id.
+         *  §7 rule 4: NO repair of any kind — no file probing, no history
+         *  switch, no re-point. The entry stays unmarked (the resolver keeps
+         *  it on the name hash, so the user keeps seeing exactly what they
+         *  see today) and is reported for manual inspection. */
+        MISMATCH_NO_REPAIR
+    }
+
+    /**
+     * Pure §7 decision for a single entry. The blank-id check runs first so
+     * a marked-but-idless entry (which [isStable] rejects) is repaired
+     * rather than skipped.
+     */
+    fun healAction(entry: Map<String, String>): HealAction {
+        val storedId = entry["id"] ?: ""
+        if (storedId.isBlank()) return HealAction.SET_ID_AND_MARK
+        if (entry[KEY_IDENTITY_VERSION] == IDENTITY_VERSION_STABLE) return HealAction.NONE
+        if (storedId.startsWith(STABLE_ID_PREFIX)) return HealAction.ADD_MARKER
+        // The name-hash comparison rides on effectiveId: for an unmarked,
+        // non-minted entry it IS the name hash, so no second hash site.
+        return if (storedId == effectiveId(entry)) HealAction.ADD_MARKER
+        else HealAction.MISMATCH_NO_REPAIR
+    }
+
+    /**
+     * The healing plan for a whole chat-list view, position-aligned with
+     * [entries]. An EMPTY plan when the list view is not authoritative
+     * (locked/corrupt storage masks the real list — plan §7: skip entirely,
+     * retry next start; a masked view must never mint permanent identity).
+     */
+    fun planHealing(entries: List<Map<String, String>>, authoritative: Boolean): List<HealAction> {
+        if (!authoritative) return emptyList()
+        return entries.map { healAction(it) }
+    }
 }

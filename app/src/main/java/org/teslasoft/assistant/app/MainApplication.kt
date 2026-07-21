@@ -27,6 +27,7 @@ import cat.ereza.customactivityoncrash.config.CaocConfig
 import com.google.android.material.color.DynamicColors
 import org.conscrypt.Conscrypt
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.Logger
 import org.teslasoft.assistant.preferences.Preferences
@@ -131,6 +132,18 @@ class MainApplication : Application() {
                 RenameJournal.reconcile(this)
             } catch (e: Exception) {
                 MemoryLog.log(this, "RenameJournal", "error", "Rename reconciliation at startup failed: ${e.message}")
+            }
+            try {
+                // Stamp the chat-identity markers (chat-id-stable-identity-
+                // plan.md §7). Deliberately AFTER the outage merge and rename
+                // recovery above — the marker makes an entry's stored id
+                // permanent, so it must never freeze a pre-recovery view of
+                // the list. Skips entirely (and retries next start) while the
+                // list is locked/corrupt; idempotent and cheap every other
+                // start.
+                ChatPreferences.getChatPreferences().healChatIdentityMarkers(this)
+            } catch (e: Exception) {
+                MemoryLog.log(this, "ChatIdentity", "error", "Chat identity marker pass failed: ${e.message}")
             }
             try {
                 if (MemoryStore.isProvisioned(this)) {

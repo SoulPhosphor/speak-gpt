@@ -147,6 +147,66 @@ class ChatPreferences private constructor() {
             ?.let { ChatIdentity.effectiveId(it) }
 
     /**
+     * Startup healing pass (chat-id-stable-identity-plan.md §7): stamps
+     * identity_version = "2" on every entry whose stored id is verified
+     * (matches the name hash, is a minted "c-" id, or was blank and is
+     * filled with the id every reader already resolves). From the stamp on,
+     * that exact stored id is the chat's permanent identity. Deliberately
+     * minimal: a mismatched stored id gets NO repair — no file probing, no
+     * history switch, no journal work — only one Error Log line per process
+     * for manual inspection, and the entry stays on its legacy name-derived
+     * id (plan §7 rule 4; the rejected repair machinery must not come back).
+     *
+     * Runs every start on the housekeeping thread, under CHAT_LIST_LOCK,
+     * only against an authoritative list view (a locked/corrupt masked list
+     * must never mint permanent identity — skip entirely, retry next
+     * start). Never parses histories (the July 15 ANR rule). Idempotent:
+     * marked entries skip instantly, so the steady-state cost is one list
+     * read.
+     */
+    fun healChatIdentityMarkers(context: Context) {
+        if (chatWriteBlocked(context, "chat_list", "record chat identity markers")) return
+        synchronized(CHAT_LIST_LOCK) {
+            val result = getChatListResult(context, includeFirstMessage = false)
+            val plan = ChatIdentity.planHealing(result.chats, ChatStorageHealth.isAuthoritative(result.state))
+            if (plan.isEmpty()) return
+
+            var changed = false
+            for ((entry, action) in result.chats.zip(plan)) {
+                when (action) {
+                    ChatIdentity.HealAction.NONE -> { /* already stable */ }
+                    ChatIdentity.HealAction.ADD_MARKER -> {
+                        entry[ChatIdentity.KEY_IDENTITY_VERSION] = ChatIdentity.IDENTITY_VERSION_STABLE
+                        changed = true
+                    }
+                    ChatIdentity.HealAction.SET_ID_AND_MARK -> {
+                        // effectiveId of a blank-id entry IS the name hash —
+                        // the id every reader has been resolving all along.
+                        entry["id"] = ChatIdentity.effectiveId(entry)
+                        entry[ChatIdentity.KEY_IDENTITY_VERSION] = ChatIdentity.IDENTITY_VERSION_STABLE
+                        changed = true
+                    }
+                    ChatIdentity.HealAction.MISMATCH_NO_REPAIR -> {
+                        if (ChatStorageHealth.shouldLogOnce("identity_mismatch.${entry["id"]}")) {
+                            Logger.log(
+                                context, CORRUPT_DATA_LOG_TYPE, "ChatPreferences", "error",
+                                "Chat \"${entry["name"]}\" carries a stored id that does not match its name (stored id ${entry["id"]}). " +
+                                    "Nothing was changed or repaired automatically: the chat keeps working under its name-derived id exactly as before, " +
+                                    "and renames of it are refused until the mismatch is inspected manually."
+                            )
+                        }
+                    }
+                }
+            }
+
+            if (changed) {
+                SecurePrefs.get(context, "chat_list")
+                    .edit { putString("data", Gson().toJson(result.chats)) }
+            }
+        }
+    }
+
+    /**
      * Retrieves a list of all available chats.
      *
      * @param context The context of the application.
