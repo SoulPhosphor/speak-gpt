@@ -1455,23 +1455,23 @@
     <string name="mem_pers_title_user_personas">Glamour Studio</string>
     <string name="mem_pers_fab_add_persona">Create Glamour</string>
     <string name="mem_pers_field_name">Name</string>
-    <string name="mem_pers_field_name_label">Persona Name</string>
-    <string name="mem_pers_error_name_empty">Please enter a Persona name</string>
+    <string name="mem_pers_field_name_label">Glamour Name</string>
+    <string name="mem_pers_error_name_empty">Please enter a Glamour name</string>
     <string name="mem_pers_field_short_description">Short Description</string>
-    <string name="mem_pers_field_short_description_hint">Shown under persona name to help you remember which persona is which. This is not sent to the model.</string>
-    <string name="mem_pers_short_desc_over">The persona can\'t be saved until you remove %1$d characters from this box.</string>
-    <string name="mem_pers_short_desc_snackbar">You must shorten your description to save this profile.</string>
+    <string name="mem_pers_field_short_description_hint">Shown under the Glamour name to help you remember which Glamour is which. This is not sent to the model.</string>
+    <string name="mem_pers_short_desc_over">The Glamour can\'t be saved until you remove %1$d characters from this box.</string>
+    <string name="mem_pers_short_desc_snackbar">You must shorten your description to save this Glamour.</string>
     <string name="mem_pers_field_presentation">Presentation</string>
-    <string name="mem_pers_field_presentation_hint">Include any information you want the AI to know about you specifically when using this persona. You may want to include gender, species, clothing, abilities or special statuses such as relationship.</string>
+    <string name="mem_pers_field_presentation_hint">Include any information you want the AI to know about you specifically when using this Glamour. You may want to include gender, species, clothing, abilities or special statuses such as relationship.</string>
     <string name="mem_pers_error_presentation_empty">Please enter a Presentation</string>
     <string name="title_mem_pers_creation">Create Glamour</string>
     <string name="title_mem_pers_edit">Edit Glamour</string>
-    <string name="mem_pers_persona_deleted">Persona deleted</string>
-    <string name="mem_pers_delete_persona_title">Delete persona?</string>
+    <string name="mem_pers_persona_deleted">Glamour deleted</string>
+    <string name="mem_pers_delete_persona_title">Delete Glamour?</string>
     <string name="mem_pers_delete_persona_msg">Delete \"%1$s\"? This can\'t be undone.</string>
     <!-- EditUserPersonaActivity's header delete icon (owner-specified wording,
          July 21 2026): title only, no body. -->
-    <string name="mem_pers_delete_title_full">Delete this persona?</string>
+    <string name="mem_pers_delete_title_full">Delete this Glamour?</string>
 
     <!-- Roleplay Characters (ui/activities/memory/MemoryRoleplayCharactersActivity) -->
     <string name="mem_pers_title_roleplay_characters">Roleplay Characters</string>
