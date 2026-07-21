@@ -346,7 +346,12 @@ class CharacterCardActivity : FragmentActivity() {
                         charClass = text(fieldClass),
                         corePersonality = text(fieldCorePersonality),
                         physicalDescription = text(fieldPhysicalDescription),
-                        goalsDrives = text(fieldGoalsDrives)
+                        goalsDrives = text(fieldGoalsDrives),
+                        // Preserve the assigned picture: this card has no
+                        // picture control, so a save must carry the stored
+                        // image_ref through rather than default it to null and
+                        // wipe an image the record already had (e.g. imported).
+                        imageRef = priorCharacter?.imageRef
                     ).also { runOnUiThread { priorCharacter = it } }
                 )
             }

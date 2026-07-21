@@ -730,6 +730,31 @@ Everything is on-device. No cloud sync, no accounts.
    plan's earlier "no images on memory-side list rows" note was superseded by
    the owner's separate approval. Only the row's look changed; the My Personas
    list order and its archive/restore behavior are unchanged.
+   **Image-tap immediate-save + chat refresh (July 21 2026).** Picking a
+   picture for an EXISTING identity commits ONLY the image at once, by the
+   identity's stable id, through a narrow store method — companion:
+   `PersonaPreferences.setPersonaAvatarRef` (writes just `<id>_avatar_ref`);
+   My Persona: `MemoryStore.setUserPersonaImageRef` (UPDATEs only `image_ref`)
+   — so it never commits the name/prompt/other unsaved editor draft and
+   backing out cannot undo the picture. The image is deliberately excluded
+   from the editors' discard-changes snapshot. A brand-new (unsaved) identity
+   keeps the pick in editor draft and writes it only on normal creation, so an
+   image pick alone materialises no record; cancelling creates nothing.
+   Defaults (`setGlobalDefaultImageRef`/`setDefaultUserImageRef`) still write
+   immediately in the gallery. Roleplay Characters have no picture control in
+   `CharacterCardActivity`; its save now carries the stored `image_ref` through
+   (`imageRef = priorCharacter?.imageRef`) so a card save can't wipe an
+   imported image. In-chat display refreshes through `ChatActivity`'s
+   `refreshCompanionAvatar`/`refreshUserAvatar` → the adapter's
+   `setCompanionAvatar`/`setUserAvatar` (which rebind visible rows), and both
+   are driven by `util/AvatarRefreshCoordinator` (pure, unit-tested): a refresh
+   requested before the adapter is attached (onResume runs before the async
+   chat load) is RETAINED and replayed by `onAvatarTargetReady()` in `initUI`
+   rather than discarded (the old `adapter == null` early return was the
+   restart-only-refresh bug), and each async picture resolve carries a
+   latest-request token so an older resolve can never overwrite a newer
+   selection. This also propagates a changed Default AI / Personal Avatar into
+   chats that fall through to it, without an app restart.
    The Memory Assistant tuning prefs (July 9 spec,
    `memory_settings_reorg_spec.md`): max suggestions per conversation +
    minimum importance (both ENFORCED IN CODE in the runner), temperature

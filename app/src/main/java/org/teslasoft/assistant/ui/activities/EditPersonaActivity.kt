@@ -165,8 +165,24 @@ class EditPersonaActivity : FragmentActivity() {
             if (!hash.isNullOrEmpty()) {
                 selectedAvatarRef = hash
                 updateAvatarUi()
+                persistImageOnlyIfExisting(hash)
             }
         }
+    }
+
+    /**
+     * Existing companion (has a stable id): the image tap IS the save — persist
+     * only the avatar immediately, by its stable id, through the narrow
+     * [PersonaPreferences.setPersonaAvatarRef] which writes ONLY the avatar_ref
+     * key. This never commits the unsaved name/prompt/activation/lorebook edits
+     * still in the editor, and backing out (which discards those edits) cannot
+     * undo the picture. A brand-new companion (blank id) keeps the pick in
+     * draft — it is written when the companion is first created, so cancelling
+     * creation leaves no record.
+     */
+    private fun persistImageOnlyIfExisting(hash: String) {
+        if (personaId.isEmpty()) return
+        PersonaPreferences.getPersonaPreferences(this).setPersonaAvatarRef(personaId, hash)
     }
 
     private val pickLoreBooksLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -487,15 +503,18 @@ class EditPersonaActivity : FragmentActivity() {
     }
 
     /** Serialised form of the editable fields, used only for change detection
-     *  against initialSnapshot (see attemptExit). */
+     *  against initialSnapshot (see attemptExit). The avatar is deliberately
+     *  NOT part of this: for an existing companion the picture is persisted the
+     *  moment it is picked (immediate-save), so it is never an unsaved edit; for
+     *  a new companion the pick is a draft written on creation, and an
+     *  image-only pick alone must not trigger the discard prompt. */
     private fun snapshot(): String = listOf(
         fieldLabel?.text?.toString().orEmpty(),
         fieldPrompt?.text?.toString().orEmpty(),
         selectedActivationPromptId,
         selectedCoreLoreBookId,
         PersonaObject.joinIds(additionalLoreBookIds),
-        (checkboxAutoload?.isChecked == true).toString(),
-        selectedAvatarRef
+        (checkboxAutoload?.isChecked == true).toString()
     ).joinToString("\u0001")
 
     /** Back / cancel. Confirms first if anything changed since load

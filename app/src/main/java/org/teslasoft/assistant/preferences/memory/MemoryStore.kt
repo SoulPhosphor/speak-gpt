@@ -3343,6 +3343,18 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         )
     }
 
+    /** Commit ONLY the image for an existing My Persona, by its stable id
+     *  (Profile Images immediate-save, July 21 2026): a narrow UPDATE of the
+     *  image_ref column so picking a picture in the editor persists at once
+     *  without writing back the name/presentation/short-description draft the
+     *  user may still be editing. A blank hash clears it. */
+    fun setUserPersonaImageRef(personaId: String, imageRef: String?) {
+        writableDatabase.update(
+            "user_personas", ContentValues().apply { put("image_ref", imageRef?.ifEmpty { null }) },
+            "persona_id = ?", arrayOf(personaId)
+        )
+    }
+
     fun deleteUserPersona(personaId: String) {
         writableDatabase.delete("user_personas", "persona_id = ?", arrayOf(personaId))
         recordDeletion("user_persona", personaId)

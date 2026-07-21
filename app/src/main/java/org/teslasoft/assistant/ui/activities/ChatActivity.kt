@@ -169,6 +169,7 @@ import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.ChatStorageHealth
 import org.teslasoft.assistant.preferences.MessageCompletionState
 import org.teslasoft.assistant.preferences.GlobalPreferences
+import org.teslasoft.assistant.util.AvatarRefreshCoordinator
 import org.teslasoft.assistant.util.ProfileImageResolver
 import org.teslasoft.assistant.preferences.LogitBiasPreferences
 import org.teslasoft.assistant.preferences.Preferences
@@ -277,6 +278,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     private var messagesUsageProjection: ArrayList<HashMap<String, Any>> = arrayListOf()
     private var adapter: ChatAdapter? = null
     private var chatMessages: ArrayList<ChatMessage> = arrayListOf()
+
+    // Avatar refresh coordinators, one per side (Profile Images refresh fix,
+    // July 21 2026). They keep a refresh requested before the adapter exists
+    // (onResume runs before the async chat load attaches it) so it is replayed
+    // instead of dropped, and stamp each async resolve with a token so an
+    // older resolve can never overwrite a newer picture selection.
+    private val companionAvatarRefresh = AvatarRefreshCoordinator()
+    private val userAvatarRefresh = AvatarRefreshCoordinator()
 
     // The user's most recent outgoing message (captured in generateResponse, which
     // every input path flows through). Used by the lorebook to match triggers.
@@ -999,6 +1008,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
      * changed, so a picture edited elsewhere shows up in this (and past) chats.
      */
     private fun refreshCompanionAvatar() {
+        // Always register the request first so one made before the adapter is
+        // attached is retained (see AvatarRefreshCoordinator / onAvatarTargetReady)
+        // rather than silently dropped — dropping it was the restart-only-refresh
+        // bug. The token drops a stale resolve that finishes after a newer one.
+        val token = companionAvatarRefresh.newRequest()
         if (adapter == null) return
         val personaId = preferences?.getPersonaId().orEmpty()
         val shape = GlobalPreferences.getPreferences(this).getProfileImageShape()
@@ -1013,6 +1027,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 }
             }
             if (isFinishing || isDestroyed) return@launch
+            // Drop this result if a newer refresh has since been requested.
+            if (!companionAvatarRefresh.isCurrent(token)) return@launch
             adapter?.setCompanionAvatar(file, shape)
         }
     }
@@ -1027,6 +1043,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
      * bubble instead of a bare person icon. Display-only and best-effort.
      */
     private fun refreshUserAvatar() {
+        val token = userAvatarRefresh.newRequest()
         if (adapter == null) return
         val rpCharId = preferences?.getChatRoleplayCharacterId().orEmpty()
         val userPersonaId = preferences?.getChatUserPersonaId().orEmpty()
@@ -1041,8 +1058,26 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 }
             }
             if (isFinishing || isDestroyed) return@launch
+            // Drop this result if a newer refresh has since been requested.
+            if (!userAvatarRefresh.isCurrent(token)) return@launch
             adapter?.setUserAvatar(file, shape)
         }
+    }
+
+    /**
+     * Called right after the chat adapter is created and attached (initUI).
+     * Marks both avatar sides' targets ready and replays any refresh that was
+     * requested before the adapter existed (onResume runs before this async
+     * setup finishes), then paints the first frame. Because the retained
+     * request is replayed here — not discarded — a Companion / persona picture
+     * or a Default changed while the chat was being (re)created still shows
+     * without an app restart.
+     */
+    private fun onAvatarTargetReady() {
+        companionAvatarRefresh.markTargetReady()
+        userAvatarRefresh.markTargetReady()
+        refreshCompanionAvatar()
+        refreshUserAvatar()
     }
 
     /** The active user identity's own image hash for [refreshUserAvatar]: the
@@ -2264,9 +2299,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
         adapter?.notifyDataSetChanged()
 
-        // First paint of both avatars (resolved off-main).
-        refreshCompanionAvatar()
-        refreshUserAvatar()
+        // First paint of both avatars (resolved off-main), and the replay of
+        // any refresh requested before this adapter was attached.
+        onAvatarTargetReady()
 
         chat?.post {
             chat?.scrollToPosition(adapter?.itemCount!! - 1)

@@ -45,6 +45,7 @@ import com.google.android.material.textfield.TextInputEditText
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.Preferences
+import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.activities.ProfileImagesActivity
 import org.teslasoft.assistant.ui.util.DiscardChangesDialog
@@ -150,8 +151,30 @@ class EditUserPersonaActivity : FragmentActivity() {
             if (!hash.isNullOrEmpty()) {
                 selectedImageRef = hash
                 updateAvatarUi()
+                persistImageOnlyIfExisting(hash)
             }
         }
+    }
+
+    /**
+     * Existing persona (has a stable id): the image tap IS the save — persist
+     * only image_ref immediately, by its stable id, through the narrow
+     * [MemoryStore.setUserPersonaImageRef] which UPDATEs only that one column.
+     * It never writes back the name/presentation/short-description draft still
+     * in the editor, and backing out cannot undo the picture. A brand-new
+     * persona (blank id) keeps the pick in draft — written when the persona is
+     * first created, so cancelling creation leaves no record.
+     */
+    private fun persistImageOnlyIfExisting(hash: String) {
+        if (personaId.isEmpty()) return
+        if (!MemoryStore.isProvisioned(this)) return
+        val id = personaId
+        val context = this
+        Thread {
+            try {
+                MemoryStore.getInstance(context).setUserPersonaImageRef(id, hash)
+            } catch (_: Exception) { /* best-effort; the editor Save still persists it */ }
+        }.start()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -345,12 +368,15 @@ class EditUserPersonaActivity : FragmentActivity() {
     }
 
     /** Serialised form of the editable fields, used only for change detection
-     *  against initialSnapshot (see attemptExit). */
+     *  against initialSnapshot (see attemptExit). The picture is deliberately
+     *  NOT part of this: for an existing persona it is persisted the moment it
+     *  is picked (immediate-save), so it is never an unsaved edit; for a new
+     *  persona the pick is a draft written on creation, and an image-only pick
+     *  alone must not trigger the discard prompt. */
     private fun snapshot(): String = listOf(
         fieldName?.text?.toString().orEmpty(),
         fieldShortDescription?.text?.toString().orEmpty(),
-        fieldPresentation?.text?.toString().orEmpty(),
-        selectedImageRef
+        fieldPresentation?.text?.toString().orEmpty()
     ).joinToString("")
 
     /** Back / cancel. Confirms first if anything changed since load

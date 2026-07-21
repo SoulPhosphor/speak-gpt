@@ -137,6 +137,25 @@ class PersonaPreferences private constructor(private var preferences: SharedPref
     }
 
     /**
+     * Commit ONLY the avatar for an existing companion, by its stable [id]
+     * (Profile Images immediate-save, July 21 2026). Writes just the avatar_ref
+     * key — never the label/prompt/activation/lorebook keys — so picking a
+     * picture in the editor persists at once without saving (or disturbing) any
+     * unsaved edits to the other fields, and backing out cannot undo the
+     * picture. Listeners fire so an open companion list re-renders the new
+     * picture; identity is never re-derived from the label. A brand-new
+     * companion has no stored keys yet and must NOT be persisted here — its
+     * pick stays a draft and is written when the companion is first created.
+     */
+    fun setPersonaAvatarRef(id: String, avatarRef: String) {
+        if (id.isEmpty()) return
+        putString(id + "_avatar_ref", avatarRef)
+        for (listener in listeners) {
+            listener.onPersonaChange()
+        }
+    }
+
+    /**
      * Drop a deleted lorebook from every persona that references it, so no
      * persona keeps pointing at a book that no longer exists.
      */
