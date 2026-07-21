@@ -16,11 +16,9 @@
 
 package org.teslasoft.assistant.ui.activities.memory
 
-import android.view.View
-import android.widget.PopupMenu
+import android.content.Intent
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.memory.UserPersonaRecord
@@ -35,6 +33,18 @@ import org.teslasoft.assistant.ui.adapters.memory.ProfileImageRowAdapter
  * are user-played fictional characters, not the user themself.
  */
 class MemoryUserPersonasActivity : MemoryScreenActivity() {
+
+    companion object {
+        /** Launched from Quick Settings to CHOOSE the chat's persona: a
+         *  whole-row tap selects and returns; the chevron edits. Absent/false
+         *  (from Characters) = managing, where a whole-row tap edits. */
+        const val EXTRA_PICK_MODE = "pickMode"
+
+        /** RESULT_OK in pick mode carries the chosen persona id here. */
+        const val EXTRA_SELECTED_PERSONA_ID = "selectedPersonaId"
+    }
+
+    private val pickMode: Boolean by lazy { intent.getBooleanExtra(EXTRA_PICK_MODE, false) }
 
     override fun contentLayoutRes(): Int = R.layout.activity_memory_list_simple
     override fun screenTitle(): String = getString(R.string.mem_pers_title_user_personas)
@@ -72,7 +82,10 @@ class MemoryUserPersonasActivity : MemoryScreenActivity() {
     )
 
     override fun buildListAdapter(rows: List<MemoryRow>): android.widget.ListAdapter {
-        val adapter = ProfileImageRowAdapter(rows, this, R.layout.view_user_persona_row)
+        val adapter = ProfileImageRowAdapter(
+            rows, this, R.layout.view_user_persona_row,
+            chevronOpensMenu = false, pickMode = pickMode
+        )
         adapter.setOnRowListener(this)
         return adapter
     }
@@ -89,32 +102,22 @@ class MemoryUserPersonasActivity : MemoryScreenActivity() {
 
     /* ------------------------------ rows ------------------------------ */
 
+    // Whole-row tap. Managing (from Characters): open the editor - everything,
+    // including delete, is done there; there is no popup menu. Pick mode (from
+    // Quick Settings): select this persona for the chat and return.
     override fun onClick(row: MemoryRow) {
+        if (pickMode) selectAndFinish(row.id) else openEditor(row.id)
+    }
+
+    // Pick mode only (chevron tap): edit this persona without selecting it yet.
+    override fun onEditClick(row: MemoryRow) {
         openEditor(row.id)
     }
 
-    override fun onAction(row: MemoryRow, anchor: View) {
-        runOffThread {
-            val store = MemoryStore.getInstance(this)
-            val p = store.getUserPersona(row.id) ?: return@runOffThread
-            runOnUiThread { showRowMenu(anchor, p) }
-        }
-    }
-
-    // My Personas are only saved or deleted - never archived (owner ruling,
-    // July 21 2026). The menu is Edit + Delete only.
-    private fun showRowMenu(anchor: View, p: UserPersonaRecord) {
-        val menu = PopupMenu(this, anchor)
-        menu.menu.add(0, 1, 0, getString(R.string.action_edit))
-        menu.menu.add(0, 4, 0, getString(R.string.action_delete))
-        menu.setOnMenuItemClickListener { item ->
-            when (item.itemId) {
-                1 -> openEditor(p.personaId)
-                4 -> confirmDelete(p)
-            }
-            true
-        }
-        menu.show()
+    /** Returns the chosen persona to Quick Settings (pick mode). */
+    private fun selectAndFinish(personaId: String) {
+        setResult(RESULT_OK, Intent().putExtra(EXTRA_SELECTED_PERSONA_ID, personaId))
+        finish()
     }
 
     /* ------------------------------ editor ------------------------------ */
@@ -150,7 +153,12 @@ class MemoryUserPersonasActivity : MemoryScreenActivity() {
                         shortDescription = shortDescription.ifEmpty { null }
                     )
                     store.upsertUserPersona(record)
-                    runOnUiThread { reload() }
+                    // Pick mode: editing then saving from Quick Settings also
+                    // selects the persona and returns (same as the Companion
+                    // edit-then-Save path). Managing: just refresh the list.
+                    runOnUiThread {
+                        if (pickMode) selectAndFinish(record.personaId) else reload()
+                    }
                 }
             }
             EditUserPersonaActivity.ACTION_DELETE -> {
@@ -187,22 +195,4 @@ class MemoryUserPersonasActivity : MemoryScreenActivity() {
         }
     }
 
-    /* ------------------------------ actions ------------------------------ */
-
-    private fun confirmDelete(p: UserPersonaRecord) {
-        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.mem_pers_delete_persona_title)
-            .setMessage(getString(R.string.mem_pers_delete_persona_msg, p.name))
-            .setPositiveButton(R.string.btn_delete) { _, _ ->
-                runOffThread {
-                    MemoryStore.getInstance(this).deleteUserPersona(p.personaId)
-                    runOnUiThread {
-                        Toast.makeText(this, R.string.mem_pers_persona_deleted, Toast.LENGTH_SHORT).show()
-                        reload()
-                    }
-                }
-            }
-            .setNegativeButton(R.string.btn_cancel) { _, _ -> }
-            .show()
-    }
 }

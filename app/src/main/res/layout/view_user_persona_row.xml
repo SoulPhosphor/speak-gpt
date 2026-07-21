@@ -20,10 +20,12 @@
      with a leading profile picture - Image + Title + Subtitle. The subtitle is
      the persona's short description (hidden when blank). The leading picture
      follows the user-side cascade (own picture -> Default Personal Avatar ->
-     person icon), bound in ProfileImageRowAdapter. Tapping the row opens the
-     editor; the trailing chevron opens the row's action menu (matching the rest
-     of the memory list). Subtitle maxLines is overridden to 3 to match the
-     editor's Short Description cap - a genuinely multi-line value, not fake
+     person icon), bound in ProfileImageRowAdapter. There is NO popup menu.
+     Managing from Characters: tapping anywhere on the row opens the editor
+     (delete lives in the editor). Pick mode from Quick Settings: the whole row
+     selects the persona and the chevron edit target opens the editor - the same
+     split as the Companion list. Subtitle maxLines is overridden to 3 to match
+     the editor's Short Description cap - a genuinely multi-line value, not fake
      spacing. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/ui"
@@ -52,17 +54,24 @@
             android:maxLines="3" />
     </LinearLayout>
 
-    <ImageView
+    <!-- Chevron wrapped in a 48dp touch target (same shape as the Companion
+         row's edit target). Not clickable by default (manager mode) - the
+         adapter turns clickability + the borderless ripple on only in pick
+         mode, where it's the "edit this persona" affordance; while inert, taps
+         fall through to the whole-row editor. -->
+    <FrameLayout
         android:id="@+id/persona_menu"
         android:layout_width="48dp"
         android:layout_height="48dp"
         android:layout_marginStart="8dp"
         android:background="?attr/selectableItemBackgroundBorderless"
-        android:clickable="true"
-        android:focusable="true"
-        android:contentDescription="@string/mem_row_more_options"
-        android:padding="12dp"
-        android:scaleType="center"
-        android:src="@drawable/ic_chevron_right"
-        android:tint="?attr/appRowSubtitleColor" />
+        android:contentDescription="@string/btn_edit_persona">
+
+        <ImageView
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_gravity="center"
+            android:src="@drawable/ic_chevron_right"
+            android:tint="?attr/appRowSubtitleColor" />
+    </FrameLayout>
 </LinearLayout>

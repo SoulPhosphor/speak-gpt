@@ -80,6 +80,11 @@ class MemoryRowAdapter(
          *  [ACTION_DELETE], [ACTION_EDIT], [ACTION_ADD_TO_CARD]. Default
          *  no-op so screens without a pending view ignore it. */
         fun onPendingAction(row: MemoryRow, action: String) {}
+
+        /** The trailing chevron edit target was tapped in a profile-image row's
+         *  pick mode (My Personas from Quick Settings): open the editor without
+         *  selecting. Default no-op so other screens ignore it. */
+        fun onEditClick(row: MemoryRow) {}
     }
 
     companion object {
