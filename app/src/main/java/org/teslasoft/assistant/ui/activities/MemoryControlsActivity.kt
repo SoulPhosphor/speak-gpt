@@ -74,6 +74,7 @@ class MemoryControlsActivity : FragmentActivity() {
 
     private var switchDefaultMemory: MaterialSwitch? = null
     private var switchCompanionInRoleplay: MaterialSwitch? = null
+    private var switchChatListMemoryStatus: MaterialSwitch? = null
 
     private var rowMemoryAssistant: LinearLayout? = null
     private var switchCardSuggestions: MaterialSwitch? = null
@@ -117,6 +118,7 @@ class MemoryControlsActivity : FragmentActivity() {
         btnBack = findViewById(R.id.btn_back)
         switchDefaultMemory = findViewById(R.id.switch_default_memory)
         switchCompanionInRoleplay = findViewById(R.id.switch_companion_in_roleplay)
+        switchChatListMemoryStatus = findViewById(R.id.switch_chat_list_memory_status)
         rowMemoryAssistant = findViewById(R.id.row_memory_assistant)
         switchCardSuggestions = findViewById(R.id.switch_card_suggestions)
         switchMaxSuggestions = findViewById(R.id.switch_max_suggestions)
@@ -170,6 +172,14 @@ class MemoryControlsActivity : FragmentActivity() {
         switchCompanionInRoleplay?.isChecked = preferences?.getAllowCompanionMemoriesInRoleplay() ?: false
         switchCompanionInRoleplay?.setOnCheckedChangeListener { _, checked ->
             preferences?.setAllowCompanionMemoriesInRoleplay(checked)
+        }
+
+        // Display-only: this controls the small review/archive line in the
+        // chat list and never changes memory capture or stored memory state.
+        switchChatListMemoryStatus?.isChecked =
+            preferences?.getShowMemoryStatusOnChatList() ?: true
+        switchChatListMemoryStatus?.setOnCheckedChangeListener { _, checked ->
+            preferences?.setShowMemoryStatusOnChatList(checked)
         }
 
         /* ---- Memory Assistant ---- */

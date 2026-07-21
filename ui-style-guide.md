@@ -263,25 +263,35 @@ and rollout notes here — not back in `CLAUDE.md`.
   activity's intent extra), so the two never mix within one instance's
   recycled views. Don't touch pick mode when converting a manager-mode
   list unless the owner asks for that specifically.
-  **The Personas/Companions list is DIFFERENT (owner ruling, July 19 2026
-  evening — supersedes the July 18 description above, which wrongly
-  called it a "checked tile" pick-mode scheme with no chevron):**
-  `PersonasListActivity`/`view_persona_item.xml` is a single screen with
-  no `pickMode` split, used identically whether reached from Characters,
-  Quick Settings, or ChatActivity's "create first companion" prompt. It
-  never shows which companion is "currently active" — no highlight, no
-  color inversion, ever; that concept lives entirely in Quick Settings and
-  the last-used-companion logic (see "New-chat companion selection" below
-  for how last-used is recorded). Tapping a row always opens that
-  Companion's edit screen (`EditPersonaActivity`) — matching System
-  Prompts' manager-mode row exactly (`Widget.App.Row.TitleOnly` +
-  `TextColumn` + `Title` + `Chevron`) but with a leading
-  `Widget.App.Row.ProfileImage` for the Companion's picture — there is no
-  separate "select" tap action on the row at all. Picking a companion from
-  Quick Settings still works: opening a row's editor and hitting Save
-  calls the same `finishWithActive` the row tap used to call directly, so
-  the result still flows back to Quick Settings/Characters — it just takes
-  an extra explicit step (open, then Save) instead of an instant tap.
+  **The Personas/Companions list is DIFFERENT — it has a `pickMode` split
+  (owner ruling, July 21 2026 — supersedes the July 19 "no select tap"
+  ruling; the July 18 "checked tile" description was already wrong and stays
+  retired).** `PersonasListActivity`/`view_persona_item.xml` share ONE row
+  layout across all callers; the difference is only which taps do what,
+  decided by a `pickMode` intent extra (read once, fixed for the adapter's
+  lifetime). The row is always `Widget.App.Row.TitleOnly` + a leading
+  `Widget.App.Row.ProfileImage` (the Companion's picture) + `TextColumn` +
+  `Title` + `Chevron` (the chevron wrapped in a 48dp `FrameLayout` id
+  `persona_edit_target` so it's a comfortable touch target). It never shows
+  which companion is "currently active" — no highlight, no color inversion,
+  ever; that concept lives entirely in Quick Settings and the
+  last-used-companion logic (see "New-chat companion selection" below for how
+  last-used is recorded). Behaviour by caller:
+  - **Manager mode** (`pickMode = false`, opened from Characters or
+    ChatActivity's "create first companion" prompt): tapping ANY part of the
+    row opens that Companion's editor (`EditPersonaActivity`). The chevron is
+    decorative — the adapter leaves `persona_edit_target` non-clickable, so
+    its taps fall through to the whole-row editor. Matches System Prompts'
+    manager-mode row.
+  - **Pick mode** (`pickMode = true`, opened from Quick Settings' Companion
+    selector): tapping the **non-chevron area SWITCHES the chat to that
+    Companion instantly** (`onClick` → `finishWithActive`, no editor); tapping
+    the **chevron edit target opens the editor** (`onEditClick` → `openEditor`).
+    The adapter makes `persona_edit_target` clickable + borderless-ripple only
+    in this mode. Saving in the editor also finishes with that Companion
+    active (`finishWithActive`, unchanged), so chevron → edit → Save selects
+    too. Backing out of either the list or the editor still returns
+    `RESULT_CANCELED` (a mere browse never selects or records last-used).
   **Caveat the owner should know:** a style only fixes how a view looks —
   it can't guarantee a new row's structure is right (that all pieces
   exist, in order, each with the correct style). Using these styles makes

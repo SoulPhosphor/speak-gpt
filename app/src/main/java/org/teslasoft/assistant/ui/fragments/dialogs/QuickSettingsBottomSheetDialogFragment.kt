@@ -747,7 +747,12 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         }
 
         btnSelectPersona?.setOnClickListener {
-            personaActivityResultLauncher.launch(Intent(requireContext(), PersonasListActivity::class.java))
+            // Pick mode: tapping a Companion's non-chevron area switches this
+            // chat to it (the chevron edits). Owner ruling, July 21 2026.
+            personaActivityResultLauncher.launch(
+                Intent(requireContext(), PersonasListActivity::class.java)
+                    .putExtra("pickMode", true)
+            )
         }
 
         btnSelectActivation?.setOnClickListener {

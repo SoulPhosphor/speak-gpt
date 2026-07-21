@@ -16,13 +16,25 @@
 * limitations under the License.
 **************************************************************************/
 -->
-<!-- Companion row (owner ruling, July 19 2026 evening): plain Image + Title +
-     Chevron, the same shared style family as the System Prompts manager-mode
-     row (view_system_prompt_item_row.xml) - no highlight, no color inversion.
-     "Currently active" is not a concept this row shows at all anymore; that
-     lives in Quick Settings and the last-used companion logic. Tapping the
-     whole row opens that Companion's edit screen (PersonasListActivity routes
-     the click to openEditor); there is no separate select action here. -->
+<!-- Companion row: plain Image + Title + Chevron, the same shared style family
+     as the System Prompts manager-mode row (view_system_prompt_item_row.xml) -
+     no highlight, no color inversion. "Currently active" is not a concept this
+     row shows at all; that lives in Quick Settings and the last-used companion
+     logic.
+
+     Two tap behaviours, decided by PersonasListActivity's pickMode (owner
+     ruling, July 21 2026 - supersedes the July 19 "no select tap" ruling for
+     the Quick Settings case only):
+       - Manager mode (opened from Characters / create-first-companion):
+         tapping anywhere on the row opens that Companion's editor; the chevron
+         is decorative and passes taps through to the row.
+       - Pick mode (opened from Quick Settings to choose the chat's Companion):
+         tapping the non-chevron area SWITCHES the chat to that Companion (an
+         instant select, no editor); tapping the chevron edit target opens the
+         editor. The adapter makes only that edit target clickable in pick mode.
+     The whole-row click always lives on the `ui` LinearLayout, so a clickable
+     chevron in pick mode simply consumes its own taps while the rest of the
+     row still selects. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/ui"
     style="@style/Widget.App.Row.TitleOnly"
@@ -43,7 +55,21 @@
             android:text="Persona" />
     </LinearLayout>
 
-    <ImageView
-        style="@style/Widget.App.Row.Chevron"
-        android:contentDescription="@string/btn_edit_persona" />
+    <!-- Chevron wrapped in a 48dp touch target so the pick-mode edit affordance
+         is comfortably tappable. Not clickable by default (manager mode) - the
+         adapter turns clickability + the borderless ripple on only in pick
+         mode; while not clickable it consumes nothing and taps fall through to
+         the whole-row editor. -->
+    <FrameLayout
+        android:id="@+id/persona_edit_target"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:background="?attr/selectableItemBackgroundBorderless">
+
+        <ImageView
+            style="@style/Widget.App.Row.Chevron"
+            android:layout_gravity="center"
+            android:layout_marginStart="0dp"
+            android:contentDescription="@string/btn_edit_persona" />
+    </FrameLayout>
 </LinearLayout>

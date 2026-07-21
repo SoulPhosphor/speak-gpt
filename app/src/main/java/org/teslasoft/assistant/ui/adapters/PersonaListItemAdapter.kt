@@ -22,6 +22,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.BaseAdapter
+import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -32,7 +33,13 @@ import org.teslasoft.assistant.preferences.profileimages.ProfileImageStore
 import org.teslasoft.assistant.util.Hash
 import org.teslasoft.assistant.util.ProfileImageBinder
 
-class PersonaListItemAdapter(private val dataArray: ArrayList<HashMap<String, String>>, private var mContext: Context) : BaseAdapter() {
+// pickMode (owner ruling, July 21 2026): when this list is opened from Quick
+// Settings to CHOOSE the chat's Companion, tapping the non-chevron area selects
+// that Companion instantly (onClick) and only the chevron edit target opens the
+// editor (onEditClick). When opened from Characters / create-first-companion
+// (pickMode = false) the chevron is decorative and the whole row edits. Fixed
+// for the adapter's whole lifetime (read once from the activity's intent).
+class PersonaListItemAdapter(private val dataArray: ArrayList<HashMap<String, String>>, private var mContext: Context, private val pickMode: Boolean = false) : BaseAdapter() {
     override fun getCount(): Int {
         return dataArray.size
     }
@@ -90,14 +97,32 @@ class PersonaListItemAdapter(private val dataArray: ArrayList<HashMap<String, St
             }
         }
 
+        val editTarget = mView?.findViewById<FrameLayout>(R.id.persona_edit_target)
+
         ui?.setOnClickListener {
             listener?.onClick(position)
+        }
+
+        // Only in pick mode is the chevron a separate, tappable edit affordance;
+        // in manager mode it stays inert so the whole-row tap (openEditor) wins.
+        if (pickMode) {
+            editTarget?.isClickable = true
+            editTarget?.setOnClickListener {
+                listener?.onEditClick(position)
+            }
+        } else {
+            editTarget?.isClickable = false
+            editTarget?.setOnClickListener(null)
         }
 
         return mView!!
     }
 
     interface OnSelectListener {
+        // Manager mode: opens the editor. Pick mode: selects the Companion for
+        // the chat.
         fun onClick(position: Int)
+        // Pick mode only (chevron tap): opens the editor without selecting.
+        fun onEditClick(position: Int)
     }
 }

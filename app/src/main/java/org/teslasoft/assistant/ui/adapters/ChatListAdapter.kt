@@ -46,6 +46,7 @@ import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.card.MaterialCardView
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.PersonaPreferences
 import org.teslasoft.assistant.preferences.Preferences
@@ -60,30 +61,102 @@ import java.io.BufferedReader
 import java.io.File
 import java.io.InputStreamReader
 import androidx.core.graphics.createBitmap
+import java.util.concurrent.Executors
+import java.util.concurrent.Future
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 
-class ChatListAdapter(private val dataArray: ArrayList<HashMap<String, String>>, private val selectorProjection: ArrayList<HashMap<String, String>>, private val mContext: Fragment) : RecyclerView.Adapter<ChatListAdapter.ViewHolder>() {
+class ChatListAdapter(
+    private val dataArray: ArrayList<HashMap<String, String>>,
+    private val selectorProjection: ArrayList<HashMap<String, String>>,
+    private val mContext: Fragment,
+    private var showMemoryStatus: Boolean
+) : RecyclerView.Adapter<ChatListAdapter.ViewHolder>() {
+
+    companion object {
+        private const val PAYLOAD_MEMORY_MARKER = "memory_marker"
+        private const val PAYLOAD_CHAT_PREVIEW = "chat_preview"
+        private const val EMPTY_CHAT_PREVIEW = "No messages yet."
+    }
 
     private var preferences: Preferences? = null
     private var bulkActionMode = false
+    private val disposed = AtomicBoolean(false)
+    private val animatedChatIds = HashSet<String>()
+    private val previewRequests = HashSet<String>()
+    private val boundMemoryStates = HashMap<String, String?>()
+    private val boundMemoryExclusions = HashMap<String, Boolean>()
+    private val previewLoader = Executors.newSingleThreadExecutor { task ->
+        Thread(task, "chat-preview-loader")
+    }
+    private val memoryStatusLoader = Executors.newSingleThreadExecutor { task ->
+        Thread(task, "chat-memory-status-loader")
+    }
+    private val memoryStatusGeneration = AtomicInteger(0)
+    private var memoryStatusFuture: Future<*>? = null
 
     // Memory-system review markers (pending / partially archived / archived /
-    // excluded) per chat id. Loaded once off the main thread — the store is
-    // SQLCipher-backed and must never be opened during a bind. Null until
-    // loaded (or when the store doesn't exist): markers simply stay hidden.
+    // excluded) per chat id. Loaded off the main thread only while the display
+    // setting is enabled — the store is SQLCipher-backed and must never be
+    // opened during a bind. Null until loaded: rows retain an invisible line.
     private var reviewStates: HashMap<String, String>? = null
 
     init {
-        Thread {
+        if (showMemoryStatus) loadMemoryStatuses()
+    }
+
+    private fun loadMemoryStatuses() {
+        if (!showMemoryStatus || disposed.get()) return
+        val generation = memoryStatusGeneration.incrementAndGet()
+        memoryStatusFuture = memoryStatusLoader.submit {
             try {
-                val appContext = mContext.context?.applicationContext ?: return@Thread
-                if (!MemoryStore.isProvisioned(appContext)) return@Thread
+                val appContext = mContext.context?.applicationContext ?: return@submit
+                if (!MemoryStore.isProvisioned(appContext)) return@submit
                 val states = MemoryStore.getInstance(appContext).chatReviewStates()
                 mContext.activity?.runOnUiThread {
+                    if (disposed.get() || !showMemoryStatus ||
+                        generation != memoryStatusGeneration.get()
+                    ) return@runOnUiThread
+                    val changedRows = ArrayList<Int>()
+                    dataArray.forEachIndexed { position, chat ->
+                        val chatId = Hash.hash(chat["name"].toString())
+                        if (!boundMemoryStates.containsKey(chatId)) return@forEachIndexed
+
+                        val previousState = boundMemoryStates[chatId]
+                        val currentState = if (boundMemoryExclusions[chatId] == true) {
+                            "excluded"
+                        } else {
+                            states[chatId]
+                        }
+                        if (previousState != currentState) {
+                            boundMemoryStates[chatId] = currentState
+                            changedRows.add(position)
+                        }
+                    }
                     reviewStates = states
-                    notifyDataSetChanged()
+                    changedRows.forEach { position ->
+                        notifyItemChanged(position, PAYLOAD_MEMORY_MARKER)
+                    }
                 }
             } catch (_: Exception) { /* markers are decoration; never break the list */ }
-        }.start()
+        }
+    }
+
+    fun setShowMemoryStatus(show: Boolean) {
+        if (showMemoryStatus == show || disposed.get()) return
+
+        showMemoryStatus = show
+        memoryStatusGeneration.incrementAndGet()
+        memoryStatusFuture?.cancel(true)
+        memoryStatusFuture = null
+        reviewStates = null
+        boundMemoryStates.clear()
+        boundMemoryExclusions.clear()
+
+        if (itemCount > 0) {
+            notifyItemRangeChanged(0, itemCount, PAYLOAD_MEMORY_MARKER)
+        }
+        if (show) loadMemoryStatuses()
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
@@ -96,7 +169,27 @@ class ChatListAdapter(private val dataArray: ArrayList<HashMap<String, String>>,
     }
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-        holder.bind(dataArray[position], selectorProjection[position], position)
+        val chatId = Hash.hash(dataArray[position]["name"].toString())
+        holder.bind(
+            dataArray[position],
+            selectorProjection[position],
+            position,
+            animatedChatIds.add(chatId)
+        )
+    }
+
+    override fun onBindViewHolder(holder: ViewHolder, position: Int, payloads: MutableList<Any>) {
+        if (payloads.isEmpty() || payloads.any {
+                it != PAYLOAD_MEMORY_MARKER && it != PAYLOAD_CHAT_PREVIEW
+            }
+        ) {
+            onBindViewHolder(holder, position)
+            return
+        }
+
+        val chat = dataArray[position]
+        if (payloads.contains(PAYLOAD_MEMORY_MARKER)) holder.bindMemoryMarker(chat)
+        if (payloads.contains(PAYLOAD_CHAT_PREVIEW)) holder.bindPreview(chat)
     }
 
     override fun getItemCount(): Int {
@@ -111,6 +204,58 @@ class ChatListAdapter(private val dataArray: ArrayList<HashMap<String, String>>,
     override fun onViewDetachedFromWindow(holder: ViewHolder) {
         super.onViewDetachedFromWindow(holder)
         holder.itemView.clearAnimation()
+    }
+
+    override fun onDetachedFromRecyclerView(recyclerView: RecyclerView) {
+        dispose()
+        super.onDetachedFromRecyclerView(recyclerView)
+    }
+
+    fun dispose() {
+        if (disposed.compareAndSet(false, true)) {
+            memoryStatusGeneration.incrementAndGet()
+            memoryStatusFuture?.cancel(true)
+            memoryStatusLoader.shutdownNow()
+            previewLoader.shutdownNow()
+        }
+    }
+
+    private fun requestPreview(chatName: String) {
+        if (disposed.get()) return
+        val chatId = Hash.hash(chatName)
+        synchronized(previewRequests) {
+            if (!previewRequests.add(chatId)) return
+        }
+
+        val appContext = mContext.context?.applicationContext ?: return
+        previewLoader.execute {
+            try {
+                val result = ChatPreferences.getChatPreferences()
+                    .getChatByIdResult(appContext, chatId)
+                val preview = if (result.messages.isNotEmpty()) {
+                    result.messages[0]["message"].toString()
+                } else {
+                    EMPTY_CHAT_PREVIEW
+                }
+
+                mContext.activity?.runOnUiThread {
+                    if (disposed.get()) return@runOnUiThread
+                    val position = dataArray.indexOfFirst {
+                        Hash.hash(it["name"].toString()) == chatId
+                    }
+                    if (position < 0) return@runOnUiThread
+
+                    val chat = dataArray[position]
+                    if (chat["first_message"] != preview) {
+                        chat["first_message"] = preview
+                        notifyItemChanged(position, PAYLOAD_CHAT_PREVIEW)
+                    }
+                }
+            } catch (_: Exception) {
+                // A preview is optional decoration. Storage-health handling is
+                // owned by ChatPreferences; a failed preview must not break the list.
+            }
+        }
     }
 
     fun setBulkActionMode(bulkActionMode: Boolean) {
@@ -189,7 +334,12 @@ class ChatListAdapter(private val dataArray: ArrayList<HashMap<String, String>>,
         private var companionImageShape: String = "flower"
 
         @SuppressLint("SetTextI18n")
-        fun bind(chatMessage: HashMap<String, String>, projection: HashMap<String, String>, position: Int) {
+        fun bind(
+            chatMessage: HashMap<String, String>,
+            projection: HashMap<String, String>,
+            position: Int,
+            animateEntrance: Boolean
+        ) {
             preferences = Preferences.getPreferences(mContext.requireActivity(), "")
 
             if (preferences?.getAvatarTypeByChatId(Hash.hash(chatMessage["name"].toString()), mContext.requireActivity()) == "builtin") {
@@ -211,7 +361,10 @@ class ChatListAdapter(private val dataArray: ArrayList<HashMap<String, String>>,
 
             name.text = if (chatMessage["name"].toString().trim().contains("_autoname_")) mContext.getString(R.string.label_untitled_chat) else chatMessage["name"].toString()
 
-            textFirstMessage.text = chatMessage["first_message"] ?: "No messages yet."
+            bindPreview(chatMessage)
+            if (!chatMessage.containsKey("first_message")) {
+                requestPreview(chatMessage["name"].toString())
+            }
 
             val chatHash = Hash.hash(chatMessage["name"].toString())
             val chatPreferences = Preferences.getPreferences(mContext.requireActivity(), chatHash)
@@ -230,22 +383,7 @@ class ChatListAdapter(private val dataArray: ArrayList<HashMap<String, String>>,
             } else ""
             companionImageFile = ProfileImageResolver.resolveAiImageFile(mContext.requireActivity(), companionRef)
 
-            // Review marker: the per-chat exclusion pref wins (it stops capture
-            // itself), otherwise show what the transcript queue says.
-            val memoryState = if (chatPreferences.isChatExcludedFromMemory()) "excluded" else reviewStates?.get(chatHash)
-            if (memoryState == null) {
-                memoryMarker.visibility = View.GONE
-            } else {
-                memoryMarker.visibility = View.VISIBLE
-                memoryMarker.text = mContext.getString(
-                    when (memoryState) {
-                        "pending" -> R.string.memory_marker_pending
-                        "partial" -> R.string.memory_marker_partial
-                        "processed" -> R.string.memory_marker_processed
-                        else -> R.string.memory_marker_excluded
-                    }
-                )
-            }
+            bindMemoryMarker(chatMessage, chatPreferences)
 
             icon.contentDescription = name.text
 
@@ -285,10 +423,62 @@ class ChatListAdapter(private val dataArray: ArrayList<HashMap<String, String>>,
                 return@setOnLongClickListener true
             }
 
-            val animation: Animation = AnimationUtils.loadAnimation(mContext.context, R.anim.fade_in)
-            animation.duration = 300
-            animation.startOffset = 50
-            itemView.startAnimation(animation)
+            itemView.clearAnimation()
+            if (animateEntrance) {
+                val animation: Animation = AnimationUtils.loadAnimation(mContext.context, R.anim.fade_in)
+                animation.duration = 300
+                animation.startOffset = 50
+                itemView.startAnimation(animation)
+            } else {
+                itemView.alpha = 1f
+            }
+        }
+
+        fun bindPreview(chatMessage: HashMap<String, String>) {
+            textFirstMessage.text = chatMessage["first_message"] ?: EMPTY_CHAT_PREVIEW
+        }
+
+        fun bindMemoryMarker(chatMessage: HashMap<String, String>) {
+            val chatHash = Hash.hash(chatMessage["name"].toString())
+            if (!showMemoryStatus) {
+                boundMemoryExclusions.remove(chatHash)
+                boundMemoryStates.remove(chatHash)
+                memoryMarker.visibility = View.GONE
+                return
+            }
+            val chatPreferences = Preferences.getPreferences(mContext.requireActivity(), chatHash)
+            bindMemoryMarker(chatMessage, chatPreferences)
+        }
+
+        private fun bindMemoryMarker(
+            chatMessage: HashMap<String, String>,
+            chatPreferences: Preferences
+        ) {
+            val chatHash = Hash.hash(chatMessage["name"].toString())
+            if (!showMemoryStatus) {
+                boundMemoryExclusions.remove(chatHash)
+                boundMemoryStates.remove(chatHash)
+                memoryMarker.visibility = View.GONE
+                return
+            }
+
+            val excluded = chatPreferences.isChatExcludedFromMemory()
+            val memoryState = if (excluded) "excluded" else reviewStates?.get(chatHash)
+            boundMemoryExclusions[chatHash] = excluded
+            boundMemoryStates[chatHash] = memoryState
+            if (memoryState == null) {
+                memoryMarker.visibility = View.INVISIBLE
+            } else {
+                memoryMarker.visibility = View.VISIBLE
+                memoryMarker.text = mContext.getString(
+                    when (memoryState) {
+                        "pending" -> R.string.memory_marker_pending
+                        "partial" -> R.string.memory_marker_partial
+                        "processed" -> R.string.memory_marker_processed
+                        else -> R.string.memory_marker_excluded
+                    }
+                )
+            }
         }
 
         private fun switchBulkActionState(projection: HashMap<String, String>, chatMessage: HashMap<String, String>, position: Int) {
