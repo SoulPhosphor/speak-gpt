@@ -14,7 +14,11 @@
 > never bare "Round N"** — that word is already spoken for elsewhere in this
 > project.
 
-**Status: PLAN AWAITING OWNER APPROVAL. Nothing here is built.**
+**Status (July 21 2026): Build Phase 0 and Build Phase 1 are COMPLETE —
+owner-confirmed on-device (the original startup freeze is gone; normal
+launch is lighter). Build Phase 2's wording is now owner-approved (see
+"Owner confirmations — RESOLVED July 21 2026") but Build Phase 2 itself is
+NOT yet built. Build Phases 3–5 remain plan only.**
 Revision 2, July 20 2026 — incorporates the second external review (11
 points + the two-systems architecture requirement). Written against `main`
 (through `2585a36`) and the owner-directed design in
@@ -26,8 +30,10 @@ rule, CI-only compile gate, owner on-device confirmation rule),
 `Memory System/owner_approved_rules.md`, and the §15 sections cited per
 phase. Owner-approved verbatim strings live in §15.12 — implement them
 exactly. The formerly-proposed changes to approved strings were all ruled
-on by the owner on July 20 2026 (see "Owner confirmations — RESOLVED");
-the only words still to be written are the Build Phase 4 wording list, and the
+on by the owner on July 20 and July 21 2026 (see both "Owner confirmations
+— RESOLVED" sections); the remaining Build Phase 4 wording is items 2, 5,
+and 6 only (B8 result buttons, the backup-failure dialog's body text, and
+the chat-recovery wording set — all Build Phase 3 scope), and the
 only open choices are under "Decisions still open."
 
 ## The two systems (architectural requirement — keep them separate)
@@ -258,16 +264,28 @@ abnormal exits; startup housekeeping measurably does less on a clean start.
    finds nothing wrong → categorized failure recorded, retry per policy.
 8. **Backup & Restore screen additions** (simple rows, house style — no
    cards/tiles), §15.9's approved order preserved: `Check Database
-   Integrity` ABOVE the backup button; helper text under Check Database
-   Integrity: it checks memory, lorebooks, and the User Image Database —
-   **it does not check chat files**; one **compact status row per type**
-   (current result + last successful date/time when relevant, `Month D,
-   YYYY at H:MM AM/PM` — **owner correction, July 21 2026: "at" between
-   the year and the time, not a comma**), e.g.:
+   Integrity` button, then its helper text (**APPROVED by owner, July 21
+   2026 — final wording**):
+   > `Checks the memory, lorebook, and user image databases for problems. Chat files are checked separately.`
+   Below that, one **compact status row per type**, grouped together under
+   a single **Backup Status** section, in this fixed order (**owner
+   ruling, July 21 2026 — resolves the chats-row placement question left
+   open below**): **Memory, Lorebooks, Chats, User Image Database** (Chats
+   sits between Lorebooks and User Image Database). Current result + last
+   successful date/time when relevant, `Month D, YYYY at H:MM AM/PM`
+   (owner correction, July 21 2026: "at" between the year and the time,
+   not a comma), e.g.:
    > `Memory: Backup failed July 20, 2026 at 2:30 PM. Last good backup: July 19, 2026 at 2:30 PM`
    > `Lorebooks: Backed up July 20, 2026 at 2:30 PM`
    > `Chats: Backed up July 20, 2026 at 2:31 PM`
    > `User Image Database: Backed up July 20, 2026 at 2:31 PM`
+   `Create Backup` sits directly beneath the Backup Status section (owner
+   ruling, July 21 2026). While a backup is running, the button's label
+   area reads `Creating backup…` (owner-approved in-progress text, July 21
+   2026); on completion the status rows above update to the new result —
+   **no separate persistent success message** (owner ruling, July 21 2026:
+   completion is communicated through the status rows alone, never an
+   additional toast/banner/dialog).
    (**APPROVED by owner, July 20 2026; date/time format and the failed-row
    wording corrected by owner, July 21 2026 — see above:** compact rows
    replace the old two-line failed/success layout, and the backup button
@@ -275,8 +293,17 @@ abnormal exits; startup housekeeping measurably does less on a clean start.
    **`Create Backup`** — not "Create Database Backup", not "Create Backup
    Now".)
 9. The existing portable JSON export/import stays untouched and clearly
-   separated on the screen (`Export Portable Copy` / `Import Portable
-   Copy`, with the readable-content warning — labels are Build Phase 4 wording).
+   separated on the screen, under its own **Portable Copy** section
+   (**APPROVED by owner, July 21 2026 — final wording**):
+   > Export or import a copy for moving your data to another device or compatible app.
+   > `Export Portable Copy`
+   > `Import Portable Copy`
+   Warning text (owner's exact words; placement TBD on the screen):
+   > Portable copies may contain readable chats, memories, and other personal information. Store them somewhere private.
+10. **Memory Manager hub row subtitle** (**APPROVED by owner, July 21
+    2026 — final wording**): the Memory Backup & Restore row on the Memory
+    Manager hub gains a subtitle:
+    > Back up and restore chats, memories, lorebooks, and user image data.
 
 **Exit:** CI green; owner picks a folder on their phone, sees four files
 appear in it, sees the per-type status rows, and last-known-good survives
@@ -365,7 +392,9 @@ Strings that do not exist yet or now need owner (re-)approval:
 2. Buttons on the B8 result (damage found → likely `Repair | Revert to
    Last Good Database`; incomplete → likely `Try Again | View Error Log`).
 3. ~~Compact status rows~~ — **APPROVED** (format per Build Phase 2 item 8);
-   only the chats row's placement remains to confirm.
+   chats-row placement **RESOLVED** (owner, July 21: Memory, Lorebooks,
+   Chats, User Image Database, all four grouped under one Backup Status
+   section).
 4. ~~Button rename~~ — **RESOLVED: `Create Backup`** (owner, July 20).
 5. The category-split backup-failure dialog's **body text** (structure +
    buttons `Change Backup Folder | Retry | Cancel` are APPROVED; the
@@ -375,12 +404,13 @@ Strings that do not exist yet or now need owner (re-)approval:
    current chat collection will be REPLACED, stating current files are
    preserved; restore success; restore failure; restart-required message +
    action; optional `Choose Another Backup` action.
-7. Portable-copy labels + the readable-content warning
-   (`Export Portable Copy` / `Import Portable Copy`).
-8. Helper text under `Check Database Integrity` (checks the three
-   databases; does not check chat files).
-9. In-progress/status text under the backup button; the Memory Backup &
-   Restore row's missing subtitle (owner may supply or leave).
+7. ~~Portable-copy labels + the readable-content warning~~ — **RESOLVED**
+   (owner, July 21 — see Build Phase 2 item 9).
+8. ~~Helper text under `Check Database Integrity`~~ — **RESOLVED** (owner,
+   July 21 — see Build Phase 2 item 8).
+9. ~~In-progress/status text under the backup button; the Memory Backup &
+   Restore row's missing subtitle~~ — **RESOLVED** (owner, July 21 — see
+   Build Phase 2 items 8 and 10).
 
 Each lands only after the owner approves the words in chat.
 
@@ -409,6 +439,31 @@ Each lands only after the owner approves the words in chat.
    "Create Database Backup", not "Create Backup Now").
 3. **Compact per-type status rows: APPROVED**, replacing the two-line
    failed-above-success layout (§15.9 items 3–4).
+
+## Owner confirmations — RESOLVED July 21 2026
+
+1. **"Profile Image Catalog" renamed `User Image Database`** — the old
+   term was confusing to a normal user (see Build Phase 2 item 3).
+2. **Status-row date/time format: `Month D, YYYY at H:MM AM/PM`** — "at"
+   between the year and the time, not a comma; the Memory row's failed
+   state carries the actual failure date/time instead of the word
+   "today" (Build Phase 2 item 8).
+3. **`Check Database Integrity` helper text: APPROVED, final wording** —
+   "Checks the memory, lorebook, and user image databases for problems.
+   Chat files are checked separately." (Build Phase 2 item 8).
+4. **Backup Status row order and grouping: APPROVED** — Memory,
+   Lorebooks, Chats, User Image Database, all four grouped under one
+   Backup Status section, with `Create Backup` directly beneath it
+   (Build Phase 2 item 8). Resolves the chats-row-placement question.
+5. **Portable Copy section wording: APPROVED, final** — description line,
+   `Export Portable Copy` / `Import Portable Copy` labels, and the
+   readable-content warning text (Build Phase 2 item 9).
+6. **In-progress text: `Creating backup…`; completion communicated via the
+   status rows alone, no separate persistent success message** (Build
+   Phase 2 item 8).
+7. **Memory Manager hub row subtitle: APPROVED, final wording** — "Back up
+   and restore chats, memories, lorebooks, and user image data." (Build
+   Phase 2 item 10).
 
 ## Decisions still open (unchanged)
 
