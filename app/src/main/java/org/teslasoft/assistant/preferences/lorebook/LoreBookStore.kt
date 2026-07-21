@@ -141,6 +141,26 @@ class LoreBookStore private constructor(context: Context, password: ByteArray) :
         db.setForeignKeyConstraintsEnabled(true)
     }
 
+    /**
+     * Returns null when the database is healthy, otherwise a short description
+     * of what `PRAGMA integrity_check` reported (or the exception that prevented
+     * the check). Mirrors the memory store's `integrityCheck()`. DETECTION ONLY
+     * — the "Check Database Integrity" button (Build Phase 2) reports the
+     * result; degraded flags, dialogs and repair are Build Phase 3.
+     */
+    fun integrityCheck(): String? {
+        return try {
+            readableDatabase.rawQuery("PRAGMA integrity_check", emptyArray<String>()).use {
+                if (it.moveToFirst()) {
+                    val result = it.getString(0)
+                    if (result.equals("ok", ignoreCase = true)) null else result
+                } else "integrity_check returned no rows"
+            }
+        } catch (e: Exception) {
+            e.message ?: e.javaClass.simpleName
+        }
+    }
+
     private fun createBooksTable(db: SQLiteDatabase) {
         db.execSQL(
             "CREATE TABLE IF NOT EXISTS $TABLE_BOOKS (" +

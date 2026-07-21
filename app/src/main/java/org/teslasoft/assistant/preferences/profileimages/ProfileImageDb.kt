@@ -72,6 +72,26 @@ class ProfileImageDb private constructor(context: Context) :
     }
 
     /**
+     * Returns null when the catalog is healthy, otherwise a short description of
+     * what `PRAGMA integrity_check` reported (or the exception that prevented
+     * the check). Plain framework SQLite (this catalog is deliberately not
+     * SQLCipher). DETECTION ONLY for the "Check Database Integrity" button
+     * (Build Phase 2); rebuild-from-files repair is Build Phase 3.
+     */
+    fun integrityCheck(): String? {
+        return try {
+            readableDatabase.rawQuery("PRAGMA integrity_check", null).use {
+                if (it.moveToFirst()) {
+                    val result = it.getString(0)
+                    if (result.equals("ok", ignoreCase = true)) null else result
+                } else "integrity_check returned no rows"
+            }
+        } catch (e: Exception) {
+            e.message ?: e.javaClass.simpleName
+        }
+    }
+
+    /**
      * Inserts [hash] with [createdAt] if it is not already catalogued.
      * Re-uploading byte-identical content must reuse the existing row and
      * keep its original created_at, so this never updates on conflict.
