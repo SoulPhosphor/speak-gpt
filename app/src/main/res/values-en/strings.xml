@@ -168,8 +168,8 @@
     <string name="global_settings_tip">You are editing global settings. This is a template for new chats and settings for assistant. These settings don\'t apply to existing chats. To edit settings for existing chat, open the chat and click the settings icon.</string>
     <string name="global_settings_title">Global settings</string>
     <string name="chat_settings_title">Chat settings</string>
-    <string name="title_control_center">Control center</string>
-    <string name="tip_12">Long press on setting tile to show function description. Works only on new settings UI. You can access new settings UI (Control center) by pressing on the \'lab\' icon in the regular settings.</string>
+    <string name="title_control_center">The Hearth</string>
+    <string name="tip_12">Long press on setting tile to show function description. Works only on new settings UI. You can access new settings UI (The Hearth) by pressing on the \'lab\' icon in the regular settings.</string>
     <string name="menu_explore">Explore</string>
     <string name="chat_role_user">User</string>
     <string name="control_center_general">General</string>
@@ -257,7 +257,7 @@
     <string name="chat_edit_message">Edit message</string>
     <string name="chat_enter_message_here" tools:ignore="TypographyEllipsis">Enter message here...</string>
     <string name="no_internet_show_error_details">Show error details</string>
-    <string name="label_quick_settings">Quick Settings</string>
+    <string name="label_quick_settings">Summoning Circle</string>
     <string name="cost_explanation">This data is provided for informational purposes only. Cost is calculated based on your model and text only messages. Additional charges may occurr for processing/generating images. We added this card to help users understand their usage and how does the cost is calculated.</string>
     <string name="btn_learn_more">Learn more</string>
     <string name="label_seed">Seed</string>
