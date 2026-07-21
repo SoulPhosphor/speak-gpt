@@ -22,7 +22,7 @@ import org.json.JSONObject
 import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.ChatStorageHealth
 import org.teslasoft.assistant.preferences.Preferences
-import org.teslasoft.assistant.util.Hash
+import org.teslasoft.assistant.util.ChatIdentity
 
 /**
  * Policy layer between the chat funnel and the transcript queue (Phase 2 of
@@ -155,7 +155,7 @@ object TranscriptRecorder {
             var allSucceeded = true
             for (chat in listResult.chats) {
                 val name = chat["name"] ?: continue
-                val chatId = Hash.hash(name)
+                val chatId = ChatIdentity.effectiveId(chat)
                 if (store.hasAnyTranscriptForChat(chatId)) continue
 
                 val prefs = Preferences.getPreferences(context, chatId)

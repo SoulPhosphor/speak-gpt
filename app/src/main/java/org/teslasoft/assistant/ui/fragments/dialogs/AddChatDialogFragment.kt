@@ -319,7 +319,14 @@ class AddChatDialogFragment : DialogFragment() {
     }
 
     private fun delete(context: Context) {
-        chatPreferences?.deleteChat(context, requireArguments().getString("name").toString())
+        // The dialog only holds the chat's NAME; the id must come from the
+        // list entry via the ChatIdentity funnel — recomputing the name hash
+        // here would delete the wrong file for a stable-id chat. A name that
+        // matches no entry deletes nothing (same net effect as before: the
+        // list never contained it).
+        val cp = chatPreferences ?: ChatPreferences.getChatPreferences()
+        val chatId = cp.getChatIdByName(context, requireArguments().getString("name").toString())
+        if (chatId != null) cp.deleteChatById(context, chatId)
         listener!!.onDelete(arguments?.getInt("position")!!)
     }
 

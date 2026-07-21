@@ -63,7 +63,7 @@ import org.teslasoft.assistant.ui.activities.ChatActivity
 import org.teslasoft.assistant.ui.activities.SettingsActivity
 import org.teslasoft.assistant.ui.adapters.ChatListAdapter
 import org.teslasoft.assistant.ui.fragments.dialogs.AddChatDialogFragment
-import org.teslasoft.assistant.util.Hash
+import org.teslasoft.assistant.util.ChatIdentity
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import kotlin.math.abs
@@ -280,14 +280,14 @@ class ChatsListFragment : Fragment(), ChatListAdapter.OnInteractionListener {
                 adapter?.notifyItemChanged(position)
 
                 if (swipeDir == ItemTouchHelper.RIGHT) {
-                    ChatPreferences.getChatPreferences().switchPinState(mContext ?: return@post, Hash.hash(chats[position]["name"].toString()))
+                    ChatPreferences.getChatPreferences().switchPinState(mContext ?: return@post, ChatIdentity.effectiveId(chats[position]))
                     initSettings()
                 } else {
                     MaterialAlertDialogBuilder(requireActivity(), R.style.App_MaterialAlertDialog)
                         .setTitle(R.string.label_confirm_deletion)
                         .setMessage(R.string.msg_confirm_deletion_chat)
                         .setPositiveButton(R.string.btn_delete) { _, _ -> run {
-                            ChatPreferences.getChatPreferences().deleteChat(mContext ?: return@run, chats[position]["name"].toString())
+                            ChatPreferences.getChatPreferences().deleteChatById(mContext ?: return@run, ChatIdentity.effectiveId(chats[position]))
                             initSettings("delete", position)
                         } }
                         .setNegativeButton(R.string.btn_cancel) { _, _ -> }
@@ -813,7 +813,7 @@ class ChatsListFragment : Fragment(), ChatListAdapter.OnInteractionListener {
                 val selected = selectionProjection.filter { it["selected"] == "true" }
 
                 for (item in selected) {
-                    ChatPreferences.getChatPreferences().deleteChat(mContext ?: return@run, item["name"] ?: "")
+                    ChatPreferences.getChatPreferences().deleteChatById(mContext ?: return@run, ChatIdentity.effectiveId(item))
                     selectionProjection.remove(item)
                 }
 

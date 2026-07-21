@@ -42,7 +42,7 @@ import org.teslasoft.assistant.preferences.memory.MemoryRecord
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.memory.ModelRuleRecord
 import org.teslasoft.assistant.preferences.memory.TranscriptRecord
-import org.teslasoft.assistant.util.Hash
+import org.teslasoft.assistant.util.ChatIdentity
 import java.time.Instant
 import kotlin.time.Duration.Companion.seconds
 
@@ -605,7 +605,7 @@ object Archivist {
         val out = HashMap<String, String>()
         for (chat in ChatPreferences.getChatPreferences().getChatList(context)) {
             val name = chat["name"] ?: continue
-            out[Hash.hash(name)] = name
+            out[ChatIdentity.effectiveId(chat)] = name
         }
         return out
     }

@@ -21,6 +21,7 @@ import androidx.core.content.edit
 import org.json.JSONArray
 import org.json.JSONObject
 import org.teslasoft.assistant.preferences.memory.MemoryStore
+import org.teslasoft.assistant.util.ChatIdentity
 
 /**
  * A tiny durable journal that bridges the gap between the two stores a chat
@@ -148,7 +149,7 @@ object RenameJournal {
             )
             return
         }
-        val liveIds = listResult.chats.mapNotNull { it["id"] }.toSet()
+        val liveIds = listResult.chats.map { ChatIdentity.effectiveId(it) }.toSet()
         val provisioned = try {
             MemoryStore.isProvisioned(context)
         } catch (_: Exception) {

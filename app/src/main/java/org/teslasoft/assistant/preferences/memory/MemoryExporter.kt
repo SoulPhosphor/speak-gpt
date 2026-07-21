@@ -23,7 +23,7 @@ import org.json.JSONObject
 import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.ChatStorageHealth
 import org.teslasoft.assistant.util.AtomicFileWriter
-import org.teslasoft.assistant.util.Hash
+import org.teslasoft.assistant.util.ChatIdentity
 import java.io.File
 import java.time.Instant
 import java.time.temporal.ChronoUnit
@@ -152,13 +152,14 @@ object MemoryExporter {
         // exactly once, via getChatByIdResult.
         for (chat in chatPreferences.getChatListResult(context, includeFirstMessage = false).chats) {
             val name = chat["name"] ?: continue
+            val chatId = ChatIdentity.effectiveId(chat)
             val obj = JSONObject()
             obj.put("name", name)
-            obj.put("chat_id", Hash.hash(name))
+            obj.put("chat_id", chatId)
             for ((key, value) in chat) {
                 if (key != "name" && key != "first_message") obj.put(key, value)
             }
-            val history = chatPreferences.getChatByIdResult(context, Hash.hash(name))
+            val history = chatPreferences.getChatByIdResult(context, chatId)
             if (ChatStorageHealth.isAuthoritative(history.state)) {
                 obj.put("messages", JSONArray(gson.toJson(history.messages)))
             } else {

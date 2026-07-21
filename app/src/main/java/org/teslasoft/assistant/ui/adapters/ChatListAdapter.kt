@@ -53,7 +53,7 @@ import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.util.ProfileImageResolver
 import org.teslasoft.assistant.ui.activities.ChatActivity
-import org.teslasoft.assistant.util.Hash
+import org.teslasoft.assistant.util.ChatIdentity
 import org.teslasoft.assistant.util.LegacyAvatarResolver
 import org.teslasoft.assistant.util.ProfileImageBinder
 import org.teslasoft.assistant.util.StaticAvatarParser
@@ -119,7 +119,7 @@ class ChatListAdapter(
                     ) return@runOnUiThread
                     val changedRows = ArrayList<Int>()
                     dataArray.forEachIndexed { position, chat ->
-                        val chatId = Hash.hash(chat["name"].toString())
+                        val chatId = ChatIdentity.effectiveId(chat)
                         if (!boundMemoryStates.containsKey(chatId)) return@forEachIndexed
 
                         val previousState = boundMemoryStates[chatId]
@@ -169,7 +169,7 @@ class ChatListAdapter(
     }
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-        val chatId = Hash.hash(dataArray[position]["name"].toString())
+        val chatId = ChatIdentity.effectiveId(dataArray[position])
         holder.bind(
             dataArray[position],
             selectorProjection[position],
@@ -220,9 +220,9 @@ class ChatListAdapter(
         }
     }
 
-    private fun requestPreview(chatName: String) {
+    private fun requestPreview(chat: HashMap<String, String>) {
         if (disposed.get()) return
-        val chatId = Hash.hash(chatName)
+        val chatId = ChatIdentity.effectiveId(chat)
         synchronized(previewRequests) {
             if (!previewRequests.add(chatId)) return
         }
@@ -241,7 +241,7 @@ class ChatListAdapter(
                 mContext.activity?.runOnUiThread {
                     if (disposed.get()) return@runOnUiThread
                     val position = dataArray.indexOfFirst {
-                        Hash.hash(it["name"].toString()) == chatId
+                        ChatIdentity.effectiveId(it) == chatId
                     }
                     if (position < 0) return@runOnUiThread
 
@@ -294,7 +294,7 @@ class ChatListAdapter(
     }
 
     fun edit(position: Int, name: String) {
-        listener?.onRename(position, name, Hash.hash(name))
+        listener?.onRename(position, name, ChatIdentity.effectiveId(dataArray[position]))
     }
 
     private var listener: OnInteractionListener? = null
@@ -342,10 +342,10 @@ class ChatListAdapter(
         ) {
             preferences = Preferences.getPreferences(mContext.requireActivity(), "")
 
-            if (preferences?.getAvatarTypeByChatId(Hash.hash(chatMessage["name"].toString()), mContext.requireActivity()) == "builtin") {
-                icon.setImageResource(StaticAvatarParser.parse(preferences?.getAvatarIdByChatId(Hash.hash(chatMessage["name"].toString()), mContext.requireActivity())!!))
+            if (preferences?.getAvatarTypeByChatId(ChatIdentity.effectiveId(chatMessage), mContext.requireActivity()) == "builtin") {
+                icon.setImageResource(StaticAvatarParser.parse(preferences?.getAvatarIdByChatId(ChatIdentity.effectiveId(chatMessage), mContext.requireActivity())!!))
             } else {
-                val legacyAvatarId = preferences?.getAvatarIdByChatId(Hash.hash(chatMessage["name"].toString()), mContext.requireActivity())
+                val legacyAvatarId = preferences?.getAvatarIdByChatId(ChatIdentity.effectiveId(chatMessage), mContext.requireActivity())
                 val legacyAvatarFile = if (legacyAvatarId != null) LegacyAvatarResolver.resolve(mContext.requireActivity().getExternalFilesDir("images"), legacyAvatarId) else null
 
                 if (legacyAvatarFile != null) {
@@ -363,10 +363,10 @@ class ChatListAdapter(
 
             bindPreview(chatMessage)
             if (!chatMessage.containsKey("first_message")) {
-                requestPreview(chatMessage["name"].toString())
+                requestPreview(chatMessage)
             }
 
-            val chatHash = Hash.hash(chatMessage["name"].toString())
+            val chatHash = ChatIdentity.effectiveId(chatMessage)
             val chatPreferences = Preferences.getPreferences(mContext.requireActivity(), chatHash)
             val model: String = chatPreferences.getModel()
 
@@ -411,7 +411,7 @@ class ChatListAdapter(
                     ).setAction(Intent.ACTION_VIEW)
 
                     i.putExtra("name", chatMessage["name"].toString())
-                    i.putExtra("chatId", Hash.hash(chatMessage["name"].toString()))
+                    i.putExtra("chatId", ChatIdentity.effectiveId(chatMessage))
 
                     mContext.requireActivity().startActivity(i, options.toBundle())
                 }
@@ -439,7 +439,7 @@ class ChatListAdapter(
         }
 
         fun bindMemoryMarker(chatMessage: HashMap<String, String>) {
-            val chatHash = Hash.hash(chatMessage["name"].toString())
+            val chatHash = ChatIdentity.effectiveId(chatMessage)
             if (!showMemoryStatus) {
                 boundMemoryExclusions.remove(chatHash)
                 boundMemoryStates.remove(chatHash)
@@ -454,7 +454,7 @@ class ChatListAdapter(
             chatMessage: HashMap<String, String>,
             chatPreferences: Preferences
         ) {
-            val chatHash = Hash.hash(chatMessage["name"].toString())
+            val chatHash = ChatIdentity.effectiveId(chatMessage)
             if (!showMemoryStatus) {
                 boundMemoryExclusions.remove(chatHash)
                 boundMemoryStates.remove(chatHash)
@@ -589,7 +589,7 @@ class ChatListAdapter(
 
             DrawableCompat.setTint(pin.getDrawable(), ContextCompat.getColor(mContext.requireActivity(), iconColor))
 
-            if (preferences?.getAvatarTypeByChatId(Hash.hash(chatMessage["name"].toString()), mContext.requireActivity()) == "builtin") {
+            if (preferences?.getAvatarTypeByChatId(ChatIdentity.effectiveId(chatMessage), mContext.requireActivity()) == "builtin") {
                 DrawableCompat.setTint(icon.getDrawable(), ContextCompat.getColor(mContext.requireActivity(), iconColor))
             }
 

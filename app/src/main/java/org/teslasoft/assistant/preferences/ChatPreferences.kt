@@ -24,6 +24,7 @@ import android.widget.Toast
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import org.teslasoft.assistant.preferences.memory.MemoryStore
+import org.teslasoft.assistant.util.ChatIdentity
 import org.teslasoft.assistant.util.Hash
 import java.lang.Exception
 import java.lang.reflect.Type
@@ -134,38 +135,16 @@ class ChatPreferences private constructor() {
     }
 
     /**
-     * Deletes a chat, including all messages, from the chat list.
-     *
-     * @param context The context of the application.
-     * @param chatName The name of the chat to delete.
+     * Resolves a chat's id from its display name via the list entry and the
+     * [ChatIdentity] funnel. For callers that only hold the name (the
+     * name-keyed delete flow); null when no entry carries that name.
+     * Deriving the id by hashing the name directly is forbidden — for a
+     * stable entry that hash names a file that does not exist.
      */
-    fun deleteChat(context: Context, chatName: String) {
-        if (chatWriteBlocked(context, "chat_list", "delete a chat")) return
-        synchronized(CHAT_LIST_LOCK) {
-            val list = getChatList(context)
-
-            for (map: HashMap<String, String> in list) {
-                if (map["name"] == chatName) {
-                    list.remove(map)
-                    break
-                }
-            }
-
-            val json: String = Gson().toJson(list)
-
-            val settings: SharedPreferences = SecurePrefs.get(context, "chat_list")
-            settings.edit { putString("data", json) }
-        }
-
-        val settings2: SharedPreferences = SecurePrefs.get(context, "chat_${Hash.hash(chatName)}")
-        settings2.edit { clear() }
-
-        // A user-confirmed delete settles this chat's unreadable-value state
-        // (the preserved ciphertext copy under files/storage_recovery/ is
-        // never touched); without this the journal row would keep reporting
-        // degraded chat storage forever.
-        ChatStorageHealth.clearReadFailure(context, "chat_${Hash.hash(chatName)}")
-    }
+    fun getChatIdByName(context: Context, chatName: String): String? =
+        getChatListResult(context, includeFirstMessage = false).chats
+            .firstOrNull { it["name"] == chatName }
+            ?.let { ChatIdentity.effectiveId(it) }
 
     /**
      * Retrieves a list of all available chats.
@@ -230,7 +209,7 @@ class ChatPreferences private constructor() {
         // freezing the UI past the ANR threshold once histories grew large.
         if (includeFirstMessage) {
             for (chat in list) {
-                val messagesList = getChatById(context, Hash.hash(chat["name"].toString()))
+                val messagesList = getChatById(context, ChatIdentity.effectiveId(chat))
 
                 if (messagesList.isNotEmpty()) {
                     val firstMessage = messagesList[0]["message"].toString()
@@ -260,7 +239,7 @@ class ChatPreferences private constructor() {
             val list = getChatList(context)
 
             for (map in list) {
-                if (Hash.hash(map["name"].toString()) == chatId) {
+                if (ChatIdentity.effectiveId(map) == chatId) {
                     if (map["pinned"] == "true") {
                         map["pinned"] = "false"
                     } else {
@@ -289,7 +268,7 @@ class ChatPreferences private constructor() {
             val list = getChatList(context)
 
             for (map in list) {
-                if (Hash.hash(map["name"].toString()) == chatId) {
+                if (ChatIdentity.effectiveId(map) == chatId) {
                     map[key] = value
                     break
                 }
@@ -635,7 +614,7 @@ class ChatPreferences private constructor() {
 
         var name = ""
         for (map: HashMap<String, String> in list) {
-            if (map["id"] == chatId) {
+            if (ChatIdentity.effectiveId(map) == chatId) {
                 name = map["name"].toString()
                 break
             }
@@ -681,12 +660,12 @@ class ChatPreferences private constructor() {
         val outcome: ChatRenameTransaction.Outcome
         synchronized(CHAT_LIST_LOCK) {
             val list = getChatList(context)
-            val entry = list.firstOrNull { it["id"] == oldId } ?: return false
+            val entry = list.firstOrNull { ChatIdentity.effectiveId(it) == oldId } ?: return false
 
             // Renaming onto an id another chat already owns would silently
             // overwrite that chat's history. Refuse instead (the rename dialog
             // pre-checks duplicates; auto-naming may retry with another title).
-            if (list.any { it !== entry && it["id"] == newId }) {
+            if (list.any { it !== entry && ChatIdentity.effectiveId(it) == newId }) {
                 Logger.log(
                     context, "crash", "ChatPreferences", "error",
                     "Rename refused: a chat named \"$chatName\" already exists; \"$previousName\" was left unchanged."
@@ -804,7 +783,7 @@ class ChatPreferences private constructor() {
             val list = getChatList(context)
 
             for (map: HashMap<String, String> in list) {
-                if (map["id"] == chatId) {
+                if (ChatIdentity.effectiveId(map) == chatId) {
                     list.remove(map)
                     break
                 }
