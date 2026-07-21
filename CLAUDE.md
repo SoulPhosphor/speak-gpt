@@ -703,9 +703,8 @@ Everything is on-device. No cloud sync, no accounts.
    description; `view_roleplay_character_row.xml` image+title only) via
    `ProfileImageRowAdapter` + `MemoryScreenActivity.buildListAdapter()` — the
    plan's earlier "no images on memory-side list rows" note was superseded by
-   the owner's separate approval. My Personas now groups archived personas
-   under a bottom Archive section (like Roleplay Characters) instead of a
-   per-row badge.
+   the owner's separate approval. Only the row's look changed; the My Personas
+   list order and its archive/restore behavior are unchanged.
    The Memory Assistant tuning prefs (July 9 spec,
    `memory_settings_reorg_spec.md`): max suggestions per conversation +
    minimum importance (both ENFORCED IN CODE in the runner), temperature

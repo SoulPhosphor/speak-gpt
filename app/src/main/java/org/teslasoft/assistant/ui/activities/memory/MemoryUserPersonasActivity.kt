@@ -55,21 +55,14 @@ class MemoryUserPersonasActivity : MemoryScreenActivity() {
                 (it.shortDescription?.lowercase()?.contains(q) == true)
         }
 
-        // Visible Archive section at the bottom (matches Roleplay Characters):
-        // active personas first, then a header, then archived ones. The picture
-        // row style carries no "archived" badge, so the section is how the
-        // archived state stays visible.
-        val active = filtered.filter { it.status != "archived" }.map { rowFor(it) }
-        val archived = filtered.filter { it.status == "archived" }.map { rowFor(it) }
-        if (archived.isEmpty()) return active
-        return active +
-            MemoryRow(id = "", title = getString(R.string.card_archive_header), isHeader = true) +
-            archived
+        return filtered.map { rowFor(it) }
     }
 
-    // Image + Title + Subtitle (owner ruling, July 21 2026). The subtitle is
-    // the persona's own short description (blank -> no subtitle line); the
-    // leading picture is resolved by ProfileImageRowAdapter from imageRef.
+    // Only the row's look changed (owner ruling, July 21 2026): the shared
+    // picture row style - Image + Title + Subtitle, the subtitle being the
+    // persona's own short description (blank -> no subtitle line), the leading
+    // picture resolved by ProfileImageRowAdapter from imageRef. The list order
+    // and everything else are unchanged from before.
     private fun rowFor(p: UserPersonaRecord): MemoryRow = MemoryRow(
         id = p.personaId,
         title = p.name,
