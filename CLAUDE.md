@@ -1635,12 +1635,22 @@ Everything is on-device. No cloud sync, no accounts.
   **both Quick Settings AND the Companions list opened from Characters** (the
   July 10 rule that only Quick Settings wrote it was the bug: a companion picked
   via Characters never carried into new chats). Recording fires only when the
-  Companions list actually returns a companion — since July 19 2026 that means
-  opening a companion's editor and hitting **Save** (tapping a row just opens
-  the editor, it doesn't select by itself; see "The Personas/Companions list
-  is DIFFERENT" above), while backing out of either the list or the editor
-  still returns `CANCELED`. A mere browse is still never recorded.
-  `Preferences.hasLastUsedPersonaChoice()` is now unused by seeding.
+  Companions list actually returns a companion. **The Companions list
+  (`PersonasListActivity`) now has a `pickMode` split (owner ruling, July 21
+  2026 — supersedes the July 19 "no select tap" rule):** opened from Quick
+  Settings' Companion selector (`pickMode = true`) a tap on a row's
+  **non-chevron area switches the chat to that Companion instantly** (returns
+  it, so last-used is recorded), while the **chevron opens that Companion's
+  editor** without switching; opened from Characters or the create-first
+  prompt (`pickMode = false`) the chevron is decorative and tapping ANYWHERE
+  edits. Saving in the editor still returns the Companion active
+  (`finishWithActive`) in either mode, so chevron → edit → Save also records
+  last-used. Backing out of the list or the editor returns `CANCELED`, and a
+  mere browse is never recorded. Split lives in `PersonaListItemAdapter`
+  (`onClick` vs `onEditClick`, chevron wrapped in the `persona_edit_target`
+  touch target) — see "The Personas/Companions list is DIFFERENT" in
+  `ui-style-guide.md`. `Preferences.hasLastUsedPersonaChoice()` is now unused
+  by seeding.
 - Legacy/odd-named files exist (`InstructionsForDegradedTeapots…Activity`,
   `MainActivity_robo_script.json`, `experiment.json`, `desktop.ini`,
   `hub-purge.sh`) — leave them unless asked.

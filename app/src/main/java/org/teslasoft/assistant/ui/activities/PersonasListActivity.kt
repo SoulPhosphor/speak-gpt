@@ -56,6 +56,14 @@ class PersonasListActivity : FragmentActivity() {
 
     private var actionBar: ConstraintLayout? = null
 
+    // Pick mode (launched from Quick Settings to choose the chat's Companion):
+    // tapping the non-chevron area selects that Companion and returns; the
+    // chevron edits. Manager mode (launched from Characters or the
+    // create-first-companion prompt): tapping anywhere edits. Owner ruling,
+    // July 21 2026 - supersedes the July 19 "no select tap" rule for the Quick
+    // Settings case; open-then-Save still selects too, unchanged.
+    private var pickMode: Boolean = false
+
     private fun newEmptyPersona(): PersonaObject {
         return PersonaObject("", "")
     }
@@ -106,13 +114,24 @@ class PersonasListActivity : FragmentActivity() {
     }
 
     private var onSelectListener: PersonaListItemAdapter.OnSelectListener = object : PersonaListItemAdapter.OnSelectListener {
-        // Owner ruling (July 19 2026): this list is pure browse/edit, matching
-        // the System Prompts row - tapping a Companion always opens its edit
-        // screen. There is no "select this Companion" tap action here; saving
-        // in the editor already finishes with that Companion active
-        // (finishWithActive, unchanged), so picking a Companion from Quick
-        // Settings still works, via open-then-save.
+        // Manager mode: the row is pure browse/edit (matching the System Prompts
+        // row) - tapping opens the editor. Pick mode (opened from Quick
+        // Settings): tapping the non-chevron area SWITCHES the chat to that
+        // Companion instantly (owner ruling, July 21 2026). Saving in the editor
+        // also finishes with that Companion active (finishWithActive), so the
+        // chevron -> edit -> Save path selects too.
         override fun onClick(position: Int) {
+            if (pickMode) {
+                val label = list[position]["label"] ?: return
+                finishWithActive(label)
+            } else {
+                openEditor(position)
+            }
+        }
+
+        // Pick mode only (chevron tap): edit without switching the active
+        // Companion.
+        override fun onEditClick(position: Int) {
             openEditor(position)
         }
     }
@@ -159,6 +178,8 @@ class PersonasListActivity : FragmentActivity() {
 
         listView?.divider = null
 
+        pickMode = intent.getBooleanExtra("pickMode", false)
+
         personaPreferences = PersonaPreferences.getPersonaPreferences(this)
         initialize()
 
@@ -188,7 +209,7 @@ class PersonasListActivity : FragmentActivity() {
         if (list == null) list = arrayListOf()
 
         runOnUiThread {
-            adapter = PersonaListItemAdapter(list, this)
+            adapter = PersonaListItemAdapter(list, this, pickMode)
             adapter!!.setOnSelectListener(onSelectListener)
             listView!!.adapter = adapter
             adapter!!.notifyDataSetChanged()
