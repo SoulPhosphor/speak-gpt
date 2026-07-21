@@ -197,7 +197,7 @@
     <string name="label_api_endpoint">API endpoint</string>
     <string name="title_api_endpoints">API Profiles</string>
     <string name="btn_new_api_endpoint">Add profile</string>
-    <string name="label_persona">Persona</string>
+    <string name="label_persona">Companion</string>
     <string name="title_personas">Companions</string>
     <string name="btn_new_persona">Add Companion</string>
     <string name="label_add_persona">Add persona</string>
@@ -390,7 +390,7 @@
     <string name="chat_edit_message">Edit message</string>
     <string name="chat_enter_message_here">Enter message here...</string>
     <string name="no_internet_show_error_details">Show error details</string>
-    <string name="label_quick_settings">Quick Settings</string>
+    <string name="label_quick_settings">Summoning Circle</string>
     <string name="cost_explanation">This data is provided for informational purposes only. Cost is calculated based on your model and text only messages. Additional charges may occurr for processing/generating images. We added this card to help users understand their usage and how does the cost is calculated.</string>
     <string name="btn_learn_more">Learn more</string>
     <string name="label_seed">Seed</string>
@@ -1452,7 +1452,7 @@
          (activity_character_card.xml), so the persona editor's own field
          label lives in the separate mem_pers_field_name_label below instead
          of repurposing the shared string. -->
-    <string name="mem_pers_title_user_personas">My Personas</string>
+    <string name="mem_pers_title_user_personas">Glamour Studio</string>
     <string name="mem_pers_fab_add_persona">New persona</string>
     <string name="mem_pers_field_name">Name</string>
     <string name="mem_pers_field_name_label">Persona Name</string>
