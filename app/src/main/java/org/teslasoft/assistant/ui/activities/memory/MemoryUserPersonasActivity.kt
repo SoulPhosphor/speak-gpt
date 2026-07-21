@@ -101,20 +101,15 @@ class MemoryUserPersonasActivity : MemoryScreenActivity() {
         }
     }
 
+    // My Personas are only saved or deleted - never archived (owner ruling,
+    // July 21 2026). The menu is Edit + Delete only.
     private fun showRowMenu(anchor: View, p: UserPersonaRecord) {
         val menu = PopupMenu(this, anchor)
         menu.menu.add(0, 1, 0, getString(R.string.action_edit))
-        if (p.status == "active") {
-            menu.menu.add(0, 2, 0, getString(R.string.action_archive))
-        } else {
-            menu.menu.add(0, 3, 0, getString(R.string.action_restore))
-        }
         menu.menu.add(0, 4, 0, getString(R.string.action_delete))
         menu.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 1 -> openEditor(p.personaId)
-                2 -> setStatus(p.personaId, "archived")
-                3 -> setStatus(p.personaId, "active")
                 4 -> confirmDelete(p)
             }
             true
@@ -193,13 +188,6 @@ class MemoryUserPersonasActivity : MemoryScreenActivity() {
     }
 
     /* ------------------------------ actions ------------------------------ */
-
-    private fun setStatus(personaId: String, status: String) {
-        runOffThread {
-            MemoryStore.getInstance(this).setUserPersonaStatus(personaId, status)
-            runOnUiThread { reload() }
-        }
-    }
 
     private fun confirmDelete(p: UserPersonaRecord) {
         MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
