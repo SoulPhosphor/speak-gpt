@@ -57,7 +57,6 @@ import org.teslasoft.assistant.preferences.memory.CardSections
 import org.teslasoft.assistant.preferences.memory.CardType
 import org.teslasoft.assistant.preferences.memory.ProjectRecord
 import org.teslasoft.assistant.preferences.memory.RoleplayCharacterRecord
-import org.teslasoft.assistant.preferences.memory.UserPersonaRecord
 import org.teslasoft.assistant.preferences.memory.WorldRecord
 import org.teslasoft.assistant.ui.activities.ActivationPromptsListActivity
 import org.teslasoft.assistant.ui.activities.ApiEndpointsListActivity
@@ -137,8 +136,6 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     private var textChatCampaign: TextView? = null
     private var rowChatRoleplayCharacter: LinearLayout? = null
     private var textChatRoleplayCharacter: TextView? = null
-    private var rowChatUserPersona: LinearLayout? = null
-    private var textChatUserPersona: TextView? = null
     private var rowChatProject: LinearLayout? = null
     private var textChatProject: TextView? = null
 
@@ -177,7 +174,6 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     private var cachedWorlds: List<WorldRecord> = emptyList()
     private var cachedCampaigns: List<CampaignRecord> = emptyList()
     private var cachedRoleplayCharacters: List<RoleplayCharacterRecord> = emptyList()
-    private var cachedUserPersonas: List<UserPersonaRecord> = emptyList()
     private var cachedProjects: List<ProjectRecord> = emptyList()
 
     // Name lookups over ALL worlds/characters (not just active ones) so a
@@ -574,8 +570,6 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         textChatCampaign = view.findViewById(R.id.text_chat_campaign)
         rowChatRoleplayCharacter = view.findViewById(R.id.row_chat_roleplay_character)
         textChatRoleplayCharacter = view.findViewById(R.id.text_chat_roleplay_character)
-        rowChatUserPersona = view.findViewById(R.id.row_chat_user_persona)
-        textChatUserPersona = view.findViewById(R.id.text_chat_user_persona)
         rowChatProject = view.findViewById(R.id.row_chat_project)
         textChatProject = view.findViewById(R.id.text_chat_project)
         rowChatModelRules = view.findViewById(R.id.row_chat_model_rules)
@@ -790,13 +784,11 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         updateChatWorldLabel()
         updateChatCampaignLabel()
         updateChatRoleplayCharacterLabel()
-        updateChatUserPersonaLabel()
         updateChatProjectLabel()
 
         rowChatWorld?.setOnClickListener { showWorldPicker() }
         rowChatCampaign?.setOnClickListener { showCampaignPicker() }
         rowChatRoleplayCharacter?.setOnClickListener { showRoleplayCharacterPicker() }
-        rowChatUserPersona?.setOnClickListener { showUserPersonaPicker() }
         rowChatProject?.setOnClickListener { showProjectPicker() }
 
         loadMemorySceneLists()
@@ -812,7 +804,6 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
                 // Only characters played by the user belong here — companion-played
                 // characters are the Storyteller/companion's own cast, not a chat scene pick.
                 val roleplayCharacters = store.getActiveRoleplayCharacters().filter { it.playedBy == "user" }
-                val userPersonas = store.getActiveUserPersonas()
                 val projects = store.getActiveProjects()
                 val allWorldNames = store.getAllWorlds().associate { it.worldId to it.name }
                 val allCharacterNames = store.getAllRoleplayCharacters()
@@ -822,14 +813,12 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
                     cachedWorlds = worlds
                     cachedCampaigns = campaigns
                     cachedRoleplayCharacters = roleplayCharacters
-                    cachedUserPersonas = userPersonas
                     cachedProjects = projects
                     worldNames = allWorldNames
                     roleplayCharacterNames = allCharacterNames
                     updateChatWorldLabel()
                     updateChatCampaignLabel()
                     updateChatRoleplayCharacterLabel()
-                    updateChatUserPersonaLabel()
                     updateChatProjectLabel()
                 }
             } catch (_: Exception) { /* the rows keep working, just empty until the store is reachable */ }
@@ -908,16 +897,6 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         } else {
             cachedRoleplayCharacters.firstOrNull { it.roleplayCharacterId == id }?.name
                 ?: getString(R.string.label_roleplay_character_none)
-        }
-    }
-
-    private fun updateChatUserPersonaLabel() {
-        val id = preferences?.getChatUserPersonaId().orEmpty()
-        textChatUserPersona?.text = if (id.isEmpty()) {
-            getString(R.string.label_user_persona_none)
-        } else {
-            cachedUserPersonas.firstOrNull { it.personaId == id }?.name
-                ?: getString(R.string.label_user_persona_none)
         }
     }
 
@@ -1118,22 +1097,6 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
             .setSingleChoiceItems(labels, current) { dialog, which ->
                 preferences?.setChatRoleplayCharacterId(ids[which])
                 updateChatRoleplayCharacterLabel()
-                dialog.dismiss()
-            }
-            .setNegativeButton(android.R.string.cancel) { _, _ -> }
-            .show()
-    }
-
-    private fun showUserPersonaPicker() {
-        val ids = listOf("") + cachedUserPersonas.map { it.personaId }
-        val labels = (listOf(getString(R.string.label_user_persona_none)) + cachedUserPersonas.map { it.name }).toTypedArray()
-        val current = ids.indexOf(preferences?.getChatUserPersonaId().orEmpty()).coerceAtLeast(0)
-
-        MaterialAlertDialogBuilder(requireContext(), R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.memory_scene_appear_as_picker_title)
-            .setSingleChoiceItems(labels, current) { dialog, which ->
-                preferences?.setChatUserPersonaId(ids[which])
-                updateChatUserPersonaLabel()
                 dialog.dismiss()
             }
             .setNegativeButton(android.R.string.cancel) { _, _ -> }
