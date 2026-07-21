@@ -27,8 +27,10 @@ import org.teslasoft.assistant.preferences.memory.DatabaseKeys
 import org.teslasoft.assistant.preferences.memory.MemoryLog
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import java.io.File
+import java.io.InputStream
 import java.security.MessageDigest
 import java.util.zip.ZipEntry
+import java.util.zip.ZipFile
 import java.util.zip.ZipOutputStream
 import net.zetetic.database.sqlcipher.SQLiteDatabase as CipherDatabase
 import android.database.sqlite.SQLiteDatabase as PlainDatabase
@@ -71,24 +73,26 @@ object RecoveryBackupManager {
 
     /**
      * Run a backup of all four types into [treeUri] (a persisted SAF tree).
-     * Records per-type success/failure in [RecoveryBackupState] and returns the
-     * per-type results. Never throws.
+     * All four artifacts share ONE run timestamp so they are recognisably one
+     * backup set (filenames + recorded success time). Records per-type
+     * success/failure in [RecoveryBackupState] and returns the per-type
+     * results. Never throws.
      */
-    fun createBackup(context: Context, treeUri: Uri): List<TypeResult> =
-        BackupType.displayOrder.map { runOne(context, it, treeUri) }
+    fun createBackup(context: Context, treeUri: Uri): List<TypeResult> {
+        val runAt = System.currentTimeMillis()
+        return BackupType.displayOrder.map { runOne(context, it, treeUri, runAt) }
+    }
 
-    private fun runOne(context: Context, type: BackupType, treeUri: Uri): TypeResult {
-        val now = System.currentTimeMillis()
-        val staged = File(context.cacheDir, "backup_stage_${type.key}_${System.nanoTime()}.tmp")
+    private fun runOne(context: Context, type: BackupType, treeUri: Uri, runAt: Long): TypeResult {
+        val staged = File(context.cacheDir, "backup_stage_${type.key}_${runAt}_${System.nanoTime()}.tmp")
         var stage = BackupStage.READ_SOURCE
         try {
             // ---- snapshot to internal staging (SOURCE stage) ----
+            // An expected source that does not exist is NOT silently skipped
+            // (that would leave a stale status row misrepresenting this run):
+            // it is a SOURCE failure so the row updates to a failed state.
             val produced = snapshot(context, type, staged)
-            if (!produced) {
-                // Nothing to back up (store absent / empty). Not a failure and
-                // not a success — leave this type's status untouched.
-                return TypeResult(type, success = false, category = null)
-            }
+            if (!produced) throw IllegalStateException("expected source for ${type.key} does not exist")
 
             // ---- verify the staged snapshot (still SOURCE) ----
             stage = BackupStage.VERIFY_STAGED
@@ -96,19 +100,19 @@ object RecoveryBackupManager {
 
             // ---- copy to the destination folder (DESTINATION stages) ----
             stage = BackupStage.WRITE_DESTINATION
-            val childUri = writeToTree(context, treeUri, destName(type, now), staged)
+            val childUri = writeToTree(context, treeUri, destName(type, runAt), staged)
 
             stage = BackupStage.VERIFY_DESTINATION
-            verifyDestination(context, childUri, staged.length())
+            verifyDestination(context, childUri, staged)
 
             // ---- rotate keep-5 (best-effort; never fails the backup) ----
             try { rotate(context, treeUri, type) } catch (_: Exception) { /* rotation is best-effort */ }
 
-            RecoveryBackupState.recordSuccess(context, type, now)
+            RecoveryBackupState.recordSuccess(context, type, runAt)
             return TypeResult(type, success = true, category = null)
         } catch (e: Exception) {
             val category = BackupFailureClassifier.classify(stage, e)
-            RecoveryBackupState.recordFailure(context, type, now, category)
+            RecoveryBackupState.recordFailure(context, type, runAt, category)
             MemoryLog.log(context, "RecoveryBackup", "error",
                 "Recovery backup of ${type.key} failed at $stage (${category.name}).")
             return TypeResult(type, success = false, category = category)
@@ -124,16 +128,14 @@ object RecoveryBackupManager {
     private fun snapshot(context: Context, type: BackupType, staged: File): Boolean {
         if (staged.exists()) staged.delete()
         return when (type) {
-            BackupType.MEMORY -> snapshotCipher(
-                context, MemoryStore.DATABASE_NAME,
-                DatabaseKeys.getOrCreate(context, DatabaseKeys.KEY_MEMORY, MemoryStore.isProvisioned(context)),
-                staged
-            )
-            BackupType.LOREBOOK -> snapshotCipher(
-                context, "lorebook.db",
-                LoreBookEncryption.obtainPassword(context, "lorebook.db"),
-                staged
-            )
+            // The key is fetched lazily (only after the source is confirmed to
+            // exist) so a backup attempt never mints a key for an absent store.
+            BackupType.MEMORY -> snapshotCipher(context, MemoryStore.DATABASE_NAME, staged) {
+                DatabaseKeys.getOrCreate(context, DatabaseKeys.KEY_MEMORY, databaseExists = true)
+            }
+            BackupType.LOREBOOK -> snapshotCipher(context, "lorebook.db", staged) {
+                LoreBookEncryption.obtainPassword(context, "lorebook.db")
+            }
             BackupType.USER_IMAGE -> snapshotUserImageCatalog(context, staged)
             BackupType.CHATS -> snapshotChats(context, staged)
         }
@@ -141,9 +143,10 @@ object RecoveryBackupManager {
 
     /** VACUUM INTO a staged encrypted copy, keyed like the source. A null/empty
      *  key means the store is locked or unmigrated — a real SOURCE failure. */
-    private fun snapshotCipher(context: Context, dbName: String, key: ByteArray?, staged: File): Boolean {
+    private fun snapshotCipher(context: Context, dbName: String, staged: File, keyProvider: () -> ByteArray?): Boolean {
         val src = context.getDatabasePath(dbName)
         if (!src.exists()) return false
+        val key = keyProvider()
         if (key == null || key.isEmpty()) throw IllegalStateException("$dbName key unavailable")
         LoreBookEncryption.loadLibrary() // idempotent; the SQLCipher .so may not be loaded yet
         val db = CipherDatabase.openDatabase(src.path, key, null, CipherDatabase.OPEN_READONLY, null, null)
@@ -206,6 +209,13 @@ object RecoveryBackupManager {
                 // Chat storage is locked/unreadable: pause ONLY this artifact.
                 throw IllegalStateException("chat storage unavailable")
             }
+            if (!manifest.complete) {
+                // One or more individual chats are unavailable (Round-4 locked).
+                // A PARTIAL chat set must never be written or recorded as a
+                // normal success (owner rule): fail this artifact so the row
+                // shows a failed state, and write no partial archive.
+                throw IllegalStateException("chat set incomplete: one or more chats unavailable")
+            }
             val files = LinkedHashMap<String, File>() // archive entry name -> source file
             addEncFile(sharedPrefsDir, CHAT_LIST_FILE, files)
             for (entry in manifest.chats) {
@@ -260,7 +270,46 @@ object RecoveryBackupManager {
                 staged, LoreBookEncryption.obtainPassword(context, "lorebook.db")
             )
             BackupType.USER_IMAGE -> integrityCheckPlain(staged)
-            BackupType.CHATS -> { /* ZIP entries + manifest were written and hashed above */ }
+            BackupType.CHATS -> verifyStagedChats(staged)
+        }
+    }
+
+    /**
+     * Reopen the staged chats ZIP and validate it fully BEFORE it is copied to
+     * the destination: the manifest parses, the completeness flag is true, every
+     * file the manifest lists is present, its bytes re-hash to the recorded
+     * SHA-256, and there are no unexpected data entries. A readable ZIP alone is
+     * not accepted as proof.
+     */
+    private fun verifyStagedChats(staged: File) {
+        ZipFile(staged).use { zip ->
+            val manifestEntry = zip.getEntry("manifest.json")
+                ?: throw IllegalStateException("chats archive missing manifest")
+            val manifestText = zip.getInputStream(manifestEntry).use { it.readBytes().toString(Charsets.UTF_8) }
+            val meta = JSONObject(manifestText)
+            if (!meta.optBoolean("complete", false)) throw IllegalStateException("chats archive marked incomplete")
+            val fileHashes = meta.getJSONObject("file_hashes")
+
+            val expected = HashSet<String>()
+            val names = fileHashes.keys()
+            while (names.hasNext()) {
+                val name = names.next()
+                expected.add(name)
+                val entry = zip.getEntry(name)
+                    ?: throw IllegalStateException("chats archive missing expected file $name")
+                val bytes = zip.getInputStream(entry).use { it.readBytes() }
+                if (sha256(bytes) != fileHashes.getString(name)) {
+                    throw IllegalStateException("chats archive hash mismatch for $name")
+                }
+            }
+            // No unexpected data entries (manifest.json aside).
+            val entries = zip.entries()
+            while (entries.hasMoreElements()) {
+                val e = entries.nextElement()
+                if (e.name != "manifest.json" && e.name !in expected) {
+                    throw IllegalStateException("chats archive has an unexpected entry: ${e.name}")
+                }
+            }
         }
     }
 
@@ -306,13 +355,17 @@ object RecoveryBackupManager {
         return child
     }
 
-    private fun verifyDestination(context: Context, childUri: Uri, expectedLength: Long) {
+    /** Reopen the finalized destination file and confirm its SHA-256 matches the
+     *  staged file byte-for-byte (not just size). A mismatch deletes the bad
+     *  destination copy — the last-known-good copies are untouched. */
+    private fun verifyDestination(context: Context, childUri: Uri, staged: File) {
         val resolver = context.contentResolver
-        val actual = resolver.openInputStream(childUri)?.use { it.readBytes().size.toLong() }
+        val expected = sha256(staged)
+        val actual = resolver.openInputStream(childUri)?.use { sha256(it) }
             ?: throw IllegalStateException("could not reopen destination for verification")
-        if (actual != expectedLength) {
+        if (actual != expected) {
             try { DocumentsContract.deleteDocument(resolver, childUri) } catch (_: Exception) { }
-            throw IllegalStateException("destination verification failed (size mismatch)")
+            throw IllegalStateException("destination verification failed (hash mismatch)")
         }
     }
 
@@ -356,4 +409,19 @@ object RecoveryBackupManager {
 
     private fun sha256(bytes: ByteArray): String =
         MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+
+    /** Streaming SHA-256 of a whole file (databases can be several MB, so this
+     *  never loads the file into memory). */
+    private fun sha256(file: File): String = file.inputStream().use { sha256(it) }
+
+    private fun sha256(stream: InputStream): String {
+        val md = MessageDigest.getInstance("SHA-256")
+        val buf = ByteArray(8192)
+        while (true) {
+            val n = stream.read(buf)
+            if (n < 0) break
+            md.update(buf, 0, n)
+        }
+        return md.digest().joinToString("") { "%02x".format(it) }
+    }
 }
