@@ -276,7 +276,8 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         creating = getString(R.string.backup_state_creating),
         backedUp = getString(R.string.backup_state_backed_up),
         failedWithLastGood = getString(R.string.backup_state_failed_last_good),
-        failedNoLastGood = getString(R.string.backup_state_failed_none)
+        failedNoLastGood = getString(R.string.backup_state_failed_none),
+        nothingToBackUp = getString(R.string.backup_state_nothing)
     )
 
     private fun refreshBackupStatus() {
@@ -286,8 +287,10 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
             for (type in BackupType.displayOrder) {
                 val lastSuccess = RecoveryBackupState.getLastSuccess(this, type)
                 val failed = RecoveryBackupState.getConsecutiveFailures(this, type) > 0
+                val nothing = RecoveryBackupState.isNothingToBackUp(this, type)
                 lines[type] = BackupStatusFormatter.statusLine(
-                    typeLabel(type), inProgress = false, lastSuccessMillis = lastSuccess, lastFailed = failed, templates = templates
+                    typeLabel(type), inProgress = false, nothingToBackUp = nothing,
+                    lastSuccessMillis = lastSuccess, lastFailed = failed, templates = templates
                 )
             }
             runOnUiThread {

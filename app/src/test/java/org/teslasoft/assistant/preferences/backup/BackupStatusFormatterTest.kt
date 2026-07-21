@@ -33,7 +33,8 @@ class BackupStatusFormatterTest {
         creating = "Creating backup…",
         backedUp = "Backed up %1\$s",
         failedWithLastGood = "Backup failed. Last good backup: %1\$s",
-        failedNoLastGood = "Backup failed. No successful backup yet."
+        failedNoLastGood = "Backup failed. No successful backup yet.",
+        nothingToBackUp = "Nothing to Back Up"
     )
 
     private val utc = ZoneOffset.UTC
@@ -45,7 +46,7 @@ class BackupStatusFormatterTest {
     fun neverBackedUp() {
         assertEquals(
             "Memory: Never backed up",
-            BackupStatusFormatter.statusLine("Memory", inProgress = false, lastSuccessMillis = 0L, lastFailed = false, templates = templates, zone = utc)
+            BackupStatusFormatter.statusLine("Memory", inProgress = false, nothingToBackUp = false, lastSuccessMillis = 0L, lastFailed = false, templates = templates, zone = utc)
         )
     }
 
@@ -53,7 +54,7 @@ class BackupStatusFormatterTest {
     fun creatingInProgress() {
         assertEquals(
             "Memory: Creating backup…",
-            BackupStatusFormatter.statusLine("Memory", inProgress = true, lastSuccessMillis = 0L, lastFailed = false, templates = templates, zone = utc)
+            BackupStatusFormatter.statusLine("Memory", inProgress = true, nothingToBackUp = false, lastSuccessMillis = 0L, lastFailed = false, templates = templates, zone = utc)
         )
     }
 
@@ -61,7 +62,7 @@ class BackupStatusFormatterTest {
     fun backedUpShowsAtNotComma() {
         assertEquals(
             "Memory: Backed up July 20, 2026 at 2:30 PM",
-            BackupStatusFormatter.statusLine("Memory", inProgress = false, lastSuccessMillis = millis(2026, 7, 20, 14, 30), lastFailed = false, templates = templates, zone = utc)
+            BackupStatusFormatter.statusLine("Memory", inProgress = false, nothingToBackUp = false, lastSuccessMillis = millis(2026, 7, 20, 14, 30), lastFailed = false, templates = templates, zone = utc)
         )
     }
 
@@ -69,7 +70,7 @@ class BackupStatusFormatterTest {
     fun failedShowsLastGoodBackup() {
         assertEquals(
             "Memory: Backup failed. Last good backup: July 19, 2026 at 2:30 PM",
-            BackupStatusFormatter.statusLine("Memory", inProgress = false, lastSuccessMillis = millis(2026, 7, 19, 14, 30), lastFailed = true, templates = templates, zone = utc)
+            BackupStatusFormatter.statusLine("Memory", inProgress = false, nothingToBackUp = false, lastSuccessMillis = millis(2026, 7, 19, 14, 30), lastFailed = true, templates = templates, zone = utc)
         )
     }
 
@@ -79,7 +80,7 @@ class BackupStatusFormatterTest {
         // backup — no date to show.
         assertEquals(
             "Memory: Backup failed. No successful backup yet.",
-            BackupStatusFormatter.statusLine("Memory", inProgress = false, lastSuccessMillis = 0L, lastFailed = true, templates = templates, zone = utc)
+            BackupStatusFormatter.statusLine("Memory", inProgress = false, nothingToBackUp = false, lastSuccessMillis = 0L, lastFailed = true, templates = templates, zone = utc)
         )
     }
 
@@ -87,7 +88,18 @@ class BackupStatusFormatterTest {
     fun inProgressWinsOverAPriorFailure() {
         assertEquals(
             "Chats: Creating backup…",
-            BackupStatusFormatter.statusLine("Chats", inProgress = true, lastSuccessMillis = millis(2026, 7, 19, 14, 30), lastFailed = true, templates = templates, zone = utc)
+            BackupStatusFormatter.statusLine("Chats", inProgress = true, nothingToBackUp = false, lastSuccessMillis = millis(2026, 7, 19, 14, 30), lastFailed = true, templates = templates, zone = utc)
+        )
+    }
+
+    @Test
+    fun nothingToBackUpIsNeutralAndWinsOverStalePriorState() {
+        // Owner ruling (July 21 2026): a store that never existed is a neutral
+        // state, not a failure, and reflects the current run over any stale
+        // prior success or failure.
+        assertEquals(
+            "Memory: Nothing to Back Up",
+            BackupStatusFormatter.statusLine("Memory", inProgress = false, nothingToBackUp = true, lastSuccessMillis = millis(2026, 7, 19, 14, 30), lastFailed = true, templates = templates, zone = utc)
         )
     }
 
@@ -100,7 +112,7 @@ class BackupStatusFormatterTest {
     fun eachTypeLabelPrefixesItsLine() {
         assertEquals(
             "User Image Database: Never backed up",
-            BackupStatusFormatter.statusLine("User Image Database", inProgress = false, lastSuccessMillis = 0L, lastFailed = false, templates = templates, zone = utc)
+            BackupStatusFormatter.statusLine("User Image Database", inProgress = false, nothingToBackUp = false, lastSuccessMillis = 0L, lastFailed = false, templates = templates, zone = utc)
         )
     }
 }

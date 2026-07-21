@@ -88,11 +88,15 @@ object RecoveryBackupManager {
         var stage = BackupStage.READ_SOURCE
         try {
             // ---- snapshot to internal staging (SOURCE stage) ----
-            // An expected source that does not exist is NOT silently skipped
-            // (that would leave a stale status row misrepresenting this run):
-            // it is a SOURCE failure so the row updates to a failed state.
+            // A source that does not exist because the feature has never been
+            // used is NOT silently skipped (that would leave a stale status row)
+            // and is NOT a failure (owner ruling, July 21 2026): it records the
+            // NEUTRAL "Nothing to Back Up" state for this run.
             val produced = snapshot(context, type, staged)
-            if (!produced) throw IllegalStateException("expected source for ${type.key} does not exist")
+            if (!produced) {
+                RecoveryBackupState.recordNothingToBackUp(context, type, runAt)
+                return TypeResult(type, success = false, category = null)
+            }
 
             // ---- verify the staged snapshot (still SOURCE) ----
             stage = BackupStage.VERIFY_STAGED

@@ -1374,6 +1374,7 @@
     <string name="backup_state_backed_up">Backed Up %1$s</string>
     <string name="backup_state_failed_last_good">Backup Failed. Last Good Backup: %1$s</string>
     <string name="backup_state_failed_none">Backup Failed. No Successful Backup Yet.</string>
+    <string name="backup_state_nothing">Nothing to Back Up</string>
     <!-- 3. Create Backup (manual recovery backup) -->
     <string name="backup_create_section">Create Backup</string>
     <string name="backup_create_hint">Creates a recovery backup of your chats, memories, lorebooks, and user image data.</string>

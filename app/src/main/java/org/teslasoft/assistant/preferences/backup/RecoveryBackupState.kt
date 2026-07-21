@@ -65,6 +65,7 @@ object RecoveryBackupState {
     private fun lastAttemptKey(type: BackupType) = "backup.${type.key}.last_attempt"
     private fun consecFailuresKey(type: BackupType) = "backup.${type.key}.consec_failures"
     private fun lastCategoryKey(type: BackupType) = "backup.${type.key}.last_category"
+    private fun nothingToBackUpKey(type: BackupType) = "backup.${type.key}.nothing"
 
     // ----- enabled -----------------------------------------------------------
 
@@ -121,8 +122,13 @@ object RecoveryBackupState {
     fun getLastFailureCategory(context: Context, type: BackupType): BackupFailureCategory? =
         try { BackupFailureCategory.fromKey(prefs(context).getString(lastCategoryKey(type), null)) } catch (_: Exception) { null }
 
+    /** True when the last run found the store did not exist because the feature
+     *  has never been used — a NEUTRAL state, not a failure (owner ruling). */
+    fun isNothingToBackUp(context: Context, type: BackupType): Boolean =
+        try { prefs(context).getBoolean(nothingToBackUpKey(type), false) } catch (_: Exception) { false }
+
     /** Record a successful backup: stamp success + attempt, clear the failure
-     *  streak and the last-failure category. */
+     *  streak, the last-failure category, and the nothing-to-back-up flag. */
     fun recordSuccess(context: Context, type: BackupType, atMillis: Long) {
         try {
             prefs(context).edit(commit = true) {
@@ -130,6 +136,7 @@ object RecoveryBackupState {
                 putLong(lastAttemptKey(type), atMillis)
                 putInt(consecFailuresKey(type), 0)
                 remove(lastCategoryKey(type))
+                remove(nothingToBackUpKey(type))
             }
         } catch (_: Exception) { }
     }
@@ -146,6 +153,23 @@ object RecoveryBackupState {
                 putLong(lastAttemptKey(type), atMillis)
                 putInt(consecFailuresKey(type), streak + 1)
                 putString(lastCategoryKey(type), category.name)
+                remove(nothingToBackUpKey(type))
+            }
+        } catch (_: Exception) { }
+    }
+
+    /** Record that there was nothing to back up for [type] this run (the store
+     *  does not exist because the feature has never been used). Neutral: not a
+     *  success and not a failure — clears the failure streak/category and leaves
+     *  the last-success stamp untouched, so the row shows the neutral state for
+     *  the current run instead of a stale value. */
+    fun recordNothingToBackUp(context: Context, type: BackupType, atMillis: Long) {
+        try {
+            prefs(context).edit(commit = true) {
+                putLong(lastAttemptKey(type), atMillis)
+                putInt(consecFailuresKey(type), 0)
+                remove(lastCategoryKey(type))
+                putBoolean(nothingToBackUpKey(type), true)
             }
         } catch (_: Exception) { }
     }

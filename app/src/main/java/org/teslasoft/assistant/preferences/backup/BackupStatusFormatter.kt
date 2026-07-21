@@ -58,13 +58,18 @@ object BackupStatusFormatter {
         val creating: String,
         val backedUp: String,
         val failedWithLastGood: String,
-        val failedNoLastGood: String
+        val failedNoLastGood: String,
+        val nothingToBackUp: String
     )
 
     /**
      * @param typeLabel the row name (Memory / Lorebooks / Chats / User Image
      *        Database).
      * @param inProgress a backup for this type is running right now.
+     * @param nothingToBackUp the store does not exist because the feature has
+     *        never been used — a NEUTRAL state (owner ruling, July 21 2026),
+     *        not a failure. Reflects the current run, so it wins over any stale
+     *        prior success/failure.
      * @param lastSuccessMillis last successful backup epoch millis, or <= 0 when
      *        the type has never been backed up.
      * @param lastFailed the most recent attempt for this type failed.
@@ -72,6 +77,7 @@ object BackupStatusFormatter {
     fun statusLine(
         typeLabel: String,
         inProgress: Boolean,
+        nothingToBackUp: Boolean,
         lastSuccessMillis: Long,
         lastFailed: Boolean,
         templates: Templates,
@@ -79,6 +85,7 @@ object BackupStatusFormatter {
     ): String {
         val body = when {
             inProgress -> templates.creating
+            nothingToBackUp -> templates.nothingToBackUp
             lastFailed && lastSuccessMillis > 0L ->
                 templates.failedWithLastGood.format(formatDateTime(lastSuccessMillis, zone))
             lastFailed -> templates.failedNoLastGood
