@@ -71,6 +71,7 @@ import androidx.core.net.toUri
 import org.teslasoft.assistant.util.WindowInsetsUtil
 import java.util.EnumSet
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import androidx.core.content.edit
 
@@ -103,19 +104,22 @@ class ChatsListFragment : Fragment(), ChatListAdapter.OnInteractionListener {
 
     private var mContext: Context? = null
 
-    // Opening each encrypted chat to compute first_message can wait on
-    // Keystore and parse a large history. Keep those loads ordered and off the
-    // UI thread; the generation drops stale results when refreshes overlap.
+    // The compact chat-list metadata is loaded on one worker. Individual row
+    // previews are loaded lazily by ChatListAdapter instead of opening every
+    // encrypted history during startup.
     private val chatListLoader = Executors.newSingleThreadExecutor { task ->
         Thread(task, "chat-list-loader")
     }
     private val chatListLoadGeneration = AtomicInteger(0)
+    private val initialLoadInFlight = AtomicBoolean(false)
+    private val initialLoadCompleted = AtomicBoolean(false)
 
     private val appearanceFlags: HashMap<String, Boolean> = hashMapOf(
         "debug_mode" to false,
         "amoled_pitch_black" to false,
         "hide_model_names" to false,
-        "monochrome_background_for_chat_list" to false
+        "monochrome_background_for_chat_list" to false,
+        "show_memory_status_on_chat_list" to true
     )
 
     private var chatListUpdatedListener: AddChatDialogFragment.StateChangesListener = object : AddChatDialogFragment.StateChangesListener {
@@ -189,6 +193,7 @@ class ChatsListFragment : Fragment(), ChatListAdapter.OnInteractionListener {
         isDestroyed = true
         chatListLoadGeneration.incrementAndGet()
         chatListLoader.shutdownNow()
+        adapter?.dispose()
         mContext = null
         super.onDestroy()
     }
@@ -230,7 +235,7 @@ class ChatsListFragment : Fragment(), ChatListAdapter.OnInteractionListener {
             (mContext as Activity?)?.runOnUiThread {
                 initUI(view)
                 initLogics()
-                initSettings()
+                initSettings(initialLoad = true)
                 // preInit()
             }
         }.start()
@@ -388,7 +393,12 @@ class ChatsListFragment : Fragment(), ChatListAdapter.OnInteractionListener {
         bulkSelect = false
         bulkSelectContainer?.visibility = View.GONE
         fieldSearch?.isEnabled = true
-        adapter = ChatListAdapter(chats, selectionProjection, this)
+        adapter = ChatListAdapter(
+            chats,
+            selectionProjection,
+            this,
+            preferences?.getShowMemoryStatusOnChatList() ?: true
+        )
         adapter?.setOnInteractionListener(this)
         chatsList?.adapter = adapter
         adapter?.notifyDataSetChanged()
@@ -454,7 +464,12 @@ class ChatsListFragment : Fragment(), ChatListAdapter.OnInteractionListener {
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                 searchTerm = s.toString().trim()
                 if (s.toString().lowercase().trim() == "") {
-                    adapter = ChatListAdapter(chats, selectionProjection, this@ChatsListFragment)
+                    adapter = ChatListAdapter(
+                        chats,
+                        selectionProjection,
+                        this@ChatsListFragment,
+                        preferences?.getShowMemoryStatusOnChatList() ?: true
+                    )
                     adapter?.setOnInteractionListener(this@ChatsListFragment)
                     chatsList?.adapter = adapter
                     adapter?.notifyDataSetChanged()
@@ -467,7 +482,12 @@ class ChatsListFragment : Fragment(), ChatListAdapter.OnInteractionListener {
                         }
                     }
 
-                    adapter = ChatListAdapter(filtered, selectionProjection, this@ChatsListFragment)
+                    adapter = ChatListAdapter(
+                        filtered,
+                        selectionProjection,
+                        this@ChatsListFragment,
+                        preferences?.getShowMemoryStatusOnChatList() ?: true
+                    )
                     adapter?.setOnInteractionListener(this@ChatsListFragment)
                     chatsList?.adapter = adapter
                     adapter?.notifyDataSetChanged()
@@ -545,46 +565,40 @@ class ChatsListFragment : Fragment(), ChatListAdapter.OnInteractionListener {
     private fun initSettings(
         action: String = "",
         position: Int = -1,
-        onlyIfChanged: Boolean = false
+        onlyIfChanged: Boolean = false,
+        initialLoad: Boolean = false
     ) {
         val context = mContext?.applicationContext ?: return
         val host = mContext as? Activity ?: return
+        if (initialLoad && !initialLoadInFlight.compareAndSet(false, true)) return
         val generation = chatListLoadGeneration.incrementAndGet()
-        val showMetadataFirst = action.isEmpty() && chats.isEmpty()
 
         chatListLoader.execute {
             val loadedPreferences = Preferences.getPreferences(context, "")
-
-            // Do not make the first visible list wait for every full chat
-            // history to decrypt just to obtain its preview line. The compact
-            // list already contains everything needed for ordering/navigation.
-            if (showMetadataFirst) {
-                val metadataChats = ChatPreferences.getChatPreferences()
-                    .getChatListResult(context, includeFirstMessage = false).chats
-
-                host.runOnUiThread {
-                    if (generation != chatListLoadGeneration.get() ||
-                        isDestroyed || !isAttached || host.isFinishing || host.isDestroyed
-                    ) return@runOnUiThread
-
-                    applySettings(metadataChats, loadedPreferences, action, position)
-                }
-            }
-
-            // Fill in the first-message previews after the usable list is on
-            // screen. This remains serialized with the metadata read.
-            val loadedChats = ChatPreferences.getChatPreferences().getChatList(context)
+            val loadedChats = ChatPreferences.getChatPreferences()
+                .getChatListResult(context, includeFirstMessage = false).chats
 
             host.runOnUiThread {
                 if (generation != chatListLoadGeneration.get() ||
                     isDestroyed || !isAttached || host.isFinishing || host.isDestroyed
-                ) return@runOnUiThread
+                ) {
+                    if (initialLoad) initialLoadInFlight.set(false)
+                    return@runOnUiThread
+                }
 
                 if (onlyIfChanged && sameDisplayedChats(loadedChats, chats)) {
+                    if (initialLoad) {
+                        initialLoadCompleted.set(true)
+                        initialLoadInFlight.set(false)
+                    }
                     return@runOnUiThread
                 }
 
                 applySettings(loadedChats, loadedPreferences, action, position)
+                if (initialLoad) {
+                    initialLoadCompleted.set(true)
+                    initialLoadInFlight.set(false)
+                }
             }
         }
     }
@@ -602,8 +616,8 @@ class ChatsListFragment : Fragment(), ChatListAdapter.OnInteractionListener {
 
         for (i in sortedFirst.indices) {
             if (sortedFirst[i]["name"] != second[i]["name"] ||
-                sortedFirst[i]["first_message"] != second[i]["first_message"] ||
-                sortedFirst[i]["timestamp"] != second[i]["timestamp"]
+                sortedFirst[i]["timestamp"] != second[i]["timestamp"] ||
+                sortedFirst[i]["pinned"] != second[i]["pinned"]
             ) return false
         }
         return true
@@ -622,6 +636,7 @@ class ChatsListFragment : Fragment(), ChatListAdapter.OnInteractionListener {
         appearanceFlags["amoled_pitch_black"] = preferences!!.getAmoledPitchBlack()
         appearanceFlags["hide_model_names"] = preferences!!.getHideModelNames()
         appearanceFlags["monochrome_background_for_chat_list"] = preferences!!.getMonochromeBackgroundForChatList()
+        appearanceFlags["show_memory_status_on_chat_list"] = preferences!!.getShowMemoryStatusOnChatList()
 
         // R8 went fuck himself...
         if (chats == null) chats = arrayListOf()
@@ -713,18 +728,26 @@ class ChatsListFragment : Fragment(), ChatListAdapter.OnInteractionListener {
         // Nothing interesting, you may ignore this...
         if (chats == null) chats = arrayListOf()
         if (selectionProjection == null) selectionProjection = arrayListOf()
-        if (!chats.isNullOrEmpty()) {
-            initSettings(onlyIfChanged = true)
-        }
-
+        val suppressInitialRefresh = initialLoadInFlight.get() || !initialLoadCompleted.get()
         preferences = Preferences.getPreferences(mContext ?: return, "")
-
-        if (
+        val showMemoryStatus = preferences!!.getShowMemoryStatusOnChatList()
+        val memoryStatusSettingChanged =
+            appearanceFlags["show_memory_status_on_chat_list"] != showMemoryStatus
+        val adapterRebuildRequired =
             appearanceFlags["debug_mode"] != preferences!!.getDebugMode() ||
             appearanceFlags["amoled_pitch_black"] != preferences!!.getAmoledPitchBlack() ||
             appearanceFlags["hide_model_names"] != preferences!!.getHideModelNames() ||
-            appearanceFlags["monochrome_background_for_chat_list"] != preferences!!.getMonochromeBackgroundForChatList()) {
-            initSettings()
+            appearanceFlags["monochrome_background_for_chat_list"] != preferences!!.getMonochromeBackgroundForChatList()
+
+        if (!suppressInitialRefresh) {
+            when {
+                adapterRebuildRequired -> initSettings()
+                memoryStatusSettingChanged -> {
+                    appearanceFlags["show_memory_status_on_chat_list"] = showMemoryStatus
+                    adapter?.setShowMemoryStatus(showMemoryStatus)
+                }
+                !chats.isNullOrEmpty() -> initSettings(onlyIfChanged = true)
+            }
         }
     }
 

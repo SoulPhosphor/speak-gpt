@@ -161,6 +161,36 @@
                 android:textColor="@color/text_subtitle"
                 android:textSize="13sp" />
 
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingTop="16dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/memory_controls_chat_list_status"
+                    android:textColor="@color/text"
+                    android:textSize="16sp" />
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_chat_list_memory_status"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="12dp" />
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="8dp"
+                android:text="@string/memory_controls_chat_list_status_hint"
+                android:textColor="@color/text_subtitle"
+                android:textSize="13sp" />
+
             <!-- ============ Memory Assistant ============ -->
             <TextView
                 android:layout_width="match_parent"

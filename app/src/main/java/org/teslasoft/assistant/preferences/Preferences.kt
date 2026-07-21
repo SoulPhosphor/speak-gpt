@@ -1491,6 +1491,18 @@ class Preferences private constructor(private var preferences: SharedPreferences
     }
 
     /**
+     * Display-only preference for the review/archive status line beneath chat
+     * rows. It does not enable, disable, or modify any memory processing.
+     */
+    fun getShowMemoryStatusOnChatList(): Boolean {
+        return getGlobalBoolean("show_memory_status_on_chat_list", true)
+    }
+
+    fun setShowMemoryStatusOnChatList(enabled: Boolean) {
+        putGlobalBoolean("show_memory_status_on_chat_list", enabled, true)
+    }
+
+    /**
      * Lore books per-chat switch (Quick Settings). Same tri-state pattern
      * and the same authority rule as [getChatMemoryEnabled]: Quick Settings
      * is God (owner ruling, July 10 2026) — an explicit per-chat value wins

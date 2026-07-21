@@ -1302,6 +1302,8 @@
     <string name="memory_controls_use_in_new_chats_hint">Turn memory on by default for new chats. You can still change this per chat.</string>
     <string name="memory_controls_companion_roleplay">Allow Companion Memories in Roleplay</string>
     <string name="memory_controls_companion_roleplay_hint">Let the active companion\'s approved memories be eligible during roleplay. Off keeps companion memories out of roleplay unless another rule allows them.</string>
+    <string name="memory_controls_chat_list_status">Show Memory Status on Chat List</string>
+    <string name="memory_controls_chat_list_status_hint">Show whether each chat is waiting for memory review, partially archived, archived, or excluded. This does not show backup status.</string>
     <string name="memory_controls_section_assistant">Memory Assistant</string>
     <string name="memory_controls_row_assistant">Memory Assistant</string>
     <string name="memory_controls_row_assistant_hint">Find possible memories in finished conversations, then review them in Pending before saving.</string>
