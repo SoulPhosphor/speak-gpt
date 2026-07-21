@@ -300,6 +300,37 @@ class MemorySeedCodecTest {
     }
 
     @Test
+    fun userPersonaShortDescriptionRoundTrip() {
+        // v16 (Profile Images phase 8): a My Persona's short_description is the
+        // list-row subtitle. It must survive backup/restore, and older backups
+        // that predate the column must import it as null.
+        val withDesc = """
+            {
+              "schema_version": "1.11.0",
+              "companions": [], "entities": [], "memories": [], "modes": [],
+              "directives": [], "worlds": [], "proposals": [],
+              "roleplay_characters": [],
+              "user_personas": [
+                { "persona_id": "up-1", "name": "Explorer", "presentation": "curious",
+                  "status": "active", "short_description": "Weekend hiking me",
+                  "created_at": "2026-07-19T00:00:00Z" },
+                { "persona_id": "up-2", "name": "Formal", "presentation": "poised",
+                  "status": "active", "created_at": "2026-07-19T00:00:00Z" }
+              ]
+            }
+        """.trimIndent()
+
+        val data = MemorySeedCodec.parse(withDesc)
+        assertEquals("Weekend hiking me", data.userPersonas.first().shortDescription)
+        assertEquals(null, data.userPersonas[1].shortDescription)
+
+        val back = MemorySeedCodec.parse(MemorySeedCodec.serialize(data))
+        assertEquals(data, back)
+        assertEquals("Weekend hiking me", back.userPersonas.first().shortDescription)
+        assertEquals(null, back.userPersonas[1].shortDescription)
+    }
+
+    @Test
     fun modelRulesRoundTrip() {
         // Stage 4 (owner_approved_rules §11 Revision 5): model rules are user-
         // authored, so backups must carry the rules (with their own model-

@@ -98,7 +98,10 @@ data class UserPersonaRecord(
     val createdAt: String?,
     // Profile Images (DB v15): bare hash of the assigned image, or null for
     // none. The catalog/files live in profile_images.db; this only references.
-    val imageRef: String? = null
+    val imageRef: String? = null,
+    // v16: the user-authored one-liner shown as the My Personas list-row
+    // subtitle. null/blank means the row shows no subtitle.
+    val shortDescription: String? = null
 )
 
 data class RoleplayCharacterRecord(

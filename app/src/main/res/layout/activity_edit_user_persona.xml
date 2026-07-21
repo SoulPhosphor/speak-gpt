@@ -19,10 +19,10 @@
 <!--
   Full-screen My Personas editor (owner ruling, July 20 2026: the old
   EditUserPersonaDialogFragment pop-up became a full screen, matching Edit
-  Companion's header/dialogs/field styling). Deliberately no picture at the
-  top yet (unlike Edit Companion) - but label_persona_name keeps the exact
-  same top offset (24dp + 96dp + 18dp = 138dp) a companion picture would
-  occupy, so a future persona picture slots in without a relayout.
+  Companion's header/dialogs/field styling). The persona picture at the top
+  (Profile Images phase 8, July 21 2026) uses the SAME geometry as Edit
+  Companion's - 96dp, 24dp down, first field 18dp below - so the two screens'
+  tops read identically; the earlier 138dp empty reservation is gone.
 -->
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -88,6 +88,25 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content">
 
+            <!-- Tappable persona picture - identical geometry to Edit Companion's
+                 (activity_edit_persona.xml): 96dp, 24dp down from the top, then
+                 the first field 18dp below it. The picture itself is the control
+                 (tap to pick another); no android:background, because the shared
+                 ProfileImageBinder resets the ImageView background every bind, so
+                 a ripple set here would be dead. Its content description is set
+                 in code (name-based, owner-approved a11y scheme). -->
+            <ImageView
+                android:id="@+id/img_persona_avatar"
+                android:layout_width="96dp"
+                android:layout_height="96dp"
+                android:layout_marginTop="24dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:scaleType="centerCrop"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent" />
+
             <!-- Persona name. No hint line - matches Companion Name's
                  pre-conversion look (no hint was ever approved for it either). -->
             <TextView
@@ -95,12 +114,12 @@
                 style="@style/Widget.App.Field.Label"
                 android:layout_width="0dp"
                 android:layout_marginStart="24dp"
-                android:layout_marginTop="138dp"
+                android:layout_marginTop="18dp"
                 android:layout_marginEnd="24dp"
                 android:text="@string/mem_pers_field_name_label"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toTopOf="parent" />
+                app:layout_constraintTop_toBottomOf="@+id/img_persona_avatar" />
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/field_persona_name"

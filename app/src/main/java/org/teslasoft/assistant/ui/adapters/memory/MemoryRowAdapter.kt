@@ -60,7 +60,11 @@ data class MemoryRow(
     val outlined: Boolean = false,
     /** Persistent inline note (owner design, July 9 2026): e.g. "Needs
      *  roleplay target." on an untargeted roleplay draft. */
-    val noteLine: String? = null
+    val noteLine: String? = null,
+    /** Profile Images (phase 8): the identity's assigned image hash, or null.
+     *  Only the profile-image row adapter (My Personas / Roleplay Characters)
+     *  reads it; the default MemoryRowAdapter ignores it. */
+    val imageRef: String? = null
 )
 
 class MemoryRowAdapter(

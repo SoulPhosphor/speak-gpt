@@ -25,10 +25,13 @@ import android.os.Bundle
 import android.view.View
 import android.view.WindowInsets
 import android.widget.ImageButton
+import android.widget.ImageView
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.activity.addCallback
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.constraintlayout.widget.ConstraintLayout
+import androidx.core.content.ContextCompat
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
 import androidx.core.widget.doAfterTextChanged
@@ -40,9 +43,13 @@ import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.snackbar.Snackbar
 import com.google.android.material.textfield.TextInputEditText
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.theme.ThemeManager
+import org.teslasoft.assistant.ui.activities.ProfileImagesActivity
 import org.teslasoft.assistant.ui.util.DiscardChangesDialog
+import org.teslasoft.assistant.util.ProfileImageBinder
+import org.teslasoft.assistant.util.ProfileImageResolver
 
 /**
  * Full-screen My Personas editor (owner ruling, July 20 2026 - replaces the
@@ -50,15 +57,15 @@ import org.teslasoft.assistant.ui.util.DiscardChangesDialog
  * (Widget.App.ActionBar) titled "Edit Persona" / "Persona Creation", mirroring
  * Edit Companion's chrome, field styles and dialog shapes exactly (see
  * EditPersonaActivity) with the category noun swapped where the wording is
- * companion-specific. No picture at the top yet - see the layout's own doc
- * comment for why the spacing is kept as if there were one.
+ * companion-specific. The persona picture at the top uses the same geometry
+ * as Edit Companion's (Profile Images phase 8); an unassigned persona shows
+ * the Default Personal Avatar (user-side cascade), then the generic person
+ * icon only if no Personal Default is set.
  *
  * It owns no persistence: it validates and returns the result (save or
  * delete) to the caller ([MemoryUserPersonasActivity]), which does the store
- * work exactly as its old dialog listener did.
- *
- * The Short Description field is visual only for now (not read from or
- * written to the store) - it has no backing column yet.
+ * work exactly as its old dialog listener did. Both the Short Description
+ * (v16 short_description column) and the picture (imageRef) ride the result.
  */
 class EditUserPersonaActivity : FragmentActivity() {
 
@@ -66,6 +73,8 @@ class EditUserPersonaActivity : FragmentActivity() {
         const val EXTRA_PERSONA_ID = "personaId"
         const val EXTRA_NAME = "name"
         const val EXTRA_PRESENTATION = "presentation"
+        const val EXTRA_SHORT_DESCRIPTION = "shortDescription"
+        const val EXTRA_IMAGE_REF = "imageRef"
 
         /** RESULT_OK carries one of [ACTION_SAVE] / [ACTION_DELETE]. */
         const val EXTRA_RESULT_ACTION = "result_action"
@@ -73,17 +82,30 @@ class EditUserPersonaActivity : FragmentActivity() {
         const val ACTION_DELETE = "delete"
         const val EXTRA_RESULT_NAME = "result_name"
         const val EXTRA_RESULT_PRESENTATION = "result_presentation"
+        const val EXTRA_RESULT_SHORT_DESCRIPTION = "result_short_description"
+        const val EXTRA_RESULT_IMAGE_REF = "result_image_ref"
 
-        /** The My Personas list row (view_memory_row.xml) caps its subtitle
-         *  at this many lines, with no character maximum to match instead. */
+        /** The My Personas list row caps its subtitle at this many lines, with
+         *  no character maximum to match instead. */
         private const val SHORT_DESCRIPTION_MAX_LINES = 3
 
+        private const val STATE_IMAGE_REF = "state_image_ref"
+
         /** [personaId] empty = a new persona. */
-        fun createIntent(context: Context, personaId: String, name: String, presentation: String): Intent {
+        fun createIntent(
+            context: Context,
+            personaId: String,
+            name: String,
+            presentation: String,
+            shortDescription: String,
+            imageRef: String
+        ): Intent {
             return Intent(context, EditUserPersonaActivity::class.java)
                 .putExtra(EXTRA_PERSONA_ID, personaId)
                 .putExtra(EXTRA_NAME, name)
                 .putExtra(EXTRA_PRESENTATION, presentation)
+                .putExtra(EXTRA_SHORT_DESCRIPTION, shortDescription)
+                .putExtra(EXTRA_IMAGE_REF, imageRef)
         }
     }
 
@@ -93,6 +115,7 @@ class EditUserPersonaActivity : FragmentActivity() {
     private var btnSave: ImageButton? = null
     private var btnDelete: ImageButton? = null
 
+    private var imgPersonaAvatar: ImageView? = null
     private var fieldName: TextInputEditText? = null
     private var textNameError: TextView? = null
     private var fieldShortDescription: TextInputEditText? = null
@@ -103,15 +126,33 @@ class EditUserPersonaActivity : FragmentActivity() {
     private var personaId: String = ""
     private var shortDescriptionOverLimit = false
 
+    /** The persona's assigned Profile Image hash, held until Save. */
+    private var selectedImageRef: String = ""
+
     /** True once the initial field values are loaded, so the unsaved-changes
      *  check doesn't fire against a half-built screen. */
     private var ready = false
 
     /** Snapshot of the editable fields as first loaded, for the discard-
      *  changes confirmation on back-out (see DiscardChangesDialog). Includes
-     *  the not-yet-wired Short Description so typed-but-unsaved text there
-     *  isn't silently lost either. */
+     *  the Short Description and the picture so typed-but-unsaved changes
+     *  aren't silently lost either. */
     private var initialSnapshot: String = ""
+
+    // Registered as an activity field so a pending gallery result survives
+    // recreation (same lifecycle-safe pattern as the Companion editor). The
+    // gallery's companion-assignment mode is the generic "return a picked
+    // hash to the caller" flow - it writes no preference and shows no
+    // companion-specific wording - so it is reused here as-is.
+    private val pickPictureLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == RESULT_OK) {
+            val hash = result.data?.getStringExtra(ProfileImagesActivity.EXTRA_RESULT_ASSIGNED_HASH)
+            if (!hash.isNullOrEmpty()) {
+                selectedImageRef = hash
+                updateAvatarUi()
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -124,6 +165,7 @@ class EditUserPersonaActivity : FragmentActivity() {
         btnSave = findViewById(R.id.btn_save)
         btnDelete = findViewById(R.id.btn_delete)
 
+        imgPersonaAvatar = findViewById(R.id.img_persona_avatar)
         fieldName = findViewById(R.id.field_persona_name)
         textNameError = findViewById(R.id.text_persona_name_error)
         fieldShortDescription = findViewById(R.id.field_short_description)
@@ -139,9 +181,22 @@ class EditUserPersonaActivity : FragmentActivity() {
 
         fieldName?.setText(intent.getStringExtra(EXTRA_NAME))
         fieldPresentation?.setText(intent.getStringExtra(EXTRA_PRESENTATION))
+        fieldShortDescription?.setText(intent.getStringExtra(EXTRA_SHORT_DESCRIPTION))
+
+        // Restore the pending pick across recreation; else the saved imageRef.
+        selectedImageRef = savedInstanceState?.getString(STATE_IMAGE_REF)
+            ?: (intent.getStringExtra(EXTRA_IMAGE_REF) ?: "")
+
+        // The picture itself is the control: tap it to pick a different image.
+        imgPersonaAvatar?.setOnClickListener { openGalleryForPicture() }
+        updateAvatarUi()
 
         fieldName?.setOnFocusChangeListener { _, _ -> textNameError?.visibility = View.GONE }
         fieldPresentation?.setOnFocusChangeListener { _, _ -> textPresentationError?.visibility = View.GONE }
+
+        // Keep the picture's screen-reader label in sync with the name (the
+        // approved a11y scheme labels an assigned picture "<Name>'s picture").
+        fieldName?.doAfterTextChanged { updateAvatarContentDescription() }
 
         fieldShortDescription?.doAfterTextChanged { updateShortDescriptionCounter() }
         fieldShortDescription?.post { updateShortDescriptionCounter() }
@@ -158,6 +213,57 @@ class EditUserPersonaActivity : FragmentActivity() {
         // Baseline for the unsaved-changes check; every field is set above.
         ready = true
         initialSnapshot = snapshot()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // The Default Shape or the Personal Default may have changed on another
+        // screen; re-resolve the preview cheaply.
+        updateAvatarUi()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putString(STATE_IMAGE_REF, selectedImageRef)
+    }
+
+    /* --------------------------- picture --------------------------- */
+
+    /** Shows the persona's own picture, or - when it has none - the Default
+     *  Personal Avatar (user-side cascade, owner ruling July 21 2026), through
+     *  the shared binder so the current Default Shape applies. The generic
+     *  person icon is the last resort, shown only when no Personal Default is
+     *  set either. */
+    private fun updateAvatarUi() {
+        val imageView = imgPersonaAvatar ?: return
+        val file = ProfileImageResolver.resolveUserImageFile(this, selectedImageRef)
+        val shape = GlobalPreferences.getPreferences(this).getProfileImageShape()
+        ProfileImageBinder.bind(this, imageView, file, shape) { iv ->
+            iv.setImageResource(R.drawable.ic_user)
+            // accent_900 is the app's established glyph tint - a plain color
+            // resource, avoiding the material colorPrimary code-side resolution
+            // failure this project has hit in CI before.
+            iv.imageTintList = ColorStateList.valueOf(ContextCompat.getColor(iv.context, R.color.accent_900))
+        }
+        updateAvatarContentDescription()
+    }
+
+    /** Screen-reader label for the picture slot (owner-approved a11y scheme):
+     *  "<Name>'s picture" once assigned, else the default that actually shows. */
+    private fun updateAvatarContentDescription() {
+        val name = fieldName?.text?.toString()?.trim().orEmpty()
+        // Before the persona is named, don't announce "'s picture" with an
+        // empty name - fall through to the default-state wording.
+        val refForLabel = if (name.isNotEmpty()) selectedImageRef else ""
+        imgPersonaAvatar?.contentDescription =
+            ProfileImageResolver.userContentDescription(this, name, refForLabel)
+    }
+
+    private fun openGalleryForPicture() {
+        val intent = Intent(this, ProfileImagesActivity::class.java)
+            .putExtra(ProfileImagesActivity.EXTRA_ASSIGN_TARGET, ProfileImagesActivity.TARGET_COMPANION)
+            .putExtra(ProfileImagesActivity.EXTRA_ASSIGN_CURRENT_HASH, selectedImageRef)
+        pickPictureLauncher.launch(intent)
     }
 
     /* --------------------------- short description counter --------------------------- */
@@ -222,6 +328,8 @@ class EditUserPersonaActivity : FragmentActivity() {
             .putExtra(EXTRA_PERSONA_ID, personaId)
             .putExtra(EXTRA_RESULT_NAME, name)
             .putExtra(EXTRA_RESULT_PRESENTATION, presentation)
+            .putExtra(EXTRA_RESULT_SHORT_DESCRIPTION, fieldShortDescription?.text?.toString()?.trim().orEmpty())
+            .putExtra(EXTRA_RESULT_IMAGE_REF, selectedImageRef)
         setResult(RESULT_OK, result)
         flashSaveButtonGreen()
         finish()
@@ -241,7 +349,8 @@ class EditUserPersonaActivity : FragmentActivity() {
     private fun snapshot(): String = listOf(
         fieldName?.text?.toString().orEmpty(),
         fieldShortDescription?.text?.toString().orEmpty(),
-        fieldPresentation?.text?.toString().orEmpty()
+        fieldPresentation?.text?.toString().orEmpty(),
+        selectedImageRef
     ).joinToString("")
 
     /** Back / cancel. Confirms first if anything changed since load

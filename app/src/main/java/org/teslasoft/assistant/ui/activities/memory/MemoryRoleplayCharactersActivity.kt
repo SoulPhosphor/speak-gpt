@@ -26,6 +26,7 @@ import org.teslasoft.assistant.preferences.memory.CardType
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.memory.RoleplayCharacterRecord
 import org.teslasoft.assistant.ui.adapters.memory.MemoryRow
+import org.teslasoft.assistant.ui.adapters.memory.ProfileImageRowAdapter
 
 /**
  * "Roleplay Characters": user-played fictional characters (the Mage, the
@@ -67,17 +68,20 @@ class MemoryRoleplayCharactersActivity : MemoryScreenActivity() {
             archived
     }
 
-    private fun rowFor(r: RoleplayCharacterRecord): MemoryRow {
-        val subtitle = listOfNotNull(r.species, r.charClass)
-            .map { it.trim() }.filter { it.isNotEmpty() }
-            .joinToString(" · ").ifEmpty { null }
-        return MemoryRow(
-            id = r.roleplayCharacterId,
-            title = r.name,
-            subtitle = subtitle,
-            badge = null,
-            hasAction = true
-        )
+    // Image + Title only (owner ruling, July 21 2026): the row shows the
+    // character's name and its picture (resolved by ProfileImageRowAdapter from
+    // imageRef) - no species/class subtitle line.
+    private fun rowFor(r: RoleplayCharacterRecord): MemoryRow = MemoryRow(
+        id = r.roleplayCharacterId,
+        title = r.name,
+        hasAction = true,
+        imageRef = r.imageRef
+    )
+
+    override fun buildListAdapter(rows: List<MemoryRow>): android.widget.ListAdapter {
+        val adapter = ProfileImageRowAdapter(rows, this, R.layout.view_roleplay_character_row)
+        adapter.setOnRowListener(this)
+        return adapter
     }
 
     /* ------------------------------ toolbar ------------------------------ */

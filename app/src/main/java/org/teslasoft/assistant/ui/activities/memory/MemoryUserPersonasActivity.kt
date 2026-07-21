@@ -25,6 +25,7 @@ import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.memory.UserPersonaRecord
 import org.teslasoft.assistant.ui.adapters.memory.MemoryRow
+import org.teslasoft.assistant.ui.adapters.memory.ProfileImageRowAdapter
 
 /**
  * "My Personas" (Phase 5, app_adaptation_notes.md §Tab structure): ALL
@@ -49,21 +50,38 @@ class MemoryUserPersonasActivity : MemoryScreenActivity() {
 
         val q = query.trim().lowercase()
         val filtered = if (q.isEmpty()) records else records.filter {
-            it.name.lowercase().contains(q) || it.presentation.lowercase().contains(q)
+            it.name.lowercase().contains(q) ||
+                it.presentation.lowercase().contains(q) ||
+                (it.shortDescription?.lowercase()?.contains(q) == true)
         }
 
-        return filtered.map { rowFor(it) }
+        // Visible Archive section at the bottom (matches Roleplay Characters):
+        // active personas first, then a header, then archived ones. The picture
+        // row style carries no "archived" badge, so the section is how the
+        // archived state stays visible.
+        val active = filtered.filter { it.status != "archived" }.map { rowFor(it) }
+        val archived = filtered.filter { it.status == "archived" }.map { rowFor(it) }
+        if (archived.isEmpty()) return active
+        return active +
+            MemoryRow(id = "", title = getString(R.string.card_archive_header), isHeader = true) +
+            archived
     }
 
-    private fun rowFor(p: UserPersonaRecord): MemoryRow {
-        val badge = if (p.status == "archived") getString(R.string.memory_badge_archived) else null
-        return MemoryRow(
-            id = p.personaId,
-            title = p.name,
-            subtitle = p.presentation.trim(),
-            badge = badge,
-            hasAction = true
-        )
+    // Image + Title + Subtitle (owner ruling, July 21 2026). The subtitle is
+    // the persona's own short description (blank -> no subtitle line); the
+    // leading picture is resolved by ProfileImageRowAdapter from imageRef.
+    private fun rowFor(p: UserPersonaRecord): MemoryRow = MemoryRow(
+        id = p.personaId,
+        title = p.name,
+        subtitle = p.shortDescription?.trim()?.ifEmpty { null },
+        hasAction = true,
+        imageRef = p.imageRef
+    )
+
+    override fun buildListAdapter(rows: List<MemoryRow>): android.widget.ListAdapter {
+        val adapter = ProfileImageRowAdapter(rows, this, R.layout.view_user_persona_row)
+        adapter.setOnRowListener(this)
+        return adapter
     }
 
     /* ------------------------------ toolbar ------------------------------ */
@@ -126,6 +144,8 @@ class MemoryUserPersonasActivity : MemoryScreenActivity() {
                 val personaId = data.getStringExtra(EditUserPersonaActivity.EXTRA_PERSONA_ID) ?: ""
                 val name = data.getStringExtra(EditUserPersonaActivity.EXTRA_RESULT_NAME) ?: ""
                 val presentation = data.getStringExtra(EditUserPersonaActivity.EXTRA_RESULT_PRESENTATION) ?: ""
+                val shortDescription = data.getStringExtra(EditUserPersonaActivity.EXTRA_RESULT_SHORT_DESCRIPTION) ?: ""
+                val imageRef = data.getStringExtra(EditUserPersonaActivity.EXTRA_RESULT_IMAGE_REF) ?: ""
                 runOffThread {
                     val store = MemoryStore.getInstance(this)
                     val prior = if (personaId.isNotEmpty()) store.getUserPersona(personaId) else null
@@ -135,7 +155,11 @@ class MemoryUserPersonasActivity : MemoryScreenActivity() {
                         presentation = presentation,
                         status = prior?.status ?: "active",
                         createdAt = prior?.createdAt ?: MemoryStore.nowIso(),
-                        imageRef = prior?.imageRef
+                        // The editor is the source of truth for both - it was
+                        // handed the prior values and returns them unchanged
+                        // unless the user edited them (blank = intentionally none).
+                        imageRef = imageRef.ifEmpty { null },
+                        shortDescription = shortDescription.ifEmpty { null }
                     )
                     store.upsertUserPersona(record)
                     runOnUiThread { reload() }
@@ -155,7 +179,7 @@ class MemoryUserPersonasActivity : MemoryScreenActivity() {
 
     private fun openEditor(personaId: String?) {
         if (personaId == null) {
-            editUserPersonaLauncher.launch(EditUserPersonaActivity.createIntent(this, "", "", ""))
+            editUserPersonaLauncher.launch(EditUserPersonaActivity.createIntent(this, "", "", "", "", ""))
             return
         }
         runOffThread {
@@ -166,7 +190,9 @@ class MemoryUserPersonasActivity : MemoryScreenActivity() {
                         this,
                         existing?.personaId ?: "",
                         existing?.name ?: "",
-                        existing?.presentation ?: ""
+                        existing?.presentation ?: "",
+                        existing?.shortDescription ?: "",
+                        existing?.imageRef ?: ""
                     )
                 )
             }

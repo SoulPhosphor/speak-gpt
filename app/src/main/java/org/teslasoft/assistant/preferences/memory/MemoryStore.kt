@@ -49,7 +49,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
 
     companion object {
         const val DATABASE_NAME = "companion_memory.db"
-        private const val DATABASE_VERSION = 15
+        private const val DATABASE_VERSION = 16
 
         // Freshness-cooldown source types (rules §10 / Stage 3.3): the
         // composite key (chat_id, source_type, entry_id) keeps ids from
@@ -241,6 +241,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         // image_ref (v15): bare Profile Images hash, or NULL for none. Only
         // references profile_images.db; opening the memory store never touches
         // that catalog.
+        // short_description (v16): the user-authored one-liner shown as the My
+        // Personas list-row subtitle. NULL/blank means the row has no subtitle.
         db.execSQL(
             "CREATE TABLE user_personas (" +
                 "persona_id TEXT PRIMARY KEY, " +
@@ -248,7 +250,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 "presentation TEXT NOT NULL, " +
                 "status TEXT NOT NULL CHECK (status IN ('active','archived')), " +
                 "created_at TEXT, " +
-                "image_ref TEXT)"
+                "image_ref TEXT, " +
+                "short_description TEXT)"
         )
 
         // The five Zone 1 card columns (species..goals_drives) are the spec
@@ -1180,6 +1183,19 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 arrayOf(META_DB_MIGRATION, "15")
             )
         }
+
+        if (oldVersion < 16) {
+            // v16 (July 2026, Profile Images phase 8): a My Persona carries a
+            // short description shown as its list-row subtitle. The editor's
+            // Short Description field existed before this column and was
+            // discarded on save; it now persists here. NULL means none.
+            // Additive.
+            db.execSQL("ALTER TABLE user_personas ADD COLUMN short_description TEXT")
+            db.execSQL(
+                "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                arrayOf(META_DB_MIGRATION, "16")
+            )
+        }
     }
 
     /* ---------------------------------------------------------------------- */
@@ -1892,7 +1908,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                         presentation = it.getString(it.getColumnIndexOrThrow("presentation")),
                         status = it.getString(it.getColumnIndexOrThrow("status")),
                         createdAt = it.getStringOrNull("created_at"),
-                        imageRef = it.getStringOrNull("image_ref")
+                        imageRef = it.getStringOrNull("image_ref"),
+                        shortDescription = it.getStringOrNull("short_description")
                     )
                 )
             }
@@ -2597,7 +2614,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                         presentation = it.getString(it.getColumnIndexOrThrow("presentation")),
                         status = it.getString(it.getColumnIndexOrThrow("status")),
                         createdAt = it.getStringOrNull("created_at"),
-                        imageRef = it.getStringOrNull("image_ref")
+                        imageRef = it.getStringOrNull("image_ref"),
+                        shortDescription = it.getStringOrNull("short_description")
                     )
                 )
             }
@@ -3312,6 +3330,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             put("status", p.status)
             put("created_at", p.createdAt ?: nowIso())
             put("image_ref", p.imageRef)
+            put("short_description", p.shortDescription)
         }, SQLiteDatabase.CONFLICT_REPLACE)
     }
 

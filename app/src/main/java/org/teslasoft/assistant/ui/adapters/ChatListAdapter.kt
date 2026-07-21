@@ -50,7 +50,7 @@ import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.PersonaPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.memory.MemoryStore
-import org.teslasoft.assistant.preferences.profileimages.ProfileImageStore
+import org.teslasoft.assistant.util.ProfileImageResolver
 import org.teslasoft.assistant.ui.activities.ChatActivity
 import org.teslasoft.assistant.util.Hash
 import org.teslasoft.assistant.util.LegacyAvatarResolver
@@ -217,14 +217,18 @@ class ChatListAdapter(private val dataArray: ArrayList<HashMap<String, String>>,
             val chatPreferences = Preferences.getPreferences(mContext.requireActivity(), chatHash)
             val model: String = chatPreferences.getModel()
 
-            // Resolve this chat's Companion picture (prefs only) so the final
-            // override below can show it ahead of the per-chat avatar/glyph.
+            // Resolve this chat's assistant picture (prefs + a file-exists check,
+            // no memory DB) so the override below shows it ahead of the per-chat
+            // avatar/glyph. AI-side cascade (owner ruling, July 21 2026): the
+            // Companion's own picture, else the Default AI Avatar - so a chat
+            // whose Companion has no picture (or no Companion) still shows the AI
+            // default, and a picture edited elsewhere re-resolves on next bind.
             val personaId = chatPreferences.getPersonaId()
             companionImageShape = GlobalPreferences.getPreferences(mContext.requireActivity()).getProfileImageShape()
-            companionImageFile = if (personaId.isNotEmpty()) {
-                val ref = PersonaPreferences.getPersonaPreferences(mContext.requireActivity()).getPersona(personaId).avatarRef
-                if (ref.isNotEmpty()) ProfileImageStore.getInstance(mContext.requireActivity()).imageFile(ref) else null
-            } else null
+            val companionRef = if (personaId.isNotEmpty()) {
+                PersonaPreferences.getPersonaPreferences(mContext.requireActivity()).getPersona(personaId).avatarRef
+            } else ""
+            companionImageFile = ProfileImageResolver.resolveAiImageFile(mContext.requireActivity(), companionRef)
 
             // Review marker: the per-chat exclusion pref wins (it stops capture
             // itself), otherwise show what the transcript queue says.

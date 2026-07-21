@@ -295,13 +295,23 @@ abstract class MemoryScreenActivity : FragmentActivity(), MemoryRowAdapter.OnRow
                 emptyList()
             }
             runOnUiThread {
-                val adapter = MemoryRowAdapter(rows, this)
-                adapter.setOnRowListener(this)
-                listView?.adapter = adapter
+                listView?.adapter = buildListAdapter(rows)
                 emptyView?.visibility = if (rows.isEmpty()) View.VISIBLE else View.GONE
                 onRowsRendered()
             }
         }.start()
+    }
+
+    /** Builds the ListView adapter for [rows]. Defaults to [MemoryRowAdapter]
+     *  (the shared card-style memory row). Screens that render the shared
+     *  house row style with a leading profile picture (My Personas, Roleplay
+     *  Characters) override this to return a [ProfileImageRowAdapter]; both
+     *  share the same [MemoryRowAdapter.OnRowListener] contract, so the row
+     *  callbacks below stay unchanged. */
+    protected open fun buildListAdapter(rows: List<MemoryRow>): android.widget.ListAdapter {
+        val adapter = MemoryRowAdapter(rows, this)
+        adapter.setOnRowListener(this)
+        return adapter
     }
 
     /** Off-thread store work with a uniform toast-on-failure wrapper. */

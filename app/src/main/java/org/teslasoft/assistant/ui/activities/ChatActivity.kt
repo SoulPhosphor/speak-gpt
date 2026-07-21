@@ -169,7 +169,7 @@ import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.ChatStorageHealth
 import org.teslasoft.assistant.preferences.MessageCompletionState
 import org.teslasoft.assistant.preferences.GlobalPreferences
-import org.teslasoft.assistant.preferences.profileimages.ProfileImageStore
+import org.teslasoft.assistant.util.ProfileImageResolver
 import org.teslasoft.assistant.preferences.LogitBiasPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.SecurePrefs
@@ -974,9 +974,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         // animation play out instead of snapping.
         actionBar?.postDelayed({ restoreTopBarVisibility() }, 500)
 
-        // A Companion picture / Default Shape may have changed while away (the
-        // Companion editor, Profile Image settings). Re-resolve display-only.
+        // A Companion / persona picture or a default may have changed while away
+        // (an editor, Profile Image settings). Re-resolve both sides, display-only.
         refreshCompanionAvatar()
+        refreshUserAvatar()
     }
 
     /** Force the chat's top action bar and its buttons back to fully visible. */
@@ -988,13 +989,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     }
 
     /**
-     * Resolves the active Companion's assigned picture off the main thread and
-     * hands it (with the current Default Shape) to ChatAdapter, which renders
-     * it on the assistant side ahead of the legacy per-chat avatar and the
-     * built-in glyph (profile-images-plan.md, CHAT AND CHAT-LIST DISPLAY).
-     * Display-only and best-effort - it never touches generation or a turn.
-     * Called on resume and whenever the chat's companion or the Default Shape
-     * may have changed; a missing file resolves to null and falls through.
+     * Resolves the assistant-side picture off the main thread and hands it
+     * (with the current Default Shape) to ChatAdapter. AI-side cascade (owner
+     * ruling, July 21 2026): the active Companion's own picture, else the
+     * Default AI Avatar; null only when neither is set, and the adapter then
+     * falls through to the built-in glyph. Display-only and best-effort - it
+     * never touches generation or a turn. Called on resume and whenever the
+     * chat's companion or a default picture / the Default Shape may have
+     * changed, so a picture edited elsewhere shows up in this (and past) chats.
      */
     private fun refreshCompanionAvatar() {
         if (adapter == null) return
@@ -1003,9 +1005,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         CoroutineScope(Dispatchers.Main).launch {
             val file = withContext(Dispatchers.IO) {
                 try {
-                    if (personaId.isEmpty()) return@withContext null
-                    val ref = PersonaPreferences.getPersonaPreferences(this@ChatActivity).getPersona(personaId).avatarRef
-                    if (ref.isEmpty()) null else ProfileImageStore.getInstance(this@ChatActivity).imageFile(ref)
+                    val ref = if (personaId.isEmpty()) ""
+                        else PersonaPreferences.getPersonaPreferences(this@ChatActivity).getPersona(personaId).avatarRef
+                    ProfileImageResolver.resolveAiImageFile(this@ChatActivity, ref)
                 } catch (_: Exception) {
                     null
                 }
@@ -1013,6 +1015,50 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             if (isFinishing || isDestroyed) return@launch
             adapter?.setCompanionAvatar(file, shape)
         }
+    }
+
+    /**
+     * Resolves the user-side picture off the main thread and hands it to
+     * ChatAdapter for the user's own bubbles. User-side cascade (owner ruling,
+     * July 21 2026): the active Roleplay Character's picture, else the active My
+     * Persona's, else the Default Personal Avatar; null only when none is set,
+     * and the bubble then shows the generic person icon. Most chats use no
+     * persona, so this is what puts the Default Personal Avatar on the user
+     * bubble instead of a bare person icon. Display-only and best-effort.
+     */
+    private fun refreshUserAvatar() {
+        if (adapter == null) return
+        val rpCharId = preferences?.getChatRoleplayCharacterId().orEmpty()
+        val userPersonaId = preferences?.getChatUserPersonaId().orEmpty()
+        val shape = GlobalPreferences.getPreferences(this).getProfileImageShape()
+        CoroutineScope(Dispatchers.Main).launch {
+            val file = withContext(Dispatchers.IO) {
+                try {
+                    val ref = activeUserIdentityImageRef(rpCharId, userPersonaId)
+                    ProfileImageResolver.resolveUserImageFile(this@ChatActivity, ref)
+                } catch (_: Exception) {
+                    null
+                }
+            }
+            if (isFinishing || isDestroyed) return@launch
+            adapter?.setUserAvatar(file, shape)
+        }
+    }
+
+    /** The active user identity's own image hash for [refreshUserAvatar]: the
+     *  Roleplay Character's picture wins, else the My Persona's, else "" (so the
+     *  resolver falls through to the Default Personal Avatar). Runs off-main;
+     *  never provisions the store. */
+    private fun activeUserIdentityImageRef(rpCharId: String, userPersonaId: String): String {
+        if (!MemoryStore.isProvisioned(this)) return ""
+        val store = MemoryStore.getInstance(this)
+        if (rpCharId.isNotEmpty()) {
+            store.getRoleplayCharacter(rpCharId)?.imageRef?.let { if (it.isNotEmpty()) return it }
+        }
+        if (userPersonaId.isNotEmpty()) {
+            store.getUserPersona(userPersonaId)?.imageRef?.let { if (it.isNotEmpty()) return it }
+        }
+        return ""
     }
 
     @Suppress("deprecation")
@@ -2192,9 +2238,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 )
             quickSettingsBottomSheetDialogFragment.setOnUpdateListener(object : QuickSettingsBottomSheetDialogFragment.OnUpdateListener {
                 override fun onUpdate() {
-                    // The chat's Companion may have changed here without a full
-                    // reload; re-resolve the assistant-side picture (display-only).
+                    // The chat's Companion or user identity may have changed here
+                    // without a full reload; re-resolve both pictures (display-only).
                     refreshCompanionAvatar()
+                    refreshUserAvatar()
                 }
 
                 override fun onForceUpdate() {
@@ -2217,8 +2264,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
         adapter?.notifyDataSetChanged()
 
-        // First paint of the assistant-side Companion picture (resolved off-main).
+        // First paint of both avatars (resolved off-main).
         refreshCompanionAvatar()
+        refreshUserAvatar()
 
         chat?.post {
             chat?.scrollToPosition(adapter?.itemCount!! - 1)

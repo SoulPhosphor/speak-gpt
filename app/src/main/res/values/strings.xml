@@ -1938,8 +1938,8 @@
     <string name="row_default_shape_title">Default Shape</string>
     <string name="row_default_shape_subtitle">Sets the shape of the profile images.</string>
 
-    <string name="row_global_default_title">Default Avatar</string>
-    <string name="row_global_default_subtitle">Image used when none has been specified.</string>
+    <string name="row_global_default_title">Default AI Avatar</string>
+    <string name="row_global_default_subtitle">Used for a companion that has no picture of its own.</string>
 
     <string name="row_personal_default_title">Default Personal Avatar</string>
     <string name="row_personal_default_subtitle">Used when the active My Persona or Roleplay Character has no image.</string>
@@ -1949,6 +1949,17 @@
     <string name="profile_image_change_picture">Change Picture</string>
     <!-- Companion editor: content description for the leading avatar preview. -->
     <string name="profile_image_companion_avatar_desc">Companion picture</string>
+    <!-- Picture-slot content descriptions (owner-approved accessibility scheme,
+         July 21 2026): a custom picture reads as "<Name>'s picture"; a slot
+         showing a shared default names that default instead of implying the
+         identity has a custom picture. %1$s is the identity's name. -->
+    <string name="profile_image_named_picture">%1$s\'s picture</string>
+    <string name="profile_image_default_ai_avatar_desc">Default AI avatar</string>
+    <string name="profile_image_default_personal_avatar_desc">Default personal avatar</string>
+    <string name="profile_image_no_personal_picture_desc">No personal picture set</string>
+    <!-- Trailing chevron on a My Personas / Roleplay Characters row: opens the
+         row's action menu (edit, archive, delete). -->
+    <string name="mem_row_more_options">More options</string>
     <!-- Per-chat avatar explanation shown while a Companion picture is in use
          (profile-images-plan.md, INTERACTION WITH EXISTING PER-CHAT AVATAR
          CUSTOMIZATION). %1$s is the Companion's name. -->

@@ -676,6 +676,36 @@ Everything is on-device. No cloud sync, no accounts.
    Settings — refusing the switch shows the owner-worded guidance INLINE
    under the Memory Engine control (persistent; the app-wide toast ban
    applies).
+   **DB v15 (Profile Images) adds `image_ref TEXT` to `user_personas` and
+   `roleplay_characters`; DB v16 (July 21 2026, Profile Images phase 8) adds
+   `short_description TEXT` to `user_personas`** — the persona's list-row
+   subtitle (the editor's Short Description field used to be discarded on save;
+   it now persists here). Both are additive, nullable, exported by
+   `MemorySeedCodec` (optional, absent in older backups → null). The Profile
+   Images feature (storage/gallery/framing/shapes) lives in
+   `preferences/profileimages/` + `profile-images-plan.md`; the two default
+   images are `GlobalPreferences.getGlobalDefaultImageRef()` (**"Default AI
+   Avatar"**, the AI-side default, auto-seeded by `GlobalDefaultImageSeeder`)
+   and `getDefaultUserImageRef()` (**"Default Personal Avatar"**, the
+   user-side default). **Fallback cascade (owner ruling, July 21 2026,
+   `util/ProfileImageResolver`):** AI side (companion editor/rows, assistant
+   chat bubble, chat-list) = own picture → Default AI Avatar → glyph; user
+   side (My Persona editor/rows, Roleplay Character rows, the user's own chat
+   bubble) = own picture → Default Personal Avatar → generic person icon. The
+   old per-chat "Customize assistant" avatar is no longer consulted in chat
+   display (the new system replaces it; that experimental control is now
+   inert and slated for a separate cleanup). Screen-reader labels for a
+   picture slot name the identity ("<Name>'s picture") when it has its own
+   picture, else the default that actually shows ("Default AI avatar" /
+   "Default personal avatar" / "No personal picture set"). **My Personas and
+   Roleplay Characters list rows use the shared house row style with a leading
+   picture** (`view_user_persona_row.xml` image+title+subtitle=short
+   description; `view_roleplay_character_row.xml` image+title only) via
+   `ProfileImageRowAdapter` + `MemoryScreenActivity.buildListAdapter()` — the
+   plan's earlier "no images on memory-side list rows" note was superseded by
+   the owner's separate approval. My Personas now groups archived personas
+   under a bottom Archive section (like Roleplay Characters) instead of a
+   per-row badge.
    The Memory Assistant tuning prefs (July 9 spec,
    `memory_settings_reorg_spec.md`): max suggestions per conversation +
    minimum importance (both ENFORCED IN CODE in the runner), temperature

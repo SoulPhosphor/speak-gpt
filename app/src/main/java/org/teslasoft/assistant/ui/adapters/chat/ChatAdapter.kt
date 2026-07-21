@@ -95,21 +95,36 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
     private var listener: OnUpdateListener? = null
     private var bulkActionMode = false
 
-    // Assistant-side Companion picture (profile-images-plan.md, CHAT AND
-    // CHAT-LIST DISPLAY). Resolved off the main thread by ChatActivity and
-    // pushed in here - row binding never touches storage. Null means the chat
-    // falls through to the existing per-chat avatar (legacy resolver) and then
-    // the built-in glyph, exactly as before. [companionImageShape] is the
-    // current Default Shape to render the picture with.
+    // Assistant-side picture, already cascaded by ChatActivity off the main
+    // thread (the active Companion's own picture, else the Default AI Avatar).
+    // Row binding never touches storage. Null only when neither exists, in
+    // which case the row falls through to the built-in glyph.
+    // [companionImageShape] is the current Default Shape to render it with.
     private var companionImageFile: File? = null
     private var companionImageShape: String = "flower"
 
-    /** Called by ChatActivity with the already-resolved Companion picture (or
+    // User-side picture (owner ruling, July 21 2026), already cascaded by
+    // ChatActivity: the active Roleplay Character's picture, else the active My
+    // Persona's, else the Default Personal Avatar. Null only when none of those
+    // is set, in which case the user bubble shows the generic person icon.
+    private var userImageFile: File? = null
+    private var userImageShape: String = "flower"
+
+    /** Called by ChatActivity with the already-resolved assistant picture (or
      *  null) plus the current Default Shape. Rebinds visible rows so the
      *  assistant avatar reflects the new state. */
     fun setCompanionAvatar(file: File?, shape: String) {
         companionImageFile = file
         companionImageShape = shape
+        notifyDataSetChanged()
+    }
+
+    /** Called by ChatActivity with the already-resolved user-side picture (or
+     *  null) plus the current Default Shape. Rebinds visible rows so the user
+     *  bubble's avatar reflects the active identity / Personal Default. */
+    fun setUserAvatar(file: File?, shape: String) {
+        userImageFile = file
+        userImageShape = shape
         notifyDataSetChanged()
     }
 
@@ -472,7 +487,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                     message.setTextColor(ResourcesCompat.getColor(context.resources, R.color.white, null))
                 }
             } else {
-                icon.setImageResource(R.drawable.ic_user)
+                displayUserAvatar()
 
                 if (isDarkThemeEnabled() && preferences.getAmoledPitchBlack()) {
                     bubbleBg?.setBackgroundResource(R.drawable.bubble_in_dark)
@@ -488,7 +503,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 username.text = preferences.getAssistantName()
                 ui.setBackgroundColor(getSurfaceColor(context))
             } else {
-                icon.setImageResource(R.drawable.ic_user)
+                displayUserAvatar()
                 username.text = context.getString(R.string.chat_role_user)
                 btnCopy.visibility = View.VISIBLE
                 ui.setBackgroundColor(getSurface2Color(context))
@@ -529,6 +544,27 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 if (legacyAvatarFile != null) {
                     readAndDisplay(Uri.fromFile(legacyAvatarFile))
                 }
+            }
+        }
+
+        /** User-side avatar (owner ruling, July 21 2026): binds the picture
+         *  ChatActivity already cascaded (active Roleplay Character -> active My
+         *  Persona -> Default Personal Avatar), or the generic person icon when
+         *  none is set. Fully resets the view each bind (background + tint) so a
+         *  recycled user row can't keep a stale photo or accent tint. */
+        private fun displayUserAvatar() {
+            val file = userImageFile
+            if (file != null && file.exists()) {
+                ProfileImageBinder.bind(context, icon, file, userImageShape) {
+                    // Only reachable if the file vanished between resolve and load.
+                    icon.background = iconInitialBackground
+                    icon.imageTintList = null
+                    icon.setImageResource(R.drawable.ic_user)
+                }
+            } else {
+                icon.background = iconInitialBackground
+                icon.imageTintList = null
+                icon.setImageResource(R.drawable.ic_user)
             }
         }
 

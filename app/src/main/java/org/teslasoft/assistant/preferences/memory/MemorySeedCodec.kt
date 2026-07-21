@@ -237,7 +237,9 @@ object MemorySeedCodec {
                 status = p.reqStr("status"),
                 createdAt = p.str("created_at"),
                 // Optional (Profile Images): absent in pre-v15 backups → null.
-                imageRef = p.str("image_ref")
+                imageRef = p.str("image_ref"),
+                // Optional (v16): absent in older backups → null.
+                shortDescription = p.str("short_description")
             )
         }
 
@@ -621,6 +623,7 @@ object MemorySeedCodec {
                     put("status", p.status)
                     putIfNotNull("created_at", p.createdAt)
                     putIfNotNull("image_ref", p.imageRef)
+                    putIfNotNull("short_description", p.shortDescription)
                 })
             }
         })
