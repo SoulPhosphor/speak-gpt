@@ -22,14 +22,12 @@ import android.content.res.Configuration
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.provider.DocumentsContract
 import android.view.View
 import android.view.WindowInsets
 import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
-import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
@@ -39,31 +37,44 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.checkbox.MaterialCheckBox
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.elevation.SurfaceColors
-import com.google.android.material.materialswitch.MaterialSwitch
+import android.provider.DocumentsContract
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
+import org.teslasoft.assistant.preferences.backup.BackupBrand
+import org.teslasoft.assistant.preferences.backup.BackupLocationDisplay
 import org.teslasoft.assistant.preferences.backup.BackupStatusFormatter
 import org.teslasoft.assistant.preferences.backup.BackupType
 import org.teslasoft.assistant.preferences.backup.DatabaseHealthChecker
-import org.teslasoft.assistant.preferences.backup.RecoveryBackupManager
 import org.teslasoft.assistant.preferences.backup.RecoveryBackupState
+import org.teslasoft.assistant.preferences.backup.RecoveryFileNaming
+import org.teslasoft.assistant.preferences.backup.readable.ReadableBackupState
+import org.teslasoft.assistant.preferences.backup.readable.ReadableChatBackup
 import org.teslasoft.assistant.preferences.memory.MemoryExporter
+import org.teslasoft.assistant.preferences.memory.MemoryLog
 import org.teslasoft.assistant.preferences.memory.MemorySeedCodec
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.theme.ThemeManager
+import java.io.File
+import java.io.InputStream
+import java.security.MessageDigest
 
 /**
- * "Memory Backup & Restore" — the Database Health & Backups screen (Build
- * Phase 2). Owner-approved order and wording (July 21 2026): Database Health,
- * Backup Status, Create Backup (manual recovery backup), Portable Copy,
- * Automatic Backups, Reset. The two backup LOCATIONS (manual vs automatic) are
- * kept separate.
+ * "Memory Backup & Restore" — the Database Health & Backups screen. Section
+ * order is owner-directed and EXACT (July 22 2026): 1. Database Health,
+ * 2. Backup Status, 3. Recovery Backup, 4. Human-Readable Chat Backup,
+ * 5. Portable Data Copy, 6. Automatic Backups, 7. Reset. Do not reorder. The
+ * two backup LOCATIONS (manual vs automatic) are kept separate.
  *
- * Two distinct systems live here and stay separate on screen:
- *  - Recovery backups (Create Backup + Automatic Backups) — same-installation
- *    per-type snapshots written to a user-chosen folder.
- *  - Portable Copy — the readable JSON export/import for moving data to another
- *    device or compatible app.
+ * Three distinct systems live here and stay separate on screen (never
+ * conflated — owner directive):
+ *  - Recovery Backup — the portable recovery package (RecoveryBackupActivity).
+ *  - Human-Readable Chat Backup — a ZIP of chats as readable Text/JSON files.
+ *  - Portable Data Copy — the readable JSON export/import of memory data
+ *    (import does NOT restore chats; the description says so).
+ *
+ * NO TOASTS anywhere in this workflow (owner rule): results and failures are
+ * persistent inline status text or Material dialogs. Location lines show a
+ * persisted friendly folder label — never a raw URI or tree document id.
  */
 class MemoryBackupRestoreActivity : FragmentActivity() {
 
@@ -85,22 +96,30 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
     private var textStatusChats: TextView? = null
     private var textStatusUserImage: TextView? = null
 
-    // 3. Create Backup (manual)
+    // 3. Recovery Backup (manual)
     private var btnCreateRecovery: MaterialButton? = null
     private var textManualLocation: TextView? = null
     private var btnChangeManualLocation: MaterialButton? = null
     private var btnCreateBackup: MaterialButton? = null
 
-    // 4. Portable Copy
+    // 4. Human-Readable Chat Backup
+    private var btnReadableScope: MaterialButton? = null
+    private var btnReadableFormat: MaterialButton? = null
+    private var btnReadableCreate: MaterialButton? = null
+    private var textReadableStatus: TextView? = null
+
+    // 5. Portable Data Copy
     private var btnPortableExport: MaterialButton? = null
     private var btnPortableImport: MaterialButton? = null
+    private var textPortableStatus: TextView? = null
 
-    // 5. Automatic Backups
+    // 6. Automatic Backups. The enable switch is deliberately NOT bound: the
+    // approved portable automatic system is unbuilt and the switch drove
+    // nothing — it stays hidden in the layout until that system exists.
     private var textAutoLocation: TextView? = null
     private var btnChangeAutoLocation: MaterialButton? = null
-    private var switchAutoBackup: MaterialSwitch? = null
 
-    // 6. Reset
+    // 7. Reset
     private var btnReset: MaterialButton? = null
 
     private val importSeedLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -113,13 +132,25 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         if (uri != null) exportToUri(uri)
     }
 
-    private val manualFolderPicker = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
-        if (uri != null) onFolderChosen(uri, manual = true)
+    private val autoFolderPicker = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) onFolderChosen(uri)
     }
 
-    private val autoFolderPicker = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
-        if (uri != null) onFolderChosen(uri, manual = false)
-    }
+    private val readableSaveLauncher = registerForActivityResult(
+        ActivityResultContracts.CreateDocument("application/zip")
+    ) { uri -> onReadableSaveAsResult(uri) }
+
+    // Human-Readable Chat Backup selections + the staged, verified ZIP waiting
+    // for its Save As destination (build-before-Save-As, same architecture as
+    // the recovery package). Staging is cleaned on cancel, success, failure,
+    // and onDestroy; the incremental baseline advances ONLY after the
+    // destination has been verified.
+    private var readableScopeAll = true
+    private var readableFormat = ReadableChatBackup.Format.TEXT
+    private var stagedReadable: File? = null
+    private var stagedReadableSha: ByteArray? = null
+    private var stagedReadableFingerprints: Map<String, String>? = null
+    private var stagedReadableIncremental = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -159,12 +190,17 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         btnChangeManualLocation = findViewById(R.id.btn_change_manual_location)
         btnCreateBackup = findViewById(R.id.btn_create_backup)
 
+        btnReadableScope = findViewById(R.id.btn_readable_scope)
+        btnReadableFormat = findViewById(R.id.btn_readable_format)
+        btnReadableCreate = findViewById(R.id.btn_readable_create)
+        textReadableStatus = findViewById(R.id.text_readable_status)
+
         btnPortableExport = findViewById(R.id.btn_portable_export)
         btnPortableImport = findViewById(R.id.btn_portable_import)
+        textPortableStatus = findViewById(R.id.text_portable_status)
 
         textAutoLocation = findViewById(R.id.text_auto_location)
         btnChangeAutoLocation = findViewById(R.id.btn_change_auto_location)
-        switchAutoBackup = findViewById(R.id.switch_auto_backup)
 
         btnReset = findViewById(R.id.btn_memory_reset)
     }
@@ -198,40 +234,291 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         /* ---- 1. Database Health ---- */
         btnCheckIntegrity?.setOnClickListener { onCheckIntegrity() }
 
-        /* ---- 3. Create Backup (manual) ---- */
+        /* ---- 3. Recovery Backup (manual) ---- */
+        // The installation-bound v1 controls (btn_change_manual_location,
+        // btn_create_backup) are hidden AND unwired: the old writer must not be
+        // reachable from this screen (owner correction, July 22 2026). The v1
+        // backend classes stay for the future automatic implementation.
         btnCreateRecovery?.setOnClickListener {
             startActivity(Intent(this, RecoveryBackupActivity::class.java))
         }
-        btnChangeManualLocation?.setOnClickListener { manualFolderPicker.launch(null) }
-        btnCreateBackup?.setOnClickListener { onCreateBackup() }
 
-        /* ---- 4. Portable Copy ---- */
+        /* ---- 4. Human-Readable Chat Backup ---- */
+        initReadableSection()
+
+        /* ---- 5. Portable Data Copy ---- */
         btnPortableImport?.setOnClickListener {
             importSeedLauncher.launch(arrayOf("application/json", "text/*"))
         }
         btnPortableExport?.setOnClickListener {
             if (!MemoryStore.isProvisioned(this)) {
-                Toast.makeText(this, R.string.memory_not_provisioned_toast, Toast.LENGTH_SHORT).show()
+                showNoticeDialog(getString(R.string.memory_not_provisioned_toast))
                 return@setOnClickListener
             }
             val stamp = MemoryStore.nowIso().substring(0, 10)
             exportLauncher.launch("memory-export-$stamp.json")
         }
 
-        /* ---- 5. Automatic Backups ---- */
+        /* ---- 6. Automatic Backups (location only; system not built yet) ---- */
         btnChangeAutoLocation?.setOnClickListener { autoFolderPicker.launch(null) }
-        // Set the persisted state BEFORE attaching the listener so the
-        // programmatic set does not write back over itself.
-        switchAutoBackup?.isChecked = RecoveryBackupState.isEnabled(this)
-        switchAutoBackup?.setOnCheckedChangeListener { _, checked ->
-            RecoveryBackupState.setEnabled(this, checked)
-        }
 
-        /* ---- 6. Reset (bottom) ---- */
+        /* ---- 7. Reset (bottom) ---- */
         btnReset?.setOnClickListener { showResetDialog() }
 
         refreshLocations()
         refreshBackupStatus()
+    }
+
+    /** A persistent notice the user dismisses — never a toast (owner rule). */
+    private fun showNoticeDialog(message: String, title: String? = null) {
+        if (isFinishing) return
+        val b = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setMessage(message)
+            .setPositiveButton(R.string.btn_ok) { _, _ -> }
+        if (title != null) b.setTitle(title)
+        b.show()
+    }
+
+    override fun onDestroy() {
+        cleanupStagedReadable()
+        super.onDestroy()
+    }
+
+    /* ------------------------------ 4. human-readable chat backup ------------------------------ */
+
+    private fun initReadableSection() {
+        updateReadableSelectorLabels()
+        btnReadableScope?.setOnClickListener { pickReadableScope() }
+        btnReadableFormat?.setOnClickListener { pickReadableFormat() }
+        btnReadableCreate?.setOnClickListener { onCreateReadableBackup() }
+        showReadableLastSuccess()
+    }
+
+    private fun updateReadableSelectorLabels() {
+        val scope = getString(
+            if (readableScopeAll) R.string.backup_readable_scope_all
+            else R.string.backup_readable_scope_incremental
+        )
+        btnReadableScope?.text = "${getString(R.string.backup_readable_scope_label)}: $scope"
+        val format = getString(
+            when (readableFormat) {
+                ReadableChatBackup.Format.TEXT -> R.string.backup_readable_format_text
+                ReadableChatBackup.Format.JSON -> R.string.backup_readable_format_json
+                ReadableChatBackup.Format.BOTH -> R.string.backup_readable_format_both
+            }
+        )
+        btnReadableFormat?.text = "${getString(R.string.backup_readable_format_label)}: $format"
+    }
+
+    private fun pickReadableScope() {
+        if (isFinishing) return
+        val options = arrayOf(
+            getString(R.string.backup_readable_scope_all),
+            getString(R.string.backup_readable_scope_incremental)
+        )
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.backup_readable_scope_label)
+            .setSingleChoiceItems(options, if (readableScopeAll) 0 else 1) { dialog, which ->
+                readableScopeAll = which == 0
+                updateReadableSelectorLabels()
+                dialog.dismiss()
+            }
+            .setNegativeButton(R.string.btn_cancel) { _, _ -> }
+            .show()
+    }
+
+    private fun pickReadableFormat() {
+        if (isFinishing) return
+        val options = arrayOf(
+            getString(R.string.backup_readable_format_text),
+            getString(R.string.backup_readable_format_json),
+            getString(R.string.backup_readable_format_both)
+        )
+        val checked = when (readableFormat) {
+            ReadableChatBackup.Format.TEXT -> 0
+            ReadableChatBackup.Format.JSON -> 1
+            ReadableChatBackup.Format.BOTH -> 2
+        }
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.backup_readable_format_label)
+            .setSingleChoiceItems(options, checked) { dialog, which ->
+                readableFormat = when (which) {
+                    1 -> ReadableChatBackup.Format.JSON
+                    2 -> ReadableChatBackup.Format.BOTH
+                    else -> ReadableChatBackup.Format.TEXT
+                }
+                updateReadableSelectorLabels()
+                dialog.dismiss()
+            }
+            .setNegativeButton(R.string.btn_cancel) { _, _ -> }
+            .show()
+    }
+
+    private fun setReadableStatus(text: String) {
+        textReadableStatus?.text = text
+        textReadableStatus?.visibility = View.VISIBLE
+    }
+
+    private fun showReadableLastSuccess() {
+        val last = ReadableBackupState.getLastSuccess(this)
+        if (last > 0L) {
+            setReadableStatus(
+                getString(R.string.backup_readable_last_success, BackupStatusFormatter.formatDateTime(last))
+            )
+        }
+    }
+
+    /** Build + verify the ZIP in private staging FIRST; Save As launches only
+     *  when the staged file is real and verified. */
+    private fun onCreateReadableBackup() {
+        btnReadableCreate?.isEnabled = false
+        setReadableStatus(getString(R.string.backup_readable_preparing))
+        cleanupStagedReadable()
+        val allChats = readableScopeAll
+        val format = readableFormat
+        runOffThread {
+            val staged = File(cacheDir, "readable_stage_${System.nanoTime()}.zip")
+            when (val result = ReadableChatBackup.build(this, staged, allChats, format)) {
+                is ReadableChatBackup.BuildResult.NothingNew -> runOnUiThread {
+                    btnReadableCreate?.isEnabled = true
+                    setReadableStatus(getString(R.string.backup_readable_none))
+                }
+                is ReadableChatBackup.BuildResult.NothingToBackUp -> runOnUiThread {
+                    btnReadableCreate?.isEnabled = true
+                    setReadableStatus(getString(R.string.recovery_fail_nothing))
+                }
+                is ReadableChatBackup.BuildResult.ChatsUnreadable -> runOnUiThread {
+                    btnReadableCreate?.isEnabled = true
+                    setReadableStatus(getString(R.string.backup_readable_fail_chats))
+                    showNoticeDialog(getString(R.string.backup_readable_fail_chats))
+                }
+                is ReadableChatBackup.BuildResult.Failed -> runOnUiThread {
+                    btnReadableCreate?.isEnabled = true
+                    setReadableStatus(getString(R.string.backup_readable_fail_generic))
+                    showNoticeDialog(getString(R.string.backup_readable_fail_generic))
+                }
+                is ReadableChatBackup.BuildResult.Ok -> {
+                    val sha = sha256(staged)
+                    runOnUiThread {
+                        stagedReadable = staged
+                        stagedReadableSha = sha
+                        stagedReadableFingerprints = result.fingerprints
+                        stagedReadableIncremental = !allChats
+                        readableSaveLauncher.launch(
+                            RecoveryFileNaming.readableChats(
+                                BackupBrand.resolve(this), complete = allChats,
+                                epochMillis = System.currentTimeMillis()
+                            )
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    /** Save As returned. Null == cancelled: the staged ZIP is discarded and
+     *  the baseline stays untouched. */
+    private fun onReadableSaveAsResult(uri: Uri?) {
+        if (uri == null) {
+            cleanupStagedReadable()
+            btnReadableCreate?.isEnabled = true
+            setReadableStatus(getString(R.string.backup_readable_cancelled))
+            return
+        }
+        val staged = stagedReadable
+        val expectedSha = stagedReadableSha
+        val fingerprints = stagedReadableFingerprints
+        if (staged == null || expectedSha == null || fingerprints == null || !staged.exists()) {
+            cleanupStagedReadable()
+            btnReadableCreate?.isEnabled = true
+            setReadableStatus(getString(R.string.backup_readable_fail_generic))
+            return
+        }
+        val incremental = stagedReadableIncremental
+        setReadableStatus(getString(R.string.backup_readable_saving))
+        runOffThread {
+            try {
+                contentResolver.openOutputStream(uri, "wt")?.use { out ->
+                    staged.inputStream().use { it.copyTo(out) }
+                } ?: throw IllegalStateException("could not open destination")
+
+                val actualSha = contentResolver.openInputStream(uri)?.use { sha256(it) }
+                    ?: throw IllegalStateException("could not reopen destination")
+
+                if (!MessageDigest.isEqual(expectedSha, actualSha)) {
+                    discardReadableDestination(uri)
+                    runOnUiThread {
+                        btnReadableCreate?.isEnabled = true
+                        setReadableStatus(getString(R.string.backup_readable_fail_verify))
+                        showNoticeDialog(getString(R.string.backup_readable_fail_verify))
+                    }
+                    return@runOffThread
+                }
+
+                // Destination verified: NOW (and only now) the incremental
+                // baseline may advance (owner directive) and the last-success
+                // stamp may move.
+                if (incremental) ReadableBackupState.setBaseline(this, fingerprints)
+                ReadableBackupState.setLastSuccess(this, System.currentTimeMillis())
+
+                val where = BackupLocationDisplay.describeSaveAs(this, uri)
+                runOnUiThread {
+                    btnReadableCreate?.isEnabled = true
+                    val main = if (where.providerLabel != null) {
+                        getString(R.string.backup_readable_saved_to, where.providerLabel)
+                    } else {
+                        getString(R.string.backup_readable_saved_generic)
+                    }
+                    val detail = where.fileName?.let { "\n" + getString(R.string.recovery_saved_file, it) } ?: ""
+                    setReadableStatus(main + detail)
+                }
+            } catch (e: Exception) {
+                discardReadableDestination(uri)
+                try {
+                    MemoryLog.log(this, "ReadableChatBackup", "error",
+                        "Saving the readable chat backup failed (${e.javaClass.simpleName}).")
+                } catch (_: Exception) { }
+                runOnUiThread {
+                    btnReadableCreate?.isEnabled = true
+                    setReadableStatus(getString(R.string.backup_readable_fail_generic))
+                    showNoticeDialog(getString(R.string.backup_readable_fail_generic))
+                }
+            } finally {
+                cleanupStagedReadable()
+            }
+        }
+    }
+
+    /** Remove a written-but-unverified destination so no corrupt ZIP remains:
+     *  delete the document, or truncate it when delete is not permitted. */
+    private fun discardReadableDestination(uri: Uri) {
+        try {
+            if (DocumentsContract.deleteDocument(contentResolver, uri)) return
+        } catch (_: Exception) { /* fall through to truncate */ }
+        try {
+            contentResolver.openOutputStream(uri, "wt")?.use { /* truncate */ }
+        } catch (_: Exception) { /* best-effort */ }
+    }
+
+    private fun cleanupStagedReadable() {
+        stagedReadable?.let { f -> runCatching { if (f.exists()) f.delete() } }
+        stagedReadable = null
+        stagedReadableSha = null
+        stagedReadableFingerprints = null
+        stagedReadableIncremental = false
+    }
+
+    private fun sha256(file: File): ByteArray = file.inputStream().use { sha256(it) }
+
+    private fun sha256(stream: InputStream): ByteArray {
+        val md = MessageDigest.getInstance("SHA-256")
+        val buf = ByteArray(8192)
+        while (true) {
+            val n = stream.read(buf)
+            if (n < 0) break
+            md.update(buf, 0, n)
+        }
+        return md.digest()
     }
 
     /* ------------------------------ 1. database health ------------------------------ */
@@ -307,74 +594,72 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         }
     }
 
-    private fun setAllRowsCreating() {
-        val creating = getString(R.string.backup_state_creating)
-        textStatusMemory?.text = "${getString(R.string.backup_type_memory)}: $creating"
-        textStatusLorebooks?.text = "${getString(R.string.backup_type_lorebooks)}: $creating"
-        textStatusChats?.text = "${getString(R.string.backup_type_chats)}: $creating"
-        textStatusUserImage?.text = "${getString(R.string.backup_type_user_image)}: $creating"
-    }
-
-    /* ------------------------------ 3. create backup ------------------------------ */
-
-    private fun onCreateBackup() {
-        val uriStr = RecoveryBackupState.getManualFolderUri(this)
-        if (uriStr == null) {
-            // No location yet: the location line already reads "No backup folder
-            // selected". Guide the user straight into choosing one.
-            manualFolderPicker.launch(null)
-            return
-        }
-        btnCreateBackup?.isEnabled = false
-        setAllRowsCreating()
-        runOffThread {
-            try {
-                RecoveryBackupManager.createBackup(this, Uri.parse(uriStr))
-            } finally {
-                runOnUiThread {
-                    btnCreateBackup?.isEnabled = true
-                    refreshBackupStatus()
-                }
-            }
-        }
-    }
-
     /* ------------------------------ backup locations ------------------------------ */
 
-    private fun onFolderChosen(uri: Uri, manual: Boolean) {
+    /**
+     * A folder was picked for Automatic Backups: persist the URI for ACCESS
+     * and, separately, a resolved human-readable label for DISPLAY (owner
+     * correction, July 22 2026). The label query runs off the main thread;
+     * until it lands the line shows the generic phrase — never the URI.
+     */
+    private fun onFolderChosen(uri: Uri) {
         try {
             contentResolver.takePersistableUriPermission(
                 uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
             )
-        } catch (_: Exception) { /* best-effort; a lost grant surfaces later as a destination-permission failure */ }
-        if (manual) RecoveryBackupState.setManualFolderUri(this, uri.toString())
-        else RecoveryBackupState.setAutoFolderUri(this, uri.toString())
+        } catch (_: Exception) { /* best-effort; a lost grant surfaces later as "Folder unavailable" */ }
+        RecoveryBackupState.setAutoFolderUri(this, uri.toString())
+        RecoveryBackupState.setAutoFolderLabel(this, null)
         refreshLocations()
-    }
-
-    private fun refreshLocations() {
-        val manual = RecoveryBackupState.getManualFolderUri(this)
-        val auto = RecoveryBackupState.getAutoFolderUri(this)
-        textManualLocation?.text = if (manual == null) getString(R.string.backup_location_none)
-        else getString(R.string.backup_current_location, folderDisplayName(Uri.parse(manual)))
-        textAutoLocation?.text = if (auto == null) getString(R.string.backup_location_none)
-        else getString(R.string.backup_auto_location, folderDisplayName(Uri.parse(auto)))
-    }
-
-    /** Best-effort human name for a SAF tree URI without a ContentResolver query
-     *  (safe on the main thread): the last path component of the tree document
-     *  id, e.g. "primary:Documents/Backups" -> "Backups". */
-    private fun folderDisplayName(uri: Uri): String {
-        return try {
-            val treeId = DocumentsContract.getTreeDocumentId(uri)
-            val tail = treeId.substringAfterLast('/').substringAfterLast(':')
-            if (tail.isNotBlank()) tail else treeId
-        } catch (_: Exception) {
-            uri.toString()
+        runOffThread {
+            val label = BackupLocationDisplay.treeFolderLabel(this, uri)
+            if (label != null) RecoveryBackupState.setAutoFolderLabel(this, label)
+            runOnUiThread { refreshLocations() }
         }
     }
 
-    /* ------------------------------ 4. portable copy ------------------------------ */
+    /** True while the persisted grant for [uriStr] is still held — when it is
+     *  gone the folder moved/was deleted/was revoked and the line must say so
+     *  instead of showing a stale name. */
+    private fun folderAccessible(uriStr: String): Boolean = try {
+        val uri = Uri.parse(uriStr)
+        contentResolver.persistedUriPermissions.any {
+            it.uri == uri && it.isReadPermission && it.isWritePermission
+        }
+    } catch (_: Exception) {
+        false
+    }
+
+    /**
+     * Location lines show, in order of preference: the persisted friendly
+     * label, the generic "Selected folder" phrase, or — when access was lost —
+     * "Folder unavailable. Choose a new location." NEVER a raw URI, tree
+     * document id, or provider authority (owner correction, July 22 2026).
+     */
+    private fun refreshLocations() {
+        val manual = RecoveryBackupState.getManualFolderUri(this)
+        val auto = RecoveryBackupState.getAutoFolderUri(this)
+        textManualLocation?.text = when {
+            manual == null -> getString(R.string.backup_location_none)
+            !folderAccessible(manual) -> getString(R.string.backup_location_unavailable)
+            else -> getString(
+                R.string.backup_current_location,
+                RecoveryBackupState.getManualFolderLabel(this)
+                    ?: getString(R.string.backup_location_selected_generic)
+            )
+        }
+        textAutoLocation?.text = when {
+            auto == null -> getString(R.string.backup_location_none)
+            !folderAccessible(auto) -> getString(R.string.backup_location_unavailable)
+            else -> getString(
+                R.string.backup_auto_location,
+                RecoveryBackupState.getAutoFolderLabel(this)
+                    ?: getString(R.string.backup_location_selected_generic)
+            )
+        }
+    }
+
+    /* ------------------------------ 5. portable data copy ------------------------------ */
 
     private fun importSeedFromUri(uri: Uri) {
         runOffThread {
@@ -393,7 +678,8 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         val report = store.importData(data, overwriteSingletons = firstSeed)
         if (firstSeed) store.setMeta(MemoryStore.META_SEED_IMPORTED_AT, MemoryStore.nowIso())
         runOnUiThread {
-            Toast.makeText(this, report.summary(), Toast.LENGTH_LONG).show()
+            // The import report stays on screen until dismissed (never a toast).
+            showNoticeDialog(report.summary(), getString(R.string.backup_portable_import_title))
             refreshBackupStatus()
         }
     }
@@ -420,7 +706,9 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
                 ?: throw IllegalStateException(getString(R.string.memory_file_unreadable))
             MemoryStore.getInstance(this).setMeta(MemoryStore.META_LAST_AUTO_EXPORT_AT, MemoryStore.nowIso())
             runOnUiThread {
-                Toast.makeText(this, R.string.memory_export_done, Toast.LENGTH_SHORT).show()
+                // Persistent inline result under the buttons (never a toast).
+                textPortableStatus?.text = getString(R.string.backup_portable_export_done)
+                textPortableStatus?.visibility = View.VISIBLE
                 refreshBackupStatus()
             }
         }
@@ -430,7 +718,7 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
 
     private fun showResetDialog() {
         if (!MemoryStore.isProvisioned(this)) {
-            Toast.makeText(this, R.string.memory_not_provisioned_toast, Toast.LENGTH_SHORT).show()
+            showNoticeDialog(getString(R.string.memory_not_provisioned_toast))
             return
         }
         val backupBox = MaterialCheckBox(this).apply {
@@ -491,18 +779,27 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
 
     /* ------------------------------ helpers ------------------------------ */
 
-    /** All store work off the main thread, all failures as a toast — never a crash. */
+    /**
+     * All store work off the main thread; a failure becomes a persistent
+     * dialog with GENERIC wording — never a toast, and never raw exception
+     * text on screen (owner corrections, July 22 2026). The class name only
+     * (no message — messages can embed paths/URIs) goes to the local Memory
+     * log for diagnosis.
+     */
     private fun runOffThread(work: () -> Unit) {
         Thread {
             try {
                 work()
             } catch (e: Exception) {
+                try {
+                    MemoryLog.log(this, "BackupScreen", "error",
+                        "Backup screen operation failed (${e.javaClass.simpleName}).")
+                } catch (_: Exception) { /* logging is best-effort */ }
                 runOnUiThread {
-                    Toast.makeText(
-                        this,
-                        getString(R.string.memory_operation_failed, e.message ?: e.javaClass.simpleName),
-                        Toast.LENGTH_LONG
-                    ).show()
+                    showNoticeDialog(
+                        getString(R.string.backup_operation_failed_body),
+                        getString(R.string.backup_operation_failed_title)
+                    )
                 }
             }
         }.start()

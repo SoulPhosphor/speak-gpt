@@ -16,10 +16,11 @@
 * limitations under the License.
 **************************************************************************/
 -->
-<!-- Memory Backup & Restore (Database Health & Backups, Build Phase 2). Order and
-     wording are owner-approved verbatim (July 21 2026): Database Health, Backup
-     Status, Create Backup (manual recovery backup), Portable Copy, Automatic
-     Backups, Reset. The manual and automatic backup locations are separate. -->
+<!-- Memory Backup & Restore (Database Health & Backups). Section order is
+     owner-directed and EXACT (July 22 2026): 1. Database Health, 2. Backup
+     Status, 3. Recovery Backup, 4. Human-Readable Chat Backup, 5. Portable
+     Data Copy, 6. Automatic Backups, 7. Reset. Do not reorder. The manual and
+     automatic backup locations are separate. -->
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/root"
@@ -177,7 +178,7 @@
                 android:textColor="@color/text"
                 android:textSize="15sp" />
 
-            <!-- ============ 3. Create Backup (manual) ============ -->
+            <!-- ============ 3. Recovery Backup (manual) ============ -->
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -238,7 +239,60 @@
                 android:text="@string/backup_create"
                 android:visibility="gone" />
 
-            <!-- ============ 4. Portable Copy ============ -->
+            <!-- ============ 4. Human-Readable Chat Backup ============ -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="24dp"
+                android:text="@string/backup_readable_section"
+                android:textColor="?attr/colorPrimary"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="8dp"
+                android:text="@string/backup_readable_desc"
+                android:textColor="@color/text_subtitle"
+                android:textSize="13sp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_readable_scope"
+                style="@style/AppButton.Primary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="@string/backup_readable_scope_all" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_readable_format"
+                style="@style/AppButton.Primary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="@string/backup_readable_format_text" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_readable_create"
+                style="@style/AppButton.Primary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="@string/backup_readable_create" />
+
+            <!-- Persistent inline status: preparing / saved / failed / "No new
+                 or updated chats." — stays until replaced. Never a toast. -->
+            <TextView
+                android:id="@+id/text_readable_status"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="12dp"
+                android:textColor="@color/text"
+                android:textSize="15sp"
+                android:visibility="gone" />
+
+            <!-- ============ 5. Portable Data Copy ============ -->
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -272,6 +326,17 @@
                 android:layout_marginTop="12dp"
                 android:text="@string/backup_portable_import" />
 
+            <!-- Persistent inline status for export/import results (replaces
+                 the removed toasts). Stays until replaced. -->
+            <TextView
+                android:id="@+id/text_portable_status"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="12dp"
+                android:textColor="@color/text"
+                android:textSize="15sp"
+                android:visibility="gone" />
+
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -280,7 +345,14 @@
                 android:textColor="@color/text_subtitle"
                 android:textSize="13sp" />
 
-            <!-- ============ 5. Automatic Backups ============ -->
+            <!-- ============ 6. Automatic Backups ============ -->
+            <!-- The approved portable automatic system is NOT built. This
+                 section says so honestly. The enable switch is GONE from view
+                 (it drove nothing — misleading), kept only in the tree for the
+                 future implementation; the location chooser stays because the
+                 chosen folder is real, persisted state the finished system
+                 will use. Do not un-hide the switch until the portable
+                 automatic writer actually exists. -->
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -294,7 +366,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:paddingTop="8dp"
-                android:text="@string/backup_auto_hint"
+                android:text="@string/backup_auto_not_ready"
                 android:textColor="@color/text_subtitle"
                 android:textSize="13sp" />
 
@@ -320,7 +392,8 @@
                 android:layout_height="wrap_content"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
-                android:paddingTop="16dp">
+                android:paddingTop="16dp"
+                android:visibility="gone">
 
                 <TextView
                     android:layout_width="0dp"
@@ -337,7 +410,7 @@
                     android:layout_marginStart="12dp" />
             </LinearLayout>
 
-            <!-- ============ 6. Reset (destructive; bottom, unchanged) ============ -->
+            <!-- ============ 7. Reset (destructive; bottom, unchanged) ============ -->
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"

@@ -58,6 +58,13 @@ object RecoveryBackupState {
     private const val KEY_MANUAL_FOLDER_URI = "backup.manual_folder_uri"
     private const val KEY_AUTO_FOLDER_URI = "backup.auto_folder_uri"
 
+    // Human-readable folder labels, resolved and persisted at pick time (owner
+    // correction, July 22 2026): the URI is for ACCESS, the label is for
+    // DISPLAY, and the two are stored separately so the screen can never fall
+    // back to showing a raw URI or tree document id after a restart.
+    private const val KEY_MANUAL_FOLDER_LABEL = "backup.manual_folder_label"
+    private const val KEY_AUTO_FOLDER_LABEL = "backup.auto_folder_label"
+
     private fun prefs(context: Context) =
         context.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)
 
@@ -102,6 +109,33 @@ object RecoveryBackupState {
         try {
             prefs(context).edit(commit = true) {
                 if (uri.isNullOrEmpty()) remove(KEY_AUTO_FOLDER_URI) else putString(KEY_AUTO_FOLDER_URI, uri)
+            }
+        } catch (_: Exception) { }
+    }
+
+    /** The persisted display label of the manual backup folder, or null when
+     *  none could be resolved at pick time (the UI shows a generic phrase —
+     *  never the URI). */
+    fun getManualFolderLabel(context: Context): String? =
+        try { prefs(context).getString(KEY_MANUAL_FOLDER_LABEL, null) } catch (_: Exception) { null }
+
+    fun setManualFolderLabel(context: Context, label: String?) {
+        try {
+            prefs(context).edit(commit = true) {
+                if (label.isNullOrBlank()) remove(KEY_MANUAL_FOLDER_LABEL) else putString(KEY_MANUAL_FOLDER_LABEL, label)
+            }
+        } catch (_: Exception) { }
+    }
+
+    /** The persisted display label of the automatic backup folder — same
+     *  contract as [getManualFolderLabel]. */
+    fun getAutoFolderLabel(context: Context): String? =
+        try { prefs(context).getString(KEY_AUTO_FOLDER_LABEL, null) } catch (_: Exception) { null }
+
+    fun setAutoFolderLabel(context: Context, label: String?) {
+        try {
+            prefs(context).edit(commit = true) {
+                if (label.isNullOrBlank()) remove(KEY_AUTO_FOLDER_LABEL) else putString(KEY_AUTO_FOLDER_LABEL, label)
             }
         } catch (_: Exception) { }
     }

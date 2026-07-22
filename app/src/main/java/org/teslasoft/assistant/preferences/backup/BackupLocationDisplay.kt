@@ -87,4 +87,56 @@ object BackupLocationDisplay {
      *  nothing. */
     fun describeSaveAs(context: Context, uri: Uri): SaveAsDescription =
         SaveAsDescription(providerLabel(context, uri), displayName(context, uri))
+
+    /**
+     * Pure display-label composition for a picked backup FOLDER (unit-tested):
+     * cloud-provider name plus folder name where useful, the folder name alone
+     * for local storage, the provider alone when the folder name is unknown,
+     * and null when nothing human-readable exists — the caller then shows a
+     * generic phrase. Never a URI, tree id, or authority string.
+     */
+    fun composeFolderLabel(providerFriendly: String?, folderName: String?): String? = when {
+        providerFriendly != null && !folderName.isNullOrBlank() -> "$providerFriendly – $folderName"
+        !folderName.isNullOrBlank() -> folderName
+        providerFriendly != null -> providerFriendly
+        else -> null
+    }
+
+    /**
+     * Resolve a human-readable label for a SAF TREE uri at pick time (owner
+     * correction, July 22 2026). The label is persisted separately from the
+     * URI; on any failure this returns null and the UI falls back to a generic
+     * phrase — NEVER the raw URI or the tree document id, which for cloud
+     * providers is an encoded internal token, not a name.
+     */
+    fun treeFolderLabel(context: Context, treeUri: Uri): String? {
+        val name = try {
+            val docUri = DocumentsContract.buildDocumentUriUsingTree(
+                treeUri, DocumentsContract.getTreeDocumentId(treeUri)
+            )
+            var display: String? = null
+            val cursor: Cursor? = context.contentResolver.query(
+                docUri, arrayOf(DocumentsContract.Document.COLUMN_DISPLAY_NAME), null, null, null
+            )
+            cursor?.use { if (it.moveToFirst() && !it.isNull(0)) display = it.getString(0) }
+            display?.takeIf { looksLikeName(it) }
+        } catch (_: Exception) {
+            null
+        }
+        return composeFolderLabel(friendlyProvider(treeUri.authority), name)
+    }
+
+    /**
+     * Guard against providers that report an internal token AS the display
+     * name: anything that looks like an encoded id/URI is rejected so it can
+     * never reach the screen (pure, unit-tested).
+     */
+    fun looksLikeName(candidate: String): Boolean {
+        val c = candidate.trim()
+        if (c.isEmpty()) return false
+        if (c.contains("://")) return false
+        // Key=value token shapes ("acc=2;doc=encoded=...") are ids, not names.
+        if (Regex("^[A-Za-z0-9_]+=").containsMatchIn(c) && (c.contains(';') || c.contains("%3D") || c.contains("=="))) return false
+        return true
+    }
 }

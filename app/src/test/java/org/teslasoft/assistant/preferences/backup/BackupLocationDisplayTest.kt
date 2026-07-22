@@ -17,7 +17,9 @@
 package org.teslasoft.assistant.preferences.backup
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /** The pure authority→friendly-name map (owner ruling 4): never a raw
@@ -38,5 +40,28 @@ class BackupLocationDisplayTest {
         assertNull(BackupLocationDisplay.friendlyProvider(null))
         // A raw authority is never returned as a friendly name.
         assertNull(BackupLocationDisplay.friendlyProvider("com.android.externalstorage.documents"))
+    }
+
+    @Test
+    fun composeFolderLabelPrefersProviderPlusName() {
+        assertEquals("Google Drive – Backups", BackupLocationDisplay.composeFolderLabel("Google Drive", "Backups"))
+        assertEquals("Backups", BackupLocationDisplay.composeFolderLabel(null, "Backups"))
+        assertEquals("Google Drive", BackupLocationDisplay.composeFolderLabel("Google Drive", null))
+        assertEquals("Google Drive", BackupLocationDisplay.composeFolderLabel("Google Drive", "  "))
+        assertNull(BackupLocationDisplay.composeFolderLabel(null, null))
+        assertNull(BackupLocationDisplay.composeFolderLabel(null, ""))
+    }
+
+    @Test
+    fun internalTokensNeverPassAsNames() {
+        // The exact shape the owner saw on screen must never count as a name.
+        assertFalse(BackupLocationDisplay.looksLikeName("acc=2;doc=encoded=abc123"))
+        assertFalse(BackupLocationDisplay.looksLikeName("doc=encoded%3Dxyz"))
+        assertFalse(BackupLocationDisplay.looksLikeName("content://com.foo.bar/tree/x"))
+        assertFalse(BackupLocationDisplay.looksLikeName("   "))
+        // Ordinary folder names pass, including ones with spaces or dashes.
+        assertTrue(BackupLocationDisplay.looksLikeName("Backups"))
+        assertTrue(BackupLocationDisplay.looksLikeName("My Phone Backups"))
+        assertTrue(BackupLocationDisplay.looksLikeName("backups-2026"))
     }
 }
