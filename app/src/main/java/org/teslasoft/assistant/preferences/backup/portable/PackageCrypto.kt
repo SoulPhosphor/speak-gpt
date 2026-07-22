@@ -133,6 +133,33 @@ object PackageCrypto {
         }
     }
 
+    /**
+     * Pure calibration clamp (unit-tested): scale a probe run to [targetMillis]
+     * and clamp to the v1 window [KDF_MIN_ITERATIONS, KDF_MAX_ITERATIONS]. The
+     * clamp is what protects a slow API-28 device — a fast phone's calibration
+     * can never push a slow phone's restore past the ceiling.
+     */
+    fun calibrateIterations(probeIterations: Int, probeMillis: Long, targetMillis: Long = 1000L): Int {
+        if (probeIterations <= 0 || probeMillis <= 0) return KDF_MIN_ITERATIONS
+        val scaled = probeIterations.toLong() * targetMillis / probeMillis
+        return scaled.coerceIn(KDF_MIN_ITERATIONS.toLong(), KDF_MAX_ITERATIONS.toLong()).toInt()
+    }
+
+    /**
+     * Android runtime calibration: time a small PBKDF2 probe on THIS device and
+     * return the iteration count for ~[targetMillis]. Runs the KDF, so it must
+     * be called off the main thread, and only at password set/change.
+     */
+    fun calibratedIterations(targetMillis: Long = 1000L): Int {
+        val probe = 100_000
+        val salt = newKdfSalt()
+        val start = System.nanoTime()
+        val kek = derivePasswordKey("calibration-probe".toCharArray(), salt, probe)
+        wipe(kek)
+        val ms = (System.nanoTime() - start) / 1_000_000
+        return calibrateIterations(probe, ms.coerceAtLeast(1))
+    }
+
     /** True when a package-supplied iteration count is inside the v1 window.
      *  Out-of-window counts mean "Unsupported or invalid backup protection
      *  settings" (owner wording) — never generic damage, and the KDF is never

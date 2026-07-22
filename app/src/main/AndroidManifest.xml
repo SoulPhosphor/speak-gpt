@@ -291,6 +291,11 @@
         </activity>
 
         <activity
+            android:name=".ui.activities.RecoveryBackupActivity"
+            android:exported="false"
+            android:label="@string/recovery_title" />
+
+        <activity
             android:name=".ui.activities.MemoryAssistantAdvancedSettingsActivity"
             android:exported="false"
             android:label="@string/title_memory_assistant_advanced"

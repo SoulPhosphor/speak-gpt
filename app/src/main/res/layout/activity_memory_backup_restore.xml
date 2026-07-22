@@ -187,6 +187,18 @@
                 android:textSize="18sp"
                 android:textStyle="bold" />
 
+            <!-- Portable recovery (format v2) entry — the owner-approved
+                 Create Recovery Backup flow. The installation-bound v1 controls
+                 below remain as the labelled fallback until the portable path
+                 passes the on-device test gate (owner ruling). -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_create_recovery"
+                style="@style/AppButton.Primary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="@string/recovery_create" />
+
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"

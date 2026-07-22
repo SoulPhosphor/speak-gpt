@@ -86,6 +86,7 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
     private var textStatusUserImage: TextView? = null
 
     // 3. Create Backup (manual)
+    private var btnCreateRecovery: MaterialButton? = null
     private var textManualLocation: TextView? = null
     private var btnChangeManualLocation: MaterialButton? = null
     private var btnCreateBackup: MaterialButton? = null
@@ -153,6 +154,7 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         textStatusChats = findViewById(R.id.text_status_chats)
         textStatusUserImage = findViewById(R.id.text_status_userimage)
 
+        btnCreateRecovery = findViewById(R.id.btn_create_recovery)
         textManualLocation = findViewById(R.id.text_manual_location)
         btnChangeManualLocation = findViewById(R.id.btn_change_manual_location)
         btnCreateBackup = findViewById(R.id.btn_create_backup)
@@ -197,6 +199,9 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         btnCheckIntegrity?.setOnClickListener { onCheckIntegrity() }
 
         /* ---- 3. Create Backup (manual) ---- */
+        btnCreateRecovery?.setOnClickListener {
+            startActivity(Intent(this, RecoveryBackupActivity::class.java))
+        }
         btnChangeManualLocation?.setOnClickListener { manualFolderPicker.launch(null) }
         btnCreateBackup?.setOnClickListener { onCreateBackup() }
 
