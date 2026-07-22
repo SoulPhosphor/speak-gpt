@@ -346,13 +346,12 @@
                 android:textSize="13sp" />
 
             <!-- ============ 6. Automatic Backups ============ -->
-            <!-- The approved portable automatic system is NOT built. This
-                 section says so honestly. The enable switch is GONE from view
-                 (it drove nothing — misleading), kept only in the tree for the
-                 future implementation; the location chooser stays because the
-                 chosen folder is real, persisted state the finished system
-                 will use. Do not un-hide the switch until the portable
-                 automatic writer actually exists. -->
+            <!-- The portable automatic system (July 22 2026): due-check at
+                 app open, protected packages only, user-chosen folder
+                 required. The switch is real and gated — it cannot turn on
+                 without a folder and a confirmed Recovery Code, and it is
+                 OFF by default. Retention is identify-only (nothing is
+                 deleted); the note below says so. -->
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -366,7 +365,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:paddingTop="8dp"
-                android:text="@string/backup_auto_not_ready"
+                android:text="@string/backup_auto_desc"
                 android:textColor="@color/text_subtitle"
                 android:textSize="13sp" />
 
@@ -387,13 +386,20 @@
                 android:layout_marginTop="12dp"
                 android:text="@string/backup_auto_change_location" />
 
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_auto_frequency"
+                style="@style/AppButton.Primary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="@string/backup_auto_frequency_label" />
+
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
-                android:paddingTop="16dp"
-                android:visibility="gone">
+                android:paddingTop="16dp">
 
                 <TextView
                     android:layout_width="0dp"
@@ -409,6 +415,34 @@
                     android:layout_height="wrap_content"
                     android:layout_marginStart="12dp" />
             </LinearLayout>
+
+            <!-- Persistent inline prerequisite notice (why the switch refused
+                 to turn on). Never a toast. -->
+            <TextView
+                android:id="@+id/text_auto_prereq"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="8dp"
+                android:textColor="@color/text"
+                android:textSize="13sp"
+                android:visibility="gone" />
+
+            <!-- Persistent last-result line for automatic runs. -->
+            <TextView
+                android:id="@+id/text_auto_result"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="12dp"
+                android:textColor="@color/text"
+                android:textSize="15sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="8dp"
+                android:text="@string/backup_auto_retention_note"
+                android:textColor="@color/text_subtitle"
+                android:textSize="13sp" />
 
             <!-- ============ 7. Reset (destructive; bottom, unchanged) ============ -->
             <TextView

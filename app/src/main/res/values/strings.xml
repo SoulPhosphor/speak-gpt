@@ -1484,14 +1484,28 @@
     <string name="backup_portable_warning">Portable copies may contain readable chats, memories, and other personal information. Store them somewhere private.</string>
     <string name="backup_portable_export_done">Portable data copy saved.</string>
     <string name="backup_portable_import_title">Import Portable Data Copy</string>
-    <!-- 6. Automatic Backups. The approved portable automatic system is NOT
-         built yet; this section says so instead of exposing the unfinished
-         legacy controls (owner correction, July 22 2026). -->
+    <!-- 6. Automatic Backups (portable automatic system — owner directive,
+         July 22 2026). The description states exactly what the code does:
+         due-check at app open, protected packages only, user-chosen folder
+         required. Retention is IDENTIFY-only until owner review — the note
+         says so honestly. -->
     <string name="backup_auto_section">Automatic Backups</string>
-    <string name="backup_auto_not_ready">Automatic backups are not ready yet. You can already choose the folder they will use; the schedule controls will appear here once automatic backups are finished.</string>
+    <string name="backup_auto_desc">When turned on, the app checks whether an automatic backup is due each time it opens, and saves a protected Recovery Backup to your chosen folder. Automatic backups always use your Recovery Code protection. Backups are not created while the app is closed.</string>
     <string name="backup_auto_location">Automatic Backup Location: %1$s</string>
     <string name="backup_auto_change_location">Change Automatic Backup Location</string>
     <string name="backup_auto_enable">Enable Automatic Backups</string>
+    <string name="backup_auto_frequency_label">Frequency</string>
+    <string name="backup_auto_freq_daily">Every Day</string>
+    <string name="backup_auto_freq_weekly">Every Week</string>
+    <string name="backup_auto_freq_biweekly">Every Two Weeks</string>
+    <string name="backup_auto_freq_monthly">Every Month</string>
+    <string name="backup_auto_need_folder">Choose an automatic backup folder before turning this on.</string>
+    <string name="backup_auto_need_setup">Set up and confirm your Recovery Code first: open Create Recovery Backup and choose Protected Recovery.</string>
+    <string name="backup_auto_last_never">No automatic backup has been created yet.</string>
+    <string name="backup_auto_last_success">Last automatic backup: %1$s</string>
+    <string name="backup_auto_last_failed">The last automatic backup attempt failed. Last good automatic backup: %1$s</string>
+    <string name="backup_auto_last_failed_none">The last automatic backup attempt failed. No automatic backup exists yet.</string>
+    <string name="backup_auto_retention_note">Keeps the five most recent automatic backups. For now older automatic backups are only counted, never deleted — cleanup arrives in a later update after review.</string>
     <!-- Shared backup-screen failure notice (replaces the old toast that leaked
          raw exception text): generic on screen, details only in local logs. -->
     <string name="backup_operation_failed_title">Something went wrong</string>

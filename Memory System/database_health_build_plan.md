@@ -41,6 +41,24 @@ NOT yet built. Build Phases 3–5 remain plan only.**
 > - The unfinished automatic controls must not present the legacy v1
 >   writer as the approved portable automatic system: the enable switch is
 >   hidden/unwired and the section says automatic backups are not ready.
+>   **Superseded in turn on the `claude/automatic-backups-*` line (July 22
+>   2026, owner-directed continuation): the PORTABLE automatic system is
+>   now built** — due-check at app open (delayed ~30 s so the package
+>   build never contends with the main thread's startup chat-list load,
+>   the July 15 ANR class), four frequency choices (Every Day / Every
+>   Week / Every Two Weeks / Every Month), protected packages ONLY (a
+>   confirmed Recovery Code is a hard prerequisite; automatic runs never
+>   fall back to unencrypted), a chosen accessible folder required before
+>   the switch turns on, per-file ownership index (URI, filename,
+>   SHA-256, creation time, verification state) in `storage_health`
+>   under `backup.auto.index`, and destination reopen-and-hash-verify
+>   before any success is recorded. **Retention is IDENTIFY-ONLY**: the
+>   keep-5 overflow among owned, verified files in the current folder is
+>   counted and logged, but DELETION IS DELIBERATELY NOT IMPLEMENTED
+>   (owner safety fence — pruning stays disabled until owner review).
+>   Files are never adopted or touched based on filename resemblance;
+>   manual backups and readable chat exports are structurally outside the
+>   index and can never enter retention.
 > - No toasts anywhere in the backup workflows.
 > - The Portable Data Copy description is qualified: importing restores
 >   memory data only, not chats.

@@ -37,9 +37,11 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.checkbox.MaterialCheckBox
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.elevation.SurfaceColors
+import com.google.android.material.materialswitch.MaterialSwitch
 import android.provider.DocumentsContract
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
+import org.teslasoft.assistant.preferences.backup.AutoBackupFrequency
 import org.teslasoft.assistant.preferences.backup.BackupBrand
 import org.teslasoft.assistant.preferences.backup.BackupLocationDisplay
 import org.teslasoft.assistant.preferences.backup.BackupStatusFormatter
@@ -113,11 +115,19 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
     private var btnPortableImport: MaterialButton? = null
     private var textPortableStatus: TextView? = null
 
-    // 6. Automatic Backups. The enable switch is deliberately NOT bound: the
-    // approved portable automatic system is unbuilt and the switch drove
-    // nothing — it stays hidden in the layout until that system exists.
+    // 6. Automatic Backups (the portable automatic system, July 22 2026).
+    // The switch is real and GATED: it cannot turn on without a chosen,
+    // accessible folder and a CONFIRMED Recovery Code (automatic packages
+    // are always protected). Refusals are explained inline, never a toast.
     private var textAutoLocation: TextView? = null
     private var btnChangeAutoLocation: MaterialButton? = null
+    private var btnAutoFrequency: MaterialButton? = null
+    private var switchAutoBackup: MaterialSwitch? = null
+    private var textAutoPrereq: TextView? = null
+    private var textAutoResult: TextView? = null
+
+    /** Guards the switch listener while code (not the user) sets its state. */
+    private var suppressAutoSwitchCallback = false
 
     // 7. Reset
     private var btnReset: MaterialButton? = null
@@ -169,6 +179,7 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         super.onResume()
         refreshLocations()
         refreshBackupStatus()
+        updateAutoUi()
     }
 
     private fun bindViews() {
@@ -201,6 +212,10 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
 
         textAutoLocation = findViewById(R.id.text_auto_location)
         btnChangeAutoLocation = findViewById(R.id.btn_change_auto_location)
+        btnAutoFrequency = findViewById(R.id.btn_auto_frequency)
+        switchAutoBackup = findViewById(R.id.switch_auto_backup)
+        textAutoPrereq = findViewById(R.id.text_auto_prereq)
+        textAutoResult = findViewById(R.id.text_auto_result)
 
         btnReset = findViewById(R.id.btn_memory_reset)
     }
@@ -259,8 +274,9 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
             exportLauncher.launch("memory-export-$stamp.json")
         }
 
-        /* ---- 6. Automatic Backups (location only; system not built yet) ---- */
+        /* ---- 6. Automatic Backups ---- */
         btnChangeAutoLocation?.setOnClickListener { autoFolderPicker.launch(null) }
+        initAutoSection()
 
         /* ---- 7. Reset (bottom) ---- */
         btnReset?.setOnClickListener { showResetDialog() }
@@ -282,6 +298,117 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
     override fun onDestroy() {
         cleanupStagedReadable()
         super.onDestroy()
+    }
+
+    /* ------------------------------ 6. automatic backups ------------------------------ */
+
+    private fun initAutoSection() {
+        setAutoSwitchChecked(RecoveryBackupState.isEnabled(this))
+        switchAutoBackup?.setOnCheckedChangeListener { _, checked ->
+            if (suppressAutoSwitchCallback) return@setOnCheckedChangeListener
+            onAutoSwitchToggled(checked)
+        }
+        btnAutoFrequency?.setOnClickListener { pickAutoFrequency() }
+        updateAutoUi()
+    }
+
+    private fun setAutoSwitchChecked(checked: Boolean) {
+        suppressAutoSwitchCallback = true
+        switchAutoBackup?.isChecked = checked
+        suppressAutoSwitchCallback = false
+    }
+
+    /**
+     * Turning the switch ON is GATED (owner directive): a chosen, accessible
+     * folder and a CONFIRMED Recovery Code are required — automatic packages
+     * are always protected and there is no user present at run time to
+     * choose. The Keystore read runs off the main thread; until it answers
+     * the switch stays visually on, and a refusal snaps it back with a
+     * persistent inline explanation (never a toast).
+     */
+    private fun onAutoSwitchToggled(checked: Boolean) {
+        if (!checked) {
+            RecoveryBackupState.setEnabled(this, false)
+            textAutoPrereq?.visibility = View.GONE
+            updateAutoUi()
+            return
+        }
+        val folderUri = RecoveryBackupState.getAutoFolderUri(this)
+        if (folderUri == null || !folderAccessible(folderUri)) {
+            setAutoSwitchChecked(false)
+            textAutoPrereq?.setText(R.string.backup_auto_need_folder)
+            textAutoPrereq?.visibility = View.VISIBLE
+            return
+        }
+        switchAutoBackup?.isEnabled = false
+        runOffThread {
+            val confirmed = try {
+                org.teslasoft.assistant.preferences.backup.portable.RecoveryKeyStore
+                    .getSetupState(this) ==
+                    org.teslasoft.assistant.preferences.backup.portable.RecoveryKeyStore.SetupState.CONFIRMED
+            } catch (_: Exception) {
+                false
+            }
+            runOnUiThread {
+                switchAutoBackup?.isEnabled = true
+                if (confirmed) {
+                    RecoveryBackupState.setEnabled(this, true)
+                    textAutoPrereq?.visibility = View.GONE
+                } else {
+                    setAutoSwitchChecked(false)
+                    textAutoPrereq?.setText(R.string.backup_auto_need_setup)
+                    textAutoPrereq?.visibility = View.VISIBLE
+                }
+                updateAutoUi()
+            }
+        }
+    }
+
+    private fun frequencyLabel(frequency: AutoBackupFrequency): String = getString(
+        when (frequency) {
+            AutoBackupFrequency.DAILY -> R.string.backup_auto_freq_daily
+            AutoBackupFrequency.WEEKLY -> R.string.backup_auto_freq_weekly
+            AutoBackupFrequency.BIWEEKLY -> R.string.backup_auto_freq_biweekly
+            AutoBackupFrequency.MONTHLY -> R.string.backup_auto_freq_monthly
+        }
+    )
+
+    private fun pickAutoFrequency() {
+        if (isFinishing) return
+        val values = arrayOf(
+            AutoBackupFrequency.DAILY, AutoBackupFrequency.WEEKLY,
+            AutoBackupFrequency.BIWEEKLY, AutoBackupFrequency.MONTHLY
+        )
+        val labels = values.map { frequencyLabel(it) }.toTypedArray()
+        val current = values.indexOf(RecoveryBackupState.getAutoFrequency(this)).coerceAtLeast(0)
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.backup_auto_frequency_label)
+            .setSingleChoiceItems(labels, current) { dialog, which ->
+                RecoveryBackupState.setAutoFrequency(this, values[which])
+                updateAutoUi()
+                dialog.dismiss()
+            }
+            .setNegativeButton(R.string.btn_cancel) { _, _ -> }
+            .show()
+    }
+
+    /** The frequency button label and the persistent last-result line — read
+     *  from the recorded state, never invented. */
+    private fun updateAutoUi() {
+        btnAutoFrequency?.text = "${getString(R.string.backup_auto_frequency_label)}: " +
+            frequencyLabel(RecoveryBackupState.getAutoFrequency(this))
+        val lastSuccess = RecoveryBackupState.getAutoLastSuccess(this)
+        val failedCategory = RecoveryBackupState.getAutoLastFailureCategory(this)
+        textAutoResult?.text = when {
+            failedCategory != null && lastSuccess > 0L -> getString(
+                R.string.backup_auto_last_failed, BackupStatusFormatter.formatDateTime(lastSuccess)
+            )
+            failedCategory != null -> getString(R.string.backup_auto_last_failed_none)
+            lastSuccess > 0L -> getString(
+                R.string.backup_auto_last_success, BackupStatusFormatter.formatDateTime(lastSuccess)
+            )
+            else -> getString(R.string.backup_auto_last_never)
+        }
     }
 
     /* ------------------------------ 4. human-readable chat backup ------------------------------ */
