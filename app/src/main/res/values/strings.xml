@@ -1382,12 +1382,45 @@
     <string name="backup_err_wrong_key_or_header">This Recovery Code belongs to a different Recovery Key, or the backup header is damaged.</string>
     <string name="backup_err_damaged">The backup is damaged or has been altered.</string>
     <string name="backup_err_unsupported_protection">Unsupported or invalid backup protection settings.</string>
+    <!-- Manual Recovery Backup flow (owner-approved wording, July 22 2026 —
+         verbatim; do not reword without asking). Section 5/6 rulings. -->
+    <string name="recovery_create">Create Recovery Backup</string>
+    <string name="recovery_choice_protected_title">Protected Recovery</string>
+    <string name="recovery_choice_protected_desc">Encrypted. Restore using your Recovery Code, Recovery Key file, or password.</string>
+    <string name="recovery_choice_unencrypted_title">Recovery Without Encryption</string>
+    <string name="recovery_choice_unencrypted_desc">Not encrypted. Anyone with the file can read your chats and memories. No code or password is needed to restore it.</string>
+    <string name="recovery_code_safety">Anyone with this code can open your protected backups. Store it somewhere safe and separate from the backup files.</string>
+    <string name="recovery_save_key_file">Save Recovery Key File</string>
+    <string name="recovery_copy_code">Copy Recovery Code</string>
+    <string name="recovery_add_password">Add Password (Optional)</string>
+    <string name="recovery_password_explain">A password gives you another way to restore your backups. Your Recovery Code and Recovery Key file will still work.</string>
+    <string name="recovery_confirm_prompt">Enter your Recovery Code to confirm you recorded it correctly.</string>
+    <string name="recovery_fail_generic">The backup could not be created.</string>
+    <string name="recovery_fail_keystore">Your recovery key is temporarily unavailable. No backup was created.</string>
+    <!-- Supporting UI chrome for the recovery flow (NOT part of the owner's
+         verbatim set — plain functional labels; flagged for owner review). -->
+    <string name="recovery_title">Recovery Backup</string>
+    <string name="recovery_your_code">Your Recovery Code</string>
+    <string name="recovery_continue">Continue</string>
+    <string name="recovery_confirm">Confirm</string>
+    <string name="recovery_password_label">Password</string>
+    <string name="recovery_password_confirm_label">Confirm password</string>
+    <string name="recovery_password_save">Save Password</string>
+    <string name="recovery_password_mismatch">The passwords do not match.</string>
+    <string name="recovery_confirm_wrong">That code does not match. Check what you recorded and try again.</string>
+    <string name="recovery_creating">Creating backup…</string>
+    <string name="recovery_saved_to">Saved to %1$s</string>
+    <string name="recovery_saved_file">File %1$s</string>
+    <string name="recovery_saved_generic">Recovery backup saved.</string>
+    <string name="recovery_code_copied">Recovery Code copied.</string>
+    <string name="recovery_key_saved">Recovery Key file saved.</string>
     <!-- The user-visible backup filename BRAND (owner filename architecture,
          July 22 2026). One centralized value; RecoveryFileNaming receives it,
-         never the app label. PLACEHOLDER: the owner has not selected the
-         final brand — do not treat this value as approved branding. Sanitized
-         by BackupBrand before use ("Phosphor Shines" -> "Phosphor-Shines"). -->
-    <string name="backup_filename_brand" translatable="false">Phosphor Shines</string>
+         never the app label. Currently the owner-approved stable fallback
+         "Backup" (owner ruling, July 22 2026: "Phosphor Shines" is NOT
+         approved branding and must never appear in a user-created filename).
+         When a final brand is chosen, change this one line. -->
+    <string name="backup_filename_brand" translatable="false">Backup</string>
     <!-- 3. Create Backup (manual recovery backup) -->
     <string name="backup_create_section">Create Backup</string>
     <string name="backup_create_hint">Creates a recovery backup of your chats, memories, lorebooks, and user image data.</string>
