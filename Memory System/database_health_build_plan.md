@@ -19,6 +19,31 @@ owner-confirmed on-device (the original startup freeze is gone; normal
 launch is lighter). Build Phase 2's wording is now owner-approved (see
 "Owner confirmations — RESOLVED July 21 2026") but Build Phase 2 itself is
 NOT yet built. Build Phases 3–5 remain plan only.**
+
+> ⚠️ **SUPERSEDED IN PART — owner correction, July 22 2026 (Backup &
+> Restore rework directive).** After the first installed prerelease the
+> owner corrected the screen this plan describes. Where this plan and the
+> July 22 directive disagree, the DIRECTIVE wins. Concretely:
+> - Section heading **"Create Backup" is now "Recovery Backup"** and
+>   **"Portable Copy" is now "Portable Data Copy"** (the July 20–21 button
+>   name `Create Recovery Backup` remains).
+> - The screen's exact section order is **1. Database Health, 2. Backup
+>   Status, 3. Recovery Backup, 4. Human-Readable Chat Backup, 5. Portable
+>   Data Copy, 6. Automatic Backups, 7. Reset** — a NEW fourth section,
+>   **Human-Readable Chat Backup** (one ZIP of chats as readable Text/JSON
+>   files, All Chats or New-and-Updated, incremental baseline advancing
+>   only after a verified write), exists as its own system, distinct from
+>   both the recovery package and the portable JSON copy, and never part
+>   of automatic rotation.
+> - Backup locations display a persisted friendly folder label — never a
+>   raw URI/tree-document-id (the installed build showed
+>   `acc=2;doc=encoded=...`).
+> - The unfinished automatic controls must not present the legacy v1
+>   writer as the approved portable automatic system: the enable switch is
+>   hidden/unwired and the section says automatic backups are not ready.
+> - No toasts anywhere in the backup workflows.
+> - The Portable Data Copy description is qualified: importing restores
+>   memory data only, not chats.
 Revision 2, July 20 2026 — incorporates the second external review (11
 points + the two-systems architecture requirement). Written against `main`
 (through `2585a36`) and the owner-directed design in
