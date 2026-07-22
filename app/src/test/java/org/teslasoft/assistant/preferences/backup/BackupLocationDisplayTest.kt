@@ -111,9 +111,13 @@ class BackupLocationDisplayTest {
         assertFalse(result!!.contains("acc="))
         assertFalse(result.contains("doc="))
 
-        // An opaque leaf name is rejected too — never shown, even alone.
+        // An opaque leaf name is rejected too — never shown, even alone: with
+        // no provider there is nothing truthful left to show (null); with a
+        // known provider it degrades to the provider name alone, never the
+        // opaque token.
         assertNull(BackupLocationDisplay.composeBreadcrumb(null, null, "content://com.foo.bar/tree/x"))
-        assertNull(BackupLocationDisplay.composeBreadcrumb("Google Drive", null, "doc=encoded%3Dxyz"))
+        val providerOnly = BackupLocationDisplay.composeBreadcrumb("Google Drive", null, "doc=encoded%3Dxyz")
+        assertEquals("Google Drive", providerOnly)
     }
 
     @Test
