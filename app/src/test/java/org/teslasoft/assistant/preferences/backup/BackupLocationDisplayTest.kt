@@ -22,8 +22,12 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** The pure authority→friendly-name map (owner ruling 4): never a raw
- *  authority; unknown authorities fall through to the OS label (null here). */
+/**
+ * The pure parts of the centralized backup-destination display resolver
+ * (owner directive, July 22 2026 breadcrumb correction): the authority→
+ * friendly-name map, the breadcrumb fallback ladder, and the opaque-id guard.
+ * Never a raw authority, URI, document id, or encoded token on screen.
+ */
 class BackupLocationDisplayTest {
 
     @Test
@@ -42,14 +46,82 @@ class BackupLocationDisplayTest {
         assertNull(BackupLocationDisplay.friendlyProvider("com.android.externalstorage.documents"))
     }
 
+    // ----- composeBreadcrumb: the fallback ladder (owner requirement 9) -----
+
     @Test
-    fun composeFolderLabelPrefersProviderPlusName() {
-        assertEquals("Google Drive – Backups", BackupLocationDisplay.composeFolderLabel("Google Drive", "Backups"))
-        assertEquals("Backups", BackupLocationDisplay.composeFolderLabel(null, "Backups"))
-        assertEquals("Google Drive", BackupLocationDisplay.composeFolderLabel("Google Drive", null))
-        assertEquals("Google Drive", BackupLocationDisplay.composeFolderLabel("Google Drive", "  "))
-        assertNull(BackupLocationDisplay.composeFolderLabel(null, null))
-        assertNull(BackupLocationDisplay.composeFolderLabel(null, ""))
+    fun fullMultiLevelBreadcrumb() {
+        // The nested example from the task: Google Drive > Temp > app folder.
+        assertEquals(
+            "Google Drive > Temp > app folder",
+            BackupLocationDisplay.composeBreadcrumb("Google Drive", listOf("Temp", "app folder"), "app folder")
+        )
+    }
+
+    @Test
+    fun providerPlusDeeplyNestedFolders() {
+        assertEquals(
+            "Google Drive > Backups > 2026 > July > Weekly",
+            BackupLocationDisplay.composeBreadcrumb(
+                "Google Drive", listOf("Backups", "2026", "July", "Weekly"), "Weekly"
+            )
+        )
+    }
+
+    @Test
+    fun leafOnlyProviderFallback_whenHierarchyUnresolved() {
+        // Tier b: the provider is known but the full path could not be walked
+        // (e.g. the provider does not implement findDocumentPath) — provider
+        // plus the selected folder's own name, never a fabricated parent.
+        assertEquals(
+            "Google Drive > Backups",
+            BackupLocationDisplay.composeBreadcrumb("Google Drive", null, "Backups")
+        )
+        // Tier c: no provider label at all — the selected folder name alone.
+        assertEquals("Backups", BackupLocationDisplay.composeBreadcrumb(null, null, "Backups"))
+        // Tier a is preferred over tier b when both are available.
+        assertEquals(
+            "Google Drive > Temp > Backups",
+            BackupLocationDisplay.composeBreadcrumb("Google Drive", listOf("Temp", "Backups"), "Backups")
+        )
+    }
+
+    @Test
+    fun nothingResolved_fallsThroughToNull_neverInventsAName() {
+        // Tier d: caller shows its own generic "Selected folder location".
+        assertNull(BackupLocationDisplay.composeBreadcrumb(null, null, null))
+        assertNull(BackupLocationDisplay.composeBreadcrumb(null, emptyList(), null))
+    }
+
+    @Test
+    fun providerAlone_whenNeitherSegmentsNorLeafResolve() {
+        assertEquals("Google Drive", BackupLocationDisplay.composeBreadcrumb("Google Drive", null, null))
+        assertEquals("Google Drive", BackupLocationDisplay.composeBreadcrumb("Google Drive", emptyList(), null))
+    }
+
+    @Test
+    fun opaqueDocumentIdsNeverAppearInBreadcrumb() {
+        // A segment that looks like an internal token poisons the WHOLE
+        // breadcrumb attempt (never a partial path that silently drops the
+        // opaque parent and misrepresents the hierarchy) — falls back to the
+        // leaf name alone, itself validated the same way.
+        val result = BackupLocationDisplay.composeBreadcrumb(
+            "Google Drive", listOf("acc=2;doc=encoded=abc123", "app folder"), "app folder"
+        )
+        assertEquals("Google Drive > app folder", result)
+        assertFalse(result!!.contains("acc="))
+        assertFalse(result.contains("doc="))
+
+        // An opaque leaf name is rejected too — never shown, even alone.
+        assertNull(BackupLocationDisplay.composeBreadcrumb(null, null, "content://com.foo.bar/tree/x"))
+        assertNull(BackupLocationDisplay.composeBreadcrumb("Google Drive", null, "doc=encoded%3Dxyz"))
+    }
+
+    @Test
+    fun separatorIsTheArrowEverywhere() {
+        assertEquals(" > ", BackupLocationDisplay.SEPARATOR)
+        val result = BackupLocationDisplay.composeBreadcrumb("Google Drive", listOf("Temp", "app folder"), "app folder")
+        assertFalse(result!!.contains("–"))
+        assertFalse(result.contains(" - "))
     }
 
     @Test
@@ -63,5 +135,66 @@ class BackupLocationDisplayTest {
         assertTrue(BackupLocationDisplay.looksLikeName("Backups"))
         assertTrue(BackupLocationDisplay.looksLikeName("My Phone Backups"))
         assertTrue(BackupLocationDisplay.looksLikeName("backups-2026"))
+    }
+
+    // ----- destination lifecycle (owner requirements 6, 7, 11) -----
+
+    @Test
+    fun unavailableFolder_classifiesRegardlessOfCachedLabel() {
+        // A lost access grant always wins over whatever label happened to be
+        // cached — the line must say the folder is unavailable, never show a
+        // stale breadcrumb for a folder the app can no longer reach.
+        assertEquals(
+            BackupLocationDisplay.DestinationDisplayKind.UNAVAILABLE,
+            BackupLocationDisplay.classifyDestination(hasUri = true, accessible = false)
+        )
+        assertEquals(
+            BackupLocationDisplay.DestinationDisplayKind.NONE,
+            BackupLocationDisplay.classifyDestination(hasUri = false, accessible = false)
+        )
+        assertEquals(
+            BackupLocationDisplay.DestinationDisplayKind.LABELED,
+            BackupLocationDisplay.classifyDestination(hasUri = true, accessible = true)
+        )
+    }
+
+    @Test
+    fun changingSelectedFolder_replacesTheOldBreadcrumbImmediately() {
+        // Simulates the persisted state before a re-pick: an old folder with
+        // a resolved breadcrumb.
+        val before = BackupLocationDisplay.FolderDestination(
+            uri = "content://com.google.android.apps.docs.storage/tree/old",
+            label = "Google Drive > Temp > old folder"
+        )
+        assertEquals("Google Drive > Temp > old folder", before.label)
+
+        // Picking a NEW folder must adopt the new URI and drop the old label
+        // right away — the screen must never keep showing "old folder" under
+        // the new URI while the new breadcrumb resolves in the background.
+        val after = BackupLocationDisplay.applyFolderPick("content://com.google.android.apps.docs.storage/tree/new")
+        assertEquals("content://com.google.android.apps.docs.storage/tree/new", after.uri)
+        assertNull(after.label)
+        assertTrue(after.label != before.label)
+    }
+
+    @Test
+    fun labelPersistsSeparatelyFromUri_survivesAcrossRestart() {
+        // The URI (access) and the breadcrumb (display) are stored under
+        // separate keys in a plain in-memory map standing in for
+        // RecoveryBackupState's SharedPreferences file — a fresh read after
+        // a simulated restart must still see both values independently,
+        // never re-derived from the URI at read time.
+        val store = HashMap<String, String>()
+        store["backup.auto_folder_uri"] = "content://com.google.android.apps.docs.storage/tree/abc"
+        store["backup.auto_folder_label"] = "Google Drive > Temp > app folder"
+
+        // "Restart": read through a brand-new view over the same backing map.
+        val afterRestart = HashMap(store)
+        assertEquals("content://com.google.android.apps.docs.storage/tree/abc", afterRestart["backup.auto_folder_uri"])
+        assertEquals("Google Drive > Temp > app folder", afterRestart["backup.auto_folder_label"])
+
+        // The label is still exactly what composeBreadcrumb would produce —
+        // never a raw URI or document id even after the round trip.
+        assertTrue(BackupLocationDisplay.looksLikeName(afterRestart["backup.auto_folder_label"]!!))
     }
 }

@@ -496,8 +496,9 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
                 val where = BackupLocationDisplay.describeSaveAs(this, uri)
                 runOnUiThread {
                     btnReadableCreate?.isEnabled = true
-                    val main = if (where.providerLabel != null) {
-                        getString(R.string.backup_readable_saved_to, where.providerLabel)
+                    val destination = where.breadcrumb ?: where.providerLabel
+                    val main = if (destination != null) {
+                        getString(R.string.backup_readable_saved_to, destination)
                     } else {
                         getString(R.string.backup_readable_saved_generic)
                     }
@@ -796,8 +797,12 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
                 uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
             )
         } catch (_: Exception) { /* best-effort; a lost grant surfaces later as "Folder unavailable" */ }
-        RecoveryBackupState.setAutoFolderUri(this, uri.toString())
-        RecoveryBackupState.setAutoFolderLabel(this, null)
+        // Adopt the new URI immediately and drop the OLD breadcrumb right
+        // away (never leave the previous folder's label on screen while the
+        // new one resolves) — see BackupLocationDisplay.applyFolderPick.
+        val picked = BackupLocationDisplay.applyFolderPick(uri.toString())
+        RecoveryBackupState.setAutoFolderUri(this, picked.uri)
+        RecoveryBackupState.setAutoFolderLabel(this, picked.label)
         refreshLocations()
         runOffThread {
             val label = BackupLocationDisplay.treeFolderLabel(this, uri)
@@ -819,33 +824,37 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
     }
 
     /**
-     * Location lines show, in order of preference: the persisted friendly
-     * label, the generic "Selected folder" phrase, or — when access was lost —
-     * "Folder unavailable. Choose a new location." NEVER a raw URI, tree
-     * document id, or provider authority (owner correction, July 22 2026).
+     * Location lines show, in order of preference: the persisted breadcrumb
+     * label ("Provider > Parent > Selected Folder", from
+     * [BackupLocationDisplay]), the generic "Selected folder location"
+     * phrase, or — when access was lost — "Folder unavailable. Choose a new
+     * location." NEVER a raw URI, tree document id, or provider authority
+     * (owner correction, July 22 2026).
      */
     private fun refreshLocations() {
         val manual = RecoveryBackupState.getManualFolderUri(this)
         val auto = RecoveryBackupState.getAutoFolderUri(this)
-        textManualLocation?.text = when {
-            manual == null -> getString(R.string.backup_location_none)
-            !folderAccessible(manual) -> getString(R.string.backup_location_unavailable)
-            else -> getString(
-                R.string.backup_current_location,
-                RecoveryBackupState.getManualFolderLabel(this)
-                    ?: getString(R.string.backup_location_selected_generic)
-            )
-        }
-        textAutoLocation?.text = when {
-            auto == null -> getString(R.string.backup_location_none)
-            !folderAccessible(auto) -> getString(R.string.backup_location_unavailable)
-            else -> getString(
-                R.string.backup_auto_location,
-                RecoveryBackupState.getAutoFolderLabel(this)
-                    ?: getString(R.string.backup_location_selected_generic)
-            )
-        }
+        textManualLocation?.text = locationText(
+            manual, RecoveryBackupState.getManualFolderLabel(this), R.string.backup_current_location
+        )
+        textAutoLocation?.text = locationText(
+            auto, RecoveryBackupState.getAutoFolderLabel(this), R.string.backup_auto_location
+        )
     }
+
+    /** One shared rendering of a destination line, driven by the pure
+     *  [BackupLocationDisplay.classifyDestination] ladder: no folder chosen,
+     *  access lost ("Folder unavailable. Choose a new location."), or the
+     *  resolved breadcrumb — falling back to the generic phrase only when
+     *  nothing could ever be resolved for an otherwise-accessible folder. */
+    private fun locationText(uriStr: String?, label: String?, templateRes: Int): String =
+        when (BackupLocationDisplay.classifyDestination(uriStr != null, uriStr != null && folderAccessible(uriStr))) {
+            BackupLocationDisplay.DestinationDisplayKind.NONE -> getString(R.string.backup_location_none)
+            BackupLocationDisplay.DestinationDisplayKind.UNAVAILABLE -> getString(R.string.backup_location_unavailable)
+            BackupLocationDisplay.DestinationDisplayKind.LABELED -> getString(
+                templateRes, label ?: getString(R.string.backup_location_selected_generic)
+            )
+        }
 
     /* ------------------------------ 5. portable data copy ------------------------------ */
 
@@ -893,9 +902,15 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
             contentResolver.openOutputStream(uri, "wt")?.bufferedWriter()?.use { it.write(json) }
                 ?: throw IllegalStateException(getString(R.string.memory_file_unreadable))
             MemoryStore.getInstance(this).setMeta(MemoryStore.META_LAST_AUTO_EXPORT_AT, MemoryStore.nowIso())
+            val where = BackupLocationDisplay.describeSaveAs(this, uri)
+            val destination = where.breadcrumb ?: where.providerLabel
             runOnUiThread {
                 // Persistent inline result under the buttons (never a toast).
-                textPortableStatus?.text = getString(R.string.backup_portable_export_done)
+                textPortableStatus?.text = if (destination != null) {
+                    getString(R.string.backup_portable_saved_to, destination)
+                } else {
+                    getString(R.string.backup_portable_export_done)
+                }
                 textPortableStatus?.visibility = View.VISIBLE
                 refreshBackupStatus()
             }

@@ -1450,7 +1450,7 @@
          location line may show a stored human-readable folder label, one of
          these two phrases, or "No backup folder selected" — NEVER a raw URI,
          tree document id, or provider authority string. -->
-    <string name="backup_location_selected_generic">Selected folder</string>
+    <string name="backup_location_selected_generic">Selected folder location</string>
     <string name="backup_location_unavailable">Folder unavailable. Choose a new location.</string>
     <!-- 4. Human-Readable Chat Backup (new section — owner directive, July 22
          2026: separate from Recovery Backup and from Portable Data Copy). -->
@@ -1483,6 +1483,7 @@
     <string name="backup_portable_import">Import Portable Copy</string>
     <string name="backup_portable_warning">Portable copies may contain readable chats, memories, and other personal information. Store them somewhere private.</string>
     <string name="backup_portable_export_done">Portable data copy saved.</string>
+    <string name="backup_portable_saved_to">Portable data copy saved to %1$s</string>
     <string name="backup_portable_import_title">Import Portable Data Copy</string>
     <!-- 6. Automatic Backups. The approved portable automatic system is NOT
          built yet; this section says so instead of exposing the unfinished

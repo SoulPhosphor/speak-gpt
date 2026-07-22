@@ -604,8 +604,9 @@ class RecoveryBackupActivity : FragmentActivity() {
 
     private fun showSaved(where: BackupLocationDisplay.SaveAsDescription) {
         showResult()
-        textResult?.text = if (where.providerLabel != null) {
-            getString(R.string.recovery_saved_to, where.providerLabel)
+        val destination = where.breadcrumb ?: where.providerLabel
+        textResult?.text = if (destination != null) {
+            getString(R.string.recovery_saved_to, destination)
         } else {
             getString(R.string.recovery_saved_generic)
         }
