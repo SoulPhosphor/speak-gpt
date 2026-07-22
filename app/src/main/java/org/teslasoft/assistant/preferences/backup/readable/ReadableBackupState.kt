@@ -42,6 +42,8 @@ object ReadableBackupState {
 
     private const val KEY_BASELINE = "readable.baseline"
     private const val KEY_LAST_SUCCESS = "readable.last_success"
+    private const val KEY_SCOPE_ALL = "readable.scope_all"
+    private const val KEY_FORMAT = "readable.format"
 
     private fun prefs(context: Context) =
         context.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)
@@ -70,5 +72,31 @@ object ReadableBackupState {
 
     fun setLastSuccess(context: Context, atMillis: Long) {
         try { prefs(context).edit(commit = true) { putLong(KEY_LAST_SUCCESS, atMillis) } } catch (_: Exception) { }
+    }
+
+    // ----- last-selected dropdown options (owner ruling, July 22 2026) -------
+    // Widget.App.Dropdown.* fields remember the last option the user picked,
+    // so re-opening this screen never resets "Backup Style" or "Format" back
+    // to a default the user already moved away from.
+
+    /** The last-selected "Backup Style" - true = All Chats, false = New and
+     *  Changed Chats Only. Defaults to All Chats until the user has picked at
+     *  least once. */
+    fun getScopeAll(context: Context): Boolean =
+        try { prefs(context).getBoolean(KEY_SCOPE_ALL, true) } catch (_: Exception) { true }
+
+    fun setScopeAll(context: Context, all: Boolean) {
+        try { prefs(context).edit(commit = true) { putBoolean(KEY_SCOPE_ALL, all) } } catch (_: Exception) { }
+    }
+
+    /** The last-selected Format. An unrecognized or missing stored value
+     *  falls back to TEXT. */
+    fun getFormat(context: Context): ReadableChatBackup.Format {
+        val name = try { prefs(context).getString(KEY_FORMAT, null) } catch (_: Exception) { null }
+        return ReadableChatBackup.Format.values().firstOrNull { it.name == name } ?: ReadableChatBackup.Format.TEXT
+    }
+
+    fun setFormat(context: Context, format: ReadableChatBackup.Format) {
+        try { prefs(context).edit(commit = true) { putString(KEY_FORMAT, format.name) } } catch (_: Exception) { }
     }
 }

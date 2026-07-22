@@ -140,6 +140,27 @@ object RecoveryBackupState {
         } catch (_: Exception) { }
     }
 
+    // ----- last-selected dropdown options (owner ruling, July 22 2026) -------
+    // Widget.App.Dropdown.* fields remember the last option the user picked,
+    // the same way the destination folders remember their label - so the
+    // Memory Backup & Restore screen never resets a choice back to a default
+    // just because the user left and came back.
+
+    private const val KEY_LAST_RECOVERY_PROTECTED = "backup.last_recovery_protected"
+
+    /** The last-selected Recovery Type on the Recovery Backup dropdown: true =
+     *  Protected Recovery, false = Recovery Without Encryption. Defaults to
+     *  Protected (the encouraged, safer choice) until the user has picked at
+     *  least once. */
+    fun getLastRecoveryProtected(context: Context): Boolean =
+        try { prefs(context).getBoolean(KEY_LAST_RECOVERY_PROTECTED, true) } catch (_: Exception) { true }
+
+    fun setLastRecoveryProtected(context: Context, protected: Boolean) {
+        try {
+            prefs(context).edit(commit = true) { putBoolean(KEY_LAST_RECOVERY_PROTECTED, protected) }
+        } catch (_: Exception) { }
+    }
+
     // ----- per-type result tracking ------------------------------------------
 
     fun getLastSuccess(context: Context, type: BackupType): Long =

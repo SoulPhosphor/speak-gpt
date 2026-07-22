@@ -701,8 +701,18 @@ and rollout notes here — not back in `CLAUDE.md`.
   a trailing edit button; tapping the value is the field's only action.
   Interaction matches the Summoning Circle's dropdown too, not just the look:
   tapping the value opens a real anchored `ListPopupWindow` (never the
-  centered picker dialog), via a per-screen `show*Dropdown` helper mirroring
-  `showTileDropdown`.
+  centered picker dialog), via the shared `showFieldDropdown` helper on each
+  screen that uses this pattern (mirroring `showTileDropdown`) — one helper
+  per screen, reused by every `Widget.App.Dropdown.*` field on that screen,
+  not one per field.
+  **A `Widget.App.Dropdown.*` field ALWAYS remembers the last option the user
+  picked (owner ruling, July 22 2026) — the same way the backup destination
+  folders remember their resolved label.** Persist the selection (a small
+  `*State` object's own pref key, the same file/pattern already used for that
+  screen's other state) and read it back when the screen is built, so
+  reopening the screen never silently resets a field to its default. This is
+  not optional per field — every dropdown built with this style needs its own
+  persisted key from day one.
   **Rollout status:** first applied July 22 2026 to the Human-Readable Chat
   Backup section's two fields (`activity_memory_backup_restore.xml`,
   `MemoryBackupRestoreActivity`) — "Chats" was renamed to **Backup Style**
@@ -710,7 +720,26 @@ and rollout notes here — not back in `CLAUDE.md`.
   its existing label/options (**Format**: Text / JSON / Text + JSON), both
   converted from full-width `MaterialButton`s showing "Label: value" text and
   a centered `setSingleChoiceItems` dialog to this same-line label + anchored-
-  dropdown pattern.
+  dropdown pattern; both persist via `ReadableBackupState.getScopeAll`/
+  `setScopeAll` and `getFormat`/`setFormat`.
+  **Second field, same day:** the Recovery Backup section gained a
+  **Recovery Type** dropdown (options **Protected Recovery** / **Recovery
+  Without Encryption**, reusing the exact `recovery_choice_protected_*`/
+  `recovery_choice_unencrypted_*` title/desc strings the Recovery Backup
+  screen's own choice panel uses — never re-typed wording that could drift),
+  persisted via `RecoveryBackupState.getLastRecoveryProtected`/
+  `setLastRecoveryProtected`. Picking a Recovery Type here now skips the
+  separate choice screen entirely: `RecoveryBackupActivity` reads the new
+  `EXTRA_RECOVERY_PROTECTED` intent extra and, when present, calls the same
+  `onProtectedChosen()`/`onUnencryptedChosen()` its choice-card taps always
+  called, instead of showing `panel_choice` — the choice UI itself is
+  untouched in `activity_recovery_backup.xml`, just no longer reached from
+  this entry point. Two `Widget.App.Section.Hint`-styled summary lines
+  (`text_recovery_type_protected_summary`/`_unencrypted_summary`) list both
+  options' names and descriptions directly under the section's hint, before
+  the dropdown, built from the same reused strings via the new
+  `recovery_type_summary_format` ("%1$s: %2$s") string — never a hand-typed
+  duplicate of the choice-panel wording.
 - **Standard section heading + hint — `Widget.App.Section.*`, and the
   ordering rule that goes with it (owner ruling, July 22 2026).** A
   settings-style screen section is a bold heading (`?attr/colorPrimary`,

@@ -119,6 +119,10 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
     private var textManualLocation: TextView? = null
     private var btnChangeManualLocation: MaterialButton? = null
     private var btnCreateBackup: MaterialButton? = null
+    private var textRecoveryTypeProtectedSummary: TextView? = null
+    private var textRecoveryTypeUnencryptedSummary: TextView? = null
+    private var btnRecoveryType: TextView? = null
+    private var recoveryTypeProtected = true
 
     // 4. Human-Readable Chat Backup (Widget.App.Dropdown.* fields)
     private var btnReadableScope: TextView? = null
@@ -223,6 +227,9 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         textManualLocation = findViewById(R.id.text_manual_location)
         btnChangeManualLocation = findViewById(R.id.btn_change_manual_location)
         btnCreateBackup = findViewById(R.id.btn_create_backup)
+        textRecoveryTypeProtectedSummary = findViewById(R.id.text_recovery_type_protected_summary)
+        textRecoveryTypeUnencryptedSummary = findViewById(R.id.text_recovery_type_unencrypted_summary)
+        btnRecoveryType = findViewById(R.id.btn_recovery_type)
 
         btnReadableScope = findViewById(R.id.btn_readable_scope)
         btnReadableFormat = findViewById(R.id.btn_readable_format)
@@ -273,8 +280,12 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         // btn_create_backup) are hidden AND unwired: the old writer must not be
         // reachable from this screen (owner correction, July 22 2026). The v1
         // backend classes stay for the future automatic implementation.
+        initRecoveryTypeSection()
         btnCreateRecovery?.setOnClickListener {
-            startActivity(Intent(this, RecoveryBackupActivity::class.java))
+            startActivity(
+                Intent(this, RecoveryBackupActivity::class.java)
+                    .putExtra(RecoveryBackupActivity.EXTRA_RECOVERY_PROTECTED, recoveryTypeProtected)
+            )
         }
 
         /* ---- 4. Human-Readable Chat Backup ---- */
@@ -318,9 +329,78 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         super.onDestroy()
     }
 
+    /* ------------------------------ Widget.App.Dropdown.* shared helper ------------------------------ */
+
+    /** Anchored dropdown list (Widget.App.Dropdown.* contract) - a real
+     *  dropdown attached to the tapped value, matching the Summoning Circle
+     *  tiles' `showTileDropdown`, minus an edit button - never the centered
+     *  picker dialog. Shared by every Widget.App.Dropdown.* field on this
+     *  screen (Recovery Type, Backup Style, Format). */
+    private fun showFieldDropdown(anchor: View, labels: List<String>, onPick: (Int) -> Unit) {
+        if (isFinishing || labels.isEmpty()) return
+        val popup = ListPopupWindow(this)
+        popup.anchorView = anchor
+        popup.isModal = true
+        popup.width = anchor.width
+        popup.setAdapter(ArrayAdapter(this, android.R.layout.simple_list_item_1, labels))
+        popup.setOnItemClickListener { _, _, position, _ ->
+            popup.dismiss()
+            onPick(position)
+        }
+        popup.show()
+    }
+
+    /* ------------------------------ 3. recovery backup (manual) ------------------------------ */
+
+    private fun initRecoveryTypeSection() {
+        // Same "Title: Description" wording as the Recovery Backup screen's
+        // choice panel, reused verbatim via the shared format string so the
+        // two can never drift apart (owner ruling, July 22 2026).
+        textRecoveryTypeProtectedSummary?.text = getString(
+            R.string.recovery_type_summary_format,
+            getString(R.string.recovery_choice_protected_title),
+            getString(R.string.recovery_choice_protected_desc)
+        )
+        textRecoveryTypeUnencryptedSummary?.text = getString(
+            R.string.recovery_type_summary_format,
+            getString(R.string.recovery_choice_unencrypted_title),
+            getString(R.string.recovery_choice_unencrypted_desc)
+        )
+        // Remember the last-selected Recovery Type across visits, the same
+        // way Backup Style and Format below do.
+        recoveryTypeProtected = RecoveryBackupState.getLastRecoveryProtected(this)
+        updateRecoveryTypeLabel()
+        btnRecoveryType?.setOnClickListener { pickRecoveryType() }
+    }
+
+    private fun updateRecoveryTypeLabel() {
+        btnRecoveryType?.text = getString(
+            if (recoveryTypeProtected) R.string.recovery_choice_protected_title
+            else R.string.recovery_choice_unencrypted_title
+        )
+    }
+
+    private fun pickRecoveryType() {
+        val anchor = btnRecoveryType ?: return
+        val labels = listOf(
+            getString(R.string.recovery_choice_protected_title),
+            getString(R.string.recovery_choice_unencrypted_title)
+        )
+        showFieldDropdown(anchor, labels) { position ->
+            recoveryTypeProtected = position == 0
+            RecoveryBackupState.setLastRecoveryProtected(this, recoveryTypeProtected)
+            updateRecoveryTypeLabel()
+        }
+    }
+
     /* ------------------------------ 4. human-readable chat backup ------------------------------ */
 
     private fun initReadableSection() {
+        // Remember the last-selected option across visits (owner ruling,
+        // July 22 2026) - never reset to the default just because the
+        // screen was reopened.
+        readableScopeAll = ReadableBackupState.getScopeAll(this)
+        readableFormat = ReadableBackupState.getFormat(this)
         updateReadableSelectorLabels()
         btnReadableScope?.setOnClickListener { pickReadableScope() }
         btnReadableFormat?.setOnClickListener { pickReadableFormat() }
@@ -342,32 +422,15 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         )
     }
 
-    /** Anchored dropdown list (Widget.App.Dropdown.* contract) - a real
-     *  dropdown attached to the tapped value, matching the Summoning Circle
-     *  tiles' `showTileDropdown`, minus an edit button - never the centered
-     *  picker dialog. */
-    private fun showReadableDropdown(anchor: View, labels: List<String>, onPick: (Int) -> Unit) {
-        if (isFinishing || labels.isEmpty()) return
-        val popup = ListPopupWindow(this)
-        popup.anchorView = anchor
-        popup.isModal = true
-        popup.width = anchor.width
-        popup.setAdapter(ArrayAdapter(this, android.R.layout.simple_list_item_1, labels))
-        popup.setOnItemClickListener { _, _, position, _ ->
-            popup.dismiss()
-            onPick(position)
-        }
-        popup.show()
-    }
-
     private fun pickReadableScope() {
         val anchor = btnReadableScope ?: return
         val labels = listOf(
             getString(R.string.backup_readable_scope_all),
             getString(R.string.backup_readable_scope_incremental)
         )
-        showReadableDropdown(anchor, labels) { position ->
+        showFieldDropdown(anchor, labels) { position ->
             readableScopeAll = position == 0
+            ReadableBackupState.setScopeAll(this, readableScopeAll)
             updateReadableSelectorLabels()
         }
     }
@@ -379,12 +442,13 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
             getString(R.string.backup_readable_format_json),
             getString(R.string.backup_readable_format_both)
         )
-        showReadableDropdown(anchor, labels) { position ->
+        showFieldDropdown(anchor, labels) { position ->
             readableFormat = when (position) {
                 1 -> ReadableChatBackup.Format.JSON
                 2 -> ReadableChatBackup.Format.BOTH
                 else -> ReadableChatBackup.Format.TEXT
             }
+            ReadableBackupState.setFormat(this, readableFormat)
             updateReadableSelectorLabels()
         }
     }

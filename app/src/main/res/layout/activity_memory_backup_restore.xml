@@ -189,6 +189,46 @@
                 style="@style/Widget.App.Section.Hint"
                 android:text="@string/backup_create_hint" />
 
+            <!-- Recovery Type summaries, same font as the section hint
+                 (Widget.App.Section.Hint), text set in Kotlin from
+                 recovery_type_summary_format + the SAME title/desc strings
+                 the Recovery Backup screen's choice panel uses, so these can
+                 never drift out of sync with the actual choice (owner
+                 ruling, July 22 2026). -->
+            <TextView
+                android:id="@+id/text_recovery_type_protected_summary"
+                style="@style/Widget.App.Section.Hint" />
+
+            <TextView
+                android:id="@+id/text_recovery_type_unencrypted_summary"
+                style="@style/Widget.App.Section.Hint" />
+
+            <!-- Recovery Type dropdown: Widget.App.Dropdown.* (owner ruling,
+                 July 22 2026), same pattern as the Human-Readable Chat Backup
+                 fields below. Picking a type here skips the separate choice
+                 screen the "Create Recovery Backup" button used to open —
+                 that screen now goes straight to the picked type's next step.
+                 The selection is remembered across visits
+                 (RecoveryBackupState.getLastRecoveryProtected/
+                 setLastRecoveryProtected), the same way Backup Style and
+                 Format below are. -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    style="@style/Widget.App.Dropdown.Label"
+                    android:text="@string/recovery_type_label" />
+
+                <TextView
+                    android:id="@+id/btn_recovery_type"
+                    style="@style/Widget.App.Dropdown.Value"
+                    android:layout_weight="1" />
+            </LinearLayout>
+
             <!-- Portable recovery (format v2) entry — the owner-approved
                  Create Recovery Backup flow, now the ONLY manual backup control.
                  The installation-bound v1 controls (text_manual_location,
@@ -201,7 +241,7 @@
                 style="@style/AppButton.Primary"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
+                android:layout_marginTop="12dp"
                 android:text="@string/recovery_create" />
 
             <TextView

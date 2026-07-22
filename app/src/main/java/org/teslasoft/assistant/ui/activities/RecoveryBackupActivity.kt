@@ -92,6 +92,17 @@ import java.security.MessageDigest
  */
 class RecoveryBackupActivity : FragmentActivity() {
 
+    companion object {
+        /** Intent extra: the Recovery Type chosen ahead of time on the
+         *  Memory Backup & Restore screen's dropdown (owner ruling, July 22
+         *  2026) - true = Protected, false = Unencrypted. When present, the
+         *  choice panel is skipped entirely and the flow goes straight to
+         *  that type's next step, the same as tapping the corresponding
+         *  choice card used to do. Absent when this activity is launched
+         *  without a pre-made choice, which still shows the choice panel. */
+        const val EXTRA_RECOVERY_PROTECTED = "recoveryProtected"
+    }
+
     private var preferences: Preferences? = null
 
     private var actionBar: ConstraintLayout? = null
@@ -164,7 +175,14 @@ class RecoveryBackupActivity : FragmentActivity() {
         bindViews()
         applyTheme()
         initLogic()
-        showChoice()
+        // A Recovery Type chosen ahead of time (the Memory Backup & Restore
+        // dropdown) skips the choice panel entirely - go straight to that
+        // type's next step, same as tapping the choice card would have.
+        if (intent.hasExtra(EXTRA_RECOVERY_PROTECTED)) {
+            if (intent.getBooleanExtra(EXTRA_RECOVERY_PROTECTED, true)) onProtectedChosen() else onUnencryptedChosen()
+        } else {
+            showChoice()
+        }
     }
 
     override fun onDestroy() {

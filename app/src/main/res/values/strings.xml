@@ -1442,6 +1442,14 @@
          owner correction, July 22 2026) -->
     <string name="backup_create_section">Recovery Backup</string>
     <string name="backup_create_hint">Creates a recovery backup of your chats, memories, lorebooks, and user image data.</string>
+    <!-- Recovery Type dropdown (owner ruling, July 22 2026): the summary
+         lines reuse the exact recovery_choice_protected_title/_desc and
+         recovery_choice_unencrypted_title/_desc wording from the Recovery
+         Backup screen's choice panel via this "Title: Description" format,
+         so the two descriptions can never drift out of sync with the actual
+         choice. -->
+    <string name="recovery_type_summary_format">%1$s: %2$s</string>
+    <string name="recovery_type_label">Recovery Type</string>
     <string name="backup_current_location">Current Backup Location: %1$s</string>
     <string name="backup_location_none">No backup folder selected</string>
     <string name="backup_change_location">Change Backup Location</string>
