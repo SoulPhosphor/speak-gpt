@@ -140,6 +140,68 @@ object RecoveryBackupState {
         } catch (_: Exception) { }
     }
 
+    // ----- automatic-run state (owner directive, July 22 2026) ---------------
+    // The automatic runner's OWN clock and result, separate from the per-type
+    // rows below (which reflect the newest verified package from any flow).
+    // All in this same raw plaintext file: a locked database must never stop
+    // the schedule from being read or the result from being recorded.
+
+    private const val KEY_AUTO_FREQUENCY = "backup.auto.frequency"
+    private const val KEY_AUTO_LAST_SUCCESS = "backup.auto.last_success"
+    private const val KEY_AUTO_LAST_ATTEMPT = "backup.auto.last_attempt"
+    private const val KEY_AUTO_LAST_CATEGORY = "backup.auto.last_category"
+    private const val KEY_AUTO_PRUNE_PENDING = "backup.auto.prune_pending"
+
+    fun getAutoFrequency(context: Context): AutoBackupFrequency =
+        try { AutoBackupFrequency.fromKey(prefs(context).getString(KEY_AUTO_FREQUENCY, null)) }
+        catch (_: Exception) { AutoBackupFrequency.DAILY }
+
+    fun setAutoFrequency(context: Context, frequency: AutoBackupFrequency) {
+        try { prefs(context).edit(commit = true) { putString(KEY_AUTO_FREQUENCY, frequency.key) } } catch (_: Exception) { }
+    }
+
+    fun getAutoLastSuccess(context: Context): Long =
+        try { prefs(context).getLong(KEY_AUTO_LAST_SUCCESS, 0L) } catch (_: Exception) { 0L }
+
+    fun getAutoLastAttempt(context: Context): Long =
+        try { prefs(context).getLong(KEY_AUTO_LAST_ATTEMPT, 0L) } catch (_: Exception) { 0L }
+
+    /** The category of the most recent automatic failure, or null when the
+     *  last automatic attempt succeeded. */
+    fun getAutoLastFailureCategory(context: Context): BackupFailureCategory? =
+        try { BackupFailureCategory.fromKey(prefs(context).getString(KEY_AUTO_LAST_CATEGORY, null)) } catch (_: Exception) { null }
+
+    fun recordAutoSuccess(context: Context, atMillis: Long) {
+        try {
+            prefs(context).edit(commit = true) {
+                putLong(KEY_AUTO_LAST_SUCCESS, atMillis)
+                putLong(KEY_AUTO_LAST_ATTEMPT, atMillis)
+                remove(KEY_AUTO_LAST_CATEGORY)
+            }
+        } catch (_: Exception) { }
+    }
+
+    /** A failed automatic attempt: the attempt clock moves, the last-success
+     *  stamp is preserved (owner rule: a failure never erases the last good). */
+    fun recordAutoFailure(context: Context, atMillis: Long, category: BackupFailureCategory) {
+        try {
+            prefs(context).edit(commit = true) {
+                putLong(KEY_AUTO_LAST_ATTEMPT, atMillis)
+                putString(KEY_AUTO_LAST_CATEGORY, category.name)
+            }
+        } catch (_: Exception) { }
+    }
+
+    /** How many owned, verified automatic backups currently fall outside the
+     *  keep window — IDENTIFIED but never deleted (pruning is disabled until
+     *  owner review). Display/bookkeeping only. */
+    fun getAutoPrunePending(context: Context): Int =
+        try { prefs(context).getInt(KEY_AUTO_PRUNE_PENDING, 0) } catch (_: Exception) { 0 }
+
+    fun setAutoPrunePending(context: Context, count: Int) {
+        try { prefs(context).edit(commit = true) { putInt(KEY_AUTO_PRUNE_PENDING, count) } } catch (_: Exception) { }
+    }
+
     // ----- per-type result tracking ------------------------------------------
 
     fun getLastSuccess(context: Context, type: BackupType): Long =
