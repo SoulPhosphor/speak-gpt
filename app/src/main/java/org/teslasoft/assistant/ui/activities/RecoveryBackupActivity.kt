@@ -24,6 +24,8 @@ import android.content.res.Configuration
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.PersistableBundle
+import android.provider.DocumentsContract
 import android.view.View
 import android.view.WindowInsets
 import android.widget.EditText
@@ -51,20 +53,37 @@ import org.teslasoft.assistant.preferences.backup.portable.RecoveryKeyFile
 import org.teslasoft.assistant.preferences.backup.portable.RecoveryKeyStore
 import org.teslasoft.assistant.theme.ThemeManager
 import java.io.File
+import java.io.InputStream
+import java.security.MessageDigest
 
 /**
  * The manual Recovery Backup flow (portable format v2). One activity, five
  * panels driven by a small state machine — the owner-approved flow (July 22
  * 2026): one entry, a choice of Protected / Unencrypted, one-time Recovery
- * Code setup with a required re-entry confirmation before the code can gate
- * automatic backups later, and Save As package creation.
+ * Code setup with a required re-entry confirmation before protected backups can
+ * be created, and Save As package creation.
  *
  * SCOPE FENCE (owner): NO automatic scheduling, NO automatic writer, NO
  * rotation, NO deletion, NO live-data restore here. This exists for the
  * controlled on-device test gate.
  *
- * The Recovery Secret is held in a field only for the brief setup+create
- * window and wiped on teardown; the durable copy lives in RecoveryKeyStore.
+ * SETUP STATE (owner correction 2, July 22 2026): storing the Recovery Secret
+ * is NOT the same as configuring it. The protected path branches on
+ * [RecoveryKeyStore.getSetupState] — a freshly generated secret is UNCONFIRMED
+ * and cannot produce a protected package until the user re-enters the complete
+ * Recovery Code AND the CONFIRMED marker is durably written.
+ *
+ * BUILD BEFORE SAVE AS (owner correction 6): the package is built and verified
+ * into per-run cache staging FIRST; only then is Save As launched. After the
+ * copy to the chosen destination, the destination is reopened and its SHA-256
+ * compared to the staged file — a mismatch discards the destination and reports
+ * a visible failure. Staging is cleaned on every path.
+ *
+ * SECRET LIFECYCLE (owner correction 3/4): confirmation compares the COMPLETE
+ * 16-byte secret in constant time and wipes the decoded copy; workers re-read
+ * the stored secret rather than sharing the activity field, and wipe it in a
+ * finally; entered password/code fields are cleared after use; the copied
+ * Recovery Code is marked sensitive on the clipboard.
  */
 class RecoveryBackupActivity : FragmentActivity() {
 
@@ -102,11 +121,22 @@ class RecoveryBackupActivity : FragmentActivity() {
     private var textResultDetail: TextView? = null
     private var btnResultDone: MaterialButton? = null
 
-    /** The secret being set up (protected flow), held only during the flow. */
+    /** The secret being set up (protected flow), held only during the setup +
+     *  confirm panels for display and constant-time confirmation. Never used to
+     *  build the package — the build worker re-reads the stored secret. */
     private var pendingSecret: ByteArray? = null
 
     /** True while the pending Save As is a protected package. */
     private var pendingProtected = false
+
+    /** The built, verified package awaiting the user's Save As destination
+     *  (owner correction 6: build before Save As). Deleted on cancel, after a
+     *  successful copy, and in onDestroy. */
+    private var stagedPackage: File? = null
+
+    /** SHA-256 of [stagedPackage], computed right after the build, used to
+     *  verify the copy landed in the destination byte-for-byte. */
+    private var stagedSha: ByteArray? = null
 
     private val saveKeyFileLauncher = registerForActivityResult(
         ActivityResultContracts.CreateDocument("application/json")
@@ -114,7 +144,7 @@ class RecoveryBackupActivity : FragmentActivity() {
 
     private val createPackageLauncher = registerForActivityResult(
         ActivityResultContracts.CreateDocument("application/zip")
-    ) { uri -> if (uri != null) createPackageInto(uri) }
+    ) { uri -> onSaveAsResult(uri) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -130,6 +160,7 @@ class RecoveryBackupActivity : FragmentActivity() {
     override fun onDestroy() {
         pendingSecret?.let { PackageCrypto.wipe(it) }
         pendingSecret = null
+        cleanupStaged()
         super.onDestroy()
     }
 
@@ -186,31 +217,48 @@ class RecoveryBackupActivity : FragmentActivity() {
 
     private fun onProtectedChosen() {
         pendingProtected = true
-        when (val existing = RecoveryKeyStore.getSecret(this)) {
-            is RecoveryKeyStore.SecretResult.Unavailable -> showKeystoreFailure()
-            is RecoveryKeyStore.SecretResult.Ok -> {
-                // Already configured: go straight to Save As (no repeat setup).
-                pendingSecret = existing.secret
-                launchCreate(protected = true)
-            }
-            is RecoveryKeyStore.SecretResult.NotSet -> {
-                val secret = PackageCrypto.newRecoverySecret()
-                if (!RecoveryKeyStore.setSecret(this, secret)) {
-                    PackageCrypto.wipe(secret)
-                    showKeystoreFailure()
-                    return
+        when (RecoveryKeyStore.getSetupState(this)) {
+            RecoveryKeyStore.SetupState.UNAVAILABLE -> showKeystoreFailure()
+            RecoveryKeyStore.SetupState.CONFIRMED -> buildThenSaveAs(protected = true)
+            RecoveryKeyStore.SetupState.UNCONFIRMED -> {
+                // A secret exists but was never confirmed: re-show setup so the
+                // user records and re-confirms it (never proceed unconfirmed).
+                when (val s = RecoveryKeyStore.getSecret(this)) {
+                    is RecoveryKeyStore.SecretResult.Ok -> showSetupWith(s.secret)
+                    is RecoveryKeyStore.SecretResult.Unavailable -> showKeystoreFailure()
+                    is RecoveryKeyStore.SecretResult.NotSet -> generateAndSetup()
                 }
-                pendingSecret = secret
-                textRecoveryCode?.text = RecoveryCode.encode(secret)
-                showSetup()
             }
+            RecoveryKeyStore.SetupState.NOT_SET -> generateAndSetup()
         }
     }
 
     private fun onUnencryptedChosen() {
-        // The warning is the choice-screen description; proceed to Save As.
+        // The warning is the choice-screen description; proceed to build + Save As.
         pendingProtected = false
-        launchCreate(protected = false)
+        buildThenSaveAs(protected = false)
+    }
+
+    private fun generateAndSetup() {
+        val secret = PackageCrypto.newRecoverySecret()
+        if (!RecoveryKeyStore.setSecret(this, secret)) {
+            PackageCrypto.wipe(secret)
+            showKeystoreFailure()
+            return
+        }
+        showSetupWith(secret)
+    }
+
+    /** Take ownership of [secret] as the pending setup secret and show setup. */
+    private fun showSetupWith(secret: ByteArray) {
+        setPendingSecret(secret)
+        textRecoveryCode?.text = RecoveryCode.encode(secret)
+        showSetup()
+    }
+
+    private fun setPendingSecret(secret: ByteArray) {
+        pendingSecret?.let { PackageCrypto.wipe(it) }
+        pendingSecret = secret
     }
 
     /* ---------------------------- setup ---------------------------- */
@@ -218,7 +266,18 @@ class RecoveryBackupActivity : FragmentActivity() {
     private fun copyCode() {
         val code = textRecoveryCode?.text?.toString() ?: return
         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return
-        clipboard.setPrimaryClip(ClipData.newPlainText("Recovery Code", code))
+        val clip = ClipData.newPlainText("Recovery Code", code)
+        // Mark the clip sensitive so the system (and keyboards/launchers that
+        // honour it) do not surface a clipboard preview of the Recovery Code.
+        // ClipDescription.EXTRA_IS_SENSITIVE is API 33+; the literal key is
+        // read by supporting platforms from API 24 up. We do NOT auto-clear the
+        // clipboard (owner: the user needs it to paste into a password manager).
+        try {
+            clip.description.extras = PersistableBundle().apply {
+                putBoolean("android.content.extra.IS_SENSITIVE", true)
+            }
+        } catch (_: Exception) { /* best-effort; copy still proceeds */ }
+        clipboard.setPrimaryClip(clip)
         // Brief inline acknowledgement without a toast (owner no-toast rule):
         btnCopyCode?.text = getString(R.string.recovery_code_copied)
     }
@@ -239,7 +298,11 @@ class RecoveryBackupActivity : FragmentActivity() {
         val pw = editPassword?.text?.toString().orEmpty()
         val confirm = editPasswordConfirm?.text?.toString().orEmpty()
         textPasswordError?.visibility = View.GONE
-        if (pw.isEmpty()) return
+        if (pw.isEmpty()) {
+            textPasswordError?.setText(R.string.recovery_password_empty)
+            textPasswordError?.visibility = View.VISIBLE
+            return
+        }
         if (pw != confirm) {
             textPasswordError?.setText(R.string.recovery_password_mismatch)
             textPasswordError?.visibility = View.VISIBLE
@@ -259,7 +322,14 @@ class RecoveryBackupActivity : FragmentActivity() {
             )
             runOnUiThread {
                 btnPasswordSave?.isEnabled = true
-                if (stored) showSetup() else showKeystoreFailure()
+                if (stored) {
+                    // Clear the entered password from the fields once stored.
+                    editPassword?.text = null
+                    editPasswordConfirm?.text = null
+                    showSetup()
+                } else {
+                    showKeystoreFailure()
+                }
             }
         }
     }
@@ -272,80 +342,181 @@ class RecoveryBackupActivity : FragmentActivity() {
         val secret = pendingSecret ?: return
         val decoded = RecoveryCode.decode(entered)
         val matches = decoded is RecoveryCode.DecodeResult.Ok &&
-            PackageCrypto.fingerprintMatches(
-                PackageCrypto.fingerprint(decoded.secret),
-                PackageCrypto.fingerprint(secret)
-            )
+            MessageDigest.isEqual(decoded.secret, secret)   // full 16-byte constant-time compare
+        if (decoded is RecoveryCode.DecodeResult.Ok) {
+            PackageCrypto.wipe(decoded.secret)              // wipe the decoded secret regardless of match
+        }
         if (!matches) {
             textConfirmError?.visibility = View.VISIBLE
             return
         }
-        launchCreate(protected = true)
+        // Durably record confirmation; proceed ONLY if the write succeeds.
+        if (!RecoveryKeyStore.markConfirmed(this)) {
+            showKeystoreFailure()
+            return
+        }
+        editConfirmCode?.text = null                        // clear the typed code
+        buildThenSaveAs(protected = true)
     }
 
     /* ---------------------------- create ---------------------------- */
 
-    private fun launchCreate(protected: Boolean) {
+    /**
+     * Build and verify the package into cache staging FIRST, then launch Save
+     * As (owner correction 6). The build worker re-reads the stored secret and
+     * password blob rather than sharing the activity field, and wipes the
+     * secret in a finally.
+     */
+    private fun buildThenSaveAs(protected: Boolean) {
         pendingProtected = protected
-        val name = RecoveryFileNaming.manualRecoveryPackage(
-            BackupBrand.resolve(this), protected, System.currentTimeMillis()
-        )
-        createPackageLauncher.launch(name)
-    }
-
-    private fun createPackageInto(uri: Uri) {
+        cleanupStaged()
         showResult()
         textResult?.setText(R.string.recovery_creating)
         textResultDetail?.visibility = View.GONE
         btnResultDone?.visibility = View.GONE
 
         runOffThread {
-            val cacheFile = File(cacheDir, "recovery_out_${System.nanoTime()}.tmp")
+            val staged = File(cacheDir, "recovery_stage_${System.nanoTime()}.tmp")
+            var secret: ByteArray? = null
             try {
-                val secret = if (pendingProtected) {
-                    when (val s = RecoveryKeyStore.getSecret(this)) {
+                if (protected) {
+                    secret = when (val s = RecoveryKeyStore.getSecret(this)) {
                         is RecoveryKeyStore.SecretResult.Ok -> s.secret
                         is RecoveryKeyStore.SecretResult.Unavailable -> {
                             runOnUiThread { showKeystoreFailure() }; return@runOffThread
                         }
                         is RecoveryKeyStore.SecretResult.NotSet -> {
-                            runOnUiThread { showFailureText(getString(R.string.recovery_fail_generic), "") }; return@runOffThread
+                            runOnUiThread { showFailureText(getString(R.string.recovery_fail_generic)) }; return@runOffThread
+                        }
+                    }
+                }
+
+                val passwordBlob: PortablePackageFormat.PasswordBlob? = if (protected) {
+                    when (val b = RecoveryKeyStore.getPasswordBlob(this)) {
+                        is RecoveryKeyStore.PasswordBlobResult.NotSet -> null
+                        is RecoveryKeyStore.PasswordBlobResult.Ok -> b.blob.toFormatBlob()
+                        is RecoveryKeyStore.PasswordBlobResult.Unavailable -> {
+                            // A password WAS configured but its blob is
+                            // unavailable/malformed: fail visibly, never silently
+                            // drop the password restore route (owner correction 5).
+                            runOnUiThread { showKeystoreFailure() }; return@runOffThread
                         }
                     }
                 } else null
-
-                val passwordBlob: PortablePackageFormat.PasswordBlob? =
-                    if (pendingProtected) RecoveryKeyStore.getPasswordBlob(this)?.toFormatBlob() else null
 
                 val appVersion = try {
                     packageManager.getPackageInfo(packageName, 0).versionName ?: ""
                 } catch (_: Exception) { "" }
 
-                val result = PortableRecoveryWriter.createPackage(this, cacheFile, secret, passwordBlob, appVersion)
-                if (result is PortableRecoveryWriter.Result.Failed) {
-                    runOnUiThread { showWriterFailure(result.reason) }
+                when (val result = PortableRecoveryWriter.createPackage(this, staged, secret, passwordBlob, appVersion)) {
+                    is PortableRecoveryWriter.Result.Failed -> {
+                        runCatching { if (staged.exists()) staged.delete() }
+                        runOnUiThread { showWriterFailure(result.reason) }
+                    }
+                    is PortableRecoveryWriter.Result.Ok -> {
+                        val sha = sha256(staged)
+                        runOnUiThread {
+                            stagedPackage = staged
+                            stagedSha = sha
+                            val name = RecoveryFileNaming.manualRecoveryPackage(
+                                BackupBrand.resolve(this), protected, System.currentTimeMillis()
+                            )
+                            createPackageLauncher.launch(name)
+                        }
+                    }
+                }
+            } catch (_: Exception) {
+                runCatching { if (staged.exists()) staged.delete() }
+                runOnUiThread { showFailureText(getString(R.string.recovery_fail_generic)) }
+            } finally {
+                secret?.let { PackageCrypto.wipe(it) }
+            }
+        }
+    }
+
+    /** Save As returned. Null == the user cancelled the picker. */
+    private fun onSaveAsResult(uri: Uri?) {
+        if (uri == null) {
+            // Cancelled: discard the staged package and return to the choice.
+            cleanupStaged()
+            showChoice()
+            return
+        }
+        copyStagedToDestination(uri)
+    }
+
+    /** Copy the verified staged package to the chosen destination, then reopen
+     *  the destination and verify its SHA-256 matches the staged file. On any
+     *  mismatch/failure the destination is discarded and a visible failure is
+     *  shown. Staging is cleaned on every path. */
+    private fun copyStagedToDestination(uri: Uri) {
+        val staged = stagedPackage
+        val expectedSha = stagedSha
+        if (staged == null || expectedSha == null || !staged.exists()) {
+            cleanupStaged()
+            showFailureText(getString(R.string.recovery_fail_generic))
+            return
+        }
+        showResult()
+        textResult?.setText(R.string.recovery_creating)
+        textResultDetail?.visibility = View.GONE
+        btnResultDone?.visibility = View.GONE
+
+        runOffThread {
+            try {
+                contentResolver.openOutputStream(uri, "wt")?.use { out ->
+                    staged.inputStream().use { it.copyTo(out) }
+                } ?: throw IllegalStateException("could not open destination")
+
+                val actualSha = contentResolver.openInputStream(uri)?.use { sha256(it) }
+                    ?: throw IllegalStateException("could not reopen destination")
+
+                if (!MessageDigest.isEqual(expectedSha, actualSha)) {
+                    discardDestination(uri)
+                    runOnUiThread { showFailureText(getString(R.string.recovery_fail_verify)) }
                     return@runOffThread
                 }
-
-                // Stream the verified package to the user-chosen destination.
-                contentResolver.openOutputStream(uri, "wt")?.use { out ->
-                    cacheFile.inputStream().use { it.copyTo(out) }
-                } ?: throw IllegalStateException("could not open destination")
 
                 val where = BackupLocationDisplay.describeSaveAs(this, uri)
                 runOnUiThread { showSaved(where) }
             } catch (_: Exception) {
-                runOnUiThread { showFailureText(getString(R.string.recovery_fail_generic), "") }
+                discardDestination(uri)
+                runOnUiThread { showFailureText(getString(R.string.recovery_fail_generic)) }
             } finally {
-                try { if (cacheFile.exists()) cacheFile.delete() } catch (_: Exception) { }
+                cleanupStaged()
             }
         }
+    }
+
+    /** Remove a written-but-unverified destination so no corrupt package
+     *  remains: delete the document, or truncate it to empty if delete is not
+     *  permitted by the provider. */
+    private fun discardDestination(uri: Uri) {
+        try {
+            if (DocumentsContract.deleteDocument(contentResolver, uri)) return
+        } catch (_: Exception) { /* fall through to truncate */ }
+        try {
+            contentResolver.openOutputStream(uri, "wt")?.use { /* write nothing = truncate */ }
+        } catch (_: Exception) { /* best-effort */ }
+    }
+
+    private fun cleanupStaged() {
+        stagedPackage?.let { f -> runCatching { if (f.exists()) f.delete() } }
+        stagedPackage = null
+        stagedSha = null
     }
 
     private fun showWriterFailure(reason: PortableRecoveryWriter.Reason) {
         when (reason) {
             PortableRecoveryWriter.Reason.KEY_MATERIAL_UNAVAILABLE -> showKeystoreFailure()
-            else -> showFailureText(getString(R.string.recovery_fail_generic), reason.name)
+            PortableRecoveryWriter.Reason.CHATS_UNAVAILABLE ->
+                showFailureText(getString(R.string.recovery_fail_chats_unavailable))
+            PortableRecoveryWriter.Reason.SNAPSHOT_FAILED ->
+                showFailureText(getString(R.string.recovery_fail_snapshot))
+            PortableRecoveryWriter.Reason.PACKAGE_VERIFY_FAILED ->
+                showFailureText(getString(R.string.recovery_fail_verify))
+            PortableRecoveryWriter.Reason.NOTHING_TO_BACK_UP ->
+                showFailureText(getString(R.string.recovery_fail_nothing))
         }
     }
 
@@ -359,24 +530,24 @@ class RecoveryBackupActivity : FragmentActivity() {
         if (where.fileName != null) {
             textResultDetail?.text = getString(R.string.recovery_saved_file, where.fileName)
             textResultDetail?.visibility = View.VISIBLE
-        }
-        btnResultDone?.visibility = View.VISIBLE
-    }
-
-    private fun showFailureText(main: String, detail: String) {
-        showResult()
-        textResult?.text = main
-        if (detail.isNotEmpty()) {
-            textResultDetail?.text = detail
-            textResultDetail?.visibility = View.VISIBLE
         } else {
             textResultDetail?.visibility = View.GONE
         }
         btnResultDone?.visibility = View.VISIBLE
     }
 
+    /** Show a failure on the result panel. Only human-readable, owner-approved
+     *  wording reaches the screen — never an enum or exception name (owner
+     *  correction 7). */
+    private fun showFailureText(main: String) {
+        showResult()
+        textResult?.text = main
+        textResultDetail?.visibility = View.GONE
+        btnResultDone?.visibility = View.VISIBLE
+    }
+
     private fun showKeystoreFailure() {
-        showFailureText(getString(R.string.recovery_fail_keystore), "")
+        showFailureText(getString(R.string.recovery_fail_keystore))
     }
 
     /* ---------------------------- panel switching ---------------------------- */
@@ -395,12 +566,25 @@ class RecoveryBackupActivity : FragmentActivity() {
 
     /* ---------------------------- helpers ---------------------------- */
 
+    private fun sha256(file: File): ByteArray = file.inputStream().use { sha256(it) }
+
+    private fun sha256(stream: InputStream): ByteArray {
+        val md = MessageDigest.getInstance("SHA-256")
+        val buf = ByteArray(8192)
+        while (true) {
+            val n = stream.read(buf)
+            if (n < 0) break
+            md.update(buf, 0, n)
+        }
+        return md.digest()
+    }
+
     private fun runOffThread(work: () -> Unit) {
         Thread {
             try {
                 work()
-            } catch (e: Exception) {
-                runOnUiThread { showFailureText(getString(R.string.recovery_fail_generic), e.javaClass.simpleName) }
+            } catch (_: Exception) {
+                runOnUiThread { showFailureText(getString(R.string.recovery_fail_generic)) }
             }
         }.start()
     }

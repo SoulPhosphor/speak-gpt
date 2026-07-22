@@ -17,6 +17,7 @@
 package org.teslasoft.assistant.preferences.backup.portable
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Test
 
 /** The pure KDF calibration clamp: the v1 window is a hard floor and ceiling
@@ -46,5 +47,27 @@ class PackageCryptoCalibrationTest {
     fun degenerateInputsFallBackToTheFloor() {
         assertEquals(PackageCrypto.KDF_MIN_ITERATIONS, PackageCrypto.calibrateIterations(0, 100, 1000))
         assertEquals(PackageCrypto.KDF_MIN_ITERATIONS, PackageCrypto.calibrateIterations(100_000, 0, 1000))
+    }
+
+    @Test
+    fun targetMillisChangesTheResultBeforeClamping() {
+        // Same probe (200k in 200ms == 1000 iters/ms), different targets. The
+        // scaling must actually USE targetMillis (owner correction 8: the bug
+        // was calibratedIterations dropping targetMillis before the clamp). All
+        // three land strictly inside the window, so the clamp is not what
+        // distinguishes them — only the target does.
+        val probeIters = 200_000
+        val probeMillis = 200L
+        val at800 = PackageCrypto.calibrateIterations(probeIters, probeMillis, 800)
+        val at1000 = PackageCrypto.calibrateIterations(probeIters, probeMillis, 1000)
+        val at1500 = PackageCrypto.calibrateIterations(probeIters, probeMillis, 1500)
+
+        assertEquals(800_000, at800)
+        assertEquals(1_000_000, at1000)
+        assertEquals(1_500_000, at1500)
+
+        // A non-default target must not collapse to the default's result.
+        assertNotEquals(at1000, at800)
+        assertNotEquals(at1000, at1500)
     }
 }

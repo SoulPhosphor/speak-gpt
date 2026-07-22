@@ -1389,7 +1389,7 @@
     <string name="recovery_choice_protected_desc">Encrypted. Restore using your Recovery Code, Recovery Key file, or password.</string>
     <string name="recovery_choice_unencrypted_title">Recovery Without Encryption</string>
     <string name="recovery_choice_unencrypted_desc">Not encrypted. Anyone with the file can read your chats and memories. No code or password is needed to restore it.</string>
-    <string name="recovery_code_safety">Anyone with this code can open your protected backups. Store it somewhere safe and separate from the backup files.</string>
+    <string name="recovery_code_safety">Anyone with your Recovery Code or Recovery Key file can open your protected backups. Store them somewhere safe and separate from the backup files.</string>
     <string name="recovery_save_key_file">Save Recovery Key File</string>
     <string name="recovery_copy_code">Copy Recovery Code</string>
     <string name="recovery_add_password">Add Password (Optional)</string>
@@ -1397,6 +1397,14 @@
     <string name="recovery_confirm_prompt">Enter your Recovery Code to confirm you recorded it correctly.</string>
     <string name="recovery_fail_generic">The backup could not be created.</string>
     <string name="recovery_fail_keystore">Your recovery key is temporarily unavailable. No backup was created.</string>
+    <!-- Human-readable writer failures (owner-authored wording, July 22 2026
+         ruling 7 — verbatim; never show an enum or exception name). Mapped from
+         PortableRecoveryWriter.Reason. KEY_MATERIAL_UNAVAILABLE reuses
+         recovery_fail_keystore; unexpected exceptions use recovery_fail_generic. -->
+    <string name="recovery_fail_chats_unavailable">Your chats could not be read. No backup was created.</string>
+    <string name="recovery_fail_snapshot">One or more databases could not be backed up. No backup was created.</string>
+    <string name="recovery_fail_verify">The backup could not be verified. No backup was saved.</string>
+    <string name="recovery_fail_nothing">There is nothing to back up.</string>
     <!-- Supporting UI chrome for the recovery flow (NOT part of the owner's
          verbatim set — plain functional labels; flagged for owner review). -->
     <string name="recovery_title">Recovery Backup</string>
@@ -1405,7 +1413,8 @@
     <string name="recovery_confirm">Confirm</string>
     <string name="recovery_password_label">Password</string>
     <string name="recovery_password_confirm_label">Confirm password</string>
-    <string name="recovery_password_save">Save Password</string>
+    <string name="recovery_password_save">Add Password</string>
+    <string name="recovery_password_empty">Enter a password.</string>
     <string name="recovery_password_mismatch">The passwords do not match.</string>
     <string name="recovery_confirm_wrong">That code does not match. Check what you recorded and try again.</string>
     <string name="recovery_creating">Creating backup…</string>

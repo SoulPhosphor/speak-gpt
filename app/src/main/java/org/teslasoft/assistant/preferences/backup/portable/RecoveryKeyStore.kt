@@ -22,41 +22,41 @@ import org.teslasoft.assistant.preferences.EncryptedPreferences
 import java.util.Base64
 
 /**
- * The device's WORKING COPY of the Recovery Secret and the static password
- * blob (architecture A-prime). This copy exists only so automatic protected
- * backups run without asking the user — it is a convenience cache, never the
- * sole recovery method (the user's saved Recovery Key file / Recovery Code /
- * password open every backup regardless of this device's fate).
+ * The device's WORKING COPY of the Recovery Secret, its explicit setup state,
+ * and the static password blob (architecture A-prime). This copy exists only
+ * so automatic protected backups run without asking the user — it is a
+ * convenience cache, never the sole recovery method.
  *
  * Storage: the existing Keystore-wrapped [EncryptedPreferences], file
- * "recovery_keys". A Keystore outage (this codebase's Round-4 territory) makes
- * every accessor return null / UNAVAILABLE — callers MUST surface that as a
- * visible backup failure (never silently stop, never fall back to an
- * unencrypted backup — owner rulings 10 and F4).
+ * "recovery_keys". A Keystore outage (this codebase's Round-4 territory) is
+ * surfaced as a distinct UNAVAILABLE state on every accessor — callers MUST
+ * treat it as a visible failure (never silence, never an unencrypted
+ * fallback).
  *
- * The static password blob is stored WITH its KDF parameters so automatic
- * backups can byte-copy the complete slot into each package header without
- * ever running the KDF (the KDF runs only at password set/change and restore).
+ * SETUP STATE (owner ruling, July 22 2026): storing the secret is NOT the same
+ * as configuring it. A freshly generated secret is UNCONFIRMED and must not
+ * permit protected package creation (manual or automatic) until the user
+ * re-enters the complete Recovery Code and the CONFIRMED marker is durably
+ * written. A missing marker on an existing (e.g. development) secret is
+ * UNCONFIRMED, never implicitly confirmed. Adding a password does NOT confirm.
  */
 object RecoveryKeyStore {
 
     private const val FILE = "recovery_keys"
     private const val KEY_SECRET_B64 = "recovery_secret_b64"
+    private const val KEY_CONFIRMED = "setup_confirmed"
     private const val KEY_PASSWORD_BLOB_JSON = "password_blob_json"
+    private const val CONFIRMED_VALUE = "1"
+
+    // ----- secret ------------------------------------------------------------
 
     sealed class SecretResult {
         data class Ok(val secret: ByteArray) : SecretResult()
         object NotSet : SecretResult()
-
-        /** Keystore/encrypted-prefs failure: a visible failure state, never
-         *  silence and never an unencrypted fallback. */
         object Unavailable : SecretResult()
     }
 
     fun getSecret(context: Context): SecretResult {
-        // getEncryptedPreferenceOrNull distinguishes a Keystore outage (null)
-        // from a genuinely unset value ("") — the plain getter swallows the
-        // outage into "", which would masquerade as "no key set".
         val b64 = EncryptedPreferences.getEncryptedPreferenceOrNull(context, FILE, KEY_SECRET_B64)
             ?: return SecretResult.Unavailable
         if (b64.isEmpty()) return SecretResult.NotSet
@@ -67,12 +67,37 @@ object RecoveryKeyStore {
         }
     }
 
-    /** Store the working copy. Returns false on a storage failure (visible to
-     *  the caller — enabling protected backups must not proceed on false). */
-    fun setSecret(context: Context, secret: ByteArray): Boolean =
-        EncryptedPreferences.setEncryptedPreferenceCommit(
+    /** Store a freshly generated secret. It is UNCONFIRMED: the CONFIRMED
+     *  marker is cleared as part of the same operation, so a new secret can
+     *  never inherit an old confirmation. Returns false on any storage
+     *  failure (enabling protected backups must not proceed on false). */
+    fun setSecret(context: Context, secret: ByteArray): Boolean {
+        val secretOk = EncryptedPreferences.setEncryptedPreferenceCommit(
             context, FILE, KEY_SECRET_B64, Base64.getEncoder().encodeToString(secret)
         )
+        val markerCleared = EncryptedPreferences.setEncryptedPreferenceCommit(context, FILE, KEY_CONFIRMED, "")
+        return secretOk && markerCleared
+    }
+
+    // ----- setup state -------------------------------------------------------
+
+    enum class SetupState { NOT_SET, UNCONFIRMED, CONFIRMED, UNAVAILABLE }
+
+    fun getSetupState(context: Context): SetupState {
+        val b64 = EncryptedPreferences.getEncryptedPreferenceOrNull(context, FILE, KEY_SECRET_B64)
+            ?: return SetupState.UNAVAILABLE
+        if (b64.isEmpty()) return SetupState.NOT_SET
+        val marker = EncryptedPreferences.getEncryptedPreferenceOrNull(context, FILE, KEY_CONFIRMED)
+            ?: return SetupState.UNAVAILABLE
+        return if (marker == CONFIRMED_VALUE) SetupState.CONFIRMED else SetupState.UNCONFIRMED
+    }
+
+    /** Durably mark the setup Confirmed. Callers proceed ONLY if this returns
+     *  true (owner ruling: proceed only if the durable write succeeds). */
+    fun markConfirmed(context: Context): Boolean =
+        EncryptedPreferences.setEncryptedPreferenceCommit(context, FILE, KEY_CONFIRMED, CONFIRMED_VALUE)
+
+    // ----- password blob (typed: NotSet / Ok / Unavailable) ------------------
 
     data class StoredPasswordBlob(
         val salt: ByteArray,
@@ -89,24 +114,36 @@ object RecoveryKeyStore {
             )
     }
 
-    fun getPasswordBlob(context: Context): StoredPasswordBlob? = try {
-        val json = EncryptedPreferences.getEncryptedPreferenceOrNull(context, FILE, KEY_PASSWORD_BLOB_JSON)
-        if (json.isNullOrEmpty()) null else {
-            val obj = JSONObject(json)
-            StoredPasswordBlob(
-                salt = Base64.getDecoder().decode(obj.getString("salt")),
-                iterations = obj.getInt("iterations"),
-                wrappedRecoverySecret = Base64.getDecoder().decode(obj.getString("wrapped_rs"))
-            )
-        }
-    } catch (_: Exception) {
-        null
+    sealed class PasswordBlobResult {
+        object NotSet : PasswordBlobResult()
+        data class Ok(val blob: StoredPasswordBlob) : PasswordBlobResult()
+
+        /** Keystore outage OR malformed stored data — a protected backup must
+         *  fail visibly here, never lose the password restore route silently. */
+        object Unavailable : PasswordBlobResult()
     }
 
-    /** Store (or with null: clear) the static password blob. Computed at
-     *  password set/change ONLY. */
-    fun setPasswordBlob(context: Context, blob: StoredPasswordBlob?): Boolean = try {
-        val value = if (blob == null) "" else JSONObject()
+    fun getPasswordBlob(context: Context): PasswordBlobResult {
+        val json = EncryptedPreferences.getEncryptedPreferenceOrNull(context, FILE, KEY_PASSWORD_BLOB_JSON)
+            ?: return PasswordBlobResult.Unavailable
+        if (json.isEmpty()) return PasswordBlobResult.NotSet
+        return try {
+            val obj = JSONObject(json)
+            PasswordBlobResult.Ok(
+                StoredPasswordBlob(
+                    salt = Base64.getDecoder().decode(obj.getString("salt")),
+                    iterations = obj.getInt("iterations"),
+                    wrappedRecoverySecret = Base64.getDecoder().decode(obj.getString("wrapped_rs"))
+                )
+            )
+        } catch (_: Exception) {
+            PasswordBlobResult.Unavailable
+        }
+    }
+
+    /** Store the static password blob. Computed at password set/change ONLY. */
+    fun setPasswordBlob(context: Context, blob: StoredPasswordBlob): Boolean = try {
+        val value = JSONObject()
             .put("salt", Base64.getEncoder().encodeToString(blob.salt))
             .put("iterations", blob.iterations)
             .put("wrapped_rs", Base64.getEncoder().encodeToString(blob.wrappedRecoverySecret))

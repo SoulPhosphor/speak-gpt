@@ -47,7 +47,10 @@ object RecoveryKeyFile {
         require(recoverySecret.size == RecoveryCode.SECRET_BYTES) { "Recovery Secret must be 16 bytes" }
         return JSONObject()
             .put("format", FORMAT)
-            .put("key_fingerprint", PackageCrypto.fingerprint(recoverySecret).toHex())
+            // Field name is "recovery_key_id" on disk (owner ruling, July 22
+            // 2026); the value is the non-secret key fingerprint. Internal code
+            // still calls it a fingerprint — only the serialized name changed.
+            .put("recovery_key_id", PackageCrypto.fingerprint(recoverySecret).toHex())
             .put("recovery_secret", Base64.getEncoder().encodeToString(recoverySecret))
             .toString(2)
     }
@@ -68,7 +71,7 @@ object RecoveryKeyFile {
             if (obj.optString("format") != FORMAT) return ParseResult.Invalid
             val secret = Base64.getDecoder().decode(obj.optString("recovery_secret", ""))
             if (secret.size != RecoveryCode.SECRET_BYTES) return ParseResult.Invalid
-            val statedFingerprint = obj.optString("key_fingerprint", "")
+            val statedFingerprint = obj.optString("recovery_key_id", "")
             if (statedFingerprint != PackageCrypto.fingerprint(secret).toHex()) return ParseResult.Invalid
             ParseResult.Ok(secret)
         } catch (_: Exception) {

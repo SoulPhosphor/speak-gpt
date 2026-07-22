@@ -188,9 +188,12 @@
                 android:textStyle="bold" />
 
             <!-- Portable recovery (format v2) entry — the owner-approved
-                 Create Recovery Backup flow. The installation-bound v1 controls
-                 below remain as the labelled fallback until the portable path
-                 passes the on-device test gate (owner ruling). -->
+                 Create Recovery Backup flow, now the ONLY manual backup control.
+                 The installation-bound v1 controls (text_manual_location,
+                 btn_change_manual_location, btn_create_backup) are HIDDEN (owner
+                 ruling, July 22 2026, correction 1): kept in the tree so the
+                 activity's existing bindings/logic still resolve, but never
+                 shown. Do not un-hide without the owner's word. -->
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_create_recovery"
                 style="@style/AppButton.Primary"
@@ -214,7 +217,8 @@
                 android:paddingTop="16dp"
                 android:textColor="@color/text"
                 android:textIsSelectable="true"
-                android:textSize="15sp" />
+                android:textSize="15sp"
+                android:visibility="gone" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_change_manual_location"
@@ -222,7 +226,8 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
-                android:text="@string/backup_change_location" />
+                android:text="@string/backup_change_location"
+                android:visibility="gone" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_create_backup"
@@ -230,7 +235,8 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
-                android:text="@string/backup_create" />
+                android:text="@string/backup_create"
+                android:visibility="gone" />
 
             <!-- ============ 4. Portable Copy ============ -->
             <TextView

@@ -157,7 +157,7 @@ object PackageCrypto {
         val kek = derivePasswordKey("calibration-probe".toCharArray(), salt, probe)
         wipe(kek)
         val ms = (System.nanoTime() - start) / 1_000_000
-        return calibrateIterations(probe, ms.coerceAtLeast(1))
+        return calibrateIterations(probe, ms.coerceAtLeast(1), targetMillis)
     }
 
     /** True when a package-supplied iteration count is inside the v1 window.

@@ -43,10 +43,19 @@ class RecoveryKeyFileTest {
 
     @Test
     fun tamperedFingerprintIsRejected() {
+        // The on-disk field is "recovery_key_id" (owner ruling, July 22 2026);
+        // it carries the key fingerprint and must match the secret it accompanies.
         val secret = PackageCrypto.newRecoverySecret()
         val json = RecoveryKeyFile.serialize(secret)
-            .replace(Regex("\"key_fingerprint\"\\s*:\\s*\"[0-9a-f]+\""), "\"key_fingerprint\":\"deadbeefdeadbeef\"")
+            .replace(Regex("\"recovery_key_id\"\\s*:\\s*\"[0-9a-f]+\""), "\"recovery_key_id\":\"deadbeefdeadbeef\"")
         assertTrue(RecoveryKeyFile.parse(json) is RecoveryKeyFile.ParseResult.Invalid)
+    }
+
+    @Test
+    fun serializesTheKeyIdFieldNotTheLegacyName() {
+        val json = RecoveryKeyFile.serialize(PackageCrypto.newRecoverySecret())
+        assertTrue(json.contains("recovery_key_id"))
+        assertFalse(json.contains("key_fingerprint"))
     }
 
     @Test
