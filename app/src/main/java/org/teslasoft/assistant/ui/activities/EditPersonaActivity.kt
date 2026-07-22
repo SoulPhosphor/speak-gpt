@@ -464,7 +464,11 @@ class EditPersonaActivity : FragmentActivity() {
                     .setTitle(R.string.label_delete_lorebook)
                     .setMessage(R.string.message_delete_lorebook)
                     .setPositiveButton(R.string.yes) { _, _ ->
-                        LoreBookStore.getInstance(this).deleteBook(book.id)
+                        // A store that degrades between rendering this row and
+                        // the confirm tap refuses here; skip the delete rather
+                        // than crash (the next render shows the blocked note).
+                        val deleteStore = loreStoreOrNull() ?: return@setPositiveButton
+                        deleteStore.deleteBook(book.id)
                         PersonaPreferences.getPersonaPreferences(this).removeLoreBookFromAllPersonas(book.id)
                         additionalLoreBookIds.remove(book.id)
                         if (selectedCoreLoreBookId == book.id) {

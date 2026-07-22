@@ -69,7 +69,6 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.ViewOutlineProvider
-import android.view.WindowInsets
 import android.view.animation.Animation
 import android.view.animation.AnimationUtils
 import android.widget.EditText
@@ -212,7 +211,6 @@ import java.util.Locale
 import java.util.Optional
 import kotlin.time.Duration.Companion.seconds
 import androidx.core.content.edit
-import androidx.core.view.WindowInsetsCompat
 import kotlinx.coroutines.flow.flowOn
 import okio.FileSystem
 import okio.Path.Companion.toPath
@@ -6673,21 +6671,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         val messages = findViewById<RecyclerView>(R.id.messages) ?: return
         val layoutParams = messages.layoutParams as ViewGroup.MarginLayoutParams
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            // rootWindowInsets is nullable — Pixel 8 / API 36 returned null here
-            // and crashed the app. Fall back to a zero status-bar inset rather
-            // than tearing down the activity; the layout settles correctly the
-            // next time insets dispatch.
-            val statusTop = window.decorView.rootWindowInsets
-                ?.getInsets(WindowInsets.Type.statusBars())?.top ?: 0
-            layoutParams.topMargin = dpToPx(64) + statusTop
-        } else {
-            val view = findViewById<View>(android.R.id.content) ?: return
-            ViewCompat.setOnApplyWindowInsetsListener(view) { _, insets ->
-                layoutParams.topMargin = dpToPx(64) + insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
-                insets
-            }
-        }
+        // The list's top is now genuinely CONSTRAINED below the action bar /
+        // A2 health banner (activity_chat.xml, Build Phase 3): the old
+        // hand-set "64dp + status inset" margin existed only because
+        // match_parent ignored those constraints, and keeping it here would
+        // double-count the offset (the action bar already carries the
+        // status-bar padding applied above) and open a dead gap at the top
+        // of the chat. Constraints own the position; the margin stays zero.
+        layoutParams.topMargin = 0
 
         messages.layoutParams = layoutParams
     }
