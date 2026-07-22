@@ -192,15 +192,27 @@ object BackupLocationDisplay {
         }
     }
 
+    /** The mid-tier truthful placeholder used inside a breadcrumb when a
+     *  provider is known but the actual folder name cannot be safely shown
+     *  (unresolved, or opaque) — "Google Drive > Selected folder", never a
+     *  bare provider name on its own: a provider alone does not identify
+     *  WHICH folder was picked, so it is never an acceptable final display. */
+    const val GENERIC_FOLDER_NAME = "Selected folder"
+
     /**
-     * Pure breadcrumb composition (unit-tested) implementing the owner's
-     * truthful fallback ladder in order:
-     *  a. Provider > resolved breadcrumb (all [segments] resolved to names)
-     *  b. Provider > selected folder ([fallbackLeaf] alone, when the full
-     *     hierarchy could not be resolved)
-     *  c. Selected folder (no provider label, just the leaf name)
-     *  d. null — the caller shows its own generic "Selected folder location"
-     *     phrase; nothing here is ever invented.
+     * Pure breadcrumb composition (unit-tested) implementing the required
+     * fallback ladder in order:
+     *  1. Provider > resolved breadcrumb (all [segments] resolved to names)
+     *  2. Provider > selected folder — the real [fallbackLeaf] name when it
+     *     resolves, otherwise the literal, truthful placeholder
+     *     [GENERIC_FOLDER_NAME] ("Google Drive > Selected folder") — a
+     *     provider is NEVER shown by itself, since that fails to identify
+     *     which folder was chosen.
+     *  3. Selected folder — [fallbackLeaf] alone when no provider label
+     *     exists but the leaf name resolves.
+     *  4. null — the caller shows its own generic "Selected folder location"
+     *     phrase; reached only when NEITHER a provider NOR a folder name is
+     *     known. Nothing here is ever invented.
      * Any segment or leaf name that does not [looksLikeName] (an opaque id,
      * an encoded token, a raw URI) is rejected outright rather than shown —
      * an opaque document id must never reach the screen.
@@ -211,7 +223,7 @@ object BackupLocationDisplay {
         return when {
             provider != null && validSegments != null -> (listOf(provider) + validSegments).joinToString(SEPARATOR)
             provider != null && validLeaf != null -> "$provider$SEPARATOR$validLeaf"
-            provider != null -> provider
+            provider != null -> "$provider$SEPARATOR$GENERIC_FOLDER_NAME"
             validLeaf != null -> validLeaf
             else -> null
         }

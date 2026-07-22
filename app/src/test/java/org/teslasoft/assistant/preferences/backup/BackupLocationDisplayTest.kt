@@ -93,9 +93,20 @@ class BackupLocationDisplayTest {
     }
 
     @Test
-    fun providerAlone_whenNeitherSegmentsNorLeafResolve() {
-        assertEquals("Google Drive", BackupLocationDisplay.composeBreadcrumb("Google Drive", null, null))
-        assertEquals("Google Drive", BackupLocationDisplay.composeBreadcrumb("Google Drive", emptyList(), null))
+    fun providerIsNeverShownAlone_genericFolderPlaceholderFillsIn() {
+        // A bare provider name ("Google Drive") does not identify WHICH
+        // folder was picked and is never an acceptable final display — when
+        // no real folder name resolves, the truthful generic placeholder
+        // fills the folder slot instead (owner correction).
+        assertEquals(
+            "Google Drive > Selected folder",
+            BackupLocationDisplay.composeBreadcrumb("Google Drive", null, null)
+        )
+        assertEquals(
+            "Google Drive > Selected folder",
+            BackupLocationDisplay.composeBreadcrumb("Google Drive", emptyList(), null)
+        )
+        assertEquals(BackupLocationDisplay.GENERIC_FOLDER_NAME, "Selected folder")
     }
 
     @Test
@@ -111,13 +122,16 @@ class BackupLocationDisplayTest {
         assertFalse(result!!.contains("acc="))
         assertFalse(result.contains("doc="))
 
-        // An opaque leaf name is rejected too — never shown, even alone: with
-        // no provider there is nothing truthful left to show (null); with a
-        // known provider it degrades to the provider name alone, never the
-        // opaque token.
+        // An opaque leaf name is rejected too — never shown, even encoded:
+        // with no provider there is nothing truthful left to show (null,
+        // tier 4); with a known provider the folder slot falls back to the
+        // generic placeholder — NEVER the opaque token, and NEVER the
+        // provider shown bare with no folder indication at all.
         assertNull(BackupLocationDisplay.composeBreadcrumb(null, null, "content://com.foo.bar/tree/x"))
-        val providerOnly = BackupLocationDisplay.composeBreadcrumb("Google Drive", null, "doc=encoded%3Dxyz")
-        assertEquals("Google Drive", providerOnly)
+        val fallback = BackupLocationDisplay.composeBreadcrumb("Google Drive", null, "doc=encoded%3Dxyz")
+        assertEquals("Google Drive > Selected folder", fallback)
+        assertFalse(fallback!!.contains("doc="))
+        assertFalse(fallback.contains("%3D"))
     }
 
     @Test
