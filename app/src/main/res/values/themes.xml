@@ -486,6 +486,42 @@
         <item name="android:textSize">13sp</item>
     </style>
 
+    <!-- Screen-section heading + its explanatory text (owner ruling, July 22
+         2026). Same "heading, then explanation, then the control it explains"
+         order as Widget.App.Field.Label/.Hint above, one level up: a whole
+         settings-style screen section, not a single form field. A section's
+         hint/description text ALWAYS sits directly under that section's
+         title and BEFORE any button or control in the section - never under
+         or after a button. Text describing what a button does must never sit
+         below that button. A section with more than one explanatory sentence
+         (e.g. a description plus a separate warning) stacks both as
+         consecutive Widget.App.Section.Hint paragraphs directly under the
+         title, still before any control - never split apart with a button in
+         between. These two styles de-duplicate a title+hint pair that was
+         hand-copied per section (Database Health, Recovery Backup,
+         Human-Readable Chat Backup, Portable Data Copy, Automatic Backups,
+         Reset) in activity_memory_backup_restore.xml with identical values;
+         extracting them here is what makes the coming theming pass a
+         one-place change instead of a hunt through every section. -->
+    <style name="Widget.App.Section.Title" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:paddingTop">24dp</item>
+        <item name="android:textColor">?attr/colorPrimary</item>
+        <item name="android:textSize">18sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <!-- Explanatory text for a section, directly under its Section.Title and
+         before that section's first control (see the ordering rule above). -->
+    <style name="Widget.App.Section.Hint" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:paddingTop">8dp</item>
+        <item name="android:textColor">@color/text_subtitle</item>
+        <item name="android:textSize">13sp</item>
+    </style>
+
     <!-- Summoning Circle tile pieces (owner ruling, July 21 2026). The four
          container tiles (Companion / Glamour / Activation / System Prompt) each
          show a bold label, an inline dropdown value, and an edit button. These

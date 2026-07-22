@@ -84,14 +84,17 @@
             android:paddingHorizontal="20dp">
 
             <!-- ============ 1. Database Health ============ -->
+            <!-- Section heading + hint styles: Widget.App.Section.Title/.Hint
+                 (see values/themes.xml + ui-style-guide.md). The hint always
+                 comes directly under the title and before the button it
+                 explains - never after the button. -->
             <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="24dp"
-                android:text="@string/backup_db_health_section"
-                android:textColor="?attr/colorPrimary"
-                android:textSize="18sp"
-                android:textStyle="bold" />
+                style="@style/Widget.App.Section.Title"
+                android:text="@string/backup_db_health_section" />
+
+            <TextView
+                style="@style/Widget.App.Section.Hint"
+                android:text="@string/backup_check_integrity_hint" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_check_integrity"
@@ -100,14 +103,6 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
                 android:text="@string/backup_check_integrity" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="8dp"
-                android:text="@string/backup_check_integrity_hint"
-                android:textColor="@color/text_subtitle"
-                android:textSize="13sp" />
 
             <!-- §15.9 verbatim in-progress line: visible only while the check
                  runs, then replaced by the per-database result lines below. -->
@@ -150,13 +145,8 @@
 
             <!-- ============ 2. Backup Status ============ -->
             <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="24dp"
-                android:text="@string/backup_status_section"
-                android:textColor="?attr/colorPrimary"
-                android:textSize="18sp"
-                android:textStyle="bold" />
+                style="@style/Widget.App.Section.Title"
+                android:text="@string/backup_status_section" />
 
             <TextView
                 android:id="@+id/text_status_memory"
@@ -192,13 +182,12 @@
 
             <!-- ============ 3. Recovery Backup (manual) ============ -->
             <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="24dp"
-                android:text="@string/backup_create_section"
-                android:textColor="?attr/colorPrimary"
-                android:textSize="18sp"
-                android:textStyle="bold" />
+                style="@style/Widget.App.Section.Title"
+                android:text="@string/backup_create_section" />
+
+            <TextView
+                style="@style/Widget.App.Section.Hint"
+                android:text="@string/backup_create_hint" />
 
             <!-- Portable recovery (format v2) entry — the owner-approved
                  Create Recovery Backup flow, now the ONLY manual backup control.
@@ -214,14 +203,6 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
                 android:text="@string/recovery_create" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="8dp"
-                android:text="@string/backup_create_hint"
-                android:textColor="@color/text_subtitle"
-                android:textSize="13sp" />
 
             <TextView
                 android:id="@+id/text_manual_location"
@@ -253,21 +234,12 @@
 
             <!-- ============ 4. Human-Readable Chat Backup ============ -->
             <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="24dp"
-                android:text="@string/backup_readable_section"
-                android:textColor="?attr/colorPrimary"
-                android:textSize="18sp"
-                android:textStyle="bold" />
+                style="@style/Widget.App.Section.Title"
+                android:text="@string/backup_readable_section" />
 
             <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="8dp"
-                android:text="@string/backup_readable_desc"
-                android:textColor="@color/text_subtitle"
-                android:textSize="13sp" />
+                style="@style/Widget.App.Section.Hint"
+                android:text="@string/backup_readable_desc" />
 
             <!-- Multiple-choice fields: standard same-line label + dropdown,
                  Widget.App.Dropdown.* (owner ruling, July 22 2026). -->
@@ -328,21 +300,20 @@
 
             <!-- ============ 5. Portable Data Copy ============ -->
             <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="24dp"
-                android:text="@string/backup_portable_section"
-                android:textColor="?attr/colorPrimary"
-                android:textSize="18sp"
-                android:textStyle="bold" />
+                style="@style/Widget.App.Section.Title"
+                android:text="@string/backup_portable_section" />
+
+            <!-- Two explanatory paragraphs, both directly under the title and
+                 before either button (owner correction, July 22 2026): the
+                 privacy warning used to sit below the buttons and the status
+                 line, reading as if it described something else entirely. -->
+            <TextView
+                style="@style/Widget.App.Section.Hint"
+                android:text="@string/backup_portable_desc" />
 
             <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="8dp"
-                android:text="@string/backup_portable_desc"
-                android:textColor="@color/text_subtitle"
-                android:textSize="13sp" />
+                style="@style/Widget.App.Section.Hint"
+                android:text="@string/backup_portable_warning" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_portable_export"
@@ -371,14 +342,6 @@
                 android:textSize="15sp"
                 android:visibility="gone" />
 
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="8dp"
-                android:text="@string/backup_portable_warning"
-                android:textColor="@color/text_subtitle"
-                android:textSize="13sp" />
-
             <!-- ============ 6. Automatic Backups ============ -->
             <!-- The approved portable automatic system is NOT built. This
                  section says so honestly. The enable switch is GONE from view
@@ -388,21 +351,12 @@
                  will use. Do not un-hide the switch until the portable
                  automatic writer actually exists. -->
             <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="24dp"
-                android:text="@string/backup_auto_section"
-                android:textColor="?attr/colorPrimary"
-                android:textSize="18sp"
-                android:textStyle="bold" />
+                style="@style/Widget.App.Section.Title"
+                android:text="@string/backup_auto_section" />
 
             <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="8dp"
-                android:text="@string/backup_auto_not_ready"
-                android:textColor="@color/text_subtitle"
-                android:textSize="13sp" />
+                style="@style/Widget.App.Section.Hint"
+                android:text="@string/backup_auto_not_ready" />
 
             <TextView
                 android:id="@+id/text_auto_location"
@@ -446,29 +400,20 @@
 
             <!-- ============ 7. Reset (destructive; bottom, unchanged) ============ -->
             <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="24dp"
-                android:text="@string/memory_controls_section_reset"
-                android:textColor="?attr/colorPrimary"
-                android:textSize="18sp"
-                android:textStyle="bold" />
+                style="@style/Widget.App.Section.Title"
+                android:text="@string/memory_controls_section_reset" />
+
+            <TextView
+                style="@style/Widget.App.Section.Hint"
+                android:text="@string/memory_controls_reset_hint" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_memory_reset"
                 style="@style/AppButton.Destructive"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
+                android:layout_marginTop="16dp"
                 android:text="@string/memory_controls_reset" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="8dp"
-                android:text="@string/memory_controls_reset_hint"
-                android:textColor="@color/text_subtitle"
-                android:textSize="13sp" />
         </LinearLayout>
     </ScrollView>
 </androidx.constraintlayout.widget.ConstraintLayout>

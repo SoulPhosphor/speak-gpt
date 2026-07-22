@@ -711,3 +711,40 @@ and rollout notes here — not back in `CLAUDE.md`.
   converted from full-width `MaterialButton`s showing "Label: value" text and
   a centered `setSingleChoiceItems` dialog to this same-line label + anchored-
   dropdown pattern.
+- **Standard section heading + hint — `Widget.App.Section.*`, and the
+  ordering rule that goes with it (owner ruling, July 22 2026).** A
+  settings-style screen section is a bold heading (`?attr/colorPrimary`,
+  18sp) optionally followed by one or more sentences of plain-language
+  explanation (13sp, `@color/text_subtitle`), then the section's controls
+  (buttons, fields, switches). **The explanation ALWAYS sits directly under
+  the heading and BEFORE the section's first control — never under or after
+  a button.** Text that describes what a button does is never placed below
+  that button. A section with more than one explanatory sentence (e.g. a
+  description plus a separate warning) stacks both as consecutive hint
+  paragraphs directly under the heading, still before any control — never
+  split apart by a button landing in between. This is the same
+  heading-then-explanation-then-control order as `Widget.App.Field.Label`/
+  `.Hint` above a field's `Widget.App.Field.Box`, one level up: a whole
+  section instead of a single field. Two styles in `values/themes.xml`:
+  - `Widget.App.Section.Title` — the bold `?attr/colorPrimary` 18sp heading,
+    `paddingTop="24dp"` (the standard gap from the section above).
+  - `Widget.App.Section.Hint` — the explanatory text, `paddingTop="8dp"`.
+  **Rollout status:** applied July 22 2026 to every section of
+  `activity_memory_backup_restore.xml` (Database Health, Backup Status,
+  Recovery Backup, Human-Readable Chat Backup, Portable Data Copy, Automatic
+  Backups, Reset), replacing hand-copied inline `textColor`/`textSize`/
+  `textStyle`/`paddingTop` attributes that were identical in every section.
+  Fixing the ordering violation was the actual bug report: Database Health,
+  Recovery Backup, and Reset each had their hint sitting BELOW that
+  section's button instead of above it (read as if describing whatever came
+  next, not the button it was actually written for), and Portable Data
+  Copy's privacy-warning sentence sat below both buttons AND the status line
+  — separated from its own section's description paragraph entirely. All
+  four are now heading → hint(s) → control, matching the sections that were
+  already correct (Human-Readable Chat Backup, Automatic Backups). Not yet
+  applied to any other screen — many other settings-style screens
+  (`activity_memory_controls.xml`, `activity_advanced_memory_settings.xml`,
+  `activity_alert_debug_menu.xml`, `activity_audio_debugging.xml`,
+  `activity_voice_settings.xml`, and others) hand-copy the same heading/hint
+  look and are candidates for the same conversion later, but converting them
+  was out of scope for this pass.
