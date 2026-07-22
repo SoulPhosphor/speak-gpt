@@ -1375,6 +1375,13 @@
     <string name="backup_state_failed_last_good">Backup Failed. Last Good Backup: %1$s</string>
     <string name="backup_state_failed_none">Backup Failed. No Successful Backup Yet.</string>
     <string name="backup_state_nothing">Nothing to Back Up</string>
+    <!-- Portable recovery restore error model (owner-authored wording, July 22
+         2026 rulings 2 and 4 — verbatim; do not reword without asking).
+         Maps from PortablePackageFormat.RestoreError. -->
+    <string name="backup_err_mistyped_code">Invalid or mistyped Recovery Code.</string>
+    <string name="backup_err_wrong_key_or_header">This Recovery Code belongs to a different Recovery Key, or the backup header is damaged.</string>
+    <string name="backup_err_damaged">The backup is damaged or has been altered.</string>
+    <string name="backup_err_unsupported_protection">Unsupported or invalid backup protection settings.</string>
     <!-- 3. Create Backup (manual recovery backup) -->
     <string name="backup_create_section">Create Backup</string>
     <string name="backup_create_hint">Creates a recovery backup of your chats, memories, lorebooks, and user image data.</string>

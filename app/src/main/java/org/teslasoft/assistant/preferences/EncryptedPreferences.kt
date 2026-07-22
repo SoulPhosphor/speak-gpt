@@ -73,5 +73,33 @@ class EncryptedPreferences {
                 putString(key, value)
             }
         }
+
+        /**
+         * Like [getEncryptedPreference], but a Keystore/open FAILURE is
+         * distinguishable from an absent value: null = storage unavailable,
+         * "" = genuinely unset. Required by the recovery-key store (owner
+         * ruling, July 22 2026): an outage must surface as a visible failure,
+         * never masquerade as "no key set".
+         */
+        fun getEncryptedPreferenceOrNull(context: Context, file: String, key: String): String? {
+            return try {
+                getEncryptedSharedPreferences(context, file).getString(key, "") ?: ""
+            } catch (_: Exception) {
+                null
+            }
+        }
+
+        /**
+         * Synchronous-commit write, returning whether it durably succeeded.
+         * Used for recovery-key material, where an apply()-deferred write that
+         * later fails would silently strand the user without a working copy.
+         */
+        fun setEncryptedPreferenceCommit(context: Context, file: String, key: String, value: String): Boolean {
+            return try {
+                getEncryptedSharedPreferences(context, file).edit().putString(key, value).commit()
+            } catch (_: Exception) {
+                false
+            }
+        }
     }
 }

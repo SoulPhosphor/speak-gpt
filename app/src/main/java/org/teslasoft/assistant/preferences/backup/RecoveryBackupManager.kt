@@ -146,12 +146,33 @@ object RecoveryBackupManager {
     }
 
     /** VACUUM INTO a staged encrypted copy, keyed like the source. A null/empty
-     *  key means the store is locked or unmigrated — a real SOURCE failure. */
-    private fun snapshotCipher(context: Context, dbName: String, staged: File, keyProvider: () -> ByteArray?): Boolean {
+     *  key means the store is locked or unmigrated — a real SOURCE failure.
+     *
+     *  MECHANISM STATUS (owner ruling, July 22 2026): VACUUM INTO is a
+     *  TEST-FIRST CANDIDATE, not production-proven — it has never executed on
+     *  a device. The on-device gate must also verify that the OPEN_READONLY
+     *  connection below permits VACUUM INTO at all; if it does not, report
+     *  that exact failure — never silently weaken the connection mode, and
+     *  never silently switch mechanisms within a run (sqlcipher_export is the
+     *  pre-agreed alternative but needs its own explicit implementation and
+     *  proof). Internal so the portable-package writer reuses this single
+     *  snapshot path. */
+    internal fun snapshotCipher(
+        context: Context,
+        dbName: String,
+        staged: File,
+        allowEmptyKey: Boolean = false,
+        keyProvider: () -> ByteArray?
+    ): Boolean {
         val src = context.getDatabasePath(dbName)
         if (!src.exists()) return false
         val key = keyProvider()
-        if (key == null || key.isEmpty()) throw IllegalStateException("$dbName key unavailable")
+        // An empty key is legal ONLY when the caller explicitly says the source
+        // may be a plaintext database (a lorebook whose one-time encryption
+        // migration has not succeeded operates on the plaintext file with an
+        // empty password — LoreBookEncryption contract). Everywhere else an
+        // empty key means the store is locked: a real SOURCE failure.
+        if (key == null || (key.isEmpty() && !allowEmptyKey)) throw IllegalStateException("$dbName key unavailable")
         LoreBookEncryption.loadLibrary() // idempotent; the SQLCipher .so may not be loaded yet
         val db = CipherDatabase.openDatabase(src.path, key, null, CipherDatabase.OPEN_READONLY, null, null)
         try {
@@ -163,7 +184,7 @@ object RecoveryBackupManager {
     }
 
     /** Row-level rebuild of the plain profile-image catalog into a staged DB. */
-    private fun snapshotUserImageCatalog(context: Context, staged: File): Boolean {
+    internal fun snapshotUserImageCatalog(context: Context, staged: File): Boolean {
         val src = context.getDatabasePath("profile_images.db")
         if (!src.exists()) return false
         val source = PlainDatabase.openDatabase(src.path, null, PlainDatabase.OPEN_READONLY)
@@ -317,7 +338,7 @@ object RecoveryBackupManager {
         }
     }
 
-    private fun integrityCheckCipher(staged: File, key: ByteArray?) {
+    internal fun integrityCheckCipher(staged: File, key: ByteArray?) {
         if (key == null || key.isEmpty()) throw IllegalStateException("snapshot key unavailable")
         LoreBookEncryption.loadLibrary()
         val db = CipherDatabase.openDatabase(staged.path, key, null, CipherDatabase.OPEN_READONLY, null, null)
@@ -325,7 +346,7 @@ object RecoveryBackupManager {
         finally { try { db.close() } catch (_: Exception) { } }
     }
 
-    private fun integrityCheckPlain(staged: File) {
+    internal fun integrityCheckPlain(staged: File) {
         val db = PlainDatabase.openDatabase(staged.path, null, PlainDatabase.OPEN_READONLY)
         try { assertIntegrity(db.rawQuery("PRAGMA integrity_check", null)) }
         finally { try { db.close() } catch (_: Exception) { } }
