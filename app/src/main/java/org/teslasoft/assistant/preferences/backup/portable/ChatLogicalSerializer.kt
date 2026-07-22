@@ -39,6 +39,16 @@ import org.teslasoft.assistant.util.Hash
  *  - ANY individual non-authoritative chat likewise fails the whole artifact
  *    (a partial chat set must never look like a normal success — standing
  *    owner ruling).
+ *  - A LOCKED per-chat SETTINGS file likewise fails the whole artifact
+ *    (owner correction, July 22 2026): SecurePrefs presents a locked file as
+ *    an inert EMPTY map without throwing, so the lock must be checked
+ *    explicitly via isLockedName after the open — never substitute empty
+ *    settings after any read failure. A genuinely readable-but-empty
+ *    settings file is honest data and is allowed. Decision logic is the
+ *    pure, unit-tested [ChatSettingsReadPolicy].
+ *  - A chat-list entry with a missing or blank name is malformed data and
+ *    fails the whole artifact (owner correction, July 22 2026) — a complete
+ *    backup must not silently omit an entry it cannot serialize.
  *  - The legacy per-chat `api_key` settings entry is EXCLUDED (owner ruling 9:
  *    API keys are never package contents; verified present in the per-chat
  *    settings surface at Preferences.kt getApiKey/setApiKey).
@@ -73,11 +83,17 @@ object ChatLogicalSerializer {
 
             val chats = JSONArray()
             for (chat in listResult.chats) {
-                val name = chat["name"] ?: continue
+                // A malformed list entry (missing/blank name) must fail the
+                // artifact visibly — never be silently skipped from a backup
+                // that then claims to be complete.
+                val name = chat["name"]
+                if (name.isNullOrBlank()) return Result.Unavailable
                 val chatId = Hash.hash(name)
 
                 val history = chatPreferences.getChatByIdResult(context, chatId)
                 if (!ChatStorageHealth.isAuthoritative(history.state)) return Result.Unavailable
+
+                val settings = serializeSettings(context, chatId) ?: return Result.Unavailable
 
                 val obj = JSONObject()
                 obj.put("name", name)
@@ -86,7 +102,7 @@ object ChatLogicalSerializer {
                     if (key != "name" && key != "first_message") obj.put("list_$key", value)
                 }
                 obj.put("messages", JSONArray(gson.toJson(history.messages)))
-                obj.put("settings", serializeSettings(context, chatId))
+                obj.put("settings", settings)
                 chats.put(obj)
             }
 
@@ -98,15 +114,29 @@ object ChatLogicalSerializer {
         }
     }
 
-    /** The chat's settings map, type-tagged for faithful restoration.
-     *  Credentials excluded. */
-    private fun serializeSettings(context: Context, chatId: String): JSONArray {
-        val out = JSONArray()
-        val all = try {
-            SecurePrefs.get(context, "settings.$chatId").all
+    /**
+     * The chat's settings map, type-tagged for faithful restoration, or NULL
+     * when the settings file is LOCKED or unreadable — the caller fails the
+     * whole artifact. Never substitutes an empty map after a failure (the
+     * Round-4 masquerade). Credentials excluded.
+     */
+    private fun serializeSettings(context: Context, chatId: String): JSONArray? {
+        val name = "settings.$chatId"
+        val entriesOrNull = try {
+            SecurePrefs.get(context, name).all
         } catch (_: Exception) {
-            emptyMap<String, Any?>()
+            null
         }
+        // The lock check comes AFTER the open attempt: SecurePrefs classifies
+        // on open, and a locked file presents an inert EMPTY map — it never
+        // throws, so the exception path alone cannot catch it.
+        val all = when (
+            val d = ChatSettingsReadPolicy.decide(SecurePrefs.isLockedName(name), entriesOrNull)
+        ) {
+            is ChatSettingsReadPolicy.Decision.Unavailable -> return null
+            is ChatSettingsReadPolicy.Decision.Readable -> d.entries
+        }
+        val out = JSONArray()
         for ((key, value) in all) {
             if (key in EXCLUDED_SETTINGS_KEYS) continue
             val entry = JSONObject()

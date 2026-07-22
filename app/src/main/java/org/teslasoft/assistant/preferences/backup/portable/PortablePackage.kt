@@ -46,8 +46,10 @@ import java.util.zip.ZipOutputStream
  *
  * Restore-side hardening (owner ruling 13) — every package is adversarial
  * input: entry-name sanitization (Zip-Slip), entry-count and per-entry /
- * total uncompressed size caps, no nested paths, manifest/type validation.
- * Nothing here APPLIES data to live stores; extraction targets staging only.
+ * total uncompressed size caps, a bounded manifest read, duplicate-name
+ * rejection (ZIP entries and manifest artifacts alike), manifest/type
+ * validation. Nothing here APPLIES data to live stores; extraction targets
+ * staging only.
  */
 object PortablePackage {
 
@@ -55,6 +57,7 @@ object PortablePackage {
     const val MAX_ENTRIES = 10_000
     const val MAX_ENTRY_BYTES: Long = 1L shl 30      // 1 GiB per entry
     const val MAX_TOTAL_BYTES: Long = 2L shl 30      // 2 GiB uncompressed total
+    const val MAX_MANIFEST_BYTES = 1 shl 20          // 1 MiB — the manifest is tiny in practice
 
     const val KEY_SEMANTICS_PASSPHRASE = "passphrase-bytes"
     const val KEY_SEMANTICS_PLAINTEXT = "plaintext-empty"
@@ -301,18 +304,43 @@ object PortablePackage {
     /**
      * Extract + validate a decoded inner ZIP into [stagingDir] under the
      * adversarial-input caps: entry count, per-entry and total uncompressed
-     * size, Zip-Slip-safe names, manifest present, every manifest artifact
-     * present with a matching SHA-256, no unexpected entries.
+     * size, a bounded manifest read ([MAX_MANIFEST_BYTES], counted toward the
+     * total), Zip-Slip-safe names, DUPLICATE rejection (duplicate ZIP entry
+     * names — including a second manifest.json — and duplicate artifact names
+     * inside the manifest), manifest present, every manifest artifact present
+     * with a matching SHA-256, no unexpected entries.
+     *
+     * Everything is resolved through ONE enumeration of the central directory:
+     * ZipFile.getEntry's selection among duplicate names is unspecified, so
+     * with duplicates present, validation and extraction could disagree about
+     * which bytes they saw (owner correction, July 22 2026). Duplicates are
+     * therefore rejected outright and entries are read via the enumerated
+     * ZipEntry objects, never by a second name lookup.
      */
     fun validateAndExtract(innerZip: File, stagingDir: File): ValidateResult {
         try {
             ZipFile(innerZip).use { zip ->
                 if (zip.size() > MAX_ENTRIES) return ValidateResult.Failed(PortablePackageFormat.RestoreError.DAMAGED_OR_ALTERED)
-                val manifestEntry = zip.getEntry(MANIFEST_ENTRY)
+
+                // Single enumeration; ANY duplicate entry name is a rejection.
+                val byName = LinkedHashMap<String, ZipEntry>()
+                val enumeration = zip.entries()
+                while (enumeration.hasMoreElements()) {
+                    val e = enumeration.nextElement()
+                    if (byName.put(e.name, e) != null) {
+                        return ValidateResult.Failed(PortablePackageFormat.RestoreError.DAMAGED_OR_ALTERED)
+                    }
+                }
+
+                val manifestEntry = byName[MANIFEST_ENTRY]
                     ?: return ValidateResult.Failed(PortablePackageFormat.RestoreError.DAMAGED_OR_ALTERED)
-                val manifest = JSONObject(
-                    zip.getInputStream(manifestEntry).use { it.readBytes() }.toString(Charsets.UTF_8)
-                )
+
+                var total = 0L
+                val manifestBytes = readBounded(zip, manifestEntry, MAX_MANIFEST_BYTES)
+                    ?: return ValidateResult.Failed(PortablePackageFormat.RestoreError.DAMAGED_OR_ALTERED)
+                total += manifestBytes.size
+
+                val manifest = JSONObject(String(manifestBytes, Charsets.UTF_8))
                 val list = manifest.optJSONArray("artifacts")
                     ?: return ValidateResult.Failed(PortablePackageFormat.RestoreError.DAMAGED_OR_ALTERED)
 
@@ -320,22 +348,25 @@ object PortablePackage {
                 for (i in 0 until list.length()) {
                     val a = list.getJSONObject(i)
                     val name = a.optString("name", "")
-                    if (!isSafeEntryName(name)) return ValidateResult.Failed(PortablePackageFormat.RestoreError.DAMAGED_OR_ALTERED)
-                    expected[name] = a
+                    if (!isSafeEntryName(name) || name == MANIFEST_ENTRY) {
+                        return ValidateResult.Failed(PortablePackageFormat.RestoreError.DAMAGED_OR_ALTERED)
+                    }
+                    // Duplicate artifact names inside the manifest are rejected.
+                    if (expected.put(name, a) != null) {
+                        return ValidateResult.Failed(PortablePackageFormat.RestoreError.DAMAGED_OR_ALTERED)
+                    }
                 }
 
-                // No unexpected data entries.
-                val entries = zip.entries()
-                while (entries.hasMoreElements()) {
-                    val e = entries.nextElement()
-                    if (e.name == MANIFEST_ENTRY) continue
-                    if (e.name !in expected) return ValidateResult.Failed(PortablePackageFormat.RestoreError.DAMAGED_OR_ALTERED)
+                // Exact set match: no unexpected entries, nothing missing.
+                for (name in byName.keys) {
+                    if (name != MANIFEST_ENTRY && name !in expected) {
+                        return ValidateResult.Failed(PortablePackageFormat.RestoreError.DAMAGED_OR_ALTERED)
+                    }
                 }
 
-                var total = 0L
                 val out = ArrayList<ValidatedArtifact>(expected.size)
                 for ((name, meta) in expected) {
-                    val entry = zip.getEntry(name)
+                    val entry = byName[name]
                         ?: return ValidateResult.Failed(PortablePackageFormat.RestoreError.DAMAGED_OR_ALTERED)
                     val staged = File(stagingDir, "artifact_" + name.replace('/', '_'))
                     val digest = MessageDigest.getInstance("SHA-256")
@@ -375,6 +406,23 @@ object PortablePackage {
         } catch (_: Exception) {
             return ValidateResult.Failed(PortablePackageFormat.RestoreError.DAMAGED_OR_ALTERED)
         }
+    }
+
+    /** Bounded whole-entry read: null when the entry exceeds [cap]. */
+    private fun readBounded(zip: ZipFile, entry: ZipEntry, cap: Int): ByteArray? {
+        val out = java.io.ByteArrayOutputStream()
+        zip.getInputStream(entry).use { input ->
+            val buf = ByteArray(8192)
+            var count = 0
+            while (true) {
+                val n = input.read(buf)
+                if (n < 0) break
+                count += n
+                if (count > cap) return null
+                out.write(buf, 0, n)
+            }
+        }
+        return out.toByteArray()
     }
 
     // ----- entry-name safety -------------------------------------------------
