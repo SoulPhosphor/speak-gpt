@@ -85,15 +85,26 @@ Stale onboarding docs are worse than none.
 
 ## ⛔ AI session rules — read before spawning agents or asking questions
 
-- **Model tiers: Opus, Sonnet, and Haiku only. Never spawn a Fable model
-  for this project, at any reasoning effort.** When delegating to a
-  subagent or choosing a session model, pick the tier that matches the
-  task's difficulty — Haiku for cheap/mechanical/well-specified work,
-  Sonnet as the default for ordinary feature work, Opus for the hardest
-  or most fragile-area work (anything touching the voice/VAD pipeline,
-  encryption/migrations, or a genuine architecture decision). Don't
-  default to the biggest model out of caution, and don't use a small
-  model just to save cost on something fragile.
+- **The session model is the owner's deliberate choice — never override,
+  swap, warn about, or second-guess it. Fable is an intentional selection,
+  not a mistake to correct.** When the owner sets the dial to Fable (or any
+  model), you ARE that model for the session; do not route "around" it or
+  treat it as wrong. The one hard constraint is about SUBAGENTS, not the
+  session: **do NOT spawn Fable subagents** — a Fable session must never fan
+  out into a fleet of smaller Fable workers (this eats the owner's usage and
+  has repeatedly failed in practice; that is the whole reason the constraint
+  exists). A Fable subagent is permitted ONLY when the work is genuinely
+  high-end (something a smaller tier truly can't do well) AND you have asked
+  the owner first and explained why; with their yes, it is fine. It is never
+  acceptable for routine or mechanical work (e.g. figuring out where an XML
+  edit goes) that is exactly the usage-burning pattern being guarded against.
+  For ordinary delegation, when you
+  genuinely do, size an Opus / Sonnet / Haiku worker to the task — Haiku for
+  cheap/mechanical/well-specified work, Sonnet for ordinary feature work,
+  Opus for the hardest or most fragile-area work (voice/VAD pipeline,
+  encryption/migrations, a genuine architecture decision). Overriding the
+  owner's session-model choice is never acceptable; only the swarm-of-Fable
+  subagent pattern is off-limits.
 - **Never use the pop-up question tool (e.g. `AskUserQuestion`) in this
   project.** It errors on the owner's phone client and causes real
   problems for them. When a decision needs the owner's input — including
