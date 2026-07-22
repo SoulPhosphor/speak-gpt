@@ -383,13 +383,13 @@
                 android:visibility="gone" />
 
             <!-- ============ 6. Automatic Backups ============ -->
-            <!-- The approved portable automatic system is NOT built. This
-                 section says so honestly. The enable switch is GONE from view
-                 (it drove nothing — misleading), kept only in the tree for the
-                 future implementation; the location chooser stays because the
-                 chosen folder is real, persisted state the finished system
-                 will use. Do not un-hide the switch until the portable
-                 automatic writer actually exists. -->
+            <!-- The approved portable automatic WRITER (the piece that would
+                 actually run a backup on a schedule) is NOT built. This
+                 section says so honestly. The toggle and frequency dropdown
+                 below are restored/visible (owner ruling, July 22 2026) and
+                 persist the user's choice for when that writer exists; the
+                 location chooser stays for the same reason it always did.
+                 Order is fixed: toggle, dropdown, location, button. -->
             <TextView
                 style="@style/Widget.App.Section.Title"
                 android:text="@string/backup_auto_section" />
@@ -397,6 +397,49 @@
             <TextView
                 style="@style/Widget.App.Section.Hint"
                 android:text="@string/backup_auto_not_ready" />
+
+            <!-- Toggle row: Widget.App.Row.Toggle/.TextColumn/.Title/.Subtitle/
+                 .Switch (established house style — see ui-style-guide.md;
+                 first used by "Automatically Apply Model Rules" on AI System
+                 Settings). A toggle row always carries a subtitle. -->
+            <LinearLayout style="@style/Widget.App.Row.Toggle">
+
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/backup_auto_enable" />
+
+                    <TextView
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:text="@string/backup_auto_enable_subtitle" />
+                </LinearLayout>
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_auto_backup"
+                    style="@style/Widget.App.Row.Switch" />
+            </LinearLayout>
+
+            <!-- Frequency dropdown: Widget.App.Dropdown.* (owner ruling, July
+                 22 2026), same pattern as the other dropdowns on this screen;
+                 selection persists (RecoveryBackupState.getAutoFrequency/
+                 setAutoFrequency). -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    style="@style/Widget.App.Dropdown.Label"
+                    android:text="@string/backup_auto_frequency_label" />
+
+                <TextView
+                    android:id="@+id/btn_auto_frequency"
+                    style="@style/Widget.App.Dropdown.Value"
+                    android:layout_weight="1" />
+            </LinearLayout>
 
             <TextView
                 android:id="@+id/text_auto_location"
@@ -414,29 +457,6 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
                 android:text="@string/backup_auto_change_location" />
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:gravity="center_vertical"
-                android:orientation="horizontal"
-                android:paddingTop="16dp"
-                android:visibility="gone">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/backup_auto_enable"
-                    android:textColor="@color/text"
-                    android:textSize="16sp" />
-
-                <com.google.android.material.materialswitch.MaterialSwitch
-                    android:id="@+id/switch_auto_backup"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="12dp" />
-            </LinearLayout>
 
             <!-- ============ 7. Reset (destructive; bottom, unchanged) ============ -->
             <TextView

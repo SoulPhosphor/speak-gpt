@@ -1497,10 +1497,21 @@
          built yet; this section says so instead of exposing the unfinished
          legacy controls (owner correction, July 22 2026). -->
     <string name="backup_auto_section">Automatic Backups</string>
-    <string name="backup_auto_not_ready">Automatic backups are not ready yet. You can already choose the folder they will use; the schedule controls will appear here once automatic backups are finished.</string>
+    <!-- Reworded (owner correction, July 22 2026): the toggle and frequency
+         dropdown below are now visible, so the old "the schedule controls
+         will appear here once automatic backups are finished" line was no
+         longer true. Still says plainly that nothing runs automatically yet
+         — only the writer that would actually run on a schedule is unbuilt. -->
+    <string name="backup_auto_not_ready">Automatic backups are not implemented yet. You can already choose how often they would run and where they\'ll be saved, but nothing will run automatically until this feature is finished.</string>
     <string name="backup_auto_location">Automatic Backup Location: %1$s</string>
     <string name="backup_auto_change_location">Change Automatic Backup Location</string>
     <string name="backup_auto_enable">Enable Automatic Backups</string>
+    <string name="backup_auto_enable_subtitle">Back up automatically on the schedule below.</string>
+    <string name="backup_auto_frequency_label">Backup Frequency</string>
+    <string name="backup_auto_frequency_daily">Every Day</string>
+    <string name="backup_auto_frequency_weekly">Every Week</string>
+    <string name="backup_auto_frequency_biweekly">Every Two Weeks</string>
+    <string name="backup_auto_frequency_monthly">Every Month</string>
     <!-- Shared backup-screen failure notice (replaces the old toast that leaked
          raw exception text): generic on screen, details only in local logs. -->
     <string name="backup_operation_failed_title">Something went wrong</string>

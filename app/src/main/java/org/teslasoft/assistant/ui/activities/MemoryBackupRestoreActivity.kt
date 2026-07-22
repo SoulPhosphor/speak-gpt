@@ -39,11 +39,13 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.checkbox.MaterialCheckBox
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.elevation.SurfaceColors
+import com.google.android.material.materialswitch.MaterialSwitch
 import android.provider.DocumentsContract
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.backup.BackupBrand
 import org.teslasoft.assistant.preferences.backup.BackupFailurePolicy
+import org.teslasoft.assistant.preferences.backup.BackupFrequency
 import org.teslasoft.assistant.preferences.backup.BackupLocationDisplay
 import org.teslasoft.assistant.preferences.backup.BackupStatusFormatter
 import org.teslasoft.assistant.preferences.backup.BackupType
@@ -135,9 +137,13 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
     private var btnPortableImport: MaterialButton? = null
     private var textPortableStatus: TextView? = null
 
-    // 6. Automatic Backups. The enable switch is deliberately NOT bound: the
-    // approved portable automatic system is unbuilt and the switch drove
-    // nothing — it stays hidden in the layout until that system exists.
+    // 6. Automatic Backups. The toggle and frequency dropdown are restored/
+    // visible (owner ruling, July 22 2026) and persist the user's choice
+    // ahead of the portable automatic WRITER existing (that piece is still
+    // unbuilt - these controls don't make anything run on a schedule yet).
+    private var switchAutoBackup: MaterialSwitch? = null
+    private var btnAutoFrequency: TextView? = null
+    private var autoFrequency = BackupFrequency.DAILY
     private var textAutoLocation: TextView? = null
     private var btnChangeAutoLocation: MaterialButton? = null
 
@@ -240,6 +246,8 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         btnPortableImport = findViewById(R.id.btn_portable_import)
         textPortableStatus = findViewById(R.id.text_portable_status)
 
+        switchAutoBackup = findViewById(R.id.switch_auto_backup)
+        btnAutoFrequency = findViewById(R.id.btn_auto_frequency)
         textAutoLocation = findViewById(R.id.text_auto_location)
         btnChangeAutoLocation = findViewById(R.id.btn_change_auto_location)
 
@@ -304,7 +312,14 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
             exportLauncher.launch("memory-export-$stamp.json")
         }
 
-        /* ---- 6. Automatic Backups (location only; system not built yet) ---- */
+        /* ---- 6. Automatic Backups (toggle + frequency persist a choice
+             ahead of the portable automatic writer existing; system not
+             built yet) ---- */
+        switchAutoBackup?.isChecked = RecoveryBackupState.isEnabled(this)
+        switchAutoBackup?.setOnCheckedChangeListener { _, isChecked ->
+            RecoveryBackupState.setEnabled(this, isChecked)
+        }
+        initAutoFrequencySection()
         btnChangeAutoLocation?.setOnClickListener { autoFolderPicker.launch(null) }
 
         /* ---- 7. Reset (bottom) ---- */
@@ -847,6 +862,38 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
                 textStatusChats?.text = lines[BackupType.CHATS]
                 textStatusUserImage?.text = lines[BackupType.USER_IMAGE]
             }
+        }
+    }
+
+    /* ------------------------------ 6. automatic backups (frequency) ------------------------------ */
+
+    private fun initAutoFrequencySection() {
+        // Remember the last-selected frequency across visits, the same way
+        // every other Widget.App.Dropdown.* field on this screen does.
+        autoFrequency = RecoveryBackupState.getAutoFrequency(this)
+        updateAutoFrequencyLabel()
+        btnAutoFrequency?.setOnClickListener { pickAutoFrequency() }
+    }
+
+    private fun autoFrequencyLabelRes(frequency: BackupFrequency): Int = when (frequency) {
+        BackupFrequency.DAILY -> R.string.backup_auto_frequency_daily
+        BackupFrequency.WEEKLY -> R.string.backup_auto_frequency_weekly
+        BackupFrequency.BIWEEKLY -> R.string.backup_auto_frequency_biweekly
+        BackupFrequency.MONTHLY -> R.string.backup_auto_frequency_monthly
+    }
+
+    private fun updateAutoFrequencyLabel() {
+        btnAutoFrequency?.text = getString(autoFrequencyLabelRes(autoFrequency))
+    }
+
+    private fun pickAutoFrequency() {
+        val anchor = btnAutoFrequency ?: return
+        val options = BackupFrequency.displayOrder
+        val labels = options.map { getString(autoFrequencyLabelRes(it)) }
+        showFieldDropdown(anchor, labels) { position ->
+            autoFrequency = options[position]
+            RecoveryBackupState.setAutoFrequency(this, autoFrequency)
+            updateAutoFrequencyLabel()
         }
     }
 

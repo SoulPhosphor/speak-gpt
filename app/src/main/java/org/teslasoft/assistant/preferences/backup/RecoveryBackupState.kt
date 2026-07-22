@@ -161,6 +161,24 @@ object RecoveryBackupState {
         } catch (_: Exception) { }
     }
 
+    private const val KEY_AUTO_FREQUENCY = "backup.auto_frequency"
+
+    /** The last-selected Backup Frequency on the Automatic Backups dropdown.
+     *  Defaults to [BackupFrequency.DAILY] (the first option) until the user
+     *  has picked at least once, or when the stored value is unrecognized. */
+    fun getAutoFrequency(context: Context): BackupFrequency =
+        try {
+            BackupFrequency.fromKey(prefs(context).getString(KEY_AUTO_FREQUENCY, null)) ?: BackupFrequency.DAILY
+        } catch (_: Exception) {
+            BackupFrequency.DAILY
+        }
+
+    fun setAutoFrequency(context: Context, frequency: BackupFrequency) {
+        try {
+            prefs(context).edit(commit = true) { putString(KEY_AUTO_FREQUENCY, frequency.key) }
+        } catch (_: Exception) { }
+    }
+
     // ----- per-type result tracking ------------------------------------------
 
     fun getLastSuccess(context: Context, type: BackupType): Long =

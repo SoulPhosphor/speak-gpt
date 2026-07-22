@@ -217,8 +217,22 @@ and rollout notes here — not back in `CLAUDE.md`.
     (same styles, same theming, same drift-proofing as every other row).
   - `Widget.App.Row.Switch` — a `MaterialSwitch` in place of the chevron,
     trailing the text column.
-  First (and so far only) use: the "Automatically Apply Model Rules" row,
-  AI System Settings.
+  First use: the "Automatically Apply Model Rules" row, AI System Settings.
+  **Second use (July 22 2026):** the "Enable Automatic Backups" row, Memory
+  Backup & Restore's Automatic Backups section — restored to visible after
+  being hidden (owner ruling; it had been `visibility="gone"` because the
+  portable automatic WRITER, the piece that would actually run a backup on a
+  schedule, doesn't exist yet, and an unbound switch would have been
+  misleading). Now bound to `RecoveryBackupState.isEnabled`/`setEnabled`
+  (state that already existed in that class, just never reached the UI), so
+  the toggle's on/off choice persists across visits even though nothing acts
+  on it yet — the section's hint text says so honestly. Followed immediately
+  by a **Backup Frequency** `Widget.App.Dropdown.*` field (Every Day / Every
+  Week / Every Two Weeks / Every Month — `BackupFrequency` enum,
+  `RecoveryBackupState.getAutoFrequency`/`setAutoFrequency`, same persist-on-
+  pick contract as every other dropdown on this screen). Section order is
+  fixed (owner ruling): toggle, then dropdown, then the existing location
+  display, then the existing "Change Automatic Backup Location" button.
   Per-row content (`android:id`, text, content descriptions, click
   listener) stays on the instance as always; only the repeated look
   attributes move into the styles. The very first row on a screen
@@ -740,6 +754,12 @@ and rollout notes here — not back in `CLAUDE.md`.
   the dropdown, built from the same reused strings via the new
   `recovery_type_summary_format` ("%1$s: %2$s") string — never a hand-typed
   duplicate of the choice-panel wording.
+  **Third field, same day:** the Automatic Backups section gained a **Backup
+  Frequency** dropdown (Every Day / Every Week / Every Two Weeks / Every
+  Month, `BackupFrequency` enum, persisted via
+  `RecoveryBackupState.getAutoFrequency`/`setAutoFrequency`) — see the
+  Widget.App.Row.Toggle entry above for the paired "Enable Automatic
+  Backups" toggle it sits under.
 - **Standard section heading + hint — `Widget.App.Section.*`, and the
   ordering rule that goes with it (owner ruling, July 22 2026).** A
   settings-style screen section is a bold heading (`?attr/colorPrimary`,
