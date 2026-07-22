@@ -69,7 +69,6 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.ViewOutlineProvider
-import android.view.WindowInsets
 import android.view.animation.Animation
 import android.view.animation.AnimationUtils
 import android.widget.EditText
@@ -212,7 +211,6 @@ import java.util.Locale
 import java.util.Optional
 import kotlin.time.Duration.Companion.seconds
 import androidx.core.content.edit
-import androidx.core.view.WindowInsetsCompat
 import kotlinx.coroutines.flow.flowOn
 import okio.FileSystem
 import okio.Path.Companion.toPath
@@ -246,6 +244,21 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     private var actionBar: ConstraintLayout? = null
     private var btnBack: ImageButton? = null
     private var btnDebugLog: ImageButton? = null
+
+    // Database Health A2 banner (§15.2a): persistent + dismissible per chat
+    // screen — OK hides it for THIS instance only, so each new chat re-shows
+    // it while a database stays disabled (the owner's re-acknowledge rule).
+    private var healthBanner: LinearLayout? = null
+    private var healthBannerText: TextView? = null
+    private var healthBannerRepair: com.google.android.material.button.MaterialButton? = null
+    private var healthBannerOk: com.google.android.material.button.MaterialButton? = null
+    private var healthBannerDismissed = false
+
+    // Which databases were degraded at the LAST banner refresh — a fresh flag
+    // appearing mid-session (§15.2c) plays the distinct audio warning once,
+    // in hands-free sessions only.
+    private var knownDegradedTypes: Set<org.teslasoft.assistant.preferences.backup.BackupType> = emptySet()
+    private var degradedBaselineTaken = false
     private var keyboardFrame: ConstraintLayout? = null
     private var root: ConstraintLayout? = null
     private var threadLoader: LinearLayout? = null
@@ -529,7 +542,52 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             // left and returned. Re-assert it at the end of every generation
             // too; it's an idempotent no-op when the bar is fine.
             restoreTopBarVisibility()
+            // §15.2c mid-session detection: a corruption caught during this
+            // turn set the degraded flag at the store layer; this end-of-turn
+            // refresh is where the banner appears and (hands-free only) the
+            // distinct audio warning plays. Cheap prefs read; runs even while
+            // the screen is off, which is exactly the case the cue exists for.
+            updateHealthBanner(allowAudioCue = true)
         }
+    }
+
+    /**
+     * A2 (§15.2a): show/refresh the persistent degraded-database banner. The
+     * banner names Memory, Lorebooks, or both (a user-image problem gets the
+     * same banner shape without a feature-disable behind it, §15.16), offers
+     * Repair | OK, stays until dismissed, and returns on each new chat screen
+     * while a database remains disabled. [allowAudioCue] is true on the
+     * per-turn refresh path: a NEWLY degraded database there plays the
+     * distinct §15.2c warning, in hands-free sessions only.
+     */
+    private fun updateHealthBanner(allowAudioCue: Boolean) {
+        val degraded = try {
+            org.teslasoft.assistant.preferences.backup.DatabaseHealthState.degradedTypes(this).toSet()
+        } catch (_: Exception) { emptySet() }
+        if (degradedBaselineTaken) {
+            val fresh = degraded - knownDegradedTypes
+            if (fresh.isNotEmpty()) {
+                // A new problem re-arms a previously dismissed banner and, on
+                // the mid-session path, plays the audio warning once.
+                healthBannerDismissed = false
+                if (allowAudioCue && isHandsFreeEngaged()) playDatabaseWarningSignal()
+            }
+        }
+        knownDegradedTypes = degraded
+        degradedBaselineTaken = true
+        if (degraded.isEmpty() || healthBannerDismissed) {
+            healthBanner?.visibility = View.GONE
+            return
+        }
+        val memory = org.teslasoft.assistant.preferences.backup.BackupType.MEMORY in degraded
+        val lore = org.teslasoft.assistant.preferences.backup.BackupType.LOREBOOK in degraded
+        healthBannerText?.text = when {
+            memory && lore -> getString(R.string.health_banner_both)
+            memory -> getString(R.string.health_banner_memory)
+            lore -> getString(R.string.health_banner_lorebook)
+            else -> getString(R.string.health_banner_user_image)
+        }
+        healthBanner?.visibility = View.VISIBLE
     }
 
     // ---- Mic button visual states ------------------------------------------
@@ -955,6 +1013,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
         // Diagnostics may have been toggled in Settings while we were away.
         updateDebugLogButtonVisibility()
+
+        // A2 banner refresh: a repair finished (banner clears) or a database
+        // was flagged while we were away (banner appears). No audio cue here —
+        // the screen is visible on resume; the cue belongs to the mid-session
+        // hands-free path (§15.2c).
+        updateHealthBanner(allowAudioCue = false)
 
         // The mic permission can be revoked while we're away (system settings,
         // a one-time grant expiring). A session that thinks it's listening
@@ -2176,6 +2240,28 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         selectedCount = findViewById(R.id.text_selected_count)
         expandableWindowRoot = findViewById(R.id.expandable_window_root)
         blurSelectorView = findViewById(R.id.attach_bg)
+
+        healthBanner = findViewById(R.id.health_banner)
+        healthBannerText = findViewById(R.id.health_banner_text)
+        healthBannerRepair = findViewById(R.id.health_banner_repair)
+        healthBannerOk = findViewById(R.id.health_banner_ok)
+        healthBannerRepair?.setOnClickListener {
+            // Repair routes to the one home of the repair flow — the Backup &
+            // Restore screen — with the affected database's A1 dialog opening
+            // immediately.
+            val degraded = org.teslasoft.assistant.preferences.backup.DatabaseHealthState.degradedTypes(this)
+            val intent = Intent(this, MemoryBackupRestoreActivity::class.java)
+            degraded.firstOrNull()?.let {
+                intent.putExtra(MemoryBackupRestoreActivity.EXTRA_START_REPAIR_FOR, it.key)
+            }
+            startActivity(intent)
+        }
+        healthBannerOk?.setOnClickListener {
+            // Acknowledged for this chat screen only; the banner returns on
+            // the next chat while the problem persists (§15.2a).
+            healthBannerDismissed = true
+            healthBanner?.visibility = View.GONE
+        }
 
         val radius = 16f
         val decorView = window.decorView
@@ -5000,6 +5086,76 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     }
 
     /**
+     * The §15.2c mid-conversation database warning: played ONCE when a
+     * database failure is confirmed mid-session, hands-free sessions only
+     * (owner ruling July 16 2026 — a typed session with the screen visible
+     * gets the banner alone). "Distinct" is a hard requirement: an
+     * alternating two-pitch warble (D5/Bb4 x2) that cannot be confused with
+     * the descending error cadence, the low no-speech tone, or the ascending
+     * done chime. Deliberately NOT gated on the error-sound preference: its
+     * whole purpose is reaching a screen-off hands-free user, and it fires at
+     * most once per new failure.
+     */
+    private fun playDatabaseWarningSignal() {
+        Thread {
+            var track: AudioTrack? = null
+            try {
+                val sampleRate = 44100
+                // D5 -> Bb4 -> D5 -> Bb4: an "attention" warble, not a cadence.
+                val notes = floatArrayOf(587.33f, 466.16f, 587.33f, 466.16f)
+                val noteMs = 140
+                val gapMs = 35
+                val samplesPerNote = sampleRate * noteMs / 1000
+                val samplesPerGap = sampleRate * gapMs / 1000
+                val totalSamples = (samplesPerNote + samplesPerGap) * notes.size
+                val buffer = ShortArray(totalSamples)
+
+                var idx = 0
+                for (freq in notes) {
+                    for (i in 0 until samplesPerNote) {
+                        val t = i.toDouble() / sampleRate
+                        val envelope = when {
+                            i < samplesPerNote * 0.1 -> i / (samplesPerNote * 0.1)
+                            i > samplesPerNote * 0.8 -> (samplesPerNote - i) / (samplesPerNote * 0.2)
+                            else -> 1.0
+                        }
+                        val sample = Math.sin(2.0 * Math.PI * freq * t) * envelope * 0.45 * Short.MAX_VALUE
+                        buffer[idx++] = sample.toInt().toShort()
+                    }
+                    idx += samplesPerGap
+                }
+
+                val attributes = AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_ALARM)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build()
+                val format = AudioFormat.Builder()
+                    .setSampleRate(sampleRate)
+                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                    .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                    .build()
+
+                track = AudioTrack(
+                    attributes,
+                    format,
+                    totalSamples * 2,
+                    AudioTrack.MODE_STATIC,
+                    AudioManager.AUDIO_SESSION_ID_GENERATE
+                )
+                track.write(buffer, 0, totalSamples)
+                track.play()
+
+                Thread.sleep(((noteMs + gapMs) * notes.size + 150).toLong())
+                track.stop()
+            } catch (_: Exception) {
+                // The warning sound must never interfere with the banner path.
+            } finally {
+                try { track?.release() } catch (_: Exception) { /* ignore */ }
+            }
+        }.start()
+    }
+
+    /**
      * Played when the hands-free loop gives up on its own — it heard nothing, or
      * couldn't capture audio, within the listening window — so a user with the
      * screen off knows it stopped listening rather than sitting in false silence.
@@ -6515,21 +6671,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         val messages = findViewById<RecyclerView>(R.id.messages) ?: return
         val layoutParams = messages.layoutParams as ViewGroup.MarginLayoutParams
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            // rootWindowInsets is nullable — Pixel 8 / API 36 returned null here
-            // and crashed the app. Fall back to a zero status-bar inset rather
-            // than tearing down the activity; the layout settles correctly the
-            // next time insets dispatch.
-            val statusTop = window.decorView.rootWindowInsets
-                ?.getInsets(WindowInsets.Type.statusBars())?.top ?: 0
-            layoutParams.topMargin = dpToPx(64) + statusTop
-        } else {
-            val view = findViewById<View>(android.R.id.content) ?: return
-            ViewCompat.setOnApplyWindowInsetsListener(view) { _, insets ->
-                layoutParams.topMargin = dpToPx(64) + insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
-                insets
-            }
-        }
+        // The list's top is now genuinely CONSTRAINED below the action bar /
+        // A2 health banner (activity_chat.xml, Build Phase 3): the old
+        // hand-set "64dp + status inset" margin existed only because
+        // match_parent ignored those constraints, and keeping it here would
+        // double-count the offset (the action bar already carries the
+        // status-bar padding applied above) and open a dead gap at the top
+        // of the chat. Constraints own the position; the margin stays zero.
+        layoutParams.topMargin = 0
 
         messages.layoutParams = layoutParams
     }

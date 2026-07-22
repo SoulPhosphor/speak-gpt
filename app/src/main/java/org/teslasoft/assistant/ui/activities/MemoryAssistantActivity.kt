@@ -42,11 +42,14 @@ import kotlinx.coroutines.withContext
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.Preferences
+import org.teslasoft.assistant.preferences.backup.BackupType
+import org.teslasoft.assistant.preferences.backup.DatabaseHealthState
 import org.teslasoft.assistant.preferences.memory.ArchivistRunRecord
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.memory.archivist.Archivist
 import org.teslasoft.assistant.preferences.memory.archivist.ArchivistFailure
 import org.teslasoft.assistant.theme.ThemeManager
+import org.teslasoft.assistant.ui.DatabaseRecoveryFlows
 import org.teslasoft.assistant.ui.activities.memory.MemoryBrowserActivity
 import org.teslasoft.assistant.ui.activities.memory.MemoryBrowserFilterState
 import java.time.Instant
@@ -80,6 +83,13 @@ class MemoryAssistantActivity : FragmentActivity() {
     private var notReadyContainer: LinearLayout? = null
     private var btnSetup: MaterialButton? = null
     private var btnAnalyze: MaterialButton? = null
+
+    // A3 (§15.2a): the hard database-health block — stronger than not-ready,
+    // with WORKING Repair / Revert buttons (owner: "make those buttons that
+    // work").
+    private var degradedContainer: LinearLayout? = null
+    private var btnDegradedRepair: MaterialButton? = null
+    private var btnDegradedRevert: MaterialButton? = null
     private var statusLabel: TextView? = null
     private var textRunStatus: TextView? = null
     private var statusDetails: TextView? = null
@@ -115,11 +125,24 @@ class MemoryAssistantActivity : FragmentActivity() {
         linkViewPending = findViewById(R.id.link_view_pending)
         runsContainer = findViewById(R.id.runs_container)
 
+        degradedContainer = findViewById(R.id.degraded_container)
+        btnDegradedRepair = findViewById(R.id.btn_degraded_repair)
+        btnDegradedRevert = findViewById(R.id.btn_degraded_revert)
+
         applyTheme()
         btnBack?.setOnClickListener { finish() }
         btnAnalyze?.setOnClickListener { if (!running) startRun(null) }
         btnSetup?.setOnClickListener { openArchivistSettings() }
         linkViewPending?.setOnClickListener { openPendingBrowser() }
+        // The A3 buttons act on the memory database — the store the Archivist
+        // writes to (the block itself trips on ANY database problem, owner
+        // rule, but memory is what these two actions repair).
+        btnDegradedRepair?.setOnClickListener {
+            DatabaseRecoveryFlows.runRepair(this, BackupType.MEMORY) { refreshFactsAndRuns() }
+        }
+        btnDegradedRevert?.setOnClickListener {
+            DatabaseRecoveryFlows.runRevert(this, BackupType.MEMORY) { refreshFactsAndRuns() }
+        }
     }
 
     override fun onResume() {
@@ -146,17 +169,23 @@ class MemoryAssistantActivity : FragmentActivity() {
 
     private fun refreshFactsAndRuns() {
         lifecycleScope.launch(Dispatchers.IO) {
-            val provisioned = MemoryStore.isProvisioned(this@MemoryAssistantActivity)
-            val eligible = if (provisioned) Archivist.eligibleConversationCount(this@MemoryAssistantActivity) else 0
-            val pendingChats = if (provisioned)
+            // A3 hard block (§15.2a): with ANY database problem the Archivist
+            // must never run (it writes to the store), and a degraded memory
+            // store refuses to open at all — so the facts are computed only
+            // when healthy.
+            val anyDegraded = DatabaseHealthState.anyDegraded(this@MemoryAssistantActivity)
+            val storeUsable = MemoryStore.isProvisioned(this@MemoryAssistantActivity) &&
+                !DatabaseHealthState.isDegraded(this@MemoryAssistantActivity, BackupType.MEMORY)
+            val eligible = if (storeUsable) Archivist.eligibleConversationCount(this@MemoryAssistantActivity) else 0
+            val pendingChats = if (storeUsable)
                 MemoryStore.getInstance(this@MemoryAssistantActivity).pendingReviewCount() else 0
-            val runs = if (provisioned)
+            val runs = if (storeUsable)
                 MemoryStore.getInstance(this@MemoryAssistantActivity).getArchivistRuns(RECENT_RUNS) else emptyList()
             // "Some Memories Deleted Later" badge: which runs reference memory
             // ids that no longer exist. Computed live so the badge appears as
             // soon as a deletion happens.
             val deletedLater = HashSet<String>()
-            if (provisioned) {
+            if (storeUsable) {
                 val store = MemoryStore.getInstance(this@MemoryAssistantActivity)
                 for (run in runs) {
                     val ids = jsonIds(run.memoryIdsJson)
@@ -180,10 +209,16 @@ class MemoryAssistantActivity : FragmentActivity() {
                     // to say, so it stays hidden rather than inventing a value.
                     factLastRun?.visibility = View.GONE
                 }
+                // A3 hard block outranks the ordinary not-ready state: the
+                // degraded note (with WORKING Repair/Revert buttons) shows,
+                // the not-ready block hides, and the run button is disabled
+                // no matter how well configured the Archivist is.
+                degradedContainer?.visibility = if (anyDegraded) View.VISIBLE else View.GONE
                 // Not-ready state (spec 1): message above the button, run
                 // button visibly disabled; Set Up opens the settings screen.
-                notReadyContainer?.visibility = if (configured) View.GONE else View.VISIBLE
-                if (!running) btnAnalyze?.isEnabled = configured
+                notReadyContainer?.visibility =
+                    if (configured || anyDegraded) View.GONE else View.VISIBLE
+                if (!running) btnAnalyze?.isEnabled = configured && !anyDegraded
                 renderRuns(runs, deletedLater)
             }
         }
@@ -253,6 +288,14 @@ class MemoryAssistantActivity : FragmentActivity() {
     /* ---------------- the run ---------------- */
 
     private fun startRun(rerunOfRunId: String?) {
+        // Belt for the A3 hard block: the Analyze/Rerun surfaces are disabled
+        // while any database problem exists, but the rule is "the Archivist
+        // must NEVER run against a bad database", so the entry point enforces
+        // it too (Rerun rows call here directly).
+        if (DatabaseHealthState.anyDegraded(this)) {
+            refreshFactsAndRuns()
+            return
+        }
         running = true
         btnAnalyze?.setText(R.string.memory_assistant_btn_running)
         btnAnalyze?.isEnabled = false

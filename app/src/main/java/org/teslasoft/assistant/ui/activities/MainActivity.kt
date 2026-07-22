@@ -60,6 +60,7 @@ import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.SecurePrefs
 import org.teslasoft.assistant.theme.ThemeManager
+import org.teslasoft.assistant.ui.DatabaseRecoveryFlows
 import org.teslasoft.assistant.ui.fragments.tabs.ChatsListFragment
 import org.teslasoft.assistant.ui.fragments.tabs.PlaygroundFragment
 import org.teslasoft.assistant.ui.fragments.tabs.ToolsFragment
@@ -387,6 +388,12 @@ class MainActivity : FragmentActivity() {
 
             reloadAmoled()
         }
+
+        // Database Health Build Phase 3: deliver any queued startup health
+        // dialog (A1 problem / Database Repaired / A6) the housekeeping thread
+        // recorded — Application has no UI, so the first foreground screen
+        // shows it. One at a time; persists until actually seen.
+        DatabaseRecoveryFlows.showPendingNoticeIfAny(this)
     }
 
     @Suppress("DEPRECATION")

@@ -343,21 +343,42 @@ class EditPersonaActivity : FragmentActivity() {
             .show()
     }
 
+    /** The lorebook store, or null while it is refused (Build Phase 3
+     *  degraded gate / locked key). Persona editing must keep working with
+     *  lorebooks absent — selections are PRESERVED, never cleared, when the
+     *  store cannot answer. */
+    private fun loreStoreOrNull(): LoreBookStore? = try {
+        LoreBookStore.getInstance(this)
+    } catch (_: Exception) {
+        null
+    }
+
     private fun coreLoreBookLabel(id: String): String {
         if (id == "") return getString(R.string.label_lorebook_none)
-        val name = LoreBookStore.getInstance(this).getBook(id)?.name ?: ""
+        val name = loreStoreOrNull()?.getBook(id)?.name ?: ""
         return if (name != "") name else getString(R.string.label_lorebook_none)
     }
 
     private fun updateCoreLoreBookLabel() {
-        if (selectedCoreLoreBookId != "" && LoreBookStore.getInstance(this).getBook(selectedCoreLoreBookId) == null) {
+        // Only a store that ANSWERED may clear a stale selection — a refused
+        // store must not wipe the persona's core-book link.
+        val store = loreStoreOrNull()
+        if (store != null && selectedCoreLoreBookId != "" && store.getBook(selectedCoreLoreBookId) == null) {
             selectedCoreLoreBookId = ""
         }
         fieldCoreLoreBook?.setText(coreLoreBookLabel(selectedCoreLoreBookId))
     }
 
     private fun showCoreLoreBookChooser() {
-        val books = LoreBookStore.getInstance(this).getAllBooks()
+        val store = loreStoreOrNull()
+        if (store == null) {
+            MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+                .setMessage(R.string.health_screen_blocked_lorebook)
+                .setPositiveButton(R.string.btn_ok) { _, _ -> }
+                .show()
+            return
+        }
+        val books = store.getAllBooks()
         val ids = arrayListOf("")
         val labels = arrayListOf(getString(R.string.label_lorebook_none))
         for (book in books) {
@@ -382,7 +403,20 @@ class EditPersonaActivity : FragmentActivity() {
         val container = additionalLoreBooksList ?: return
         container.removeAllViews()
 
-        val store = LoreBookStore.getInstance(this)
+        val store = loreStoreOrNull()
+        if (store == null) {
+            // Degraded store: a persistent inline line (never a toast, never a
+            // crash) — the persona's linked-book ids stay untouched.
+            val blocked = TextView(this)
+            blocked.text = getString(R.string.health_screen_blocked_lorebook)
+            blocked.setTextColor(resources.getColor(R.color.text_subtitle, theme))
+            blocked.textSize = 13f
+            val params = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+            params.topMargin = dpToPx(2)
+            blocked.layoutParams = params
+            container.addView(blocked)
+            return
+        }
         additionalLoreBookIds = ArrayList(additionalLoreBookIds.filter { store.getBook(it) != null })
 
         if (additionalLoreBookIds.isEmpty()) {
@@ -430,7 +464,11 @@ class EditPersonaActivity : FragmentActivity() {
                     .setTitle(R.string.label_delete_lorebook)
                     .setMessage(R.string.message_delete_lorebook)
                     .setPositiveButton(R.string.yes) { _, _ ->
-                        LoreBookStore.getInstance(this).deleteBook(book.id)
+                        // A store that degrades between rendering this row and
+                        // the confirm tap refuses here; skip the delete rather
+                        // than crash (the next render shows the blocked note).
+                        val deleteStore = loreStoreOrNull() ?: return@setPositiveButton
+                        deleteStore.deleteBook(book.id)
                         PersonaPreferences.getPersonaPreferences(this).removeLoreBookFromAllPersonas(book.id)
                         additionalLoreBookIds.remove(book.id)
                         if (selectedCoreLoreBookId == book.id) {

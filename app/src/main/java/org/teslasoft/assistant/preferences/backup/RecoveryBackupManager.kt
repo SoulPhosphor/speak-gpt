@@ -84,6 +84,16 @@ object RecoveryBackupManager {
     }
 
     private fun runOne(context: Context, type: BackupType, treeUri: Uri, runAt: Long): TypeResult {
+        // A degraded (confirmed-damaged) database PAUSES its own artifact
+        // (Build Phase 3 item 1 / A1's "unavailable to use or save"): backing
+        // it up would copy the corrupt file over the good rotation. No attempt
+        // is recorded — the status row keeps showing the last good backup —
+        // and the other types run untouched.
+        if (DatabaseHealthState.isDegraded(context, type)) {
+            MemoryLog.log(context, "RecoveryBackup", "warning",
+                "Recovery backup of ${type.key} paused: the store is disabled pending repair.")
+            return TypeResult(type, success = false, category = null)
+        }
         val staged = File(context.cacheDir, "backup_stage_${type.key}_${runAt}_${System.nanoTime()}.tmp")
         var stage = BackupStage.READ_SOURCE
         try {

@@ -63,7 +63,15 @@ object ProfileImageUsage {
             add(persona.avatarRef, Reference(Kind.COMPANION, persona.label))
         }
 
-        if (MemoryStore.isProvisioned(context)) {
+        // While the memory database is disabled pending repair (Build Phase
+        // 3), its identity references cannot be read: the map then simply
+        // lacks the memory-side references. Callers that DELETE on the
+        // strength of this map must therefore refuse while that flag is set
+        // (ProfileImagesActivity.performDelete does) — an incomplete map here
+        // keeps the gallery browsable without crashing it.
+        if (MemoryStore.isProvisioned(context) &&
+            !org.teslasoft.assistant.preferences.backup.DatabaseHealthState.isDegraded(
+                context, org.teslasoft.assistant.preferences.backup.BackupType.MEMORY)) {
             val store = MemoryStore.getInstance(context)
             for (userPersona in store.getAllUserPersonas()) {
                 add(userPersona.imageRef, Reference(Kind.MY_PERSONA, userPersona.name))

@@ -49,6 +49,14 @@ object BackupStatusFormatter {
     fun formatDateTime(epochMillis: Long, zone: ZoneId = ZoneId.systemDefault()): String =
         DATE_TIME.format(Instant.ofEpochMilli(epochMillis).atZone(zone))
 
+    /** Owner date-only format, "Month D, YYYY" (§15.9) — used by the A5
+     *  restore confirmation, which names the backup's date. */
+    private val DATE_ONLY: DateTimeFormatter =
+        DateTimeFormatter.ofPattern("MMMM d, yyyy", Locale.US)
+
+    fun formatDate(epochMillis: Long, zone: ZoneId = ZoneId.systemDefault()): String =
+        DATE_ONLY.format(Instant.ofEpochMilli(epochMillis).atZone(zone))
+
     /**
      * The injected owner-approved templates. [backedUp] and [failedWithLastGood]
      * each contain a single `%1$s` date placeholder.

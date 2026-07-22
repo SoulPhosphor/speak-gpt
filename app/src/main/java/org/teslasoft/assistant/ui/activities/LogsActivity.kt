@@ -38,6 +38,41 @@ import org.teslasoft.assistant.theme.ThemeManager
 
 class LogsActivity : FragmentActivity() {
 
+    companion object {
+        /** An Error Log entry header immediately followed by the database-
+         *  health tag (§15.15). Group 1 is the "[timestamp]" portion —
+         *  exactly the part the owner wants rendered in red. The optional
+         *  seconds / AM-PM pieces mirror Logger's header-matching regex so
+         *  entries from older formats still match. */
+        private val HEALTH_HEADER = Regex(
+            "(?m)^(\\[\\d{4}-\\d{2}-\\d{2} \\d{1,2}:\\d{2}(?::\\d{2})?(?: [AP]M)?]) \\[DatabaseHealth]"
+        )
+    }
+
+    /**
+     * Error Log rendering (§15.15, owner B13 ruling): database-health lines'
+     * date+time render in RED so they stand out when scanning; everything
+     * else stays plain. Only the "crash" channel gets this pass.
+     */
+    private fun renderErrorLog(raw: String): CharSequence {
+        if (raw.isEmpty() || !raw.contains("[DatabaseHealth]")) return raw
+        return try {
+            val spannable = android.text.SpannableString(raw)
+            val red = androidx.core.content.res.ResourcesCompat.getColor(resources, R.color.light_red, theme)
+            for (match in HEALTH_HEADER.findAll(raw)) {
+                val group = match.groups[1] ?: continue
+                spannable.setSpan(
+                    android.text.style.ForegroundColorSpan(red),
+                    group.range.first, group.range.last + 1,
+                    android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+            }
+            spannable
+        } catch (_: Exception) {
+            raw
+        }
+    }
+
     private var btnClearLog: MaterialButton? = null
     private var btnCopyLog: MaterialButton? = null
     private var btnBack: ImageButton? = null
@@ -82,7 +117,7 @@ class LogsActivity : FragmentActivity() {
                         "crash" -> {
                             activityLogsTitle?.text = getString(R.string.title_crash_log)
                             this.title = getString(R.string.title_crash_log)
-                            textLog?.text = Logger.getCrashLog(this)
+                            textLog?.text = renderErrorLog(Logger.getCrashLog(this))
                         }
 
                         "event" -> {
@@ -123,7 +158,7 @@ class LogsActivity : FragmentActivity() {
                             when (logType) {
                                 "crash" -> {
                                     Logger.clearCrashLog(this)
-                                    textLog?.text = Logger.getCrashLog(this)
+                                    textLog?.text = renderErrorLog(Logger.getCrashLog(this))
                                 }
 
                                 "event" -> {

@@ -351,7 +351,16 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         val container = lorebookCheckList ?: return
         container.removeAllViews()
 
-        val store = LoreBookStore.getInstance(requireContext())
+        // Build Phase 3 degraded gate: with the lorebook store refused
+        // (confirmed damage), the checklist degrades to a persistent inline
+        // line instead of crashing the whole sheet — the chat's other
+        // settings stay reachable; the A2 banner owns the repair route.
+        val store = try {
+            LoreBookStore.getInstance(requireContext())
+        } catch (_: Exception) {
+            textLoreBook?.text = getString(R.string.health_screen_blocked_lorebook)
+            return
+        }
         val personaId = preferences?.getPersonaId() ?: ""
         val persona = if (personaId != "") personaPreferences?.getPersona(personaId) else null
 

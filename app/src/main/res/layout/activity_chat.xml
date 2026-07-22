@@ -351,19 +351,74 @@
                 app:layout_constraintTop_toTopOf="parent" />
         </androidx.constraintlayout.widget.ConstraintLayout>
 
+        <!-- Database Health A2 banner (§15.2a): persistent, dismissible,
+             re-shown per new chat while a database stays disabled. GONE by
+             default, so the messages list sits exactly where it always did;
+             when visible it pushes the list down instead of covering it. -->
+        <LinearLayout
+            android:id="@+id/health_banner"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="?attr/colorSurfaceContainerHigh"
+            android:orientation="vertical"
+            android:paddingStart="16dp"
+            android:paddingTop="10dp"
+            android:paddingEnd="16dp"
+            android:visibility="gone"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/action_bar"
+            tools:visibility="visible">
+
+            <TextView
+                android:id="@+id/health_banner_text"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textColor="@color/text"
+                android:textSize="14sp"
+                tools:text="@string/health_banner_memory" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="end"
+                android:orientation="horizontal">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/health_banner_repair"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/health_btn_repair" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/health_banner_ok"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/btn_ok" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Height is 0dp (match-constraint), NOT match_parent: match_parent
+             ignores constraints inside ConstraintLayout (the old 64dp top
+             margin existed to hand-compensate for the 64dp action bar). With
+             real constraints the list starts under the A2 banner when it is
+             visible and exactly under the action bar when it is gone — same
+             position as before. -->
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/messages"
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:layout_marginTop="64dp"
+            android:layout_height="0dp"
             android:contentDescription="@string/menu_chat"
             android:listSelector="@android:color/transparent"
             android:paddingBottom="80dp"
             android:scrollbars="none"
             android:stackFromBottom="true"
+            app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@+id/action_bar"
+            app:layout_constraintTop_toBottomOf="@+id/health_banner"
             tools:listitem="@layout/view_message" />
 
         <LinearLayout

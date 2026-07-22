@@ -55,6 +55,17 @@ class ProfileImageStore private constructor(context: Context) {
                 instance ?: ProfileImageStore(context.applicationContext).also { instance = it }
             }
         }
+
+        /**
+         * Forget the cached wrapper (it holds a [ProfileImageDb] reference)
+         * so a catalog repair can replace the database file underneath.
+         * Called by DatabaseRepairManager together with
+         * [ProfileImageDb.invalidateInstance]; order does not matter, both
+         * must run.
+         */
+        fun invalidateInstance() {
+            synchronized(this) { instance = null }
+        }
     }
 
     private fun permanentDir(): File? = appContext.getExternalFilesDir(PERMANENT_DIR_NAME)

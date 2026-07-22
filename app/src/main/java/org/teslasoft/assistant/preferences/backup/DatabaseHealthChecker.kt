@@ -52,6 +52,12 @@ object DatabaseHealthChecker {
     )
 
     fun checkMemory(context: Context): Result {
+        // Already degraded = damage was CONFIRMED earlier and the store is
+        // gated shut (getInstance would throw); report the truth rather than
+        // "could not be checked".
+        if (DatabaseHealthState.isDegraded(context, BackupType.MEMORY)) {
+            return Result(BackupType.MEMORY, Status.DAMAGED, "disabled pending repair")
+        }
         // Not yet provisioned = there is no store to damage; report OK rather
         // than provision one as a side effect of a health check.
         if (!MemoryStore.isProvisioned(context)) return Result(BackupType.MEMORY, Status.OK, null)
@@ -63,16 +69,26 @@ object DatabaseHealthChecker {
         }
     }
 
-    fun checkLorebook(context: Context): Result = try {
-        fromProblem(BackupType.LOREBOOK, LoreBookStore.getInstance(context).integrityCheck())
-    } catch (e: Exception) {
-        Result(BackupType.LOREBOOK, Status.UNAVAILABLE, e.message ?: e.javaClass.simpleName)
+    fun checkLorebook(context: Context): Result {
+        if (DatabaseHealthState.isDegraded(context, BackupType.LOREBOOK)) {
+            return Result(BackupType.LOREBOOK, Status.DAMAGED, "disabled pending repair")
+        }
+        return try {
+            fromProblem(BackupType.LOREBOOK, LoreBookStore.getInstance(context).integrityCheck())
+        } catch (e: Exception) {
+            Result(BackupType.LOREBOOK, Status.UNAVAILABLE, e.message ?: e.javaClass.simpleName)
+        }
     }
 
-    fun checkUserImage(context: Context): Result = try {
-        fromProblem(BackupType.USER_IMAGE, ProfileImageDb.getInstance(context).integrityCheck())
-    } catch (e: Exception) {
-        Result(BackupType.USER_IMAGE, Status.UNAVAILABLE, e.message ?: e.javaClass.simpleName)
+    fun checkUserImage(context: Context): Result {
+        if (DatabaseHealthState.isDegraded(context, BackupType.USER_IMAGE)) {
+            return Result(BackupType.USER_IMAGE, Status.DAMAGED, "disabled pending repair")
+        }
+        return try {
+            fromProblem(BackupType.USER_IMAGE, ProfileImageDb.getInstance(context).integrityCheck())
+        } catch (e: Exception) {
+            Result(BackupType.USER_IMAGE, Status.UNAVAILABLE, e.message ?: e.javaClass.simpleName)
+        }
     }
 
     private fun fromProblem(type: BackupType, problem: String?): Result =

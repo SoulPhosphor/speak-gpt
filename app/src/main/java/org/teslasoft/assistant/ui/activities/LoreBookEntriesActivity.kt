@@ -208,6 +208,17 @@ class LoreBookEntriesActivity : FragmentActivity() {
 
         listView?.divider = null
 
+        // Build Phase 3 degraded gate: a lorebook store with confirmed damage
+        // refuses to open; this screen cannot function without it, so show
+        // the blocking notice (Repair routes to the recovery flow) instead of
+        // crashing on the refusal.
+        if (org.teslasoft.assistant.preferences.backup.DatabaseHealthState.isDegraded(
+                this, org.teslasoft.assistant.preferences.backup.BackupType.LOREBOOK)) {
+            org.teslasoft.assistant.ui.DatabaseRecoveryFlows.showBlockedScreenDialog(
+                this, org.teslasoft.assistant.preferences.backup.BackupType.LOREBOOK)
+            return
+        }
+
         store = LoreBookStore.getInstance(this)
         initialize()
     }
