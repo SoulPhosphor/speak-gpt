@@ -22,7 +22,9 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.ChatStorageHealth
+import org.teslasoft.assistant.preferences.Logger
 import org.teslasoft.assistant.preferences.SecurePrefs
+import org.teslasoft.assistant.preferences.memory.MemoryLog
 import org.teslasoft.assistant.util.Hash
 
 /**
@@ -46,9 +48,21 @@ import org.teslasoft.assistant.util.Hash
  *    settings after any read failure. A genuinely readable-but-empty
  *    settings file is honest data and is allowed. Decision logic is the
  *    pure, unit-tested [ChatSettingsReadPolicy].
- *  - A chat-list entry with a missing or blank name is malformed data and
- *    fails the whole artifact (owner correction, July 22 2026) — a complete
- *    backup must not silently omit an entry it cannot serialize.
+ *  - CHAT IDENTITY FOLLOWS THE APP (compatibility correction, July 22 2026,
+ *    after the on-device failure "Your chats could not be read"): a chat-list
+ *    entry with a MISSING or BLANK name is serialized faithfully, exactly as
+ *    the app itself handles it — ChatPreferences hashes the stored name's
+ *    string form everywhere (`map["name"].toString()`, so an absent name
+ *    hashes the literal string "null") — instead of failing the artifact. The
+ *    previous build treated such an entry as malformed data and refused the
+ *    whole backup, which turned a chat the app displays and uses every day
+ *    into "your chats could not be read". Nothing is omitted and nothing is
+ *    invented: the entry's stored fields travel as-is; only GENUINELY
+ *    unreadable content (locked/corrupt/failed reads) fails the artifact.
+ *  - Every failure is CATEGORIZED ([FailureCategory]) and logged with chat
+ *    IDS and states only — never a chat title, message, settings value, or
+ *    key (owner logging rules) — so the next on-device failure is diagnosable
+ *    from the Error Log instead of a guess.
  *  - The legacy per-chat `api_key` settings entry is EXCLUDED (owner ruling 9:
  *    API keys are never package contents; verified present in the per-chat
  *    settings surface at Preferences.kt getApiKey/setApiKey).
@@ -65,13 +79,27 @@ object ChatLogicalSerializer {
     /** Settings keys that must never travel (external credentials). */
     private val EXCLUDED_SETTINGS_KEYS = setOf("api_key")
 
+    /** WHICH part of chat storage was unreadable — carried up to the UI so
+     *  the failure names the failing part in plain words, and logged for
+     *  diagnosis. */
+    enum class FailureCategory { LIST, HISTORY, SETTINGS }
+
     sealed class Result {
         data class Ok(val json: String, val chatCount: Int) : Result()
 
         /** Chat storage is LOCKED or a chat is unreadable: the artifact fails
          *  visibly; no partial or fabricated output exists. */
-        object Unavailable : Result()
+        data class Unavailable(val category: FailureCategory) : Result()
     }
+
+    /**
+     * The exact name-to-id mapping the app itself uses for a stored chat-list
+     * name value: the string form of whatever is stored, with a missing value
+     * becoming the literal "null" (ChatPreferences hashes
+     * `map["name"].toString()` everywhere). Pure — unit-tested so the backup
+     * can never drift from the app again.
+     */
+    fun storedNameForId(storedName: String?): String = storedName ?: "null"
 
     fun serialize(context: Context): Result {
         val gson = Gson()
@@ -79,24 +107,33 @@ object ChatLogicalSerializer {
 
         synchronized(ChatPreferences.CHAT_LIST_LOCK) {
             val listResult = chatPreferences.getChatListResult(context, includeFirstMessage = false)
-            if (!ChatStorageHealth.isAuthoritative(listResult.state)) return Result.Unavailable
+            if (!ChatStorageHealth.isAuthoritative(listResult.state)) {
+                logFailure(context, FailureCategory.LIST,
+                    "the chat list could not be read (state ${listResult.state})")
+                return Result.Unavailable(FailureCategory.LIST)
+            }
 
             val chats = JSONArray()
             for (chat in listResult.chats) {
-                // A malformed list entry (missing/blank name) must fail the
-                // artifact visibly — never be silently skipped from a backup
-                // that then claims to be complete.
-                val name = chat["name"]
-                if (name.isNullOrBlank()) return Result.Unavailable
+                val storedName = chat["name"]
+                val name = storedNameForId(storedName)
                 val chatId = Hash.hash(name)
 
                 val history = chatPreferences.getChatByIdResult(context, chatId)
-                if (!ChatStorageHealth.isAuthoritative(history.state)) return Result.Unavailable
+                if (!ChatStorageHealth.isAuthoritative(history.state)) {
+                    logFailure(context, FailureCategory.HISTORY,
+                        "the history of chat $chatId could not be read (state ${history.state})")
+                    return Result.Unavailable(FailureCategory.HISTORY)
+                }
 
-                val settings = serializeSettings(context, chatId) ?: return Result.Unavailable
+                val settings = serializeSettings(context, chatId)
+                    ?: return Result.Unavailable(FailureCategory.SETTINGS)
 
                 val obj = JSONObject()
-                obj.put("name", name)
+                // The stored value travels as-is; a truly absent name is
+                // recorded as JSON null so a restore rebuilds the entry the
+                // app had, not an invented one.
+                obj.put("name", storedName ?: JSONObject.NULL)
                 obj.put("chat_id", chatId)
                 for ((key, value) in chat) {
                     if (key != "name" && key != "first_message") obj.put("list_$key", value)
@@ -130,10 +167,16 @@ object ChatLogicalSerializer {
         // The lock check comes AFTER the open attempt: SecurePrefs classifies
         // on open, and a locked file presents an inert EMPTY map — it never
         // throws, so the exception path alone cannot catch it.
+        val locked = SecurePrefs.isLockedName(name)
         val all = when (
-            val d = ChatSettingsReadPolicy.decide(SecurePrefs.isLockedName(name), entriesOrNull)
+            val d = ChatSettingsReadPolicy.decide(locked, entriesOrNull)
         ) {
-            is ChatSettingsReadPolicy.Decision.Unavailable -> return null
+            is ChatSettingsReadPolicy.Decision.Unavailable -> {
+                logFailure(context, FailureCategory.SETTINGS,
+                    "the settings of chat $chatId could not be read (" +
+                        (if (locked) "locked" else "read failed") + ")")
+                return null
+            }
             is ChatSettingsReadPolicy.Decision.Readable -> d.entries
         }
         val out = JSONArray()
@@ -153,5 +196,17 @@ object ChatLogicalSerializer {
             out.put(entry)
         }
         return out
+    }
+
+    /** One line to the Memory log AND the user-facing Error Log per failed
+     *  attempt: category + chat id (already a hash) + read state. Never a
+     *  title, message, settings value, or key. */
+    private fun logFailure(context: Context, category: FailureCategory, detail: String) {
+        val msg = "Recovery backup failed (${category.name}): $detail. " +
+            "No backup was created; nothing was modified."
+        try {
+            MemoryLog.log(context, "PortableRecovery", "error", msg)
+            Logger.log(context, ChatPreferences.CORRUPT_DATA_LOG_TYPE, "PortableRecovery", "error", msg)
+        } catch (_: Exception) { /* logging is best-effort */ }
     }
 }

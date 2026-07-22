@@ -43,8 +43,13 @@ import com.google.android.material.elevation.SurfaceColors
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.backup.BackupBrand
+import org.teslasoft.assistant.preferences.backup.BackupFailureCategory
+import org.teslasoft.assistant.preferences.backup.BackupFailureClassifier
 import org.teslasoft.assistant.preferences.backup.BackupLocationDisplay
+import org.teslasoft.assistant.preferences.backup.BackupType
+import org.teslasoft.assistant.preferences.backup.RecoveryBackupState
 import org.teslasoft.assistant.preferences.backup.RecoveryFileNaming
+import org.teslasoft.assistant.preferences.backup.portable.ChatLogicalSerializer
 import org.teslasoft.assistant.preferences.backup.portable.PackageCrypto
 import org.teslasoft.assistant.preferences.backup.portable.PortablePackageFormat
 import org.teslasoft.assistant.preferences.backup.portable.PortableRecoveryWriter
@@ -137,6 +142,11 @@ class RecoveryBackupActivity : FragmentActivity() {
     /** SHA-256 of [stagedPackage], computed right after the build, used to
      *  verify the copy landed in the destination byte-for-byte. */
     private var stagedSha: ByteArray? = null
+
+    /** The backup types the staged package actually contains. Backup Status is
+     *  recorded from this ONLY after the destination is also verified (owner
+     *  rule: never claim a failed or unfinished attempt succeeded). */
+    private var stagedIncludedTypes: Set<BackupType> = emptySet()
 
     private val saveKeyFileLauncher = registerForActivityResult(
         ActivityResultContracts.CreateDocument("application/json")
@@ -371,7 +381,10 @@ class RecoveryBackupActivity : FragmentActivity() {
         pendingProtected = protected
         cleanupStaged()
         showResult()
-        textResult?.setText(R.string.recovery_creating)
+        // Owner correction (July 22 2026): say plainly that Save As comes
+        // AFTER the package is ready, so the quiet build phase is not
+        // mistaken for a hang or a missing picker.
+        textResult?.setText(R.string.recovery_preparing)
         textResultDetail?.visibility = View.GONE
         btnResultDone?.visibility = View.GONE
 
@@ -411,13 +424,15 @@ class RecoveryBackupActivity : FragmentActivity() {
                 when (val result = PortableRecoveryWriter.createPackage(this, staged, secret, passwordBlob, appVersion)) {
                     is PortableRecoveryWriter.Result.Failed -> {
                         runCatching { if (staged.exists()) staged.delete() }
-                        runOnUiThread { showWriterFailure(result.reason) }
+                        recordFailureStatus(result.reason)
+                        runOnUiThread { showWriterFailure(result.reason, result.chatFailure) }
                     }
                     is PortableRecoveryWriter.Result.Ok -> {
                         val sha = sha256(staged)
                         runOnUiThread {
                             stagedPackage = staged
                             stagedSha = sha
+                            stagedIncludedTypes = result.includedTypes
                             val name = RecoveryFileNaming.manualRecoveryPackage(
                                 BackupBrand.resolve(this), protected, System.currentTimeMillis()
                             )
@@ -427,6 +442,7 @@ class RecoveryBackupActivity : FragmentActivity() {
                 }
             } catch (_: Exception) {
                 runCatching { if (staged.exists()) staged.delete() }
+                recordFailureStatusAll(BackupFailureCategory.SOURCE)
                 runOnUiThread { showFailureText(getString(R.string.recovery_fail_generic)) }
             } finally {
                 secret?.let { PackageCrypto.wipe(it) }
@@ -458,10 +474,11 @@ class RecoveryBackupActivity : FragmentActivity() {
             return
         }
         showResult()
-        textResult?.setText(R.string.recovery_creating)
+        textResult?.setText(R.string.recovery_saving)
         textResultDetail?.visibility = View.GONE
         btnResultDone?.visibility = View.GONE
 
+        val includedTypes = stagedIncludedTypes
         runOffThread {
             try {
                 contentResolver.openOutputStream(uri, "wt")?.use { out ->
@@ -473,19 +490,58 @@ class RecoveryBackupActivity : FragmentActivity() {
 
                 if (!MessageDigest.isEqual(expectedSha, actualSha)) {
                     discardDestination(uri)
+                    recordFailureStatusAll(BackupFailureCategory.VERIFY)
                     runOnUiThread { showFailureText(getString(R.string.recovery_fail_verify)) }
                     return@runOffThread
                 }
 
+                // BOTH verifications passed (staged package + destination):
+                // only now may Backup Status claim success (owner rule). Types
+                // with no artifact in this package record the neutral
+                // "Nothing to Back Up" state for this run.
+                val now = System.currentTimeMillis()
+                for (type in BackupType.displayOrder) {
+                    if (type in includedTypes) RecoveryBackupState.recordSuccess(this, type, now)
+                    else RecoveryBackupState.recordNothingToBackUp(this, type, now)
+                }
+
                 val where = BackupLocationDisplay.describeSaveAs(this, uri)
                 runOnUiThread { showSaved(where) }
-            } catch (_: Exception) {
+            } catch (e: Exception) {
                 discardDestination(uri)
+                recordFailureStatusAll(
+                    if (BackupFailureClassifier.isPermissionRelated(e)) BackupFailureCategory.DESTINATION_PERMISSION
+                    else BackupFailureCategory.DESTINATION_WRITE
+                )
                 runOnUiThread { showFailureText(getString(R.string.recovery_fail_generic)) }
             } finally {
                 cleanupStaged()
             }
         }
+    }
+
+    /**
+     * Record a failed manual attempt in Backup Status. recordFailure keeps
+     * the last-success stamp untouched and marks the latest attempt failed —
+     * exactly the owner-required display ("Backup Failed. Last Good Backup:
+     * …"). NOTHING_TO_BACK_UP is neutral, not a failure.
+     */
+    private fun recordFailureStatus(reason: PortableRecoveryWriter.Reason) {
+        val now = System.currentTimeMillis()
+        if (reason == PortableRecoveryWriter.Reason.NOTHING_TO_BACK_UP) {
+            for (type in BackupType.displayOrder) RecoveryBackupState.recordNothingToBackUp(this, type, now)
+            return
+        }
+        val category = when (reason) {
+            PortableRecoveryWriter.Reason.PACKAGE_VERIFY_FAILED -> BackupFailureCategory.VERIFY
+            else -> BackupFailureCategory.SOURCE
+        }
+        for (type in BackupType.displayOrder) RecoveryBackupState.recordFailure(this, type, now, category)
+    }
+
+    private fun recordFailureStatusAll(category: BackupFailureCategory) {
+        val now = System.currentTimeMillis()
+        for (type in BackupType.displayOrder) RecoveryBackupState.recordFailure(this, type, now, category)
     }
 
     /** Remove a written-but-unverified destination so no corrupt package
@@ -504,13 +560,30 @@ class RecoveryBackupActivity : FragmentActivity() {
         stagedPackage?.let { f -> runCatching { if (f.exists()) f.delete() } }
         stagedPackage = null
         stagedSha = null
+        stagedIncludedTypes = emptySet()
     }
 
-    private fun showWriterFailure(reason: PortableRecoveryWriter.Reason) {
+    private fun showWriterFailure(
+        reason: PortableRecoveryWriter.Reason,
+        chatFailure: ChatLogicalSerializer.FailureCategory?
+    ) {
         when (reason) {
             PortableRecoveryWriter.Reason.KEY_MATERIAL_UNAVAILABLE -> showKeystoreFailure()
-            PortableRecoveryWriter.Reason.CHATS_UNAVAILABLE ->
+            PortableRecoveryWriter.Reason.CHATS_UNAVAILABLE -> {
+                // Main line + a plain-words detail naming WHICH part of chat
+                // storage failed — diagnosable, never an enum or exception.
                 showFailureText(getString(R.string.recovery_fail_chats_unavailable))
+                val detail = when (chatFailure) {
+                    ChatLogicalSerializer.FailureCategory.LIST -> R.string.recovery_fail_chats_detail_list
+                    ChatLogicalSerializer.FailureCategory.HISTORY -> R.string.recovery_fail_chats_detail_history
+                    ChatLogicalSerializer.FailureCategory.SETTINGS -> R.string.recovery_fail_chats_detail_settings
+                    null -> null
+                }
+                if (detail != null) {
+                    textResultDetail?.setText(detail)
+                    textResultDetail?.visibility = View.VISIBLE
+                }
+            }
             PortableRecoveryWriter.Reason.SNAPSHOT_FAILED ->
                 showFailureText(getString(R.string.recovery_fail_snapshot))
             PortableRecoveryWriter.Reason.PACKAGE_VERIFY_FAILED ->

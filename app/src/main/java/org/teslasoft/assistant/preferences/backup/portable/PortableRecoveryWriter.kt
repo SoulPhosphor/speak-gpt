@@ -17,6 +17,7 @@
 package org.teslasoft.assistant.preferences.backup.portable
 
 import android.content.Context
+import org.teslasoft.assistant.preferences.backup.BackupType
 import org.teslasoft.assistant.preferences.backup.RecoveryBackupManager
 import org.teslasoft.assistant.preferences.lorebook.LoreBookEncryption
 import org.teslasoft.assistant.preferences.memory.DatabaseKeys
@@ -60,8 +61,21 @@ import java.time.Instant
 object PortableRecoveryWriter {
 
     sealed class Result {
-        data class Ok(val chatCount: Int, val artifactCount: Int) : Result()
-        data class Failed(val reason: Reason) : Result()
+        /** [includedTypes] = which of the four backup types have an artifact
+         *  inside this package — the caller records per-type Backup Status
+         *  from it, and ONLY after the destination is also verified. */
+        data class Ok(
+            val chatCount: Int,
+            val artifactCount: Int,
+            val includedTypes: Set<BackupType>
+        ) : Result()
+
+        /** [chatFailure] refines CHATS_UNAVAILABLE with WHICH part of chat
+         *  storage failed, for the plain-words detail line. */
+        data class Failed(
+            val reason: Reason,
+            val chatFailure: ChatLogicalSerializer.FailureCategory? = null
+        ) : Result()
     }
 
     enum class Reason {
@@ -104,6 +118,7 @@ object PortableRecoveryWriter {
         try {
             val createdAt = Instant.now().toString()
             val artifacts = ArrayList<PortablePackage.Artifact>()
+            val includedTypes = LinkedHashSet<BackupType>()
 
             // ---- memory DB (ciphertext + key) ----
             if (MemoryStore.isProvisioned(context)) {
@@ -122,6 +137,7 @@ object PortableRecoveryWriter {
                         schemaVersion = null
                     )
                 )
+                includedTypes.add(BackupType.MEMORY)
             }
 
             // ---- lorebook DB (ciphertext + key; may legitimately be plaintext
@@ -147,6 +163,7 @@ object PortableRecoveryWriter {
                         schemaVersion = null
                     )
                 )
+                includedTypes.add(BackupType.LOREBOOK)
             }
 
             // ---- user image catalog (plain SQLite; catalog only) ----
@@ -160,13 +177,14 @@ object PortableRecoveryWriter {
                             databaseKeyHex = null, keySemantics = null, schemaVersion = null
                         )
                     )
+                    includedTypes.add(BackupType.USER_IMAGE)
                 }
             }
 
             // ---- chats (logical serialization; LOCKED fails visibly) ----
             when (val chats = ChatLogicalSerializer.serialize(context)) {
                 is ChatLogicalSerializer.Result.Unavailable ->
-                    return Result.Failed(Reason.CHATS_UNAVAILABLE)
+                    return Result.Failed(Reason.CHATS_UNAVAILABLE, chatFailure = chats.category)
                 is ChatLogicalSerializer.Result.Ok -> {
                     val staged = File(staging, "chats.json")
                     staged.writeText(chats.json, Charsets.UTF_8)
@@ -176,6 +194,7 @@ object PortableRecoveryWriter {
                             databaseKeyHex = null, keySemantics = null, schemaVersion = null
                         )
                     )
+                    includedTypes.add(BackupType.CHATS)
                     if (artifacts.size == 1 && chats.chatCount == 0) {
                         // No databases exist and no chats exist: nothing real
                         // to package — neutral, not a failure (owner ruling).
@@ -204,7 +223,11 @@ object PortableRecoveryWriter {
                     MemoryLog.log(context, "PortableRecovery", "info",
                         "Portable recovery package created and verified (${artifacts.size} artifact(s), ${chats.chatCount} chat(s), " +
                             (if (recoverySecret != null) "encrypted" else "unencrypted") + ").")
-                    return Result.Ok(chatCount = chats.chatCount, artifactCount = artifacts.size)
+                    return Result.Ok(
+                        chatCount = chats.chatCount,
+                        artifactCount = artifacts.size,
+                        includedTypes = includedTypes
+                    )
                 }
             }
         } catch (e: Exception) {
