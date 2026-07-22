@@ -225,20 +225,32 @@ class ChatsListFragment : Fragment(), ChatListAdapter.OnInteractionListener {
 
         fileIntentLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult(), activityResultCallback)
 
-        Thread {
-            while (!isAttached) {
-                Thread.sleep(100)
-            }
+        // Wire the UI SYNCHRONOUSLY. This used to hop through a watcher thread
+        // (sleep-loop on isAttached, then runOnUiThread) — but onViewCreated
+        // is GUARANTEED to run after onAttach, so the wait could never be
+        // needed; all it did was leave the screen visible with NO click
+        // listeners for a scheduling-dependent window (worst on cold start),
+        // which is exactly the "New Chat does nothing on the first press
+        // after opening the app" bug. It could also lose the whole init: the
+        // watcher could wake between onAttach's isAttached=true and mContext
+        // writes, making runOnUiThread a silent no-op — a dead screen for
+        // that launch. The heavy part (parsing the chat list) already runs
+        // on chatListLoader inside initSettings, so nothing slow returns to
+        // the main thread here — listener wiring is findViewById + set.
+        initUI(view)
+        initLogics()
+        initSettings(initialLoad = true)
 
-            // preferences = Preferences.getPreferences(mContext ?: return@Thread, "").addOnPreferencesChangedListener(this)
-
-            (mContext as Activity?)?.runOnUiThread {
-                initUI(view)
-                initLogics()
-                initSettings(initialLoad = true)
-                // preInit()
-            }
-        }.start()
+        // If the process (or activity) was recreated while the New Chat /
+        // rename dialog was open, the system restores that DialogFragment —
+        // but its listener is wired only at the original show() site, so the
+        // restored copy comes back unwired (its onStart would self-dismiss as
+        // a last resort). Re-attach the listener here so the dialog SURVIVES
+        // rotation/process death working, instead of quietly closing. Runs
+        // before the dialog's onStart (this fragment precedes it in the
+        // FragmentManager), so the self-dismiss never fires in this path.
+        (parentFragmentManager.findFragmentByTag("AddChatDialog") as? AddChatDialogFragment)
+            ?.setStateChangedListener(chatListUpdatedListener)
     }
 
     private fun initUI(view: View) {
@@ -249,7 +261,19 @@ class ChatsListFragment : Fragment(), ChatListAdapter.OnInteractionListener {
         bgSearch = view.findViewById(R.id.bg_search)
         btnAdd = view.findViewById(R.id.btn_add)
 
-        WindowInsetsUtil.adjustPaddings((mContext as Activity?) ?: return, rootView, R.id.root, EnumSet.of(WindowInsetsUtil.Companion.Flags.STATUS_BAR, WindowInsetsUtil.Companion.Flags.IGNORE_PADDINGS))
+        val host = (mContext as Activity?) ?: return
+        WindowInsetsUtil.adjustPaddings(host, rootView, R.id.root, EnumSet.of(WindowInsetsUtil.Companion.Flags.STATUS_BAR, WindowInsetsUtil.Companion.Flags.IGNORE_PADDINGS))
+        // On API 31+ adjustPaddings reads rootWindowInsets directly and
+        // silently no-ops if the window is not attached yet. initUI now runs
+        // synchronously in onViewCreated (pre-attach on a cold start), so
+        // re-apply once the view is attached — View.post on an unattached
+        // view runs right after attachment, and re-applying is idempotent
+        // (absolute padding on 31+, cached-original on older).
+        view.post {
+            if (isAttached && !isDestroyed) {
+                WindowInsetsUtil.adjustPaddings(host, rootView, R.id.root, EnumSet.of(WindowInsetsUtil.Companion.Flags.STATUS_BAR, WindowInsetsUtil.Companion.Flags.IGNORE_PADDINGS))
+            }
+        }
 
         bulkSelectContainer = view.findViewById(R.id.bulk_actions_container)
         btnBulkSelectAll = view.findViewById(R.id.btn_bulk_select_all)

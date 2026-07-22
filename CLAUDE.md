@@ -1629,6 +1629,30 @@ Everything is on-device. No cloud sync, no accounts.
   arm64 — keep the gate if you touch JNI loading.
 - **Checked-in `debug.keystore`** is intentional (stable CI debug signing).
   Do not rotate/remove it; do not publish debug builds as real releases.
+- **Crash reports must be READABLE (owner directive, July 22 2026).**
+  `proguard-rules.pro` sets `-dontobfuscate` (R8 still SHRINKS — minify and
+  resource shrinking stay on — but never renames classes/methods/fields, and
+  real source files + line numbers are kept). Before this, both build types
+  obfuscated with no mapping.txt archived anywhere, so every crash the owner
+  ever saw — including in the app's own crash screen and Error Log — was
+  undecodable ("vf.e.g(SourceFile:663)"); a real crash report was lost to
+  this. The app's source is public, so obfuscation protected nothing. Never
+  re-enable obfuscation or `-renamesourcefileattribute`.
+- **ChatsListFragment wires its UI synchronously in `onViewCreated` (July 22
+  2026).** It used to defer `initUI`/`initLogics`/`initSettings` through a
+  watcher thread (sleep-loop on `isAttached` → `runOnUiThread`), which left
+  the chat list on screen with NO click listeners for a scheduling-dependent
+  window — the "New Chat does nothing on the first press after opening the
+  app" bug — and could silently skip init entirely (the thread could wake
+  between onAttach's `isAttached = true` and `mContext` writes). onViewCreated
+  is guaranteed to run after onAttach, and the heavy chat-list parse already
+  runs async on `chatListLoader` inside `initSettings`, so nothing slow came
+  back to the main thread. Do not reintroduce deferred listener wiring here;
+  keep the post-attach insets re-apply (API 31+ adjustPaddings no-ops before
+  the window attaches). onViewCreated also re-attaches the restored New
+  Chat/rename dialog's listener (`findFragmentByTag("AddChatDialog")`), which
+  pairs with `AddChatDialogFragment`'s self-dismiss-when-unwired last resort —
+  keep both halves.
 - **Chat renames are a verified transaction** (`ChatRenameTransaction`, July
   11 2026 — see the feature list): write-new → verify → pointer flip → clear
   old, settings copied wholesale, every write a synchronous commit, run

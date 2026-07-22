@@ -12,13 +12,16 @@
 #   public *;
 #}
 
-# Uncomment this to preserve the line number information for
-# debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
-
-# If you keep the line number information, uncomment this to
-# hide the original source file name.
--renamesourcefileattribute SourceFile
+# CRASH REPORTS MUST BE READABLE (owner directive, July 22 2026). This app's
+# source is public on GitHub, so obfuscation protects nothing — but it made
+# every crash report useless: real reports arrived as "vf.e.g(SourceFile:663)"
+# with no shipped mapping.txt anywhere to decode them (CI never archived one),
+# including in the app's own crash screen and Error Log. R8 keeps SHRINKING
+# (dead code + resources still stripped, minifyEnabled stays on) but no longer
+# RENAMES classes/methods/fields, and real source file names + line numbers
+# are kept. Never re-enable obfuscation or -renamesourcefileattribute without
+# also building a mapping-file retrieval story the owner has approved.
+-dontobfuscate
 -keepattributes SourceFile,LineNumberTable
 # -optimizationpasses 5
 -dontusemixedcaseclassnames
