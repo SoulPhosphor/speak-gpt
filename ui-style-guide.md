@@ -699,4 +699,15 @@ and rollout notes here — not back in `CLAUDE.md`.
     visual reference only.
   **No edit button** — unlike the Summoning Circle tiles, this pair never gets
   a trailing edit button; tapping the value is the field's only action.
-  **Rollout status:** styles created, not yet applied to any screen.
+  Interaction matches the Summoning Circle's dropdown too, not just the look:
+  tapping the value opens a real anchored `ListPopupWindow` (never the
+  centered picker dialog), via a per-screen `show*Dropdown` helper mirroring
+  `showTileDropdown`.
+  **Rollout status:** first applied July 22 2026 to the Human-Readable Chat
+  Backup section's two fields (`activity_memory_backup_restore.xml`,
+  `MemoryBackupRestoreActivity`) — "Chats" was renamed to **Backup Style**
+  (options **All Chats** / **New and Changed Chats Only**) and "Format" kept
+  its existing label/options (**Format**: Text / JSON / Text + JSON), both
+  converted from full-width `MaterialButton`s showing "Label: value" text and
+  a centered `setSingleChoiceItems` dialog to this same-line label + anchored-
+  dropdown pattern.

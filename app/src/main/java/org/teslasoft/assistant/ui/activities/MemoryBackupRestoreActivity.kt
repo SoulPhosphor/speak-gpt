@@ -24,11 +24,13 @@ import android.os.Build
 import android.os.Bundle
 import android.view.View
 import android.view.WindowInsets
+import android.widget.ArrayAdapter
 import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.widget.ListPopupWindow
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
@@ -118,9 +120,9 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
     private var btnChangeManualLocation: MaterialButton? = null
     private var btnCreateBackup: MaterialButton? = null
 
-    // 4. Human-Readable Chat Backup
-    private var btnReadableScope: MaterialButton? = null
-    private var btnReadableFormat: MaterialButton? = null
+    // 4. Human-Readable Chat Backup (Widget.App.Dropdown.* fields)
+    private var btnReadableScope: TextView? = null
+    private var btnReadableFormat: TextView? = null
     private var btnReadableCreate: MaterialButton? = null
     private var textReadableStatus: TextView? = null
 
@@ -327,63 +329,64 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
     }
 
     private fun updateReadableSelectorLabels() {
-        val scope = getString(
+        btnReadableScope?.text = getString(
             if (readableScopeAll) R.string.backup_readable_scope_all
             else R.string.backup_readable_scope_incremental
         )
-        btnReadableScope?.text = "${getString(R.string.backup_readable_scope_label)}: $scope"
-        val format = getString(
+        btnReadableFormat?.text = getString(
             when (readableFormat) {
                 ReadableChatBackup.Format.TEXT -> R.string.backup_readable_format_text
                 ReadableChatBackup.Format.JSON -> R.string.backup_readable_format_json
                 ReadableChatBackup.Format.BOTH -> R.string.backup_readable_format_both
             }
         )
-        btnReadableFormat?.text = "${getString(R.string.backup_readable_format_label)}: $format"
+    }
+
+    /** Anchored dropdown list (Widget.App.Dropdown.* contract) - a real
+     *  dropdown attached to the tapped value, matching the Summoning Circle
+     *  tiles' `showTileDropdown`, minus an edit button - never the centered
+     *  picker dialog. */
+    private fun showReadableDropdown(anchor: View, labels: List<String>, onPick: (Int) -> Unit) {
+        if (isFinishing || labels.isEmpty()) return
+        val popup = ListPopupWindow(this)
+        popup.anchorView = anchor
+        popup.isModal = true
+        popup.width = anchor.width
+        popup.setAdapter(ArrayAdapter(this, android.R.layout.simple_list_item_1, labels))
+        popup.setOnItemClickListener { _, _, position, _ ->
+            popup.dismiss()
+            onPick(position)
+        }
+        popup.show()
     }
 
     private fun pickReadableScope() {
-        if (isFinishing) return
-        val options = arrayOf(
+        val anchor = btnReadableScope ?: return
+        val labels = listOf(
             getString(R.string.backup_readable_scope_all),
             getString(R.string.backup_readable_scope_incremental)
         )
-        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.backup_readable_scope_label)
-            .setSingleChoiceItems(options, if (readableScopeAll) 0 else 1) { dialog, which ->
-                readableScopeAll = which == 0
-                updateReadableSelectorLabels()
-                dialog.dismiss()
-            }
-            .setNegativeButton(R.string.btn_cancel) { _, _ -> }
-            .show()
+        showReadableDropdown(anchor, labels) { position ->
+            readableScopeAll = position == 0
+            updateReadableSelectorLabels()
+        }
     }
 
     private fun pickReadableFormat() {
-        if (isFinishing) return
-        val options = arrayOf(
+        val anchor = btnReadableFormat ?: return
+        val labels = listOf(
             getString(R.string.backup_readable_format_text),
             getString(R.string.backup_readable_format_json),
             getString(R.string.backup_readable_format_both)
         )
-        val checked = when (readableFormat) {
-            ReadableChatBackup.Format.TEXT -> 0
-            ReadableChatBackup.Format.JSON -> 1
-            ReadableChatBackup.Format.BOTH -> 2
-        }
-        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.backup_readable_format_label)
-            .setSingleChoiceItems(options, checked) { dialog, which ->
-                readableFormat = when (which) {
-                    1 -> ReadableChatBackup.Format.JSON
-                    2 -> ReadableChatBackup.Format.BOTH
-                    else -> ReadableChatBackup.Format.TEXT
-                }
-                updateReadableSelectorLabels()
-                dialog.dismiss()
+        showReadableDropdown(anchor, labels) { position ->
+            readableFormat = when (position) {
+                1 -> ReadableChatBackup.Format.JSON
+                2 -> ReadableChatBackup.Format.BOTH
+                else -> ReadableChatBackup.Format.TEXT
             }
-            .setNegativeButton(R.string.btn_cancel) { _, _ -> }
-            .show()
+            updateReadableSelectorLabels()
+        }
     }
 
     private fun setReadableStatus(text: String) {

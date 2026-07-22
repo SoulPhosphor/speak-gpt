@@ -1456,9 +1456,9 @@
          2026: separate from Recovery Backup and from Portable Data Copy). -->
     <string name="backup_readable_section">Human-Readable Chat Backup</string>
     <string name="backup_readable_desc">Saves your chats as ordinary files you can open anywhere, packed into one ZIP.</string>
-    <string name="backup_readable_scope_label">Chats</string>
+    <string name="backup_readable_scope_label">Backup Style</string>
     <string name="backup_readable_scope_all">All Chats</string>
-    <string name="backup_readable_scope_incremental">New and Updated Chats</string>
+    <string name="backup_readable_scope_incremental">New and Changed Chats Only</string>
     <string name="backup_readable_format_label">Format</string>
     <string name="backup_readable_format_text">Text</string>
     <string name="backup_readable_format_json">JSON</string>
