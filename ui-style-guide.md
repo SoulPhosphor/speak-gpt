@@ -676,3 +676,27 @@ and rollout notes here — not back in `CLAUDE.md`.
   keeps the selected-or-first prompt effective, so a real "send no system
   prompt" needs a small per-chat mechanism that doesn't exist; it's noted in
   the code and deferred rather than guessed.
+- **Standard multiple-choice dropdown field — `Widget.App.Dropdown.*` (owner
+  ruling, July 22 2026).** The house style for any future label + tap-to-select
+  dropdown where the user picks one of several options: **use this whenever a
+  screen has a multiple-choice field, so every such field looks the same.**
+  Label and dropdown value sit on **the same line** — Label first, dropdown
+  immediately after it. This is deliberately different from the Summoning
+  Circle tiles above (`Widget.App.QuickTile.*`), which stack the label above
+  the value — that stacked layout was done incorrectly and is left as-is; do
+  not fix it, and do not restyle it to match this pattern. Two styles in
+  `values/themes.xml`:
+  - `Widget.App.Dropdown.Label` — `wrap_content` width so it sits inline; the
+    same bold `?attr/colorPrimary` 16sp look as `Widget.App.QuickTile.Label`.
+    Label text is authored in Title Case, per this app's Title Case rule for
+    screen/menu labels.
+  - `Widget.App.Dropdown.Value` — the current selection and the dropdown
+    trigger, placed right after the label on the same line (`0dp` width,
+    constrained to fill the rest of the line so it ellipsizes instead of
+    wrapping). Same caret (`ic_arrow_drop_down`) and same value text
+    color/size as `Widget.App.QuickTile.Value` — the correct look for a
+    dropdown trigger in this app, taken from the Summoning Circle tiles as a
+    visual reference only.
+  **No edit button** — unlike the Summoning Circle tiles, this pair never gets
+  a trailing edit button; tapping the value is the field's only action.
+  **Rollout status:** styles created, not yet applied to any screen.

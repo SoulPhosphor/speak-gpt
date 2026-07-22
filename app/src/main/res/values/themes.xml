@@ -537,6 +537,50 @@
         <item name="android:tint">?attr/colorPrimary</item>
     </style>
 
+    <!-- Standard multiple-choice dropdown field (owner ruling, July 22 2026):
+         the shape for every future label + tap-to-select dropdown pair where
+         the user picks one of several options. Label and dropdown value sit
+         on the SAME LINE - Label first, dropdown right after it - unlike the
+         Summoning Circle's four tiles (Widget.App.QuickTile.* above), which
+         stack the label above the value. That stacked layout was done
+         incorrectly and stays as-is - do not touch it, and do not restyle it
+         to match this pattern. The chevron and value text here match
+         Widget.App.QuickTile.Value exactly (same ic_arrow_drop_down caret,
+         same text color/size) since that is the correct look for a dropdown
+         trigger in this app; this pair just never gets a trailing edit
+         button - tapping the value is the field's only action. Label text is
+         authored in Title Case, matching this app's Title Case rule for
+         screen/menu labels. -->
+    <style name="Widget.App.Dropdown.Label" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textColor">?attr/colorPrimary</item>
+        <item name="android:textSize">16sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <!-- The current selection, on the same line as Widget.App.Dropdown.Label
+         and immediately after it, doubling as the dropdown trigger - same
+         caret/text styling as Widget.App.QuickTile.Value. Width is 0dp so it
+         fills the remaining space on the line and ellipsizes a long value
+         instead of wrapping, with the caret always visible at the end. -->
+    <style name="Widget.App.Dropdown.Value" parent="">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginStart">8dp</item>
+        <item name="android:background">?attr/selectableItemBackground</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+        <item name="android:drawableEnd">@drawable/ic_arrow_drop_down</item>
+        <item name="android:drawableTint">@color/text</item>
+        <item name="android:drawablePadding">2dp</item>
+        <item name="android:ellipsize">end</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:paddingVertical">6dp</item>
+        <item name="android:paddingStart">4dp</item>
+        <item name="android:textColor">@color/text</item>
+    </style>
+
     <style name="Widget.App.Field.Box" parent="">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
