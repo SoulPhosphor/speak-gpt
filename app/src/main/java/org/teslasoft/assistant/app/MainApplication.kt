@@ -33,6 +33,7 @@ import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.RenameJournal
 import org.teslasoft.assistant.preferences.SecurePrefs
 import org.teslasoft.assistant.preferences.StartupHealth
+import org.teslasoft.assistant.preferences.backup.AutomaticBackupRunner
 import org.teslasoft.assistant.preferences.memory.MemoryExporter
 import org.teslasoft.assistant.preferences.memory.MemoryLog
 import org.teslasoft.assistant.preferences.memory.MemoryStore
@@ -174,6 +175,23 @@ class MainApplication : Application() {
                 }
             } catch (e: Exception) {
                 MemoryLog.log(this, "MemoryStore", "error", "Memory store startup check failed: ${e.message}")
+            }
+            try {
+                // Automatic portable Recovery Backup (owner directive, July 22
+                // 2026): the due check is cheap prefs reads and runs LAST in
+                // this housekeeping pass; when a backup is actually due, the
+                // runner additionally delays the heavy package build ~30s and
+                // re-checks, so the whole-store chat serialization can never
+                // contend with the main thread's startup chat-list load on the
+                // encrypted-prefs monitor (the July 15 ANR class). Runs
+                // regardless of memory-store provisioning — chats and
+                // lorebooks are backed up even when the memory store was
+                // never created. OFF unless the user enabled it with a chosen
+                // folder and a confirmed Recovery Code.
+                AutomaticBackupRunner.runIfDue(this)
+            } catch (e: Exception) {
+                MemoryLog.log(this, "AutomaticBackup", "error",
+                    "Automatic backup startup pass failed (${e.javaClass.simpleName}).")
             }
         }.start()
 
