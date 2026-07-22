@@ -87,6 +87,23 @@ class AddChatDialogFragment : DialogFragment() {
         context = this.activity
     }
 
+    override fun onStart() {
+        super.onStart()
+        // The system re-creates a shown DialogFragment after the app's process
+        // is killed (backgrounding + memory pressure), but the callback is only
+        // wired via setStateChangedListener() at the original show() site — it
+        // is not persisted and is never re-attached. A restored dialog therefore
+        // comes back with a null listener, and every button used to force-unwrap
+        // it (listener!!), so the first tap crashed with an NPE. A restored,
+        // unwired dialog can't do anything useful anyway, so dismiss it quietly
+        // before it can be tapped; the user taps New Chat again and gets a
+        // working one. (In the normal flow the listener is always set before any
+        // lifecycle callback runs, so null here means "restored without a host".)
+        if (listener == null) {
+            dismissAllowingStateLoss()
+        }
+    }
+
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
         return inflater.inflate(R.layout.fragment_add_chat, container, false)
     }
@@ -117,7 +134,7 @@ class AddChatDialogFragment : DialogFragment() {
                     .setCancelable(false)
                     .setPositiveButton(R.string.btn_save) { _, _ -> validateForm() }
                     .setNeutralButton(R.string.btn_delete) { _, _ -> confirmDeletion(requireActivity()) }
-                    .setNegativeButton(R.string.btn_cancel) { _, _ -> listener!!.onCanceled() }
+                    .setNegativeButton(R.string.btn_cancel) { _, _ -> listener?.onCanceled() }
 
             isEdit = true
 
@@ -140,7 +157,7 @@ class AddChatDialogFragment : DialogFragment() {
             builder!!.setView(view)
                     .setCancelable(false)
                     .setPositiveButton(R.string.btn_ok) { _, _ -> validateForm() }
-                    .setNegativeButton(R.string.btn_cancel) { _, _: Int -> listener!!.onCanceled() }
+                    .setNegativeButton(R.string.btn_cancel) { _, _: Int -> listener?.onCanceled() }
 
             autoName?.visibility = View.VISIBLE
         }
@@ -157,7 +174,7 @@ class AddChatDialogFragment : DialogFragment() {
                 dismiss()
                 return@run true
             } else if (event.action == KeyEvent.ACTION_DOWN && (keyCode == KeyEvent.KEYCODE_BACK || keyCode == KeyEvent.KEYCODE_ESCAPE)) {
-                listener!!.onCanceled()
+                listener?.onCanceled()
                 dismiss()
                 return@run true
             }
@@ -173,8 +190,16 @@ class AddChatDialogFragment : DialogFragment() {
     }
 
     private fun validateForm() {
+        // With no host wired (a process-death restore), do nothing rather than
+        // run createChat()'s side effects (addChat + settings writes) and then
+        // fail to navigate. onStart already dismisses this case; this is a
+        // belt-and-suspenders guard against any restore/click race.
+        if (listener == null) {
+            dismissAllowingStateLoss()
+            return
+        }
         if (nameInput?.text.toString() == "" && !autoName!!.isChecked) {
-            listener!!.onError(arguments?.getBoolean("fromFile") == true, arguments?.getInt("position")!!)
+            listener?.onError(arguments?.getBoolean("fromFile") == true, arguments?.getInt("position")!!)
         } else {
             createChat()
         }
@@ -236,7 +261,7 @@ class AddChatDialogFragment : DialogFragment() {
             }
 
             chatPreferences?.addChat(requireActivity(), chatName)
-            listener!!.onAdd(chatName, Hash.hash(chatName), arguments?.getBoolean("fromFile") == true)
+            listener?.onAdd(chatName, Hash.hash(chatName), arguments?.getBoolean("fromFile") == true)
 
             // Copy settings from default
             val preferences: Preferences = Preferences.getPreferences(requireActivity(), "")
@@ -305,7 +330,7 @@ class AddChatDialogFragment : DialogFragment() {
             newPreferences.setAvatarId(avatarId!!)
             newPreferences.setAssistantName(assistantName!!)
         } else {
-            listener!!.onDuplicate(arguments?.getInt("position")!!)
+            listener?.onDuplicate(arguments?.getInt("position")!!)
         }
     }
 
@@ -320,7 +345,7 @@ class AddChatDialogFragment : DialogFragment() {
 
     private fun delete(context: Context) {
         chatPreferences?.deleteChat(context, requireArguments().getString("name").toString())
-        listener!!.onDelete(arguments?.getInt("position")!!)
+        listener?.onDelete(arguments?.getInt("position")!!)
     }
 
     fun setStateChangedListener(listener: StateChangesListener) {
