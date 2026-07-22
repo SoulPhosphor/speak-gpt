@@ -41,12 +41,17 @@ import android.provider.DocumentsContract
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.backup.BackupBrand
+import org.teslasoft.assistant.preferences.backup.BackupFailurePolicy
 import org.teslasoft.assistant.preferences.backup.BackupLocationDisplay
 import org.teslasoft.assistant.preferences.backup.BackupStatusFormatter
 import org.teslasoft.assistant.preferences.backup.BackupType
 import org.teslasoft.assistant.preferences.backup.DatabaseHealthChecker
+import org.teslasoft.assistant.preferences.backup.DatabaseHealthState
+import org.teslasoft.assistant.preferences.backup.DatabaseRepairManager
+import org.teslasoft.assistant.preferences.backup.RecoveryBackupManager
 import org.teslasoft.assistant.preferences.backup.RecoveryBackupState
 import org.teslasoft.assistant.preferences.backup.RecoveryFileNaming
+import org.teslasoft.assistant.ui.DatabaseRecoveryFlows
 import org.teslasoft.assistant.preferences.backup.readable.ReadableBackupState
 import org.teslasoft.assistant.preferences.backup.readable.ReadableChatBackup
 import org.teslasoft.assistant.preferences.memory.MemoryExporter
@@ -78,6 +83,12 @@ import java.security.MessageDigest
  */
 class MemoryBackupRestoreActivity : FragmentActivity() {
 
+    companion object {
+        /** Intent extra: a BackupType key whose A1 repair dialog should open
+         *  immediately (the A2 chat banner's Repair action lands here). */
+        const val EXTRA_START_REPAIR_FOR = "startRepairFor"
+    }
+
     private var preferences: Preferences? = null
     private var chatId = ""
 
@@ -86,9 +97,14 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
 
     // 1. Database Health
     private var btnCheckIntegrity: MaterialButton? = null
+    private var textCheckProgress: TextView? = null
     private var textResultMemory: TextView? = null
     private var textResultLorebook: TextView? = null
     private var textResultUserImage: TextView? = null
+
+    // One 3-strikes backup-failure dialog per screen visit at most, so a
+    // resume loop cannot nag (Build Phase 3 item 8).
+    private var backupFailureDialogShown = false
 
     // 2. Backup Status
     private var textStatusMemory: TextView? = null
@@ -169,6 +185,21 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         super.onResume()
         refreshLocations()
         refreshBackupStatus()
+        // Build Phase 3 dialog delivery: a queued startup health notice (A1 /
+        // Database Repaired / A6), a repair explicitly requested from the A2
+        // chat banner, then the 3-strikes backup-failure sweep — one dialog
+        // at a time.
+        val repairFor = intent.getStringExtra(EXTRA_START_REPAIR_FOR)
+        if (repairFor != null) {
+            intent.removeExtra(EXTRA_START_REPAIR_FOR)
+            val type = BackupType.fromKey(repairFor)
+            if (type != null && DatabaseHealthState.isDegraded(this, type)) {
+                DatabaseRecoveryFlows.showProblemDialog(this, type) { refreshBackupStatus() }
+                return
+            }
+        }
+        DatabaseRecoveryFlows.showPendingNoticeIfAny(this) { refreshBackupStatus() }
+        sweepRepeatedBackupFailures()
     }
 
     private fun bindViews() {
@@ -176,6 +207,7 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         btnBack = findViewById(R.id.btn_back)
 
         btnCheckIntegrity = findViewById(R.id.btn_check_integrity)
+        textCheckProgress = findViewById(R.id.text_check_progress)
         textResultMemory = findViewById(R.id.text_result_memory)
         textResultLorebook = findViewById(R.id.text_result_lorebook)
         textResultUserImage = findViewById(R.id.text_result_userimage)
@@ -525,10 +557,25 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
 
     private fun onCheckIntegrity() {
         btnCheckIntegrity?.isEnabled = false
+        // §15.9 verbatim in-progress line while the check runs; the result
+        // lines replace it when it finishes.
+        textCheckProgress?.visibility = View.VISIBLE
+        textResultMemory?.visibility = View.GONE
+        textResultLorebook?.visibility = View.GONE
+        textResultUserImage?.visibility = View.GONE
         runOffThread {
             val results = DatabaseHealthChecker.checkAll(this)
+            // B8 escalation: a DAMAGED manual-check result IS confirmed damage
+            // — set the degraded flag (off the main thread; transition-logged
+            // once) before the report dialog offers the repair flow.
+            for (r in results) {
+                if (r.status == DatabaseHealthChecker.Status.DAMAGED) {
+                    DatabaseHealthState.markDegraded(this, r.type, r.detail ?: "integrity check failed")
+                }
+            }
             runOnUiThread {
                 btnCheckIntegrity?.isEnabled = true
+                textCheckProgress?.visibility = View.GONE
                 for (r in results) {
                     val name = when (r.type) {
                         BackupType.MEMORY -> getString(R.string.backup_db_name_memory)
@@ -550,7 +597,148 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
                     tv?.text = line
                     tv?.visibility = View.VISIBLE
                 }
+                showCheckReportDialog(results)
             }
+        }
+    }
+
+    /**
+     * The B8 per-database report dialog (owner-approved wording): `Database
+     * Check Complete` when every database produced a real result, `Database
+     * Check Incomplete` when one could not be checked. A damaged database
+     * routes straight into the A1 repair flow (result buttons are the build
+     * plan's suggested labels, pending owner confirmation).
+     */
+    private fun showCheckReportDialog(results: List<DatabaseHealthChecker.Result>) {
+        if (isFinishing) return
+        fun reportName(type: BackupType): String = when (type) {
+            BackupType.MEMORY -> getString(R.string.health_db_memory)
+            BackupType.LOREBOOK -> getString(R.string.health_db_lorebook)
+            else -> getString(R.string.health_db_user_image)
+        }
+        val incomplete = results.any { it.status == DatabaseHealthChecker.Status.UNAVAILABLE }
+        val damaged = results.filter { it.status == DatabaseHealthChecker.Status.DAMAGED }
+        val lines = results.joinToString("\n") { r ->
+            when (r.status) {
+                DatabaseHealthChecker.Status.OK -> getString(R.string.health_check_line_ok, reportName(r.type))
+                DatabaseHealthChecker.Status.DAMAGED -> getString(R.string.health_check_line_damaged, reportName(r.type))
+                DatabaseHealthChecker.Status.UNAVAILABLE -> getString(R.string.health_check_line_unchecked, reportName(r.type))
+            }
+        }
+        val footer = when {
+            damaged.isNotEmpty() ->
+                "\n\n" + getString(R.string.health_check_footer_damaged,
+                    DatabaseHealthState.displayNoun(damaged.first().type))
+            incomplete -> "\n\n" + getString(R.string.health_check_footer_incomplete)
+            else -> ""
+        }
+        val b = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(if (incomplete) R.string.health_check_incomplete_title else R.string.health_check_complete_title)
+            .setMessage(lines + footer)
+        when {
+            damaged.isNotEmpty() -> {
+                // Route the FIRST damaged database into the repair flow; a
+                // re-run after fixing it reports (and routes) the next one.
+                val target = damaged.first().type
+                b.setPositiveButton(R.string.health_btn_repair) { _, _ ->
+                    DatabaseRecoveryFlows.runRepair(this, target) { refreshBackupStatus() }
+                }
+                b.setNeutralButton(R.string.health_btn_revert) { _, _ ->
+                    DatabaseRecoveryFlows.runRevert(this, target) { refreshBackupStatus() }
+                }
+                b.setNegativeButton(R.string.btn_cancel) { _, _ -> }
+            }
+            incomplete -> {
+                b.setPositiveButton(R.string.health_btn_try_again) { _, _ -> onCheckIntegrity() }
+                b.setNeutralButton(R.string.health_btn_view_log) { _, _ ->
+                    val intent = Intent(this, LogsActivity::class.java)
+                    intent.putExtra("type", "crash")
+                    startActivity(intent)
+                }
+                b.setNegativeButton(R.string.btn_cancel) { _, _ -> }
+            }
+            else -> b.setPositiveButton(R.string.btn_ok) { _, _ -> }
+        }
+        b.show()
+    }
+
+    /**
+     * Build Phase 3 item 8 — the 3-consecutive-failures response, split by
+     * category: destination/verify failures get the storage dialog (`Change
+     * Backup Folder | Retry | Cancel`, folder shown as text, `Open Backup
+     * Folder` as a secondary action); a SOURCE failure runs the store's own
+     * check and routes into the repair flow ONLY if damage is confirmed.
+     * At most one dialog per screen visit.
+     */
+    private fun sweepRepeatedBackupFailures() {
+        if (backupFailureDialogShown || isFinishing) return
+        for (type in BackupType.displayOrder) {
+            val response = BackupFailurePolicy.respond(
+                RecoveryBackupState.getConsecutiveFailures(this, type),
+                RecoveryBackupState.getLastFailureCategory(this, type)
+            )
+            when (response) {
+                BackupFailurePolicy.Response.STORAGE_DIALOG -> {
+                    backupFailureDialogShown = true
+                    showBackupFailureStorageDialog(type)
+                    return
+                }
+                BackupFailurePolicy.Response.SOURCE_CHECK -> {
+                    backupFailureDialogShown = true
+                    runOffThread {
+                        // Chat source failures route to the Round-4 chat
+                        // machinery, not the database flow (Build Phase 2
+                        // item 7); confirmDamage handles the three databases.
+                        if (type != BackupType.CHATS && DatabaseRepairManager.confirmDamage(this, type)) {
+                            runOnUiThread {
+                                if (!isFinishing) {
+                                    DatabaseRecoveryFlows.showProblemDialog(this, type) { refreshBackupStatus() }
+                                }
+                            }
+                        }
+                    }
+                    return
+                }
+                BackupFailurePolicy.Response.NONE -> { /* status row only */ }
+            }
+        }
+    }
+
+    private fun showBackupFailureStorageDialog(type: BackupType) {
+        if (isFinishing) return
+        val streak = RecoveryBackupState.getConsecutiveFailures(this, type)
+        val folderLabel = RecoveryBackupState.getAutoFolderLabel(this)
+            ?: getString(R.string.backup_location_selected_generic)
+        // The folder is shown as text in the body (approved structure). A
+        // stock Material dialog has exactly three button slots, all spoken
+        // for (Change Backup Folder | Retry | Cancel), so the `Open Backup
+        // Folder` secondary convenience lives on the screen's Automatic
+        // Backups section rather than in this dialog — never as a fourth
+        // primary button (owner ruling).
+        val body = getString(R.string.health_backup_failed_body, streak, typeLabel(type)) +
+            "\n\n" + getString(R.string.backup_current_location, folderLabel)
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.health_backup_failed_title)
+            .setMessage(body)
+            .setPositiveButton(R.string.health_btn_change_folder) { _, _ ->
+                autoFolderPicker.launch(null)
+            }
+            .setNeutralButton(R.string.health_btn_retry) { _, _ -> retryAutomaticBackup() }
+            .setNegativeButton(R.string.btn_cancel) { _, _ -> }
+            .show()
+    }
+
+    /** Retry from the 3-strikes dialog: run one recovery-backup pass into the
+     *  automatic folder now, then refresh the status rows. */
+    private fun retryAutomaticBackup() {
+        val uriStr = RecoveryBackupState.getAutoFolderUri(this)
+        if (uriStr == null) {
+            autoFolderPicker.launch(null)
+            return
+        }
+        runOffThread {
+            RecoveryBackupManager.createBackup(this, Uri.parse(uriStr))
+            runOnUiThread { refreshBackupStatus() }
         }
     }
 

@@ -711,6 +711,18 @@ class ProfileImagesActivity : FragmentActivity(), ProfileImageDetailBottomSheetD
      *  cleared; it is architecturally the same as any other Missing record -
      *  display code already falls through gracefully. */
     private fun performDelete(hashes: Set<String>, forceEvenIfUsed: Boolean = false) {
+        // Build Phase 3 safety gate: while the MEMORY database is disabled
+        // pending repair, its identity references (My Personas, user-side
+        // Roleplay Characters) cannot be consulted, so "unused" cannot be
+        // verified. Deleting on an incomplete usage picture could destroy a
+        // referenced image — deletion pauses instead (persistent inline
+        // status, never a toast). The informed single-image force path is
+        // paused too: the usage it showed the user was equally incomplete.
+        if (org.teslasoft.assistant.preferences.backup.DatabaseHealthState.isDegraded(
+                this, org.teslasoft.assistant.preferences.backup.BackupType.MEMORY)) {
+            showInlineStatus(getString(R.string.health_gallery_usage_unavailable))
+            return
+        }
         ioScope.launch {
             val s = store
             val skippedCount: Int

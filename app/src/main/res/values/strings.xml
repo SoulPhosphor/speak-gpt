@@ -1499,6 +1499,97 @@
     <!-- Memory Manager hub row subtitle -->
     <string name="row_memory_backup_restore_subtitle">Back up and restore chats, memories, lorebooks, and user image data.</string>
 
+    <!-- ================================================================
+         Database Health Build Phase 3 — detection → dialog → repair/replace.
+         The A1/A2/A3/A5/A6/B8 wording below is OWNER-APPROVED VERBATIM
+         (memory_health_round5_phase1_design.md §15.12; casing rule: titles +
+         buttons Title Case, bodies sentence case; "Cancel", never "Not Now").
+         Strings marked DRAFT are Build Phase 4 gaps filled with tone-matched
+         professional wording per the owner's July 22 instruction ("make it
+         sound professional, I'll review after") — flag them for review, do
+         not treat them as approved.
+         ================================================================ -->
+    <!-- A1 — problem found, not auto-repairable (approved; user-image variant DRAFT) -->
+    <string name="health_problem_title">Database Problem Found!</string>
+    <string name="health_problem_body_memory">Your memory database is damaged and couldn\'t be repaired automatically. You can try a repair, or replace it with your latest good backup. This may cause recent memories to be lost.\n\nUntil then, memory will be unavailable to use or save to prevent further corruption.</string>
+    <string name="health_problem_body_lorebook">Your lorebooks database is damaged and couldn\'t be repaired automatically. You can try a repair, or replace it with your latest good backup. This may cause recent lorebook entries to be lost.\n\nUntil then, lorebooks will be unavailable to use or save to prevent further corruption.</string>
+    <!-- DRAFT (user-image variant of A1, patterned on the approved bodies) -->
+    <string name="health_problem_body_user_image">Your user image database is damaged and couldn\'t be repaired automatically. You can try a repair, or replace it with your latest good backup. This may cause recent user image records to be lost.\n\nUntil then, the user image database will be unavailable to use or save to prevent further corruption.</string>
+    <!-- A1 — repaired automatically (approved) -->
+    <string name="health_repaired_title">Database Repaired</string>
+    <string name="health_repaired_body">A problem was found in your %1$s database and repaired automatically. Everything should be working normally.</string>
+    <!-- Buttons (approved: Repair / Revert to Last Good Database / Restore /
+         Open File Location; Cancel comes from btn_cancel) -->
+    <string name="health_btn_repair">Repair</string>
+    <string name="health_btn_revert">Revert to Last Good Database</string>
+    <string name="health_btn_restore">Restore</string>
+    <string name="health_btn_open_location">Open File Location</string>
+    <!-- DRAFT buttons (B8 result routing — plan-suggested labels) -->
+    <string name="health_btn_try_again">Try Again</string>
+    <string name="health_btn_view_log">View Error Log</string>
+    <string name="health_btn_start_fresh">Start New Database</string>
+    <string name="health_btn_change_folder">Change Backup Folder</string>
+    <string name="health_btn_retry">Retry</string>
+    <string name="health_btn_open_backup_folder">Open Backup Folder</string>
+    <!-- A2 — degraded-mode banner (memory + lorebook approved; the combined and
+         user-image variants are DRAFT, patterned on the approved sentences) -->
+    <string name="health_banner_memory">Memory is currently turned off because of a database problem. Tap Repair to fix it.</string>
+    <string name="health_banner_lorebook">Lorebooks are currently turned off because of a database problem. Tap Repair to fix it.</string>
+    <string name="health_banner_both">Memory and lorebooks are currently turned off because of a database problem. Tap Repair to fix it.</string>
+    <string name="health_banner_user_image">There is a problem with the user image database. Tap Repair to fix it.</string>
+    <!-- A3 — blocked Analyze Conversations note (approved verbatim) -->
+    <string name="health_archivist_blocked">Unable to analyze conversations due to current memory database corruption. You may try to repair it again or revert to last known good database. Caution reverting may cause recent memories to be lost.</string>
+    <!-- A5 — restore confirmation (approved; the date is the backup\'s real
+         date, Month D, YYYY) -->
+    <string name="health_restore_title">Restore from Backup?</string>
+    <string name="health_restore_body_memory">This replaces your damaged memory database with your last good Backup from %1$s. Any memories added after that date will be lost. Your damaged database will be kept aside, not deleted.</string>
+    <string name="health_restore_body_lorebook">This replaces your damaged lorebook database with your last good Backup from %1$s. Any lorebook entries added after that date will be lost. Your damaged database will be kept aside, not deleted.</string>
+    <!-- A6 — recovery failed / started fresh (approved) -->
+    <string name="health_recovery_failed_title">Database Recovery Failed</string>
+    <string name="health_recovery_failed_body">The %1$s database was damaged and could not be repaired. No usable backup was available, so the app created a new, empty database to keep working.\n\nThe damaged database was not deleted. It was saved here in case it can be recovered later:\n\n%2$s</string>
+    <!-- B8 — per-database check report (approved wording; result-button labels
+         are the plan\'s suggestions pending owner confirmation) -->
+    <string name="health_check_complete_title">Database Check Complete</string>
+    <string name="health_check_incomplete_title">Database Check Incomplete</string>
+    <string name="health_db_memory">Memory database</string>
+    <string name="health_db_lorebook">Lorebook database</string>
+    <string name="health_db_user_image">User image database</string>
+    <string name="health_check_line_ok">%1$s: No problems found</string>
+    <string name="health_check_line_damaged">%1$s: Damage detected</string>
+    <string name="health_check_line_unchecked">%1$s: Could not be checked</string>
+    <string name="health_check_footer_damaged">Your %1$s data may need repair.</string>
+    <string name="health_check_footer_incomplete">Try again or view the error log for details.</string>
+    <!-- In-progress lines. The check line is approved verbatim (§15.9); the
+         repair/restore lines are DRAFT, patterned on it (§15.2 item 4\'s
+         "do not close the app" warning). -->
+    <string name="health_check_progress">Checking database integrity. Do not close your app. Please wait.</string>
+    <string name="health_repair_progress">Repairing the %1$s database. Do not close your app. Please wait.</string>
+    <string name="health_restore_progress">Restoring the %1$s database. Do not close your app. Please wait.</string>
+    <!-- DRAFT — repair failed from the dialog\'s Repair button -->
+    <string name="health_repair_failed_title">Repair Did Not Succeed</string>
+    <string name="health_repair_failed_body">The %1$s database could not be repaired. You can replace it with your last good backup, or cancel and leave it turned off for now.</string>
+    <!-- DRAFT — the revert walk found nothing usable (§15.6 step 4 confirm
+         before the fresh start; A6 is shown after) -->
+    <string name="health_no_backup_title">No Usable Backup</string>
+    <string name="health_no_backup_body">No usable backup of the %1$s database was found. You can start a new, empty database to keep the app working. Your damaged database will be kept aside, not deleted.</string>
+    <!-- DRAFT — restore outcome dialogs -->
+    <string name="health_restore_done_title">Database Restored</string>
+    <string name="health_restore_done_body">Your %1$s database was restored from the backup. Everything should be working normally.</string>
+    <string name="health_restore_failed_title">Restore Did Not Succeed</string>
+    <string name="health_restore_failed_body">The backup could not be restored. Your damaged database was kept aside and your backups are untouched. You can try again or view the error log for details.</string>
+    <!-- 3-strikes backup-failure dialog (structure + buttons approved July 20;
+         title approved July 15; body DRAFT — Build Phase 4 item 5) -->
+    <string name="health_backup_failed_title">Backup Attempts Failed</string>
+    <string name="health_backup_failed_body">The last %1$d backups of your %2$s data could not be saved. The backup folder may have moved or been removed, or your device may be low on storage space.</string>
+    <!-- DRAFT — recovery package refused while a database is degraded -->
+    <string name="recovery_fail_degraded">A database is turned off because of damage. Repair it on the Backup &amp; Restore screen before creating a recovery backup.</string>
+    <!-- DRAFT — image gallery while the memory database is off (usage cannot
+         be verified, so deletion is blocked rather than guessed) -->
+    <string name="health_gallery_usage_unavailable">Image usage can\'t be checked right now because of a database problem, so deleting images is paused.</string>
+    <!-- DRAFT — memory screens blocked while their database is off -->
+    <string name="health_screen_blocked_memory">Memory is currently turned off because of a database problem.</string>
+    <string name="health_screen_blocked_lorebook">Lorebooks are currently turned off because of a database problem.</string>
+
     <string name="memory_controls_row_advanced">Advanced Memory Settings</string>
     <string name="memory_controls_row_advanced_subtitle">Diagnostics, indexing, model files, and repair tools.</string>
 

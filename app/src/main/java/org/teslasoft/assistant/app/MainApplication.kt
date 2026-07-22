@@ -21,8 +21,6 @@ import android.content.ComponentCallbacks2
 import android.content.res.Configuration
 import android.os.Handler
 import android.os.HandlerThread
-import android.os.Looper
-import android.widget.Toast
 import cat.ereza.customactivityoncrash.config.CaocConfig
 import com.google.android.material.color.DynamicColors
 import org.conscrypt.Conscrypt
@@ -33,6 +31,9 @@ import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.RenameJournal
 import org.teslasoft.assistant.preferences.SecurePrefs
 import org.teslasoft.assistant.preferences.StartupHealth
+import org.teslasoft.assistant.preferences.backup.BackupType
+import org.teslasoft.assistant.preferences.backup.DatabaseHealthState
+import org.teslasoft.assistant.preferences.backup.StartupDatabaseCheck
 import org.teslasoft.assistant.preferences.memory.MemoryExporter
 import org.teslasoft.assistant.preferences.memory.MemoryLog
 import org.teslasoft.assistant.preferences.memory.MemoryStore
@@ -106,6 +107,15 @@ class MainApplication : Application() {
         // not wait on SQLCipher.
         Thread {
             try {
+                // Finish (or discard) a chat recovery restore interrupted by
+                // process death (Build Phase 3 item 5) — BEFORE the outage
+                // reconcile and rename recovery, both of which read the chat
+                // files this may still be replacing from verified staging.
+                org.teslasoft.assistant.preferences.backup.ChatRestoreManager.resumeIfPending(this)
+            } catch (e: Exception) {
+                MemoryLog.log(this, "ChatRestore", "error", "Chat-restore recovery at startup failed: ${e.message}")
+            }
+            try {
                 // Recover anything the FIRST Round-4 build wrote to legacy
                 // outage.* files during a storage lock (that plaintext
                 // redirection was rejected and removed July 12 2026 — LOCKED
@@ -133,47 +143,47 @@ class MainApplication : Application() {
                 MemoryLog.log(this, "RenameJournal", "error", "Rename reconciliation at startup failed: ${e.message}")
             }
             try {
-                if (MemoryStore.isProvisioned(this)) {
+                // Crash-triggered integrity checking (Build Phase 1 gate,
+                // Build Phase 3 response). The whole-database PRAGMA
+                // integrity_check reads every page and grows with the store,
+                // so it runs ONLY after an abnormal previous exit (a write
+                // could have been interrupted) or when a check/repair is
+                // explicitly pending. When it fires it now covers ALL THREE
+                // databases, and a CONFIRMED-damaged store is handled by the
+                // Build Phase 3 flow — degraded flag, quarantine, automatic
+                // staged repair attempt, and a queued dialog the next
+                // foreground screen delivers (A1 problem / Database Repaired).
+                // The old vanishing Toast (design doc F3) is gone.
+                val shouldCheck = StartupHealth.shouldRunIntegrityCheck(
+                    Logger.wasPreviousExitAbnormal(this),
+                    StartupHealth.isIntegrityCheckPending(this)
+                )
+                if (shouldCheck) StartupDatabaseCheck.run(this)
+            } catch (e: Exception) {
+                MemoryLog.log(this, "MemoryStore", "error", "Startup database check failed: ${e.message}")
+            }
+            try {
+                // Ordinary memory housekeeping — only for a provisioned store
+                // that is not disabled pending repair (a degraded store's
+                // getInstance would refuse anyway; checking first keeps the
+                // log clean and the intent obvious).
+                if (MemoryStore.isProvisioned(this) &&
+                    !DatabaseHealthState.isDegraded(this, BackupType.MEMORY)) {
                     val store = MemoryStore.getInstance(this)
-
-                    // Crash-triggered integrity check (Build Phase 1). The
-                    // whole-database PRAGMA integrity_check reads every page and
-                    // grows with the store, so it used to be pure every-launch
-                    // waste on a healthy app. It now runs ONLY after an abnormal
-                    // previous exit (a write could have been interrupted) or when
-                    // a check/repair is explicitly pending (a Build Phase 3 flag,
-                    // honored here already). A clean exit ran no writes to
-                    // interrupt, so the store is presumed healthy and the check
-                    // is skipped — the app proceeds exactly as it did on a
-                    // previously-passing check.
-                    val shouldCheck = StartupHealth.shouldRunIntegrityCheck(
-                        Logger.wasPreviousExitAbnormal(this),
-                        StartupHealth.isIntegrityCheckPending(this)
-                    )
-                    val problem = if (shouldCheck) store.integrityCheck() else null
-
-                    if (problem != null) {
-                        MemoryLog.log(this, "MemoryStore", "error", "Memory store integrity check failed: $problem")
-                        Handler(Looper.getMainLooper()).post {
-                            Toast.makeText(this, getString(R.string.memory_integrity_failed), Toast.LENGTH_LONG).show()
+                    // One-time backfill: pre-existing chats become eligible
+                    // for memory review too. The completion flag is set ONLY
+                    // when the pass actually completed — a failed or partial
+                    // pass leaves it unset and retries next start (the pass is
+                    // idempotent: already-imported chats are skipped).
+                    if (store.getMeta(MemoryStore.META_BACKFILL_DONE) != "1") {
+                        if (TranscriptRecorder.backfillExistingChats(this).completed) {
+                            store.setMeta(MemoryStore.META_BACKFILL_DONE, "1")
                         }
-                    } else {
-                        // Healthy — verified just now, or presumed healthy after a
-                        // clean exit. One-time backfill: pre-existing chats become
-                        // eligible for memory review too. The completion flag is
-                        // set ONLY when the pass actually completed — a failed or
-                        // partial pass leaves it unset and retries next start (the
-                        // pass is idempotent: already-imported chats are skipped).
-                        if (store.getMeta(MemoryStore.META_BACKFILL_DONE) != "1") {
-                            if (TranscriptRecorder.backfillExistingChats(this).completed) {
-                                store.setMeta(MemoryStore.META_BACKFILL_DONE, "1")
-                            }
-                        }
-                        MemoryExporter.autoExportIfDue(this)
                     }
+                    MemoryExporter.autoExportIfDue(this)
                 }
             } catch (e: Exception) {
-                MemoryLog.log(this, "MemoryStore", "error", "Memory store startup check failed: ${e.message}")
+                MemoryLog.log(this, "MemoryStore", "error", "Memory store startup housekeeping failed: ${e.message}")
             }
         }.start()
 

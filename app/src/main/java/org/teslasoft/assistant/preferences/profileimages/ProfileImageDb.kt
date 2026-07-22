@@ -20,6 +20,8 @@ import android.content.ContentValues
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
+import org.teslasoft.assistant.preferences.backup.BackupType
+import org.teslasoft.assistant.preferences.backup.CorruptionErrorHandlers
 
 /**
  * Catalog of permanent Profile Images: which content hashes have a saved
@@ -38,7 +40,15 @@ import android.database.sqlite.SQLiteOpenHelper
  * Default User Image), never cached here.
  */
 class ProfileImageDb private constructor(context: Context) :
-    SQLiteOpenHelper(context.applicationContext, DATABASE_NAME, null, DATABASE_VERSION) {
+    SQLiteOpenHelper(
+        context.applicationContext, DATABASE_NAME, null, DATABASE_VERSION,
+        // Explicit corruption handler (Database Health Build Phase 3): the
+        // framework DEFAULT deletes a corrupt database file on detection;
+        // ours flags the catalog degraded (banner + repair flow, §15.16) and
+        // preserves the file. The catalog is deliberately NOT feature-gated
+        // on the flag — nothing else depends on it to function.
+        CorruptionErrorHandlers.Plain(context, BackupType.USER_IMAGE)
+    ) {
 
     companion object {
         private const val DATABASE_NAME = "profile_images.db"
@@ -54,6 +64,19 @@ class ProfileImageDb private constructor(context: Context) :
         fun getInstance(context: Context): ProfileImageDb {
             return instance ?: synchronized(this) {
                 instance ?: ProfileImageDb(context.applicationContext).also { instance = it }
+            }
+        }
+
+        /**
+         * Close and forget the cached helper so the catalog FILE can be
+         * replaced underneath (rebuild-from-files repair / restore —
+         * DatabaseRepairManager only, which also invalidates
+         * [ProfileImageStore]'s wrapper that holds a reference to this).
+         */
+        fun invalidateInstance() {
+            synchronized(this) {
+                try { instance?.close() } catch (_: Exception) { }
+                instance = null
             }
         }
     }

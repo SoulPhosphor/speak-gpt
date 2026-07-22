@@ -53,6 +53,12 @@ object SnapshotRegistry {
     const val ORIGIN_CORRUPT_JSON = "corrupt_json"
     const val ORIGIN_LEGACY_UNINDEXED = "legacy_unindexed"
 
+    /** A damaged database (or its WAL/journal sidecar) quarantined before a
+     *  repair/restore, and the pre-restore copies of healthy files a chat
+     *  restore replaces (Database Health Build Phase 3 items 2 and 5). */
+    const val ORIGIN_DB_CORRUPTION = "db_corruption"
+    const val ORIGIN_PRE_RESTORE = "pre_restore"
+
     const val STATUS_PRESERVED = "preserved"
 
     private const val FILE = "storage_health" // shared with ChatStorageHealth (metadata-only file)

@@ -14,11 +14,14 @@
 > never bare "Round N"** — that word is already spoken for elsewhere in this
 > project.
 
-**Status (July 21 2026): Build Phase 0 and Build Phase 1 are COMPLETE —
+**Status (July 22 2026): Build Phase 0 and Build Phase 1 are COMPLETE —
 owner-confirmed on-device (the original startup freeze is gone; normal
-launch is lighter). Build Phase 2's wording is now owner-approved (see
-"Owner confirmations — RESOLVED July 21 2026") but Build Phase 2 itself is
-NOT yet built. Build Phases 3–5 remain plan only.**
+launch is lighter). Build Phase 2 is BUILT (recovery-package flow + the
+corrected Backup & Restore screen, July 22 directive) — awaiting the
+on-device test gate. Build Phase 3 is CODE-COMPLETE (see the STATUS block
+under Build Phase 3: engines + dialogs + tests; chat-restore UI and the
+remaining wording deliberately held for Build Phase 4 owner approval) —
+NOT owner-confirmed on-device. Build Phases 4–5 remain open.**
 
 > ⚠️ **SUPERSEDED IN PART — owner correction, July 22 2026 (Backup &
 > Restore rework directive).** After the first installed prerelease the
@@ -409,6 +412,88 @@ backup-walk selection, 3-strike counting, staged-repair planner, chat-swap
 journal) unit-tested in `app/src/test`; CI green; dialogs verified by the
 owner on-device. Any debug-only trigger to preview these dialogs needs the
 owner's explicit yes first.
+
+> **STATUS (July 22 2026): Build Phase 3 CODE-COMPLETE — NOT owner-confirmed
+> on-device; the exit gate stays open until the owner sees the flows on their
+> phone.** Built (branch `claude/memory-system-phase-3-3xeij1`):
+> - **Item 1 — degraded flag:** `preferences/backup/DatabaseHealthState`
+>   (plain `storage_health` prefs, `health.` keys). Set ONLY by confirmed
+>   damage (failed integrity check, or a corruption exception caught by the
+>   new per-store `CorruptionErrorHandlers` — which also stop the libraries'
+>   DEFAULT handler from DELETING the corrupt file, verified against
+>   sqlcipher-android 4.16.0 bytecode). While set: `MemoryStore.getInstance`
+>   / `LoreBookStore.getInstance` throw the typed
+>   `DatabaseDegradedException` (same failure envelope as the existing
+>   locked-key throw, so every best-effort call site degrades identically),
+>   that type's recovery-backup artifact pauses, the portable recovery
+>   package refuses (new `STORE_DEGRADED` reason), the Archivist is
+>   hard-blocked (A3), and the state survives restarts (B10) until a
+>   repair/restore succeeds. The user-image catalog gets flag + banner but
+>   no feature-disable (§15.16 item 5) — its gallery blocks only DELETION
+>   while memory-side usage can't be verified.
+> - **Item 2 — preserve-the-original:** `DatabaseRepairManager.quarantine`
+>   copies db + WAL/journal sidecars into `files/storage_recovery/` as
+>   `<stem>.corrupt-<date>-<uniq>.db`, `SnapshotRegistry`-indexed (new
+>   origins `db_corruption` / `pre_restore`); a quarantine failure ABORTS
+>   destructive steps. Repair is a bounded staged salvage
+>   (`SqlcipherSalvage`: schema replay + per-table/per-row copy into a fresh
+>   keyed staged file, integrity-verified BEFORE the swap) — never in-place.
+> - **Item 3 — startup path:** `StartupDatabaseCheck` (housekeeping thread,
+>   behind the Build-Phase-1 crash gate) now checks ALL THREE databases,
+>   auto-repairs first (owner order), and queues the outcome as a pending
+>   notice; `MainActivity`/the Backup & Restore screen deliver the A1
+>   `Database Problem Found!` / `Database Repaired` dialogs via the shared
+>   `ui/DatabaseRecoveryFlows`. The old vanishing Toast (F3) is REMOVED.
+> - **Item 4 — revert path:** `DatabaseRevertManager` walks newest→oldest,
+>   verifies each candidate before offering it, A5 confirm with the backup's
+>   real date, then quarantine → replace → verify. **Honesty note:** the only
+>   enumerable on-device recovery backups today are the rotating memory JSON
+>   exports (`memory_backups/`) — the per-type `.dbbackup` writer never
+>   shipped (hidden July 22) and v2 packages are Save-As files the app cannot
+>   enumerate — so the walk covers MEMORY for real, and lorebook/user-image
+>   reverts honestly fall through to §15.6 step 4 (fresh empty + A6) until
+>   the approved automatic per-type system lands and plugs into the same
+>   walk. Fresh-start is always disclosed via A6 with the preserved path.
+> - **Item 5 — chat recovery restore: ENGINE ONLY.** `ChatRestoreManager` +
+>   pure `ChatRestorePlanner` (validate manifest+hashes+strict entry
+>   whitelist → staging → re-verify → CHAT_LIST_LOCK: quarantine current
+>   files → journaled swap → startup `resumeIfPending` finishes an
+>   interrupted swap from verified staging; honors RenameJournal.hasPending;
+>   restart required after). **No UI invokes it yet — deliberately:** the
+>   chat-recovery WORDING SET is Build Phase 4 item 6 and "lands only after
+>   the owner approves the words in chat".
+> - **Item 6 — mid-session:** corruption handlers flag at the store layer;
+>   ChatActivity's per-turn refresh shows the A2 banner and plays a NEW
+>   distinct warble (D5/Bb4 ×2 — not confusable with the three existing
+>   chimes), hands-free sessions only, once per new failure.
+> - **Item 7 — manual check (B8):** the Check Database Integrity button now
+>   shows the §15.9 verbatim progress line, marks a DAMAGED result degraded
+>   (confirmed), and reports via the approved `Database Check Complete /
+>   Incomplete` dialog with per-database lines; damage routes into the A1
+>   flow (result buttons use the plan's suggested labels — still an open
+>   owner decision).
+> - **Item 8 — 3-strikes:** pure `BackupFailurePolicy` (category split) +
+>   the storage dialog (`Change Backup Folder | Retry | Cancel`, folder as
+>   text; `Open Backup Folder` lives on the screen — a Material dialog has
+>   exactly three button slots) and source-failure routing through
+>   `confirmDamage`. Body text is a DRAFT pending Build Phase 4.
+> - **Item 9 — user image:** rebuild-from-files auto-repair (rescans
+>   `profile_images/`, never guesses), always disclosed via `Database
+>   Repaired`.
+> - **Item 10 — §15.15 logging:** `DatabaseHealthState.logHealth` writes
+>   once-per-transition/event lines to the Error Log ungated under the
+>   `DatabaseHealth` tag; `LogsActivity` renders those entries' timestamps
+>   in red.
+> - **Tests:** `BackupWalkPlannerTest`, `ChatRestorePlannerTest`,
+>   `BackupFailurePolicyTest` join the existing backup suite.
+> - **Wording:** every A1/A2/A3/A5/A6/B8 string implemented verbatim from
+>   §15.12. Strings the owner has NOT approved are marked `DRAFT` in
+>   `strings.xml` comments (owner instruction July 22: draft professionally,
+>   review after): the A1/A5-style user-image variants, the combined and
+>   user-image A2 banners, the B8 result buttons (`Try Again` / `View Error
+>   Log` / `Start New Database`), repair/restore progress+outcome dialogs,
+>   the 3-strikes body, `recovery_fail_degraded`,
+>   `health_gallery_usage_unavailable`, and the blocked-screen notices.
 
 ## Build Phase 4 — Wording completion (owner copy, then wire it)
 

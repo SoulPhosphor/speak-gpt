@@ -284,6 +284,16 @@ abstract class MemoryScreenActivity : FragmentActivity(), MemoryRowAdapter.OnRow
         Thread {
             val rows: List<MemoryRow> = try {
                 loadRows(query)
+            } catch (e: org.teslasoft.assistant.preferences.backup.DatabaseDegradedException) {
+                // Build Phase 3 degraded gate: the store refused to open
+                // because damage is confirmed. This screen cannot function —
+                // show the blocking notice with the Repair route and close.
+                runOnUiThread {
+                    if (!isFinishing) {
+                        org.teslasoft.assistant.ui.DatabaseRecoveryFlows.showBlockedScreenDialog(this, e.type)
+                    }
+                }
+                return@Thread
             } catch (e: Exception) {
                 runOnUiThread {
                     Toast.makeText(
@@ -319,6 +329,14 @@ abstract class MemoryScreenActivity : FragmentActivity(), MemoryRowAdapter.OnRow
         Thread {
             try {
                 work()
+            } catch (e: org.teslasoft.assistant.preferences.backup.DatabaseDegradedException) {
+                // Degraded store (Build Phase 3): a persistent dialog with the
+                // repair route, never a vanishing toast.
+                runOnUiThread {
+                    if (!isFinishing) {
+                        org.teslasoft.assistant.ui.DatabaseRecoveryFlows.showBlockedScreenDialog(this, e.type)
+                    }
+                }
             } catch (e: Exception) {
                 runOnUiThread {
                     Toast.makeText(

@@ -153,6 +153,44 @@
                     android:text="@string/mem_arch_btn_setup" />
             </LinearLayout>
 
+            <!-- A3 degraded state (§15.2a, wording owner-approved verbatim):
+                 shown while ANY database problem exists; the Analyze button
+                 below is hard-disabled and these two buttons WORK. -->
+            <LinearLayout
+                android:id="@+id/degraded_container"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center"
+                    android:text="@string/health_archivist_blocked"
+                    android:textColor="@color/text_title"
+                    android:textSize="14sp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_degraded_repair"
+                    style="@style/Widget.Material3.Button.TonalButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_horizontal"
+                    android:layout_marginTop="8dp"
+                    android:text="@string/health_btn_repair" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_degraded_revert"
+                    style="@style/Widget.Material3.Button.TonalButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_horizontal"
+                    android:layout_marginTop="4dp"
+                    android:text="@string/health_btn_revert" />
+            </LinearLayout>
+
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_analyze"
                 android:layout_width="match_parent"

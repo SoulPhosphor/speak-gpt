@@ -18,6 +18,7 @@ package org.teslasoft.assistant.preferences.backup.portable
 
 import android.content.Context
 import org.teslasoft.assistant.preferences.backup.BackupType
+import org.teslasoft.assistant.preferences.backup.DatabaseHealthState
 import org.teslasoft.assistant.preferences.backup.RecoveryBackupManager
 import org.teslasoft.assistant.preferences.lorebook.LoreBookEncryption
 import org.teslasoft.assistant.preferences.memory.DatabaseKeys
@@ -93,7 +94,13 @@ object PortableRecoveryWriter {
         PACKAGE_VERIFY_FAILED,
 
         /** Nothing exists to back up (no store provisioned, no chats). */
-        NOTHING_TO_BACK_UP
+        NOTHING_TO_BACK_UP,
+
+        /** A database is disabled with CONFIRMED damage (Build Phase 3
+         *  degraded flag). A recovery package must never capture a corrupt
+         *  database as if it were a good copy — repair first (A1's
+         *  "unavailable to use or save"). Visible, typed, never silent. */
+        STORE_DEGRADED
     }
 
     /**
@@ -116,6 +123,12 @@ object PortableRecoveryWriter {
     ): Result {
         val staging = PortableStaging.newRunDir(context)
         try {
+            // Degraded gate (Build Phase 3): a store with confirmed damage is
+            // "unavailable to use or save" — snapshotting it here would seal a
+            // corrupt copy inside a package the user trusts. Refused loudly.
+            if (DatabaseHealthState.anyDegraded(context)) {
+                return Result.Failed(Reason.STORE_DEGRADED)
+            }
             val createdAt = Instant.now().toString()
             val artifacts = ArrayList<PortablePackage.Artifact>()
             val includedTypes = LinkedHashSet<BackupType>()

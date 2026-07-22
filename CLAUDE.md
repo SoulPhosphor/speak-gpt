@@ -1689,9 +1689,62 @@ Everything is on-device. No cloud sync, no accounts.
   that latch only when fully settled (nothing deferred +
   `!RenameJournal.hasPending`) so recovery is never skipped while still
   needed. This is a startup-cost reduction only; it changed no
-  backup/repair/encryption/chat/voice/UI behavior. (NOTE: only
-  `companion_memory.db` has an `integrityCheck()` today; the plan's "all
-  three databases" coverage arrives with later phases.)
+  backup/repair/encryption/chat/voice/UI behavior. (Superseded in part by
+  Build Phase 3, July 22 2026: the crash-gated startup check now covers all
+  THREE databases via `StartupDatabaseCheck`, and `isIntegrityCheckPending`
+  is now set — it mirrors "any database still degraded".)
+- **The database-health degraded/repair machinery (Database Health Build
+  Phase 3, July 22 2026 — CODE-COMPLETE, NOT owner-confirmed on-device;
+  read `Memory System/database_health_build_plan.md`'s Build Phase 3
+  STATUS block before touching any of it).** The load-bearing laws:
+  - **The degraded flag (`preferences/backup/DatabaseHealthState`, plain
+    `storage_health` prefs, `health.` keys) is set ONLY by CONFIRMED
+    damage** — a failed `PRAGMA integrity_check` or a corruption exception
+    caught by `CorruptionErrorHandlers` (passed explicitly to all three
+    SQLiteOpenHelpers because the libraries' DEFAULT corruption handler
+    DELETES the database file — never remove those handler arguments, and
+    never pass null there). Destination/verify backup failures must never
+    touch the flag.
+  - **While degraded, `MemoryStore.getInstance` / `LoreBookStore.getInstance`
+    THROW `DatabaseDegradedException`** (extends the same
+    IllegalStateException envelope as the locked-key throw, so best-effort
+    call sites degrade identically: no memory/lore that turn, generation
+    never blocked). Every new call site of these stores must tolerate that
+    throw. The user-image catalog is flagged + bannered but NOT gated
+    (§15.16: nothing else depends on it); its gallery only pauses DELETION
+    while memory-side usage can't be verified.
+  - **Preserve-the-original:** before ANY repair/restore/fresh-start,
+    `DatabaseRepairManager.quarantine` copies the db + WAL/journal sidecars
+    into `files/storage_recovery/` (`<stem>.corrupt-<date>-<uniq>.db`,
+    `SnapshotRegistry` origins `db_corruption`/`pre_restore`); a quarantine
+    failure ABORTS the destructive step. Repair = bounded staged salvage
+    (`SqlcipherSalvage`) into a SEPARATE keyed file, integrity-verified
+    before the swap — never in-place, never promised as more than salvage.
+  - **Dialog flows live in ONE place** (`ui/DatabaseRecoveryFlows`): A1
+    problem/repaired, A5 restore confirm (verify-first, walk newest→oldest
+    via `DatabaseRevertManager` — today only the memory JSON exports are
+    enumerable restore sources), the fresh-start confirm, A6. Wording is
+    §15.12 verbatim; strings marked DRAFT in `strings.xml` await owner
+    review — do not treat them as approved, do not reword approved ones.
+  - **A2 banner:** ChatActivity's `health_banner` (top of chat, Repair | OK,
+    re-shown per chat screen while degraded) + the distinct §15.2c warble
+    (`playDatabaseWarningSignal`, hands-free only, once per new failure).
+    The chat `messages` RecyclerView is now height-0dp/fully constrained
+    (was match_parent + 64dp margin) so the banner pushes it down — keep it
+    that way. A3: the Memory Assistant hard-disables Analyze while ANY
+    database is degraded, with working Repair/Revert buttons.
+  - **Chat recovery restore is ENGINE-ONLY** (`ChatRestoreManager` +
+    unit-tested `ChatRestorePlanner`): journaled wholesale swap under
+    `CHAT_LIST_LOCK`, strict entry whitelist (an archive can never plant
+    non-chat prefs files), startup `resumeIfPending` (ordered BEFORE
+    `reconcileOutageAtStartup` in MainApplication) finishes an interrupted
+    swap from verified staging. **Do NOT wire a UI to it until the owner
+    approves the Build Phase 4 chat-recovery wording set**; a restart is
+    required after any swap (live SecurePrefs handles cache the old files).
+  - **§15.15 health lines:** `DatabaseHealthState.logHealth` → Error Log,
+    ungated, once per transition/event, tag `DatabaseHealth`; LogsActivity
+    renders those timestamps in red. Never gate these on a diagnostics
+    toggle.
 - **`ChatActivity` handles rotation itself** (`android:configChanges`
   includes orientation/screenSize etc., July 10 2026): recreation runs
   onDestroy, which kills TTS readback and the hands-free loop — tilting the

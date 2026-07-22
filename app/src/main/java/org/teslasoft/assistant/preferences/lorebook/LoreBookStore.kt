@@ -20,6 +20,10 @@ import android.content.ContentValues
 import android.content.Context
 import net.zetetic.database.sqlcipher.SQLiteDatabase
 import net.zetetic.database.sqlcipher.SQLiteOpenHelper
+import org.teslasoft.assistant.preferences.backup.BackupType
+import org.teslasoft.assistant.preferences.backup.CorruptionErrorHandlers
+import org.teslasoft.assistant.preferences.backup.DatabaseDegradedException
+import org.teslasoft.assistant.preferences.backup.DatabaseHealthState
 import org.teslasoft.assistant.preferences.dto.LoreBook
 import org.teslasoft.assistant.preferences.dto.LoreBookEntry
 import java.util.UUID
@@ -48,7 +52,14 @@ import java.util.UUID
  * A chat injects only from the single lorebook selected as active for that chat.
  */
 class LoreBookStore private constructor(context: Context, password: ByteArray) :
-    SQLiteOpenHelper(context.applicationContext, DATABASE_NAME, password, null, DATABASE_VERSION, 0, null, null, false) {
+    SQLiteOpenHelper(
+        context.applicationContext, DATABASE_NAME, password, null, DATABASE_VERSION, 0,
+        // Explicit corruption handler (Build Phase 3): the library DEFAULT
+        // deletes a corrupt database file; ours flags the store degraded and
+        // preserves the file for quarantine + repair. Never pass null here.
+        CorruptionErrorHandlers.Cipher(context, BackupType.LOREBOOK),
+        null, false
+    ) {
 
     companion object {
         private const val DATABASE_NAME = "lorebook.db"
@@ -91,6 +102,15 @@ class LoreBookStore private constructor(context: Context, password: ByteArray) :
         private var instance: LoreBookStore? = null
 
         fun getInstance(context: Context): LoreBookStore {
+            // Degraded gate (Database Health Build Phase 3, §15.2a): a store
+            // with CONFIRMED damage is genuinely off — reads and writes —
+            // until a repair/restore succeeds. Checked before the cached
+            // instance too. ChatActivity's lorebook call sites already
+            // try/catch-guard this path, so a degraded store means "no lore
+            // this turn", never a crash.
+            if (DatabaseHealthState.isDegraded(context.applicationContext, BackupType.LOREBOOK)) {
+                throw DatabaseDegradedException(BackupType.LOREBOOK)
+            }
             return instance ?: synchronized(this) {
                 instance ?: run {
                     val appContext = context.applicationContext
@@ -100,6 +120,19 @@ class LoreBookStore private constructor(context: Context, password: ByteArray) :
                     val password = LoreBookEncryption.obtainPassword(appContext, DATABASE_NAME)
                     LoreBookStore(appContext, password).also { instance = it }
                 }
+            }
+        }
+
+        /**
+         * Close and forget the cached helper so the database FILE can be
+         * replaced underneath (repair swap / restore / fresh start —
+         * DatabaseRepairManager only). The next [getInstance] reopens against
+         * whatever file then exists.
+         */
+        fun invalidateInstance() {
+            synchronized(this) {
+                try { instance?.close() } catch (_: Exception) { }
+                instance = null
             }
         }
     }

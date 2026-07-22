@@ -532,6 +532,13 @@ class RecoveryBackupActivity : FragmentActivity() {
             for (type in BackupType.displayOrder) RecoveryBackupState.recordNothingToBackUp(this, type, now)
             return
         }
+        if (reason == PortableRecoveryWriter.Reason.STORE_DEGRADED) {
+            // A degraded-database refusal is a PAUSE, not a backup failure:
+            // recording it would poison every type's failure streak (and the
+            // 3-strikes source routing) for a condition the repair flow owns.
+            // The status rows keep their last real result.
+            return
+        }
         val category = when (reason) {
             PortableRecoveryWriter.Reason.PACKAGE_VERIFY_FAILED -> BackupFailureCategory.VERIFY
             else -> BackupFailureCategory.SOURCE
@@ -590,6 +597,8 @@ class RecoveryBackupActivity : FragmentActivity() {
                 showFailureText(getString(R.string.recovery_fail_verify))
             PortableRecoveryWriter.Reason.NOTHING_TO_BACK_UP ->
                 showFailureText(getString(R.string.recovery_fail_nothing))
+            PortableRecoveryWriter.Reason.STORE_DEGRADED ->
+                showFailureText(getString(R.string.recovery_fail_degraded))
         }
     }
 

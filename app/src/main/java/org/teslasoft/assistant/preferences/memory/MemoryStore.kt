@@ -21,6 +21,10 @@ import android.content.Context
 import android.database.Cursor
 import net.zetetic.database.sqlcipher.SQLiteDatabase
 import net.zetetic.database.sqlcipher.SQLiteOpenHelper
+import org.teslasoft.assistant.preferences.backup.BackupType
+import org.teslasoft.assistant.preferences.backup.CorruptionErrorHandlers
+import org.teslasoft.assistant.preferences.backup.DatabaseDegradedException
+import org.teslasoft.assistant.preferences.backup.DatabaseHealthState
 import java.time.Instant
 import java.util.UUID
 
@@ -45,7 +49,14 @@ import java.util.UUID
  * additive steps, never edit old blocks (same rule as LoreBookStore).
  */
 class MemoryStore private constructor(context: Context, password: ByteArray) :
-    SQLiteOpenHelper(context.applicationContext, DATABASE_NAME, password, null, DATABASE_VERSION, 0, null, null, true) {
+    SQLiteOpenHelper(
+        context.applicationContext, DATABASE_NAME, password, null, DATABASE_VERSION, 0,
+        // Explicit corruption handler (Build Phase 3): the library DEFAULT
+        // deletes a corrupt database file; ours flags the store degraded and
+        // preserves the file for quarantine + repair. Never pass null here.
+        CorruptionErrorHandlers.Cipher(context, BackupType.MEMORY),
+        null, true
+    ) {
 
     companion object {
         const val DATABASE_NAME = "companion_memory.db"
@@ -86,6 +97,17 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         private var libraryLoaded = false
 
         fun getInstance(context: Context): MemoryStore {
+            // Degraded gate (Database Health Build Phase 3, §15.2a): once
+            // damage is CONFIRMED the store is genuinely OFF — reads and
+            // writes both — until a repair/restore succeeds, because reading
+            // a corrupt SQLite file is itself unsafe. Checked before the
+            // cached instance too, so a reference obtained pre-confirmation
+            // stops being handed out the moment the flag is set. Same failure
+            // envelope as the locked-key IllegalStateException below, so
+            // every existing best-effort call site degrades identically.
+            if (DatabaseHealthState.isDegraded(context.applicationContext, BackupType.MEMORY)) {
+                throw DatabaseDegradedException(BackupType.MEMORY)
+            }
             return instance ?: synchronized(this) {
                 instance ?: run {
                     if (!libraryLoaded) {
@@ -99,6 +121,19 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                         )
                     MemoryStore(appContext, key).also { instance = it }
                 }
+            }
+        }
+
+        /**
+         * Close and forget the cached helper so the database FILE can be
+         * replaced underneath (repair swap / restore / fresh start —
+         * DatabaseRepairManager only). The next [getInstance] reopens against
+         * whatever file then exists.
+         */
+        fun invalidateInstance() {
+            synchronized(this) {
+                try { instance?.close() } catch (_: Exception) { }
+                instance = null
             }
         }
 
