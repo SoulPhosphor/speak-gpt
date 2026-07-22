@@ -35,6 +35,7 @@ import com.google.android.material.button.MaterialButton
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Logger
 import org.teslasoft.assistant.ui.activities.MainActivity
+import org.teslasoft.assistant.util.CrashReportFormat
 import java.time.Instant
 import java.time.format.DateTimeFormatter
 import org.teslasoft.assistant.theme.ThemeManager
@@ -103,11 +104,30 @@ class CrashHandlerActivity : FragmentActivity() {
             btnCopy = findViewById(R.id.btn_copy)
 
             textError!!.setTextIsSelectable(true)
-            textError!!.text = "\nApp has been crashed and needs to be restarted.\n\n===== BEGIN SYSTEM INFO =====\nAndroid version: ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT} ${Build.VERSION.CODENAME})\nROM version: ${Build.VERSION.INCREMENTAL}\nApp version: $appVersion ($versionCode)\nDevice model: ${Build.MODEL}\nAndroid device ID: ${Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)}\nEffective time: ${
-                DateTimeFormatter.ISO_INSTANT.format(
-                    Instant.now())}\n===== END SYSTEM INFO =====\n\n===== BEGIN OF CRASH =====\n$error\n===== END OF CRASH =====\n"
 
-            Logger.clearCrashLog(this)
+            // The only screen breadcrumb the app collects: CustomActivityOnCrash's
+            // activity history (trackActivities). It is captured on every crash
+            // but was being discarded — surface it now. Retrieved and formatted
+            // defensively (never throws) so it can't disturb the crash report;
+            // it is ACTIVITY-level, so it shows the last SCREEN, not the
+            // fragment/dialog/tab within it (no navigation tracking is added).
+            val activityHistory = CrashReportFormat.formatActivityHistory(
+                try { CustomActivityOnCrash.getActivityLogFromIntent(intent) } catch (_: Throwable) { null }
+            )
+
+            textError!!.text = "\nApp has been crashed and needs to be restarted.\n\n===== BEGIN SYSTEM INFO =====\nFailure type: Uncaught JVM exception\nAndroid version: ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT} ${Build.VERSION.CODENAME})\nROM version: ${Build.VERSION.INCREMENTAL}\nApp version: $appVersion ($versionCode)\nDevice model: ${Build.MODEL}\nAndroid device ID: ${Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)}\nEffective time: ${
+                DateTimeFormatter.ISO_INSTANT.format(
+                    Instant.now())}\n===== END SYSTEM INFO =====\n\n===== BEGIN OF CRASH =====\n$error\n===== END OF CRASH =====\n\n===== RECENT SCREEN/ACTIVITY HISTORY =====\n$activityHistory\n===== END SCREEN/ACTIVITY HISTORY =====\n"
+
+            // Do NOT clear the crash log here (the automatic clear was removed
+            // July 22 2026). Logger.clearCrashLog blanks the ENTIRE "crash"
+            // Error Log value — crashes, generation errors, database-health
+            // lines, process-exit and rename entries all share it — so clearing
+            // on every crash destroyed the pre-crash context that led to this
+            // crash, exactly when it is most useful. The Error Log self-bounds
+            // via Logger.trimByEntries (500 entries / 30 days); the user-facing
+            // Clear Log button in LogsActivity still calls clearCrashLog for a
+            // deliberate, user-initiated wipe.
             Logger.log(this, "crash", "CrashHandler", "error", textError!!.text.toString())
 
             if (error == "") {
