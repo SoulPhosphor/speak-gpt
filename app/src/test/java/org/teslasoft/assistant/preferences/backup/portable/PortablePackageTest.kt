@@ -141,6 +141,47 @@ class PortablePackageTest {
         )
     }
 
+    // ----- filename-independent identity + producer metadata -----------------
+
+    @Test
+    fun producerMetadataRoundTripsInTheAuthenticatedHeader() {
+        val rs = PackageCrypto.newRecoverySecret()
+        val inner = tmp.newFile("inner_p.zip")
+        inner.delete()
+        PortablePackage.buildInnerZip(buildArtifacts(), "2026-07-22T00:00:00Z", inner)
+        val out = tmp.newFile("package_p.bin")
+        out.delete()
+        PortablePackage.envelope(
+            inner, out, "2026-07-22T00:00:00Z", "1.0", rs, null,
+            producerAppId = "com.example.app", producerDisplayName = "Old App Name"
+        )
+        val inspect = PortablePackage.inspect(out)
+        assertTrue(inspect is PortablePackage.InspectResult.Ok)
+        val info = (inspect as PortablePackage.InspectResult.Ok).inspection
+        assertEquals("com.example.app", info.producerAppId)
+        assertEquals("Old App Name", info.producerDisplayName)
+    }
+
+    @Test
+    fun renamingThePackageFileChangesNothingAboutItsIdentity() {
+        // Filename text is NOT identity (owner filename architecture): a
+        // package renamed to anything — including another brand's shape —
+        // must inspect and decode identically.
+        val rs = PackageCrypto.newRecoverySecret()
+        val pkg = makePackage(rs)
+        val renamed = File(tmp.root, "TotallyDifferentBrand-Automatic-Recovery-Protected-2020-01-01_0000.zip")
+        assertTrue(pkg.renameTo(renamed))
+
+        val inspect = PortablePackage.inspect(renamed)
+        assertTrue(inspect is PortablePackage.InspectResult.Ok)
+
+        val staging = tmp.newFolder()
+        val decoded = PortablePackage.decodeWithSecret(renamed, rs, staging)
+        assertTrue(decoded is PortablePackage.DecodeResult.Ok)
+        assertTrue((decoded as PortablePackage.DecodeResult.Ok).authenticated)
+        assertTrue(PortablePackage.validateAndExtract(decoded.innerZip, staging) is PortablePackage.ValidateResult.Ok)
+    }
+
     // ----- the owner-ruled error model ---------------------------------------
 
     @Test

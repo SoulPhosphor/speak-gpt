@@ -22,60 +22,120 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 /**
- * Readable backup filenames (owner ruling, July 21 2026) — replaces the old
- * epoch-millisecond names. One shared minute-resolution timestamp per run; if
- * two runs land in the same minute a short sequence number is appended (never a
- * hash). Pure so the exact shapes are unit-pinned.
+ * Backup filename shapes (owner filename architecture, July 22 2026). No app
+ * name is hardcoded here: the brand arrives as a parameter (callers resolve
+ * it via [BackupBrand]) and is re-sanitized defensively, so a future app
+ * rename is a one-resource change, never a format redesign.
  *
- * Examples:
- *   SpeakGPT-Recovery-2026-07-21_1722.zip                 (single package)
- *   SpeakGPT-Memory-2026-07-21_1722.dbbackup              (separate artifact)
- *   SpeakGPT-Lorebooks-2026-07-21_1722.dbbackup
- *   SpeakGPT-User-Image-Database-2026-07-21_1722.dbbackup
- *   SpeakGPT-Chats-Recovery-2026-07-21_1722.zip
- *   SpeakGPT-Readable-Chats-Complete-2026-07-21_1722.zip
- *   SpeakGPT-Readable-Chats-Incremental-2026-07-21_1722.zip
+ * Approved shapes ({Brand} = the configured backup filename brand):
+ *   {Brand}-Recovery-Protected-2026-07-21_1722.zip
+ *   {Brand}-Recovery-Unencrypted-2026-07-21_1722.zip
+ *   {Brand}-Automatic-Recovery-Protected-2026-07-21_1722.zip
+ *   {Brand}-Automatic-Recovery-Unencrypted-2026-07-21_1722.zip
+ *   {Brand}-Readable-Chats-Complete-2026-07-21_1722.zip
+ *   {Brand}-Readable-Chats-Incremental-2026-07-21_1722.zip
+ * Same-minute collisions append -2, -3, ... (never hashes).
  *
- * The minute-resolution timestamp sorts lexically == chronologically, so
- * rotation can order automatic packages by name.
+ * ⚠️ FILENAMES ARE NOT IDENTITY AND NEVER AUTHORIZE DELETION (owner ruling):
+ * packages are recognized by their magic/format/protection metadata and
+ * authenticated contents; [hasAutomaticRecoveryShape] is deliberately
+ * BRAND-AGNOSTIC (old- and new-brand files both match after a rename) and is
+ * only ONE of the conjunctive automatic-rotation ownership conditions — a
+ * file may be deleted by rotation only when it ALSO was created by the
+ * automatic writer, is recorded in the durable automatic-backup ownership
+ * index, sits in the configured automatic destination, and passed
+ * reopen-validation into the retained set. Manual packages, readable chat
+ * exports, portable data copies and user-saved files are NEVER rotated, even
+ * inside the automatic folder. No deletion logic exists in this helper.
  */
 object RecoveryFileNaming {
 
-    const val PACKAGE_PREFIX = "SpeakGPT-Recovery-"
-    const val PACKAGE_EXT = ".zip"
+    const val EXT = ".zip"
 
     private val STAMP: DateTimeFormatter =
         DateTimeFormatter.ofPattern("yyyy-MM-dd_HHmm", Locale.US)
 
-    /** The shared per-run stamp, e.g. "2026-07-21_1722". */
+    /** The shared per-run stamp, e.g. "2026-07-21_1722" — minute resolution,
+     *  lexically sortable == chronologically sortable. */
     fun stamp(epochMillis: Long, zone: ZoneId = ZoneId.systemDefault()): String =
         STAMP.format(Instant.ofEpochMilli(epochMillis).atZone(zone))
 
-    private fun seqSuffix(seq: Int): String = if (seq <= 1) "" else "-$seq"
-
-    /** The single complete recovery package (all artifacts + manifest). */
-    fun recoveryPackage(epochMillis: Long, zone: ZoneId = ZoneId.systemDefault(), seq: Int = 1): String =
-        "$PACKAGE_PREFIX${stamp(epochMillis, zone)}${seqSuffix(seq)}$PACKAGE_EXT"
-
-    /** A separate recovery artifact file (Separate Recovery Files mode). */
-    fun artifact(type: BackupType, epochMillis: Long, zone: ZoneId = ZoneId.systemDefault(), seq: Int = 1): String {
-        val stamp = stamp(epochMillis, zone)
-        val suffix = seqSuffix(seq)
-        return when (type) {
-            BackupType.MEMORY -> "SpeakGPT-Memory-$stamp$suffix.dbbackup"
-            BackupType.LOREBOOK -> "SpeakGPT-Lorebooks-$stamp$suffix.dbbackup"
-            BackupType.USER_IMAGE -> "SpeakGPT-User-Image-Database-$stamp$suffix.dbbackup"
-            BackupType.CHATS -> "SpeakGPT-Chats-Recovery-$stamp$suffix.zip"
-        }
+    private fun seqSuffix(seq: Int): String {
+        require(seq >= 1) { "sequence starts at 1" }
+        return if (seq == 1) "" else "-$seq"
     }
+
+    /** A MANUAL portable recovery package. */
+    fun manualRecoveryPackage(
+        brand: String,
+        protected: Boolean,
+        epochMillis: Long,
+        zone: ZoneId = ZoneId.systemDefault(),
+        seq: Int = 1
+    ): String = "${BackupBrand.sanitize(brand)}-Recovery-" +
+        (if (protected) "Protected" else "Unencrypted") +
+        "-${stamp(epochMillis, zone)}${seqSuffix(seq)}$EXT"
+
+    /** An AUTOMATIC portable recovery package. (Naming only — the automatic
+     *  writer itself is not authorized yet, owner ruling July 22 2026.) */
+    fun automaticRecoveryPackage(
+        brand: String,
+        protected: Boolean,
+        epochMillis: Long,
+        zone: ZoneId = ZoneId.systemDefault(),
+        seq: Int = 1
+    ): String = "${BackupBrand.sanitize(brand)}-Automatic-Recovery-" +
+        (if (protected) "Protected" else "Unencrypted") +
+        "-${stamp(epochMillis, zone)}${seqSuffix(seq)}$EXT"
 
     /** A human-readable chat backup ZIP. */
-    fun readableChats(complete: Boolean, epochMillis: Long, zone: ZoneId = ZoneId.systemDefault(), seq: Int = 1): String {
-        val kind = if (complete) "Complete" else "Incremental"
-        return "SpeakGPT-Readable-Chats-$kind-${stamp(epochMillis, zone)}${seqSuffix(seq)}$PACKAGE_EXT"
-    }
+    fun readableChats(
+        brand: String,
+        complete: Boolean,
+        epochMillis: Long,
+        zone: ZoneId = ZoneId.systemDefault(),
+        seq: Int = 1
+    ): String = "${BackupBrand.sanitize(brand)}-Readable-Chats-" +
+        (if (complete) "Complete" else "Incremental") +
+        "-${stamp(epochMillis, zone)}${seqSuffix(seq)}$EXT"
 
-    /** True for a name produced by [recoveryPackage] — the set rotation walks. */
-    fun isRecoveryPackage(name: String): Boolean =
-        name.startsWith(PACKAGE_PREFIX) && name.endsWith(PACKAGE_EXT)
+    /**
+     * True when [name] merely LOOKS like an automatic recovery package, under
+     * ANY brand (brand-agnostic by design: an app rename must not orphan or
+     * misclassify older files). Necessary-but-never-sufficient for rotation —
+     * see the class doc; this function must never be the sole basis for
+     * touching a file.
+     */
+    fun hasAutomaticRecoveryShape(name: String): Boolean =
+        AUTOMATIC_SHAPE.matches(name)
+
+    private val AUTOMATIC_SHAPE = Regex(
+        "^[A-Za-z0-9][A-Za-z0-9-]{0,31}-Automatic-Recovery-(Protected|Unencrypted)-" +
+            "\\d{4}-\\d{2}-\\d{2}_\\d{4}(-\\d+)?\\.zip$"
+    )
+
+    /**
+     * DORMANT — Separate Recovery Files naming (owner ruling, July 22 2026):
+     * the v2 architecture defines ONE complete enveloped package as the
+     * portable recovery unit. These per-artifact names stay dormant until
+     * separate-artifact protection/portability/restore behavior receives its
+     * own owner decision. Nothing may call this in production paths.
+     */
+    fun dormantSeparateArtifact(
+        brand: String,
+        type: BackupType,
+        epochMillis: Long,
+        zone: ZoneId = ZoneId.systemDefault(),
+        seq: Int = 1
+    ): String {
+        val b = BackupBrand.sanitize(brand)
+        val s = stamp(epochMillis, zone)
+        val suffix = seqSuffix(seq)
+        return when (type) {
+            BackupType.MEMORY -> "$b-Memory-$s$suffix.dbbackup"
+            BackupType.LOREBOOK -> "$b-Lorebooks-$s$suffix.dbbackup"
+            BackupType.USER_IMAGE -> "$b-User-Image-Database-$s$suffix.dbbackup"
+            BackupType.CHATS -> "$b-Chats-Recovery-$s$suffix.zip"
+        }
+    }
 }

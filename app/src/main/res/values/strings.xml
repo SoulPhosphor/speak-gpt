@@ -1382,6 +1382,12 @@
     <string name="backup_err_wrong_key_or_header">This Recovery Code belongs to a different Recovery Key, or the backup header is damaged.</string>
     <string name="backup_err_damaged">The backup is damaged or has been altered.</string>
     <string name="backup_err_unsupported_protection">Unsupported or invalid backup protection settings.</string>
+    <!-- The user-visible backup filename BRAND (owner filename architecture,
+         July 22 2026). One centralized value; RecoveryFileNaming receives it,
+         never the app label. PLACEHOLDER: the owner has not selected the
+         final brand — do not treat this value as approved branding. Sanitized
+         by BackupBrand before use ("Phosphor Shines" -> "Phosphor-Shines"). -->
+    <string name="backup_filename_brand" translatable="false">Phosphor Shines</string>
     <!-- 3. Create Backup (manual recovery backup) -->
     <string name="backup_create_section">Create Backup</string>
     <string name="backup_create_hint">Creates a recovery backup of your chats, memories, lorebooks, and user image data.</string>

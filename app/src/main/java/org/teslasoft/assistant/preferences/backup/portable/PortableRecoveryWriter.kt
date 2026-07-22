@@ -185,7 +185,17 @@ object PortableRecoveryWriter {
                     // ---- assemble + envelope + reopen-and-verify ----
                     val innerZip = File(staging, "inner.zip")
                     PortablePackage.buildInnerZip(artifacts, createdAt, innerZip)
-                    PortablePackage.envelope(innerZip, out, createdAt, appVersion, recoverySecret, passwordBlob)
+                    // Producer metadata: identity lives in the header, never in
+                    // the filename (owner filename architecture). The display
+                    // name is captured AT CREATION TIME; a later app rename
+                    // changes nothing about this package.
+                    PortablePackage.envelope(
+                        innerZip, out, createdAt, appVersion, recoverySecret, passwordBlob,
+                        producerAppId = context.packageName,
+                        producerDisplayName = try {
+                            context.applicationInfo.loadLabel(context.packageManager).toString()
+                        } catch (_: Exception) { "" }
+                    )
 
                     if (!verifyFinishedPackage(context, out, recoverySecret)) {
                         runCatching { out.delete() }

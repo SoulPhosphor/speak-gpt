@@ -95,6 +95,8 @@ object PortablePackageFormat {
         val protection: String,
         val createdAtIso: String,
         val appVersion: String,
+        val producerAppId: String,
+        val producerDisplayName: String,
         val keyFingerprint: ByteArray?,   // null on the unencrypted tier
         val bodyNonce: ByteArray?,        // null on the unencrypted tier
         val wrappedDek: ByteArray?,       // null on the unencrypted tier
@@ -114,7 +116,15 @@ object PortablePackageFormat {
     // ----- writing -----------------------------------------------------------
 
     /** Serialize a header; returns the exact prefix bytes (magic+len+json),
-     *  which are both what is written to disk and the body's AAD. */
+     *  which are both what is written to disk and the body's AAD.
+     *
+     *  Producer metadata (owner filename architecture, July 22 2026): the
+     *  package records WHO made it — producer application ID, app version,
+     *  and the display name AT CREATION TIME — separately from any filename.
+     *  Filename text is never identity; recognition rests on the magic,
+     *  format version, protection metadata and authenticated contents, so an
+     *  app rename can never orphan older backups. The application ID
+     *  identifies the producing app but is never user-facing filename text. */
     fun buildHeaderPrefix(
         protection: String,
         createdAtIso: String,
@@ -122,13 +132,17 @@ object PortablePackageFormat {
         keyFingerprint: ByteArray?,
         bodyNonce: ByteArray?,
         wrappedDek: ByteArray?,
-        passwordBlob: PasswordBlob?
+        passwordBlob: PasswordBlob?,
+        producerAppId: String = "",
+        producerDisplayName: String = ""
     ): ByteArray {
         val json = JSONObject()
         json.put("format_version", FORMAT_VERSION)
         json.put("protection", protection)
         json.put("created_at", createdAtIso)
         json.put("app_version", appVersion)
+        if (producerAppId.isNotEmpty()) json.put("producer_app_id", producerAppId)
+        if (producerDisplayName.isNotEmpty()) json.put("producer_display_name", producerDisplayName)
         if (keyFingerprint != null) json.put("key_fingerprint", b64e.encodeToString(keyFingerprint))
         if (bodyNonce != null) json.put("body_nonce", b64e.encodeToString(bodyNonce))
         if (wrappedDek != null) json.put("wrapped_dek", b64e.encodeToString(wrappedDek))
@@ -232,6 +246,8 @@ object PortablePackageFormat {
                 protection = protection,
                 createdAtIso = json.optString("created_at", ""),
                 appVersion = json.optString("app_version", ""),
+                producerAppId = json.optString("producer_app_id", ""),
+                producerDisplayName = json.optString("producer_display_name", ""),
                 keyFingerprint = fingerprint,
                 bodyNonce = bodyNonce,
                 wrappedDek = wrappedDek,

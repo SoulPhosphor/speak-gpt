@@ -129,12 +129,15 @@ object PortablePackage {
         createdAtIso: String,
         appVersion: String,
         recoverySecret: ByteArray?,               // null = unencrypted tier
-        passwordBlob: PortablePackageFormat.PasswordBlob?
+        passwordBlob: PortablePackageFormat.PasswordBlob?,
+        producerAppId: String = "",
+        producerDisplayName: String = ""
     ) {
         if (recoverySecret == null) {
             val prefix = PortablePackageFormat.buildHeaderPrefix(
                 PortablePackageFormat.PROTECTION_NONE, createdAtIso, appVersion,
-                keyFingerprint = null, bodyNonce = null, wrappedDek = null, passwordBlob = null
+                keyFingerprint = null, bodyNonce = null, wrappedDek = null, passwordBlob = null,
+                producerAppId = producerAppId, producerDisplayName = producerDisplayName
             )
             out.outputStream().buffered().use { o ->
                 o.write(prefix)
@@ -149,7 +152,8 @@ object PortablePackage {
                     keyFingerprint = PackageCrypto.fingerprint(recoverySecret),
                     bodyNonce = nonce,
                     wrappedDek = PackageCrypto.wrapDek(recoverySecret, dek),
-                    passwordBlob = passwordBlob
+                    passwordBlob = passwordBlob,
+                    producerAppId = producerAppId, producerDisplayName = producerDisplayName
                 )
                 out.outputStream().buffered().use { o ->
                     o.write(prefix)
@@ -173,6 +177,8 @@ object PortablePackage {
         val protection: String,
         val createdAtIso: String,
         val appVersion: String,
+        val producerAppId: String,
+        val producerDisplayName: String,
         val keyFingerprint: ByteArray?,
         val hasPasswordSlot: Boolean
     )
@@ -193,6 +199,8 @@ object PortablePackage {
                     protection = h.header.protection,
                     createdAtIso = h.header.createdAtIso,
                     appVersion = h.header.appVersion,
+                    producerAppId = h.header.producerAppId,
+                    producerDisplayName = h.header.producerDisplayName,
                     keyFingerprint = h.header.keyFingerprint,
                     hasPasswordSlot = h.header.passwordBlob != null
                 )
