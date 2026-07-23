@@ -120,7 +120,7 @@ object AutoBackupController {
             // The verified recovery-backup engine, into the AUTOMATIC folder,
             // rotation OFF (never deletes an older copy). Per-type success/
             // failure is recorded by the manager; this pass records the set.
-            val results = RecoveryBackupManager.createBackup(appContext, Uri.parse(uriStr), rotate = false)
+            val results = RecoveryBackupManager.createBackup(appContext, Uri.parse(uriStr), rotateOldCopies = false)
 
             val permissionFailed = results.any { it.category == BackupFailureCategory.DESTINATION_PERMISSION }
             if (!AutoBackupScheduler.shouldAdvanceSchedule(permissionFailed)) {

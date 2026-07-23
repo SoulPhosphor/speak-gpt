@@ -78,17 +78,18 @@ object RecoveryBackupManager {
      * success/failure in [RecoveryBackupState] and returns the per-type
      * results. Never throws.
      *
-     * @param rotate whether to prune older copies (keep-5) after a verified
-     *        write. The AUTOMATIC backup path passes false: automatic backups
-     *        NEVER delete old backups yet (owner ruling, July 23 2026 — deletion
-     *        stays disabled until a rotation policy is explicitly approved).
+     * @param rotateOldCopies whether to prune older copies (keep-5) after a
+     *        verified write. The AUTOMATIC backup path passes false: automatic
+     *        backups NEVER delete old backups yet (owner ruling, July 23 2026 —
+     *        deletion stays disabled until a rotation policy is explicitly
+     *        approved).
      */
-    fun createBackup(context: Context, treeUri: Uri, rotate: Boolean = true): List<TypeResult> {
+    fun createBackup(context: Context, treeUri: Uri, rotateOldCopies: Boolean = true): List<TypeResult> {
         val runAt = System.currentTimeMillis()
-        return BackupType.displayOrder.map { runOne(context, it, treeUri, runAt, rotate) }
+        return BackupType.displayOrder.map { runOne(context, it, treeUri, runAt, rotateOldCopies) }
     }
 
-    private fun runOne(context: Context, type: BackupType, treeUri: Uri, runAt: Long, rotate: Boolean): TypeResult {
+    private fun runOne(context: Context, type: BackupType, treeUri: Uri, runAt: Long, rotateOldCopies: Boolean): TypeResult {
         // A degraded (confirmed-damaged) database PAUSES its own artifact
         // (Build Phase 3 item 1 / A1's "unavailable to use or save"): backing
         // it up would copy the corrupt file over the good rotation. No attempt
@@ -127,7 +128,7 @@ object RecoveryBackupManager {
             // ---- rotate keep-5 (best-effort; never fails the backup) ----
             // Skipped entirely for automatic backups: they never delete an
             // older copy (owner ruling, July 23 2026).
-            if (rotate) {
+            if (rotateOldCopies) {
                 try { rotate(context, treeUri, type) } catch (_: Exception) { /* rotation is best-effort */ }
             }
 
