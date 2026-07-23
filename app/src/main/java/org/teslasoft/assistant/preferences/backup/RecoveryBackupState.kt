@@ -191,56 +191,58 @@ object RecoveryBackupState {
     private const val KEY_AUTO_LAST_ATTEMPT = "backup.auto.last_attempt"
     private const val KEY_AUTO_LAST_SUCCESS = "backup.auto.last_success"
     private const val KEY_AUTO_LAST_CATEGORY = "backup.auto.last_category"
-    private const val KEY_AUTO_NEXT_DUE = "backup.auto.next_due"
 
-    /** When the last automatic pass STARTED (the last attempt), or 0 if never. */
+    /** When the last automatic pass was ATTEMPTED — every genuine attempt
+     *  stamps this, success or failure alike — or 0 if never. There is
+     *  deliberately no separate "next due" field: the due calculation
+     *  ([AutoBackupScheduler.nextDueMillis]) is always derived fresh from
+     *  [getAutoLastSuccess], never cached, so a failed attempt can never
+     *  masquerade as having advanced the schedule. */
     fun getAutoLastAttempt(context: Context): Long =
         try { prefs(context).getLong(KEY_AUTO_LAST_ATTEMPT, 0L) } catch (_: Exception) { 0L }
 
-    /** When the last automatic pass SUCCEEDED (advanced the schedule), or 0 if
-     *  never — this is the scheduler's due anchor. */
+    /** When the last automatic pass genuinely SUCCEEDED (every artifact backed
+     *  up cleanly or had nothing to back up), or 0 if never — the scheduler's
+     *  SOLE due anchor. A failed or partially-failed pass must never move this:
+     *  the normal backup frequency is calculated from the last real success,
+     *  not merely the last attempt. */
     fun getAutoLastSuccess(context: Context): Long =
         try { prefs(context).getLong(KEY_AUTO_LAST_SUCCESS, 0L) } catch (_: Exception) { 0L }
 
     /** The category of the last automatic-pass failure, or null when the last
-     *  pass advanced the schedule (cleared on success). */
+     *  pass succeeded (cleared on success). */
     fun getAutoLastFailureCategory(context: Context): BackupFailureCategory? =
         try { BackupFailureCategory.fromKey(prefs(context).getString(KEY_AUTO_LAST_CATEGORY, null)) } catch (_: Exception) { null }
 
-    /** The recorded next-due epoch millis for the automatic set (0 = due now /
-     *  never recorded). Derivable from last success + frequency, but stored
-     *  explicitly so the screen can show it without recomputing and it survives
-     *  a frequency change cleanly. */
-    fun getAutoNextDue(context: Context): Long =
-        try { prefs(context).getLong(KEY_AUTO_NEXT_DUE, 0L) } catch (_: Exception) { 0L }
-
-    /** Stamp the start of an automatic pass. */
+    /** Stamp the start of an automatic pass. Called for EVERY genuine attempt —
+     *  including one blocked immediately by a lost destination permission —
+     *  but never for a trigger that did nothing (disabled, no destination
+     *  configured, not yet due, or a run already in flight). */
     fun recordAutoAttempt(context: Context, atMillis: Long) {
         try { prefs(context).edit(commit = true) { putLong(KEY_AUTO_LAST_ATTEMPT, atMillis) } } catch (_: Exception) { }
     }
 
-    /** Record a successful automatic pass: stamp success, clear the failure
-     *  category, and store the next-due time. */
-    fun recordAutoSuccess(context: Context, atMillis: Long, nextDueMillis: Long) {
+    /** Record a successful automatic pass: stamp success and clear the failure
+     *  category. Callers must only invoke this when the pass was genuinely
+     *  fully successful — never on a partial or failed pass (a failed attempt
+     *  must not be treated as though the scheduled backup succeeded). */
+    fun recordAutoSuccess(context: Context, atMillis: Long) {
         try {
             prefs(context).edit(commit = true) {
                 putLong(KEY_AUTO_LAST_SUCCESS, atMillis)
-                putLong(KEY_AUTO_NEXT_DUE, nextDueMillis)
                 remove(KEY_AUTO_LAST_CATEGORY)
             }
         } catch (_: Exception) { }
     }
 
-    /** Record a failed automatic pass: store the CATEGORY (never a bare "failed")
-     *  and, for a permission failure, leave the set due now (nextDue = 0) so the
-     *  next trigger re-surfaces the lost-folder state instead of sleeping a whole
-     *  window. The last-success stamp is left untouched. */
-    fun recordAutoFailure(context: Context, category: BackupFailureCategory, nextDueMillis: Long) {
+    /** Record a failed (or permission-blocked) automatic pass: store the
+     *  CATEGORY (never a bare "failed"). The last-success stamp is
+     *  deliberately left untouched, so [getAutoLastSuccess] — and therefore
+     *  the next-due calculation — keeps anchoring on the last time a backup
+     *  genuinely completed. */
+    fun recordAutoFailure(context: Context, category: BackupFailureCategory) {
         try {
-            prefs(context).edit(commit = true) {
-                putString(KEY_AUTO_LAST_CATEGORY, category.name)
-                putLong(KEY_AUTO_NEXT_DUE, nextDueMillis)
-            }
+            prefs(context).edit(commit = true) { putString(KEY_AUTO_LAST_CATEGORY, category.name) }
         } catch (_: Exception) { }
     }
 

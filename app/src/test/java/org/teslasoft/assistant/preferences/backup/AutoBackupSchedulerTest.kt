@@ -198,12 +198,15 @@ class AutoBackupSchedulerTest {
     /* -------------------- schedule advance: success vs failure ------------- */
 
     @Test
-    fun scheduleAdvancesOnSuccessNotOnPermissionFailure() {
-        // Success (no destination-permission failure): advance the window.
-        assertTrue(AutoBackupScheduler.shouldAdvanceSchedule(destinationPermissionFailed = false))
-        // A destination/permission failure: DON'T advance — stay due so the
-        // next trigger re-surfaces the lost-folder state and it blocks honestly.
-        assertFalse(AutoBackupScheduler.shouldAdvanceSchedule(destinationPermissionFailed = true))
+    fun scheduleAdvancesOnlyOnAFullyCleanPass() {
+        // No failure of any kind: advance the window (this is the ONLY case
+        // the controller may call recordAutoSuccess).
+        assertTrue(AutoBackupScheduler.shouldAdvanceSchedule(hadAnyFailure = false))
+        // ANY real failure — permission lost, a transient source/destination/
+        // verify failure, or an unexpected exception — must NOT advance: a
+        // failed attempt is never treated as though the scheduled backup
+        // succeeded.
+        assertFalse(AutoBackupScheduler.shouldAdvanceSchedule(hadAnyFailure = true))
     }
 
     @Test
@@ -223,5 +226,84 @@ class AutoBackupSchedulerTest {
                 )
             )
         }
+    }
+
+    /* -------------------- failure categorization: the six scenarios -------- */
+    // The exact matrix the owner asked to have confirmed: for each named
+    // failure scenario, which BackupFailureCategory it maps to (via the
+    // existing, separately-tested BackupFailureClassifier — see
+    // BackupFailureClassifierTest, e.g. writeWithIoIsWrite for "storage
+    // full"), and whether AutoBackupScheduler says it is worth a bounded
+    // WorkManager backoff-retry.
+
+    @Test
+    fun temporaryDestinationFailureIsRetryable() {
+        // A generic transient destination write failure (not permission-
+        // related) classifies as DESTINATION_WRITE and IS retried.
+        assertTrue(AutoBackupScheduler.isRetryableFailure(BackupFailureCategory.DESTINATION_WRITE))
+    }
+
+    @Test
+    fun lostSafPermissionIsNeverRetried() {
+        // Lost SAF permission — retrying immediately would just hit the same
+        // wall; the fix requires the user to repair the destination.
+        assertFalse(AutoBackupScheduler.isRetryableFailure(BackupFailureCategory.DESTINATION_PERMISSION))
+    }
+
+    @Test
+    fun storageFullIsRetryable() {
+        // Storage full classifies as DESTINATION_WRITE (confirmed by
+        // BackupFailureClassifierTest.writeWithIoIsWrite, an ENOSPC IOException
+        // at the WRITE_DESTINATION stage) — same bounded-retry treatment as any
+        // other transient destination write failure.
+        assertTrue(AutoBackupScheduler.isRetryableFailure(BackupFailureCategory.DESTINATION_WRITE))
+    }
+
+    @Test
+    fun backupCreationFailureIsRetryable() {
+        // A failure reading/snapshotting the source (SOURCE category) is a
+        // health signal, not confirmed corruption — worth a bounded retry.
+        assertTrue(AutoBackupScheduler.isRetryableFailure(BackupFailureCategory.SOURCE))
+    }
+
+    @Test
+    fun verificationFailureIsRetryable() {
+        assertTrue(AutoBackupScheduler.isRetryableFailure(BackupFailureCategory.VERIFY))
+    }
+
+    @Test
+    fun unexpectedExceptionIsCategorizedSourceAndRetryable() {
+        // AutoBackupController's defensive catch-all classifies an unexpected
+        // exception as SOURCE (the least presumptive category) — confirm that
+        // category is retryable, matching the controller's treatment.
+        assertTrue(AutoBackupScheduler.isRetryableFailure(BackupFailureCategory.SOURCE))
+    }
+
+    @Test
+    fun everyCategoryIsClassified() {
+        // Exhaustiveness pin: every BackupFailureCategory value has a defined
+        // retry answer (the `when` in isRetryableFailure has no else branch,
+        // so this also guards against a silently-uncovered future category).
+        for (c in BackupFailureCategory.values()) {
+            AutoBackupScheduler.isRetryableFailure(c) // must not throw
+        }
+    }
+
+    /* -------------------- bounded retry attempts ---------------------------- */
+
+    @Test
+    fun retryIsBoundedByMaxAttempts() {
+        val max = AutoBackupScheduler.MAX_RETRY_ATTEMPTS
+        for (attempt in 0 until max) {
+            assertTrue("attempt $attempt of $max should still retry", AutoBackupScheduler.shouldRetryNow(attempt))
+        }
+        assertFalse("attempt $max reached the bound", AutoBackupScheduler.shouldRetryNow(max))
+        assertFalse(AutoBackupScheduler.shouldRetryNow(max + 5))
+    }
+
+    @Test
+    fun retryBoundHonoursACustomMax() {
+        assertTrue(AutoBackupScheduler.shouldRetryNow(runAttemptCount = 0, maxAttempts = 1))
+        assertFalse(AutoBackupScheduler.shouldRetryNow(runAttemptCount = 1, maxAttempts = 1))
     }
 }

@@ -56,14 +56,23 @@ object AutoBackupController {
     enum class Outcome {
         DISABLED,
         NO_DESTINATION,
+        /** The destination's SAF grant is gone. Automatic backups are PAUSED —
+         *  never retried automatically (retrying immediately would just hit the
+         *  same wall) — until the user repairs the destination. */
         PERMISSION_LOST,
         NOT_DUE,
         ALREADY_RUNNING,
-        /** Ran and every type that had something to back up succeeded. */
+        /** Ran and the whole pass was genuinely clean: every type either backed
+         *  up or had nothing to back up. The ONLY outcome that advances the
+         *  schedule. */
         COMPLETED,
-        /** Ran and advanced the schedule, but one or more types failed for a
-         *  SOURCE reason (a degraded/locked store) — recorded per type. */
-        COMPLETED_WITH_FAILURES
+        /** Ran, but at least one type failed for a retryable reason (SOURCE,
+         *  DESTINATION_WRITE, or VERIFY — see [AutoBackupScheduler
+         *  .isRetryableFailure]), or the pass itself threw unexpectedly. The
+         *  schedule does NOT advance — this was NOT treated as a success — and
+         *  the caller (the Worker) should attempt a bounded WorkManager
+         *  backoff-retry. */
+        RETRYABLE_FAILURE
     }
 
     /** Scheduled / app-open trigger: run only if actually due. */
@@ -98,12 +107,15 @@ object AutoBackupController {
             AutoBackupScheduler.Decision.SKIP_DISABLED -> return Outcome.DISABLED
             AutoBackupScheduler.Decision.SKIP_NO_DESTINATION -> return Outcome.NO_DESTINATION
             AutoBackupScheduler.Decision.SKIP_PERMISSION_LOST -> {
-                // The grant is gone before we even try: record it honestly and
-                // leave the set due so the next trigger re-surfaces it, without
-                // running (blocked until the user repairs the destination).
-                RecoveryBackupState.recordAutoFailure(
-                    appContext, BackupFailureCategory.DESTINATION_PERMISSION, nextDueMillis = 0L
-                )
+                // The grant is already gone before we even try to write anything
+                // — this IS a genuine attempt (the system found it due/forced and
+                // enabled, and was blocked), so lastAttempt stamps like any other
+                // attempt. lastSuccess is never touched: a lost destination is
+                // never treated as a success, and the next natural trigger
+                // re-checks rather than the worker looping a backoff-retry here
+                // (see AutoBackupWorker — permission loss is not retried).
+                RecoveryBackupState.recordAutoAttempt(appContext, now)
+                RecoveryBackupState.recordAutoFailure(appContext, BackupFailureCategory.DESTINATION_PERMISSION)
                 return Outcome.PERMISSION_LOST
             }
             AutoBackupScheduler.Decision.SKIP_ALREADY_RUNNING -> return Outcome.ALREADY_RUNNING
@@ -112,52 +124,64 @@ object AutoBackupController {
         }
 
         // Claim the single-run latch. A lost race here means another thread is
-        // already running the pass — never start a second.
+        // already running the pass — never start a second. This CAS is the real
+        // duplicate-prevention gate: even if two threads both observed
+        // `alreadyRunning == false` in plan() above, only one wins the CAS here
+        // and actually calls the backup engine.
         if (!running.compareAndSet(false, true)) return Outcome.ALREADY_RUNNING
         try {
+            // lastAttempt stamps for EVERY genuine attempt, before the outcome is
+            // known — never conditioned on success.
             RecoveryBackupState.recordAutoAttempt(appContext, now)
 
             // The verified recovery-backup engine, into the AUTOMATIC folder,
             // rotation OFF (never deletes an older copy). Per-type success/
-            // failure is recorded by the manager; this pass records the set.
+            // failure is recorded by the manager itself (unchanged, shared with
+            // the manual path); this pass additionally records the SET's own
+            // last-attempt/last-success/last-category below.
             val results = RecoveryBackupManager.createBackup(appContext, Uri.parse(uriStr), rotateOldCopies = false)
 
             val permissionFailed = results.any { it.category == BackupFailureCategory.DESTINATION_PERMISSION }
-            if (!AutoBackupScheduler.shouldAdvanceSchedule(permissionFailed)) {
-                // A destination/permission failure mid-run: block, keep due.
-                RecoveryBackupState.recordAutoFailure(
-                    appContext, BackupFailureCategory.DESTINATION_PERMISSION, nextDueMillis = 0L
-                )
-                MemoryLog.log(appContext, "AutoBackup", "warning",
-                    "Automatic backup could not reach its folder; blocked until the destination is repaired.")
-                return Outcome.PERMISSION_LOST
+            // A real per-type failure: success == false AND category != null.
+            // "Nothing to back up" (category == null) is a NEUTRAL state and is
+            // NEVER counted as a failure of the automatic pass.
+            val realFailure = results.firstOrNull { !it.success && it.category != null }
+            val hadAnyFailure = permissionFailed || realFailure != null
+
+            if (!AutoBackupScheduler.shouldAdvanceSchedule(hadAnyFailure)) {
+                // NEVER recorded as success: a failed (or permission-blocked)
+                // attempt must not be treated as though the scheduled backup
+                // succeeded. lastSuccess is left untouched, so the next-due
+                // calculation keeps anchoring on the last real success.
+                val category = if (permissionFailed) BackupFailureCategory.DESTINATION_PERMISSION else realFailure!!.category!!
+                RecoveryBackupState.recordAutoFailure(appContext, category)
+                return if (permissionFailed) {
+                    MemoryLog.log(appContext, "AutoBackup", "warning",
+                        "Automatic backup could not reach its folder; blocked until the destination is repaired.")
+                    Outcome.PERMISSION_LOST
+                } else {
+                    MemoryLog.log(appContext, "AutoBackup", "warning",
+                        "Automatic backup completed with one or more per-type failures (recorded per type).")
+                    Outcome.RETRYABLE_FAILURE
+                }
             }
 
-            // Advance the schedule: this window is closed (no duplicate), and the
-            // next-due time is recorded from this success + the current interval.
-            val nextDue = AutoBackupScheduler.nextDueMillis(now, frequency)
-            RecoveryBackupState.recordAutoSuccess(appContext, now, nextDue)
-
-            val hadFailure = results.any { !it.success && it.category != null }
-            if (hadFailure) {
-                MemoryLog.log(appContext, "AutoBackup", "warning",
-                    "Automatic backup completed with one or more per-type failures (recorded per type).")
-                return Outcome.COMPLETED_WITH_FAILURES
-            }
+            // Fully successful: every type either backed up cleanly or had
+            // nothing to back up. ONLY here does the schedule advance.
+            RecoveryBackupState.recordAutoSuccess(appContext, now)
             return Outcome.COMPLETED
         } catch (e: Exception) {
-            // The manager never throws, but stay defensive: a failure here is
-            // recorded as a SOURCE category (the destination path succeeded far
-            // enough to record its own category otherwise). Never rethrow.
-            RecoveryBackupState.recordAutoFailure(
-                appContext, BackupFailureCategory.SOURCE,
-                nextDueMillis = AutoBackupScheduler.nextDueMillis(now, frequency)
-            )
+            // The manager never throws, but stay defensive: never silently
+            // record success on an unexpected exception. Categorized SOURCE (the
+            // least presumptive category — this isn't necessarily a destination
+            // problem) and treated as retryable, same as any other transient
+            // per-type failure.
+            RecoveryBackupState.recordAutoFailure(appContext, BackupFailureCategory.SOURCE)
             try {
                 MemoryLog.log(appContext, "AutoBackup", "error",
                     "Automatic backup pass failed (${e.javaClass.simpleName}).")
             } catch (_: Exception) { }
-            return Outcome.COMPLETED_WITH_FAILURES
+            return Outcome.RETRYABLE_FAILURE
         } finally {
             running.set(false)
         }

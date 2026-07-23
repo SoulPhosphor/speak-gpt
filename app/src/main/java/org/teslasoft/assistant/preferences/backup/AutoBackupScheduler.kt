@@ -143,13 +143,48 @@ object AutoBackupScheduler {
 
     /**
      * After a run completes, whether the schedule anchor should advance (closing
-     * the current window). It advances unless the destination itself is the
-     * problem: a lost/revoked folder leaves the set DUE so the very next trigger
-     * re-surfaces the permission-lost state rather than sleeping a whole window
-     * on a destination the user still needs to repair. Per-type SOURCE failures
-     * (a degraded store) do NOT hold the window open — those are recorded and
-     * shown per type, and hammering the schedule would not help them.
+     * this window and recording the pass as the new "last success"). This is
+     * true ONLY when the whole pass was genuinely clean — no per-type failure of
+     * any kind (source, destination write, verify) and no lost destination
+     * permission. A failed or partially-failed attempt must NEVER be treated as
+     * though the scheduled backup succeeded: [hadAnyFailure] covers every real
+     * failure category, not just a lost destination, so the schedule only ever
+     * advances on a true success.
      */
-    fun shouldAdvanceSchedule(destinationPermissionFailed: Boolean): Boolean =
-        !destinationPermissionFailed
+    fun shouldAdvanceSchedule(hadAnyFailure: Boolean): Boolean = !hadAnyFailure
+
+    /** The bounded ceiling on WorkManager backoff-retry attempts within a single
+     *  due window, for a category [isRetryableFailure] allows retrying. Beyond
+     *  this the worker gives up until the next natural trigger (the next
+     *  periodic tick or an app-open catch-up) rather than retrying forever. */
+    const val MAX_RETRY_ATTEMPTS = 3
+
+    /**
+     * Whether a failure [category] is worth a short, bounded WorkManager
+     * backoff-retry within the current due window, as opposed to one that must
+     * NOT be retried automatically:
+     *  - [BackupFailureCategory.DESTINATION_PERMISSION] — retrying immediately
+     *    would just hit the same wall; the fix requires the USER to repair the
+     *    destination, so automatic backups pause without repeated retries until
+     *    they do (the next natural trigger re-checks, it does not backoff-loop).
+     *  - [BackupFailureCategory.SOURCE], [BackupFailureCategory.DESTINATION_WRITE]
+     *    (covers both a generic transient destination failure and a full-disk
+     *    "storage full" condition — see [BackupFailureClassifier]), and
+     *    [BackupFailureCategory.VERIFY] are all conditions a short backoff-retry
+     *    might clear (a transient IO hiccup, a momentarily busy source, freed-up
+     *    space), so they ARE retried, bounded by [MAX_RETRY_ATTEMPTS].
+     */
+    fun isRetryableFailure(category: BackupFailureCategory): Boolean = when (category) {
+        BackupFailureCategory.DESTINATION_PERMISSION -> false
+        BackupFailureCategory.SOURCE,
+        BackupFailureCategory.DESTINATION_WRITE,
+        BackupFailureCategory.VERIFY -> true
+    }
+
+    /** Whether the worker should retry now, given how many times this due
+     *  window's execution has already been attempted ([runAttemptCount], as
+     *  reported by WorkManager — 0 on the first try). Bounded so a persistently
+     *  broken destination doesn't retry forever between periodic ticks. */
+    fun shouldRetryNow(runAttemptCount: Int, maxAttempts: Int = MAX_RETRY_ATTEMPTS): Boolean =
+        runAttemptCount < maxAttempts
 }

@@ -903,22 +903,59 @@ folder — never combined), and is deliberately conservative:
   otherwise).
 - **Pure decision core:** `AutoBackupScheduler` (unit-tested, no Android) owns
   interval-per-frequency (Every Day / Week / Two Weeks / Month = 1/7/14/30 days),
-  `isDue`/`nextDueMillis` (measured from the last SUCCESSFUL auto pass), the full
-  `plan()` gate (disabled → no-destination → permission-lost → already-running →
-  not-due → RUN, permission-lost outranks due), and `shouldAdvanceSchedule`.
-- **No duplicates per due window:** the schedule anchor advances on success (so a
-  second trigger in the same window sees NOT_DUE) plus a process-wide
-  `AtomicBoolean` running latch in `AutoBackupController`.
+  `isDue`/`nextDueMillis` (measured from the last SUCCESSFUL auto pass — see the
+  failure semantics below), the full `plan()` gate (disabled → no-destination →
+  permission-lost → already-running → not-due → RUN, permission-lost outranks
+  due), `shouldAdvanceSchedule` (advances ONLY on a fully clean pass — see
+  below), `isRetryableFailure` (which `BackupFailureCategory` values get a
+  bounded WorkManager backoff-retry), and `shouldRetryNow` (the
+  `MAX_RETRY_ATTEMPTS = 3` bound against WorkManager's `runAttemptCount`).
+- **No duplicates per due window:** the schedule anchor advances ONLY on success
+  (so a second trigger in the same window sees NOT_DUE) plus a process-wide
+  `AtomicBoolean` running latch in `AutoBackupController` — the `compareAndSet`
+  right before the engine runs is the real atomic gate (an earlier `plan()` read
+  of the latch is advisory only), so the WorkManager trigger and the app-open
+  catch-up can never both produce a backup for the same window even if both
+  observe the latch as free at the same instant.
+- **Failed attempts are never recorded as success (owner correction, July 23
+  2026 — the ship-day version of this had a live bug here, fixed before
+  reaching `main`).** `AutoBackupState`'s automatic-pass tracking is
+  `lastAttempt` / `lastSuccess` / `lastFailureCategory` — no separate cached
+  "next due", which is ALWAYS derived fresh from `lastSuccess` (never from
+  `lastAttempt`), so a run of failures can never shift the schedule.
+  `recordAutoAttempt` stamps on EVERY genuine attempt (including one blocked
+  immediately by a lost destination permission) — but never for a trigger that
+  did nothing (disabled, no destination, not due, already running).
+  `recordAutoSuccess` is called ONLY when `AutoBackupScheduler
+  .shouldAdvanceSchedule(hadAnyFailure = false)` — i.e. every artifact backed up
+  cleanly or had nothing to back up; a real per-type failure (`success == false
+  && category != null`) or a mid-run lost permission both leave `lastSuccess`
+  untouched and record the failure category instead.
 - **Lost SAF permission handled honestly:** a missing/revoked grant BLOCKS future
   runs (no silent fallback anywhere), is recorded as `DESTINATION_PERMISSION`,
-  keeps the set due, and shows a "Paused — the backup folder is unavailable" line;
-  the screen's destination line uses the centralized `BackupLocationDisplay`
-  breadcrumb (never a raw URI or exception text).
-- **Never deletes:** automatic runs call `createBackup(..., rotate = false)` — the
-  keep-5 rotation is skipped, so no old backup is ever deleted yet. Records last
-  attempt / last success / last failure / next due. It ONLY saves — never
-  restores, never touches a live database, never weakens encryption or
-  verification. WorkManager dep: `androidx.work:work-runtime-ktx`.
+  keeps the set due (since `lastSuccess` never moves), and shows a "Paused — the
+  backup folder is unavailable" line; the screen's destination line uses the
+  centralized `BackupLocationDisplay` breadcrumb (never a raw URI or exception
+  text). The frequency choice itself is untouched by a failure — only
+  `setAutoFrequency` (the picker) ever writes it.
+- **WorkManager `Result` mapping is category-aware (`AutoBackupWorker`):** a lost
+  SAF permission (`Outcome.PERMISSION_LOST`) → `Result.failure()`, never
+  retried automatically — an immediate retry would just hit the same wall, and
+  the fix requires the user to repair the destination; the periodic job's
+  `PeriodicWorkRequestBuilder` carries `setBackoffCriteria(EXPONENTIAL,
+  MIN_BACKOFF_MILLIS)` for the other case: a retryable per-type failure
+  (`Outcome.RETRYABLE_FAILURE` — SOURCE / DESTINATION_WRITE, which also covers
+  "storage full" / VERIFY, or an unexpected exception in the controller) →
+  `Result.retry()` while `shouldRetryNow(runAttemptCount)` is true (bounded at
+  3 attempts within the due window per WorkManager's own attempt counter), then
+  `Result.failure()`; everything else (disabled / no destination / not due /
+  already running / a clean pass) → `Result.success()` — not a worker failure.
+- **Never deletes:** automatic runs call `createBackup(..., rotateOldCopies =
+  false)` — the keep-5 rotation is skipped, so no old backup is ever deleted
+  yet. Records last attempt / last success / last failure category (per the
+  semantics above). It ONLY saves — never restores, never touches a live
+  database, never weakens encryption or verification. WorkManager dep:
+  `androidx.work:work-runtime-ktx`.
 
 ## Current feature list
 

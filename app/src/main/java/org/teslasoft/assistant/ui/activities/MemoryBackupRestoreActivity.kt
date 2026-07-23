@@ -1007,12 +1007,16 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
 
     /** The folder picker was cancelled. If it was opened to satisfy a
      *  pending toggle-enable, revert the switch to off — enabling requires a
-     *  valid destination, and none was chosen. */
+     *  valid destination, and none was chosen — and make sure nothing was
+     *  left scheduled (defensive: `enabled` was never actually set true on
+     *  this path, so this is normally a no-op cancel, but automatic backups
+     *  must provably stay unscheduled after a cancelled first-time enable). */
     private fun onFolderPickCancelled() {
         if (pendingEnableAfterPick) {
             pendingEnableAfterPick = false
             RecoveryBackupState.setEnabled(this, false)
             setAutoSwitchChecked(false)
+            AutoBackupScheduling.sync(this)
             refreshAutoStatus()
         }
     }

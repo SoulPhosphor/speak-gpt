@@ -17,9 +17,11 @@
 package org.teslasoft.assistant.preferences.backup
 
 import android.content.Context
+import androidx.work.BackoffPolicy
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
+import androidx.work.WorkRequest
 import java.util.concurrent.TimeUnit
 
 /**
@@ -66,6 +68,13 @@ object AutoBackupScheduling {
         val requestedMinutes = AutoBackupScheduler.intervalMillis(frequency) / 60_000L
         val periodMinutes = maxOf(requestedMinutes, floorMinutes)
         val request = PeriodicWorkRequestBuilder<AutoBackupWorker>(periodMinutes, TimeUnit.MINUTES)
+            // Bounded backoff-retry for transient per-type failures
+            // (AutoBackupController.Outcome.RETRYABLE_FAILURE — see
+            // AutoBackupWorker/AutoBackupScheduler.isRetryableFailure). A lost
+            // destination permission never reaches this path — the worker
+            // returns Result.failure() for that outcome, which WorkManager does
+            // not back off and retry.
+            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, WorkRequest.MIN_BACKOFF_MILLIS, TimeUnit.MILLISECONDS)
             .build()
         // UPDATE (not KEEP) so a frequency change re-periods the SAME unique job
         // instead of leaving the old cadence in place; uniqueness still holds.
