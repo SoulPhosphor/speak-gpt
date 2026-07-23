@@ -1611,9 +1611,12 @@
     <!-- A1 — repaired automatically (approved) -->
     <string name="health_repaired_title">Database Repaired</string>
     <string name="health_repaired_body">A problem was found in your %1$s database and repaired automatically. Everything should be working normally.</string>
-    <!-- Buttons (approved: Repair / Revert to Last Good Database / Restore /
-         Open File Location; Cancel comes from btn_cancel) -->
-    <string name="health_btn_repair">Repair</string>
+    <!-- Buttons (owner correction, July 23 2026: "Repair" renamed "Attempt
+         Repair" everywhere it appears — repair outcome is never guaranteed,
+         the label must not imply it is. Revert to Last Good Database /
+         Restore / Open File Location unaffected; Cancel comes from
+         btn_cancel) -->
+    <string name="health_btn_repair">Attempt Repair</string>
     <string name="health_btn_revert">Revert to Last Good Database</string>
     <string name="health_btn_restore">Restore</string>
     <string name="health_btn_open_location">Open File Location</string>
@@ -1634,11 +1637,11 @@
     <string name="health_banner_lorebook">Lorebooks are currently unavailable due to a database issue. You may continue chatting. However, they will not be available until the database is repaired.</string>
     <string name="health_banner_both">Lorebooks and memory are currently unavailable due to database issues. You may continue chatting. However, these will not be available until the database is repaired.</string>
     <string name="health_banner_user_image">The user image database is currently unavailable due to a database issue. You may continue chatting. However, it will not be available until the database is repaired.</string>
-    <!-- Banner-specific button labels — deliberately SEPARATE strings from
-         health_btn_repair/btn_ok (both reused elsewhere, e.g. the A1 dialog
-         and dozens of unrelated OK buttons app-wide) so this wording change
-         cannot leak into other screens. Owner-approved verbatim, July 23 2026. -->
-    <string name="health_banner_btn_repair">Attempt Repair</string>
+    <!-- Banner's "Okay" is its own string, distinct from the shared btn_ok
+         used app-wide. Its "Attempt Repair" button now reuses the shared
+         health_btn_repair directly (owner correction, July 23 2026: "Repair"
+         is "Attempt Repair" everywhere, so a separate banner copy of the
+         same text was redundant and has been removed). -->
     <string name="health_banner_btn_ok">Okay</string>
     <!-- A3 — blocked Analyze Conversations note (approved verbatim) -->
     <string name="health_archivist_blocked">Unable to analyze conversations due to current memory database corruption. You may try to repair it again or revert to last known good database. Caution reverting may cause recent memories to be lost.</string>
