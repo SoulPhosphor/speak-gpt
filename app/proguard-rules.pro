@@ -158,3 +158,10 @@ org.apache.hc.core5.**
 # SQLCipher (companion memory store): native layer binds these classes by
 # name; renaming them breaks database open on minified release builds.
 -keep class net.zetetic.database.** { *; }
+
+# WorkManager instantiates workers reflectively with the
+# (Context, WorkerParameters) constructor. R8 shrinking is on for BOTH build
+# types, and this worker is only referenced as a class literal when the job is
+# enqueued — without this rule R8 could strip the constructor and the Automatic
+# Backups job would crash on instantiation. Keep the worker whole.
+-keep class org.teslasoft.assistant.preferences.backup.AutoBackupWorker { *; }
