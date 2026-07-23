@@ -14,6 +14,29 @@ your feelings. If you do something wrong apologize.
 - Never tell the owner what they can or cannot do. Only speak in terms of what is or isn't technically possible in the code.
 - Never tell the owner what you won't do, unless there is an actual technical or Terms of Service reason for it.
 
+## Stop and ask instead of guessing (owner ruling, July 23 2026)
+
+When a task hits a decision this file doesn't already answer — wording,
+scope, how broadly a change should apply, which strings or screens are
+affected, an architecture choice — **stop and ask in plain chat before
+doing it.** Do not pick the answer that seems reasonable, ship it, and
+let the owner find and correct it later. That pattern is not "making
+progress" — it costs the owner real time, tokens, and trust, and it has
+already happened at real scale: a one-time "make it professional, I'll
+review after" instruction turned into draft wording sitting unreviewed in
+`strings.xml` while further phases kept building on top of it, because no
+session stopped to flag that the review never actually happened.
+
+This is a general rule, not limited to memory-system content (the OWNER
+APPROVAL GATE above already covers that case specifically). If a session
+catches itself thinking "I don't know for certain what's wanted here, but
+this seems like the sensible/safe choice" — that is the moment to stop.
+State the actual fork in chat (what the choice is, why it isn't settled by
+existing rules) and wait for the answer. Don't ship a guess now and revise
+it in a later pass; asking once costs the owner one answer, guessing wrong
+costs them noticing the mistake, explaining the correction, and waiting for
+it to be undone — every time.
+
 ## Git Commit Privacy and Attribution
 
 Claude Code sessions and conversations are private and sensitive.
