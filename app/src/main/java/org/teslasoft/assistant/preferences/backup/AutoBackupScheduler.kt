@@ -187,4 +187,24 @@ object AutoBackupScheduler {
      *  broken destination doesn't retry forever between periodic ticks. */
     fun shouldRetryNow(runAttemptCount: Int, maxAttempts: Int = MAX_RETRY_ATTEMPTS): Boolean =
         runAttemptCount < maxAttempts
+
+    /**
+     * The automatic pass's reported "File Size": the sum of every
+     * successfully-backed-up artifact's FINAL VERIFIED destination size
+     * ([RecoveryBackupManager.TypeResult.sizeBytes]) — a result with nothing
+     * to back up contributes none (it wrote no file). Pure so this is
+     * unit-tested directly: [RecoveryBackupManager.TypeResult] carries no
+     * Android types.
+     *
+     * Null (unavailable) when ANY successful result is missing its size —
+     * that should not normally happen (a successful write always verifies
+     * and returns one), but reporting a partial sum in that case would
+     * itself be a form of estimating, which the file-size display must never
+     * do. Only meaningful to call on a pass [shouldAdvanceSchedule] accepted;
+     * callers pass the same `results` list either way.
+     */
+    fun totalVerifiedSize(results: List<RecoveryBackupManager.TypeResult>): Long? {
+        val successfulSizes = results.filter { it.success }.map { it.sizeBytes }
+        return if (successfulSizes.any { it == null }) null else successfulSizes.filterNotNull().sum()
+    }
 }

@@ -306,4 +306,78 @@ class AutoBackupSchedulerTest {
         assertTrue(AutoBackupScheduler.shouldRetryNow(runAttemptCount = 0, maxAttempts = 1))
         assertFalse(AutoBackupScheduler.shouldRetryNow(runAttemptCount = 1, maxAttempts = 1))
     }
+
+    /* -------------------- totalVerifiedSize: the "File Size" total --------- */
+    // RecoveryBackupManager.TypeResult carries no Android types, so the sum
+    // logic behind the automatic-backup status's "File Size:" line is pure
+    // and directly testable here.
+
+    private fun result(
+        type: BackupType,
+        success: Boolean,
+        category: BackupFailureCategory? = null,
+        sizeBytes: Long? = null
+    ) = RecoveryBackupManager.TypeResult(type, success, category, sizeBytes)
+
+    @Test
+    fun totalSize_sumsOnlySuccessfulVerifiedSizes() {
+        val results = listOf(
+            result(BackupType.MEMORY, success = true, sizeBytes = 1000L),
+            result(BackupType.LOREBOOK, success = true, sizeBytes = 2000L),
+            result(BackupType.CHATS, success = true, sizeBytes = 500L),
+            result(BackupType.USER_IMAGE, success = true, sizeBytes = 300L)
+        )
+        assertEquals(3800L, AutoBackupScheduler.totalVerifiedSize(results))
+    }
+
+    @Test
+    fun totalSize_excludesNothingToBackUpContributingZero() {
+        // "Nothing to back up" is success=false, category=null, sizeBytes=null
+        // — it must contribute nothing to the sum, not be treated as missing
+        // data that makes the whole total unavailable.
+        val results = listOf(
+            result(BackupType.MEMORY, success = true, sizeBytes = 1000L),
+            result(BackupType.LOREBOOK, success = false, category = null, sizeBytes = null),
+            result(BackupType.CHATS, success = true, sizeBytes = 500L),
+            result(BackupType.USER_IMAGE, success = false, category = null, sizeBytes = null)
+        )
+        assertEquals(1500L, AutoBackupScheduler.totalVerifiedSize(results))
+    }
+
+    @Test
+    fun totalSize_allNothingToBackUp_isZeroNotUnavailable() {
+        val results = BackupType.displayOrder.map { result(it, success = false, category = null, sizeBytes = null) }
+        assertEquals(0L, AutoBackupScheduler.totalVerifiedSize(results))
+    }
+
+    @Test
+    fun totalSize_missingSizeOnASuccessfulResult_isUnavailable() {
+        // Defensive case: a successful result somehow missing its verified
+        // size must never produce a silently-wrong partial sum — that would
+        // itself be a form of estimating.
+        val results = listOf(
+            result(BackupType.MEMORY, success = true, sizeBytes = 1000L),
+            result(BackupType.LOREBOOK, success = true, sizeBytes = null),
+            result(BackupType.CHATS, success = true, sizeBytes = 500L),
+            result(BackupType.USER_IMAGE, success = true, sizeBytes = 300L)
+        )
+        assertEquals(null, AutoBackupScheduler.totalVerifiedSize(results))
+    }
+
+    @Test
+    fun totalSize_ignoresFailedResultsSizesEvenIfPresent() {
+        // A failed result's sizeBytes is always null by construction in the
+        // real engine, but the sum must key off `success`, not merely
+        // "sizeBytes present" — pin that explicitly.
+        val results = listOf(
+            result(BackupType.MEMORY, success = true, sizeBytes = 1000L),
+            result(BackupType.LOREBOOK, success = false, category = BackupFailureCategory.SOURCE, sizeBytes = null)
+        )
+        assertEquals(1000L, AutoBackupScheduler.totalVerifiedSize(results))
+    }
+
+    @Test
+    fun totalSize_emptyResultsIsZero() {
+        assertEquals(0L, AutoBackupScheduler.totalVerifiedSize(emptyList()))
+    }
 }

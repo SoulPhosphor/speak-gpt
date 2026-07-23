@@ -450,17 +450,40 @@
                 android:textIsSelectable="true"
                 android:textSize="15sp" />
 
-            <!-- Automatic-set status: last automatic backup + next due (or the
-                 paused/never state). Records surfaced honestly; the per-type
-                 rows in Backup Status show each artifact's own result. -->
-            <TextView
-                android:id="@+id/text_auto_status"
+            <!-- Automatic-set status: Last Automatic Backup / File Size / Next
+                 Automatic Backup Due (or the paused/never state). Records
+                 surfaced honestly; the per-type rows in Backup Status show
+                 each artifact's own result. While a pass is actively running
+                 (spinner_auto_status visible) this text instead reads
+                 backup_auto_status_creating - the spinner and text sit in one
+                 row so both toggle together. -->
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:paddingTop="8dp"
-                android:textColor="@color/text"
-                android:textIsSelectable="true"
-                android:textSize="13sp" />
+                android:layout_marginTop="8dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <com.google.android.material.progressindicator.CircularProgressIndicator
+                    android:id="@+id/spinner_auto_status"
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:layout_marginEnd="10dp"
+                    android:indeterminate="true"
+                    android:visibility="gone"
+                    app:indicatorSize="18dp"
+                    app:trackThickness="2dp"
+                    style="@style/Widget.Material3.CircularProgressIndicator" />
+
+                <TextView
+                    android:id="@+id/text_auto_status"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:textColor="@color/text"
+                    android:textIsSelectable="true"
+                    android:textSize="13sp" />
+            </LinearLayout>
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_change_auto_location"

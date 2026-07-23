@@ -167,8 +167,10 @@ object AutoBackupController {
             }
 
             // Fully successful: every type either backed up cleanly or had
-            // nothing to back up. ONLY here does the schedule advance.
-            RecoveryBackupState.recordAutoSuccess(appContext, now)
+            // nothing to back up. ONLY here does the schedule advance, and
+            // ONLY here is a total file size recorded (pure sum logic in
+            // AutoBackupScheduler.totalVerifiedSize — unit-tested).
+            RecoveryBackupState.recordAutoSuccess(appContext, now, AutoBackupScheduler.totalVerifiedSize(results))
             return Outcome.COMPLETED
         } catch (e: Exception) {
             // The manager never throws, but stay defensive: never silently
@@ -186,6 +188,14 @@ object AutoBackupController {
             running.set(false)
         }
     }
+
+    /**
+     * True while an automatic pass is actively running (the single-run latch
+     * is held). The Memory Backup & Restore screen reads this to show the
+     * "Creating automatic backup…" spinner state in place of the normal
+     * status lines instead of a stale success/failure display.
+     */
+    fun isRunning(): Boolean = running.get()
 
     /**
      * True while the persisted SAF grant for [uriStr] is still held with BOTH

@@ -42,6 +42,7 @@ object ReadableBackupState {
 
     private const val KEY_BASELINE = "readable.baseline"
     private const val KEY_LAST_SUCCESS = "readable.last_success"
+    private const val KEY_LAST_SUCCESS_SIZE = "readable.last_success_size"
     private const val KEY_SCOPE_ALL = "readable.scope_all"
     private const val KEY_FORMAT = "readable.format"
 
@@ -72,6 +73,27 @@ object ReadableBackupState {
 
     fun setLastSuccess(context: Context, atMillis: Long) {
         try { prefs(context).edit(commit = true) { putLong(KEY_LAST_SUCCESS, atMillis) } } catch (_: Exception) { }
+    }
+
+    /** The exact size, in bytes, of the last VERIFIED readable chat backup's
+     *  FINAL destination ZIP — measured during the same hash-verification
+     *  read that confirms the save succeeded, never the staged/temporary
+     *  file, never an estimate. Null when unavailable (never recorded, or
+     *  the size could not be determined for that save). Companion to
+     *  [getLastSuccess] — stamp them together. */
+    fun getLastSuccessSizeBytes(context: Context): Long? =
+        try {
+            val stored = prefs(context).getLong(KEY_LAST_SUCCESS_SIZE, -1L)
+            if (stored < 0L) null else stored
+        } catch (_: Exception) { null }
+
+    fun setLastSuccessSizeBytes(context: Context, bytes: Long?) {
+        try {
+            prefs(context).edit(commit = true) {
+                if (bytes != null && bytes >= 0L) putLong(KEY_LAST_SUCCESS_SIZE, bytes)
+                else remove(KEY_LAST_SUCCESS_SIZE)
+            }
+        } catch (_: Exception) { }
     }
 
     // ----- last-selected dropdown options (owner ruling, July 22 2026) -------

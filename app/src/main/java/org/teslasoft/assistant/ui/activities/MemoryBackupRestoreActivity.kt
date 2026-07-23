@@ -40,6 +40,7 @@ import com.google.android.material.checkbox.MaterialCheckBox
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.materialswitch.MaterialSwitch
+import com.google.android.material.progressindicator.CircularProgressIndicator
 import android.provider.DocumentsContract
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
@@ -52,6 +53,7 @@ import org.teslasoft.assistant.preferences.backup.BackupFrequency
 import org.teslasoft.assistant.preferences.backup.BackupLocationDisplay
 import org.teslasoft.assistant.preferences.backup.BackupStatusFormatter
 import org.teslasoft.assistant.preferences.backup.BackupType
+import org.teslasoft.assistant.preferences.backup.ByteSizeFormatter
 import org.teslasoft.assistant.preferences.backup.DatabaseHealthChecker
 import org.teslasoft.assistant.preferences.backup.DatabaseHealthState
 import org.teslasoft.assistant.preferences.backup.DatabaseRepairManager
@@ -148,7 +150,16 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
     private var autoFrequency = BackupFrequency.DAILY
     private var textAutoLocation: TextView? = null
     private var textAutoStatus: TextView? = null
+    private var spinnerAutoStatus: CircularProgressIndicator? = null
     private var btnChangeAutoLocation: MaterialButton? = null
+
+    // True while THIS screen's own manual trigger (the 3-strikes dialog's
+    // Retry action) is running an automatic pass — shown immediately,
+    // without waiting for AutoBackupController.isRunning() to be polled on a
+    // refresh. refreshAutoStatus() also checks isRunning() directly, so a
+    // pass started elsewhere (WorkManager / app-open) while this screen is
+    // open and gets refreshed is reflected too.
+    private var manualAutoBackupRunning = false
 
     // Guards the auto-backup switch's listener from firing while we set its
     // checked state programmatically (revert-on-cancel, initial load).
@@ -263,6 +274,7 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         btnAutoFrequency = findViewById(R.id.btn_auto_frequency)
         textAutoLocation = findViewById(R.id.text_auto_location)
         textAutoStatus = findViewById(R.id.text_auto_status)
+        spinnerAutoStatus = findViewById(R.id.spinner_auto_status)
         btnChangeAutoLocation = findViewById(R.id.btn_change_auto_location)
 
         btnReset = findViewById(R.id.btn_memory_reset)
@@ -500,8 +512,11 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
     private fun showReadableLastSuccess() {
         val last = ReadableBackupState.getLastSuccess(this)
         if (last > 0L) {
+            val sizeValue = ReadableBackupState.getLastSuccessSizeBytes(this)?.let { ByteSizeFormatter.format(it) }
+                ?: getString(R.string.backup_size_unavailable)
             setReadableStatus(
-                getString(R.string.backup_readable_last_success, BackupStatusFormatter.formatDateTime(last))
+                getString(R.string.backup_readable_last_success, BackupStatusFormatter.formatDateTime(last)) +
+                    "\n" + getString(R.string.backup_readable_file_size, sizeValue)
             )
         }
     }
@@ -580,7 +595,7 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
                     staged.inputStream().use { it.copyTo(out) }
                 } ?: throw IllegalStateException("could not open destination")
 
-                val actualSha = contentResolver.openInputStream(uri)?.use { sha256(it) }
+                val (actualSha, verifiedSize) = contentResolver.openInputStream(uri)?.use { sha256WithSize(it) }
                     ?: throw IllegalStateException("could not reopen destination")
 
                 if (!MessageDigest.isEqual(expectedSha, actualSha)) {
@@ -595,9 +610,12 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
 
                 // Destination verified: NOW (and only now) the incremental
                 // baseline may advance (owner directive) and the last-success
-                // stamp may move.
+                // stamp may move. verifiedSize is the FINAL destination file's
+                // exact size, measured during this same verification read —
+                // never the staged file's size, never an estimate.
                 if (incremental) ReadableBackupState.setBaseline(this, fingerprints)
                 ReadableBackupState.setLastSuccess(this, System.currentTimeMillis())
+                ReadableBackupState.setLastSuccessSizeBytes(this, verifiedSize)
 
                 val where = BackupLocationDisplay.describeSaveAs(this, uri)
                 runOnUiThread {
@@ -649,15 +667,24 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
 
     private fun sha256(file: File): ByteArray = file.inputStream().use { sha256(it) }
 
-    private fun sha256(stream: InputStream): ByteArray {
+    private fun sha256(stream: InputStream): ByteArray = sha256WithSize(stream).first
+
+    /** Streaming SHA-256 that also counts the exact bytes read in the same
+     *  pass — the FINAL verified destination file's real size, never an
+     *  estimate and never an extra IPC/metadata round trip (see
+     *  RecoveryBackupManager.sha256WithSize for the identical rationale on
+     *  the automatic-backup path). */
+    private fun sha256WithSize(stream: InputStream): Pair<ByteArray, Long> {
         val md = MessageDigest.getInstance("SHA-256")
         val buf = ByteArray(8192)
+        var total = 0L
         while (true) {
             val n = stream.read(buf)
             if (n < 0) break
             md.update(buf, 0, n)
+            total += n
         }
-        return md.digest()
+        return md.digest() to total
     }
 
     /* ------------------------------ 1. database health ------------------------------ */
@@ -846,11 +873,22 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
             autoFolderPicker.launch(null)
             return
         }
+        manualAutoBackupRunning = true
+        refreshAutoStatus()
         runOffThread {
-            AutoBackupController.runNow(this)
-            runOnUiThread {
-                refreshBackupStatus()
-                refreshAutoStatus()
+            // A local try/finally, not just runOffThread's own catch: the
+            // spinner must never get stuck showing "Creating…" forever, even
+            // on an exception runOffThread's handler would otherwise catch
+            // AFTER this block (AutoBackupController.runNow is documented to
+            // never throw, but this guarantees it regardless).
+            try {
+                AutoBackupController.runNow(this)
+            } finally {
+                runOnUiThread {
+                    manualAutoBackupRunning = false
+                    refreshBackupStatus()
+                    refreshAutoStatus()
+                }
             }
         }
     }
@@ -931,15 +969,36 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         }
     }
 
+    /** The value shown for a file-size label when the size could not be
+     *  reliably determined — never an estimate, never a stale number. */
+    private fun fileSizeValue(bytes: Long?): String =
+        if (bytes != null) ByteSizeFormatter.format(bytes) else getString(R.string.backup_size_unavailable)
+
     /**
-     * Show the automatic set's own status: paused when the folder is
-     * unavailable while enabled, otherwise the last automatic backup and the
-     * next due time (or the never-run state). Uses the recorded state — never a
-     * raw URI. The per-type Backup Status rows above show each artifact's own
-     * last result.
+     * Show the automatic set's own status. While a pass is actively running
+     * (this screen's own manual trigger, or one it discovers on refresh via
+     * [AutoBackupController.isRunning]) this shows an indeterminate spinner +
+     * "Creating automatic backup…" in place of everything below — the last
+     * known state is restored the moment the pass finishes. Otherwise: paused
+     * when the folder is unavailable while enabled; the never-run state; or,
+     * after a real success, "Last Automatic Backup: … / File Size: … / Next
+     * Automatic Backup Due: …" (File Size omitted only when disabled, since
+     * there is no next-due to pair it with there). Uses the recorded state —
+     * never a raw URI. The per-type Backup Status rows above show each
+     * artifact's own last result.
      */
     private fun refreshAutoStatus() {
         val tv = textAutoStatus ?: return
+        val spinner = spinnerAutoStatus
+
+        if (manualAutoBackupRunning || AutoBackupController.isRunning()) {
+            spinner?.visibility = View.VISIBLE
+            tv.text = getString(R.string.backup_auto_status_creating)
+            tv.visibility = View.VISIBLE
+            return
+        }
+        spinner?.visibility = View.GONE
+
         val enabled = RecoveryBackupState.isEnabled(this)
         val uriStr = RecoveryBackupState.getAutoFolderUri(this)
         val lastSuccess = RecoveryBackupState.getAutoLastSuccess(this)
@@ -947,18 +1006,27 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
 
         val text: String = when {
             paused -> getString(R.string.backup_auto_status_paused)
-            !enabled -> if (lastSuccess > 0L)
-                getString(R.string.backup_auto_status_last, BackupStatusFormatter.formatDateTime(lastSuccess))
-                else ""
+            !enabled -> if (lastSuccess > 0L) {
+                getString(R.string.backup_auto_status_last, BackupStatusFormatter.formatDateTime(lastSuccess)) +
+                    "\n" + getString(
+                        R.string.backup_auto_status_file_size,
+                        fileSizeValue(RecoveryBackupState.getAutoLastSuccessSizeBytes(this))
+                    )
+            } else ""
             lastSuccess <= 0L -> getString(R.string.backup_auto_status_never)
             else -> {
                 val lastLine = getString(
                     R.string.backup_auto_status_last, BackupStatusFormatter.formatDateTime(lastSuccess)
                 )
+                val sizeLine = getString(
+                    R.string.backup_auto_status_file_size,
+                    fileSizeValue(RecoveryBackupState.getAutoLastSuccessSizeBytes(this))
+                )
                 val nextDue = AutoBackupScheduler.nextDueMillis(lastSuccess, autoFrequency)
-                lastLine + "\n" + getString(
+                val nextDueLine = getString(
                     R.string.backup_auto_status_next_due, BackupStatusFormatter.formatDateTime(nextDue)
                 )
+                "$lastLine\n$sizeLine\n$nextDueLine"
             }
         }
         tv.text = text

@@ -1485,7 +1485,18 @@
     <string name="backup_readable_cancelled">Backup cancelled. Nothing was saved.</string>
     <string name="backup_readable_saved_to">Readable chat backup saved to %1$s</string>
     <string name="backup_readable_saved_generic">Readable chat backup saved.</string>
-    <string name="backup_readable_last_success">Last readable chat backup: %1$s</string>
+    <!-- Title Case label (owner correction, July 23 2026 — was sentence case,
+         inconsistent with every other "Label: value" status line on this
+         screen, e.g. backup_current_location). -->
+    <string name="backup_readable_last_success">Last Readable Chat Backup: %1$s</string>
+    <!-- Shown directly under backup_readable_last_success, same Title Case
+         "Label: value" formatting. The value is the FINAL verified
+         destination ZIP's exact size (never the staged/temporary file),
+         measured during the same hash-verification read that already
+         confirms the backup is intact — see MemoryBackupRestoreActivity
+         .onReadableSaveAsResult. %1$s is a formatted size (ByteSizeFormatter,
+         e.g. "4.8 MB") or backup_size_unavailable. -->
+    <string name="backup_readable_file_size">Chat Backup File Size: %1$s</string>
     <string name="backup_readable_fail_chats">Your chats could not be read. No backup was created.</string>
     <string name="backup_readable_fail_generic">The backup could not be created.</string>
     <string name="backup_readable_fail_verify">The backup could not be verified. No backup was saved.</string>
@@ -1515,10 +1526,28 @@
          two safety limits: nothing is ever deleted, and it only backs up —
          never restores. -->
     <string name="backup_auto_hint">Automatic backups run in the background on the schedule you choose, saving a verified backup to your chosen folder. Android may delay a run to save battery, so the timing is not exact. Old backups are never deleted, and automatic backups only save — they never restore or replace your data.</string>
-    <string name="backup_auto_status_last">Last automatic backup: %1$s</string>
-    <string name="backup_auto_status_next_due">Next automatic backup due: %1$s</string>
+    <!-- Title Case labels (owner correction, July 23 2026 — were sentence
+         case, inconsistent with every other "Label: value" status line on
+         this screen). File size sits between last-backup and next-due, same
+         formatting; the value is either a ByteSizeFormatter string (e.g.
+         "4.8 MB") or backup_size_unavailable — never an estimate. -->
+    <string name="backup_auto_status_last">Last Automatic Backup: %1$s</string>
+    <string name="backup_auto_status_file_size">File Size: %1$s</string>
+    <string name="backup_auto_status_next_due">Next Automatic Backup Due: %1$s</string>
     <string name="backup_auto_status_never">No automatic backup has run yet.</string>
     <string name="backup_auto_status_paused">Paused — the backup folder is unavailable. Choose a new location to resume.</string>
+    <!-- Shown in place of the normal status lines while a pass is actively
+         running (the manual Retry trigger, or the screen resuming while a
+         scheduled/app-open pass happens to be in flight) — an indeterminate
+         spinner sits next to this text. Restored to the normal status once
+         the pass finishes. -->
+    <string name="backup_auto_status_creating">Creating automatic backup…</string>
+    <!-- Shared "we don\'t know" value for a file-size label (owner ruling,
+         July 23 2026): honest, never an estimate. Used as the %1$s value
+         inside backup_auto_status_file_size / backup_readable_file_size —
+         never a standalone sentence, so it stays a short Title Case value
+         like every other label\'s value, not a full sentence. -->
+    <string name="backup_size_unavailable">Unavailable</string>
     <string name="backup_auto_location">Automatic Backup Location: %1$s</string>
     <string name="backup_auto_change_location">Change Automatic Backup Location</string>
     <string name="backup_auto_enable">Enable Automatic Backups</string>

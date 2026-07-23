@@ -191,6 +191,7 @@ object RecoveryBackupState {
     private const val KEY_AUTO_LAST_ATTEMPT = "backup.auto.last_attempt"
     private const val KEY_AUTO_LAST_SUCCESS = "backup.auto.last_success"
     private const val KEY_AUTO_LAST_CATEGORY = "backup.auto.last_category"
+    private const val KEY_AUTO_LAST_SUCCESS_SIZE = "backup.auto.last_success_size"
 
     /** When the last automatic pass was ATTEMPTED — every genuine attempt
      *  stamps this, success or failure alike — or 0 if never. There is
@@ -214,6 +215,22 @@ object RecoveryBackupState {
     fun getAutoLastFailureCategory(context: Context): BackupFailureCategory? =
         try { BackupFailureCategory.fromKey(prefs(context).getString(KEY_AUTO_LAST_CATEGORY, null)) } catch (_: Exception) { null }
 
+    /** The total verified size, in bytes, of the last SUCCESSFUL automatic
+     *  pass's destination files — summed across every artifact that pass
+     *  actually wrote (see [AutoBackupController]) — or null when unavailable
+     *  (never recorded, or that pass's size could not be reliably determined;
+     *  never an estimate). Stamped ONLY alongside [getAutoLastSuccess] in
+     *  [recordAutoSuccess], so it always describes the SAME pass as the
+     *  success timestamp next to it, and is NEVER touched by
+     *  [recordAutoFailure] — a failed backup must not replace the previous
+     *  successful file size. Survives leaving and reopening the screen (plain
+     *  persisted state, same as every other field here). */
+    fun getAutoLastSuccessSizeBytes(context: Context): Long? =
+        try {
+            val stored = prefs(context).getLong(KEY_AUTO_LAST_SUCCESS_SIZE, -1L)
+            if (stored < 0L) null else stored
+        } catch (_: Exception) { null }
+
     /** Stamp the start of an automatic pass. Called for EVERY genuine attempt —
      *  including one blocked immediately by a lost destination permission —
      *  but never for a trigger that did nothing (disabled, no destination
@@ -222,24 +239,34 @@ object RecoveryBackupState {
         try { prefs(context).edit(commit = true) { putLong(KEY_AUTO_LAST_ATTEMPT, atMillis) } } catch (_: Exception) { }
     }
 
-    /** Record a successful automatic pass: stamp success and clear the failure
-     *  category. Callers must only invoke this when the pass was genuinely
-     *  fully successful — never on a partial or failed pass (a failed attempt
-     *  must not be treated as though the scheduled backup succeeded). */
-    fun recordAutoSuccess(context: Context, atMillis: Long) {
+    /** Record a successful automatic pass: stamp success, stamp its total
+     *  verified size (or clear it when [totalSizeBytes] is null/negative —
+     *  unavailable for THIS pass, never left showing a stale size from an
+     *  older one), and clear the failure category. Callers must only invoke
+     *  this when the pass was genuinely fully successful — never on a partial
+     *  or failed pass (a failed attempt must not be treated as though the
+     *  scheduled backup succeeded). */
+    fun recordAutoSuccess(context: Context, atMillis: Long, totalSizeBytes: Long?) {
         try {
             prefs(context).edit(commit = true) {
                 putLong(KEY_AUTO_LAST_SUCCESS, atMillis)
+                if (totalSizeBytes != null && totalSizeBytes >= 0L) {
+                    putLong(KEY_AUTO_LAST_SUCCESS_SIZE, totalSizeBytes)
+                } else {
+                    remove(KEY_AUTO_LAST_SUCCESS_SIZE)
+                }
                 remove(KEY_AUTO_LAST_CATEGORY)
             }
         } catch (_: Exception) { }
     }
 
     /** Record a failed (or permission-blocked) automatic pass: store the
-     *  CATEGORY (never a bare "failed"). The last-success stamp is
-     *  deliberately left untouched, so [getAutoLastSuccess] — and therefore
-     *  the next-due calculation — keeps anchoring on the last time a backup
-     *  genuinely completed. */
+     *  CATEGORY (never a bare "failed"). The last-success stamp AND its
+     *  paired file size are deliberately left untouched, so [getAutoLastSuccess]
+     *  / [getAutoLastSuccessSizeBytes] — and therefore the next-due
+     *  calculation and the displayed file size — keep describing the last
+     *  time a backup genuinely completed; a failed backup must never replace
+     *  the previous successful file size. */
     fun recordAutoFailure(context: Context, category: BackupFailureCategory) {
         try {
             prefs(context).edit(commit = true) { putString(KEY_AUTO_LAST_CATEGORY, category.name) }

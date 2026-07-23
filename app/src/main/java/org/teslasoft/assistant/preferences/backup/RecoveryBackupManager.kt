@@ -67,7 +67,18 @@ import android.database.sqlite.SQLiteDatabase as PlainDatabase
  */
 object RecoveryBackupManager {
 
-    data class TypeResult(val type: BackupType, val success: Boolean, val category: BackupFailureCategory?)
+    data class TypeResult(
+        val type: BackupType,
+        val success: Boolean,
+        val category: BackupFailureCategory?,
+        /** The exact size, in bytes, of the FINAL VERIFIED destination file —
+         *  measured while re-reading it during the mandatory post-write hash
+         *  verification (never the staged/temporary snapshot's size, and
+         *  never an estimate). Null whenever there is no verified
+         *  destination file for this result: a failure, "nothing to back
+         *  up", or a degraded-store pause. */
+        val sizeBytes: Long? = null
+    )
 
     private const val CHAT_LIST_FILE = "chat_list"
 
@@ -123,7 +134,7 @@ object RecoveryBackupManager {
             val childUri = writeToTree(context, treeUri, destName(type, runAt), staged)
 
             stage = BackupStage.VERIFY_DESTINATION
-            verifyDestination(context, childUri, staged)
+            val verifiedSize = verifyDestination(context, childUri, staged)
 
             // ---- rotate keep-5 (best-effort; never fails the backup) ----
             // Skipped entirely for automatic backups: they never delete an
@@ -133,7 +144,7 @@ object RecoveryBackupManager {
             }
 
             RecoveryBackupState.recordSuccess(context, type, runAt)
-            return TypeResult(type, success = true, category = null)
+            return TypeResult(type, success = true, category = null, sizeBytes = verifiedSize)
         } catch (e: Exception) {
             val category = BackupFailureClassifier.classify(stage, e)
             RecoveryBackupState.recordFailure(context, type, runAt, category)
@@ -400,18 +411,23 @@ object RecoveryBackupManager {
         return child
     }
 
-    /** Reopen the finalized destination file and confirm its SHA-256 matches the
-     *  staged file byte-for-byte (not just size). A mismatch deletes the bad
-     *  destination copy — the last-known-good copies are untouched. */
-    private fun verifyDestination(context: Context, childUri: Uri, staged: File) {
+    /** Reopen the finalized destination file, confirm its SHA-256 matches the
+     *  staged file byte-for-byte (not just size), and return its exact size in
+     *  bytes as measured during that SAME read — the authoritative "final
+     *  verified backup file size" (never the staged/temporary snapshot's size,
+     *  never an estimate: it is counted byte-for-byte while computing the hash
+     *  that already has to be trusted for verification). A mismatch deletes
+     *  the bad destination copy — the last-known-good copies are untouched. */
+    private fun verifyDestination(context: Context, childUri: Uri, staged: File): Long {
         val resolver = context.contentResolver
         val expected = sha256(staged)
-        val actual = resolver.openInputStream(childUri)?.use { sha256(it) }
+        val (actual, size) = resolver.openInputStream(childUri)?.use { sha256WithSize(it) }
             ?: throw IllegalStateException("could not reopen destination for verification")
         if (actual != expected) {
             try { DocumentsContract.deleteDocument(resolver, childUri) } catch (_: Exception) { }
             throw IllegalStateException("destination verification failed (hash mismatch)")
         }
+        return size
     }
 
     private fun rotate(context: Context, treeUri: Uri, type: BackupType) {
@@ -459,14 +475,21 @@ object RecoveryBackupManager {
      *  never loads the file into memory). */
     private fun sha256(file: File): String = file.inputStream().use { sha256(it) }
 
-    private fun sha256(stream: InputStream): String {
+    private fun sha256(stream: InputStream): String = sha256WithSize(stream).first
+
+    /** Streaming SHA-256 that also counts the exact bytes read — one pass, so
+     *  the returned size is never an extra IPC/metadata round trip and can
+     *  never disagree with what was actually hashed. */
+    private fun sha256WithSize(stream: InputStream): Pair<String, Long> {
         val md = MessageDigest.getInstance("SHA-256")
         val buf = ByteArray(8192)
+        var total = 0L
         while (true) {
             val n = stream.read(buf)
             if (n < 0) break
             md.update(buf, 0, n)
+            total += n
         }
-        return md.digest().joinToString("") { "%02x".format(it) }
+        return md.digest().joinToString("") { "%02x".format(it) } to total
     }
 }
