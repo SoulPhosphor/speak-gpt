@@ -1877,9 +1877,23 @@ folder — never combined), and is deliberately conservative:
     enumerable restore sources), the fresh-start confirm, A6. Wording is
     §15.12 verbatim; strings marked DRAFT in `strings.xml` await owner
     review — do not treat them as approved, do not reword approved ones.
-  - **A2 banner:** ChatActivity's `health_banner` (top of chat, Repair | OK,
-    re-shown per chat screen while degraded) + the distinct §15.2c warble
-    (`playDatabaseWarningSignal`, hands-free only, once per new failure).
+  - **A2 banner:** ChatActivity's `health_banner` (top of chat, buttons
+    **Attempt Repair | Okay** — `health_banner_btn_repair`/`health_banner_btn_ok`,
+    deliberately separate strings from the shared `health_btn_repair`/`btn_ok`
+    so this wording can't leak into the A1 dialog or any other OK button;
+    re-shown per chat screen while degraded — this "reappears on the next
+    chat" behavior falls out for free from `healthBannerDismissed` being a
+    plain ChatActivity instance field that resets whenever a chat is opened
+    via a fresh `ChatActivity` instance, which is how every chat switch/open
+    already works) + the distinct §15.2c warble (`playDatabaseWarningSignal`,
+    hands-free only, once per new failure). **Owner ruling, July 23 2026: the
+    banner body text must never instruct the user to tap a button** ("Tap
+    Repair to fix it" was removed — the buttons are self-explanatory); the
+    body now states the user may keep chatting but the affected feature stays
+    off until repaired. The `health_banner_both` wording is owner-approved
+    verbatim; the memory/lorebook/user-image variants extrapolate the same
+    sentence pattern and are flagged for owner confirmation, not yet
+    independently approved.
     The chat `messages` RecyclerView is now height-0dp/fully constrained
     (was match_parent + 64dp margin) so the banner pushes it down — keep it
     that way. A3: the Memory Assistant hard-disables Analyze while ANY

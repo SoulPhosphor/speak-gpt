@@ -1624,12 +1624,22 @@
     <string name="health_btn_change_folder">Change Backup Folder</string>
     <string name="health_btn_retry">Retry</string>
     <string name="health_btn_open_backup_folder">Open Backup Folder</string>
-    <!-- A2 — degraded-mode banner (memory + lorebook approved; the combined and
-         user-image variants are DRAFT, patterned on the approved sentences) -->
-    <string name="health_banner_memory">Memory is currently turned off because of a database problem. Tap Repair to fix it.</string>
-    <string name="health_banner_lorebook">Lorebooks are currently turned off because of a database problem. Tap Repair to fix it.</string>
-    <string name="health_banner_both">Memory and lorebooks are currently turned off because of a database problem. Tap Repair to fix it.</string>
-    <string name="health_banner_user_image">There is a problem with the user image database. Tap Repair to fix it.</string>
+    <!-- A2 — degraded-mode banner. "both" wording is owner-approved verbatim
+         (chat, July 23 2026); memory/lorebook/user-image variants follow the
+         same sentence pattern by direct extrapolation — flagged for owner
+         review, not yet independently confirmed. No variant instructs the
+         user to tap a button (owner ruling, July 23 2026: the buttons are
+         self-explanatory, never say "tap X to fix it"). -->
+    <string name="health_banner_memory">Memory is currently unavailable due to a database issue. You may continue chatting. However, it will not be available until the database is repaired.</string>
+    <string name="health_banner_lorebook">Lorebooks are currently unavailable due to a database issue. You may continue chatting. However, they will not be available until the database is repaired.</string>
+    <string name="health_banner_both">Lorebooks and memory are currently unavailable due to database issues. You may continue chatting. However, these will not be available until the database is repaired.</string>
+    <string name="health_banner_user_image">The user image database is currently unavailable due to a database issue. You may continue chatting. However, it will not be available until the database is repaired.</string>
+    <!-- Banner-specific button labels — deliberately SEPARATE strings from
+         health_btn_repair/btn_ok (both reused elsewhere, e.g. the A1 dialog
+         and dozens of unrelated OK buttons app-wide) so this wording change
+         cannot leak into other screens. Owner-approved verbatim, July 23 2026. -->
+    <string name="health_banner_btn_repair">Attempt Repair</string>
+    <string name="health_banner_btn_ok">Okay</string>
     <!-- A3 — blocked Analyze Conversations note (approved verbatim) -->
     <string name="health_archivist_blocked">Unable to analyze conversations due to current memory database corruption. You may try to repair it again or revert to last known good database. Caution reverting may cause recent memories to be lost.</string>
     <!-- A5 — restore confirmation (approved; the date is the backup\'s real
