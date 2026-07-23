@@ -1531,17 +1531,45 @@
          this screen). File size sits between last-backup and next-due, same
          formatting; the value is either a ByteSizeFormatter string (e.g.
          "4.8 MB") or backup_size_unavailable — never an estimate. -->
+    <!-- SUCCESS-state label (a clean pass, no failure). After a FAILURE the
+         status uses backup_auto_status_last_successful instead, so the two
+         contexts read distinctly. -->
     <string name="backup_auto_status_last">Last Automatic Backup: %1$s</string>
+    <!-- Same "Label: value" line, shown after a failure/paused state to keep
+         the previous good backup visible (owner ruling, July 23 2026). -->
+    <string name="backup_auto_status_last_successful">Last Successful Backup: %1$s</string>
     <string name="backup_auto_status_file_size">File Size: %1$s</string>
     <string name="backup_auto_status_next_due">Next Automatic Backup Due: %1$s</string>
     <string name="backup_auto_status_never">No automatic backup has run yet.</string>
-    <string name="backup_auto_status_paused">Paused — the backup folder is unavailable. Choose a new location to resume.</string>
+    <!-- Shown after a failed pass whose destination is still reachable: the
+         schedule did not advance, so the set stays due and the WorkManager
+         job + app-open catch-up will try again. The EXACT next-retry time is
+         not reliably exposed by WorkManager, so this states the fact without
+         false precision (owner ruling, July 23 2026). -->
+    <string name="backup_auto_status_retrying">Retrying Automatically</string>
+    <!-- DESTINATION_PERMISSION / paused message (owner-approved wording,
+         July 23 2026): a lost SAF grant pauses automatic backups with NO
+         scheduled retry until the user repairs the destination. -->
+    <string name="backup_auto_status_paused">Automatic Backups Paused: Access to the selected folder was lost. Choose the folder again.</string>
+    <!-- Per-category automatic-backup failure messages (owner-approved
+         wording, July 23 2026). Each names a concise, actionable reason; the
+         raw exception is never shown to the user (only the local diagnostic
+         log records class + message for the UNEXPECTED case). -->
+    <string name="backup_auto_fail_write">Automatic Backup Failed: Couldn\'t write to the selected folder.</string>
+    <!-- Used ONLY when the exception specifically indicated insufficient
+         storage (BackupFailureClassifier.isInsufficientStorage), otherwise
+         backup_auto_fail_write is shown. -->
+    <string name="backup_auto_fail_storage">Automatic Backup Failed: Not enough storage space to save the backup.</string>
+    <string name="backup_auto_fail_source">Automatic Backup Failed: The backup could not be created from the app\'s data.</string>
+    <string name="backup_auto_fail_verify">Automatic Backup Failed: The completed backup did not pass verification.</string>
+    <string name="backup_auto_fail_unexpected">Automatic Backup Failed: An unexpected internal error occurred.</string>
     <!-- Shown in place of the normal status lines while a pass is actively
          running (the manual Retry trigger, or the screen resuming while a
-         scheduled/app-open pass happens to be in flight) — an indeterminate
-         spinner sits next to this text. Restored to the normal status once
-         the pass finishes. -->
-    <string name="backup_auto_status_creating">Creating automatic backup…</string>
+         scheduled/app-open pass happens to be in flight) — the real
+         indeterminate Material spinner sits next to this text (no text glyph).
+         Restored to the normal status once the pass finishes. Title Case to
+         match the sibling "Creating Backup…" status value. -->
+    <string name="backup_auto_status_creating">Creating Automatic Backup…</string>
     <!-- Shared "we don\'t know" value for a file-size label (owner ruling,
          July 23 2026): honest, never an estimate. Used as the %1$s value
          inside backup_auto_status_file_size / backup_readable_file_size —

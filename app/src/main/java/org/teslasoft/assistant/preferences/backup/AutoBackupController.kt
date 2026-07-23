@@ -115,7 +115,7 @@ object AutoBackupController {
                 // re-checks rather than the worker looping a backoff-retry here
                 // (see AutoBackupWorker — permission loss is not retried).
                 RecoveryBackupState.recordAutoAttempt(appContext, now)
-                RecoveryBackupState.recordAutoFailure(appContext, BackupFailureCategory.DESTINATION_PERMISSION)
+                RecoveryBackupState.recordAutoFailure(appContext, AutoBackupFailureReason.DESTINATION_PERMISSION)
                 return Outcome.PERMISSION_LOST
             }
             AutoBackupScheduler.Decision.SKIP_ALREADY_RUNNING -> return Outcome.ALREADY_RUNNING
@@ -152,16 +152,20 @@ object AutoBackupController {
                 // NEVER recorded as success: a failed (or permission-blocked)
                 // attempt must not be treated as though the scheduled backup
                 // succeeded. lastSuccess is left untouched, so the next-due
-                // calculation keeps anchoring on the last real success.
-                val category = if (permissionFailed) BackupFailureCategory.DESTINATION_PERMISSION else realFailure!!.category!!
-                RecoveryBackupState.recordAutoFailure(appContext, category)
+                // calculation keeps anchoring on the last real success. The
+                // DISPLAY reason (permission / write / out-of-space / source /
+                // verify) is derived by the pure AutoBackupScheduler
+                // .autoFailureReason and drives the status line's message.
+                val reason = AutoBackupScheduler.autoFailureReason(results)
+                    ?: AutoBackupFailureReason.UNEXPECTED // defensive: hadAnyFailure was true
+                RecoveryBackupState.recordAutoFailure(appContext, reason)
                 return if (permissionFailed) {
                     MemoryLog.log(appContext, "AutoBackup", "warning",
                         "Automatic backup could not reach its folder; blocked until the destination is repaired.")
                     Outcome.PERMISSION_LOST
                 } else {
                     MemoryLog.log(appContext, "AutoBackup", "warning",
-                        "Automatic backup completed with one or more per-type failures (recorded per type).")
+                        "Automatic backup completed with one or more per-type failures (recorded per type): ${reason.name}.")
                     Outcome.RETRYABLE_FAILURE
                 }
             }
@@ -174,14 +178,18 @@ object AutoBackupController {
             return Outcome.COMPLETED
         } catch (e: Exception) {
             // The manager never throws, but stay defensive: never silently
-            // record success on an unexpected exception. Categorized SOURCE (the
-            // least presumptive category — this isn't necessarily a destination
-            // problem) and treated as retryable, same as any other transient
-            // per-type failure.
-            RecoveryBackupState.recordAutoFailure(appContext, BackupFailureCategory.SOURCE)
+            // record success on an unexpected exception. This is the ONLY path
+            // that records UNEXPECTED (an unclassified internal error) — the
+            // user sees "an unexpected internal error occurred", and the local
+            // diagnostic log records the operation stage, exception CLASS and
+            // exception MESSAGE (owner ruling, July 23 2026 — richer than the
+            // usual class-name-only line specifically so a rare unexpected
+            // failure is diagnosable; local Memory log only, never a raw stack
+            // trace to the user and never telemetry). Treated as retryable.
+            RecoveryBackupState.recordAutoFailure(appContext, AutoBackupFailureReason.UNEXPECTED)
             try {
                 MemoryLog.log(appContext, "AutoBackup", "error",
-                    "Automatic backup pass failed (${e.javaClass.simpleName}).")
+                    "Automatic backup pass failed unexpectedly (stage=pass, ${e.javaClass.name}): ${e.message}")
             } catch (_: Exception) { }
             return Outcome.RETRYABLE_FAILURE
         } finally {

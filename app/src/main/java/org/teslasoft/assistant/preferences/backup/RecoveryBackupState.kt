@@ -190,7 +190,11 @@ object RecoveryBackupState {
 
     private const val KEY_AUTO_LAST_ATTEMPT = "backup.auto.last_attempt"
     private const val KEY_AUTO_LAST_SUCCESS = "backup.auto.last_success"
-    private const val KEY_AUTO_LAST_CATEGORY = "backup.auto.last_category"
+    // Stores an AutoBackupFailureReason.name (owner ruling, July 23 2026). The
+    // key name is kept from when it stored a BackupFailureCategory — the four
+    // shared value names are identical, so an older stored value still parses,
+    // no migration needed.
+    private const val KEY_AUTO_LAST_REASON = "backup.auto.last_category"
     private const val KEY_AUTO_LAST_SUCCESS_SIZE = "backup.auto.last_success_size"
 
     /** When the last automatic pass was ATTEMPTED — every genuine attempt
@@ -210,10 +214,11 @@ object RecoveryBackupState {
     fun getAutoLastSuccess(context: Context): Long =
         try { prefs(context).getLong(KEY_AUTO_LAST_SUCCESS, 0L) } catch (_: Exception) { 0L }
 
-    /** The category of the last automatic-pass failure, or null when the last
-     *  pass succeeded (cleared on success). */
-    fun getAutoLastFailureCategory(context: Context): BackupFailureCategory? =
-        try { BackupFailureCategory.fromKey(prefs(context).getString(KEY_AUTO_LAST_CATEGORY, null)) } catch (_: Exception) { null }
+    /** The DISPLAY reason the last automatic pass failed (the value the status
+     *  line shows a message for), or null when the last pass succeeded
+     *  (cleared on success) or was never run. */
+    fun getAutoLastFailureReason(context: Context): AutoBackupFailureReason? =
+        try { AutoBackupFailureReason.fromKey(prefs(context).getString(KEY_AUTO_LAST_REASON, null)) } catch (_: Exception) { null }
 
     /** The total verified size, in bytes, of the last SUCCESSFUL automatic
      *  pass's destination files — summed across every artifact that pass
@@ -255,22 +260,30 @@ object RecoveryBackupState {
                 } else {
                     remove(KEY_AUTO_LAST_SUCCESS_SIZE)
                 }
-                remove(KEY_AUTO_LAST_CATEGORY)
+                remove(KEY_AUTO_LAST_REASON)
             }
         } catch (_: Exception) { }
     }
 
     /** Record a failed (or permission-blocked) automatic pass: store the
-     *  CATEGORY (never a bare "failed"). The last-success stamp AND its
+     *  display REASON (never a bare "failed"). The last-success stamp AND its
      *  paired file size are deliberately left untouched, so [getAutoLastSuccess]
      *  / [getAutoLastSuccessSizeBytes] — and therefore the next-due
      *  calculation and the displayed file size — keep describing the last
      *  time a backup genuinely completed; a failed backup must never replace
      *  the previous successful file size. */
-    fun recordAutoFailure(context: Context, category: BackupFailureCategory) {
+    fun recordAutoFailure(context: Context, reason: AutoBackupFailureReason) {
         try {
-            prefs(context).edit(commit = true) { putString(KEY_AUTO_LAST_CATEGORY, category.name) }
+            prefs(context).edit(commit = true) { putString(KEY_AUTO_LAST_REASON, reason.name) }
         } catch (_: Exception) { }
+    }
+
+    /** Clear only the last-failure reason (not the success stamp/size) — used
+     *  when the user picks a NEW destination folder, so a stale "folder lost"
+     *  reason from the old folder doesn't linger over the freshly-granted one
+     *  until the next run overwrites it. */
+    fun clearAutoFailureReason(context: Context) {
+        try { prefs(context).edit(commit = true) { remove(KEY_AUTO_LAST_REASON) } } catch (_: Exception) { }
     }
 
     // ----- per-type result tracking ------------------------------------------

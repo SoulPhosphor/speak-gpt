@@ -106,6 +106,53 @@ class BackupFailureClassifierTest {
         assertFalse(BackupFailureClassifier.isPermissionRelated(a))
     }
 
+    /* -------------------- insufficient-storage detection ------------------- */
+
+    @Test
+    fun enospcMessageIsInsufficientStorage() {
+        assertTrue(BackupFailureClassifier.isInsufficientStorage(IOException("write failed: ENOSPC (No space left on device)")))
+    }
+
+    @Test
+    fun noSpaceLeftPhraseIsInsufficientStorage() {
+        assertTrue(BackupFailureClassifier.isInsufficientStorage(IOException("No space left on device")))
+    }
+
+    @Test
+    fun notEnoughSpacePhraseIsInsufficientStorage() {
+        assertTrue(BackupFailureClassifier.isInsufficientStorage(RuntimeException("Not enough space to complete write")))
+    }
+
+    @Test
+    fun insufficientStorageThroughCauseChain() {
+        val wrapped = RuntimeException("copy failed", IOException("ENOSPC"))
+        assertTrue(BackupFailureClassifier.isInsufficientStorage(wrapped))
+    }
+
+    @Test
+    fun caseInsensitiveStorageMatch() {
+        assertTrue(BackupFailureClassifier.isInsufficientStorage(IOException("no SPACE left ON device")))
+    }
+
+    @Test
+    fun genericIoErrorIsNotInsufficientStorage() {
+        // A plain write failure must NOT be mislabeled out-of-space (owner
+        // rule: storage message "if and only if" the exception says so).
+        assertFalse(BackupFailureClassifier.isInsufficientStorage(IOException("Broken pipe")))
+        assertFalse(BackupFailureClassifier.isInsufficientStorage(IOException("Permission denied")))
+        assertFalse(BackupFailureClassifier.isInsufficientStorage(null))
+        assertFalse(BackupFailureClassifier.isInsufficientStorage(RuntimeException()))
+    }
+
+    @Test
+    fun insufficientStorageSelfReferentialChainDoesNotLoop() {
+        val a = RuntimeException("outer")
+        val b = RuntimeException("inner", a)
+        a.initCause(b)
+        // Must terminate (and not match — no storage phrase present).
+        assertFalse(BackupFailureClassifier.isInsufficientStorage(a))
+    }
+
     @Test
     fun categoryRoundTripsThroughKey() {
         for (c in BackupFailureCategory.values()) {

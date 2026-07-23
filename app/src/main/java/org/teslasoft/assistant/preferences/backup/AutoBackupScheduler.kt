@@ -207,4 +207,38 @@ object AutoBackupScheduler {
         val successfulSizes = results.filter { it.success }.map { it.sizeBytes }
         return if (successfulSizes.any { it == null }) null else successfulSizes.filterNotNull().sum()
     }
+
+    /**
+     * The DISPLAY reason a completed pass failed, from its per-type
+     * [RecoveryBackupManager.TypeResult]s — the value the automatic-backup
+     * status line shows a message for. Pure and unit-tested.
+     *
+     * Priority: a lost destination permission (anywhere in the pass) wins,
+     * since it blocks everything and pauses the system; otherwise the FIRST
+     * real per-type failure decides — a [BackupFailureCategory.DESTINATION_WRITE]
+     * whose exception was recognized as out-of-space
+     * ([RecoveryBackupManager.TypeResult.insufficientStorage]) becomes
+     * [AutoBackupFailureReason.DESTINATION_FULL], everything else maps straight
+     * across. Returns null when there was no real failure (a fully clean pass,
+     * or only neutral "nothing to back up" results) — the caller records a
+     * success in that case, never a failure. The controller's own defensive
+     * catch (an unexpected throw from the engine, which is designed never to
+     * happen) records [AutoBackupFailureReason.UNEXPECTED] directly and does
+     * NOT go through here.
+     */
+    fun autoFailureReason(results: List<RecoveryBackupManager.TypeResult>): AutoBackupFailureReason? {
+        if (results.any { it.category == BackupFailureCategory.DESTINATION_PERMISSION }) {
+            return AutoBackupFailureReason.DESTINATION_PERMISSION
+        }
+        val firstFailure = results.firstOrNull { !it.success && it.category != null } ?: return null
+        return when (firstFailure.category) {
+            BackupFailureCategory.DESTINATION_PERMISSION -> AutoBackupFailureReason.DESTINATION_PERMISSION
+            BackupFailureCategory.DESTINATION_WRITE ->
+                if (firstFailure.insufficientStorage) AutoBackupFailureReason.DESTINATION_FULL
+                else AutoBackupFailureReason.DESTINATION_WRITE
+            BackupFailureCategory.SOURCE -> AutoBackupFailureReason.SOURCE
+            BackupFailureCategory.VERIFY -> AutoBackupFailureReason.VERIFY
+            null -> null
+        }
+    }
 }

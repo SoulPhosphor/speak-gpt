@@ -45,8 +45,10 @@ import android.provider.DocumentsContract
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.backup.AutoBackupController
+import org.teslasoft.assistant.preferences.backup.AutoBackupFailureReason
 import org.teslasoft.assistant.preferences.backup.AutoBackupScheduler
 import org.teslasoft.assistant.preferences.backup.AutoBackupScheduling
+import org.teslasoft.assistant.preferences.backup.AutoBackupStatusPresenter
 import org.teslasoft.assistant.preferences.backup.BackupBrand
 import org.teslasoft.assistant.preferences.backup.BackupFailurePolicy
 import org.teslasoft.assistant.preferences.backup.BackupFrequency
@@ -974,24 +976,58 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
     private fun fileSizeValue(bytes: Long?): String =
         if (bytes != null) ByteSizeFormatter.format(bytes) else getString(R.string.backup_size_unavailable)
 
+    /** The owner-approved message for a display failure reason. */
+    private fun autoFailureMessage(reason: AutoBackupFailureReason?): String = getString(
+        when (reason) {
+            AutoBackupFailureReason.DESTINATION_PERMISSION -> R.string.backup_auto_status_paused
+            AutoBackupFailureReason.DESTINATION_WRITE -> R.string.backup_auto_fail_write
+            AutoBackupFailureReason.DESTINATION_FULL -> R.string.backup_auto_fail_storage
+            AutoBackupFailureReason.SOURCE -> R.string.backup_auto_fail_source
+            AutoBackupFailureReason.VERIFY -> R.string.backup_auto_fail_verify
+            AutoBackupFailureReason.UNEXPECTED, null -> R.string.backup_auto_fail_unexpected
+        }
+    )
+
+    /** The "Last (Successful) Backup: <date>" + "File Size: <size>" pair, with
+     *  the label chosen by context (clean success vs after-a-failure). */
+    private fun lastSuccessLines(labelRes: Int): List<String> {
+        val date = BackupStatusFormatter.formatDateTime(RecoveryBackupState.getAutoLastSuccess(this))
+        val size = fileSizeValue(RecoveryBackupState.getAutoLastSuccessSizeBytes(this))
+        return listOf(
+            getString(labelRes, date),
+            getString(R.string.backup_auto_status_file_size, size)
+        )
+    }
+
     /**
-     * Show the automatic set's own status. While a pass is actively running
-     * (this screen's own manual trigger, or one it discovers on refresh via
-     * [AutoBackupController.isRunning]) this shows an indeterminate spinner +
-     * "Creating automatic backup…" in place of everything below — the last
-     * known state is restored the moment the pass finishes. Otherwise: paused
-     * when the folder is unavailable while enabled; the never-run state; or,
-     * after a real success, "Last Automatic Backup: … / File Size: … / Next
-     * Automatic Backup Due: …" (File Size omitted only when disabled, since
-     * there is no next-due to pair it with there). Uses the recorded state —
-     * never a raw URI. The per-type Backup Status rows above show each
-     * artifact's own last result.
+     * Show the automatic set's own status, driven by the pure
+     * [AutoBackupStatusPresenter] (every state is unit-tested there). While a
+     * pass is actively running this shows the real indeterminate Material
+     * spinner + "Creating Automatic Backup…" and NOTHING else (no text glyph).
+     * Otherwise it renders, per the presenter's decision: the last successful
+     * backup + size when disabled; the never-run line; the paused message
+     * (destination lost, no retry) with the previous good backup kept visible;
+     * a category-specific failure message + previous good backup + "Retrying
+     * Automatically"; or, on a clean pass, last backup + size + next due.
+     * Uses the recorded state — never a raw URI, never a raw exception.
      */
     private fun refreshAutoStatus() {
         val tv = textAutoStatus ?: return
         val spinner = spinnerAutoStatus
 
-        if (manualAutoBackupRunning || AutoBackupController.isRunning()) {
+        val uriStr = RecoveryBackupState.getAutoFolderUri(this)
+        val hasDestination = uriStr != null
+        val view = AutoBackupStatusPresenter.present(
+            enabled = RecoveryBackupState.isEnabled(this),
+            hasDestination = hasDestination,
+            destinationAccessible = hasDestination && AutoBackupController.folderAccessible(this, uriStr!!),
+            running = manualAutoBackupRunning || AutoBackupController.isRunning(),
+            lastSuccessMillis = RecoveryBackupState.getAutoLastSuccess(this),
+            lastAttemptMillis = RecoveryBackupState.getAutoLastAttempt(this),
+            failureReason = RecoveryBackupState.getAutoLastFailureReason(this)
+        )
+
+        if (view.kind == AutoBackupStatusPresenter.Kind.CREATING) {
             spinner?.visibility = View.VISIBLE
             tv.text = getString(R.string.backup_auto_status_creating)
             tv.visibility = View.VISIBLE
@@ -999,36 +1035,31 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         }
         spinner?.visibility = View.GONE
 
-        val enabled = RecoveryBackupState.isEnabled(this)
-        val uriStr = RecoveryBackupState.getAutoFolderUri(this)
-        val lastSuccess = RecoveryBackupState.getAutoLastSuccess(this)
-        val paused = enabled && uriStr != null && !AutoBackupController.folderAccessible(this, uriStr)
-
-        val text: String = when {
-            paused -> getString(R.string.backup_auto_status_paused)
-            !enabled -> if (lastSuccess > 0L) {
-                getString(R.string.backup_auto_status_last, BackupStatusFormatter.formatDateTime(lastSuccess)) +
-                    "\n" + getString(
-                        R.string.backup_auto_status_file_size,
-                        fileSizeValue(RecoveryBackupState.getAutoLastSuccessSizeBytes(this))
-                    )
-            } else ""
-            lastSuccess <= 0L -> getString(R.string.backup_auto_status_never)
-            else -> {
-                val lastLine = getString(
-                    R.string.backup_auto_status_last, BackupStatusFormatter.formatDateTime(lastSuccess)
+        val lines = ArrayList<String>()
+        when (view.kind) {
+            AutoBackupStatusPresenter.Kind.HIDDEN, AutoBackupStatusPresenter.Kind.CREATING -> { /* nothing */ }
+            AutoBackupStatusPresenter.Kind.NEVER ->
+                lines += getString(R.string.backup_auto_status_never)
+            AutoBackupStatusPresenter.Kind.DISABLED ->
+                if (view.showLastSuccess) lines += lastSuccessLines(R.string.backup_auto_status_last)
+            AutoBackupStatusPresenter.Kind.SUCCESS -> {
+                lines += lastSuccessLines(R.string.backup_auto_status_last)
+                val nextDue = AutoBackupScheduler.nextDueMillis(
+                    RecoveryBackupState.getAutoLastSuccess(this), autoFrequency
                 )
-                val sizeLine = getString(
-                    R.string.backup_auto_status_file_size,
-                    fileSizeValue(RecoveryBackupState.getAutoLastSuccessSizeBytes(this))
-                )
-                val nextDue = AutoBackupScheduler.nextDueMillis(lastSuccess, autoFrequency)
-                val nextDueLine = getString(
-                    R.string.backup_auto_status_next_due, BackupStatusFormatter.formatDateTime(nextDue)
-                )
-                "$lastLine\n$sizeLine\n$nextDueLine"
+                lines += getString(R.string.backup_auto_status_next_due, BackupStatusFormatter.formatDateTime(nextDue))
+            }
+            AutoBackupStatusPresenter.Kind.PAUSED -> {
+                lines += autoFailureMessage(view.failureReason)
+                if (view.showLastSuccess) lines += lastSuccessLines(R.string.backup_auto_status_last_successful)
+            }
+            AutoBackupStatusPresenter.Kind.FAILED -> {
+                lines += autoFailureMessage(view.failureReason)
+                if (view.showLastSuccess) lines += lastSuccessLines(R.string.backup_auto_status_last_successful)
+                if (view.showRetrying) lines += getString(R.string.backup_auto_status_retrying)
             }
         }
+        val text = lines.joinToString("\n")
         tv.text = text
         tv.visibility = if (text.isEmpty()) View.GONE else View.VISIBLE
     }
@@ -1053,6 +1084,10 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         val picked = BackupLocationDisplay.applyFolderPick(uri.toString())
         RecoveryBackupState.setAutoFolderUri(this, picked.uri)
         RecoveryBackupState.setAutoFolderLabel(this, picked.label)
+        // Repairing/replacing the destination clears a stale "folder lost"
+        // failure reason so the status doesn't keep showing the old paused
+        // message over the freshly-granted folder until the next run.
+        RecoveryBackupState.clearAutoFailureReason(this)
 
         // If this pick was the destination the pending toggle-enable needed,
         // enabling now completes: the required valid destination exists.

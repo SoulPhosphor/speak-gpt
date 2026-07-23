@@ -380,4 +380,81 @@ class AutoBackupSchedulerTest {
     fun totalSize_emptyResultsIsZero() {
         assertEquals(0L, AutoBackupScheduler.totalVerifiedSize(emptyList()))
     }
+
+    /* -------------------- autoFailureReason: results -> display reason ----- */
+
+    private fun fail(
+        type: BackupType,
+        category: BackupFailureCategory,
+        insufficientStorage: Boolean = false
+    ) = RecoveryBackupManager.TypeResult(
+        type, success = false, category = category, sizeBytes = null, insufficientStorage = insufficientStorage
+    )
+
+    @Test
+    fun reason_permissionWinsOverEverything() {
+        // A lost permission anywhere in the pass outranks any other failure —
+        // it blocks everything and pauses the system.
+        val results = listOf(
+            fail(BackupType.MEMORY, BackupFailureCategory.SOURCE),
+            fail(BackupType.LOREBOOK, BackupFailureCategory.DESTINATION_PERMISSION),
+            fail(BackupType.CHATS, BackupFailureCategory.VERIFY)
+        )
+        assertEquals(AutoBackupFailureReason.DESTINATION_PERMISSION, AutoBackupScheduler.autoFailureReason(results))
+    }
+
+    @Test
+    fun reason_destinationWriteMapsToWrite() {
+        val results = listOf(fail(BackupType.MEMORY, BackupFailureCategory.DESTINATION_WRITE))
+        assertEquals(AutoBackupFailureReason.DESTINATION_WRITE, AutoBackupScheduler.autoFailureReason(results))
+    }
+
+    @Test
+    fun reason_destinationWriteWithInsufficientStorageMapsToFull() {
+        val results = listOf(fail(BackupType.MEMORY, BackupFailureCategory.DESTINATION_WRITE, insufficientStorage = true))
+        assertEquals(AutoBackupFailureReason.DESTINATION_FULL, AutoBackupScheduler.autoFailureReason(results))
+    }
+
+    @Test
+    fun reason_sourceMapsToSource() {
+        val results = listOf(fail(BackupType.MEMORY, BackupFailureCategory.SOURCE))
+        assertEquals(AutoBackupFailureReason.SOURCE, AutoBackupScheduler.autoFailureReason(results))
+    }
+
+    @Test
+    fun reason_verifyMapsToVerify() {
+        val results = listOf(fail(BackupType.MEMORY, BackupFailureCategory.VERIFY))
+        assertEquals(AutoBackupFailureReason.VERIFY, AutoBackupScheduler.autoFailureReason(results))
+    }
+
+    @Test
+    fun reason_firstRealFailureDecidesWhenNoPermission() {
+        val results = listOf(
+            result(BackupType.MEMORY, success = true, sizeBytes = 100L),
+            result(BackupType.LOREBOOK, success = false, category = null), // nothing-to-back-up, skipped
+            fail(BackupType.CHATS, BackupFailureCategory.VERIFY),
+            fail(BackupType.USER_IMAGE, BackupFailureCategory.SOURCE)
+        )
+        assertEquals(AutoBackupFailureReason.VERIFY, AutoBackupScheduler.autoFailureReason(results))
+    }
+
+    @Test
+    fun reason_insufficientStorageOnlyMattersForDestinationWrite() {
+        // A SOURCE failure that happens to carry insufficientStorage=true still
+        // maps to SOURCE — the "out of space" message is scoped to the
+        // destination-write case only (owner requirement).
+        val results = listOf(fail(BackupType.MEMORY, BackupFailureCategory.SOURCE, insufficientStorage = true))
+        assertEquals(AutoBackupFailureReason.SOURCE, AutoBackupScheduler.autoFailureReason(results))
+    }
+
+    @Test
+    fun reason_nullWhenNoRealFailure() {
+        // A fully clean pass, or only neutral nothing-to-back-up results, is
+        // not a failure — the controller records a success, never a failure.
+        assertEquals(null, AutoBackupScheduler.autoFailureReason(emptyList()))
+        assertEquals(null, AutoBackupScheduler.autoFailureReason(listOf(
+            result(BackupType.MEMORY, success = true, sizeBytes = 100L),
+            result(BackupType.LOREBOOK, success = false, category = null)
+        )))
+    }
 }

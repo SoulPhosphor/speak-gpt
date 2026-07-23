@@ -77,7 +77,14 @@ object RecoveryBackupManager {
          *  never an estimate). Null whenever there is no verified
          *  destination file for this result: a failure, "nothing to back
          *  up", or a degraded-store pause. */
-        val sizeBytes: Long? = null
+        val sizeBytes: Long? = null,
+        /** True only when this result FAILED and its exception specifically
+         *  indicated insufficient storage space
+         *  ([BackupFailureClassifier.isInsufficientStorage]). Lets the
+         *  automatic-backup status show an accurate "not enough space"
+         *  message instead of a generic write failure — see
+         *  [AutoBackupScheduler.autoFailureReason]. Always false on success. */
+        val insufficientStorage: Boolean = false
     )
 
     private const val CHAT_LIST_FILE = "chat_list"
@@ -147,10 +154,11 @@ object RecoveryBackupManager {
             return TypeResult(type, success = true, category = null, sizeBytes = verifiedSize)
         } catch (e: Exception) {
             val category = BackupFailureClassifier.classify(stage, e)
+            val insufficientStorage = BackupFailureClassifier.isInsufficientStorage(e)
             RecoveryBackupState.recordFailure(context, type, runAt, category)
             MemoryLog.log(context, "RecoveryBackup", "error",
                 "Recovery backup of ${type.key} failed at $stage (${category.name}).")
-            return TypeResult(type, success = false, category = category)
+            return TypeResult(type, success = false, category = category, insufficientStorage = insufficientStorage)
         } finally {
             try { if (staged.exists()) staged.delete() } catch (_: Exception) { }
         }

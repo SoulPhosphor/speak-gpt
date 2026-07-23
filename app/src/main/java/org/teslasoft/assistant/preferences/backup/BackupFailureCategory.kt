@@ -99,4 +99,34 @@ object BackupFailureClassifier {
         }
         return false
     }
+
+    /**
+     * True ONLY when a failure's exception SPECIFICALLY indicates the write
+     * failed for lack of storage space (owner ruling, July 23 2026: use an
+     * accurate storage-space message "if and only if" the exception really
+     * says so — never as a guess for any write failure). Deliberately narrow:
+     * it matches the unambiguous out-of-space signatures (the POSIX ENOSPC
+     * code and its canonical "No space left on device" text, plus the two
+     * plainest English phrasings providers use) and nothing vaguer, so a
+     * generic IO error is never mislabeled as "out of space". Walks the cause
+     * chain by MESSAGE, bounded against a self-referential cycle, and stays
+     * free of Android-only types so it is unit-testable on the JVM.
+     */
+    fun isInsufficientStorage(error: Throwable?): Boolean {
+        var e = error
+        var guard = 0
+        while (e != null && guard < 20) {
+            val msg = e.message?.lowercase()
+            if (msg != null && (
+                    msg.contains("enospc") ||
+                    msg.contains("no space left on device") ||
+                    msg.contains("not enough space") ||
+                    msg.contains("insufficient storage")
+                )
+            ) return true
+            e = e.cause
+            guard++
+        }
+        return false
+    }
 }
