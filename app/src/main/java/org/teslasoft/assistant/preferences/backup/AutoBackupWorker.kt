@@ -40,7 +40,7 @@ import androidx.work.WorkerParameters
  *    hit the same wall); the fix requires the user to repair the destination,
  *    and the next natural trigger (periodic tick or app-open) re-checks.
  *  - [AutoBackupController.Outcome.RETRYABLE_FAILURE] → [Result.retry], bounded
- *    by [AutoBackupScheduler.shouldRetryNow] against [getRunAttemptCount] — a
+ *    by [AutoBackupScheduler.shouldRetryNow] against [runAttemptCount] — a
  *    transient per-type failure (source/destination-write/verify) gets a short
  *    WorkManager backoff-retry within this due window; once the bound is
  *    exceeded it becomes [Result.failure] until the next natural trigger.
