@@ -198,6 +198,12 @@ dependencies {
     // compile. Version matches the one sqlcipher-android 4.16.0 resolves.
     implementation 'androidx.sqlite:sqlite:2.6.2'
 
+    // WorkManager drives the Automatic Backups periodic job — the reliable
+    // trigger that survives the app being closed (an app-open check alone can
+    // only run when the user opens the app). One unique periodic job; the
+    // worker's own due gate makes a deferred/early fire harmless.
+    implementation 'androidx.work:work-runtime-ktx:2.10.0'
+
     // JVM unit tests (app/src/test); run in CI via "gradlew test".
     testImplementation 'junit:junit:4.13.2'
     // Real org.json for unit tests (the android.jar stub throws); lets the

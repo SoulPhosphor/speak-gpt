@@ -396,7 +396,7 @@
 
             <TextView
                 style="@style/Widget.App.Section.Hint"
-                android:text="@string/backup_auto_not_ready" />
+                android:text="@string/backup_auto_hint" />
 
             <!-- Toggle row: Widget.App.Row.Toggle/.TextColumn/.Title/.Subtitle/
                  .Switch (established house style — see ui-style-guide.md;
@@ -449,6 +449,18 @@
                 android:textColor="@color/text"
                 android:textIsSelectable="true"
                 android:textSize="15sp" />
+
+            <!-- Automatic-set status: last automatic backup + next due (or the
+                 paused/never state). Records surfaced honestly; the per-type
+                 rows in Backup Status show each artifact's own result. -->
+            <TextView
+                android:id="@+id/text_auto_status"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="8dp"
+                android:textColor="@color/text"
+                android:textIsSelectable="true"
+                android:textSize="13sp" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_change_auto_location"

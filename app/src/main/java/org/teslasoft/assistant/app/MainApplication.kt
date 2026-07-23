@@ -31,6 +31,8 @@ import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.RenameJournal
 import org.teslasoft.assistant.preferences.SecurePrefs
 import org.teslasoft.assistant.preferences.StartupHealth
+import org.teslasoft.assistant.preferences.backup.AutoBackupController
+import org.teslasoft.assistant.preferences.backup.AutoBackupScheduling
 import org.teslasoft.assistant.preferences.backup.BackupType
 import org.teslasoft.assistant.preferences.backup.DatabaseHealthState
 import org.teslasoft.assistant.preferences.backup.StartupDatabaseCheck
@@ -184,6 +186,22 @@ class MainApplication : Application() {
                 }
             } catch (e: Exception) {
                 MemoryLog.log(this, "MemoryStore", "error", "Memory store startup housekeeping failed: ${e.message}")
+            }
+            try {
+                // Automatic Backups (owner ruling, July 23 2026). Two triggers:
+                // the WorkManager job below is the reliable one that survives the
+                // app being closed; this app-open pass is the CATCH-UP so a
+                // backup that came due while the app was closed runs promptly on
+                // next open. It runs HERE, on the startup housekeeping thread —
+                // off the main thread and off the chat-list loader — so a due
+                // backup never blocks the chat list from loading or a new chat
+                // from opening (its only shared lock, CHAT_LIST_LOCK, is held
+                // just briefly while a few small chat files are archived). Both
+                // calls gate/guard internally and never throw.
+                AutoBackupScheduling.sync(this)
+                AutoBackupController.runIfDue(this)
+            } catch (e: Exception) {
+                MemoryLog.log(this, "AutoBackup", "error", "Automatic backup startup pass failed: ${e.message}")
             }
         }.start()
 

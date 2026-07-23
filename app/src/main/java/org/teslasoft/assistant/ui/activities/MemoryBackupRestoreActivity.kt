@@ -43,6 +43,9 @@ import com.google.android.material.materialswitch.MaterialSwitch
 import android.provider.DocumentsContract
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
+import org.teslasoft.assistant.preferences.backup.AutoBackupController
+import org.teslasoft.assistant.preferences.backup.AutoBackupScheduler
+import org.teslasoft.assistant.preferences.backup.AutoBackupScheduling
 import org.teslasoft.assistant.preferences.backup.BackupBrand
 import org.teslasoft.assistant.preferences.backup.BackupFailurePolicy
 import org.teslasoft.assistant.preferences.backup.BackupFrequency
@@ -52,7 +55,6 @@ import org.teslasoft.assistant.preferences.backup.BackupType
 import org.teslasoft.assistant.preferences.backup.DatabaseHealthChecker
 import org.teslasoft.assistant.preferences.backup.DatabaseHealthState
 import org.teslasoft.assistant.preferences.backup.DatabaseRepairManager
-import org.teslasoft.assistant.preferences.backup.RecoveryBackupManager
 import org.teslasoft.assistant.preferences.backup.RecoveryBackupState
 import org.teslasoft.assistant.preferences.backup.RecoveryFileNaming
 import org.teslasoft.assistant.ui.DatabaseRecoveryFlows
@@ -145,7 +147,17 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
     private var btnAutoFrequency: TextView? = null
     private var autoFrequency = BackupFrequency.DAILY
     private var textAutoLocation: TextView? = null
+    private var textAutoStatus: TextView? = null
     private var btnChangeAutoLocation: MaterialButton? = null
+
+    // Guards the auto-backup switch's listener from firing while we set its
+    // checked state programmatically (revert-on-cancel, initial load).
+    private var suppressAutoToggle = false
+
+    // The user flipped the toggle ON with no destination yet: the folder picker
+    // is open, and enabling completes only once a folder is actually chosen. If
+    // they cancel the picker, the toggle reverts to off.
+    private var pendingEnableAfterPick = false
 
     // 7. Reset
     private var btnReset: MaterialButton? = null
@@ -161,7 +173,7 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
     }
 
     private val autoFolderPicker = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
-        if (uri != null) onFolderChosen(uri)
+        if (uri != null) onFolderChosen(uri) else onFolderPickCancelled()
     }
 
     private val readableSaveLauncher = registerForActivityResult(
@@ -197,6 +209,7 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         super.onResume()
         refreshLocations()
         refreshBackupStatus()
+        refreshAutoStatus()
         // Build Phase 3 dialog delivery: a queued startup health notice (A1 /
         // Database Repaired / A6), a repair explicitly requested from the A2
         // chat banner, then the 3-strikes backup-failure sweep — one dialog
@@ -249,6 +262,7 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         switchAutoBackup = findViewById(R.id.switch_auto_backup)
         btnAutoFrequency = findViewById(R.id.btn_auto_frequency)
         textAutoLocation = findViewById(R.id.text_auto_location)
+        textAutoStatus = findViewById(R.id.text_auto_status)
         btnChangeAutoLocation = findViewById(R.id.btn_change_auto_location)
 
         btnReset = findViewById(R.id.btn_memory_reset)
@@ -312,15 +326,25 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
             exportLauncher.launch("memory-export-$stamp.json")
         }
 
-        /* ---- 6. Automatic Backups (toggle + frequency persist a choice
-             ahead of the portable automatic writer existing; system not
-             built yet) ---- */
+        /* ---- 6. Automatic Backups: enabled flag + frequency + destination
+             drive the WorkManager job and the app-open catch-up check. A
+             valid, writable destination is REQUIRED before enabling — flipping
+             the toggle on with no folder opens the picker and completes the
+             enable only once a folder is chosen. ---- */
+        suppressAutoToggle = true
         switchAutoBackup?.isChecked = RecoveryBackupState.isEnabled(this)
+        suppressAutoToggle = false
         switchAutoBackup?.setOnCheckedChangeListener { _, isChecked ->
-            RecoveryBackupState.setEnabled(this, isChecked)
+            if (suppressAutoToggle) return@setOnCheckedChangeListener
+            onAutoToggle(isChecked)
         }
         initAutoFrequencySection()
-        btnChangeAutoLocation?.setOnClickListener { autoFolderPicker.launch(null) }
+        // Changing the folder here is a plain "change location" (never a
+        // pending-enable), so make sure the flag is clear before launching.
+        btnChangeAutoLocation?.setOnClickListener {
+            pendingEnableAfterPick = false
+            autoFolderPicker.launch(null)
+        }
 
         /* ---- 7. Reset (bottom) ---- */
         btnReset?.setOnClickListener { showResetDialog() }
@@ -812,16 +836,22 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
     }
 
     /** Retry from the 3-strikes dialog: run one recovery-backup pass into the
-     *  automatic folder now, then refresh the status rows. */
+     *  automatic folder now (through the controller, so rotation stays OFF —
+     *  automatic backups never delete an older copy), then refresh the status
+     *  rows. [AutoBackupController.runNow] ignores the due window but honours
+     *  every other gate (destination present + still writable). */
     private fun retryAutomaticBackup() {
-        val uriStr = RecoveryBackupState.getAutoFolderUri(this)
-        if (uriStr == null) {
+        if (RecoveryBackupState.getAutoFolderUri(this) == null) {
+            pendingEnableAfterPick = false
             autoFolderPicker.launch(null)
             return
         }
         runOffThread {
-            RecoveryBackupManager.createBackup(this, Uri.parse(uriStr))
-            runOnUiThread { refreshBackupStatus() }
+            AutoBackupController.runNow(this)
+            runOnUiThread {
+                refreshBackupStatus()
+                refreshAutoStatus()
+            }
         }
     }
 
@@ -894,7 +924,45 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
             autoFrequency = options[position]
             RecoveryBackupState.setAutoFrequency(this, autoFrequency)
             updateAutoFrequencyLabel()
+            // Re-period the unique job so a frequency change takes effect
+            // (no-op when automatic backups are off or no folder is set).
+            AutoBackupScheduling.sync(this)
+            refreshAutoStatus()
         }
+    }
+
+    /**
+     * Show the automatic set's own status: paused when the folder is
+     * unavailable while enabled, otherwise the last automatic backup and the
+     * next due time (or the never-run state). Uses the recorded state — never a
+     * raw URI. The per-type Backup Status rows above show each artifact's own
+     * last result.
+     */
+    private fun refreshAutoStatus() {
+        val tv = textAutoStatus ?: return
+        val enabled = RecoveryBackupState.isEnabled(this)
+        val uriStr = RecoveryBackupState.getAutoFolderUri(this)
+        val lastSuccess = RecoveryBackupState.getAutoLastSuccess(this)
+        val paused = enabled && uriStr != null && !AutoBackupController.folderAccessible(this, uriStr)
+
+        val text: String = when {
+            paused -> getString(R.string.backup_auto_status_paused)
+            !enabled -> if (lastSuccess > 0L)
+                getString(R.string.backup_auto_status_last, BackupStatusFormatter.formatDateTime(lastSuccess))
+                else ""
+            lastSuccess <= 0L -> getString(R.string.backup_auto_status_never)
+            else -> {
+                val lastLine = getString(
+                    R.string.backup_auto_status_last, BackupStatusFormatter.formatDateTime(lastSuccess)
+                )
+                val nextDue = AutoBackupScheduler.nextDueMillis(lastSuccess, autoFrequency)
+                lastLine + "\n" + getString(
+                    R.string.backup_auto_status_next_due, BackupStatusFormatter.formatDateTime(nextDue)
+                )
+            }
+        }
+        tv.text = text
+        tv.visibility = if (text.isEmpty()) View.GONE else View.VISIBLE
     }
 
     /* ------------------------------ backup locations ------------------------------ */
@@ -917,12 +985,63 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         val picked = BackupLocationDisplay.applyFolderPick(uri.toString())
         RecoveryBackupState.setAutoFolderUri(this, picked.uri)
         RecoveryBackupState.setAutoFolderLabel(this, picked.label)
+
+        // If this pick was the destination the pending toggle-enable needed,
+        // enabling now completes: the required valid destination exists.
+        if (pendingEnableAfterPick) {
+            pendingEnableAfterPick = false
+            RecoveryBackupState.setEnabled(this, true)
+            setAutoSwitchChecked(true)
+        }
+        // Reconcile the WorkManager job with the new state (enqueues when
+        // enabled + a folder is set, cancels otherwise). Idempotent.
+        AutoBackupScheduling.sync(this)
         refreshLocations()
+        refreshAutoStatus()
         runOffThread {
             val label = BackupLocationDisplay.treeFolderLabel(this, uri)
             if (label != null) RecoveryBackupState.setAutoFolderLabel(this, label)
             runOnUiThread { refreshLocations() }
         }
+    }
+
+    /** The folder picker was cancelled. If it was opened to satisfy a
+     *  pending toggle-enable, revert the switch to off — enabling requires a
+     *  valid destination, and none was chosen. */
+    private fun onFolderPickCancelled() {
+        if (pendingEnableAfterPick) {
+            pendingEnableAfterPick = false
+            RecoveryBackupState.setEnabled(this, false)
+            setAutoSwitchChecked(false)
+            refreshAutoStatus()
+        }
+    }
+
+    /** Set the auto-backup switch's checked state without firing the listener. */
+    private fun setAutoSwitchChecked(checked: Boolean) {
+        suppressAutoToggle = true
+        switchAutoBackup?.isChecked = checked
+        suppressAutoToggle = false
+    }
+
+    /**
+     * The toggle changed. Turning ON requires a valid destination: if none is
+     * chosen yet, open the picker and defer the enable until a folder lands
+     * (owner ruling). Turning OFF disables and cancels the scheduled job.
+     */
+    private fun onAutoToggle(isChecked: Boolean) {
+        if (isChecked) {
+            if (RecoveryBackupState.getAutoFolderUri(this) == null) {
+                pendingEnableAfterPick = true
+                autoFolderPicker.launch(null)
+                return
+            }
+            RecoveryBackupState.setEnabled(this, true)
+        } else {
+            RecoveryBackupState.setEnabled(this, false)
+        }
+        AutoBackupScheduling.sync(this)
+        refreshAutoStatus()
     }
 
     /** True while the persisted grant for [uriStr] is still held — when it is

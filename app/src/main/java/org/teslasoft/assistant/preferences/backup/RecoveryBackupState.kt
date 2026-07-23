@@ -179,6 +179,71 @@ object RecoveryBackupState {
         } catch (_: Exception) { }
     }
 
+    // ----- automatic-set run tracking (owner ruling, July 23 2026) -----------
+    // The four artifacts each record their own last-attempt/success/failure
+    // above; these track the AUTOMATIC PASS as a whole, so the scheduler has a
+    // single anchor that manual per-type runs can't move and the screen can
+    // show "last automatic backup" / "next due" honestly. Time is fixed epoch
+    // millis; the failure category is the auto pass's own (chiefly
+    // DESTINATION_PERMISSION, which BLOCKS future runs until the folder is
+    // repaired). Everything is metadata — never chat content.
+
+    private const val KEY_AUTO_LAST_ATTEMPT = "backup.auto.last_attempt"
+    private const val KEY_AUTO_LAST_SUCCESS = "backup.auto.last_success"
+    private const val KEY_AUTO_LAST_CATEGORY = "backup.auto.last_category"
+    private const val KEY_AUTO_NEXT_DUE = "backup.auto.next_due"
+
+    /** When the last automatic pass STARTED (the last attempt), or 0 if never. */
+    fun getAutoLastAttempt(context: Context): Long =
+        try { prefs(context).getLong(KEY_AUTO_LAST_ATTEMPT, 0L) } catch (_: Exception) { 0L }
+
+    /** When the last automatic pass SUCCEEDED (advanced the schedule), or 0 if
+     *  never — this is the scheduler's due anchor. */
+    fun getAutoLastSuccess(context: Context): Long =
+        try { prefs(context).getLong(KEY_AUTO_LAST_SUCCESS, 0L) } catch (_: Exception) { 0L }
+
+    /** The category of the last automatic-pass failure, or null when the last
+     *  pass advanced the schedule (cleared on success). */
+    fun getAutoLastFailureCategory(context: Context): BackupFailureCategory? =
+        try { BackupFailureCategory.fromKey(prefs(context).getString(KEY_AUTO_LAST_CATEGORY, null)) } catch (_: Exception) { null }
+
+    /** The recorded next-due epoch millis for the automatic set (0 = due now /
+     *  never recorded). Derivable from last success + frequency, but stored
+     *  explicitly so the screen can show it without recomputing and it survives
+     *  a frequency change cleanly. */
+    fun getAutoNextDue(context: Context): Long =
+        try { prefs(context).getLong(KEY_AUTO_NEXT_DUE, 0L) } catch (_: Exception) { 0L }
+
+    /** Stamp the start of an automatic pass. */
+    fun recordAutoAttempt(context: Context, atMillis: Long) {
+        try { prefs(context).edit(commit = true) { putLong(KEY_AUTO_LAST_ATTEMPT, atMillis) } } catch (_: Exception) { }
+    }
+
+    /** Record a successful automatic pass: stamp success, clear the failure
+     *  category, and store the next-due time. */
+    fun recordAutoSuccess(context: Context, atMillis: Long, nextDueMillis: Long) {
+        try {
+            prefs(context).edit(commit = true) {
+                putLong(KEY_AUTO_LAST_SUCCESS, atMillis)
+                putLong(KEY_AUTO_NEXT_DUE, nextDueMillis)
+                remove(KEY_AUTO_LAST_CATEGORY)
+            }
+        } catch (_: Exception) { }
+    }
+
+    /** Record a failed automatic pass: store the CATEGORY (never a bare "failed")
+     *  and, for a permission failure, leave the set due now (nextDue = 0) so the
+     *  next trigger re-surfaces the lost-folder state instead of sleeping a whole
+     *  window. The last-success stamp is left untouched. */
+    fun recordAutoFailure(context: Context, category: BackupFailureCategory, nextDueMillis: Long) {
+        try {
+            prefs(context).edit(commit = true) {
+                putString(KEY_AUTO_LAST_CATEGORY, category.name)
+                putLong(KEY_AUTO_NEXT_DUE, nextDueMillis)
+            }
+        } catch (_: Exception) { }
+    }
+
     // ----- per-type result tracking ------------------------------------------
 
     fun getLastSuccess(context: Context, type: BackupType): Long =

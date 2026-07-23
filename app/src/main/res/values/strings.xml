@@ -1510,6 +1510,15 @@
          longer true. Still says plainly that nothing runs automatically yet
          — only the writer that would actually run on a schedule is unbuilt. -->
     <string name="backup_auto_not_ready">Automatic backups are not implemented yet. You can already choose how often they would run and where they\'ll be saved, but nothing will run automatically until this feature is finished.</string>
+    <!-- The Automatic Backups system now runs (owner ruling, July 23 2026).
+         Honest about deferral (Android may delay background work) and about the
+         two safety limits: nothing is ever deleted, and it only backs up —
+         never restores. -->
+    <string name="backup_auto_hint">Automatic backups run in the background on the schedule you choose, saving a verified backup to your chosen folder. Android may delay a run to save battery, so the timing is not exact. Old backups are never deleted, and automatic backups only save — they never restore or replace your data.</string>
+    <string name="backup_auto_status_last">Last automatic backup: %1$s</string>
+    <string name="backup_auto_status_next_due">Next automatic backup due: %1$s</string>
+    <string name="backup_auto_status_never">No automatic backup has run yet.</string>
+    <string name="backup_auto_status_paused">Paused — the backup folder is unavailable. Choose a new location to resume.</string>
     <string name="backup_auto_location">Automatic Backup Location: %1$s</string>
     <string name="backup_auto_change_location">Change Automatic Backup Location</string>
     <string name="backup_auto_enable">Enable Automatic Backups</string>

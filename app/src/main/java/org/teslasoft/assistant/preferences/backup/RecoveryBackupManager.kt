@@ -77,13 +77,18 @@ object RecoveryBackupManager {
      * backup set (filenames + recorded success time). Records per-type
      * success/failure in [RecoveryBackupState] and returns the per-type
      * results. Never throws.
+     *
+     * @param rotate whether to prune older copies (keep-5) after a verified
+     *        write. The AUTOMATIC backup path passes false: automatic backups
+     *        NEVER delete old backups yet (owner ruling, July 23 2026 — deletion
+     *        stays disabled until a rotation policy is explicitly approved).
      */
-    fun createBackup(context: Context, treeUri: Uri): List<TypeResult> {
+    fun createBackup(context: Context, treeUri: Uri, rotate: Boolean = true): List<TypeResult> {
         val runAt = System.currentTimeMillis()
-        return BackupType.displayOrder.map { runOne(context, it, treeUri, runAt) }
+        return BackupType.displayOrder.map { runOne(context, it, treeUri, runAt, rotate) }
     }
 
-    private fun runOne(context: Context, type: BackupType, treeUri: Uri, runAt: Long): TypeResult {
+    private fun runOne(context: Context, type: BackupType, treeUri: Uri, runAt: Long, rotate: Boolean): TypeResult {
         // A degraded (confirmed-damaged) database PAUSES its own artifact
         // (Build Phase 3 item 1 / A1's "unavailable to use or save"): backing
         // it up would copy the corrupt file over the good rotation. No attempt
@@ -120,7 +125,11 @@ object RecoveryBackupManager {
             verifyDestination(context, childUri, staged)
 
             // ---- rotate keep-5 (best-effort; never fails the backup) ----
-            try { rotate(context, treeUri, type) } catch (_: Exception) { /* rotation is best-effort */ }
+            // Skipped entirely for automatic backups: they never delete an
+            // older copy (owner ruling, July 23 2026).
+            if (rotate) {
+                try { rotate(context, treeUri, type) } catch (_: Exception) { /* rotation is best-effort */ }
+            }
 
             RecoveryBackupState.recordSuccess(context, type, runAt)
             return TypeResult(type, success = true, category = null)

@@ -877,6 +877,49 @@ Everything is on-device. No cloud sync, no accounts.
    `LocalWhisperStorage`, rotating memory backups in
    `getExternalFilesDir("memory_backups")`.
 
+## Automatic Backups (recovery backups on a schedule) — BUILT July 23 2026
+
+The Automatic Backups section of the Memory Backup & Restore screen is now a
+working system (previously the toggle/frequency only PERSISTED a choice with no
+writer). It runs the SAME verified recovery-backup engine (`RecoveryBackupManager
+.createBackup`) into the **Automatic** SAF folder (kept separate from the manual
+folder — never combined), and is deliberately conservative:
+
+- **Disabled by default.** Enabling **requires a valid, writable destination**:
+  flipping the toggle on with no folder opens the SAF folder picker and completes
+  the enable only once a folder is chosen (cancelling reverts the toggle). Enabled
+  flag + frequency + both folders + the auto-set run tracking live in
+  `RecoveryBackupState` (raw `storage_health` prefs, `backup.*` keys — OUTSIDE the
+  three protected databases, so a locked/damaged DB can't disable backups).
+- **Two triggers, one funnel.** The reliable one is a **WorkManager unique
+  periodic job** (`AutoBackupScheduling` → `AutoBackupWorker`, unique name
+  `auto_recovery_backup`, `ExistingPeriodicWorkPolicy.UPDATE` so a frequency
+  change re-periods the SAME job — duplicate jobs can't be scheduled). The
+  catch-up one is an **app-open opportunistic check** in `MainApplication`'s
+  startup housekeeping thread (off the main thread and off the chat-list loader,
+  so a due backup never blocks the chat list loading or opening a new chat). Both
+  call `AutoBackupController.runIfDue`. Android may DEFER background work — the
+  frequency interval is a MINIMUM spacing, never exact timing (never claim
+  otherwise).
+- **Pure decision core:** `AutoBackupScheduler` (unit-tested, no Android) owns
+  interval-per-frequency (Every Day / Week / Two Weeks / Month = 1/7/14/30 days),
+  `isDue`/`nextDueMillis` (measured from the last SUCCESSFUL auto pass), the full
+  `plan()` gate (disabled → no-destination → permission-lost → already-running →
+  not-due → RUN, permission-lost outranks due), and `shouldAdvanceSchedule`.
+- **No duplicates per due window:** the schedule anchor advances on success (so a
+  second trigger in the same window sees NOT_DUE) plus a process-wide
+  `AtomicBoolean` running latch in `AutoBackupController`.
+- **Lost SAF permission handled honestly:** a missing/revoked grant BLOCKS future
+  runs (no silent fallback anywhere), is recorded as `DESTINATION_PERMISSION`,
+  keeps the set due, and shows a "Paused — the backup folder is unavailable" line;
+  the screen's destination line uses the centralized `BackupLocationDisplay`
+  breadcrumb (never a raw URI or exception text).
+- **Never deletes:** automatic runs call `createBackup(..., rotate = false)` — the
+  keep-5 rotation is skipped, so no old backup is ever deleted yet. Records last
+  attempt / last success / last failure / next due. It ONLY saves — never
+  restores, never touches a live database, never weakens encryption or
+  verification. WorkManager dep: `androidx.work:work-runtime-ktx`.
+
 ## Current feature list
 
 - Multi-chat with per-chat settings (model, endpoint, sampling, persona, …),
