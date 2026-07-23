@@ -307,6 +307,29 @@ files may linger on old devices, unread.
   force-push `main`. Commit messages explain *why*, in plain prose.
 - The owner is not a coder. Explain changes in user terms; when a request is
   ambiguous, prefer asking over guessing on destructive/architectural choices.
+- **Watching CI to green is part of the job, not an extra step (owner
+  ruling, July 23 2026).** After you push, WATCH the Android Checks run and
+  drive it to green yourself: if it fails, read the logs, fix the cause, and
+  push again — repeat until it passes. Do not hand a red or still-running
+  build back to the owner as if it were finished. This is ordinary coder
+  work; own it.
+- **"Put it on Main" is an explicit instruction to merge (owner ruling, July
+  23 2026).** When the owner says to put a change on Main (once CI is green),
+  merge the branch to `main` and push. The owner KNOWS this triggers
+  `release.yml` and publishes a debug-signed `latest` prerelease — that is
+  the entire point of doing it, their own test build. Do NOT warn about it,
+  do NOT ask "are you sure", do NOT re-explain that debug builds aren't
+  distributable. Just do it. (Still never force-push `main`; a normal
+  merge/push only.)
+- **Do NOT reflexively hedge that work "isn't done until you confirm on
+  device" (owner ruling, July 23 2026).** Appending that disclaimer to every
+  report wastes the owner's tokens and their patience. Report factually:
+  what changed, and the CI result. Green CI means the code side is verified
+  and you say so plainly. The genuine on-device-confirmation bar is specific
+  and narrow — it applies to declaring a REPORTED BUG actually FIXED
+  (especially the voice pipeline, whose OPEN PRIORITY section still governs
+  that case), NOT to every feature or change. When it doesn't apply, don't
+  invoke it.
 
 ## Architecture map (where things live)
 
