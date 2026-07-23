@@ -652,6 +652,21 @@ and rollout notes here — not back in `CLAUDE.md`.
   counter + blocks Save with a Snackbar, never blocks typing. Not yet wired
   to storage (no backing column yet). Not yet applied to any other
   form-field screen beyond these two.
+  - `Widget.App.Field.NumberBlank` (added July 23 2026) — a small, right-sized
+    whole-number input blank, distinct from `Widget.App.Field.Box` (which is a
+    full-width, label-above box). Same `@drawable/bg_field_box` skin so it
+    themes identically, but `wrap_content` width + centred text so it sits
+    **inline at the end of its label's line** rather than stretching. `inputType=number`
+    is baked in (every use is a whole-number field); the **digit width
+    (`android:ems`) and `android:maxLength` are per-instance** since the style
+    can't know how many digits a field allows — a 4-digit field (must hold
+    "1000") is wider than a 2-digit one. First (and only) use: the per-log
+    **Maximum Logs Saved** (ems 4 / maxLength 4) and **Maximum Days Saved**
+    (ems 3 / maxLength 2) retention blanks on Alerts, Errors & Logs, each
+    preceded by a plain 15sp `@color/text` label with an `android:labelFor`.
+    The over-ceiling "Okay" notice on these fields uses the shared
+    `dialog_single_action.xml` + `App.MaterialAlertDialog` single-button dialog
+    (see the dialog styles above), not a toast.
 - **Summoning Circle tile styles (owner ruling, July 21 2026).** The four
   container tiles at the top of the Summoning Circle (formerly "Quick
   Settings") — Companion, Glamour, Activation, System Prompt — each render a

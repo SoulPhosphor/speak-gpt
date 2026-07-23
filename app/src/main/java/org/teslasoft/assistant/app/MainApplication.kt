@@ -65,7 +65,7 @@ class MainApplication : Application() {
         override fun run() {
             try {
                 if (Preferences.getPreferences(this@MainApplication, "").getMemoryUsageLogging()) {
-                    Logger.log(this@MainApplication, "performance", "MemSample", "info",
+                    Logger.log(this@MainApplication, "memory_usage", "MemSample", "info",
                         MemoryDiagnostics.snapshotFull(this@MainApplication))
                 }
             } catch (_: Throwable) { /* a diagnostic must never crash the app */ }
@@ -227,7 +227,7 @@ class MainApplication : Application() {
         super.onTrimMemory(level)
         try {
             if (Preferences.getPreferences(this, "").getMemoryUsageLogging()) {
-                Logger.log(this, "performance", "MemTrim", "warning",
+                Logger.log(this, "memory_usage", "MemTrim", "warning",
                     "onTrimMemory ${trimLevelName(level)} | ${MemoryDiagnostics.snapshotFull(this)}")
             }
         } catch (_: Throwable) { /* a diagnostic must never crash the app */ }
@@ -238,7 +238,7 @@ class MainApplication : Application() {
         super.onLowMemory()
         try {
             if (Preferences.getPreferences(this, "").getMemoryUsageLogging()) {
-                Logger.log(this, "performance", "MemTrim", "warning",
+                Logger.log(this, "memory_usage", "MemTrim", "warning",
                     "onLowMemory | ${MemoryDiagnostics.snapshotFull(this)}")
             }
         } catch (_: Throwable) { /* a diagnostic must never crash the app */ }

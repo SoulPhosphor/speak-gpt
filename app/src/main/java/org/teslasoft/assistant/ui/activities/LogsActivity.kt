@@ -144,6 +144,18 @@ class LogsActivity : FragmentActivity() {
                             textLog?.text = Logger.getPerformanceLog(this)
                         }
 
+                        "whisper_perf" -> {
+                            activityLogsTitle?.text = getString(R.string.title_whisper_perf_log)
+                            this.title = getString(R.string.title_whisper_perf_log)
+                            textLog?.text = Logger.getWhisperPerfLog(this)
+                        }
+
+                        "memory_usage" -> {
+                            activityLogsTitle?.text = getString(R.string.title_memory_usage_log)
+                            this.title = getString(R.string.title_memory_usage_log)
+                            textLog?.text = Logger.getMemoryUsageLog(this)
+                        }
+
                         else -> finish()
                     }
                 } catch (_: Exception) {
@@ -174,6 +186,16 @@ class LogsActivity : FragmentActivity() {
                                 "performance" -> {
                                     Logger.clearPerformanceLog(this)
                                     textLog?.text = Logger.getPerformanceLog(this)
+                                }
+
+                                "whisper_perf" -> {
+                                    Logger.clearWhisperPerfLog(this)
+                                    textLog?.text = Logger.getWhisperPerfLog(this)
+                                }
+
+                                "memory_usage" -> {
+                                    Logger.clearMemoryUsageLog(this)
+                                    textLog?.text = Logger.getMemoryUsageLog(this)
                                 }
                             }
                         }

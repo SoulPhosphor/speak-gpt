@@ -125,6 +125,46 @@ class Logger {
         }
 
         /**
+         * Whisper Performance Log — the per-transcription timing channel
+         * (audio/model-load/decode ms + a memory snapshot), split out of the
+         * old shared Performance Log (owner spec, July 23 2026) so it can be
+         * viewed, copied and retained independently of the Memory Usage
+         * heartbeat. Fed only while "Whisper performance logging" is on. The
+         * old `"performance"` key and its mixed historical contents are left
+         * untouched (no migration) — this is a fresh channel.
+         * */
+        fun getWhisperPerfLog(context: Context) : String {
+            return EncryptedPreferences.getEncryptedPreference(context, "logs", "whisper_perf")
+        }
+
+        private fun setWhisperPerfLog(context: Context, log: String) {
+            EncryptedPreferences.setEncryptedPreference(context, "logs", "whisper_perf", log)
+        }
+
+        fun clearWhisperPerfLog(context: Context) {
+            setWhisperPerfLog(context, "")
+        }
+
+        /**
+         * Memory Usage Log — the app-wide memory-footprint heartbeat and
+         * trim/low-memory lines, split out of the old shared Performance Log
+         * (owner spec, July 23 2026) into its own channel. Fed only while
+         * "Memory usage logging" is on. Same no-migration note as the Whisper
+         * channel above.
+         * */
+        fun getMemoryUsageLog(context: Context) : String {
+            return EncryptedPreferences.getEncryptedPreference(context, "logs", "memory_usage")
+        }
+
+        private fun setMemoryUsageLog(context: Context, log: String) {
+            EncryptedPreferences.setEncryptedPreference(context, "logs", "memory_usage", log)
+        }
+
+        fun clearMemoryUsageLog(context: Context) {
+            setMemoryUsageLog(context, "")
+        }
+
+        /**
          * The persistent log channels [log] recognizes. A `type` outside this
          * set is silently dropped (see the unknown-channel `else` in [log]),
          * so a caller passing e.g. "error" instead of "crash" writes nowhere.
@@ -133,7 +173,8 @@ class Logger {
          * in [log].
          */
         fun isPersistentType(type: String): Boolean =
-            type == "crash" || type == "event" || type == "memory" || type == "performance"
+            type == "crash" || type == "event" || type == "memory" || type == "performance" ||
+                type == "whisper_perf" || type == "memory_usage"
 
         /**
          * @param type - type of log (crash/event/memory/performance)
@@ -184,13 +225,44 @@ class Logger {
                     setEventLog(context, log)
                 }
 
+                // The three user-configurable diagnostic logs read their own
+                // per-channel "Maximum Logs Saved" / "Maximum Days Saved" from
+                // Preferences (owner spec, July 23 2026). The getters clamp to
+                // the owner's ceilings, so a bad value can never reach the
+                // trimmer; a device with nothing set yet falls back to the
+                // shared defaults. Reading the global "settings" prefs here is
+                // a cheap, thread-safe SharedPreferences lookup.
                 "memory" -> {
+                    val p = Preferences.getPreferences(context, "")
                     val log = trimByEntries(
-                        "${getMemoryLog(context)}$logString", MEMORY_LOG_MAX_ENTRIES, MEMORY_LOG_MAX_AGE_DAYS
+                        "${getMemoryLog(context)}$logString",
+                        p.getMemoryLogMaxEntries(), p.getMemoryLogMaxDays().toLong()
                     )
                     setMemoryLog(context, log)
                 }
 
+                "whisper_perf" -> {
+                    val p = Preferences.getPreferences(context, "")
+                    val log = trimByEntries(
+                        "${getWhisperPerfLog(context)}$logString",
+                        p.getWhisperPerfLogMaxEntries(), p.getWhisperPerfLogMaxDays().toLong()
+                    )
+                    setWhisperPerfLog(context, log)
+                }
+
+                "memory_usage" -> {
+                    val p = Preferences.getPreferences(context, "")
+                    val log = trimByEntries(
+                        "${getMemoryUsageLog(context)}$logString",
+                        p.getMemoryUsageLogMaxEntries(), p.getMemoryUsageLogMaxDays().toLong()
+                    )
+                    setMemoryUsageLog(context, log)
+                }
+
+                // The old shared Performance Log. Nothing writes here anymore
+                // after the July 23 2026 split (both producers moved to the two
+                // channels above); the branch and its stored contents are left
+                // in place, untouched, per the no-migration decision.
                 "performance" -> {
                     val log = trimByEntries(
                         "${getPerformanceLog(context)}$logString", PERF_LOG_MAX_ENTRIES, PERF_LOG_MAX_AGE_DAYS
@@ -220,18 +292,22 @@ class Logger {
         private val LOG_TIME_FORMAT: DateTimeFormatter =
             DateTimeFormatter.ofPattern("yyyy-MM-dd h:mm a")
 
-        // Per-log retention (see ERROR_CODES.md section 4.2). Voice diagnostics are
-        // far higher volume, so the Voice Debug Log keeps more entries over a
-        // shorter window. Each limit is independent; whichever is hit first wins.
+        // Per-log retention (see ERROR_CODES.md section 4.2). The Error Log
+        // ("crash") and Voice Debug Log ("event") are deliberately NOT
+        // user-configurable and keep these fixed constants; voice diagnostics
+        // are far higher volume, so the Voice Debug Log keeps more entries over
+        // a shorter window. Each limit is independent; whichever is hit first
+        // wins. The three configurable logs — Memory Diagnostics, Whisper
+        // Performance, Memory Usage — no longer use constants here; their
+        // limits live in Preferences (owner spec, July 23 2026).
         private const val ERROR_LOG_MAX_ENTRIES = 500
         private const val ERROR_LOG_MAX_AGE_DAYS = 30L
         private const val VOICE_LOG_MAX_ENTRIES = 1000
         private const val VOICE_LOG_MAX_AGE_DAYS = 7L
-        private const val MEMORY_LOG_MAX_ENTRIES = 1000
-        private const val MEMORY_LOG_MAX_AGE_DAYS = 7L
-        // The performance channel is the highest-volume of all (a memory sample
-        // every ~60s plus a line per transcription), so it keeps the most
-        // entries over the same short window as the voice log.
+        // The legacy shared performance channel's original limits, kept only so
+        // the untouched "performance" branch still trims its historical (now
+        // frozen) contents if ever written. No producer targets it after the
+        // July 23 2026 split.
         private const val PERF_LOG_MAX_ENTRIES = 2000
         private const val PERF_LOG_MAX_AGE_DAYS = 7L
 

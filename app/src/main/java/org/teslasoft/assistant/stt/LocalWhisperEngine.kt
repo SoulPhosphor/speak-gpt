@@ -891,7 +891,7 @@ class LocalWhisperEngine private constructor() {
                                     "audio=${audioMs}ms load=${loadMs}ms decode=${elapsed}ms model=$activeModelId " +
                                     "decoder=${if (useBeam) "beam($beamSize)" else "greedy"} | " +
                                     MemoryDiagnostics.snapshotCompact(context.applicationContext)
-                            Logger.log(context.applicationContext, "performance", "WhisperPerf", "info", perfLine)
+                            Logger.log(context.applicationContext, "whisper_perf", "WhisperPerf", "info", perfLine)
                         } catch (_: Throwable) { /* diagnostics must never break STT */ }
                     }
                     // After stripping non-speech markers, Whisper-generated

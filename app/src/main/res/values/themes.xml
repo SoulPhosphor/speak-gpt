@@ -625,6 +625,28 @@
         <item name="android:padding">12dp</item>
     </style>
 
+    <!-- A small, right-sized numeric input blank (owner spec, July 23 2026 —
+         the per-log "Maximum Logs Saved" / "Maximum Days Saved" fields on
+         Alerts, Errors & Logs). Same bg_field_box skin as Widget.App.Field.Box
+         so it themes with every other field, but sized to a handful of digits
+         and centred rather than stretched full-width: it sits inline at the end
+         of its label's line. The DIGIT WIDTH and android:maxLength are set
+         per-instance (android:ems) — a 4-digit "Maximum Logs" blank (must fit
+         1000) is wider than a 2-digit "Maximum Days" blank — since the style
+         can't know how many digits a given field allows. inputType=number is
+         baked in here because every use of this style is a whole-number field. -->
+    <style name="Widget.App.Field.NumberBlank" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:background">@drawable/bg_field_box</item>
+        <item name="android:paddingHorizontal">10dp</item>
+        <item name="android:paddingVertical">8dp</item>
+        <item name="android:gravity">center</item>
+        <item name="android:inputType">number</item>
+        <item name="android:textColor">@color/text</item>
+        <item name="android:textSize">16sp</item>
+    </style>
+
     <style name="BottomNavigationView.ActiveIndicator" parent="Widget.Material3.BottomNavigationView.ActiveIndicator">
         <item name="android:color">@color/accent_900</item>
     </style>

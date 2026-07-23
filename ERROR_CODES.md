@@ -149,12 +149,26 @@ high-volume voice diagnostics from burying error entries.
 
 | Log | Keep the most recent… | Tie-breaker |
 |-----|------------------------|-------------|
-| **Error Log** | 30 days **or** 500 entries | whichever limit is reached **first** |
-| **Voice Debug Log** | 7 days **or** 1,000 entries | whichever limit is reached **first** |
+| **Error Log** (fixed) | 30 days **or** 500 entries | whichever limit is reached **first** |
+| **Voice Debug Log** (fixed) | 7 days **or** 1,000 entries | whichever limit is reached **first** |
+| **Memory Diagnostics Log** (configurable) | Maximum Days Saved **or** Maximum Logs Saved | whichever limit is reached **first** |
+| **Whisper Performance Log** (configurable) | Maximum Days Saved **or** Maximum Logs Saved | whichever limit is reached **first** |
+| **Memory Usage Log** (configurable) | Maximum Days Saved **or** Maximum Logs Saved | whichever limit is reached **first** |
 
 Voice diagnostics are far higher volume, so the Voice Debug Log keeps more
 entries but over a shorter window. This replaces the current single
 character-count trim in `Logger` (see §7).
+
+**Per-log configurable retention (owner spec, July 23 2026).** The Error Log
+and Voice Debug Log keep the fixed constants above. The three diagnostic logs
+below them each expose their own **Maximum Logs Saved** (entry count, ceiling
+**1,000**) and **Maximum Days Saved** (age, ceiling **30**) on the Alerts,
+Errors & Logs screen, edited under the toggle that feeds each log and saved as
+typed. Floor is 1 (0 would erase the log on the next write); defaults are
+1,000 entries / 7 days. Over-ceiling entries are clamped with a single-button
+("Okay") dialog. The old single Performance Log was split into the two
+dedicated channels shown (Whisper Performance, Memory Usage) with **no
+migration** — the legacy `performance` storage is left untouched and unshown.
 
 **Trim by whole entries, never by physical lines.** A single entry is often
 multiple lines (a `GenError` block, a multi-line stack trace). An "entry" is

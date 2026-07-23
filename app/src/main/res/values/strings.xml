@@ -438,6 +438,13 @@
     <string name="title_event_log">Voice Debug Log</string>
     <string name="title_memory_log">Memory Debug Log</string>
     <string name="title_performance_log">Performance Log</string>
+    <string name="title_whisper_perf_log">Whisper Performance Log</string>
+    <string name="title_memory_usage_log">Memory Usage Log</string>
+    <!-- Per-log retention fields (Alerts, Errors & Logs), owner spec July 23 2026. -->
+    <string name="label_max_logs_saved">Maximum Logs Saved</string>
+    <string name="label_max_days_saved">Maximum Days Saved</string>
+    <string name="dialog_max_logs_exceeded">Maximum logs allowed to save is 1,000.</string>
+    <string name="dialog_max_days_exceeded">Maximum days of logs you\'re allowed to save is 30.</string>
     <string name="btn_open_event_log">Open event log</string>
     <string name="btn_open_voice_advanced">Advanced voice &amp; debugging</string>
     <string name="label_clear_log">Clear log</string>

@@ -26,6 +26,29 @@ class Preferences private constructor(private var preferences: SharedPreferences
         fun getPreferences(context: Context, xchatId: String) : Preferences {
             return Preferences(SecurePrefs.get(context, "settings.$xchatId"), context.getSharedPreferences("settings", Context.MODE_PRIVATE), xchatId)
         }
+
+        /**
+         * Per-log retention bounds for the three user-configurable diagnostic
+         * logs (Memory Diagnostics, Whisper Performance, Memory Usage). The
+         * owner set these ceilings (July 23 2026): a log keeps entries until it
+         * exceeds the entry-count cap OR the age cap, whichever comes first
+         * (the existing [Logger.trimByEntries] behaviour). The Error and Voice
+         * logs are deliberately NOT configurable and keep their own constants
+         * in Logger. Floors are 1 (a value of 0 would erase the log on the next
+         * write). Defaults match the diagnostics' pre-split behaviour (the old
+         * shared Performance Log's 2000-entry default exceeded the new 1000
+         * ceiling, so the fresh channels start at the ceiling-safe 1000/7).
+         */
+        const val LOG_MAX_ENTRIES_LIMIT = 1000
+        const val LOG_MAX_DAYS_LIMIT = 30
+        const val LOG_DEFAULT_MAX_ENTRIES = 1000
+        const val LOG_DEFAULT_MAX_DAYS = 7
+
+        /** Clamp a max-entries value to [1, LOG_MAX_ENTRIES_LIMIT]. Pure, unit-tested. */
+        fun coerceLogMaxEntries(value: Int): Int = value.coerceIn(1, LOG_MAX_ENTRIES_LIMIT)
+
+        /** Clamp a max-days value to [1, LOG_MAX_DAYS_LIMIT]. Pure, unit-tested. */
+        fun coerceLogMaxDays(value: Int): Int = value.coerceIn(1, LOG_MAX_DAYS_LIMIT)
     }
 
     /**
@@ -88,6 +111,32 @@ class Preferences private constructor(private var preferences: SharedPreferences
         if (oldValue != value) {
             gp.edit {
                 putBoolean(param, value)
+            }
+        }
+    }
+
+    /**
+     * Get global int
+     *
+     * @param param The key of the value to retrieve.
+     * @param default The default value to return if the key is not found.
+     * */
+    private fun getGlobalInt(param: String?, default: Int) : Int {
+        return gp.getInt(param, default)
+    }
+
+    /**
+     * Set global int
+     *
+     * @param param The key with which the value is to be associated.
+     * @param value The value to be stored.
+     * */
+    private fun putGlobalInt(param: String, value: Int, default: Int = 0) {
+        val oldValue = getGlobalInt(param, default)
+
+        if (oldValue != value) {
+            gp.edit {
+                putInt(param, value)
             }
         }
     }
@@ -1580,6 +1629,66 @@ class Preferences private constructor(private var preferences: SharedPreferences
 
     fun setMemoryUsageLogging(enabled: Boolean) {
         putGlobalBoolean("memory_usage_logging", enabled, false)
+    }
+
+    /**
+     * Per-log retention settings (owner spec, July 23 2026). Each of the three
+     * user-configurable diagnostic logs — Memory Diagnostics, Whisper
+     * Performance, Memory Usage — carries its own independent "Maximum Logs
+     * Saved" (entry count) and "Maximum Days Saved" (age) value, edited on the
+     * Alerts, Errors & Logs screen and consumed by [Logger.log]. Reads and
+     * writes are clamped through [coerceLogMaxEntries]/[coerceLogMaxDays] so a
+     * value out of bounds (e.g. left over from a future edit, or an
+     * over-ceiling entry the UI catches) can never reach the trimmer. Values
+     * absent on first open fall back to the shared defaults, never overwritten
+     * with a default once the user has set one (the getters only read).
+     */
+    fun getMemoryLogMaxEntries() : Int {
+        return coerceLogMaxEntries(getGlobalInt("memory_log_max_entries", LOG_DEFAULT_MAX_ENTRIES))
+    }
+
+    fun setMemoryLogMaxEntries(value: Int) {
+        putGlobalInt("memory_log_max_entries", coerceLogMaxEntries(value), LOG_DEFAULT_MAX_ENTRIES)
+    }
+
+    fun getMemoryLogMaxDays() : Int {
+        return coerceLogMaxDays(getGlobalInt("memory_log_max_days", LOG_DEFAULT_MAX_DAYS))
+    }
+
+    fun setMemoryLogMaxDays(value: Int) {
+        putGlobalInt("memory_log_max_days", coerceLogMaxDays(value), LOG_DEFAULT_MAX_DAYS)
+    }
+
+    fun getWhisperPerfLogMaxEntries() : Int {
+        return coerceLogMaxEntries(getGlobalInt("whisper_perf_log_max_entries", LOG_DEFAULT_MAX_ENTRIES))
+    }
+
+    fun setWhisperPerfLogMaxEntries(value: Int) {
+        putGlobalInt("whisper_perf_log_max_entries", coerceLogMaxEntries(value), LOG_DEFAULT_MAX_ENTRIES)
+    }
+
+    fun getWhisperPerfLogMaxDays() : Int {
+        return coerceLogMaxDays(getGlobalInt("whisper_perf_log_max_days", LOG_DEFAULT_MAX_DAYS))
+    }
+
+    fun setWhisperPerfLogMaxDays(value: Int) {
+        putGlobalInt("whisper_perf_log_max_days", coerceLogMaxDays(value), LOG_DEFAULT_MAX_DAYS)
+    }
+
+    fun getMemoryUsageLogMaxEntries() : Int {
+        return coerceLogMaxEntries(getGlobalInt("memory_usage_log_max_entries", LOG_DEFAULT_MAX_ENTRIES))
+    }
+
+    fun setMemoryUsageLogMaxEntries(value: Int) {
+        putGlobalInt("memory_usage_log_max_entries", coerceLogMaxEntries(value), LOG_DEFAULT_MAX_ENTRIES)
+    }
+
+    fun getMemoryUsageLogMaxDays() : Int {
+        return coerceLogMaxDays(getGlobalInt("memory_usage_log_max_days", LOG_DEFAULT_MAX_DAYS))
+    }
+
+    fun setMemoryUsageLogMaxDays(value: Int) {
+        putGlobalInt("memory_usage_log_max_days", coerceLogMaxDays(value), LOG_DEFAULT_MAX_DAYS)
     }
 
     /**

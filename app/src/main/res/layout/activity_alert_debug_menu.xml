@@ -176,6 +176,70 @@
                     android:layout_marginStart="12dp" />
             </LinearLayout>
 
+            <!-- Retention for the Memory Diagnostics log (owner spec, July 23
+                 2026): saved as typed; a value over the ceiling is clamped and
+                 a single-button dialog explains why. -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingStart="4dp"
+                android:paddingTop="12dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:labelFor="@+id/field_memory_max_logs"
+                        android:text="@string/label_max_logs_saved"
+                        android:textColor="@color/text"
+                        android:textSize="15sp" />
+
+                    <EditText
+                        android:id="@+id/field_memory_max_logs"
+                        style="@style/Widget.App.Field.NumberBlank"
+                        android:layout_marginStart="12dp"
+                        android:contentDescription="@string/label_max_logs_saved"
+                        android:ems="4"
+                        android:imeOptions="actionDone"
+                        android:maxLength="4"
+                        android:maxLines="1" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingTop="10dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:labelFor="@+id/field_memory_max_days"
+                        android:text="@string/label_max_days_saved"
+                        android:textColor="@color/text"
+                        android:textSize="15sp" />
+
+                    <EditText
+                        android:id="@+id/field_memory_max_days"
+                        style="@style/Widget.App.Field.NumberBlank"
+                        android:layout_marginStart="12dp"
+                        android:contentDescription="@string/label_max_days_saved"
+                        android:ems="3"
+                        android:imeOptions="actionDone"
+                        android:maxLength="2"
+                        android:maxLines="1" />
+                </LinearLayout>
+            </LinearLayout>
+
             <!-- Performance diagnostics: two opt-in toggles, both off by default,
                  both writing to the dedicated Performance Log (row below). -->
             <LinearLayout
@@ -213,6 +277,69 @@
                     android:layout_marginStart="12dp" />
             </LinearLayout>
 
+            <!-- Retention for the Whisper Performance log (its own channel since
+                 the July 23 2026 split). -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingStart="4dp"
+                android:paddingTop="12dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:labelFor="@+id/field_whisper_max_logs"
+                        android:text="@string/label_max_logs_saved"
+                        android:textColor="@color/text"
+                        android:textSize="15sp" />
+
+                    <EditText
+                        android:id="@+id/field_whisper_max_logs"
+                        style="@style/Widget.App.Field.NumberBlank"
+                        android:layout_marginStart="12dp"
+                        android:contentDescription="@string/label_max_logs_saved"
+                        android:ems="4"
+                        android:imeOptions="actionDone"
+                        android:maxLength="4"
+                        android:maxLines="1" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingTop="10dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:labelFor="@+id/field_whisper_max_days"
+                        android:text="@string/label_max_days_saved"
+                        android:textColor="@color/text"
+                        android:textSize="15sp" />
+
+                    <EditText
+                        android:id="@+id/field_whisper_max_days"
+                        style="@style/Widget.App.Field.NumberBlank"
+                        android:layout_marginStart="12dp"
+                        android:contentDescription="@string/label_max_days_saved"
+                        android:ems="3"
+                        android:imeOptions="actionDone"
+                        android:maxLength="2"
+                        android:maxLines="1" />
+                </LinearLayout>
+            </LinearLayout>
+
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -246,6 +373,69 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="12dp" />
+            </LinearLayout>
+
+            <!-- Retention for the Memory Usage log (its own channel since the
+                 July 23 2026 split). -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingStart="4dp"
+                android:paddingTop="12dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:labelFor="@+id/field_memusage_max_logs"
+                        android:text="@string/label_max_logs_saved"
+                        android:textColor="@color/text"
+                        android:textSize="15sp" />
+
+                    <EditText
+                        android:id="@+id/field_memusage_max_logs"
+                        style="@style/Widget.App.Field.NumberBlank"
+                        android:layout_marginStart="12dp"
+                        android:contentDescription="@string/label_max_logs_saved"
+                        android:ems="4"
+                        android:imeOptions="actionDone"
+                        android:maxLength="4"
+                        android:maxLines="1" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingTop="10dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:labelFor="@+id/field_memusage_max_days"
+                        android:text="@string/label_max_days_saved"
+                        android:textColor="@color/text"
+                        android:textSize="15sp" />
+
+                    <EditText
+                        android:id="@+id/field_memusage_max_days"
+                        style="@style/Widget.App.Field.NumberBlank"
+                        android:layout_marginStart="12dp"
+                        android:contentDescription="@string/label_max_days_saved"
+                        android:ems="3"
+                        android:imeOptions="actionDone"
+                        android:maxLength="2"
+                        android:maxLines="1" />
+                </LinearLayout>
             </LinearLayout>
 
             <!-- ============ Audio Debugging shortcut ============ -->
@@ -397,8 +587,11 @@
                     android:tint="@color/text_subtitle" />
             </LinearLayout>
 
+            <!-- The old single Performance Log row was split into these two
+                 (owner spec, July 23 2026). The old "performance" storage is
+                 left untouched but no longer has a viewer row. -->
             <LinearLayout
-                android:id="@+id/row_performance_log"
+                android:id="@+id/row_whisper_perf_log"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:background="?attr/selectableItemBackground"
@@ -413,7 +606,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="@string/title_performance_log"
+                    android:text="@string/title_whisper_perf_log"
                     android:textColor="@color/text"
                     android:textSize="16sp" />
 
@@ -421,7 +614,36 @@
                     android:layout_width="24dp"
                     android:layout_height="24dp"
                     android:layout_marginStart="12dp"
-                    android:contentDescription="@string/title_performance_log"
+                    android:contentDescription="@string/title_whisper_perf_log"
+                    android:src="@drawable/ic_chevron_right"
+                    android:tint="@color/text_subtitle" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/row_memory_usage_log"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="?attr/selectableItemBackground"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center_vertical"
+                android:minHeight="56dp"
+                android:orientation="horizontal"
+                android:paddingVertical="12dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/title_memory_usage_log"
+                    android:textColor="@color/text"
+                    android:textSize="16sp" />
+
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:layout_marginStart="12dp"
+                    android:contentDescription="@string/title_memory_usage_log"
                     android:src="@drawable/ic_chevron_right"
                     android:tint="@color/text_subtitle" />
             </LinearLayout>

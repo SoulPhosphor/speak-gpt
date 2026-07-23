@@ -22,13 +22,18 @@ import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
 import android.view.WindowInsets
+import android.view.inputmethod.EditorInfo
+import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
+import androidx.core.widget.doAfterTextChanged
 import androidx.fragment.app.FragmentActivity
+import com.google.android.material.button.MaterialButton
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.materialswitch.MaterialSwitch
 import org.teslasoft.assistant.R
@@ -67,13 +72,22 @@ class AlertDebugMenuActivity : FragmentActivity() {
     private var switchMemoryDebug: MaterialSwitch? = null
     private var switchWhisperPerf: MaterialSwitch? = null
     private var switchMemoryUsage: MaterialSwitch? = null
+    // Per-log retention blanks (owner spec, July 23 2026). Each of the three
+    // configurable logs has its own "Maximum Logs Saved" + "Maximum Days Saved".
+    private var fieldMemoryMaxLogs: EditText? = null
+    private var fieldMemoryMaxDays: EditText? = null
+    private var fieldWhisperMaxLogs: EditText? = null
+    private var fieldWhisperMaxDays: EditText? = null
+    private var fieldMemUsageMaxLogs: EditText? = null
+    private var fieldMemUsageMaxDays: EditText? = null
     // Shortcut down to the audio-only diagnostics, so a user who lands here
     // looking for VAD logging doesn't have to know it lives under Voice.
     private var rowAudioDebugging: LinearLayout? = null
     private var rowCrashLog: LinearLayout? = null
     private var rowEventLog: LinearLayout? = null
     private var rowMemoryLog: LinearLayout? = null
-    private var rowPerformanceLog: LinearLayout? = null
+    private var rowWhisperPerfLog: LinearLayout? = null
+    private var rowMemoryUsageLog: LinearLayout? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -98,11 +112,18 @@ class AlertDebugMenuActivity : FragmentActivity() {
         switchMemoryDebug = findViewById(R.id.switch_memory_debug)
         switchWhisperPerf = findViewById(R.id.switch_whisper_perf)
         switchMemoryUsage = findViewById(R.id.switch_memory_usage)
+        fieldMemoryMaxLogs = findViewById(R.id.field_memory_max_logs)
+        fieldMemoryMaxDays = findViewById(R.id.field_memory_max_days)
+        fieldWhisperMaxLogs = findViewById(R.id.field_whisper_max_logs)
+        fieldWhisperMaxDays = findViewById(R.id.field_whisper_max_days)
+        fieldMemUsageMaxLogs = findViewById(R.id.field_memusage_max_logs)
+        fieldMemUsageMaxDays = findViewById(R.id.field_memusage_max_days)
         rowAudioDebugging = findViewById(R.id.row_audio_debugging)
         rowCrashLog = findViewById(R.id.row_crash_log)
         rowEventLog = findViewById(R.id.row_event_log)
         rowMemoryLog = findViewById(R.id.row_memory_log)
-        rowPerformanceLog = findViewById(R.id.row_performance_log)
+        rowWhisperPerfLog = findViewById(R.id.row_whisper_perf_log)
+        rowMemoryUsageLog = findViewById(R.id.row_memory_usage_log)
     }
 
     @Suppress("DEPRECATION")
@@ -135,6 +156,16 @@ class AlertDebugMenuActivity : FragmentActivity() {
         switchMemoryDebug?.isChecked = p.getMemoryDebugLogging()
         switchWhisperPerf?.isChecked = p.getWhisperPerfLogging()
         switchMemoryUsage?.isChecked = p.getMemoryUsageLogging()
+
+        // Show each log's currently-configured retention. Set BEFORE the
+        // text-watchers are wired in initLogic, so seeding the fields never
+        // counts as a user edit and never re-saves a default over a real value.
+        fieldMemoryMaxLogs?.setText(p.getMemoryLogMaxEntries().toString())
+        fieldMemoryMaxDays?.setText(p.getMemoryLogMaxDays().toString())
+        fieldWhisperMaxLogs?.setText(p.getWhisperPerfLogMaxEntries().toString())
+        fieldWhisperMaxDays?.setText(p.getWhisperPerfLogMaxDays().toString())
+        fieldMemUsageMaxLogs?.setText(p.getMemoryUsageLogMaxEntries().toString())
+        fieldMemUsageMaxDays?.setText(p.getMemoryUsageLogMaxDays().toString())
     }
 
     private fun initLogic() {
@@ -147,6 +178,37 @@ class AlertDebugMenuActivity : FragmentActivity() {
         switchMemoryDebug?.setOnCheckedChangeListener { _, checked -> p.setMemoryDebugLogging(checked) }
         switchWhisperPerf?.setOnCheckedChangeListener { _, checked -> p.setWhisperPerfLogging(checked) }
         switchMemoryUsage?.setOnCheckedChangeListener { _, checked -> p.setMemoryUsageLogging(checked) }
+
+        wireRetentionField(
+            fieldMemoryMaxLogs, Preferences.LOG_MAX_ENTRIES_LIMIT,
+            { p.getMemoryLogMaxEntries() }, { v -> p.setMemoryLogMaxEntries(v) },
+            R.string.dialog_max_logs_exceeded
+        )
+        wireRetentionField(
+            fieldMemoryMaxDays, Preferences.LOG_MAX_DAYS_LIMIT,
+            { p.getMemoryLogMaxDays() }, { v -> p.setMemoryLogMaxDays(v) },
+            R.string.dialog_max_days_exceeded
+        )
+        wireRetentionField(
+            fieldWhisperMaxLogs, Preferences.LOG_MAX_ENTRIES_LIMIT,
+            { p.getWhisperPerfLogMaxEntries() }, { v -> p.setWhisperPerfLogMaxEntries(v) },
+            R.string.dialog_max_logs_exceeded
+        )
+        wireRetentionField(
+            fieldWhisperMaxDays, Preferences.LOG_MAX_DAYS_LIMIT,
+            { p.getWhisperPerfLogMaxDays() }, { v -> p.setWhisperPerfLogMaxDays(v) },
+            R.string.dialog_max_days_exceeded
+        )
+        wireRetentionField(
+            fieldMemUsageMaxLogs, Preferences.LOG_MAX_ENTRIES_LIMIT,
+            { p.getMemoryUsageLogMaxEntries() }, { v -> p.setMemoryUsageLogMaxEntries(v) },
+            R.string.dialog_max_logs_exceeded
+        )
+        wireRetentionField(
+            fieldMemUsageMaxDays, Preferences.LOG_MAX_DAYS_LIMIT,
+            { p.getMemoryUsageLogMaxDays() }, { v -> p.setMemoryUsageLogMaxDays(v) },
+            R.string.dialog_max_days_exceeded
+        )
 
         rowAudioDebugging?.setOnClickListener {
             startActivity(Intent(this, AudioDebuggingActivity::class.java).putExtra("chatId", chatId))
@@ -161,9 +223,78 @@ class AlertDebugMenuActivity : FragmentActivity() {
         rowMemoryLog?.setOnClickListener {
             startActivity(Intent(this, LogsActivity::class.java).putExtra("type", "memory").putExtra("chatId", chatId))
         }
-        rowPerformanceLog?.setOnClickListener {
-            startActivity(Intent(this, LogsActivity::class.java).putExtra("type", "performance").putExtra("chatId", chatId))
+        rowWhisperPerfLog?.setOnClickListener {
+            startActivity(Intent(this, LogsActivity::class.java).putExtra("type", "whisper_perf").putExtra("chatId", chatId))
         }
+        rowMemoryUsageLog?.setOnClickListener {
+            startActivity(Intent(this, LogsActivity::class.java).putExtra("type", "memory_usage").putExtra("chatId", chatId))
+        }
+    }
+
+    /**
+     * Wire one retention blank (owner spec, July 23 2026). "Saved as typed":
+     * any in-range value is persisted immediately on each edit. The ceiling is
+     * enforced on commit (focus loss / IME Done) rather than mid-keystroke so a
+     * dialog can't interrupt typing: a value above [cap] is clamped to [cap],
+     * the field updated to show the clamp, the value stored, and the
+     * owner-worded single-button dialog shown; a blank or zero field is
+     * restored to the stored value. Re-seeding the text with an in-range value
+     * can't recurse — the in-range branch never rewrites the field.
+     */
+    private fun wireRetentionField(
+        targetField: EditText?,
+        cap: Int,
+        getStored: () -> Int,
+        store: (Int) -> Unit,
+        overCapMessageRes: Int
+    ) {
+        val editText = targetField ?: return
+
+        editText.doAfterTextChanged { text ->
+            val value = text?.toString()?.toIntOrNull()
+            if (value != null && value in 1..cap) store(value)
+        }
+
+        val commit = {
+            val value = editText.text?.toString()?.toIntOrNull()
+            when {
+                value == null || value < 1 -> editText.setText(getStored().toString())
+                value > cap -> {
+                    store(cap)
+                    editText.setText(cap.toString())
+                    editText.setSelection(editText.text.length)
+                    showCapDialog(overCapMessageRes)
+                }
+                else -> store(value)
+            }
+        }
+
+        editText.setOnFocusChangeListener { _, hasFocus -> if (!hasFocus) commit() }
+        editText.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == EditorInfo.IME_ACTION_DONE) commit()
+            false
+        }
+    }
+
+    /**
+     * The owner's single-button ("Okay") over-ceiling notice. Reuses the shared
+     * single-action dialog shape (dialog_single_action.xml +
+     * App.MaterialAlertDialog): the statement is the dialog TITLE (a single
+     * sentence with no separate subtext, per the house dialog rule) and the one
+     * primary button dismisses it.
+     */
+    private fun showCapDialog(messageRes: Int) {
+        val view = layoutInflater.inflate(R.layout.dialog_single_action, null)
+        val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(messageRes)
+            .setCancelable(true)
+            .setView(view)
+            .create()
+        view.findViewById<MaterialButton>(R.id.btn_dialog_action).apply {
+            setText(R.string.okay)
+            setOnClickListener { dialog.dismiss() }
+        }
+        dialog.show()
     }
 
     override fun onAttachedToWindow() {

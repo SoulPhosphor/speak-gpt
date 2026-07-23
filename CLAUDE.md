@@ -1426,23 +1426,47 @@ Everything is on-device. No cloud sync, no accounts.
     (`getWhisperPerfLogging`) and **Memory usage logging** (`getMemoryUsageLogging`),
     all three **off by default**; a **→ Audio Debugging** shortcut row (so someone
     hunting for VAD logging here still finds it); then **Crash log** (a.k.a. the
-    Error Log) / **Event log** (Voice Debug Log) / **Memory log** / **Performance
-    Log** as "label ›" rows that open `LogsActivity`.
-    The **Performance Log** is a dedicated `Logger` channel (`type == "performance"`,
-    2000 entries / 7 days) fed by exactly those two toggles, kept separate from the
-    Error and Voice logs so its high-volume output never evicts real crash entries
-    or buries the per-turn voice trail: **Whisper performance logging** writes one
-    line per on-device transcription from `LocalWhisperEngine.stopAndTranscribe`
-    (audio ms / model-load ms / decode ms + a compact `MemoryDiagnostics` snapshot),
-    and **Memory usage logging** drives an app-wide ~60s heartbeat plus
+    Error Log) / **Event log** (Voice Debug Log) / **Memory log** / **Whisper
+    Performance Log** / **Memory Usage Log** as "label ›" rows that open
+    `LogsActivity`.
+    **The old shared Performance Log was SPLIT into two dedicated channels
+    (owner spec, July 23 2026):** `type == "whisper_perf"` (`Logger.getWhisperPerfLog`)
+    and `type == "memory_usage"` (`Logger.getMemoryUsageLog`), so each category
+    is viewed/copied/cleared independently without sorting a mixed log. **No
+    migration** (owner ruling, option (a)): the legacy `type == "performance"`
+    storage key and its historical mixed contents are left byte-for-byte
+    untouched — the branch still exists in `Logger`/`LogsActivity`, but no
+    producer targets it and its viewer row was removed; the two new channels
+    start empty. **Whisper performance logging** writes one line per on-device
+    transcription from `LocalWhisperEngine` (audio ms / model-load ms / decode
+    ms + a compact `MemoryDiagnostics` snapshot) → `whisper_perf`; **Memory
+    usage logging** drives an app-wide ~60s heartbeat plus
     `onTrimMemory`/`onLowMemory` lines from `MainApplication` (Java heap, native
-    heap, total PSS, thread count, system availMem/low-memory) so a slow decode can
-    be read against memory pressure and a slow RAM leak shows as a rising curve even
-    while the app is idle. Footprint sampling lives in `util/MemoryDiagnostics`
-    (shared by both). Added July 2026 to diagnose "Whisper suddenly slow in long
-    conversations" — the transcribe path itself has no per-turn accumulation
-    (native decode caps threads at 4, `no_context` defaults on), so the cause is an
-    emergent system effect these logs are built to localize.
+    heap, total PSS, thread count, system availMem/low-memory) → `memory_usage`,
+    so a slow decode can be read against memory pressure and a slow RAM leak
+    shows as a rising curve even while the app is idle. Footprint sampling lives
+    in `util/MemoryDiagnostics` (shared by both). Kept separate from the Error
+    and Voice logs so this high-volume output never evicts real crash entries or
+    buries the per-turn voice trail. Added July 2026 to diagnose "Whisper
+    suddenly slow in long conversations" — the transcribe path itself has no
+    per-turn accumulation (native decode caps threads at 4, `no_context`
+    defaults on), so the cause is an emergent system effect these logs are built
+    to localize.
+    **Per-log retention is user-configurable for these three logs** (Memory
+    Diagnostics, Whisper Performance, Memory Usage — owner spec, July 23 2026):
+    each has its own **Maximum Logs Saved** (entry count) + **Maximum Days
+    Saved** (age) blank directly under its toggle, saved as typed. Stored via
+    `Preferences.get/setXxxLogMax{Entries,Days}` (global int prefs), clamped
+    through the pure `Preferences.coerceLogMax{Entries,Days}` (floor 1;
+    ceilings `LOG_MAX_ENTRIES_LIMIT = 1000` / `LOG_MAX_DAYS_LIMIT = 30`,
+    defaults 1000 / 7). `Logger.log` reads these per write for the three
+    channels and passes them to the unchanged `trimByEntries` (retain until the
+    entry-count OR age limit is hit, whichever first). A value over the ceiling
+    is clamped and explained via the shared single-button ("Okay") dialog
+    (`dialog_single_action.xml` + `App.MaterialAlertDialog`; strings
+    `dialog_max_logs_exceeded` / `dialog_max_days_exceeded`, owner-worded).
+    The Error Log and Voice Debug Log are deliberately NOT configurable and keep
+    their fixed constants in `Logger`.
   All toggles are global prefs; the logs are local-only and intentionally always
   reachable — never add a telemetry/consent gate (the old installation-id gate,
   and the installation-id/consent system it belonged to, were removed July 2026). **Audio Health** is a separate hands-free diagnostic from VAD
