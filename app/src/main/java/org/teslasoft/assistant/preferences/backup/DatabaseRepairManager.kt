@@ -206,15 +206,23 @@ object DatabaseRepairManager {
             when (type) {
                 BackupType.MEMORY -> {
                     val key = sourceKey ?: return Outcome(false, null, "backup key unavailable")
-                    RecoveryBackupManager.integrityCheckCipher(verifiedSnapshot, key)
+                    RecoveryBackupManager.integrityCheckCipher(
+                        verifiedSnapshot, key, "meta"
+                    )
                 }
                 BackupType.LOREBOOK -> if (sourcePlaintext) {
-                    RecoveryBackupManager.integrityCheckPlain(verifiedSnapshot)
+                    RecoveryBackupManager.integrityCheckPlain(
+                        verifiedSnapshot, "memory_entries"
+                    )
                 } else {
                     val key = sourceKey ?: return Outcome(false, null, "backup key unavailable")
-                    RecoveryBackupManager.integrityCheckCipher(verifiedSnapshot, key)
+                    RecoveryBackupManager.integrityCheckCipher(
+                        verifiedSnapshot, key, "memory_entries"
+                    )
                 }
-                BackupType.USER_IMAGE -> RecoveryBackupManager.integrityCheckPlain(verifiedSnapshot)
+                BackupType.USER_IMAGE -> RecoveryBackupManager.integrityCheckPlain(
+                    verifiedSnapshot, "profile_images"
+                )
                 BackupType.CHATS -> Unit
             }
         } catch (e: Exception) {
@@ -245,13 +253,16 @@ object DatabaseRepairManager {
             verifiedSnapshot.copyTo(staged, overwrite = true)
             when (type) {
                 BackupType.MEMORY ->
-                    RecoveryBackupManager.integrityCheckCipher(staged, sourceKey)
+                    RecoveryBackupManager.integrityCheckCipher(staged, sourceKey, "meta")
                 BackupType.LOREBOOK -> if (sourcePlaintext) {
-                    RecoveryBackupManager.integrityCheckPlain(staged)
+                    RecoveryBackupManager.integrityCheckPlain(staged, "memory_entries")
                 } else {
-                    RecoveryBackupManager.integrityCheckCipher(staged, sourceKey)
+                    RecoveryBackupManager.integrityCheckCipher(
+                        staged, sourceKey, "memory_entries"
+                    )
                 }
-                BackupType.USER_IMAGE -> RecoveryBackupManager.integrityCheckPlain(staged)
+                BackupType.USER_IMAGE ->
+                    RecoveryBackupManager.integrityCheckPlain(staged, "profile_images")
                 BackupType.CHATS -> Unit
             }
 
@@ -270,13 +281,16 @@ object DatabaseRepairManager {
 
             when (type) {
                 BackupType.MEMORY ->
-                    RecoveryBackupManager.integrityCheckCipher(active, sourceKey)
+                    RecoveryBackupManager.integrityCheckCipher(active, sourceKey, "meta")
                 BackupType.LOREBOOK -> if (sourcePlaintext) {
-                    RecoveryBackupManager.integrityCheckPlain(active)
+                    RecoveryBackupManager.integrityCheckPlain(active, "memory_entries")
                 } else {
-                    RecoveryBackupManager.integrityCheckCipher(active, sourceKey)
+                    RecoveryBackupManager.integrityCheckCipher(
+                        active, sourceKey, "memory_entries"
+                    )
                 }
-                BackupType.USER_IMAGE -> RecoveryBackupManager.integrityCheckPlain(active)
+                BackupType.USER_IMAGE ->
+                    RecoveryBackupManager.integrityCheckPlain(active, "profile_images")
                 BackupType.CHATS -> Unit
             }
 
