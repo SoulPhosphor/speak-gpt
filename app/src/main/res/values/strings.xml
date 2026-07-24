@@ -1526,7 +1526,7 @@
          Honest about deferral (Android may delay background work) and about the
          two safety limits: nothing is ever deleted, and it only backs up —
          never restores. -->
-    <string name="backup_auto_hint">Automatic backups run in the background on the schedule you choose, saving a verified backup to your chosen folder. Android may delay a run to save battery, so the timing is not exact. Old backups are never deleted, and automatic backups only save — they never restore or replace your data.</string>
+    <string name="backup_auto_hint">Automatic backups run in the background on the schedule you choose, saving a verified backup to your chosen folder. Android may delay a run to save battery, so the timing is not exact. Automatic backups can restore this app installation. To recover after reinstalling the app or moving to another device, create a Recovery Backup.</string>
     <!-- Title Case labels (owner correction, July 23 2026 — were sentence
          case, inconsistent with every other "Label: value" status line on
          this screen). File size sits between last-backup and next-due, same
@@ -1619,6 +1619,37 @@
          btn_cancel) -->
     <string name="health_btn_repair">Attempt Repair</string>
     <string name="health_btn_revert">Revert to Last Good Database</string>
+    <string name="restore_database">Restore Database</string>
+    <string name="restore_dialog_body">Restore the newest usable backup, or choose another backup.</string>
+    <string name="restore_choose_another">Choose Another Backup</string>
+    <string name="restore_choose_file">Choose Backup File</string>
+    <string name="restore_choose_folder">Choose Backup Folder</string>
+    <string name="restore_choose_source_title">Choose Another Backup</string>
+    <string name="restore_type_label">Type of Database to Restore:</string>
+    <string name="restore_type_memory">Memory Database</string>
+    <string name="restore_type_lorebook">Lorebook Database</string>
+    <string name="restore_type_user_image">User Image Database</string>
+    <string name="restore_finding_backup">Finding a Usable Backup…</string>
+    <string name="restore_checking_backup">Checking Backup…</string>
+    <string name="restore_replacing_database">Restoring Database…</string>
+    <string name="restore_database_success">Database Restored Successfully!</string>
+    <string name="restore_database_failed">Database Restore Failed.</string>
+    <string name="restore_repair_running">Attempting to Repair…</string>
+    <string name="restore_repair_success">Repair Successful!</string>
+    <string name="restore_repair_failed">Repair Failed.</string>
+    <string name="restore_no_current_backup">No usable backup was found in the current automatic backup location.</string>
+    <string name="restore_no_appropriate_database">Database import failed. No appropriate database found.</string>
+    <string name="restore_no_valid_file">No valid databases found in file.</string>
+    <string name="restore_no_valid_folder">No valid databases found in folder.</string>
+    <string name="restore_automatic_key_or_damage">This automatic backup cannot be opened with this app installation’s database key, or the file is damaged. Choose a Recovery Backup if this file came from another installation.</string>
+    <string name="restore_source_unavailable">The selected backup could not be opened.</string>
+    <string name="restore_mismatch">You selected the %1$s, but this backup contains a %2$s.</string>
+    <string name="restore_proceed">Proceed</string>
+    <string name="restore_confirm_title">Restore from Backup?</string>
+    <string name="restore_confirm_body">This replaces your %1$s with the backup from %2$s. Changes made after that date will be lost. Your current database will be kept aside, not deleted.</string>
+    <string name="restore_recovery_code_title">Enter Recovery Code</string>
+    <string name="restore_recovery_code_hint">Recovery Code</string>
+    <string name="restore_recovery_code_body">Enter the Recovery Code for this protected Recovery Backup.</string>
     <string name="health_btn_restore">Restore</string>
     <string name="health_btn_open_location">Open File Location</string>
     <!-- DRAFT buttons (B8 result routing — plan-suggested labels) -->
