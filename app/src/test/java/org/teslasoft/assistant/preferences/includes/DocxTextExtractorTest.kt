@@ -111,6 +111,29 @@ class DocxTextExtractorTest {
         assertEquals("Spaced text continues.", DocxTextExtractor.xmlToText(xml))
     }
 
+    @Test fun closingTagsAreRecognisedSoTextEndsAndParagraphsBreak() {
+        // Regression guard. A closing tag's name STARTS with the slash that a
+        // self-closing tag ENDS with; treating the slash as a terminator from
+        // index 0 made every closing tag resolve to "". Nothing then cleared
+        // the in-text flag or emitted a paragraph break, so a document came
+        // back as one run-on line with markup free to leak in.
+        //
+        // Both halves are asserted, because either can look healthy while the
+        // other is broken: the paragraph break proves /w:p fires, and the
+        // stray text sitting OUTSIDE any <w:t> proves /w:t fires. That stray
+        // text is the load-bearing part — an attribute value would never leak
+        // no matter how badly closing tags parsed, since attributes live
+        // inside a tag and are skipped wholesale.
+        val xml = document(
+            "<w:p><w:r><w:t>First.</w:t>SHOULD_NOT_APPEAR</w:r></w:p>" +
+                    "<w:p><w:r><w:t>Second.</w:t></w:r></w:p>"
+        )
+        val text = DocxTextExtractor.xmlToText(xml)
+
+        assertEquals("First.\nSecond.", text)
+        assertFalse(text.contains("SHOULD_NOT_APPEAR"))
+    }
+
     @Test fun anEmptyBodyYieldsEmptyText() {
         assertEquals("", DocxTextExtractor.xmlToText(document("")))
     }
@@ -183,8 +206,26 @@ class DocxTextExtractorTest {
         // word/document.xml is genuinely located (proof this was a real
         // docx), but its compressed data is cut off mid-stream, so reading it
         // must fail — distinct from NotDocx, which has no such proof.
-        val bytes = docxBytes(document(paragraph("A".repeat(5000))))
-        val truncated = bytes.copyOfRange(0, bytes.size - 20)
+        //
+        // The cut has to land INSIDE that entry's compressed data. Lopping a
+        // few bytes off the end only damages the central directory, which
+        // ZipInputStream never reads (it walks local headers sequentially),
+        // so the entry would still inflate cleanly. Hence: one entry only, so
+        // nothing precedes it, content varied enough not to compress away to
+        // nothing, and a cut at the halfway mark — comfortably past the local
+        // header and far short of the central directory.
+        val body = (0 until 2000).joinToString("") {
+            "<w:p><w:r><w:t>Section $it unique content ${it * 7919} marker</w:t></w:r></w:p>"
+        }
+        val out = ByteArrayOutputStream()
+        ZipOutputStream(out).use { zip ->
+            zip.putNextEntry(ZipEntry("word/document.xml"))
+            zip.write(document(body).toByteArray())
+            zip.closeEntry()
+        }
+        val bytes = out.toByteArray()
+        val truncated = bytes.copyOfRange(0, bytes.size / 2)
+
         assertEquals(
             DocxTextExtractor.ExtractResult.Corrupted,
             DocxTextExtractor.extract(truncated)

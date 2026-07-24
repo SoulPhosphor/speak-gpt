@@ -173,17 +173,27 @@ object DocxTextExtractor {
     /**
      * The element name inside a tag body, with attributes and any
      * self-closing slash stripped: `w:t xml:space="preserve"` -> `w:t`,
-     * `w:br/` -> `w:br`.
+     * `w:br/` -> `w:br`, `/w:p` -> `/w:p`.
      *
      * Exact names are load-bearing here. Prefix matching looks tempting but
      * is wrong: `w:tc` (table cell), `w:tr` (table row) and `w:tbl` (table)
      * all begin with `w:t`, so a prefix test would treat a table's structural
      * markup as body text and spill raw XML into the prompt for any document
      * containing a table.
+     *
+     * The slash is positional, and getting that wrong silently breaks
+     * extraction: a CLOSING tag opens with `/`, which is part of its name,
+     * while a SELF-CLOSING tag ends with one, which is not. Scanning for the
+     * first slash from index 0 therefore returned "" for every closing tag,
+     * so `/w:t` never cleared the in-text flag and `/w:p` never emitted a
+     * paragraph break — whole documents came out as one run-on line with
+     * formatting text able to leak in. Start the terminator scan past a
+     * leading slash.
      */
     private fun tagName(tagBody: String): String {
+        val start = if (tagBody.startsWith("/")) 1 else 0
         var end = tagBody.length
-        for (i in tagBody.indices) {
+        for (i in start until tagBody.length) {
             val c = tagBody[i]
             if (c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '/') {
                 end = i
