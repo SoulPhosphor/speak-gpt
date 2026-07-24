@@ -1,4 +1,4 @@
-# External Memory Analysis — Counter Plan (Revision 2, reconciled)
+# External Memory Analysis — Counter Plan (Revision 3, reconciled)
 
 **Document type:** Planning/architecture only — no code, database, prompt, UI,
 or string changes were made with this document.
@@ -20,6 +20,12 @@ overlapping exclusion flags, toggle semantics decided before Phase 2 ships,
 stable IDs in the target catalog, and "Possible match" wording). This
 document is the canonical roadmap; the audit plan remains the detailed
 package/UI/test reference, read with the `plot_ledger` correction in §2.
+**Revision 3 (2026-07-24, same day):** the separate UI-copy proposal has
+been folded into §5 so the owner and future agents have one canonical plan.
+Phase 1 receives only the few labels required by visible behavior; the
+larger computer-workflow vocabulary is reserved for Phase 2. A fresh-agent
+correctness review gate was added in §7. No app strings are approved or
+changed by this revision.
 
 > **Approval note:** nothing in this document is approved wording or an
 > approved screen. Every user-facing decision here goes through the owner in
@@ -286,7 +292,316 @@ an owner-approval conversation of their own.
 
 ---
 
-## 5. Suggested order and why
+## 5. Proposed user-facing wording, separated by phase
+
+This section is the copy source for implementation planning. It deliberately
+does not turn internal machinery into UI. Claims, run IDs, hashes, stable
+target IDs, exclusion flags, packet ledgers, and dedup keys remain behind
+the scenes. Technical details belong behind **View Details** or in the
+Memory Debug Log.
+
+Nothing below is approved merely because it appears in this document. The
+owner approves visible wording in chat before implementation. Missing cases
+return for copy review; an implementation agent must not improvise new
+user-facing text.
+
+### Shared vocabulary
+
+Use these terms consistently in new UI:
+
+| Concept | User-facing term |
+|---|---|
+| The feature | **Memory Assistant** |
+| Desktop/file route | **Analyze on a Computer** |
+| Exported ZIP | **Memory Review Package** or **review package** |
+| Returned result | **Memory Suggestions File** or **suggestions file** |
+| Model output | **Suggestions** |
+| Review destination | **Pending** |
+| Near-duplicate signal | **Possible Match** |
+| Existing API route | **In App** when a route label is necessary |
+| File-based route | **On Computer** when a route label is necessary |
+
+Do not use **Archivist**, **external analysis**, **analysis packet**,
+**result payload**, **archive database**, or **import memories** in new
+primary UI. Do not display a similarity percentage as if it were a
+probability.
+
+### Phase 1 copy — the only wording needed before the file workflow
+
+Most of Phase 1 is invisible correctness work and needs no labels. Only the
+following visible situations need owner-approved wording.
+
+#### A. Analysis in progress
+
+Place a persistent notice beneath the existing Analyze Conversations
+control while a run is active:
+
+> **Analyzing Conversations**
+>
+> Keep this screen open while conversations are being analyzed. Chats are
+> unavailable until analysis finishes. If analysis is interrupted,
+> unfinished conversations will remain available to analyze again.
+
+Do not rely on a toast for this state.
+
+#### B. Interrupted run recovered
+
+> **Previous Analysis Interrupted**
+>
+> Speak GPT recovered the unfinished review. No unfinished conversations
+> were marked as reviewed.
+
+If some conversations committed before interruption, the detailed view may
+also show:
+
+- **Memory drafts created:** N
+- **Conversations fully processed:** N
+- **Conversations remaining:** N
+
+#### C. Partial or full failure
+
+> **Run Partially Failed**
+>
+> Memory extraction stopped before every conversation was fully processed.
+> Saved memory drafts were kept.
+
+Show truthful counts:
+
+- **Memory drafts created:** N
+- **Conversations fully processed:** N
+- **Conversations remaining:** N
+
+For a full failure, use the same factual pattern with **Run Failed**. Never
+claim that zero drafts were created unless the stored count is actually
+zero.
+
+#### D. Re-enabling chat archiving
+
+When the user turns **Archive this chat** back on and earlier eligible
+messages still exist:
+
+> **Include Earlier Messages?**
+>
+> This chat was not being archived. Speak GPT can include messages already
+> in this chat the next time Memory Assistant runs, or begin with new
+> messages only.
+
+Actions:
+
+1. **Include Earlier Messages** — recommended default.
+2. **New Messages Only**
+3. **Cancel**
+
+If earlier messages are no longer available:
+
+> **Earlier Messages Unavailable**
+>
+> Speak GPT will begin archiving new messages from this point.
+
+Action: **Okay**
+
+Re-enabling **Use memory in this chat** does not need a second dialog. It
+automatically removes only that toggle's exclusion reason and re-queues
+still-available rows unless another exclusion reason remains.
+
+**Owner review required for Phase 1:** the archive re-enable default and
+the four short status/dialog groups above. No owner wording review is
+needed for the internal database and run-integrity changes.
+
+### Phase 2 copy — reserve now, approve when Phase 2 begins
+
+The computer route is a subordinate row on the existing Memory Assistant,
+not a replacement for Analyze Conversations.
+
+Entry row:
+
+- **Title:** Analyze on a Computer
+- **Subtitle:** Let an AI on your computer review conversations, then bring
+  its suggestions back to Pending.
+
+Screen introduction:
+
+> Create a review package, give it to an AI that can work with files, then
+> import its suggestions. Suggestions are added to Pending for your review
+> and do not become saved memories on their own.
+
+Privacy notice:
+
+> The review package is not encrypted. It contains conversation text and a
+> reference copy of your existing memories so the AI can avoid duplicate
+> suggestions. No API keys are included.
+>
+> When you give the package to another AI app, that app's provider may
+> receive the contents. Use a service you trust.
+
+#### The three-step screen
+
+1. **Create a Review Package**
+
+   Supporting state: **N conversations ready** or **No conversations
+   waiting**.
+
+   Primary action: **Create Review Package**
+
+2. **Review It on Your Computer**
+
+   > Move the ZIP to your computer and open it with an AI that can work
+   > with files. Ask the AI to follow `README.md`. It will create a
+   > suggestions file for Speak GPT.
+
+3. **Import Suggestions**
+
+   > Bring the suggestions file back to this device. Speak GPT will check
+   > it before anything is added to Pending.
+
+   Primary action: **Import Suggestions**
+
+Creation confirmation:
+
+> **Create Review Package?**
+>
+> This package will contain N conversations and a reference copy of your
+> existing memories. It is not encrypted. No API keys are included.
+
+Actions: **Choose Save Location**, **Cancel**
+
+Progress labels:
+
+- **Preparing Conversations…**
+- **Adding Existing Memories…**
+- **Checking Review Package…**
+- **Saving Review Package…**
+
+Outstanding-package state:
+
+- **Waiting for Suggestions**
+- **Import Suggestions**
+- **Replace Package**
+- **Cancel Package**
+- **View Instructions**
+
+Replacement confirmation:
+
+> **Replace Review Package?**
+>
+> The current package will stop accepting suggestions. Its conversations
+> will be placed in a new package with any other eligible conversations.
+
+Actions: **Replace Package**, **Keep Current Package**
+
+Cancellation confirmation:
+
+> **Cancel Review Package?**
+>
+> No suggestions will be imported from this package. Its conversations
+> will be available for a future analysis.
+
+Actions: **Cancel Package**, **Keep Package**
+
+#### Import review
+
+Before committing anything, show:
+
+> **Review Import**
+>
+> Speak GPT checked the suggestions file. New suggestions will be added to
+> Pending for your review.
+
+Use only categories that describe a deterministic app result:
+
+- **New Suggestions**
+- **Possible Matches**
+- **Already Saved**
+- **Couldn't Be Used**
+- **Conversations to Retry**
+- **No Longer Eligible**
+
+Primary action: **Add N to Pending**. If N is zero: **Finish Import**.
+
+Success:
+
+> **Suggestions Added to Pending**
+>
+> N suggestions were added to Pending. Review them before they become
+> active memories.
+
+Actions: **View Pending Memories**, **View Details**
+
+Valid import with nothing new:
+
+> **No New Suggestions**
+>
+> Speak GPT checked the file, but every suggestion was already saved,
+> already pending, no longer eligible, or could not be used.
+
+Partial completion:
+
+> **Import Partially Completed**
+>
+> Suggestions from N conversations were added to Pending. M conversations
+> still need attention and remain available to retry.
+
+#### Import errors
+
+Each failure says what happened and confirms that nothing unsafe changed:
+
+| Title | Message |
+|---|---|
+| **Different Review Package** | This file belongs to a different review package. Nothing was imported. |
+| **Review Package No Longer Active** | This package was canceled or replaced. Nothing was imported. |
+| **Suggestions File Could Not Be Read** | The file is missing required information or is not in the expected format. Nothing was imported. |
+| **Suggestions File Is Out of Date** | Some conversations or targets changed after this package was created. Nothing was imported for the affected conversations. |
+| **Suggestions Do Not Match** | One or more results do not match the conversations in this package. Nothing was imported for the affected conversations. |
+| **Already Imported** | These suggestions were already checked. No duplicate suggestions were added. |
+
+Recent-run route labels, when needed, are **In App** and **On Computer**.
+An outstanding computer run uses **Import Suggestions**, not **Run Again**.
+
+**Owner review required for Phase 2:** approve this screen as one coherent
+flow when Phase 2 starts. There is no reason to approve every Phase 2 label
+during Phase 1.
+
+### Phase 3 copy — defer until the feature is chosen
+
+Embedding-assisted review uses a **Possible Match** badge and a
+**Compare Memories** action. The comparison screen offers:
+
+- **Keep Both**
+- **Keep Existing**
+- **Replace Existing**
+- **Delete Suggestion**
+
+Replacement confirmation:
+
+> **Replace Existing Memory?**
+>
+> The existing memory will be marked as replaced by this suggestion. You
+> can review both records in memory history.
+
+Actions: **Replace Existing**, **Cancel**
+
+Do not show a percentage. The score chooses what comparison to present; it
+does not make the user's decision.
+
+The LAN endpoint side path should reuse the repository's existing approved
+unencrypted-endpoint warning rather than inventing another warning.
+
+### Copy behavior rules for every phase
+
+- Suggestions always go to **Pending** and never become active without user
+  approval.
+- Persistent work and recoverable failures are not communicated only by a
+  toast.
+- Every failure summary states what changed, what did not change, and what
+  the user can do next.
+- Technical IDs, hashes, JSON paths, and database states stay out of the
+  main UI.
+- Never create a second Pending screen for the computer route.
+- Do not let a model invent user-facing categories or organization.
+
+---
+
+## 6. Suggested order and why
 
 1. **Phase 1 (a)–(c), (g)** — small diffs, fix live defects, prerequisites
    for the package. Lowest risk, immediate honesty gains.
@@ -294,22 +609,22 @@ an owner-approval conversation of their own.
    API route now and the package content later.
 3. **Phase 1 (f)** once the owner settles the toggle semantics — required
    before Phase 2 ships, since export eligibility depends on it.
-4. **Owner conversation on Phase 2 UI + wording**, then **Phase 2**.
+4. **Owner approval of the Phase 2 flow in §5**, then **Phase 2**.
 5. **Phase 3 / embeddings phase** — by demand, after the loop is real.
 
 This ordering delivers the subscription-agent workflow after two small
 phases instead of six stages, and every step before it is independently
 valuable to the app as it is today.
 
-## 6. Decisions the owner is asked for (in chat, whenever ready)
+## 7. Decisions and review gates
 
 1. **Go/no-go on Phase 1 (a)–(e), (g)** — behavior-safe correctness fixes.
 2. **Phase 1 (f) semantics** — what re-enabling each toggle should do to
    previously captured rows, and the Archive-off history question (when
    "Archive this chat" is turned back on: include still-available earlier
    messages, or begin from now?). Must be settled before Phase 2 ships.
-3. **Phase 2 go/no-go** and, when it starts, the screen/wording
-   conversation (the audit plan's §14 as the starting sketch).
+3. **Phase 2 go/no-go** and, when it starts, approval or revision of the
+   complete screen/wording flow in §5.
 4. **Plain-http LAN endpoints** (Phase 3 side path): enable or leave
    blocked.
 5. **Embedding-assisted duplicate review** (the "65%" feature): wanted at
@@ -317,3 +632,39 @@ valuable to the app as it is today.
 6. Reaffirm: `plot_ledger` card-section suggestions stay (no change needed —
    listed only so the audit plan's contrary instruction is formally
    overruled).
+
+### Fresh-agent correctness review after this revision
+
+Before implementation, give this branch to a new capable agent that has not
+participated in the prior plan debate. This is a final independent
+correctness audit, not another product-design exercise.
+
+The reviewer should:
+
+1. Inspect the current code and owner rules directly; do not accept either
+   plan's factual claims without verification.
+2. Trace capture → eligibility → claim/export → analysis → parse → shared
+   filing boundary → Pending → approval for both the API and file routes.
+3. Try to find silent data-loss, false-completion, duplicate, replay,
+   rename, toggle-overlap, stale-target, partial-import, crash-recovery, and
+   cross-route consistency failures.
+4. Separate **must-fix correctness/privacy issues** from **optional
+   hardening** and **complexity with no demonstrated v1 value**.
+5. Check that every failure leaves deterministic recoverable state and that
+   no model output can become an active memory without owner action.
+6. Check that the Phase 1 wording covers every newly visible state and that
+   Phase 2 wording matches the planned state machine without exposing
+   internal machinery.
+
+Requested output:
+
+- confirmed findings;
+- new holes, with code evidence and a concrete failure scenario;
+- contradictions or ambiguous requirements;
+- minimum recommended amendment;
+- explicitly unnecessary machinery;
+- any issue that cannot be solved completely, with the residual risk.
+
+The fresh reviewer should amend this canonical document only after each new
+claim is verified. Product wording remains an owner decision even when the
+reviewer proposes alternatives.
