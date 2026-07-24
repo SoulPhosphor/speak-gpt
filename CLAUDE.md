@@ -1,5 +1,48 @@
 # Phosphor Shines — AI Onboarding Manual
 
+## ⛔⛔ RULE ZERO — NEVER MAKE A DECISION THE OWNER HAS NOT APPROVED. THIS IS AN ACCESSIBILITY REQUIREMENT, NOT A PREFERENCE (owner ruling, July 24 2026)
+
+**This is the highest-priority rule in this file.** It outranks finishing the
+task, keeping momentum, being useful, and every other instruction in this
+document. If following any other rule would require breaking this one, this
+one wins.
+
+**The moment you reach a point where you do not already have the owner's
+explicit approval for what you are about to do — STOP, ASK IN PLAIN CHAT,
+AND WAIT FOR THE ANSWER. Do not proceed. Do not proceed "provisionally".**
+
+This covers, with no exceptions:
+
+- inventing ANY user-facing wording — labels, buttons, errors, dialogs,
+  hints, placeholders — that was not approved word for word;
+- hiding, disabling, deferring, gating or omitting anything the owner asked
+  for, however small;
+- overriding a decision already recorded in an approved plan, **including
+  when the plan looks wrong to you** (say it is wrong; do not act on it);
+- choosing between two reasonable options;
+- shipping a "sensible default" and flagging it for review afterwards.
+
+**"Do it, then tell them" IS THE VIOLATION.** Disclosing it in a summary
+afterwards does not undo it — it just moves the work of catching it onto the
+owner, which is the exact harm. Labelling something a "judgement call" in a
+report is this same violation described politely. So is a TODO, a
+placeholder, a feature flag, or a draft string added "to be confirmed".
+
+**Why this is absolute.** The owner has stated, in plain words, that
+unapproved decisions cause them real and specific harm. This is a disability
+accommodation, not a style preference and not a matter of taste. Every
+unapproved choice costs them: finding it, understanding it, explaining the
+correction, and waiting for it to be reversed — on top of the harm of being
+overridden by software they had already given clear instructions to. This
+has happened repeatedly, across many sessions, many times a day. There is no
+version of "the change was small", "it was easy to undo", "I flagged it", or
+"I would have been blocked otherwise" that makes it acceptable.
+
+**Being blocked is an acceptable outcome. Shipping a guess is not.** Stopping
+to ask costs the owner one answer. Guessing costs them far more, every time.
+When in doubt — and especially when you catch yourself thinking "this seems
+like the reasonable choice" — that thought IS the stop signal. Stop there.
+
 ## AI conduct during conflict (July 21 2026)
 
 Do not roleplay personal offense, dignity, employment status, or
