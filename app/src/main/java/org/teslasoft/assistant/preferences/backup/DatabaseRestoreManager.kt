@@ -351,14 +351,22 @@ object DatabaseRestoreManager {
         return try {
             when (type) {
                 BackupType.MEMORY ->
-                    RecoveryBackupManager.integrityCheckCipher(artifact.stagedFile, key)
+                    RecoveryBackupManager.integrityCheckCipher(
+                        artifact.stagedFile, key, "meta"
+                    )
                 BackupType.LOREBOOK -> if (sourcePlaintext) {
-                    RecoveryBackupManager.integrityCheckPlain(artifact.stagedFile)
+                    RecoveryBackupManager.integrityCheckPlain(
+                        artifact.stagedFile, "memory_entries"
+                    )
                 } else {
-                    RecoveryBackupManager.integrityCheckCipher(artifact.stagedFile, key)
+                    RecoveryBackupManager.integrityCheckCipher(
+                        artifact.stagedFile, key, "memory_entries"
+                    )
                 }
                 BackupType.USER_IMAGE ->
-                    RecoveryBackupManager.integrityCheckPlain(artifact.stagedFile)
+                    RecoveryBackupManager.integrityCheckPlain(
+                        artifact.stagedFile, "profile_images"
+                    )
                 BackupType.CHATS ->
                     return PrepareResult.Failed(Failure.NO_APPROPRIATE_DATABASE)
             }
@@ -381,11 +389,18 @@ object DatabaseRestoreManager {
         local: File,
         root: File
     ): PrepareResult {
+        // The private staging copy was created just now, so its filesystem
+        // mtime is not the backup date. Prefer the timestamp carried by the
+        // app's generated filename whenever one exists.
+        val backupAt = automaticMillisFromName(local.name)
+            ?: BackupWalkPlanner.backupInstantMillis(local.name)
+            ?: local.lastModified()
+
         // A selected automatic artifact's generated name is helpful metadata,
         // but verification still decides whether it is usable.
         val namedType = automaticTypeFromName(local.name)
         if (namedType != null && namedType != requestedType) {
-            return when (val actual = prepareAutomaticLocal(context, namedType, local, root, local.lastModified())) {
+            return when (val actual = prepareAutomaticLocal(context, namedType, local, root, backupAt)) {
                 is PrepareResult.Ready -> PrepareResult.Mismatch(namedType, actual.prepared)
                 else -> actual
             }
@@ -399,7 +414,7 @@ object DatabaseRestoreManager {
                 MemorySeedCodec.parse(local.readText())
                 val prepared = Prepared(
                     BackupType.MEMORY, Kind.MEMORY_JSON, local, null, false,
-                    local.lastModified(), root
+                    backupAt, root
                 )
                 return if (requestedType == BackupType.MEMORY) PrepareResult.Ready(prepared)
                 else PrepareResult.Mismatch(BackupType.MEMORY, prepared)
@@ -408,7 +423,7 @@ object DatabaseRestoreManager {
                 return PrepareResult.Failed(Failure.NO_VALID_DATABASES)
             }
         }
-        return prepareAutomaticLocal(context, requestedType, local, root, local.lastModified())
+        return prepareAutomaticLocal(context, requestedType, local, root, backupAt)
     }
 
     private fun prepareAutomaticUri(
@@ -449,9 +464,13 @@ object DatabaseRestoreManager {
                         PortableStaging.delete(root)
                         return PrepareResult.Failed(Failure.AUTOMATIC_KEY_OR_DAMAGE)
                     }
-                    RecoveryBackupManager.integrityCheckCipher(local, key)
+                    RecoveryBackupManager.integrityCheckCipher(
+                        local, key,
+                        if (type == BackupType.MEMORY) "meta" else "memory_entries"
+                    )
                 }
-                BackupType.USER_IMAGE -> RecoveryBackupManager.integrityCheckPlain(local)
+                BackupType.USER_IMAGE ->
+                    RecoveryBackupManager.integrityCheckPlain(local, "profile_images")
                 BackupType.CHATS -> {
                     PortableStaging.delete(root)
                     return PrepareResult.Failed(Failure.NO_APPROPRIATE_DATABASE)
