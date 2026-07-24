@@ -1894,12 +1894,17 @@ folder — never combined), and is deliberately conservative:
     failure ABORTS the destructive step. Repair = bounded staged salvage
     (`SqlcipherSalvage`) into a SEPARATE keyed file, integrity-verified
     before the swap — never in-place, never promised as more than salvage.
-  - **Dialog flows live in ONE place** (`ui/DatabaseRecoveryFlows`): A1
-    problem/repaired, A5 restore confirm (verify-first, walk newest→oldest
-    via `DatabaseRevertManager` — today only the memory JSON exports are
-    enumerable restore sources), the fresh-start confirm, A6. Wording is
-    §15.12 verbatim; strings marked DRAFT in `strings.xml` await owner
-    review — do not treat them as approved, do not reword approved ones.
+  - **Recovery UI has two deliberate entry surfaces.** The one-shot A1/A6
+    notices remain in `ui/DatabaseRecoveryFlows`. Standing repair/restore
+    actions live on `MemoryBackupRestoreActivity`, backed by the single
+    `DatabaseRestoreManager` coordinator. That coordinator hides the physical
+    formats from the user: same-install automatic per-database `.dbbackup`
+    files, portable v2 Recovery Backups (protected or unencrypted), and the
+    older internal Memory JSON chain. Every candidate is staged, integrity-
+    checked, and checked for the expected database identity before the dated
+    confirmation; live data is untouched until the user confirms. A failed
+    swap automatically puts the pre-restore database back while retaining its
+    preserved safety copy.
   - **A2 banner:** ChatActivity's `health_banner` (top of chat, buttons in
     order **Okay | Attempt Repair** — `health_banner_btn_ok` is its own string
     distinct from the shared `btn_ok`, while Attempt Repair reuses the shared
@@ -1925,23 +1930,29 @@ folder — never combined), and is deliberately conservative:
     that way. A3: the Memory Assistant hard-disables Analyze while ANY
     database is degraded, with working Repair/Revert buttons.
   - **Inline per-database recovery buttons on the Backup & Restore screen
-    (owner ruling, July 24 2026):** under the Backup Status section (which
-    now leads the screen — section order is 1. Backup Status, 2. Database
-    Health, …), a corrupted database's row shows **Attempt Repair | Revert to
-    Last Good Database** directly beneath it (`health_actions_memory` /
-    `_lorebook` / `_userimage` in `activity_memory_backup_restore.xml`), so a
-    user who dismissed the one-shot A1 dialog still has a standing way to act
-    without re-running the integrity check. GONE by default; visibility is
-    gated STRICTLY on `DatabaseHealthState.isDegraded(type)` in
-    `refreshBackupStatus` — a space/permission backup failure NEVER shows
-    them (no repair language for non-corruption). **Chats get no buttons** (not
-    a database; Round-4 lock owns that case). The buttons reuse the existing
-    A1 entry points `DatabaseRecoveryFlows.runRepair`/`runRevert` (repair is
-    non-destructive salvage; revert still runs the "Restore from Backup?"
-    A5 confirmation before overwriting) — no new recovery logic. Style is the
-    new `AppButton.Primary.Inline` (owner: "still based off primary, it's
-    just the size width") — a primary button sized to its own text so the pair
-    sits side by side at different widths, not full-width, not equal.
+    (owner ruling, July 24 2026):** under a confirmed-failed database row show
+    **Attempt Repair | Restore Database**. The buttons stay visible but disabled
+    while the non-cancelable mutation runs; a spinner + status line appears
+    underneath. Success leaves **Repair Successful!** / **Database Restored
+    Successfully!** for that screen visit, removes the buttons, and refreshes
+    the health row. Failure leaves the buttons available. These controls are
+    gated STRICTLY on `DatabaseHealthState.isDegraded(type)`; backup destination
+    failures never show repair language, and Chats get no buttons. The primary-
+    based `AppButton.Primary.Inline` style wraps each label independently.
+    The Recovery Backup section also has one normal **Restore Database** button
+    with the established **Type of Database to Restore** dropdown, so a healthy
+    database can be restored deliberately. Its chooser offers **Revert to Last
+    Good Database** or **Choose Another Backup** → file/folder system picker.
+    Current-location restore walks newest→oldest and skips unusable candidates;
+    selecting a folder recognizes both automatic artifacts and portable
+    Recovery Backups. No remembered-folder registry exists: moved/old folders
+    are reached explicitly through **Choose Backup Folder**. A selected
+    individual file containing exactly one different database gets the
+    Proceed/Cancel mismatch confirmation, followed by the ordinary dated
+    restore confirmation—Proceed never overwrites immediately. Existing raw
+    encrypted automatic files have no authenticated installation fingerprint,
+    so an open failure is honestly reported as "this installation's key OR
+    file damage"; never falsely label those old files corrupt.
   - **Chat recovery restore is ENGINE-ONLY** (`ChatRestoreManager` +
     unit-tested `ChatRestorePlanner`): journaled wholesale swap under
     `CHAT_LIST_LOCK`, strict entry whitelist (an archive can never plant
