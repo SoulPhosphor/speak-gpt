@@ -1,4 +1,4 @@
-# External Memory Analysis + RAG Compatibility — Counter Plan (Revision 5, desktop-integrated)
+# External Memory Analysis + RAG Compatibility — Counter Plan (Revision 6, independently reviewed)
 
 **Document type:** Planning/architecture only — no code, database, prompt, UI,
 or string changes were made with this document.
@@ -56,6 +56,22 @@ IDs as add-or-skip rather than reconcile; and the separate `LoreBookStore`
 has stable UUIDs and timestamps but no export, revision feed, or tombstones.
 The existing portable JSON and encrypted recovery package remain separate
 products. No app code or strings are changed by this revision.
+**Revision 6 (2026-07-24, same day):** a fresh agent read all of Revision 5
+and spot-checked its load-bearing claims against the repository. The review
+confirmed the technical findings and end-state architecture, then found
+nine document-level corrections that are incorporated here: analysis no
+longer claims chats are unavailable or asks the user to keep a screen open;
+the API run moves under a dedicated foreground-service pattern; the existing
+embedding-model prerequisite is preserved pending an explicit owner decision;
+the duplicate Phase A numbering is replaced with named workstreams; retired
+Protected/handling machinery is removed from the live design; exchange
+journals remain dormant until a computer workspace is first created; the
+working user term for an internal `retire` proposal is consistently
+**Archive Suggestion**; plaintext-transfer services are included in the
+privacy warning; and API/computer-run coexistence is explicit. All visible
+copy remains provisional and the owner has deferred wording approval until
+the architecture is complete. No app code or strings are changed by this
+revision.
 
 > **Approval note:** nothing in this document is approved wording or an
 > approved screen. Every user-facing decision here goes through the owner in
@@ -146,7 +162,7 @@ Pending review, origin tracking) — and write our own small implementation.
 
 ---
 
-## 4. The external-workflow intent (mapped to the authoritative A–D plan in §9)
+## 4. The external-workflow intent (mapped to the authoritative A–D plan in §§9–10)
 
 The audit plan's Stage 0–11 program front-loads a generalized run
 coordinator, an item state machine, claim leases, an exclusion-reason table,
@@ -156,7 +172,7 @@ the only compile gate and regressions land on one user's daily driver, that
 much rebuilt machinery is itself the biggest risk. This plan cuts to what
 the file feature actually requires. Revision 5 keeps these product
 constraints but replaces this section's compressed delivery outline with
-the complete Phase A–D architecture in §9. In particular, the computer may
+the complete architecture and Phase A–D path in §§9–10. In particular, the computer may
 propose maintenance operations as well as additions, but it still has
 **proposal authority only**.
 
@@ -179,7 +195,20 @@ ships, and (a)–(c) are hard prerequisites for it.
   live — the same recover-at-startup pattern `RenameJournal.reconcile`
   already established. An externally-exported package's claims are the one
   kind deliberately NOT auto-released (they wait for import, cancel, or
-  replacement). Additive migration, version bump.
+  replacement).
+
+  The activity must not own the long-running analysis coroutine. Add a
+  dedicated **Memory Analysis foreground service** following the proven
+  `GenerationForegroundService` keep-alive pattern, but declare the
+  appropriate data-sync service type rather than reusing its media-playback
+  service. The service owns the run, CPU/Wi-Fi keep-alive, progress
+  notification, and terminal cleanup; `MemoryAssistantActivity` launches or
+  observes the durable run and may be destroyed without cancelling it. A
+  notification tap returns to Memory Assistant. If the service cannot start,
+  do not claim rows or begin an Activity-owned fallback run: show a durable
+  failure and leave all work retryable. Process/service death still uses the
+  durable reconcile above. Additive migration, manifest/service work, version
+  bump.
 - **(b) Normalize the duplicate check, placement-aware.** Compare
   versioned Unicode-NFKC, locale-independent case-folded,
   whitespace-collapsed content (title excluded — models retitle the same
@@ -264,7 +293,10 @@ What v1 keeps from the audit plan's machinery:
 - **claimed rows stay frozen** (Phase A's claim stamp) while a package is
   outstanding; new turns accumulate in new rows and are simply not in the
   package;
-- **one outstanding archive-review job at a time**;
+- **one outstanding computer archive-review package at a time**. This does
+  not block one API/In-App run over other, unclaimed rows; both transports
+  atomically claim only currently unclaimed eligible rows. The detailed
+  coexistence rule is in §9.6.6;
 - import funnels through the SAME **complete filing boundary** as the API
   path — not just the low-level `insertArchivistDraftMemory` (which only
   enforces draft status and origin), but the whole filing logic that today
@@ -319,9 +351,10 @@ What v1 deliberately does NOT build (deferred until real use demands it):
 the generalized run-coordinator framework, claim leases/expiry, the
 broad acceptance-validator framework beyond the shared exact/target checks
 defined here, per-message database IDs, canonical-JSON hashing per RFC 8785,
-general phone-to-phone sync, and multiple outstanding review jobs. A
+general phone-to-phone sync, and multiple outstanding computer review
+packages. A
 separate optional encryption wrapper and incremental computer-workspace
-updates are now part of Phase D (§9), not vague prerequisites for the first
+updates are now part of Phase D (§§9–10), not vague prerequisites for the first
 working package.
 
 UI for v1 is intentionally minimal and 100% owner-designed before build:
@@ -331,13 +364,15 @@ with the privacy disclosure, and a persistent result summary. The audit
 plan's §14 is a reasonable starting sketch for that conversation — every
 string in it is unapproved until the owner says otherwise.
 
-**Privacy, stated plainly (unchanged from the audit plan, worth repeating):**
+**Privacy, stated plainly (the audit-plan warning plus transfer-channel risk):**
 the package is the user's conversations and memory list in readable
 plaintext. Once it leaves the app, what happens to it depends entirely on
 the tool that reads it — an agentic desktop app working for a cloud AI
 sends what it reads to that provider. The app's job is to say that clearly
 at export time and include nothing beyond what analysis needs (no API keys,
-no database, no embeddings).
+no database, no embeddings). A plaintext email attachment or cloud-drive
+upload also exposes the package to that transfer/storage service before an
+AI reads it; recommend USB or a trusted local transfer where practical.
 
 ### After Phase D — Only if wanted: the same contract through other transports
 
@@ -378,13 +413,15 @@ an update (old status vs new status), or the same sentence in two different
 fictional worlds. Embeddings treat all of those as "very similar." So the
 score selects what to SHOW the user; the user's tap is the decision — which
 is also exactly the owner's standing authority rule for the memory system.
-When no embedding model is installed, this degrades to exact identity and
+When the embedding model is unavailable, this degrades to exact identity and
 deterministic text overlap, the same safe degradation principle the
-Librarian uses. The **exact** duplicate/status check and acceptance-time
-revalidation are Phase A correctness work. The broader semantic comparison
-screen can follow the file loop, but it should land before large backfills
-or a broad release make memory hygiene expensive. Its screens and wording
-are an owner-approval conversation of their own.
+Librarian uses. That reliability fallback does not decide the separate
+owner question of whether Saved memories may be first-enabled without a
+model. The **exact** duplicate/status check and acceptance-time revalidation
+are Phase A correctness work. The broader semantic comparison screen can
+follow the file loop, but it should land before large backfills or a broad
+release make memory hygiene expensive. Its screens and wording are an
+owner-approval conversation of their own.
 
 ---
 
@@ -541,16 +578,21 @@ underlying retrieval mechanics.
 
 **First-enable and unavailable states**
 
-- Recommendation: permit Saved memories without an embedding model. First
-  enable provisions the store/companion links independently of model setup,
-  then uses deterministic lexical matching over the complete eligible set.
-  Show a persistent state such as **Matching: Keywords** with an optional
-  **Improve Matching** setup action. Do not use a disappearing toast.
-- The stricter alternative is to require a model before first enable. It
-  produces better initial relevance but excludes low-resource devices and
-  makes the already-supported fallback harder to explain. Even under that
-  policy, a later model failure must degrade to keywords without silently
-  turning the source off or claiming memory is unavailable.
+- The current owner ruling remains authoritative unless deliberately changed:
+  first enabling the full Saved memories engine requires an installed
+  embedding model, with persistent inline setup guidance if the user declines
+  or no compatible model is available. Phase A must not silently reverse that
+  product rule.
+- A keyword-only supported mode is a technically sound alternative for
+  low-resource devices, but enabling it would reverse the standing ruling.
+  It is therefore a narrow owner decision, recorded in §§8 and 13, rather
+  than a technical default hidden in this plan.
+- Regardless of that first-enable policy, a previously enabled engine must
+  degrade safely when a model later fails, is removed, is rebuilding, or has
+  only a partial index: use deterministic lexical matching over the complete
+  eligible set for that turn. Do not silently turn the source off, hide
+  vectorless memories, or claim the library is unavailable. Show a
+  persistent diagnostic/recovery route rather than a disappearing toast.
 - If one source fails during a turn, continue with the other source and
   normal chat. Do not silently flip the user's saved switch. Show a durable
   status/details route when the failure persists.
@@ -873,35 +915,37 @@ superseded/stale retrieval rate, and lexical-fallback parity. Evaluate
 retrieval selection before judging final model prose, so generation variance
 does not hide a read-path defect.
 
-### 5.10 Delivery slices and gates
+### 5.10 Named workstreams and gates
 
 Keep the implementation small and independently reversible:
 
-1. **A0 — source semantics and migration:** two global defaults, matching
+1. **Phase A / Source semantics:** two global defaults, matching
    per-chat controls, Saved-memories-led store provisioning,
    injection/archive separation, legacy migration, and four-mode tests.
-2. **A1 — retrieval correctness:** complete-set fallback, relevance-before-
+2. **Phase A / Retrieval correctness:** complete-set fallback, relevance-before-
    top-K, post-filter backfill, policy clamps, updated freshness, title/tag
    lexical and embedding documents.
-3. **A2 — index lifecycle and performance:** derived missing-vector repair
+3. **Phase A / Index lifecycle and performance:** derived missing-vector repair
    (using the narrow approved portion of the existing health design), scoped
    vector loads, cached/reused overlap vectors, persistent diagnostics.
-4. **A3 — provenance and hygiene:** shared filing/acceptance validation,
+4. **Phase A / Provenance and hygiene:** shared filing/acceptance validation,
    evidence lineage, truthful source labels, status-aware exact matching,
    Possible Match service.
-5. **A4 — lore query/diagnostic cleanup:** joined/cached trigger retrieval,
+5. **Phase A / Lore query and diagnostics:** joined/cached trigger retrieval,
    exact cross-book content dedup, injected-versus-cut logs.
-6. **B — full portable package:** ship only after A0, the release-blocking
-   parts of A1, and evidence/shared filing from A3 are complete.
-7. **C — computer workflow proof:** validate the shared retrieval/result
+6. **Phase B — full portable package:** ship only after **Source semantics**,
+   the release-blocking parts of **Retrieval correctness**, and the
+   evidence/shared-filing foundation from **Provenance and hygiene** are
+   complete.
+7. **Phase C — computer workflow proof:** validate the shared retrieval/result
    contract with real file-capable agents before app mutation code.
-8. **D — reconciliation and deltas:** strict import, conflicts, Pending,
+8. **Phase D — reconciliation and deltas:** strict import, conflicts, Pending,
    approval/rollback, incremental workspace updates, then optional encryption.
 
-A2 performance optimizations can move later if measurement shows no current
-latency problem, but the partial-index correctness fallback cannot. Semantic
-Possible Match UI may mature during C/D, but acceptance-time exact
-validation cannot.
+Index-lifecycle performance optimizations can move later if measurement
+shows no current latency problem, but the partial-index correctness fallback
+cannot. Semantic Possible Match UI may mature during Phases C/D, but
+acceptance-time exact validation cannot.
 
 ### 5.11 Residual risks that cannot be designed away completely
 
@@ -939,7 +983,9 @@ Memory Debug Log.
 Nothing below is approved merely because it appears in this document. The
 owner approves visible wording in chat before implementation. Missing cases
 return for copy review; an implementation agent must not improvise new
-user-facing text.
+user-facing text. The owner has explicitly deferred final user-facing wording
+decisions until the architecture is complete, so every string below remains
+a working placeholder and does not block behind-the-scenes Phase A work.
 
 ### Shared vocabulary
 
@@ -957,13 +1003,15 @@ Use these terms consistently in new UI:
 | Model output | **Suggestions** |
 | Review destination | **Pending** |
 | Near-duplicate signal | **Possible Match** |
+| Internal `retire` proposal | **Archive Suggestion** |
 | Existing API route | **In App** when a route label is necessary |
 | File-based route | **On Computer** when a route label is necessary |
 
 Do not use **Archivist**, **external analysis**, **analysis packet**,
 **result payload**, **archive database**, or **import memories** in new
 primary UI. Do not display a similarity percentage as if it were a
-probability.
+probability. `retire` remains the schema/implementation operation name; do
+not expose **Retire** or **Retirement** as a competing user term.
 
 ### Phase A copy — the only wording needed before the file workflow
 
@@ -973,15 +1021,18 @@ following visible situations need owner-approved wording.
 #### A. Analysis in progress
 
 Place a persistent notice beneath the existing Analyze Conversations
-control while a run is active:
+control while a run is active, and mirror progress in the foreground-service
+notification:
 
 > **Analyzing Conversations**
 >
-> Keep this screen open while conversations are being analyzed. Chats are
-> unavailable until analysis finishes. If analysis is interrupted,
-> unfinished conversations will remain available to analyze again.
+> Memory Assistant is reviewing N of M conversations. You can keep chatting
+> or leave this screen. New messages will be included in a later review. If
+> analysis is interrupted, unfinished conversations will remain available to
+> analyze again.
 
-Do not rely on a toast for this state.
+Do not rely on a toast for this state, block chat access, or make Activity
+lifetime the run lifetime.
 
 #### B. Interrupted run recovered
 
@@ -1043,7 +1094,7 @@ Re-enabling **Use saved memories in this chat** does not need a dialog and
 does not change archived/reviewable history. It changes prompt injection
 only. The same is true of **Use lore books in this chat**.
 
-**Owner review required for Phase A/A0:** the two source labels/helpers in
+**Owner review required near the end of Phase A:** the two source labels/helpers in
 §5.3, the archive re-enable default, and the four short status/dialog groups
 above. No owner wording review is needed for internal database, retrieval,
 index, and run-integrity changes.
@@ -1073,7 +1124,9 @@ Privacy notice:
 > review. No API keys, passwords, or database keys are included.
 >
 > When you give the package to another AI app, that app's provider may
-> receive the contents. Use a service you trust.
+> receive the contents. Email, cloud drives, and other services used to move
+> an unencrypted package may receive it too. Use services you trust; a cable
+> or trusted local transfer exposes it to fewer parties.
 
 #### The four-step screen
 
@@ -1095,8 +1148,9 @@ Privacy notice:
 3. **Review It on Your Computer**
 
    > Move the ZIP to your computer and open it with an AI that can work
-   > with files. Ask the AI to follow `README.md`. It will create a
-   > suggestions file for Speak GPT.
+   > with files. A cable or trusted local transfer is the most private
+   > option. Ask the AI to follow `README.md`. It will create a suggestions
+   > file for Speak GPT.
 
 4. **Import Suggestions**
 
@@ -1112,7 +1166,8 @@ Creation confirmation:
 >
 > This package will contain the selected review material and the current
 > memories, lore books, and lore cards needed for comparison. It is not
-> encrypted. No API keys, passwords, or database keys are included.
+> encrypted. Any email, cloud drive, or transfer service used to move it can
+> read it. No API keys, passwords, or database keys are included.
 
 Actions: **Choose Save Location**, **Cancel**
 
@@ -1130,6 +1185,12 @@ Outstanding-package state:
 - **Replace Package**
 - **Cancel Package**
 - **View Instructions**
+
+An outstanding computer package does not disable **Analyze Conversations**
+for other unclaimed chats. Its eligible count excludes the package's frozen
+rows. If no other rows are available, show that conversations are reserved
+in the computer package rather than presenting a generic analysis failure.
+Exact helper wording remains deferred with the rest of this section.
 
 Replacement confirmation:
 
@@ -1163,7 +1224,7 @@ Use only categories that describe a deterministic app result:
 - **New Memories**
 - **Suggested Edits**
 - **Suggested Merges**
-- **Suggested Archives**
+- **Archive Suggestions**
 - **Possible Matches**
 - **Already Saved**
 - **No Changes Needed**
@@ -1292,18 +1353,25 @@ file loop is boringly reliable.
 2. **Archive history copy/default:** when **Archive this chat** is re-enabled,
    confirm **Include Earlier Messages** as the recommended default versus
    New Messages Only. Source switches never alter this queue.
-3. **Phase B plaintext disclosure/default scope:** approve the exact privacy
+3. **Saved-memories model prerequisite:** preserve the standing rule that an
+   embedding model is required to enable the full engine (the default until
+   explicitly changed), or deliberately support a keyword-only enabled mode
+   for low-resource devices. Complete lexical fallback after model/index
+   failure is required either way and is not part of this choice. This does
+   not block internal correctness repairs; it must be settled before the new
+   first-enable UI ships.
+4. **Phase B plaintext disclosure/default scope:** approve the exact privacy
    warning and selected-chat-review default before the first exchange export.
-4. **Phase D maintenance wording:** approve the visible revise/merge/retire
-   labels and stale-conflict choices.
-5. **Optional encryption timing:** accept plaintext-first interoperability
+5. **Phase D maintenance wording:** approve the visible Edit/Merge/Archive
+   Suggestion labels and stale-conflict choices.
+6. **Optional encryption timing:** accept plaintext-first interoperability
    (recommended) or require the separate encrypted wrapper/helper before
    broader release.
 
-No-model behavior is not a blocking architecture choice: allow Saved
-memories to work through complete lexical retrieval and present model setup
-as an improvement. Plain-http LAN endpoints are unrelated to the file
-workflow and remain an optional future security decision.
+Final wording review is intentionally deferred until its phase approaches
+UI implementation. Until decision 3 is made, implementation preserves the
+existing first-enable requirement. Plain-http LAN endpoints are unrelated to
+the file workflow and remain an optional future security decision.
 
 ### Technical gates that do not require routine owner input
 
@@ -1574,10 +1642,23 @@ a **cursor vector**, not a pretend global revision:
 ```
 
 - Add an append-only `exchange_changes` journal to `MemoryStore` for exported
-  memory-store types. Every authoritative mutation writes its record type,
-  ID, operation (`upsert`/`delete`), sequence, resulting hash, actor class,
-  and timestamp in the same SQL transaction.
-- Add the equivalent journal and tombstone table to `LoreBookStore`.
+  memory-store types, plus an explicit exchange-tracking-enabled state.
+  Journal hooks are dormant for users who have never created a computer
+  workspace. Once enabled, every authoritative mutation writes its record
+  type, ID, operation (`upsert`/`delete`), sequence, resulting hash, actor
+  class, and timestamp in the same SQL transaction.
+- Add the equivalent gated journal and tombstone table to `LoreBookStore`.
+- The first full export enables tracking **before** its source snapshot is
+  read, initializes baseline revisions/high-water marks, and therefore
+  journals mutations that race with export. Only a successfully written and
+  verified package creates the active workspace/cursor. If that first export
+  fails and no workspace exists, disable tracking and discard rows/tombstones
+  needed only by the failed attempt.
+- Keep tracking only while a paired workspace is active. Explicitly removing
+  the workspace disables the hooks and permits all exchange-only journal
+  history/tombstones to be pruned; a future full export establishes a new
+  honest baseline. Thus people who never use computer review pay the schema
+  migration cost, not an unbounded write/storage cost on every memory edit.
 - Chats use an app-held per-workspace fingerprint baseline plus a durable set
   of known conversation UIDs. A missing previously-known UID emits a chat
   tombstone in the next delta. The baseline advances only after the export
@@ -1585,7 +1666,8 @@ a **cursor vector**, not a pretend global revision:
   backup safety pattern.
 - A full snapshot establishes a new baseline. History before that baseline is
   not invented.
-- Change feeds keep enough rows to satisfy the active workspace cursor.
+- While a workspace is active, change feeds keep enough rows to satisfy its
+  acknowledged cursor.
   If required rows were pruned or a delta in the chain is missing, the app
   requires a new full export.
 
@@ -1813,7 +1895,6 @@ Every JSONL line uses a common envelope:
 - scope and sorted stable companion/world/campaign/roleplay-character/
   project IDs;
 - entity references;
-- protection/handling metadata where the user already created it;
 - origin and existing provenance labels;
 - supersedes/superseded relationship;
 - the placement-aware `duplicate_fingerprint`;
@@ -2154,7 +2235,7 @@ Do not create a second memory library for computer work.
   such as **From computer review** (wording unapproved).
 - Revise, merge, and retire proposals use the extended dormant `proposals`
   table and appear in the same Pending mode, with operation-specific cards.
-- A Pending filter may distinguish New / Edit / Merge / Retire / Conflict,
+- A Pending filter may distinguish New / Edit / Merge / Archive / Conflict,
   but the default remains one chronological queue.
 - Approving a proposal always revalidates current revisions, exact identity,
   targets, and evidence. Opening a proposal for hours cannot bypass a change
@@ -2169,7 +2250,7 @@ All approved operations go through one semantic mutation service that:
 - validates target/scope/kind/status;
 - writes full target joins;
 - updates `updated_at`;
-- increments the exchange journal;
+- increments the exchange journal when exchange tracking is active;
 - clears stale embeddings and cooldowns;
 - preserves/links evidence;
 - writes a complete before-image and after-hash to an apply batch;
@@ -2235,10 +2316,28 @@ If the user loses a delta, changes computers, deletes the mirror, or the
 phone has pruned required journal rows, the recovery action is **Create new
 full package**. No data merge is attempted from an unknown mirror.
 
-Only one paired desktop workspace and one outstanding archive-review job are
-needed initially. Multiple workspaces require per-workspace cursor retention
-and materially increase tombstone/history storage; defer them until there is
-real demand.
+Only one paired desktop workspace and one outstanding computer
+archive-review package are needed initially. Multiple workspaces require
+per-workspace cursor retention and materially increase tombstone/history
+storage; defer them until there is real demand.
+
+An outstanding computer package does **not** block the In-App/API analysis
+route. V1 allows at most one active API run and one outstanding computer
+package at the same time. Both use the same atomic claim operation and can
+select only eligible rows with no existing claim:
+
+- computer-claimed transcript rows remain sealed for that package;
+- an API run analyzes only other unclaimed rows;
+- if no unclaimed rows remain, the API UI says so rather than treating the
+  package as an error;
+- messages created during either job enter new unclaimed rows and wait for a
+  later review;
+- library-maintenance packages claim no transcripts, but phone edits after
+  export still use the revision/conflict rules.
+
+This concurrency is safe because the shared filing boundary rechecks exact
+identity and targets when proposals are filed and again when accepted. Do
+not serialize the two routes merely to simplify screen copy.
 
 #### 9.6.7 Stale package workflow
 
@@ -2301,7 +2400,13 @@ Default data minimization:
 
 The Android app cannot control retention by Claude, ChatGPT, or another
 provider after the user hands it plaintext. That risk is not technically
-solvable by the package.
+solvable by the package. The transfer path is also a recipient: attaching
+the plaintext package to email, placing it in a cloud drive, or using another
+hosted transfer service gives that service access under its own policies
+before the desktop agent opens it. The export disclosure and package
+`README.md` recommend a cable or trusted local transfer where practical.
+The optional encrypted wrapper protects storage/transfer only until the user
+decrypts it for an agent.
 
 #### 9.7.2 Optional encrypted wrapper
 
@@ -2404,15 +2509,23 @@ If there is an outstanding job, the screen shows:
   **Replace with a newer package**;
 - cancel consequences before confirmation.
 
+The ordinary In-App analyze action stays available for unclaimed
+conversations. Its count excludes computer-claimed rows; if that leaves zero,
+the UI identifies the conversations reserved by the outstanding package
+instead of implying that chat access or Memory Assistant as a whole is
+blocked.
+
 #### 9.8.3 Desktop instructions
 
 `README.md` gives short provider-neutral instructions:
 
 1. Put/extract this package in a private folder.
-2. Ask the desktop agent to read `instructions/agent_workflow.md`.
-3. Let it validate/search the package and write `proposals.json`.
-4. Return only `proposals.json` to the phone.
-5. Keep or delete the desktop workspace according to the user's privacy
+2. Transfer it privately where practical: prefer a cable or trusted local
+   transfer; email/cloud-drive services can read a plaintext package.
+3. Ask the desktop agent to read `instructions/agent_workflow.md`.
+4. Let it validate/search the package and write `proposals.json`.
+5. Return only `proposals.json` to the phone.
+6. Keep or delete the desktop workspace according to the user's privacy
    preference.
 
 Provider-specific copy/paste prompts may be offered as optional examples,
@@ -2425,7 +2538,7 @@ Before opening individual Pending items, show:
 - new memory drafts;
 - suggested edits;
 - suggested merges;
-- suggested retirements;
+- archive suggestions;
 - already saved / no-change items;
 - conflicts;
 - failed/skipped review items.
@@ -2441,7 +2554,7 @@ mark the whole package “complete” because one valid array parsed.
   rationale; actions Keep current / Edit suggestion / Apply.
 - **Suggested merge:** every source memory, proposed survivor, placement and
   evidence; actions Keep separate / Edit merge / Merge.
-- **Suggested retirement:** current memory, reason and later evidence;
+- **Archive suggestion:** current memory, reason and later evidence;
   actions Keep / Archive (recommended) / inspect existing Delete flow.
 - **Conflict:** Base at export / Phone now / Suggested, with Keep phone /
   Refresh package / manually create a new proposal.
@@ -2489,7 +2602,9 @@ that both API and computer analysis depend on:
 8. bounded/defaulted retrieval policy parsing;
 9. final assembled-context budgeting and truthful diagnostics;
 10. capture of typed scene context;
-11. sealed transcript claims and durable run recovery;
+11. sealed transcript claims, a durable run record, and a dedicated
+    foreground service so API analysis survives Activity destruction,
+    app-switching, and screen-off operation;
 12. shared placement-aware exact identity and acceptance-time validation;
 13. rename-safe evidence/rejected-draft identity;
 14. golden end-to-end retrieval tests.
@@ -2529,7 +2644,7 @@ Retrieval produces a ranked stream/page, not a final fixed list that
 - relevance is exhausted; or
 - a documented scan cap is reached.
 
-Lore overlap, cooldown, status changes, missing protection data, and context
+Lore overlap, cooldown, status changes, and context
 budget cuts record reasons and allow lower-ranked candidates to fill open
 slots. A bounded paged/overscan implementation is acceptable; a hard-coded
 single overscan multiplier is not treated as proof of correctness.
@@ -2574,12 +2689,11 @@ to `reindexMemory` remain an optimization, not the correctness boundary.
 Budget the **rendered combined dynamic memory message**, not only the
 retrieved-memory list.
 
-1. Render/measure required scene cores, current model rules, and inseparable
-   protection handling first.
+1. Render/measure required scene cores and current model rules first.
 2. If required content alone exceeds the configured dynamic budget, include
    it atomically, omit optional dynamic entries, and emit an explicit
-   `required_context_over_budget` diagnostic. Never substring a protected
-   memory or card core.
+   `required_context_over_budget` diagnostic. Never substring an atomic
+   memory, lore entry, or card core.
 3. Admit optional authored lore/card entries and retrieved memories as atomic
    units in owner-approved precedence/order.
 4. Backfill smaller/lower-ranked eligible entries when a larger item does
@@ -2603,6 +2717,13 @@ Primary:
 - `preferences/memory/TranscriptRecorder.kt`
 - `preferences/memory/archivist/Archivist.kt`
 - `preferences/memory/archivist/ArchivistPrompt.kt`
+- new `service/MemoryAnalysisForegroundService.kt`, following the existing
+  generation keep-alive pattern but using the correct data-sync declaration;
+- `AndroidManifest.xml` (the data-sync permission already exists; add the
+  dedicated service declaration/type) and notification resources for
+  analysis progress;
+- `ui/activities/MemoryAssistantActivity.kt`, changed from run owner to
+  launcher/observer of durable state;
 - `ui/activities/ChatActivity.kt`
 - `ui/fragments/dialogs/QuickSettingsBottomSheetDialogFragment.kt`
 - `preferences/Preferences.kt`
@@ -2663,6 +2784,13 @@ Backfill:
   entries not silently truncated, diagnostic persisted.
 - API Archivist process death: startup/next-run reconciles active run and
   claims; externally claimed rows are not auto-released.
+- foreground-service start refused: no rows are claimed, a persistent error
+  explains that analysis did not start, and retry remains available.
+- Activity destruction/background/screen-off: the foreground service
+  continues and the reopened activity renders progress from durable state.
+- service/process killed after claiming: startup/next-run reconciliation
+  keeps committed items, releases only unfinished API claims, and never marks
+  unseen text processed.
 - Mid-run append: sealed claimed row cannot change; new turn starts a new
   pending row.
 
@@ -2683,7 +2811,11 @@ Required tests reproduce and then close:
 - World A never retrieves World B;
 - drafts/archived/superseded never enter normal retrieval;
 - final assembled context obeys atomicity/precedence and logs overflow;
-- run crash and mid-run append cannot mark unseen text processed.
+- duplicate API starts cannot create overlapping runs;
+- Activity recreation, app-switching, and screen-off do not cancel a healthy
+  service-owned run;
+- foreground-service start refusal leaves no claimed rows;
+- run/service crash and mid-run append cannot mark unseen text processed.
 
 Exit requires the golden corpus's forbidden-scope leakage to be zero and
 must-include recall to meet an explicitly recorded threshold on the
@@ -2693,8 +2825,10 @@ phone; no guessed millisecond threshold is written into architecture.
 #### A.7 Privacy and dependencies
 
 No new export occurs. Transcript capture/consent behavior becomes clearer,
-which is itself a privacy repair. This phase depends only on the existing
-stores and owner-approved source-control wording.
+which is itself a privacy repair. The foreground notification shows progress
+counts/status, not chat text or proposed-memory content. This phase depends
+only on the existing stores; final source/status wording may be approved near
+the end and does not block internal repairs.
 
 #### A.8 Deliberately out of scope
 
@@ -2759,8 +2893,8 @@ Add:
 
 - immutable `conversation_uid` and mapping/backfill;
 - `memory_evidence`;
-- memory-store `exchange_changes`;
-- lore-store `exchange_changes` and lore tombstones;
+- memory-store `exchange_changes` plus exchange-tracking-enabled state;
+- lore-store `exchange_changes`, lore tombstones, and matching tracking state;
 - `exchange_workspaces`;
 - `exchange_packages`;
 - `exchange_items`;
@@ -2769,7 +2903,12 @@ Add:
 
 Revision strategy:
 
-- seed one baseline change event/revision for every current exported record;
+- on the first full export, enable tracking before reading source snapshots,
+  initialize each exported record's baseline revision/high-water mark, and
+  let the full package itself represent the baseline; do not append a
+  synthetic journal row per current record merely to restate that snapshot;
+- keep mutation hooks dormant before that first workspace and disable/prune
+  them again if creation fails or the only workspace is explicitly removed;
 - preserve current stable IDs;
 - compute semantic hashes from current state;
 - import existing `deleted_ids` into the exchange tombstone view;
@@ -2802,7 +2941,9 @@ Backfill limitations stated honestly:
   incomplete and keep its item unclaimable; recommended default is block that
   review item.
 - Write/verification failure: do not advance baseline/cursors or leave a new
-  package as outstanding.
+  package as outstanding; if this was the first attempted workspace, undo its
+  tracking activation and discard exchange-only rows created for the failed
+  attempt.
 - App death while writing: temp file is ignored/cleaned; ledger reconciles.
 - Package exceeds cap: offer narrower scopes/chats, not silent omission.
 
@@ -2815,9 +2956,16 @@ Backfill limitations stated honestly:
 - tombstones included;
 - every evidence ref resolves and quote hash matches;
 - archive consent excludes unauthorized chats;
+- an outstanding computer package and one API run may coexist but can never
+  claim the same transcript row;
+- new turns created during either route remain unclaimed for later review;
 - unavailable chat is not represented as empty;
 - ZIP traversal/symlink/duplicate-path/zip-bomb adversarial tests;
 - atomic write/baseline advancement;
+- mutation racing the first full export appears either in the verified
+  snapshot or in the next journal delta, never neither;
+- users with no computer workspace do not accumulate journal/tombstone rows;
+- failed first export returns tracking to its dormant state;
 - package contains no keys, databases, vectors, or unrelated settings;
 - old portable backup/import remains byte/behavior compatible.
 
@@ -3068,6 +3216,8 @@ Migration/backfill:
 - plaintext and encrypted adversarial packages;
 - supported old/new minor versions and unsupported major versions;
 - no API/computer route can activate memory without explicit user action.
+- API and computer routes remain independently usable while their disjoint
+  claims/workspaces are outstanding.
 
 Exit: the full export → desktop analysis → import → Pending → approval →
 next delta loop survives replay, app death, stale records, and a lost
@@ -3154,16 +3304,25 @@ Keep these narrow. The repository provides enough evidence for the rest.
 
 1. **Phase A visible source-control copy:** approve the final labels/helper
    text for Saved memories, Lore books, Archive this chat, and Include Earlier
-   Messages. The four-mode behavior and independence are technically
-   recommended, not an open architecture question.
-2. **Phase B plaintext disclosure/default scope:** approve the exact warning
+   Messages near the end of the phase. The owner has deferred wording review;
+   the four-mode behavior and independence are technically recommended, not
+   an open architecture question.
+2. **Saved-memories first-enable requirement:** keep the existing ruling that
+   the full engine requires an installed embedding model (the default unless
+   deliberately changed), or permit keyword-only enablement on low-resource
+   devices. Complete lexical fallback for a model/index failure after enable
+   remains required either way. This decision can wait until the source-
+   control/first-enable UI is implemented; it does not block the internal
+   Phase A repairs.
+3. **Phase B plaintext disclosure/default scope:** approve the exact warning
    and whether the first screen defaults to selected chat review (recommended)
    or full library maintenance. Both remain explicit choices; no background
    export to a provider.
-3. **Phase D maintenance action wording:** approve user-facing names for
-   revise/merge/retire and the three-way stale conflict screen. The technical
-   rule remains proposal-only with archive/supersede preferred over delete.
-4. **Optional encryption timing:** ship plaintext interoperability first
+4. **Phase D maintenance action wording:** approve user-facing names for
+   Edit, Merge, and Archive Suggestions and the three-way stale conflict
+   screen. Internal `revise`/`merge`/`retire` operations remain proposal-only,
+   with archive/supersede preferred over delete.
+5. **Optional encryption timing:** ship plaintext interoperability first
    (recommended), or require the encrypted wrapper/helper before broader
    release. Encryption cannot protect content after a cloud agent reads it.
 
