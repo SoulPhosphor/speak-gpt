@@ -45,6 +45,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageButton
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.constraintlayout.widget.ConstraintLayout
@@ -66,7 +67,12 @@ import io.noties.markwon.ext.tables.TablePlugin
 import io.noties.markwon.ext.tasklist.TaskListPlugin
 import io.noties.markwon.html.HtmlPlugin
 import io.noties.markwon.inlineparser.MarkwonInlineParserPlugin
+import java.text.NumberFormat
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.preferences.includes.ChatInclude
+import org.teslasoft.assistant.preferences.includes.IncludeForm
+import org.teslasoft.assistant.preferences.includes.IncludeKind
+import org.teslasoft.assistant.ui.activities.ChatActivity
 import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.MessageCompletionState
 import org.teslasoft.assistant.preferences.Preferences
@@ -145,6 +151,14 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         this.chatId = chatId
     }
 
+    /**
+     * Which messages currently have their "Includes" record opened. Held on
+     * the adapter rather than the row, because rows are recycled — keeping it
+     * on the view would make an unrelated message inherit an open accordion
+     * as soon as it scrolled into that recycled slot.
+     */
+    private val expandedIncludeRows: MutableSet<Int> = mutableSetOf()
+
     override fun getItemViewType(position: Int): Int {
         return if (preferences.getLayout() == "bubbles" || isAssistant) {
             if (dataArray[position]["isBot"] == true) {
@@ -210,6 +224,10 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
 
     private fun deleteMessage(position: Int) {
         if (position < 0 || position >= dataArray.size) return
+        // Open "Includes" records are tracked by position, and a deletion
+        // shifts every position after it — so drop the tracking rather than
+        // let an accordion reopen against the wrong message.
+        expandedIncludeRows.clear()
         dataArray.removeAt(position)
         notifyItemRemoved(position)
         if (position > 0) {
@@ -279,10 +297,17 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         // completion marker); nullable so the shared ViewHolder is safe on every
         // layout it inflates.
         private val statusMarker: TextView? = itemView.findViewById(R.id.status_marker)
+        // The "Includes" record of what this message carried. Absent from the
+        // assistant bubble (attachments are user-side only), so nullable.
+        private val includeSummary: LinearLayout? = itemView.findViewById(R.id.include_summary)
+        private val includeSummaryHeader: LinearLayout? = itemView.findViewById(R.id.include_summary_header)
+        private val includeSummaryIcon: ImageView? = itemView.findViewById(R.id.include_summary_icon)
+        private val includeSummaryList: LinearLayout? = itemView.findViewById(R.id.include_summary_list)
 
         @SuppressLint("SetTextI18n", "SetJavaScriptEnabled")
         open fun bind(chatMessage: HashMap<String, Any>, position: Int) {
 
+            updateIncludeSummary(chatMessage, position)
             updateUI(chatMessage)
             updateRetryButton(chatMessage, position)
             updateReportButton(chatMessage)
@@ -386,6 +411,95 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
          * the model's own words (it lives in a different field). No toast,
          * dialog, notification, or sound — just this line.
          */
+        /**
+         * Renders this message's record of what it carried: a small
+         * "Includes" box under the user's name that opens like an accordion.
+         *
+         * It is a record of the PAST — the weights shown are what each item
+         * cost when this turn was sent, so the transcript does not silently
+         * rewrite itself when the user later condenses or removes something.
+         * The live strip above the message box is what shows the present.
+         *
+         * Every branch sets visibility explicitly: these rows are recycled, so
+         * an early return would let one message's open accordion reappear on
+         * an unrelated message further down the conversation.
+         */
+        private fun updateIncludeSummary(chatMessage: HashMap<String, Any>, position: Int) {
+            val summary = includeSummary ?: return
+            val includes = ChatInclude.listFromJson(
+                chatMessage[ChatActivity.INCLUDES_KEY]?.toString()
+            )
+
+            if (chatMessage["isBot"] == true || includes.isEmpty()) {
+                summary.visibility = View.GONE
+                includeSummaryList?.removeAllViews()
+                return
+            }
+
+            summary.visibility = View.VISIBLE
+
+            // Once everything attached here has been reduced to a bookmark,
+            // the box wears the artifact marker instead of a file glyph.
+            val allArtifacts = includes.all { it.form == IncludeForm.ARTIFACT }
+            includeSummaryIcon?.setImageResource(
+                if (allArtifacts) R.drawable.ic_bookmark_added else R.drawable.ic_file
+            )
+
+            val expanded = expandedIncludeRows.contains(position)
+            includeSummaryList?.visibility = if (expanded) View.VISIBLE else View.GONE
+            if (expanded) {
+                buildIncludeSummaryRows(includes)
+            } else {
+                includeSummaryList?.removeAllViews()
+            }
+
+            includeSummaryHeader?.setOnClickListener {
+                if (expandedIncludeRows.contains(position)) {
+                    expandedIncludeRows.remove(position)
+                } else {
+                    expandedIncludeRows.add(position)
+                }
+                notifyItemChanged(position)
+            }
+        }
+
+        private fun buildIncludeSummaryRows(includes: List<ChatInclude>) {
+            val list = includeSummaryList ?: return
+            list.removeAllViews()
+            val inflater = LayoutInflater.from(context)
+            for (include in includes) {
+                val row = inflater.inflate(R.layout.view_include_summary_item, list, false)
+                row.findViewById<ImageView>(R.id.summary_item_icon)
+                    ?.setImageResource(includeIcon(include.kind))
+                // For an item that has been reduced to a bookmark, the
+                // bookmark line IS the informative content — the file name
+                // alone would not tell the user what they are still sending.
+                row.findViewById<TextView>(R.id.summary_item_name)?.text =
+                    if (include.form == IncludeForm.ARTIFACT) {
+                        include.modelText()
+                    } else {
+                        include.fileName
+                    }
+                // Deliberately the CURRENT weight, not the weight recorded
+                // when this turn was sent: after an item has been condensed or
+                // reduced to a bookmark, the original figure would overstate
+                // what this message still costs on every turn.
+                row.findViewById<TextView>(R.id.summary_item_weight)?.text = context.getString(
+                    R.string.include_weight,
+                    NumberFormat.getIntegerInstance().format(include.currentTokens())
+                )
+                list.addView(row)
+            }
+        }
+
+        private fun includeIcon(kind: IncludeKind): Int = when (kind) {
+            IncludeKind.TXT -> R.drawable.ic_doc_text
+            IncludeKind.MARKDOWN -> R.drawable.ic_doc_markdown
+            IncludeKind.CSV -> R.drawable.ic_doc_table
+            IncludeKind.DOCX -> R.drawable.ic_doc_word
+            IncludeKind.IMAGE -> R.drawable.ic_image
+        }
+
         private fun updateStatusMarker(chatMessage: HashMap<String, Any>) {
             val marker = statusMarker ?: return
             val state = chatMessage[MessageCompletionState.KEY_STATE]?.toString()

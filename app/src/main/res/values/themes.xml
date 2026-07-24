@@ -121,6 +121,98 @@
         <item name="android:layout_height">wrap_content</item>
     </style>
 
+    <!-- The outlined counterpart of AppButton.Primary.Inline, for a
+         wrap_content pair where one action commits and the other backs out
+         (Cancel + Save on the include Edit dialog). Same width rule, same
+         AppButton.Destructive outlined look. -->
+    <style name="AppButton.Destructive.Inline" parent="AppButton.Destructive">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+    </style>
+
+    <!-- ===== Includes strip (document/image attachments) =====
+         The row that sits above the message box for every attached item, and
+         its pieces. A NEW row shape, deliberately not one of the five
+         chevron-row shapes in ui-style-guide.md: it has no chevron and ends
+         in a three-dots menu instead, so extending the chevron-row vocabulary
+         would have been wrong. Typography/colour roles are borrowed from the
+         row styles so the strip reads as part of the same system.
+         See document-includes-plan.md for the owner-approved design. -->
+    <style name="Widget.App.Include.Row" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">horizontal</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:minHeight">44dp</item>
+        <item name="android:paddingStart">12dp</item>
+        <item name="android:paddingEnd">4dp</item>
+        <item name="android:paddingTop">4dp</item>
+        <item name="android:paddingBottom">4dp</item>
+    </style>
+
+    <!-- Leading file-type icon. Each supported type has its own glyph so a
+         later image/other type is identifiable at a glance (owner
+         requirement). No tint here — instances tint ?attr/colorPrimary,
+         leaving the slot open for a future non-glyph thumbnail. -->
+    <style name="Widget.App.Include.Icon" parent="">
+        <item name="android:layout_width">24dp</item>
+        <item name="android:layout_height">24dp</item>
+        <item name="android:layout_marginEnd">10dp</item>
+    </style>
+
+    <!-- "Includes" / "Includes condensed" — the label that states which form
+         of the item is being sent right now. -->
+    <style name="Widget.App.Include.Label" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginEnd">6dp</item>
+        <item name="android:textColor">?attr/colorPrimary</item>
+        <item name="android:textSize">13sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="Widget.App.Include.Name" parent="">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:ellipsize">middle</item>
+        <item name="android:textColor">@color/text</item>
+        <item name="android:textSize">14sp</item>
+    </style>
+
+    <!-- The "~N tokens" weight readout. Subtitle colour/size so it reads as
+         secondary information next to the file name. -->
+    <style name="Widget.App.Include.Weight" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginStart">8dp</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:textColor">@color/text_subtitle</item>
+        <item name="android:textSize">12sp</item>
+    </style>
+
+    <style name="Widget.App.Include.Menu" parent="">
+        <item name="android:layout_width">40dp</item>
+        <item name="android:layout_height">40dp</item>
+        <item name="android:background">?attr/selectableItemBackgroundBorderless</item>
+        <item name="android:src">@drawable/ic_more_vert</item>
+        <item name="android:tint">?attr/colorPrimary</item>
+        <item name="android:scaleType">centerInside</item>
+    </style>
+
+    <!-- Persistent size notice under a row (never a toast, per house rule).
+         Same size/colour as the shared field hint. -->
+    <style name="Widget.App.Include.Notice" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:paddingStart">46dp</item>
+        <item name="android:paddingEnd">12dp</item>
+        <item name="android:paddingBottom">6dp</item>
+        <item name="android:textColor">@color/text_subtitle</item>
+        <item name="android:textSize">13sp</item>
+    </style>
+
     <!-- Shared chevron-row styles, preserving the current Memory Manager row
          appearance. Use Widget.App.Row.WithSubtitle when the row has helper text
          and Widget.App.Row.TitleOnly when it does not. Both variants intentionally

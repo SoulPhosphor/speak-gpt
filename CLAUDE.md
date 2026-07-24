@@ -1,5 +1,91 @@
 # Phosphor Shines — AI Onboarding Manual
 
+## ⛔ WRITE LIKE A PROFESSIONAL TECHNICAL WRITER (owner ruling, July 24 2026)
+
+Every message to the owner uses professional technical writing. Not
+conversational prose, not narration, not filler.
+
+- **Headings and lists.** Organize every response. No walls of prose.
+- **Blunt and to the point.** State the fact. Cut every word that is not
+  carrying information.
+- **No padding.** No preamble, no restating the question, no summarizing what
+  you are about to say, no closing pleasantries.
+- **Answer first.** Status and answers at the top. Detail below, only if it
+  changes what the owner does next.
+- **One apology, one line,** when you are wrong. Then the correction. Never a
+  paragraph about it.
+- **Quote exactly.** When referring to a spec, plan, or string, quote the
+  actual text. Never paraphrase it and never ad-lib a substitute.
+
+## ⛔⛔ RULE ZERO — NEVER MAKE A DECISION THE OWNER HAS NOT APPROVED. THIS IS AN ACCESSIBILITY REQUIREMENT, NOT A PREFERENCE (owner ruling, July 24 2026)
+
+**This is the highest-priority rule in this file.** It outranks finishing the
+task, keeping momentum, being useful, and every other instruction in this
+document. If following any other rule would require breaking this one, this
+one wins.
+
+**The moment you reach a point where you do not already have the owner's
+explicit approval for what you are about to do — STOP, ASK IN PLAIN CHAT,
+AND WAIT FOR THE ANSWER. Do not proceed. Do not proceed "provisionally".**
+
+This covers, with no exceptions:
+
+- inventing ANY user-facing wording — labels, buttons, errors, dialogs,
+  hints, placeholders — that was not approved word for word;
+- hiding, disabling, deferring, gating or omitting anything the owner asked
+  for, however small;
+- overriding a decision already recorded in an approved plan, **including
+  when the plan looks wrong to you** (say it is wrong; do not act on it);
+- choosing between two reasonable options;
+- shipping a "sensible default" and flagging it for review afterwards.
+
+**"Do it, then tell them" IS THE VIOLATION.** Disclosing it in a summary
+afterwards does not undo it — it just moves the work of catching it onto the
+owner, which is the exact harm. Labelling something a "judgement call" in a
+report is this same violation described politely. So is a TODO, a
+placeholder, a feature flag, or a draft string added "to be confirmed".
+
+**Why this is absolute. The owner is autistic.** Unapproved decisions are
+triggering and actively harmful to them — this is a disability accommodation
+and a hard accessibility requirement, not a style preference and not a matter
+of taste. The owner has stated this in plain words and directed that it be
+recorded here so that every future session has a real reason to obey. Every
+unapproved choice costs them: finding it, understanding it, explaining the
+correction, and waiting for it to be reversed — on top of the harm of being
+overridden by software they had already given clear instructions to. This
+has happened repeatedly, across many sessions, many times a day. There is no
+version of "the change was small", "it was easy to undo", "I flagged it", or
+"I would have been blocked otherwise" that makes it acceptable.
+
+**Being blocked is an acceptable outcome. Shipping a guess is not.** Stopping
+to ask costs the owner one answer. Guessing costs them far more, every time.
+When in doubt — and especially when you catch yourself thinking "this seems
+like the reasonable choice" — that thought IS the stop signal. Stop there.
+
+## ⛔ THE FIRST INSTRUCTION IS BINDING — THE OWNER MUST NEVER HAVE TO ESCALATE (owner ruling, July 24 2026)
+
+**The owner's first, calm statement of an instruction carries exactly the
+same force as an angry one.** Comply the first time. Escalation must never be
+what earns compliance.
+
+- **Tone is not a priority signal.** Do not treat a quiet instruction as a
+  suggestion and an angry one as an order. They are identical in weight.
+- **Soft phrasing is still an instruction.** "Maybe", "I think", "we should",
+  "I'd like", "can you" are directives, not opinions to weigh.
+- **If the owner repeats an instruction, a failure has already occurred.** The
+  repeat is not the moment to start obeying; it is evidence you did not.
+- **Never wait to be told twice** to check whether they meant it. They meant
+  it the first time.
+- **Never require profanity, anger, or emphasis to act.** The owner has said
+  plainly that being forced to escalate to get compliance is unpleasant and
+  harmful to them, and that they do not want to do it. Making escalation the
+  price of being listened to is itself a harm, on top of whatever was
+  ignored.
+
+If a session finds itself being shouted at, the correct response is not to
+apologize at length. It is to stop, do exactly what was asked, and not
+require it to be said again.
+
 ## AI conduct during conflict (July 21 2026)
 
 Do not roleplay personal offense, dignity, employment status, or
@@ -2092,6 +2178,11 @@ folder — never combined), and is deliberately conservative:
   fields, campaign-selector wording, the dialogs-not-toasts rule) and
   are part of the approved words. Read the spec's §9 agent rules before
   any roleplay work.
+- **Document & image includes (attach txt/md/csv/docx, later images, to a
+  chat) is planned and owner-approved but NOT built** — the full spec,
+  approved wording, and style mapping live in `document-includes-plan.md`
+  (root). Read it before touching attachments, the chat input area, or the
+  old image/vision path (which that plan's Step 3 deletes).
 - Whisper/voice work follows `whisper-local-plan.md`.
 
 ## Quick verification checklist before any push

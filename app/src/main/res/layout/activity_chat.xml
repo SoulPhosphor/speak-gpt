@@ -421,6 +421,53 @@
             app:layout_constraintTop_toBottomOf="@+id/health_banner"
             tools:listitem="@layout/view_message" />
 
+<!-- Includes strip: one row per attached document, directly above the
+             message box, visible whenever anything heavier than a bookmark is
+             attached. "If you can see it, it's being sent" is the owner's rule
+             for this surface, so it is never hidden while an item is live.
+
+             Rows are inflated into include_list from view_include_row.xml; at
+             four or more items include_collapsed takes over instead and the
+             list becomes a tap-to-expand overlay (see IncludeStripController).
+             It floats over the chat like the attachment preview beside it —
+             the RecyclerView is bottom-anchored to the parent with padding, so
+             nothing here shifts the conversation around. -->
+        <LinearLayout
+            android:id="@+id/include_strip"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:layout_marginEnd="12dp"
+            android:layout_marginBottom="8dp"
+            android:background="@drawable/btn_accent_tonal_selector"
+            android:elevation="10dp"
+            android:orientation="vertical"
+            android:visibility="gone"
+            app:layout_constraintBottom_toTopOf="@+id/keyboard_input"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            tools:visibility="visible">
+
+<!-- No android:id here on purpose: an id on an <include> REPLACES the
+                 included layout's own root id, which would make
+                 findViewById(R.id.include_collapsed_row) return null. -->
+            <include layout="@layout/view_include_collapsed" />
+
+            <ScrollView
+                android:id="@+id/include_list_scroll"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:fillViewport="false"
+                android:scrollbars="vertical">
+
+                <LinearLayout
+                    android:id="@+id/include_list"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+            </ScrollView>
+        </LinearLayout>
+
         <LinearLayout
             android:id="@+id/vision_action_selector"
             android:layout_width="wrap_content"
@@ -430,7 +477,7 @@
             android:elevation="12dp"
             android:orientation="vertical"
             android:visibility="gone"
-            app:layout_constraintBottom_toTopOf="@+id/keyboard_input"
+            app:layout_constraintBottom_toTopOf="@+id/include_strip"
             app:layout_constraintStart_toStartOf="parent"
             tools:visibility="visible">
 
@@ -477,17 +524,37 @@
                             android:layout_height="48dp"
                             android:layout_marginStart="12dp"
                             android:layout_marginTop="12dp"
-                            android:layout_marginEnd="12dp"
                             android:layout_marginBottom="12dp"
                             android:background="@drawable/btn_accent_50_v2"
                             android:contentDescription="@string/label_select_from_gallery"
                             android:src="@drawable/ic_photo"
                             android:tooltipText="@string/label_select_from_gallery"
                             app:layout_constraintBottom_toBottomOf="parent"
-                            app:layout_constraintEnd_toEndOf="parent"
+                            app:layout_constraintEnd_toStartOf="@+id/action_document"
                             app:layout_constraintStart_toEndOf="@+id/action_camera"
                             app:layout_constraintTop_toTopOf="parent"
                             app:srcCompat="@drawable/ic_photo" />
+
+<!-- Document attach (document-includes-plan.md, Step 1). Third choice
+                             in the existing attach selector, alongside Camera and Gallery —
+                             deliberately not a separate top-level button. -->
+                        <ImageButton
+                            android:id="@+id/action_document"
+                            android:layout_width="48dp"
+                            android:layout_height="48dp"
+                            android:layout_marginStart="12dp"
+                            android:layout_marginTop="12dp"
+                            android:layout_marginEnd="12dp"
+                            android:layout_marginBottom="12dp"
+                            android:background="@drawable/btn_accent_50_v2"
+                            android:contentDescription="@string/btn_attach_document"
+                            android:src="@drawable/ic_doc_text"
+                            android:tooltipText="@string/btn_attach_document"
+                            app:layout_constraintBottom_toBottomOf="parent"
+                            app:layout_constraintEnd_toEndOf="parent"
+                            app:layout_constraintStart_toEndOf="@+id/action_gallery"
+                            app:layout_constraintTop_toTopOf="parent"
+                            app:srcCompat="@drawable/ic_doc_text" />
 
                         <ImageButton
                             android:id="@+id/action_sources"
@@ -523,7 +590,7 @@
             android:elevation="12dp"
             android:orientation="vertical"
             android:visibility="gone"
-            app:layout_constraintBottom_toTopOf="@+id/keyboard_input"
+            app:layout_constraintBottom_toTopOf="@+id/include_strip"
             app:layout_constraintStart_toStartOf="parent">
 
             <androidx.constraintlayout.widget.ConstraintLayout

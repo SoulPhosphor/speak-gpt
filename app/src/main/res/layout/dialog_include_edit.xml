@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Body of the include Edit dialog: one editable box holding the text that is
+  actually being sent for this item (a condensed document, or an artifact's
+  one-line bookmark). The user can correct a detail the model missed, or
+  shorten it further.
+
+  Deliberately a pop-up rather than a full-screen editor — the owner chose
+  that shape for this one case. The action buttons come from
+  dialog_two_actions_end.xml; this file is only the field.
+-->
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:paddingHorizontal="24dp"
+    android:paddingTop="8dp">
+
+    <com.google.android.material.textfield.TextInputEditText
+        android:id="@+id/include_edit_text"
+        style="@style/Widget.App.Field.Box"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="top"
+        android:inputType="text|textMultiLine|textCapSentences"
+        android:maxHeight="260dp"
+        android:minLines="4"
+        android:isScrollContainer="true"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>

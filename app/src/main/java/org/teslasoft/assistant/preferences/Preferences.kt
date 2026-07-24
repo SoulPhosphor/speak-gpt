@@ -1845,6 +1845,26 @@ class Preferences private constructor(private var preferences: SharedPreferences
     }
 
     /**
+     * Documents the user has attached but not yet sent (the Includes strip
+     * above the message box), as the JSON produced by
+     * `ChatInclude.listToJson`. Empty = nothing attached.
+     *
+     * Only PENDING attachments live here. Once a message is sent its
+     * attachments move into that message's own record inside the chat history
+     * blob, so they are saved atomically with the text they belong to and are
+     * carried by a rename with the rest of the history. This key exists purely
+     * so an attachment picked before the app was closed is still waiting when
+     * it reopens.
+     */
+    fun getPendingIncludes() : String {
+        return getString("pending_includes", "")
+    }
+
+    fun setPendingIncludes(json: String) {
+        putString("pending_includes", json)
+    }
+
+    /**
      * Per-chat Campaign selector (owner_approved_rules §3/§12 rev 3, Stage 3.0).
      * Empty = none. Selecting a campaign is the owner-chosen explicit signal
      * that a chat is inside that playthrough: it makes campaign-scoped memories

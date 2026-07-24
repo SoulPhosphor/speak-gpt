@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  One attached item in the Includes strip above the message box.
+
+  Row shape: type icon, the "Includes"/"Includes condensed" label, the file
+  name, the "~N tokens" weight, then a three-dots menu. Any size notice for
+  this item is a persistent line underneath (never a toast).
+
+  Every attribute of the look lives in the Widget.App.Include.* styles
+  (values/themes.xml); only ids and per-instance content belong here.
+  See document-includes-plan.md for the owner-approved design.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical">
+
+    <LinearLayout
+        android:id="@+id/include_row"
+        style="@style/Widget.App.Include.Row">
+
+        <ImageView
+            android:id="@+id/include_icon"
+            style="@style/Widget.App.Include.Icon"
+            android:contentDescription="@string/include_icon_desc"
+            android:tint="?attr/colorPrimary"
+            android:src="@drawable/ic_doc_text" />
+
+        <TextView
+            android:id="@+id/include_label"
+            style="@style/Widget.App.Include.Label"
+            android:text="@string/include_label" />
+
+        <TextView
+            android:id="@+id/include_name"
+            style="@style/Widget.App.Include.Name"
+            android:text="@string/include_label" />
+
+        <TextView
+            android:id="@+id/include_weight"
+            style="@style/Widget.App.Include.Weight"
+            android:text="@string/include_label" />
+
+        <ImageButton
+            android:id="@+id/include_menu"
+            style="@style/Widget.App.Include.Menu"
+            android:contentDescription="@string/include_menu_desc" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/include_notice"
+        style="@style/Widget.App.Include.Notice"
+        android:visibility="gone" />
+</LinearLayout>
