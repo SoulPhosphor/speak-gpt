@@ -1900,27 +1900,48 @@ folder — never combined), and is deliberately conservative:
     enumerable restore sources), the fresh-start confirm, A6. Wording is
     §15.12 verbatim; strings marked DRAFT in `strings.xml` await owner
     review — do not treat them as approved, do not reword approved ones.
-  - **A2 banner:** ChatActivity's `health_banner` (top of chat, buttons
-    **Attempt Repair | Okay** — `health_banner_btn_repair`/`health_banner_btn_ok`,
-    deliberately separate strings from the shared `health_btn_repair`/`btn_ok`
-    so this wording can't leak into the A1 dialog or any other OK button;
-    re-shown per chat screen while degraded — this "reappears on the next
-    chat" behavior falls out for free from `healthBannerDismissed` being a
-    plain ChatActivity instance field that resets whenever a chat is opened
-    via a fresh `ChatActivity` instance, which is how every chat switch/open
-    already works) + the distinct §15.2c warble (`playDatabaseWarningSignal`,
-    hands-free only, once per new failure). **Owner ruling, July 23 2026: the
-    banner body text must never instruct the user to tap a button** ("Tap
-    Repair to fix it" was removed — the buttons are self-explanatory); the
-    body now states the user may keep chatting but the affected feature stays
-    off until repaired. The `health_banner_both` wording is owner-approved
-    verbatim; the memory/lorebook/user-image variants extrapolate the same
-    sentence pattern and are flagged for owner confirmation, not yet
-    independently approved.
+  - **A2 banner:** ChatActivity's `health_banner` (top of chat, buttons in
+    order **Okay | Attempt Repair** — `health_banner_btn_ok` is its own string
+    distinct from the shared `btn_ok`, while Attempt Repair reuses the shared
+    `health_btn_repair`; re-shown per chat screen while degraded — this
+    "reappears on the next chat" behavior falls out for free from
+    `healthBannerDismissed` being a plain ChatActivity instance field that
+    resets whenever a chat is opened via a fresh `ChatActivity` instance,
+    which is how every chat switch/open already works) + the distinct §15.2c
+    warble (`playDatabaseWarningSignal`, hands-free only, once per new
+    failure). **Owner ruling, July 23 2026: the banner body text must never
+    instruct the user to tap a button** ("Tap Repair to fix it" was removed —
+    the buttons are self-explanatory); the body now states the user may keep
+    chatting but the affected feature stays off until repaired. The
+    `health_banner_both` wording is owner-approved verbatim; the
+    memory/lorebook/user-image variants extrapolate the same sentence pattern
+    and are flagged for owner confirmation, not yet independently approved.
+    **"Repair" is "Attempt Repair" everywhere (owner correction, July 23
+    2026 — repair is salvage, never guaranteed): the shared `health_btn_repair`
+    string is now "Attempt Repair", so the A1 dialog, the Memory Assistant
+    action, and both banner/screen surfaces read the same.**
     The chat `messages` RecyclerView is now height-0dp/fully constrained
     (was match_parent + 64dp margin) so the banner pushes it down — keep it
     that way. A3: the Memory Assistant hard-disables Analyze while ANY
     database is degraded, with working Repair/Revert buttons.
+  - **Inline per-database recovery buttons on the Backup & Restore screen
+    (owner ruling, July 24 2026):** under the Backup Status section (which
+    now leads the screen — section order is 1. Backup Status, 2. Database
+    Health, …), a corrupted database's row shows **Attempt Repair | Revert to
+    Last Good Database** directly beneath it (`health_actions_memory` /
+    `_lorebook` / `_userimage` in `activity_memory_backup_restore.xml`), so a
+    user who dismissed the one-shot A1 dialog still has a standing way to act
+    without re-running the integrity check. GONE by default; visibility is
+    gated STRICTLY on `DatabaseHealthState.isDegraded(type)` in
+    `refreshBackupStatus` — a space/permission backup failure NEVER shows
+    them (no repair language for non-corruption). **Chats get no buttons** (not
+    a database; Round-4 lock owns that case). The buttons reuse the existing
+    A1 entry points `DatabaseRecoveryFlows.runRepair`/`runRevert` (repair is
+    non-destructive salvage; revert still runs the "Restore from Backup?"
+    A5 confirmation before overwriting) — no new recovery logic. Style is the
+    new `AppButton.Primary.Inline` (owner: "still based off primary, it's
+    just the size width") — a primary button sized to its own text so the pair
+    sits side by side at different widths, not full-width, not equal.
   - **Chat recovery restore is ENGINE-ONLY** (`ChatRestoreManager` +
     unit-tested `ChatRestorePlanner`): journaled wholesale swap under
     `CHAT_LIST_LOCK`, strict entry whitelist (an archive can never plant

@@ -125,6 +125,20 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
     private var textStatusChats: TextView? = null
     private var textStatusUserImage: TextView? = null
 
+    // Per-database inline recovery actions, shown under a row ONLY while that
+    // database is degraded (corruption confirmed) — not for space/permission
+    // backup failures, and never for Chats (not a database). Same actions as
+    // the A1 dialog's Repair / Revert.
+    private var healthActionsMemory: LinearLayout? = null
+    private var healthActionsLorebook: LinearLayout? = null
+    private var healthActionsUserImage: LinearLayout? = null
+    private var btnHealthRepairMemory: MaterialButton? = null
+    private var btnHealthRevertMemory: MaterialButton? = null
+    private var btnHealthRepairLorebook: MaterialButton? = null
+    private var btnHealthRevertLorebook: MaterialButton? = null
+    private var btnHealthRepairUserImage: MaterialButton? = null
+    private var btnHealthRevertUserImage: MaterialButton? = null
+
     // 3. Recovery Backup (manual)
     private var btnCreateRecovery: MaterialButton? = null
     private var textManualLocation: TextView? = null
@@ -258,6 +272,16 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         textStatusChats = findViewById(R.id.text_status_chats)
         textStatusUserImage = findViewById(R.id.text_status_userimage)
 
+        healthActionsMemory = findViewById(R.id.health_actions_memory)
+        healthActionsLorebook = findViewById(R.id.health_actions_lorebook)
+        healthActionsUserImage = findViewById(R.id.health_actions_userimage)
+        btnHealthRepairMemory = findViewById(R.id.btn_health_repair_memory)
+        btnHealthRevertMemory = findViewById(R.id.btn_health_revert_memory)
+        btnHealthRepairLorebook = findViewById(R.id.btn_health_repair_lorebook)
+        btnHealthRevertLorebook = findViewById(R.id.btn_health_revert_lorebook)
+        btnHealthRepairUserImage = findViewById(R.id.btn_health_repair_userimage)
+        btnHealthRevertUserImage = findViewById(R.id.btn_health_revert_userimage)
+
         btnCreateRecovery = findViewById(R.id.btn_create_recovery)
         textManualLocation = findViewById(R.id.text_manual_location)
         btnChangeManualLocation = findViewById(R.id.btn_change_manual_location)
@@ -310,6 +334,30 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
 
     private fun initLogic() {
         btnBack?.setOnClickListener { finish() }
+
+        /* ---- 1. Backup Status: per-database inline recovery actions ---- */
+        // Same entry points as the A1 dialog: runRepair is non-destructive
+        // salvage; runRevert verifies a backup and shows the "Restore from
+        // Backup?" confirmation before overwriting. Both refresh the rows
+        // (and re-hide these buttons) when the store is healthy again.
+        btnHealthRepairMemory?.setOnClickListener {
+            DatabaseRecoveryFlows.runRepair(this, BackupType.MEMORY) { refreshBackupStatus() }
+        }
+        btnHealthRevertMemory?.setOnClickListener {
+            DatabaseRecoveryFlows.runRevert(this, BackupType.MEMORY) { refreshBackupStatus() }
+        }
+        btnHealthRepairLorebook?.setOnClickListener {
+            DatabaseRecoveryFlows.runRepair(this, BackupType.LOREBOOK) { refreshBackupStatus() }
+        }
+        btnHealthRevertLorebook?.setOnClickListener {
+            DatabaseRecoveryFlows.runRevert(this, BackupType.LOREBOOK) { refreshBackupStatus() }
+        }
+        btnHealthRepairUserImage?.setOnClickListener {
+            DatabaseRecoveryFlows.runRepair(this, BackupType.USER_IMAGE) { refreshBackupStatus() }
+        }
+        btnHealthRevertUserImage?.setOnClickListener {
+            DatabaseRecoveryFlows.runRevert(this, BackupType.USER_IMAGE) { refreshBackupStatus() }
+        }
 
         /* ---- 2. Database Health ---- */
         btnCheckIntegrity?.setOnClickListener { onCheckIntegrity() }
@@ -929,11 +977,20 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
                     lastSuccessMillis = lastSuccess, lastFailed = failed, templates = templates
                 )
             }
+            // Inline recovery actions are gated STRICTLY on confirmed
+            // corruption (isDegraded), never on a backup-failure status — a
+            // space/permission failure must never surface repair language.
+            val memoryDegraded = DatabaseHealthState.isDegraded(this, BackupType.MEMORY)
+            val lorebookDegraded = DatabaseHealthState.isDegraded(this, BackupType.LOREBOOK)
+            val userImageDegraded = DatabaseHealthState.isDegraded(this, BackupType.USER_IMAGE)
             runOnUiThread {
                 textStatusMemory?.text = lines[BackupType.MEMORY]
                 textStatusLorebooks?.text = lines[BackupType.LOREBOOK]
                 textStatusChats?.text = lines[BackupType.CHATS]
                 textStatusUserImage?.text = lines[BackupType.USER_IMAGE]
+                healthActionsMemory?.visibility = if (memoryDegraded) View.VISIBLE else View.GONE
+                healthActionsLorebook?.visibility = if (lorebookDegraded) View.VISIBLE else View.GONE
+                healthActionsUserImage?.visibility = if (userImageDegraded) View.VISIBLE else View.GONE
             }
         }
     }
