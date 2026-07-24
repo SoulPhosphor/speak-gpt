@@ -2389,12 +2389,13 @@
     <string name="include_notice_truncated">This file is too large to send in full. The beginning was included, up to about ~%1$s tokens.</string>
     <string name="include_notice_csv">Large spreadsheet — sent the column names and first %1$s rows of %2$s.</string>
 
-    <!-- DRAFT WORDING — extrapolated in the approved voice for the failure
-         cases the owner has not yet ruled on. Flagged for confirmation. -->
-    <string name="include_error_unsupported">%1$s can\'t be read. Text, Markdown, spreadsheet and Word files can be attached.</string>
+    <!-- Attach failures. Owner-approved wording, July 24 2026, except
+         include_error_not_text and include_error_unreadable, which are still
+         DRAFT pending the owner's ruling. -->
+    <string name="include_error_unsupported">This file type is not supported.</string>
+    <string name="include_error_empty">File contains no data.</string>
     <string name="include_error_not_text">%1$s doesn\'t contain readable text, so it wasn\'t attached.</string>
     <string name="include_error_unreadable">%1$s couldn\'t be opened, so it wasn\'t attached.</string>
-    <string name="include_error_empty">%1$s is empty, so it wasn\'t attached.</string>
 
     <!-- Accessibility labels. -->
     <string name="include_menu_desc">Options for %1$s</string>
