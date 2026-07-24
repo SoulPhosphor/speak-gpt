@@ -107,6 +107,20 @@
         <item name="layout_constraintWidth_percent">0.42</item>
     </style>
 
+    <!-- Inline action button (owner ruling, July 24 2026): a primary button
+         that sizes to its OWN text (wrap_content width) so a pair can sit
+         side by side, each only as wide as its label — deliberately NOT equal
+         widths and NOT full-width. Used for the per-database Attempt Repair /
+         Revert buttons that appear under a corrupted database's row on the
+         Backup & Restore screen. Based on AppButton.Primary; only the width
+         differs (owner: "still based off primary, it's just the size width").
+         A LinearLayout parent supplies the horizontal spacing between the
+         pair (layout_marginEnd in the layout), so no constraint fields here. -->
+    <style name="AppButton.Primary.Inline" parent="AppButton.Primary">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+    </style>
+
     <!-- Shared chevron-row styles, preserving the current Memory Manager row
          appearance. Use Widget.App.Row.WithSubtitle when the row has helper text
          and Widget.App.Row.TitleOnly when it does not. Both variants intentionally

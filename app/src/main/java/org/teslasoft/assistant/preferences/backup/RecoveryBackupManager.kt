@@ -377,17 +377,43 @@ object RecoveryBackupManager {
         }
     }
 
-    internal fun integrityCheckCipher(staged: File, key: ByteArray?) {
+    internal fun integrityCheckCipher(
+        staged: File,
+        key: ByteArray?,
+        requiredTable: String? = null
+    ) {
         if (key == null || key.isEmpty()) throw IllegalStateException("snapshot key unavailable")
         LoreBookEncryption.loadLibrary()
         val db = CipherDatabase.openDatabase(staged.path, key, null, CipherDatabase.OPEN_READONLY, null, null)
-        try { assertIntegrity(db.rawQuery("PRAGMA integrity_check", emptyArray<String>())) }
+        try {
+            assertIntegrity(db.rawQuery("PRAGMA integrity_check", emptyArray<String>()))
+            if (requiredTable != null) {
+                assertRequiredTable(
+                    db.rawQuery(
+                        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1",
+                        arrayOf(requiredTable)
+                    ),
+                    requiredTable
+                )
+            }
+        }
         finally { try { db.close() } catch (_: Exception) { } }
     }
 
-    internal fun integrityCheckPlain(staged: File) {
+    internal fun integrityCheckPlain(staged: File, requiredTable: String? = null) {
         val db = PlainDatabase.openDatabase(staged.path, null, PlainDatabase.OPEN_READONLY)
-        try { assertIntegrity(db.rawQuery("PRAGMA integrity_check", null)) }
+        try {
+            assertIntegrity(db.rawQuery("PRAGMA integrity_check", null))
+            if (requiredTable != null) {
+                assertRequiredTable(
+                    db.rawQuery(
+                        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1",
+                        arrayOf(requiredTable)
+                    ),
+                    requiredTable
+                )
+            }
+        }
         finally { try { db.close() } catch (_: Exception) { } }
     }
 
@@ -395,6 +421,14 @@ object RecoveryBackupManager {
         cursor.use {
             val ok = it.moveToFirst() && it.getString(0).equals("ok", ignoreCase = true)
             if (!ok) throw IllegalStateException("staged snapshot failed integrity check")
+        }
+    }
+
+    private fun assertRequiredTable(cursor: android.database.Cursor, table: String) {
+        cursor.use {
+            if (!it.moveToFirst()) {
+                throw IllegalStateException("snapshot is not the expected database: missing $table")
+            }
         }
     }
 

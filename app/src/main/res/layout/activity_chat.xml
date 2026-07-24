@@ -385,18 +385,18 @@
                 android:orientation="horizontal">
 
                 <com.google.android.material.button.MaterialButton
+                    android:id="@+id/health_banner_ok"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/health_banner_btn_ok" />
+
+                <com.google.android.material.button.MaterialButton
                     android:id="@+id/health_banner_repair"
                     style="@style/Widget.Material3.Button.TextButton"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="@string/health_btn_repair" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/health_banner_ok"
-                    style="@style/Widget.Material3.Button.TextButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/btn_ok" />
             </LinearLayout>
         </LinearLayout>
 
