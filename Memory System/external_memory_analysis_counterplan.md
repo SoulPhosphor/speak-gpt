@@ -1,4 +1,4 @@
-# External Memory Analysis — Counter Plan
+# External Memory Analysis — Counter Plan (Revision 2, reconciled)
 
 **Document type:** Planning/architecture only — no code, database, prompt, UI,
 or string changes were made with this document.
@@ -9,6 +9,17 @@ or string changes were made with this document.
 written plan the owner uploaded, 2026-07-24 — "the audit plan" below). It
 adopts that plan's verified findings, corrects one of them, and replaces its
 11-stage delivery program with a smaller one.
+**Revision 2 (2026-07-24, same day):** the audit plan's author reviewed
+Revision 1 of this document against the branch and returned ten amendments;
+the owner relayed them in chat. All ten were re-verified against the code
+and are incorporated below (durable run record + crash recovery, the
+minimal packet-item ledger, the shared filing boundary, placement-aware
+dedup, rename-safe rejected-draft identity, populating the EXISTING typed
+transcript context columns — Revision 1 wrongly said they didn't exist —
+overlapping exclusion flags, toggle semantics decided before Phase 2 ships,
+stable IDs in the target catalog, and "Possible match" wording). This
+document is the canonical roadmap; the audit plan remains the detailed
+package/UI/test reference, read with the `plot_ledger` correction in §2.
 
 > **Approval note:** nothing in this document is approved wording or an
 > approved screen. Every user-facing decision here goes through the owner in
@@ -61,7 +72,7 @@ code at the baseline commit. These are REAL:
 | Rejected-draft suppression is keyed to the mutable chat NAME, so a rename defeats it | `Archivist.fileMemoryDrafts` → `isDraftRejected(title, content, chatName)` |
 | Proposed target names resolve to the first case-insensitive match; duplicate names resolve silently | `Archivist.resolveTarget` (`.take(1)`) |
 | Re-enabling "Use memory in this chat" only writes the preference — rows excluded while it was off are never re-queued (the "Don't archive" toggle DOES re-queue, and re-queues everything, including rows excluded for the other reason) | `QuickSettingsBottomSheetDialogFragment` (~line 726 vs ~737), `MemoryStore.setChatTranscriptsExcluded` |
-| Capture stamps no scene context — `quick_settings_json` holds model + sampling params only, so the Archivist cannot tell which world/campaign a roleplay conversation belonged to | `ChatActivity.recordTranscriptTurn` (~line 4883) |
+| Capture stamps no scene context — the transcripts table HAS typed `world_id` / `roleplay_character_id` / `user_persona_id` columns (schema lines ~494–496), but `appendTranscriptTurn` never populates them, and `quick_settings_json` holds model + sampling params only. (Revision 1 of this document wrongly said the columns didn't exist; the audit plan had this right.) | `MemoryStore` transcripts schema, `ChatActivity.recordTranscriptTurn` (~line 4883) |
 | The full-failure log line hardcodes "No memories were created … memories=0" even when earlier chunks of the run did file drafts (the run RECORD's count is accurate; the wording is not) | `Archivist.run`, "full_failed" branch |
 
 **Correction — `plot_ledger` is NOT a conflict.** The audit plan flags the
@@ -115,34 +126,56 @@ Each item below is a small, separately shippable change to the CURRENT API
 Archivist. They fix real defects whether or not the external feature ever
 ships, and (a)–(c) are hard prerequisites for it.
 
-- **(a) Seal claimed transcript rows.** One new column
-  (`claim_run_id` or equivalent) on `transcripts`. When a run (or later, an
-  export) selects rows, it stamps them in one transaction;
-  `appendTranscriptTurn` never appends into a stamped row (a new turn starts
-  a new row); `markTranscriptsProcessed` only advances rows still carrying
-  that run's stamp; failure/interruption clears the stamp. This closes the
-  mid-run race with a localized change instead of the audit plan's full
-  `analysis_items` state machine. Additive migration, version bump.
-- **(b) Normalize the duplicate check.** Compare
+- **(a) Seal claimed transcript rows, with a durable run record and crash
+  recovery.** One new column (`claim_run_id` or equivalent) on
+  `transcripts`. When a run (or later, an export) selects rows, it stamps
+  them in one transaction; `appendTranscriptTurn` never appends into a
+  stamped row (a new turn starts a new row); `markTranscriptsProcessed`
+  only advances rows still carrying that run's stamp; failure/interruption
+  clears the stamp. Because a killed process runs no cleanup code, the
+  stamp alone is not enough: a small durable **active-run record** (in the
+  store, not an activity field) marks the one API run allowed to be live,
+  and a startup/next-run reconcile releases claims whose run is no longer
+  live — the same recover-at-startup pattern `RenameJournal.reconcile`
+  already established. An externally-exported package's claims are the one
+  kind deliberately NOT auto-released (they wait for import, cancel, or
+  replacement). Additive migration, version bump.
+- **(b) Normalize the duplicate check, placement-aware.** Compare
   case-folded/whitespace-collapsed content (title excluded — models retitle
-  the same fact) against all memory statuses including drafts. Exact-match
-  semantics stay deterministic; no similarity guessing here.
-- **(c) Key rejected drafts to the chat ID, not the chat name**, keeping the
-  owner's deliberately-narrow suppression semantics otherwise unchanged.
-- **(d) Send the valid target catalog in the prompt.** The runner already
-  loads live worlds/campaigns/characters/projects to resolve names; include
-  those names in the user message so the model stops guessing. Log (never
-  silently pick) when a proposed name matches more than one record.
-- **(e) Stamp scene context at capture.** Add the chat's
-  world/campaign/RP-character/persona selections into the existing
-  `quick_settings_json` blob (no schema change) so analysis knows what room
-  the conversation happened in.
-- **(f) Fix the eligibility toggles** — "Use memory" re-enable re-queues the
-  rows it excluded; the two exclusion causes stop overwriting each other.
-  Smallest honest version: a third `review_status` value or a reason column
-  distinguishing "memory off" from "user excluded" (NOT the audit plan's
-  reason table). Behavior change → owner sign-off on the intended semantics
-  first.
+  the same fact) **plus scope and the sorted stable target IDs**, against
+  all memory statuses including drafts. The same sentence in two different
+  fictional worlds is legitimately two memories, so placement is part of
+  the identity. Exact-match semantics stay deterministic; no similarity
+  guessing here.
+- **(c) Make rejected-draft identity rename-safe.** Key rejected drafts to
+  the chat ID instead of the chat name — and because chat IDs are
+  name-derived hashes that change on rename, add `rejected_drafts` to the
+  set of tables `MemoryStore.repointChat` carries across a rename (it
+  already carries transcripts and cooldowns). The owner's
+  deliberately-narrow suppression semantics stay otherwise unchanged.
+- **(d) Send the valid target catalog in the prompt — stable IDs alongside
+  names.** The runner already loads live worlds/campaigns/characters/
+  projects to resolve names; include them in the user message so the model
+  stops guessing, with their stable IDs, and prefer results that reference
+  IDs. Log (never silently pick) when a proposed name matches more than
+  one record. The external package's result contract is IDs-only (§Phase
+  2); the API route can accept names transitionally.
+- **(e) Stamp scene context at capture, in the typed columns that already
+  exist.** The transcripts table already has `world_id`,
+  `roleplay_character_id`, and `user_persona_id` columns — populate them in
+  `appendTranscriptTurn`, and add `campaign_id`/`project_id` columns in the
+  same migration as (a). Scene identity does not belong muddled into the
+  sampling-settings JSON.
+- **(f) Fix the eligibility toggles with overlapping reason flags.** "Use
+  memory" re-enable re-queues the rows it excluded; the exclusion causes
+  stop overwriting each other. Because reasons can overlap (memory off AND
+  user excluded at once), a single enum value cannot represent the state —
+  use a small flags/bitmask column (still far short of the audit plan's
+  reason table); a row is eligible only when no blocking flag remains, and
+  each toggle clears only its own flag. Behavior change → owner sign-off on
+  the intended semantics first, and this decision must land **before
+  Phase 2 ships** (respecting later opt-in was part of the original
+  requirement, and export eligibility depends on it).
 - **(g) Truthful failure wording** — the full-failure path reports the real
   draft count instead of a hardcoded zero. (Status wording is owner-approved
   text — any visible change goes through the owner.)
@@ -158,23 +191,39 @@ incorporates them by reference rather than restating them.
 
 What v1 keeps from the audit plan's machinery:
 
-- a **packet ledger** — one small table: packet id, run id, created/imported
-  timestamps, status, content hash. Enough for "this result belongs to that
-  export" and "importing the same file twice is a no-op";
+- a **packet ledger plus a minimal packet-item ledger**. The packet table
+  holds packet id, run id, created/imported timestamps, status, and a plain
+  hash of the exported file bytes (no RFC-canonical-JSON machinery). The
+  packet-item table maps each conversation item to its frozen transcript
+  IDs, its input hash, and an item status
+  (awaiting / committed / failed / stale) with an import timestamp. The
+  item ledger is what makes partial imports honest: if five conversations
+  commit and the app dies on the sixth, the app knows exactly which five
+  are done — replay becomes a real no-op instead of an accident of
+  duplicate suppression, and the remaining item stays retryable. (This is
+  the audit plan's `analysis_items` idea minus the state-machine ceremony —
+  no leases, no candidate-event ledger, no coordinator framework.)
 - **claimed rows stay frozen** (Phase 1a's stamp) while a package is
   outstanding; new turns accumulate in new rows and are simply not in the
   package;
 - **one outstanding package at a time**;
-- import funnels through the SAME draft filing as the API path
-  (`insertArchivistDraftMemory` — status='draft' and origin='archivist'
-  enforced at the store), never through backup import.
+- import funnels through the SAME **complete filing boundary** as the API
+  path — not just the low-level `insertArchivistDraftMemory` (which only
+  enforces draft status and origin), but the whole filing logic that today
+  lives inside `Archivist.fileMemoryDrafts`: duplicate check, rejected-draft
+  check, target/card resolution and validation, provenance stamping, then
+  insertion. That logic is extracted into one shared service both
+  transports call, so external results cannot bypass any check the API
+  route applies. Never through backup import.
+- the external result contract references targets by **stable ID only**
+  (names may ride along for readability; the importer resolves and
+  validates IDs against the exported catalog and current state).
 
 What v1 deliberately does NOT build (deferred until real use demands it):
-the generalized `analysis_items` state machine and join tables, claim
-leases/expiry, the acceptance-validator rework, per-message revision IDs,
-canonical-JSON hashing per RFC 8785 (a plain hash of the file bytes is
-enough for same-device replay detection), cross-device import, encrypted
-packages, and multiple outstanding packages.
+the generalized run-coordinator framework, claim leases/expiry, the
+acceptance-validator rework, per-message revision IDs, canonical-JSON
+hashing per RFC 8785, cross-device import, encrypted packages, and
+multiple outstanding packages.
 
 UI for v1 is intentionally minimal and 100% owner-designed before build:
 one entry row on the Memory Assistant, one screen with
@@ -216,10 +265,13 @@ memory you already have — delete or replace?"
 **Yes, this is feasible, and the plumbing already exists.** The Librarian
 already embeds memories and ranks by cosine similarity for retrieval; the
 same math can score a new draft against existing memories at filing or
-review time and attach "possibly the same as: <memory>" to the Pending row,
+review time and attach a **"Possible match"** note to the Pending row,
 opening a side-by-side comparison where the user picks **Keep both /
-Replace the old one / Delete this draft** ("Replace" = the existing
-`supersedes` + status machinery, which is built but has no UI yet).
+Keep existing / Replace the old one / Delete this draft** ("Replace" = the
+existing `supersedes` + status machinery, which is built but has no UI
+yet). Deliberately NOT shown as a percentage: cosine similarity is not a
+probability, and "65% similar" reads as far more authoritative than the
+number actually is. (Final wording is the owner's, as always.)
 
 **What it must never do is decide alone.** A high similarity score cannot
 distinguish a duplicate from a negation ("likes X" vs "no longer likes X"),
@@ -240,8 +292,9 @@ an owner-approval conversation of their own.
    for the package. Lowest risk, immediate honesty gains.
 2. **Phase 1 (d)–(e)** — better targeting and scene context; improves the
    API route now and the package content later.
-3. **Owner conversation on Phase 2 UI + wording**, then **Phase 2**.
-4. **Phase 1 (f)** whenever the owner settles the toggle semantics.
+3. **Phase 1 (f)** once the owner settles the toggle semantics — required
+   before Phase 2 ships, since export eligibility depends on it.
+4. **Owner conversation on Phase 2 UI + wording**, then **Phase 2**.
 5. **Phase 3 / embeddings phase** — by demand, after the loop is real.
 
 This ordering delivers the subscription-agent workflow after two small
@@ -252,7 +305,9 @@ valuable to the app as it is today.
 
 1. **Go/no-go on Phase 1 (a)–(e), (g)** — behavior-safe correctness fixes.
 2. **Phase 1 (f) semantics** — what re-enabling each toggle should do to
-   previously captured rows.
+   previously captured rows, and the Archive-off history question (when
+   "Archive this chat" is turned back on: include still-available earlier
+   messages, or begin from now?). Must be settled before Phase 2 ships.
 3. **Phase 2 go/no-go** and, when it starts, the screen/wording
    conversation (the audit plan's §14 as the starting sketch).
 4. **Plain-http LAN endpoints** (Phase 3 side path): enable or leave
