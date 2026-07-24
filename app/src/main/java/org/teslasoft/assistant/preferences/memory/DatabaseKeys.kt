@@ -62,6 +62,37 @@ object DatabaseKeys {
         return if (readBack == hex) key else null
     }
 
+    /** Read an already-stored database key without ever minting a replacement.
+     * Restore inspection uses this for installation-bound automatic artifacts:
+     * if the key is absent/unavailable, trying a newly generated key would
+     * falsely make a good backup look corrupt. */
+    fun readExisting(context: Context, keyName: String): ByteArray? {
+        val value = EncryptedPreferences.getEncryptedPreferenceOrNull(
+            context, PREF_FILE, keyName
+        ) ?: return null
+        if (value.isEmpty()) return null
+        return try { decodeHex(value) } catch (_: Exception) { null }
+    }
+
+    /** Durably install a key carried by a verified portable Recovery Backup.
+     * Callers stage and verify the database under this key before invoking
+     * this method, and verify the encrypted preference round-trip before any
+     * live database swap is allowed. */
+    fun replaceExisting(context: Context, keyName: String, key: ByteArray): Boolean {
+        if (key.isEmpty()) return false
+        val hex = encodeHex(key)
+        if (!EncryptedPreferences.setEncryptedPreferenceCommit(context, PREF_FILE, keyName, hex)) {
+            return false
+        }
+        return EncryptedPreferences.getEncryptedPreferenceOrNull(context, PREF_FILE, keyName) == hex
+    }
+
+    /** Remove a key installed during a restore that failed before completion.
+     * Empty is the existing representation for "not set." */
+    fun clearExisting(context: Context, keyName: String): Boolean =
+        EncryptedPreferences.setEncryptedPreferenceCommit(context, PREF_FILE, keyName, "") &&
+            EncryptedPreferences.getEncryptedPreferenceOrNull(context, PREF_FILE, keyName) == ""
+
     /** Hex form for embedding as a raw-key literal (KEY "x'…'") in ATTACH. */
     fun toHex(key: ByteArray): String = encodeHex(key)
 

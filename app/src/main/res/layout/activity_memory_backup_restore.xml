@@ -17,10 +17,14 @@
 **************************************************************************/
 -->
 <!-- Memory Backup & Restore (Database Health & Backups). Section order is
-     owner-directed and EXACT (July 22 2026): 1. Database Health, 2. Backup
-     Status, 3. Recovery Backup, 4. Human-Readable Chat Backup, 5. Portable
-     Data Copy, 6. Automatic Backups, 7. Reset. Do not reorder. The manual and
-     automatic backup locations are separate. -->
+     owner-directed and EXACT (July 24 2026, supersedes the July 22 order):
+     1. Backup Status, 2. Database Health, 3. Recovery Backup, 3b. Restore
+     Database (its own section — saving and restoring never share one,
+     owner ruling July 24 2026), 4. Human-Readable Chat Backup, 5. Portable
+     Data Copy, 6. Automatic Backups, 7. Reset. Backup Status leads because
+     it's the one section that's always current the moment the screen opens
+     — the Database Health result lines stay blank until the user presses
+     the check button. Do not reorder. -->
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/root"
@@ -83,7 +87,214 @@
             android:orientation="vertical"
             android:paddingHorizontal="20dp">
 
-            <!-- ============ 1. Database Health ============ -->
+            <!-- ============ 1. Backup Status ============ -->
+            <!-- Moved above Database Health (owner ruling, July 24 2026): this
+                 is the one section that's always current on open, so the data
+                 leads. Section heading style: Widget.App.Section.Title (see
+                 values/themes.xml + ui-style-guide.md). -->
+            <TextView
+                style="@style/Widget.App.Section.Title"
+                android:text="@string/backup_status_section" />
+
+            <TextView
+                android:id="@+id/text_status_memory"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="16dp"
+                android:textColor="@color/text"
+                android:textSize="15sp" />
+
+            <!-- Per-database recovery actions (owner ruling, July 24 2026):
+                 shown ONLY when this database is actually corrupted
+                 (DatabaseHealthState.isDegraded), directly under its failed
+                 status row, so the user can fix it here instead of waiting
+                 for the one-shot A1 dialog. Gone by default; a backup that
+                 failed for space/permission reasons never shows these — only
+                 confirmed corruption does. Buttons wrap to their own text
+                 (AppButton.Primary.Inline) so they sit side by side at
+                 different widths. -->
+            <LinearLayout
+                android:id="@+id/health_actions_memory"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="8dp"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <LinearLayout
+                    android:id="@+id/health_buttons_memory"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btn_health_repair_memory"
+                        style="@style/AppButton.Primary.Inline"
+                        android:layout_marginEnd="8dp"
+                        android:text="@string/health_btn_repair" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btn_health_revert_memory"
+                        style="@style/AppButton.Primary.Inline"
+                        android:text="@string/restore_database" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/health_progress_memory"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:visibility="gone">
+
+                    <com.google.android.material.progressindicator.CircularProgressIndicator
+                        android:id="@+id/health_spinner_memory"
+                        android:layout_width="18dp"
+                        android:layout_height="18dp"
+                        android:indeterminate="true" />
+
+                    <TextView
+                        android:id="@+id/health_progress_text_memory"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:textColor="@color/text"
+                        android:textSize="14sp" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/text_status_lorebooks"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="8dp"
+                android:textColor="@color/text"
+                android:textSize="15sp" />
+
+            <LinearLayout
+                android:id="@+id/health_actions_lorebook"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="8dp"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <LinearLayout
+                    android:id="@+id/health_buttons_lorebook"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btn_health_repair_lorebook"
+                        style="@style/AppButton.Primary.Inline"
+                        android:layout_marginEnd="8dp"
+                        android:text="@string/health_btn_repair" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btn_health_revert_lorebook"
+                        style="@style/AppButton.Primary.Inline"
+                        android:text="@string/restore_database" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/health_progress_lorebook"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:visibility="gone">
+
+                    <com.google.android.material.progressindicator.CircularProgressIndicator
+                        android:id="@+id/health_spinner_lorebook"
+                        android:layout_width="18dp"
+                        android:layout_height="18dp"
+                        android:indeterminate="true" />
+
+                    <TextView
+                        android:id="@+id/health_progress_text_lorebook"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:textColor="@color/text"
+                        android:textSize="14sp" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/text_status_chats"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="8dp"
+                android:textColor="@color/text"
+                android:textSize="15sp" />
+
+            <!-- Chats deliberately get NO recovery buttons here: chats are not
+                 a database and never enter the repair/revert flow (the Round-4
+                 chat-storage lock system owns that case). -->
+
+            <TextView
+                android:id="@+id/text_status_userimage"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="8dp"
+                android:textColor="@color/text"
+                android:textSize="15sp" />
+
+            <LinearLayout
+                android:id="@+id/health_actions_userimage"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="8dp"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <LinearLayout
+                    android:id="@+id/health_buttons_userimage"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btn_health_repair_userimage"
+                        style="@style/AppButton.Primary.Inline"
+                        android:layout_marginEnd="8dp"
+                        android:text="@string/health_btn_repair" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btn_health_revert_userimage"
+                        style="@style/AppButton.Primary.Inline"
+                        android:text="@string/restore_database" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/health_progress_userimage"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:visibility="gone">
+
+                    <com.google.android.material.progressindicator.CircularProgressIndicator
+                        android:id="@+id/health_spinner_userimage"
+                        android:layout_width="18dp"
+                        android:layout_height="18dp"
+                        android:indeterminate="true" />
+
+                    <TextView
+                        android:id="@+id/health_progress_text_userimage"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:textColor="@color/text"
+                        android:textSize="14sp" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- ============ 2. Database Health ============ -->
             <!-- Section heading + hint styles: Widget.App.Section.Title/.Hint
                  (see values/themes.xml + ui-style-guide.md). The hint always
                  comes directly under the title and before the button it
@@ -143,43 +354,6 @@
                 android:textSize="15sp"
                 android:visibility="gone" />
 
-            <!-- ============ 2. Backup Status ============ -->
-            <TextView
-                style="@style/Widget.App.Section.Title"
-                android:text="@string/backup_status_section" />
-
-            <TextView
-                android:id="@+id/text_status_memory"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="16dp"
-                android:textColor="@color/text"
-                android:textSize="15sp" />
-
-            <TextView
-                android:id="@+id/text_status_lorebooks"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="8dp"
-                android:textColor="@color/text"
-                android:textSize="15sp" />
-
-            <TextView
-                android:id="@+id/text_status_chats"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="8dp"
-                android:textColor="@color/text"
-                android:textSize="15sp" />
-
-            <TextView
-                android:id="@+id/text_status_userimage"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="8dp"
-                android:textColor="@color/text"
-                android:textSize="15sp" />
-
             <!-- ============ 3. Recovery Backup (manual) ============ -->
             <TextView
                 style="@style/Widget.App.Section.Title"
@@ -205,13 +379,13 @@
 
             <!-- Recovery Type dropdown: Widget.App.Dropdown.* (owner ruling,
                  July 22 2026), same pattern as the Human-Readable Chat Backup
-                 fields below. Picking a type here skips the separate choice
-                 screen the "Create Recovery Backup" button used to open —
-                 that screen now goes straight to the picked type's next step.
-                 The selection is remembered across visits
+                 fields below. The selection is remembered across visits
                  (RecoveryBackupState.getLastRecoveryProtected/
                  setLastRecoveryProtected), the same way Backup Style and
-                 Format below are. -->
+                 Format below are. There is no separate choice screen any
+                 more — the Create button below goes straight to the system
+                 Save dialog for the picked type (owner directive, July 24
+                 2026). -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -229,14 +403,15 @@
                     android:layout_weight="1" />
             </LinearLayout>
 
-            <!-- Recovery Backup: one tap opens the system Save dialog directly
-                 (owner directive, July 24 2026 — supersedes the earlier
-                 multi-screen build/result flow). The location line shows
-                 where the last one landed, same breadcrumb format as
+            <!-- Recovery Backup CREATE: one tap opens the system Save dialog
+                 directly (owner directive, July 24 2026 — supersedes the
+                 earlier multi-screen build/result flow). The location line
+                 shows where the last one landed, same breadcrumb format as
                  Automatic Backup Location below; the spinner + status row
                  underneath the button carries Preparing/Saving/Successful/
-                 failure text inline, matching the Human-Readable Chat Backup
-                 and Automatic Backups sections — no screen change. -->
+                 failure text inline — no screen change. RESTORE is its own
+                 separate section below (owner ruling, July 24 2026: saving
+                 and restoring never share a section). -->
             <TextView
                 android:id="@+id/text_recovery_location"
                 android:layout_width="match_parent"
@@ -281,6 +456,71 @@
                     android:textIsSelectable="true"
                     android:textSize="13sp"
                     android:visibility="gone" />
+            </LinearLayout>
+
+            <!-- ============ 3b. Restore Database ============ -->
+            <!-- Restore lives in its OWN section directly after Recovery
+                 Backup (owner ruling, July 24 2026): creating a backup and
+                 restoring one are different operations and never share a
+                 section — the two dropdowns ("Recovery Type" above, "Type of
+                 Database to Restore" here) must never sit side by side. The
+                 button opens the same restore chooser a failed database row
+                 uses; progress renders inline. -->
+            <TextView
+                style="@style/Widget.App.Section.Title"
+                android:text="@string/restore_database" />
+
+            <TextView
+                style="@style/Widget.App.Section.Hint"
+                android:text="@string/restore_section_hint" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    style="@style/Widget.App.Dropdown.Label"
+                    android:text="@string/restore_type_label" />
+
+                <TextView
+                    android:id="@+id/btn_restore_type"
+                    style="@style/Widget.App.Dropdown.Value"
+                    android:layout_weight="1" />
+            </LinearLayout>
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_restore_database"
+                style="@style/AppButton.Primary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="@string/restore_database" />
+
+            <LinearLayout
+                android:id="@+id/restore_progress"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:visibility="gone">
+
+                <com.google.android.material.progressindicator.CircularProgressIndicator
+                    android:id="@+id/restore_spinner"
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:indeterminate="true" />
+
+                <TextView
+                    android:id="@+id/restore_progress_text"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:textColor="@color/text"
+                    android:textSize="14sp" />
             </LinearLayout>
 
             <!-- ============ 4. Human-Readable Chat Backup ============ -->

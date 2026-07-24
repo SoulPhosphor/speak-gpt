@@ -1360,7 +1360,8 @@
     <!-- Database Health & Backups, Build Phase 2 (owner-approved wording, July 21 2026).
          Title Case for section headings, buttons, toggle labels and short field
          labels; sentence case for complete helper sentences and warnings. -->
-    <!-- 1. Database Health -->
+    <!-- 2. Database Health (on-screen order since July 24 2026 — Backup
+         Status now leads; see MemoryBackupRestoreActivity's class doc) -->
     <string name="backup_db_health_section">Database Health</string>
     <string name="backup_check_integrity">Check Database Integrity</string>
     <string name="backup_check_integrity_hint">Checks the memory, lorebook, and user image databases for problems. Chats are not included.</string>
@@ -1370,7 +1371,7 @@
     <string name="backup_check_result_ok">%1$s: No Problems Found</string>
     <string name="backup_check_result_problem">%1$s: Problem Found</string>
     <string name="backup_check_result_unavailable">%1$s: Could Not Be Checked</string>
-    <!-- 2. Backup Status -->
+    <!-- 1. Backup Status -->
     <string name="backup_status_section">Backup Status</string>
     <string name="backup_type_memory">Memory</string>
     <string name="backup_type_lorebooks">Lorebooks</string>
@@ -1531,7 +1532,7 @@
          Honest about deferral (Android may delay background work) and about the
          two safety limits: nothing is ever deleted, and it only backs up —
          never restores. -->
-    <string name="backup_auto_hint">Automatic backups run in the background on the schedule you choose, saving a verified backup to your chosen folder. Android may delay a run to save battery, so the timing is not exact. Old backups are never deleted, and automatic backups only save — they never restore or replace your data.</string>
+    <string name="backup_auto_hint">Automatic backups run in the background on the schedule you choose, saving a verified backup to your chosen folder. Android may delay a run to save battery, so the timing is not exact. Automatic backups can restore this app installation. To recover after reinstalling the app or moving to another device, create a Recovery Backup.</string>
     <!-- Title Case labels (owner correction, July 23 2026 — were sentence
          case, inconsistent with every other "Label: value" status line on
          this screen). File size sits between last-backup and next-due, same
@@ -1617,10 +1618,48 @@
     <!-- A1 — repaired automatically (approved) -->
     <string name="health_repaired_title">Database Repaired</string>
     <string name="health_repaired_body">A problem was found in your %1$s database and repaired automatically. Everything should be working normally.</string>
-    <!-- Buttons (approved: Repair / Revert to Last Good Database / Restore /
-         Open File Location; Cancel comes from btn_cancel) -->
-    <string name="health_btn_repair">Repair</string>
+    <!-- Buttons (owner correction, July 23 2026: "Repair" renamed "Attempt
+         Repair" everywhere it appears — repair outcome is never guaranteed,
+         the label must not imply it is. Revert to Last Good Database /
+         Restore / Open File Location unaffected; Cancel comes from
+         btn_cancel) -->
+    <string name="health_btn_repair">Attempt Repair</string>
     <string name="health_btn_revert">Revert to Last Good Database</string>
+    <string name="restore_database">Restore Database</string>
+    <!-- The Restore Database section's hint (its own section directly after
+         Recovery Backup — owner ruling, July 24 2026: saving and restoring
+         never share a section). -->
+    <string name="restore_section_hint">Restores a database from a backup. Every backup is checked before use, and your current database is kept aside, not deleted.</string>
+    <string name="restore_dialog_body">Restore the newest usable backup, or choose another backup.</string>
+    <string name="restore_choose_another">Choose Another Backup</string>
+    <string name="restore_choose_file">Choose Backup File</string>
+    <string name="restore_choose_folder">Choose Backup Folder</string>
+    <string name="restore_choose_source_title">Choose Another Backup</string>
+    <string name="restore_type_label">Type of Database to Restore:</string>
+    <string name="restore_type_memory">Memory Database</string>
+    <string name="restore_type_lorebook">Lorebook Database</string>
+    <string name="restore_type_user_image">User Image Database</string>
+    <string name="restore_finding_backup">Finding a Usable Backup…</string>
+    <string name="restore_checking_backup">Checking Backup…</string>
+    <string name="restore_replacing_database">Restoring Database…</string>
+    <string name="restore_database_success">Database Restored Successfully!</string>
+    <string name="restore_database_failed">Database Restore Failed.</string>
+    <string name="restore_repair_running">Attempting to Repair…</string>
+    <string name="restore_repair_success">Repair Successful!</string>
+    <string name="restore_repair_failed">Repair Failed.</string>
+    <string name="restore_no_current_backup">No usable backup was found in the current automatic backup location.</string>
+    <string name="restore_no_appropriate_database">Database import failed. No appropriate database found.</string>
+    <string name="restore_no_valid_file">No valid databases found in file.</string>
+    <string name="restore_no_valid_folder">No valid databases found in folder.</string>
+    <string name="restore_automatic_key_or_damage">This automatic backup cannot be opened with this app installation’s database key, or the file is damaged. Choose a Recovery Backup if this file came from another installation.</string>
+    <string name="restore_source_unavailable">The selected backup could not be opened.</string>
+    <string name="restore_mismatch">You selected the %1$s, but this backup contains a %2$s.</string>
+    <string name="restore_proceed">Proceed</string>
+    <string name="restore_confirm_title">Restore from Backup?</string>
+    <string name="restore_confirm_body">This replaces your %1$s with the backup from %2$s. Changes made after that date will be lost. Your current database will be kept aside, not deleted.</string>
+    <string name="restore_recovery_code_title">Enter Recovery Code</string>
+    <string name="restore_recovery_code_hint">Recovery Code</string>
+    <string name="restore_recovery_code_body">Enter the Recovery Code for this protected Recovery Backup.</string>
     <string name="health_btn_restore">Restore</string>
     <string name="health_btn_open_location">Open File Location</string>
     <!-- DRAFT buttons (B8 result routing — plan-suggested labels) -->
@@ -1630,12 +1669,22 @@
     <string name="health_btn_change_folder">Change Backup Folder</string>
     <string name="health_btn_retry">Retry</string>
     <string name="health_btn_open_backup_folder">Open Backup Folder</string>
-    <!-- A2 — degraded-mode banner (memory + lorebook approved; the combined and
-         user-image variants are DRAFT, patterned on the approved sentences) -->
-    <string name="health_banner_memory">Memory is currently turned off because of a database problem. Tap Repair to fix it.</string>
-    <string name="health_banner_lorebook">Lorebooks are currently turned off because of a database problem. Tap Repair to fix it.</string>
-    <string name="health_banner_both">Memory and lorebooks are currently turned off because of a database problem. Tap Repair to fix it.</string>
-    <string name="health_banner_user_image">There is a problem with the user image database. Tap Repair to fix it.</string>
+    <!-- A2 — degraded-mode banner. "both" wording is owner-approved verbatim
+         (chat, July 23 2026); memory/lorebook/user-image variants follow the
+         same sentence pattern by direct extrapolation — flagged for owner
+         review, not yet independently confirmed. No variant instructs the
+         user to tap a button (owner ruling, July 23 2026: the buttons are
+         self-explanatory, never say "tap X to fix it"). -->
+    <string name="health_banner_memory">Memory is currently unavailable due to a database issue. You may continue chatting. However, it will not be available until the database is repaired.</string>
+    <string name="health_banner_lorebook">Lorebooks are currently unavailable due to a database issue. You may continue chatting. However, they will not be available until the database is repaired.</string>
+    <string name="health_banner_both">Lorebooks and memory are currently unavailable due to database issues. You may continue chatting. However, these will not be available until the database is repaired.</string>
+    <string name="health_banner_user_image">The user image database is currently unavailable due to a database issue. You may continue chatting. However, it will not be available until the database is repaired.</string>
+    <!-- Banner's "Okay" is its own string, distinct from the shared btn_ok
+         used app-wide. Its "Attempt Repair" button now reuses the shared
+         health_btn_repair directly (owner correction, July 23 2026: "Repair"
+         is "Attempt Repair" everywhere, so a separate banner copy of the
+         same text was redundant and has been removed). -->
+    <string name="health_banner_btn_ok">Okay</string>
     <!-- A3 — blocked Analyze Conversations note (approved verbatim) -->
     <string name="health_archivist_blocked">Unable to analyze conversations due to current memory database corruption. You may try to repair it again or revert to last known good database. Caution reverting may cause recent memories to be lost.</string>
     <!-- A5 — restore confirmation (approved; the date is the backup\'s real
