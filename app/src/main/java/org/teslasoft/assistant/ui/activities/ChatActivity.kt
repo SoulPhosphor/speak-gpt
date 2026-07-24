@@ -75,6 +75,7 @@ import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import android.window.OnBackInvokedDispatcher
@@ -168,6 +169,13 @@ import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.ChatStorageHealth
 import org.teslasoft.assistant.preferences.MessageCompletionState
 import org.teslasoft.assistant.preferences.GlobalPreferences
+import org.teslasoft.assistant.preferences.includes.ChatInclude
+import org.teslasoft.assistant.preferences.includes.DocumentImporter
+import org.teslasoft.assistant.preferences.includes.IncludeForm
+import org.teslasoft.assistant.preferences.includes.IncludeRenderer
+import org.teslasoft.assistant.preferences.includes.IncludeTextPolicy
+import org.teslasoft.assistant.ui.util.IncludeEditDialog
+import org.teslasoft.assistant.ui.util.IncludeStripController
 import org.teslasoft.assistant.util.AvatarRefreshCoordinator
 import org.teslasoft.assistant.util.ProfileImageResolver
 import org.teslasoft.assistant.preferences.LogitBiasPreferences
@@ -229,6 +237,21 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         // toast the same degraded session again. compareAndSet keeps it correct
         // if the notice ever fires off more than one thread.
         private val memoryDegradedNotified = java.util.concurrent.atomic.AtomicBoolean(false)
+
+        /**
+         * Key under which a user message stores the attachments it carried,
+         * as the JSON produced by `ChatInclude.listToJson`. Absent = none, so
+         * every message written by an older build reads correctly.
+         *
+         * It lives in the SAME map as the message text, which means
+         * saveSettings() persists text and attachments together — there is no
+         * window where one is written and the other is not.
+         */
+        const val INCLUDES_KEY = "includes"
+
+        /** How much of a document the bookmark-writing request sees. Enough
+         *  to say what the file IS, without paying to send it all again. */
+        private const val ARTIFACT_EXCERPT_CHARS = 2000
     }
 
     // Init UI
@@ -269,6 +292,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     private var visionActions: LinearLayout? = null
     private var btnVisionActionCamera: ImageButton? = null
     private var btnVisionActionGallery: ImageButton? = null
+    private var btnVisionActionDocument: ImageButton? = null
+
+    // ---- Document includes (document-includes-plan.md) --------------------
+    // Attachments the user has picked but not yet sent. Once a message goes
+    // out these move into that message's own record (INCLUDES_KEY), so the
+    // document text is saved atomically with the text it belongs to.
+    private var includeStrip: LinearLayout? = null
+    private var includeStripController: IncludeStripController? = null
+    private var pendingIncludes: ArrayList<ChatInclude> = arrayListOf()
     private var bulkContainer: ConstraintLayout? = null
     private var btnSelectAll: ImageButton? = null
     private var btnDeselectAll: ImageButton? = null
@@ -2186,12 +2218,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                         chatMessages.add(
                             ChatMessage(
                                 role = ChatRole.User,
-                                content = message["message"].toString()
+                                content = modelFacingContent(message)
                             )
                         )
                     }
                 }
             }
+
+            loadPendingIncludes()
 
             updateMessagesSelectionProjection()
 
@@ -2231,6 +2265,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         visionActions = findViewById(R.id.vision_action_selector)
         btnVisionActionCamera = findViewById(R.id.action_camera)
         btnVisionActionGallery = findViewById(R.id.action_gallery)
+        btnVisionActionDocument = findViewById(R.id.action_document)
+        includeStrip = findViewById(R.id.include_strip)
+        initIncludeStrip()
         bulkContainer = findViewById(R.id.bulk_container)
         btnSelectAll = findViewById(R.id.btn_select_all)
         btnDeselectAll = findViewById(R.id.btn_deselect_all)
@@ -2609,6 +2646,293 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         }
     }
 
+    // ==== Document includes ================================================
+    // See document-includes-plan.md for the owner-approved design. The short
+    // version: an attached document is extracted to text on THIS device and
+    // rides inside the user message it was attached to, so it works
+    // identically on every OpenAI-compatible endpoint (GLM, DeepSeek,
+    // OpenRouter) with no provider-specific upload anywhere, and it sits at a
+    // fixed point in history that the provider's prefix cache can cover on
+    // every later turn.
+
+    private fun initIncludeStrip() {
+        val strip = includeStrip ?: return
+        val collapsed = findViewById<View>(R.id.include_collapsed_row) ?: return
+        val scroll = findViewById<ScrollView>(R.id.include_list_scroll) ?: return
+        val list = findViewById<LinearLayout>(R.id.include_list) ?: return
+
+        includeStripController = IncludeStripController(
+            this, strip, collapsed, scroll, list,
+            object : IncludeStripController.Callbacks {
+                override fun onRemoveInclude(include: ChatInclude) = removeInclude(include)
+                override fun onCondenseInclude(include: ChatInclude) = condenseInclude(include)
+                override fun onEditInclude(include: ChatInclude) = editInclude(include)
+            }
+        )
+        refreshIncludeStrip()
+    }
+
+    /**
+     * Every include the strip should show: the ones waiting to be sent, plus
+     * the ones already sent that are still in a form heavier than a bookmark.
+     * Both are live costs on every turn, so the owner's rule — "if you can see
+     * it, it's being sent" — requires showing them together.
+     */
+    private fun liveIncludes(): List<ChatInclude> {
+        val out = ArrayList<ChatInclude>(pendingIncludes)
+        for (message in messages) {
+            for (include in includesOf(message)) {
+                if (include.showsInStrip()) out.add(include)
+            }
+        }
+        return out
+    }
+
+    private fun refreshIncludeStrip() {
+        includeStripController?.bind(liveIncludes())
+    }
+
+    private fun includesOf(message: HashMap<String, Any>): List<ChatInclude> =
+        ChatInclude.listFromJson(message[INCLUDES_KEY]?.toString())
+
+    private fun savePendingIncludes() {
+        preferences?.setPendingIncludes(
+            if (pendingIncludes.isEmpty()) "" else ChatInclude.listToJson(pendingIncludes)
+        )
+    }
+
+    private fun loadPendingIncludes() {
+        pendingIncludes = ArrayList(
+            ChatInclude.listFromJson(preferences?.getPendingIncludes())
+        )
+    }
+
+    /**
+     * Replaces one include wherever it lives — still pending, or already
+     * carried by a sent message — and re-renders everything that depends on
+     * it. Changing an include changes what the model sees for that turn, so
+     * the model projection is rebuilt too; leaving the old projection in place
+     * would keep sending a document the user just removed.
+     */
+    private fun updateInclude(updated: ChatInclude) {
+        var changed = false
+
+        val pendingIndex = pendingIncludes.indexOfFirst { it.id == updated.id }
+        if (pendingIndex >= 0) {
+            pendingIncludes[pendingIndex] = updated
+            savePendingIncludes()
+            changed = true
+        }
+
+        for (message in messages) {
+            val existing = includesOf(message)
+            if (existing.none { it.id == updated.id }) continue
+            val merged = existing.map { if (it.id == updated.id) updated else it }
+            message[INCLUDES_KEY] = ChatInclude.listToJson(merged)
+            changed = true
+        }
+
+        if (!changed) return
+        saveSettings()
+        rebuildModelProjection()
+        refreshIncludeStrip()
+        adapter?.notifyDataSetChanged()
+    }
+
+    /**
+     * Rebuilds the model-facing projection of the whole conversation from the
+     * stored messages. Cheap (no encryption, no tokenizer) and the only way to
+     * guarantee the projection and the stored includes cannot drift apart.
+     */
+    private fun rebuildModelProjection() {
+        chatMessages = arrayListOf()
+        for (message in messages) {
+            if (message["message"].toString().contains("data:image")) continue
+            if (message["isBot"] == true) {
+                chatMessages.add(
+                    ChatMessage(role = ChatRole.Assistant, content = modelFacingContent(message))
+                )
+            } else {
+                chatMessages.add(
+                    ChatMessage(role = ChatRole.User, content = modelFacingContent(message))
+                )
+            }
+        }
+    }
+
+    private fun openDocumentPicker() {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            // "*/*" with an EXTRA_MIME_TYPES filter, because some providers
+            // hand back documents typed as octet-stream and a strict type
+            // filter would make real .md/.csv files unpickable.
+            type = "*/*"
+            putExtra(Intent.EXTRA_MIME_TYPES, DocumentImporter.PICKER_MIME_TYPES)
+        }
+        documentIntentLauncher.launch(intent)
+    }
+
+    private val documentIntentLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode != RESULT_OK) return@registerForActivityResult
+        val uri = result.data?.data ?: return@registerForActivityResult
+        importDocument(uri)
+    }
+
+    /**
+     * Reads the picked file off the main thread (a large document is real I/O)
+     * and either attaches it or explains why it could not be. A failure is
+     * always stated — never a silently ignored tap.
+     */
+    private fun importDocument(uri: Uri) {
+        val scope = CoroutineScope(Dispatchers.Main)
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                try {
+                    DocumentImporter.import(this@ChatActivity, uri)
+                } catch (_: Exception) {
+                    DocumentImporter.Result.Unreadable("")
+                }
+            }
+            if (isFinishing || isDestroyed) return@launch
+
+            when (result) {
+                is DocumentImporter.Result.Success -> {
+                    pendingIncludes.add(result.include)
+                    savePendingIncludes()
+                    refreshIncludeStrip()
+                }
+                is DocumentImporter.Result.Unsupported ->
+                    showIncludeProblem(R.string.include_error_unsupported, result.fileName)
+                is DocumentImporter.Result.NotText ->
+                    showIncludeProblem(R.string.include_error_not_text, result.fileName)
+                is DocumentImporter.Result.Unreadable ->
+                    showIncludeProblem(R.string.include_error_unreadable, result.fileName)
+                is DocumentImporter.Result.Empty ->
+                    showIncludeProblem(R.string.include_error_empty, result.fileName)
+            }
+        }
+    }
+
+    /** A dialog, never a toast (house rule) — the user must be able to read
+     *  why their file did not attach at their own pace. */
+    private fun showIncludeProblem(messageRes: Int, fileName: String) {
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(getString(messageRes, fileName))
+            .setPositiveButton(R.string.btn_close, null)
+            .show()
+    }
+
+    /**
+     * Remove drops an include to its ARTIFACT form — a one-line bookmark —
+     * rather than erasing it. Deleting outright would leave the conversation
+     * full of replies about something the model can no longer see, which is
+     * how a model starts inventing what the document said.
+     *
+     * The bookmark line is written by the chat's own model; if that cannot be
+     * reached the file-name fallback stands in immediately. Removal must never
+     * block or fail on a network problem, and the line stays editable either
+     * way.
+     */
+    private fun removeInclude(include: ChatInclude) {
+        // Show the cheap form at once so the strip responds to the tap; the
+        // model-written line replaces the fallback when/if it arrives.
+        val fallback = IncludeTextPolicy.fallbackArtifactLine(include.fileName)
+        updateInclude(include.copy(form = IncludeForm.ARTIFACT, artifactLine = fallback))
+
+        val scope = CoroutineScope(Dispatchers.Main)
+        scope.launch {
+            val written = requestArtifactLine(include)
+            if (isFinishing || isDestroyed || written == null) return@launch
+            val latest = findIncludeById(include.id) ?: return@launch
+            // Only replace the placeholder — never overwrite a line the user
+            // has since edited by hand.
+            if (latest.form == IncludeForm.ARTIFACT && latest.artifactLine == fallback) {
+                updateInclude(latest.copy(artifactLine = written))
+            }
+        }
+    }
+
+    private fun findIncludeById(id: String): ChatInclude? {
+        pendingIncludes.firstOrNull { it.id == id }?.let { return it }
+        for (message in messages) {
+            includesOf(message).firstOrNull { it.id == id }?.let { return it }
+        }
+        return null
+    }
+
+    /**
+     * Asks the chat's own model for the one-line bookmark that stands in for
+     * a removed attachment. Uses the chat's configured model (never a
+     * hardcoded id — that mistake left auto-naming broken on every custom
+     * endpoint for months) and returns null on any failure, because the
+     * caller has already applied a usable fallback.
+     */
+    private suspend fun requestArtifactLine(include: ChatInclude): String? {
+        val client = ai ?: return null
+        val lineModel = model.ifBlank { preferences?.getModel() ?: "" }
+        if (lineModel.isBlank()) return null
+
+        val request = ChatCompletionRequest(
+            model = ModelId(lineModel),
+            maxTokens = 40,
+            messages = listOf(
+                ChatMessage(
+                    role = ChatRole.User,
+                    content = "Write one short line of at most 12 words recording that the user " +
+                            "shared this file in a conversation. Begin with \"User sent\". Say what " +
+                            "the file is, not what it says. Reply with the line and nothing else.\n\n" +
+                            "File name: ${include.fileName}\n\n" +
+                            include.modelText().take(ARTIFACT_EXCERPT_CHARS)
+                )
+            )
+        )
+
+        return try {
+            val raw = withContext(Dispatchers.IO) {
+                client.chatCompletion(request).choices.firstOrNull()?.message?.content
+            }
+            IncludeTextPolicy.sanitizeArtifactLine(raw, include.fileName)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun editInclude(include: ChatInclude) {
+        val text = when (include.form) {
+            IncludeForm.ARTIFACT -> include.modelText()
+            IncludeForm.CONDENSED -> include.condensedText ?: include.fullText
+            IncludeForm.FULL -> include.fullText
+        }
+        IncludeEditDialog.show(this, include.fileName, text) { edited ->
+            val latest = findIncludeById(include.id) ?: return@show
+            updateInclude(
+                when (latest.form) {
+                    IncludeForm.ARTIFACT -> latest.copy(artifactLine = edited)
+                    else -> latest.copy(form = IncludeForm.CONDENSED, condensedText = edited)
+                }
+            )
+        }
+    }
+
+    /**
+     * Condense is Step 2 of the plan and is not built yet. The menu item is
+     * not shown until it is, so this is unreachable from the UI today; it
+     * exists so the strip's callback contract is complete.
+     */
+    private fun condenseInclude(include: ChatInclude) {
+        editInclude(include)
+    }
+
+    private fun consumePendingIncludesForSend(): List<ChatInclude> {
+        if (pendingIncludes.isEmpty()) return emptyList()
+        val sent = pendingIncludes.map { it.copy(sentTokens = it.currentTokens()) }
+        pendingIncludes = arrayListOf()
+        savePendingIncludes()
+        return sent
+    }
+
     private fun readFile(uri: Uri) : Bitmap? {
         return contentResolver.openInputStream(uri)?.use { inputStream ->
             BufferedReader(InputStreamReader(inputStream)).use { _ ->
@@ -2720,6 +3044,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             visionActions?.visibility = View.GONE
             val intent = Intent(this, CameraPermissionActivity::class.java).setAction(Intent.ACTION_VIEW)
             permissionResultLauncherCamera.launch(intent)
+        }
+
+        btnVisionActionDocument?.setOnClickListener {
+            visionActions?.visibility = View.GONE
+            openDocumentPicker()
         }
 
         btnRemoveImage?.setOnClickListener {
@@ -3924,6 +4253,20 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             } else {
                 if (shouldAdd) putMessage(m, false)
             }
+
+            // Attachments waiting in the strip belong to THIS message: they
+            // move into its record so the document text is saved atomically
+            // with the text it accompanies, and so it holds a fixed position
+            // in history that the provider's prefix cache can cover on every
+            // later turn. Only on shouldAdd — a retry re-sends an existing
+            // message that already carries its own attachments.
+            if (shouldAdd) {
+                val attached = consumePendingIncludesForSend()
+                if (attached.isNotEmpty() && messages.isNotEmpty()) {
+                    messages[messages.size - 1][INCLUDES_KEY] = ChatInclude.listToJson(attached)
+                }
+                refreshIncludeStrip()
+            }
             saveSettings()
 
             btnMicro?.isEnabled = false
@@ -3953,7 +4296,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     chatMessages.add(
                         ChatMessage(
                             role = ChatRole.User,
-                            content = m
+                            // Not plain `m`: if this turn carried attachments
+                            // they are part of what the model receives.
+                            content = messages.lastOrNull()
+                                ?.let { modelFacingContent(it) } ?: m
                         )
                     )
                     syncChatProjection()
@@ -4404,17 +4750,27 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         saveSettings()
     }
 
-    /** Content of an assistant message as the MODEL should see it. An
-     *  unfinished reply gets an internal note appended so the model cannot
-     *  mistake it for an intentionally completed reply — never shown to the
-     *  user (this shapes the model projection only, not the visible text). */
+    /** Content of a message as the MODEL should see it, which is not always
+     *  what the user sees.
+     *
+     *  An unfinished assistant reply gets an internal note appended so the
+     *  model cannot mistake it for an intentionally completed reply. A user
+     *  message carrying attachments gets those attachments rendered into it,
+     *  in whatever form they are in right now — full text, a condensed
+     *  version, or a one-line bookmark once removed. Neither is ever shown in
+     *  the chat; this shapes the model projection only. */
     private fun modelFacingContent(message: HashMap<String, Any>): String {
         val content = message["message"].toString()
-        if (message["isBot"] == true && content.isNotBlank() &&
-            MessageCompletionState.isIncomplete(message[MessageCompletionState.KEY_STATE]?.toString())) {
-            return content + "\n\n" + getString(R.string.message_incomplete_model_note)
+        if (message["isBot"] == true) {
+            if (content.isNotBlank() && MessageCompletionState.isIncomplete(
+                    message[MessageCompletionState.KEY_STATE]?.toString())) {
+                return content + "\n\n" + getString(R.string.message_incomplete_model_note)
+            }
+            return content
         }
-        return content
+        val includes = includesOf(message)
+        if (includes.isEmpty()) return content
+        return IncludeRenderer.renderUserMessage(content, includes)
     }
 
     private fun scroll(mode: Boolean) {

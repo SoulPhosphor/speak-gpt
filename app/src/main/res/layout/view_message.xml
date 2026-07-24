@@ -99,6 +99,18 @@
         android:textSize="16sp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="@+id/username"
+        app:layout_constraintTop_toBottomOf="@+id/include_summary" />
+
+    <!-- Record of what was attached to this message (document-includes-plan.md).
+         Directly under the user label, above the message text; GONE collapses it
+         to a point so the text keeps its original position when nothing is
+         attached. No android:id on the <include> — that would replace the
+         included layout's own root id, which ChatAdapter looks up. -->
+    <include
+        layout="@layout/view_include_summary"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        app:layout_constraintStart_toStartOf="@+id/username"
         app:layout_constraintTop_toBottomOf="@+id/username" />
 
     <androidx.constraintlayout.widget.ConstraintLayout

@@ -1,6 +1,9 @@
 # Document & Image Includes — Build Plan
 
-Status: **APPROVED IN CHAT, July 24 2026. Not yet built.** Every user-facing
+Status: **Step 1 BUILT July 24 2026** (attach/extract/strip/Remove→artifact/
+history record/size guards). Steps 2 (Condense) and 3 (images) not started.
+Everything below is the full approved design; see "Build order" at the end for
+what each step covers. Every user-facing
 word, behavior, and UI decision in this plan was settled with the owner in
 plain chat, July 24 2026. Where this plan and that conversation disagree, the
 conversation wins. Any fork this plan does not settle → stop and ask in chat
@@ -71,10 +74,7 @@ All strings live in `res/values/strings.xml` only, per house rule.
 | Oversized CSV note | *"Large spreadsheet — sent the column names and first 500 rows of 47,000."* (real numbers substituted) |
 | History box label | **Includes** |
 | Artifact line default shape | "User sent …" — AI-written, ≤ ~12 words |
-
-The collapse line's wording (e.g. "Includes 5 documents") follows the same
-"Includes" vocabulary; final phrasing goes past the owner with the first
-build if it needs to differ from that.
+| Collapse line (4+ items) | **Includes N Documents** — "Documents" capitalised per the app's Title Case rule (owner ruling, July 24 2026), followed by a **downward-facing chevron** |
 
 ## UI specification, surface by surface, with the styles each uses
 
@@ -118,10 +118,13 @@ No toasts anywhere (standing rule). All notices are persistent inline text.
   too-big and CSV notes likewise. Styled in the hint family
   (13sp, `@color/text_subtitle`).
 - **Collapse at 4+:** with four or more rows the strip becomes a single line
-  with an **upward-facing chevron icon**; tapping expands the full list
-  **upward as an overlay covering the chat** (the conversation must not be
-  shoved around), scrollable, collapsed again the same way or by tapping
-  outside. With three or fewer rows the strip shows them all, no collapse.
+  reading **Includes N Documents** with a **downward-facing chevron at the
+  end** (owner ruling, July 24 2026 — this supersedes the earlier
+  upward-facing note; the chevron glyph points down even though the list
+  opens upward). Tapping expands the full list **upward as an overlay
+  covering the chat** (the conversation must not be shoved around),
+  scrollable, collapsed again the same way or by tapping outside. With three
+  or fewer rows the strip shows them all, no collapse.
 
 ### 2. The Edit dialog (condensed/reduced text, and artifact lines)
 
@@ -247,10 +250,28 @@ No toasts anywhere (standing rule). All notices are persistent inline text.
 
 ## Build order and done-ness
 
-- **Step 1:** picker accepts the four document types (a Document choice
-  alongside the existing Camera/Gallery in the attach selector) → extraction
-  → strip with token counts and notes → Remove→artifact with bookmark popup →
-  history accordion → size guards. Independently shippable and testable.
+- **Step 1 — BUILT July 24 2026.** Picker accepts the four document types (a
+  Document choice alongside the existing Camera/Gallery in the attach
+  selector) → extraction → strip with token counts and notes →
+  Remove→artifact → per-message history record → size guards.
+  Notes on what shipped:
+  - The artifact's bookmark marker appears as the **icon on the message's own
+    "Includes" record** (which switches to `ic_bookmark_added` once everything
+    that message carried has been reduced to a bookmark), and the accordion
+    lists the bookmark LINES. A separate popup hung off the user name was the
+    original sketch; folding it into the existing accordion gives the same
+    "see what's in there" behaviour with one control instead of two.
+  - The accordion shows each item's **current** weight, not the weight
+    recorded at send time. The plan's earlier "permanent snapshot" wording
+    was self-contradictory: after a document is reduced to a bookmark the
+    original figure would overstate what that message still costs every turn.
+    `ChatInclude.sentTokens` still records the original for later use.
+  - **Condense is absent from the row menu**, gated by `CONDENSE_BUILT` in
+    `IncludeStripController` — a menu item that claimed to condense while
+    doing something else would be worse than none. Flip it in Step 2.
+  - Four draft strings (`include_error_*`) cover the failure cases the owner
+    has not yet ruled on; they are written in the approved voice and flagged
+    in `strings.xml`. **Still need owner confirmation.**
 - **Step 2:** Condense + the Edit dialog (which also serves artifact-line
   editing from Step 1 — build the dialog in whichever step reaches it first).
 - **Step 3:** images join (image icon rows, Reduce to Text Only, ~token

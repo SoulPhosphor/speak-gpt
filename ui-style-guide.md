@@ -775,6 +775,47 @@ and rollout notes here — not back in `CLAUDE.md`.
   `RecoveryBackupState.getAutoFrequency`/`setAutoFrequency`) — see the
   Widget.App.Row.Toggle entry above for the paired "Enable Automatic
   Backups" toggle it sits under.
+- **Includes strip row — `Widget.App.Include.*` (built July 24 2026).** The
+  row shown above the chat's message box for each attached document (see
+  `document-includes-plan.md`). Deliberately a **new row shape, NOT one of
+  the five chevron-row shapes** above: it has no chevron and ends in a
+  three-dots menu, so extending the chevron-row vocabulary would have been
+  wrong. Pieces, applied together in order:
+  `Widget.App.Include.Row` (container: 44dp min height, horizontal) →
+  `Widget.App.Include.Icon` (leading 24dp type glyph; **no tint of its own**,
+  instances tint `?attr/colorPrimary`, leaving the slot open for a future
+  thumbnail — same reasoning as `Widget.App.Row.Icon`) →
+  `Widget.App.Include.Label` (the "Includes"/"Includes condensed" state word,
+  bold `?attr/colorPrimary` 13sp) → `Widget.App.Include.Name` (the file name,
+  weighted to fill, middle-ellipsized) → `Widget.App.Include.Weight` (the
+  "~N tokens" readout, `@color/text_subtitle` 12sp) →
+  `Widget.App.Include.Menu` (trailing three-dots, borderless ripple).
+  `Widget.App.Include.Notice` is the persistent size warning that can sit
+  under a row (13sp `@color/text_subtitle`, matching `Widget.App.Field.Hint`)
+  — never a toast, per the app-wide ban. Built from
+  `layout/view_include_row.xml`; the four-or-more collapsed line is
+  `layout/view_include_collapsed.xml` (same container style, ending in a
+  downward `ic_chevron_down`). The per-message record inside the transcript
+  is `layout/view_include_summary.xml` + `view_include_summary_item.xml`,
+  which deliberately use their own small sizes (18/16dp icons, 13sp text)
+  rather than the strip styles — they sit inside a chat bubble, not a
+  settings surface.
+  **Gotcha, cost a bug already:** these layouts are pulled in with `<include>`
+  tags carrying **no `android:id`** — an id on an `<include>` REPLACES the
+  included layout's root id, which silently breaks every `findViewById` for
+  that root. Constraints reference the included root's own id instead.
+- **`AppButton.Destructive.Inline` + `dialog_two_actions_end.xml` (owner
+  ruling, July 24 2026).** The outlined counterpart of
+  `AppButton.Primary.Inline` (wrap_content width), and the shared layout for
+  a dialog whose two actions sit **right-aligned as a pair, Cancel first then
+  Save** — the owner's chosen shape for the include Edit dialog.
+  **This is NOT interchangeable with `dialog_two_actions.xml`**, which is the
+  approved shape for a primary+destructive confirmation spread across the
+  dialog with the primary on the START side (Discard Changes). Two different
+  approved shapes for two different jobs; do not edit either to match the
+  other. Ids: `btn_dialog_end_cancel` then `btn_dialog_end_save`. Same
+  24dp horizontal / 16dp bottom padding as `dialog_two_actions.xml`, for the
+  same window-corner-clipping reason.
 - **Standard section heading + hint — `Widget.App.Section.*`, and the
   ordering rule that goes with it (owner ruling, July 22 2026).** A
   settings-style screen section is a bold heading (`?attr/colorPrimary`,

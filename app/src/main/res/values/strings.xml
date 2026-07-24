@@ -2356,4 +2356,56 @@
     <string name="shape_flower">Flower</string>
     <string name="shape_circle">Circle</string>
     <string name="shape_square">Square</string>
+
+    <!-- ================= Document & image includes =================
+         Owner-approved wording, July 24 2026 (see document-includes-plan.md).
+         The label/action words and the three size notices were approved
+         verbatim in chat — do not reword any of them without asking. -->
+
+    <!-- Strip row label. "Includes condensed" is the same row after the user
+         has condensed the document, so the form being sent is always visible. -->
+    <string name="include_label">Includes</string>
+    <string name="include_label_condensed">Includes condensed</string>
+
+    <!-- Row menu actions. "Condense" (documents) and "Reduce to Text Only"
+         (images) are deliberately DIFFERENT words: condensing shrinks the same
+         kind of thing, reducing an image destroys the visual entirely and
+         keeps only words (owner ruling). Never merge them. -->
+    <string name="include_action_remove">Remove</string>
+    <string name="include_action_condense">Condense</string>
+    <string name="include_action_reduce">Reduce to Text Only</string>
+    <string name="include_action_edit">Edit</string>
+
+    <!-- Collapse line shown once four or more items are attached. "Documents"
+         is capitalised per the app's Title Case rule. -->
+    <string name="include_collapsed_count">Includes %1$d Documents</string>
+
+    <!-- Weight readout on every row. Always shows the tilde: this is an
+         estimate (roughly ±25% across models), never a promise. -->
+    <string name="include_weight">~%1$s tokens</string>
+
+    <!-- Size notices. Persistent inline text under the row, never a toast. -->
+    <string name="include_notice_large">Large file — adds about ~%1$s tokens to every message while included.</string>
+    <string name="include_notice_truncated">This file is too large to send in full. The beginning was included, up to about ~%1$s tokens.</string>
+    <string name="include_notice_csv">Large spreadsheet — sent the column names and first %1$s rows of %2$s.</string>
+
+    <!-- DRAFT WORDING — extrapolated in the approved voice for the failure
+         cases the owner has not yet ruled on. Flagged for confirmation. -->
+    <string name="include_error_unsupported">%1$s can\'t be read. Text, Markdown, spreadsheet and Word files can be attached.</string>
+    <string name="include_error_not_text">%1$s doesn\'t contain readable text, so it wasn\'t attached.</string>
+    <string name="include_error_unreadable">%1$s couldn\'t be opened, so it wasn\'t attached.</string>
+    <string name="include_error_empty">%1$s is empty, so it wasn\'t attached.</string>
+
+    <!-- Accessibility labels. -->
+    <string name="include_menu_desc">Options for %1$s</string>
+    <string name="include_expand_desc">Show attached documents</string>
+    <string name="include_collapse_desc">Hide attached documents</string>
+    <string name="include_bookmark_desc">Previously attached items</string>
+    <string name="include_icon_desc">Attached file</string>
+    <string name="btn_attach_document">Document</string>
+
+    <!-- Save/Cancel pair on the Edit dialog (right-aligned, Cancel then Save,
+         per the owner's layout ruling). -->
+    <string name="include_edit_save">Save</string>
+    <string name="include_edit_cancel">Cancel</string>
 </resources>
