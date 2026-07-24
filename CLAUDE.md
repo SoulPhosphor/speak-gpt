@@ -2093,6 +2093,15 @@ folder — never combined), and is deliberately conservative:
   are part of the approved words. Read the spec's §9 agent rules before
   any roleplay work.
 - Whisper/voice work follows `whisper-local-plan.md`.
+- **External memory analysis (proposed, NOT built or approved):** the owner
+  wants the Memory Assistant's archive work doable by an agentic desktop AI
+  (Claude Cowork/Code, ChatGPT desktop) via a file package, using the user's
+  subscription instead of API. Read `Memory System/
+  external_memory_analysis_counterplan.md` first — it verifies which findings
+  of the owner's uploaded ChatGPT audit plan are real in the code, records a
+  correction (the extraction prompt's `plot_ledger` card section is
+  SANCTIONED — do not remove it on the audit plan's say-so), and lays out the
+  smaller phased path. Nothing in either document is owner-approved wording.
 
 ## Quick verification checklist before any push
 
