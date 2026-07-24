@@ -17,10 +17,13 @@
 **************************************************************************/
 -->
 <!-- Memory Backup & Restore (Database Health & Backups). Section order is
-     owner-directed and EXACT (July 22 2026): 1. Database Health, 2. Backup
-     Status, 3. Recovery Backup, 4. Human-Readable Chat Backup, 5. Portable
-     Data Copy, 6. Automatic Backups, 7. Reset. Do not reorder. The manual and
-     automatic backup locations are separate. -->
+     owner-directed and EXACT (July 24 2026, supersedes the July 22 order):
+     1. Backup Status, 2. Database Health, 3. Recovery Backup, 4. Human-
+     Readable Chat Backup, 5. Portable Data Copy, 6. Automatic Backups,
+     7. Reset. Backup Status leads because it's the one section that's
+     always current the moment the screen opens — the Database Health
+     result lines stay blank until the user presses the check button. Do
+     not reorder. The manual and automatic backup locations are separate. -->
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/root"
@@ -83,7 +86,48 @@
             android:orientation="vertical"
             android:paddingHorizontal="20dp">
 
-            <!-- ============ 1. Database Health ============ -->
+            <!-- ============ 1. Backup Status ============ -->
+            <!-- Moved above Database Health (owner ruling, July 24 2026): this
+                 is the one section that's always current on open, so the data
+                 leads. Section heading style: Widget.App.Section.Title (see
+                 values/themes.xml + ui-style-guide.md). -->
+            <TextView
+                style="@style/Widget.App.Section.Title"
+                android:text="@string/backup_status_section" />
+
+            <TextView
+                android:id="@+id/text_status_memory"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="16dp"
+                android:textColor="@color/text"
+                android:textSize="15sp" />
+
+            <TextView
+                android:id="@+id/text_status_lorebooks"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="8dp"
+                android:textColor="@color/text"
+                android:textSize="15sp" />
+
+            <TextView
+                android:id="@+id/text_status_chats"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="8dp"
+                android:textColor="@color/text"
+                android:textSize="15sp" />
+
+            <TextView
+                android:id="@+id/text_status_userimage"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="8dp"
+                android:textColor="@color/text"
+                android:textSize="15sp" />
+
+            <!-- ============ 2. Database Health ============ -->
             <!-- Section heading + hint styles: Widget.App.Section.Title/.Hint
                  (see values/themes.xml + ui-style-guide.md). The hint always
                  comes directly under the title and before the button it
@@ -142,43 +186,6 @@
                 android:textColor="@color/text"
                 android:textSize="15sp"
                 android:visibility="gone" />
-
-            <!-- ============ 2. Backup Status ============ -->
-            <TextView
-                style="@style/Widget.App.Section.Title"
-                android:text="@string/backup_status_section" />
-
-            <TextView
-                android:id="@+id/text_status_memory"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="16dp"
-                android:textColor="@color/text"
-                android:textSize="15sp" />
-
-            <TextView
-                android:id="@+id/text_status_lorebooks"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="8dp"
-                android:textColor="@color/text"
-                android:textSize="15sp" />
-
-            <TextView
-                android:id="@+id/text_status_chats"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="8dp"
-                android:textColor="@color/text"
-                android:textSize="15sp" />
-
-            <TextView
-                android:id="@+id/text_status_userimage"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="8dp"
-                android:textColor="@color/text"
-                android:textSize="15sp" />
 
             <!-- ============ 3. Recovery Backup (manual) ============ -->
             <TextView

@@ -75,10 +75,13 @@ import java.security.MessageDigest
 
 /**
  * "Memory Backup & Restore" — the Database Health & Backups screen. Section
- * order is owner-directed and EXACT (July 22 2026): 1. Database Health,
- * 2. Backup Status, 3. Recovery Backup, 4. Human-Readable Chat Backup,
- * 5. Portable Data Copy, 6. Automatic Backups, 7. Reset. Do not reorder. The
- * two backup LOCATIONS (manual vs automatic) are kept separate.
+ * order is owner-directed and EXACT (July 24 2026, supersedes the July 22
+ * order): 1. Backup Status, 2. Database Health, 3. Recovery Backup,
+ * 4. Human-Readable Chat Backup, 5. Portable Data Copy, 6. Automatic Backups,
+ * 7. Reset. Backup Status leads because it's always current on open, unlike
+ * Database Health's result lines which stay blank until the check button is
+ * pressed. Do not reorder. The two backup LOCATIONS (manual vs automatic)
+ * are kept separate.
  *
  * Three distinct systems live here and stay separate on screen (never
  * conflated — owner directive):
@@ -105,7 +108,7 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
     private var actionBar: ConstraintLayout? = null
     private var btnBack: ImageButton? = null
 
-    // 1. Database Health
+    // 2. Database Health (on-screen order; see class doc — Backup Status leads)
     private var btnCheckIntegrity: MaterialButton? = null
     private var textCheckProgress: TextView? = null
     private var textResultMemory: TextView? = null
@@ -116,7 +119,7 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
     // resume loop cannot nag (Build Phase 3 item 8).
     private var backupFailureDialogShown = false
 
-    // 2. Backup Status
+    // 1. Backup Status
     private var textStatusMemory: TextView? = null
     private var textStatusLorebooks: TextView? = null
     private var textStatusChats: TextView? = null
@@ -308,7 +311,7 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
     private fun initLogic() {
         btnBack?.setOnClickListener { finish() }
 
-        /* ---- 1. Database Health ---- */
+        /* ---- 2. Database Health ---- */
         btnCheckIntegrity?.setOnClickListener { onCheckIntegrity() }
 
         /* ---- 3. Recovery Backup (manual) ---- */
