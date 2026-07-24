@@ -448,6 +448,16 @@ class RecoveryBackupActivity : FragmentActivity() {
                     is PortableRecoveryWriter.Result.Ok -> {
                         val sha = sha256(staged)
                         runOnUiThread {
+                            // The user can back out while the package is still
+                            // building; onDestroy then unregisters the Save As
+                            // launcher, and launch() on an unregistered launcher
+                            // throws (the ActivityResultLauncher crash). If the
+                            // activity is gone, discard the staged package rather
+                            // than leak it, and never touch the launcher.
+                            if (isFinishing || isDestroyed) {
+                                runCatching { if (staged.exists()) staged.delete() }
+                                return@runOnUiThread
+                            }
                             stagedPackage = staged
                             stagedSha = sha
                             stagedIncludedTypes = result.includedTypes
