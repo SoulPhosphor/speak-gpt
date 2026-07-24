@@ -2389,13 +2389,19 @@
     <string name="include_notice_truncated">This file is too large to send in full. The beginning was included, up to about ~%1$s tokens.</string>
     <string name="include_notice_csv">Large spreadsheet — sent the column names and first %1$s rows of %2$s.</string>
 
-    <!-- Attach failures. Owner-approved wording, July 24 2026, except
-         include_error_not_text and include_error_unreadable, which are still
-         DRAFT pending the owner's ruling. -->
+    <!-- Attach failures. Owner-approved wording, verbatim, July 24 2026. Each
+         maps to exactly one row of the owner-approved detectable-condition
+         mapping in document-includes-plan.md — do not reword or merge. -->
     <string name="include_error_unsupported">This file type is not supported.</string>
+    <string name="include_error_permission_denied">File is unable to be read. Permission has expired or been revoked, and the file is no longer available.</string>
+    <string name="include_error_source_unavailable">File is unable to be read. The source app is not responding.</string>
+    <string name="include_error_file_gone">File is unable to be read. File is no longer available. It may have been moved or deleted.</string>
+    <string name="include_error_interrupted_read">File could not be read completely. The storage or connection may have been interrupted.</string>
+    <string name="include_error_password_protected">File is unable to be read. Content is password protected and unreadable. Please try again with a non-protected file.</string>
+    <string name="include_error_content_mismatch">File is unable to be read. Content does not match file type.</string>
+    <string name="include_error_corrupted">File is unable to be read. File is corrupted.</string>
     <string name="include_error_empty">File contains no data.</string>
-    <string name="include_error_not_text">%1$s doesn\'t contain readable text, so it wasn\'t attached.</string>
-    <string name="include_error_unreadable">%1$s couldn\'t be opened, so it wasn\'t attached.</string>
+    <string name="include_error_unknown">File could not be attached due to an unknown error.</string>
 
     <!-- Accessibility labels. -->
     <string name="include_menu_desc">Options for %1$s</string>

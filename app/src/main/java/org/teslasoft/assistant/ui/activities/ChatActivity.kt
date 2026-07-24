@@ -2792,7 +2792,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 try {
                     DocumentImporter.import(this@ChatActivity, uri)
                 } catch (_: Exception) {
-                    DocumentImporter.Result.Unreadable("")
+                    DocumentImporter.Result.Unknown("")
                 }
             }
             if (isFinishing || isDestroyed) return@launch
@@ -2805,12 +2805,24 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 }
                 is DocumentImporter.Result.Unsupported ->
                     showIncludeProblem(R.string.include_error_unsupported, result.fileName)
-                is DocumentImporter.Result.NotText ->
-                    showIncludeProblem(R.string.include_error_not_text, result.fileName)
-                is DocumentImporter.Result.Unreadable ->
-                    showIncludeProblem(R.string.include_error_unreadable, result.fileName)
+                is DocumentImporter.Result.PermissionDenied ->
+                    showIncludeProblem(R.string.include_error_permission_denied, result.fileName)
+                is DocumentImporter.Result.SourceUnavailable ->
+                    showIncludeProblem(R.string.include_error_source_unavailable, result.fileName)
+                is DocumentImporter.Result.FileGone ->
+                    showIncludeProblem(R.string.include_error_file_gone, result.fileName)
+                is DocumentImporter.Result.InterruptedRead ->
+                    showIncludeProblem(R.string.include_error_interrupted_read, result.fileName)
+                is DocumentImporter.Result.PasswordProtected ->
+                    showIncludeProblem(R.string.include_error_password_protected, result.fileName)
+                is DocumentImporter.Result.ContentMismatch ->
+                    showIncludeProblem(R.string.include_error_content_mismatch, result.fileName)
+                is DocumentImporter.Result.Corrupted ->
+                    showIncludeProblem(R.string.include_error_corrupted, result.fileName)
                 is DocumentImporter.Result.Empty ->
                     showIncludeProblem(R.string.include_error_empty, result.fileName)
+                is DocumentImporter.Result.Unknown ->
+                    showIncludeProblem(R.string.include_error_unknown, result.fileName)
             }
         }
     }

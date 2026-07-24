@@ -16,7 +16,6 @@
 
 package org.teslasoft.assistant.preferences.includes
 
-import java.io.InputStream
 import java.util.zip.ZipInputStream
 
 /**
@@ -45,33 +44,94 @@ object DocxTextExtractor {
     private const val MAX_XML_CHARS = 40_000_000
 
     /**
-     * Returns the document's text, or null when the archive carries no
-     * readable `word/document.xml` (not a real .docx, or an encrypted one).
+     * Magic bytes at the start of an OLE2 Compound File Binary container —
+     * the format a password-protected Office file is wrapped in (Office
+     * cannot encrypt a plain zip entry-by-entry, so a protected .docx is not
+     * a zip at all at the top level; it is a CFB container holding an
+     * encrypted package stream). The same signature also opens a legacy
+     * binary .doc/.xls/.ppt — this app only routes files with a `.docx`
+     * extension here, and a legacy `.doc` renamed to `.docx` would also read
+     * as this signature, which is a known limitation of a signature-only
+     * check rather than something this detection tries to resolve further.
      */
-    fun extract(input: InputStream): String? {
-        val xml = readDocumentXml(input) ?: return null
-        return xmlToText(xml)
+    private val CFB_SIGNATURE = byteArrayOf(
+        0xD0.toByte(), 0xCF.toByte(), 0x11.toByte(), 0xE0.toByte(),
+        0xA1.toByte(), 0xB1.toByte(), 0x1A.toByte(), 0xE1.toByte()
+    )
+
+    /** Outcome of attempting to read a .docx. */
+    sealed class ExtractResult {
+        data class Success(val text: String) : ExtractResult()
+
+        /** Not a zip at all, or a zip with no `word/document.xml` entry —
+         *  no positive evidence this was ever a genuine Word document. */
+        data object NotDocx : ExtractResult()
+
+        /** An OLE2/CFB container — a password-protected Office file. */
+        data object PasswordProtected : ExtractResult()
+
+        /** `word/document.xml` was located, but reading or decompressing it
+         *  failed — positive evidence of a genuine, damaged Word document. */
+        data object Corrupted : ExtractResult()
     }
 
-    private fun readDocumentXml(input: InputStream): String? {
-        ZipInputStream(input).use { zip ->
+    /**
+     * Marks a failure that happened AFTER `word/document.xml` was located,
+     * so the caller can tell "never found a real docx" (NotDocx) apart from
+     * "found one, but it's damaged" (Corrupted) — both surface as an
+     * exception from the zip machinery otherwise.
+     */
+    private class DocumentEntryUnreadable(cause: Throwable) : Exception(cause)
+
+    fun extract(bytes: ByteArray): ExtractResult {
+        if (isCfbContainer(bytes)) return ExtractResult.PasswordProtected
+
+        val xml = try {
+            locateDocumentXml(bytes) ?: return ExtractResult.NotDocx
+        } catch (_: DocumentEntryUnreadable) {
+            return ExtractResult.Corrupted
+        } catch (_: Exception) {
+            return ExtractResult.NotDocx
+        }
+
+        return ExtractResult.Success(xmlToText(xml))
+    }
+
+    private fun isCfbContainer(bytes: ByteArray): Boolean {
+        if (bytes.size < CFB_SIGNATURE.size) return false
+        for (i in CFB_SIGNATURE.indices) {
+            if (bytes[i] != CFB_SIGNATURE[i]) return false
+        }
+        return true
+    }
+
+    private fun locateDocumentXml(bytes: ByteArray): String? {
+        ZipInputStream(bytes.inputStream()).use { zip ->
             var entry = zip.nextEntry
             while (entry != null) {
                 if (entry.name == DOCUMENT_ENTRY) {
-                    val out = StringBuilder()
-                    val buffer = ByteArray(8 * 1024)
-                    while (true) {
-                        val read = zip.read(buffer)
-                        if (read <= 0) break
-                        out.append(String(buffer, 0, read, Charsets.UTF_8))
-                        if (out.length > MAX_XML_CHARS) break
+                    return try {
+                        readEntryText(zip)
+                    } catch (e: Exception) {
+                        throw DocumentEntryUnreadable(e)
                     }
-                    return out.toString()
                 }
                 entry = zip.nextEntry
             }
         }
         return null
+    }
+
+    private fun readEntryText(zip: ZipInputStream): String {
+        val out = StringBuilder()
+        val buffer = ByteArray(8 * 1024)
+        while (true) {
+            val read = zip.read(buffer)
+            if (read <= 0) break
+            out.append(String(buffer, 0, read, Charsets.UTF_8))
+            if (out.length > MAX_XML_CHARS) break
+        }
+        return out.toString()
     }
 
     /**

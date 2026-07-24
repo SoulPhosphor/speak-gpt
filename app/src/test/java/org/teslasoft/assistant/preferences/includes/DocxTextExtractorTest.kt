@@ -18,7 +18,6 @@ package org.teslasoft.assistant.preferences.includes
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.ByteArrayOutputStream
@@ -125,7 +124,8 @@ class DocxTextExtractorTest {
 
     @Test fun readsTextOutOfARealDocxContainer() {
         val bytes = docxBytes(document(paragraph("Contract terms.") + paragraph("Signed.")))
-        assertEquals("Contract terms.\nSigned.", DocxTextExtractor.extract(bytes.inputStream()))
+        val result = DocxTextExtractor.extract(bytes) as DocxTextExtractor.ExtractResult.Success
+        assertEquals("Contract terms.\nSigned.", result.text)
     }
 
     @Test fun aZipWithoutADocumentPartIsNotADocx() {
@@ -135,12 +135,59 @@ class DocxTextExtractorTest {
             zip.write("<x/>".toByteArray())
             zip.closeEntry()
         }
-        assertNull(DocxTextExtractor.extract(out.toByteArray().inputStream()))
+        assertEquals(
+            DocxTextExtractor.ExtractResult.NotDocx,
+            DocxTextExtractor.extract(out.toByteArray())
+        )
     }
 
     @Test fun extractedDocumentTextPassesTheBinaryGuard() {
         val bytes = docxBytes(document(paragraph("Ordinary prose in a document.")))
-        val text = DocxTextExtractor.extract(bytes.inputStream())!!
-        assertTrue(IncludeTextPolicy.looksLikeText(text))
+        val result = DocxTextExtractor.extract(bytes) as DocxTextExtractor.ExtractResult.Success
+        assertTrue(IncludeTextPolicy.looksLikeText(result.text))
+    }
+
+    @Test fun completelyNonZipBytesAreNotADocx() {
+        val garbage = "not a zip file at all, just plain bytes".toByteArray()
+        assertEquals(DocxTextExtractor.ExtractResult.NotDocx, DocxTextExtractor.extract(garbage))
+    }
+
+    @Test fun emptyBytesAreNotADocx() {
+        assertEquals(DocxTextExtractor.ExtractResult.NotDocx, DocxTextExtractor.extract(ByteArray(0)))
+    }
+
+    // ---- password protection (row 6) ---------------------------------------
+
+    @Test fun anOle2CfbContainerIsReportedAsPasswordProtected() {
+        // The magic bytes a password-protected Office file is wrapped in;
+        // the rest of the bytes are irrelevant to the signature check.
+        val cfbSignature = byteArrayOf(
+            0xD0.toByte(), 0xCF.toByte(), 0x11.toByte(), 0xE0.toByte(),
+            0xA1.toByte(), 0xB1.toByte(), 0x1A.toByte(), 0xE1.toByte()
+        )
+        val bytes = cfbSignature + ByteArray(100) { 0 }
+        assertEquals(
+            DocxTextExtractor.ExtractResult.PasswordProtected,
+            DocxTextExtractor.extract(bytes)
+        )
+    }
+
+    @Test fun bytesShorterThanTheSignatureAreNotMisreadAsProtected() {
+        val tooShort = byteArrayOf(0xD0.toByte(), 0xCF.toByte(), 0x11.toByte())
+        assertEquals(DocxTextExtractor.ExtractResult.NotDocx, DocxTextExtractor.extract(tooShort))
+    }
+
+    // ---- corruption (row 9) -------------------------------------------------
+
+    @Test fun aTruncatedDocumentPartIsReportedAsCorrupted() {
+        // word/document.xml is genuinely located (proof this was a real
+        // docx), but its compressed data is cut off mid-stream, so reading it
+        // must fail — distinct from NotDocx, which has no such proof.
+        val bytes = docxBytes(document(paragraph("A".repeat(5000))))
+        val truncated = bytes.copyOfRange(0, bytes.size - 20)
+        assertEquals(
+            DocxTextExtractor.ExtractResult.Corrupted,
+            DocxTextExtractor.extract(truncated)
+        )
     }
 }

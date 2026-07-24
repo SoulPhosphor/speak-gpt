@@ -38,20 +38,51 @@ object DocumentImporter {
     /** Hard ceiling on bytes read from disk, before any size guard. */
     private const val MAX_BYTES = 24 * 1024 * 1024
 
+    /**
+     * Every distinguishable attach failure, per the owner-approved mapping
+     * of detectable code conditions to messages (document-includes-plan.md).
+     * Each case corresponds to exactly one row of that mapping; several rows
+     * that are not distinguishable in code share one case on purpose (never
+     * a falsely specific one per cause).
+     */
     sealed class Result {
         data class Success(val include: ChatInclude) : Result()
 
-        /** The picked file's type is not one this app can read. */
+        /** Row 1: extension/MIME not in the supported set. */
         data class Unsupported(val fileName: String) : Result()
 
-        /** Opened, but the contents are not usable text. */
-        data class NotText(val fileName: String) : Result()
+        /** Row 2: SecurityException opening the file — permission expired
+         *  or revoked. */
+        data class PermissionDenied(val fileName: String) : Result()
 
-        /** Could not be opened or read at all. */
-        data class Unreadable(val fileName: String) : Result()
+        /** Row 3: open failed and the content provider does not resolve —
+         *  the source app is gone or not responding. */
+        data class SourceUnavailable(val fileName: String) : Result()
 
-        /** Opened fine, but there was nothing in it. */
+        /** Row 4: open failed but the content provider resolves — the file
+         *  itself is gone (moved or deleted). */
+        data class FileGone(val fileName: String) : Result()
+
+        /** Row 5: the file opened, but reading it stopped part-way. */
+        data class InterruptedRead(val fileName: String) : Result()
+
+        /** Row 6: a .docx wrapped in an encrypted OLE2/CFB container. */
+        data class PasswordProtected(val fileName: String) : Result()
+
+        /** Rows 7/8/10: not a zip at all, a zip with no Word document part,
+         *  or plain text whose bytes are not usable text — indistinguishable
+         *  from each other in code, so one shared message. */
+        data class ContentMismatch(val fileName: String) : Result()
+
+        /** Row 9: a .docx whose document part was located but could not be
+         *  read — positive evidence of a genuine, damaged Word file. */
+        data class Corrupted(val fileName: String) : Result()
+
+        /** Row 11: opened fine, but there was nothing in it. */
         data class Empty(val fileName: String) : Result()
+
+        /** Row 12: any other, unanticipated failure. */
+        data class Unknown(val fileName: String) : Result()
     }
 
     /** MIME types offered to the system file picker. */
@@ -65,36 +96,58 @@ object DocumentImporter {
     )
 
     fun import(context: Context, uri: Uri): Result {
+        return try {
+            importOrThrow(context, uri)
+        } catch (_: Exception) {
+            // A failure not already caught by a more specific case below —
+            // row 12 of the approved mapping.
+            Result.Unknown(displayNameSafely(context, uri))
+        }
+    }
+
+    private fun importOrThrow(context: Context, uri: Uri): Result {
         val fileName = displayName(context, uri)
         val kind = IncludeKind.fromFileName(fileName)
             ?: kindFromMime(context.contentResolver.getType(uri))
             ?: return Result.Unsupported(fileName)
 
-        val bytes = try {
-            context.contentResolver.openInputStream(uri)?.use { stream ->
-                stream.readBytesCapped(MAX_BYTES)
-            } ?: return Result.Unreadable(fileName)
+        val inputStream = try {
+            context.contentResolver.openInputStream(uri)
+        } catch (_: SecurityException) {
+            return Result.PermissionDenied(fileName)
         } catch (_: Exception) {
-            return Result.Unreadable(fileName)
+            return openFailureResult(context, uri, fileName)
+        }
+
+        if (inputStream == null) return openFailureResult(context, uri, fileName)
+
+        val bytes = try {
+            inputStream.use { it.readBytesCapped(MAX_BYTES) }
+        } catch (_: Exception) {
+            // The file opened successfully; failing partway through reading
+            // it is row 5, not an open failure.
+            return Result.InterruptedRead(fileName)
         }
 
         if (bytes.isEmpty()) return Result.Empty(fileName)
 
         val text = when (kind) {
-            IncludeKind.DOCX -> try {
-                DocxTextExtractor.extract(bytes.inputStream())
-            } catch (_: Exception) {
-                null
-            } ?: return Result.NotText(fileName)
+            IncludeKind.DOCX -> when (val extracted = DocxTextExtractor.extract(bytes)) {
+                is DocxTextExtractor.ExtractResult.Success -> extracted.text
+                DocxTextExtractor.ExtractResult.NotDocx -> return Result.ContentMismatch(fileName)
+                DocxTextExtractor.ExtractResult.PasswordProtected -> return Result.PasswordProtected(fileName)
+                DocxTextExtractor.ExtractResult.Corrupted -> return Result.Corrupted(fileName)
+            }
 
-            else -> decodeText(bytes) ?: return Result.NotText(fileName)
+            else -> decodeText(bytes) ?: return Result.ContentMismatch(fileName)
         }
 
         if (text.isBlank()) return Result.Empty(fileName)
         // A .docx that parsed is text by construction; the guard is for files
-        // claiming to be plain text that are really binary.
+        // claiming to be plain text that are really binary — indistinguishable
+        // from a corrupted text file, so it shares ContentMismatch (row 10).
         if (kind != IncludeKind.DOCX && !IncludeTextPolicy.looksLikeText(text)) {
-            return Result.NotText(fileName)
+            return Result.ContentMismatch(fileName)
         }
 
         val sized = IncludeTextPolicy.applySizeGuard(text, kind)
@@ -108,6 +161,33 @@ object DocumentImporter {
                 notice = sized.notice
             )
         )
+    }
+
+    /**
+     * Distinguishes rows 3 and 4 for an open failure: if the content
+     * provider itself resolves, the failure is the FILE (moved/deleted); if
+     * it does not, the failure is the SOURCE APP (gone or not responding).
+     */
+    private fun openFailureResult(context: Context, uri: Uri, fileName: String): Result =
+        if (providerResolves(context, uri)) {
+            Result.FileGone(fileName)
+        } else {
+            Result.SourceUnavailable(fileName)
+        }
+
+    private fun providerResolves(context: Context, uri: Uri): Boolean {
+        val authority = uri.authority ?: return false
+        return try {
+            context.packageManager.resolveContentProvider(authority, 0) != null
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun displayNameSafely(context: Context, uri: Uri): String = try {
+        displayName(context, uri)
+    } catch (_: Exception) {
+        "document"
     }
 
     /**
