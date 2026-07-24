@@ -22,9 +22,11 @@ import android.content.res.Configuration
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.text.InputType
 import android.view.View
 import android.view.WindowInsets
 import android.widget.ArrayAdapter
+import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -44,6 +46,7 @@ import com.google.android.material.progressindicator.CircularProgressIndicator
 import android.provider.DocumentsContract
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
+import org.teslasoft.assistant.preferences.StartupHealth
 import org.teslasoft.assistant.preferences.backup.AutoBackupController
 import org.teslasoft.assistant.preferences.backup.AutoBackupFailureReason
 import org.teslasoft.assistant.preferences.backup.AutoBackupScheduler
@@ -59,6 +62,7 @@ import org.teslasoft.assistant.preferences.backup.ByteSizeFormatter
 import org.teslasoft.assistant.preferences.backup.DatabaseHealthChecker
 import org.teslasoft.assistant.preferences.backup.DatabaseHealthState
 import org.teslasoft.assistant.preferences.backup.DatabaseRepairManager
+import org.teslasoft.assistant.preferences.backup.DatabaseRestoreManager
 import org.teslasoft.assistant.preferences.backup.RecoveryBackupState
 import org.teslasoft.assistant.preferences.backup.RecoveryFileNaming
 import org.teslasoft.assistant.ui.DatabaseRecoveryFlows
@@ -138,6 +142,25 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
     private var btnHealthRevertLorebook: MaterialButton? = null
     private var btnHealthRepairUserImage: MaterialButton? = null
     private var btnHealthRevertUserImage: MaterialButton? = null
+    private var healthButtonsMemory: LinearLayout? = null
+    private var healthButtonsLorebook: LinearLayout? = null
+    private var healthButtonsUserImage: LinearLayout? = null
+    private var healthProgressMemory: LinearLayout? = null
+    private var healthProgressLorebook: LinearLayout? = null
+    private var healthProgressUserImage: LinearLayout? = null
+    private var healthSpinnerMemory: CircularProgressIndicator? = null
+    private var healthSpinnerLorebook: CircularProgressIndicator? = null
+    private var healthSpinnerUserImage: CircularProgressIndicator? = null
+    private var healthProgressTextMemory: TextView? = null
+    private var healthProgressTextLorebook: TextView? = null
+    private var healthProgressTextUserImage: TextView? = null
+
+    /** Inline results live until this screen closes. A successful repair or
+     *  restore removes the action buttons but leaves its result line visible,
+     *  exactly where the spinner was. */
+    private val inlineMessages = LinkedHashMap<BackupType, String>()
+    private val inlineBusy = HashSet<BackupType>()
+    private val inlineCompleted = HashSet<BackupType>()
 
     // 3. Recovery Backup (manual)
     private var btnCreateRecovery: MaterialButton? = null
@@ -148,6 +171,17 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
     private var textRecoveryTypeUnencryptedSummary: TextView? = null
     private var btnRecoveryType: TextView? = null
     private var recoveryTypeProtected = true
+    private var btnRestoreType: TextView? = null
+    private var btnRestoreDatabase: MaterialButton? = null
+    private var restoreProgress: LinearLayout? = null
+    private var restoreSpinner: CircularProgressIndicator? = null
+    private var restoreProgressText: TextView? = null
+
+    private var generalRestoreType = BackupType.MEMORY
+    private var pendingRestoreType = BackupType.MEMORY
+    private var pendingRestoreInlineType: BackupType? = null
+    private var pendingUnlock: DatabaseRestoreManager.PendingCode? = null
+    private var pendingPrepared: DatabaseRestoreManager.Prepared? = null
 
     // 4. Human-Readable Chat Backup (Widget.App.Dropdown.* fields)
     private var btnReadableScope: TextView? = null
@@ -206,6 +240,18 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         if (uri != null) onFolderChosen(uri) else onFolderPickCancelled()
     }
 
+    private val restoreFilePicker = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) prepareRestoreFile(uri) else endRestoreSelection()
+    }
+
+    private val restoreFolderPicker = registerForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri != null) prepareRestoreFolder(uri) else endRestoreSelection()
+    }
+
     private val readableSaveLauncher = registerForActivityResult(
         ActivityResultContracts.CreateDocument("application/zip")
     ) { uri -> onReadableSaveAsResult(uri) }
@@ -221,6 +267,8 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
     private var stagedReadableSha: ByteArray? = null
     private var stagedReadableFingerprints: Map<String, String>? = null
     private var stagedReadableIncremental = false
+    private var restoreFlowActive = false
+    private var nonCancelableDatabaseOperation = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -281,6 +329,18 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         btnHealthRevertLorebook = findViewById(R.id.btn_health_revert_lorebook)
         btnHealthRepairUserImage = findViewById(R.id.btn_health_repair_userimage)
         btnHealthRevertUserImage = findViewById(R.id.btn_health_revert_userimage)
+        healthButtonsMemory = findViewById(R.id.health_buttons_memory)
+        healthButtonsLorebook = findViewById(R.id.health_buttons_lorebook)
+        healthButtonsUserImage = findViewById(R.id.health_buttons_userimage)
+        healthProgressMemory = findViewById(R.id.health_progress_memory)
+        healthProgressLorebook = findViewById(R.id.health_progress_lorebook)
+        healthProgressUserImage = findViewById(R.id.health_progress_userimage)
+        healthSpinnerMemory = findViewById(R.id.health_spinner_memory)
+        healthSpinnerLorebook = findViewById(R.id.health_spinner_lorebook)
+        healthSpinnerUserImage = findViewById(R.id.health_spinner_userimage)
+        healthProgressTextMemory = findViewById(R.id.health_progress_text_memory)
+        healthProgressTextLorebook = findViewById(R.id.health_progress_text_lorebook)
+        healthProgressTextUserImage = findViewById(R.id.health_progress_text_userimage)
 
         btnCreateRecovery = findViewById(R.id.btn_create_recovery)
         textManualLocation = findViewById(R.id.text_manual_location)
@@ -289,6 +349,11 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         textRecoveryTypeProtectedSummary = findViewById(R.id.text_recovery_type_protected_summary)
         textRecoveryTypeUnencryptedSummary = findViewById(R.id.text_recovery_type_unencrypted_summary)
         btnRecoveryType = findViewById(R.id.btn_recovery_type)
+        btnRestoreType = findViewById(R.id.btn_restore_type)
+        btnRestoreDatabase = findViewById(R.id.btn_restore_database)
+        restoreProgress = findViewById(R.id.restore_progress)
+        restoreSpinner = findViewById(R.id.restore_spinner)
+        restoreProgressText = findViewById(R.id.restore_progress_text)
 
         btnReadableScope = findViewById(R.id.btn_readable_scope)
         btnReadableFormat = findViewById(R.id.btn_readable_format)
@@ -336,27 +401,23 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         btnBack?.setOnClickListener { finish() }
 
         /* ---- 1. Backup Status: per-database inline recovery actions ---- */
-        // Same entry points as the A1 dialog: runRepair is non-destructive
-        // salvage; runRevert verifies a backup and shows the "Restore from
-        // Backup?" confirmation before overwriting. Both refresh the rows
-        // (and re-hide these buttons) when the store is healthy again.
         btnHealthRepairMemory?.setOnClickListener {
-            DatabaseRecoveryFlows.runRepair(this, BackupType.MEMORY) { refreshBackupStatus() }
+            runInlineRepair(BackupType.MEMORY)
         }
         btnHealthRevertMemory?.setOnClickListener {
-            DatabaseRecoveryFlows.runRevert(this, BackupType.MEMORY) { refreshBackupStatus() }
+            showRestoreChoice(BackupType.MEMORY, BackupType.MEMORY)
         }
         btnHealthRepairLorebook?.setOnClickListener {
-            DatabaseRecoveryFlows.runRepair(this, BackupType.LOREBOOK) { refreshBackupStatus() }
+            runInlineRepair(BackupType.LOREBOOK)
         }
         btnHealthRevertLorebook?.setOnClickListener {
-            DatabaseRecoveryFlows.runRevert(this, BackupType.LOREBOOK) { refreshBackupStatus() }
+            showRestoreChoice(BackupType.LOREBOOK, BackupType.LOREBOOK)
         }
         btnHealthRepairUserImage?.setOnClickListener {
-            DatabaseRecoveryFlows.runRepair(this, BackupType.USER_IMAGE) { refreshBackupStatus() }
+            runInlineRepair(BackupType.USER_IMAGE)
         }
         btnHealthRevertUserImage?.setOnClickListener {
-            DatabaseRecoveryFlows.runRevert(this, BackupType.USER_IMAGE) { refreshBackupStatus() }
+            showRestoreChoice(BackupType.USER_IMAGE, BackupType.USER_IMAGE)
         }
 
         /* ---- 2. Database Health ---- */
@@ -373,6 +434,11 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
                 Intent(this, RecoveryBackupActivity::class.java)
                     .putExtra(RecoveryBackupActivity.EXTRA_RECOVERY_PROTECTED, recoveryTypeProtected)
             )
+        }
+        updateRestoreTypeLabel()
+        btnRestoreType?.setOnClickListener { pickRestoreType() }
+        btnRestoreDatabase?.setOnClickListener {
+            showRestoreChoice(generalRestoreType, null)
         }
 
         /* ---- 4. Human-Readable Chat Backup ---- */
@@ -428,7 +494,454 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         b.show()
     }
 
+    @Deprecated("Back is deliberately blocked only during a database mutation")
+    override fun onBackPressed() {
+        if (nonCancelableDatabaseOperation) return
+        super.onBackPressed()
+    }
+
+    /* ------------------------------ database repair + restore ------------------------------ */
+
+    private enum class RestoreSource { CURRENT, FILE, FOLDER }
+
+    private data class InlineViews(
+        val outer: LinearLayout?,
+        val buttons: LinearLayout?,
+        val progress: LinearLayout?,
+        val spinner: CircularProgressIndicator?,
+        val text: TextView?,
+        val repair: MaterialButton?,
+        val restore: MaterialButton?
+    )
+
+    private fun inlineViews(type: BackupType): InlineViews = when (type) {
+        BackupType.MEMORY -> InlineViews(
+            healthActionsMemory, healthButtonsMemory, healthProgressMemory,
+            healthSpinnerMemory, healthProgressTextMemory,
+            btnHealthRepairMemory, btnHealthRevertMemory
+        )
+        BackupType.LOREBOOK -> InlineViews(
+            healthActionsLorebook, healthButtonsLorebook, healthProgressLorebook,
+            healthSpinnerLorebook, healthProgressTextLorebook,
+            btnHealthRepairLorebook, btnHealthRevertLorebook
+        )
+        BackupType.USER_IMAGE -> InlineViews(
+            healthActionsUserImage, healthButtonsUserImage, healthProgressUserImage,
+            healthSpinnerUserImage, healthProgressTextUserImage,
+            btnHealthRepairUserImage, btnHealthRevertUserImage
+        )
+        BackupType.CHATS -> InlineViews(null, null, null, null, null, null, null)
+    }
+
+    private fun restoreTypeLabel(type: BackupType): String = getString(
+        when (type) {
+            BackupType.MEMORY -> R.string.restore_type_memory
+            BackupType.LOREBOOK -> R.string.restore_type_lorebook
+            BackupType.USER_IMAGE -> R.string.restore_type_user_image
+            BackupType.CHATS -> R.string.backup_type_chats
+        }
+    )
+
+    private fun applyInlineState(type: BackupType) {
+        if (type == BackupType.CHATS) return
+        val views = inlineViews(type)
+        val degraded = DatabaseHealthState.isDegraded(this, type)
+        val message = inlineMessages[type]
+        val busy = type in inlineBusy
+        val completed = type in inlineCompleted
+        views.outer?.visibility = if (degraded || message != null) View.VISIBLE else View.GONE
+        views.buttons?.visibility = if (degraded && !completed) View.VISIBLE else View.GONE
+        views.repair?.isEnabled = !busy && !restoreFlowActive
+        views.restore?.isEnabled = !busy && !restoreFlowActive
+        views.progress?.visibility = if (message != null) View.VISIBLE else View.GONE
+        views.spinner?.visibility = if (busy) View.VISIBLE else View.GONE
+        views.text?.text = message
+    }
+
+    private fun setRestoreStatus(
+        inlineType: BackupType?,
+        message: String?,
+        busy: Boolean,
+        completed: Boolean = false
+    ) {
+        if (inlineType != null) {
+            if (message == null) inlineMessages.remove(inlineType) else inlineMessages[inlineType] = message
+            if (busy) inlineBusy.add(inlineType) else inlineBusy.remove(inlineType)
+            if (completed) inlineCompleted.add(inlineType)
+            applyInlineState(inlineType)
+        } else {
+            restoreProgress?.visibility = if (message != null) View.VISIBLE else View.GONE
+            restoreSpinner?.visibility = if (busy) View.VISIBLE else View.GONE
+            restoreProgressText?.text = message
+            btnRestoreDatabase?.isEnabled = !busy && !restoreFlowActive
+            btnRestoreType?.isEnabled = !busy && !restoreFlowActive
+        }
+    }
+
+    private fun setRestoreFlowActive(active: Boolean) {
+        restoreFlowActive = active
+        btnRestoreDatabase?.isEnabled = !active
+        btnRestoreType?.isEnabled = !active
+        DatabaseHealthState.databaseTypes.forEach { applyInlineState(it) }
+    }
+
+    private fun setDatabaseMutationRunning(running: Boolean) {
+        nonCancelableDatabaseOperation = running
+        btnBack?.isEnabled = !running
+    }
+
+    private fun runInlineRepair(type: BackupType) {
+        if (type in inlineBusy || restoreFlowActive) return
+        setRestoreFlowActive(true)
+        setDatabaseMutationRunning(true)
+        setRestoreStatus(type, getString(R.string.restore_repair_running), busy = true)
+        runOffThread {
+            val outcome = DatabaseRepairManager.attemptRepair(applicationContext, type)
+            runOnUiThread {
+                setDatabaseMutationRunning(false)
+                setRestoreFlowActive(false)
+                StartupHealth.setIntegrityCheckPending(this, DatabaseHealthState.anyDegraded(this))
+                if (outcome.ok) {
+                    setRestoreStatus(
+                        type, getString(R.string.restore_repair_success),
+                        busy = false, completed = true
+                    )
+                } else {
+                    setRestoreStatus(type, getString(R.string.restore_repair_failed), busy = false)
+                }
+                refreshBackupStatus()
+            }
+        }
+    }
+
+    private fun updateRestoreTypeLabel() {
+        btnRestoreType?.text = restoreTypeLabel(generalRestoreType)
+    }
+
+    private fun pickRestoreType() {
+        if (restoreFlowActive) return
+        val anchor = btnRestoreType ?: return
+        val types = arrayOf(BackupType.MEMORY, BackupType.LOREBOOK, BackupType.USER_IMAGE)
+        showFieldDropdown(anchor, types.map { restoreTypeLabel(it) }) { position ->
+            generalRestoreType = types[position]
+            updateRestoreTypeLabel()
+        }
+    }
+
+    private fun showRestoreChoice(type: BackupType, inlineType: BackupType?) {
+        if (restoreFlowActive) return
+        setRestoreFlowActive(true)
+        pendingRestoreType = type
+        pendingRestoreInlineType = inlineType
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(getString(R.string.restore_database))
+            .setMessage(R.string.restore_dialog_body)
+            .setPositiveButton(R.string.health_btn_revert) { _, _ ->
+                prepareLastGood(type, inlineType)
+            }
+            .setNeutralButton(R.string.restore_choose_another) { _, _ ->
+                showChooseRestoreSource(type, inlineType)
+            }
+            .setNegativeButton(R.string.btn_cancel) { _, _ -> endRestoreSelection() }
+            .setOnCancelListener { endRestoreSelection() }
+            .show()
+    }
+
+    private fun showChooseRestoreSource(type: BackupType, inlineType: BackupType?) {
+        pendingRestoreType = type
+        pendingRestoreInlineType = inlineType
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.restore_choose_source_title)
+            .setMessage(R.string.restore_dialog_body)
+            .setPositiveButton(R.string.restore_choose_file) { _, _ ->
+                restoreFilePicker.launch(arrayOf("*/*"))
+            }
+            .setNeutralButton(R.string.restore_choose_folder) { _, _ ->
+                restoreFolderPicker.launch(null)
+            }
+            .setNegativeButton(R.string.btn_cancel) { _, _ -> endRestoreSelection() }
+            .setOnCancelListener { endRestoreSelection() }
+            .show()
+    }
+
+    private fun prepareLastGood(type: BackupType, inlineType: BackupType?) {
+        setRestoreStatus(inlineType, getString(R.string.restore_finding_backup), busy = true)
+        runOffThread {
+            val result = DatabaseRestoreManager.prepareLastGood(applicationContext, type)
+            runOnUiThread { handlePrepareResult(result, RestoreSource.CURRENT, inlineType) }
+        }
+    }
+
+    private fun prepareRestoreFile(uri: Uri) {
+        val type = pendingRestoreType
+        val inlineType = pendingRestoreInlineType
+        setRestoreStatus(inlineType, getString(R.string.restore_checking_backup), busy = true)
+        runOffThread {
+            val result = DatabaseRestoreManager.prepareFile(applicationContext, type, uri)
+            runOnUiThread { handlePrepareResult(result, RestoreSource.FILE, inlineType) }
+        }
+    }
+
+    private fun prepareRestoreFolder(uri: Uri) {
+        val type = pendingRestoreType
+        val inlineType = pendingRestoreInlineType
+        setRestoreStatus(inlineType, getString(R.string.restore_checking_backup), busy = true)
+        runOffThread {
+            val result = DatabaseRestoreManager.prepareFolder(applicationContext, type, uri)
+            runOnUiThread { handlePrepareResult(result, RestoreSource.FOLDER, inlineType) }
+        }
+    }
+
+    private fun handlePrepareResult(
+        result: DatabaseRestoreManager.PrepareResult,
+        source: RestoreSource,
+        inlineType: BackupType?
+    ) {
+        if (isFinishing) {
+            when (result) {
+                is DatabaseRestoreManager.PrepareResult.Ready -> result.prepared.discard()
+                is DatabaseRestoreManager.PrepareResult.Mismatch -> result.prepared.discard()
+                is DatabaseRestoreManager.PrepareResult.NeedsRecoveryCode -> result.pending.discard()
+                else -> Unit
+            }
+            return
+        }
+        when (result) {
+            is DatabaseRestoreManager.PrepareResult.Ready ->
+                showRestoreConfirmation(result.prepared, inlineType)
+
+            is DatabaseRestoreManager.PrepareResult.NeedsRecoveryCode -> {
+                pendingUnlock?.discard()
+                pendingUnlock = result.pending
+                setRestoreStatus(inlineType, null, busy = false)
+                showRecoveryCodeDialog(result.pending, source, inlineType)
+            }
+
+            is DatabaseRestoreManager.PrepareResult.Mismatch -> {
+                setRestoreStatus(inlineType, null, busy = false)
+                val requested = restoreTypeLabel(pendingRestoreType)
+                val actual = restoreTypeLabel(result.actualType)
+                MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+                    .setMessage(getString(R.string.restore_mismatch, requested, actual))
+                    .setPositiveButton(R.string.restore_proceed) { _, _ ->
+                        // The operation now targets the database the file
+                        // actually contains. The ordinary dated confirmation
+                        // still follows; Proceed never overwrites immediately.
+                        pendingRestoreType = result.actualType
+                        showRestoreConfirmation(result.prepared, null)
+                    }
+                    .setNegativeButton(R.string.btn_cancel) { _, _ ->
+                        result.prepared.discard()
+                        endRestoreSelection()
+                    }
+                    .setOnCancelListener {
+                        result.prepared.discard()
+                        endRestoreSelection()
+                    }
+                    .show()
+            }
+
+            is DatabaseRestoreManager.PrepareResult.Failed ->
+                handlePrepareFailure(result.reason, source, inlineType)
+        }
+    }
+
+    private fun showRecoveryCodeDialog(
+        pending: DatabaseRestoreManager.PendingCode,
+        source: RestoreSource,
+        inlineType: BackupType?
+    ) {
+        val input = EditText(this).apply {
+            hint = getString(R.string.restore_recovery_code_hint)
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+            setSingleLine(false)
+            setPadding(48, 12, 48, 12)
+        }
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.restore_recovery_code_title)
+            .setMessage(R.string.restore_recovery_code_body)
+            .setView(input)
+            .setPositiveButton(R.string.health_btn_restore) { _, _ ->
+                val code = input.text?.toString().orEmpty()
+                setRestoreStatus(inlineType, getString(R.string.restore_checking_backup), busy = true)
+                runOffThread {
+                    val unlocked = DatabaseRestoreManager.unlockWithCode(
+                        applicationContext, pending, code
+                    )
+                    runOnUiThread {
+                        if (unlocked is DatabaseRestoreManager.PrepareResult.Failed &&
+                            (unlocked.reason == DatabaseRestoreManager.Failure.INVALID_RECOVERY_CODE ||
+                                unlocked.reason == DatabaseRestoreManager.Failure.WRONG_RECOVERY_KEY)
+                        ) {
+                            setRestoreStatus(inlineType, null, busy = false)
+                            MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+                                .setMessage(
+                                    if (unlocked.reason == DatabaseRestoreManager.Failure.INVALID_RECOVERY_CODE)
+                                        R.string.backup_err_mistyped_code
+                                    else R.string.backup_err_wrong_key_or_header
+                                )
+                                .setPositiveButton(R.string.btn_ok) { _, _ ->
+                                    showRecoveryCodeDialog(pending, source, inlineType)
+                                }
+                                .setNegativeButton(R.string.btn_cancel) { _, _ ->
+                                    pending.discard()
+                                    if (pendingUnlock === pending) pendingUnlock = null
+                                    endRestoreSelection()
+                                }
+                                .setOnCancelListener {
+                                    pending.discard()
+                                    if (pendingUnlock === pending) pendingUnlock = null
+                                    endRestoreSelection()
+                                }
+                                .show()
+                        } else {
+                            pendingUnlock = null
+                            handlePrepareResult(unlocked, source, inlineType)
+                        }
+                    }
+                }
+            }
+            .setNegativeButton(R.string.btn_cancel) { _, _ ->
+                pending.discard()
+                if (pendingUnlock === pending) pendingUnlock = null
+                endRestoreSelection()
+            }
+            .setOnCancelListener {
+                pending.discard()
+                if (pendingUnlock === pending) pendingUnlock = null
+                endRestoreSelection()
+            }
+            .show()
+    }
+
+    private fun showRestoreConfirmation(
+        prepared: DatabaseRestoreManager.Prepared,
+        inlineType: BackupType?
+    ) {
+        pendingPrepared?.discard()
+        pendingPrepared = prepared
+        setRestoreStatus(inlineType, null, busy = false)
+        val body = getString(
+            R.string.restore_confirm_body,
+            restoreTypeLabel(prepared.type),
+            BackupStatusFormatter.formatDate(prepared.backupAtMillis)
+        )
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.restore_confirm_title)
+            .setMessage(body)
+            .setPositiveButton(R.string.health_btn_restore) { _, _ ->
+                pendingPrepared = null
+                executePreparedRestore(prepared, inlineType)
+            }
+            .setNegativeButton(R.string.btn_cancel) { _, _ ->
+                prepared.discard()
+                if (pendingPrepared === prepared) pendingPrepared = null
+                endRestoreSelection()
+            }
+            .setOnCancelListener {
+                prepared.discard()
+                if (pendingPrepared === prepared) pendingPrepared = null
+                endRestoreSelection()
+            }
+            .show()
+    }
+
+    private fun executePreparedRestore(
+        prepared: DatabaseRestoreManager.Prepared,
+        inlineType: BackupType?
+    ) {
+        setDatabaseMutationRunning(true)
+        setRestoreStatus(inlineType, getString(R.string.restore_replacing_database), busy = true)
+        runOffThread {
+            val outcome = try {
+                DatabaseRestoreManager.restore(applicationContext, prepared)
+            } finally {
+                prepared.discard()
+            }
+            runOnUiThread {
+                setDatabaseMutationRunning(false)
+                setRestoreFlowActive(false)
+                StartupHealth.setIntegrityCheckPending(this, DatabaseHealthState.anyDegraded(this))
+                if (outcome.ok) {
+                    setRestoreStatus(
+                        inlineType, getString(R.string.restore_database_success),
+                        busy = false, completed = inlineType != null
+                    )
+                } else {
+                    setRestoreStatus(
+                        inlineType, getString(R.string.restore_database_failed), busy = false
+                    )
+                }
+                refreshBackupStatus()
+            }
+        }
+    }
+
+    private fun handlePrepareFailure(
+        reason: DatabaseRestoreManager.Failure,
+        source: RestoreSource,
+        inlineType: BackupType?
+    ) {
+        val message = when (reason) {
+            DatabaseRestoreManager.Failure.NO_APPROPRIATE_DATABASE ->
+                getString(R.string.restore_no_appropriate_database)
+            DatabaseRestoreManager.Failure.NO_VALID_DATABASES -> getString(
+                when (source) {
+                    RestoreSource.FILE -> R.string.restore_no_valid_file
+                    RestoreSource.FOLDER -> R.string.restore_no_valid_folder
+                    RestoreSource.CURRENT -> R.string.restore_no_current_backup
+                }
+            )
+            DatabaseRestoreManager.Failure.AUTOMATIC_KEY_OR_DAMAGE ->
+                getString(R.string.restore_automatic_key_or_damage)
+            DatabaseRestoreManager.Failure.DAMAGED_OR_ALTERED ->
+                getString(R.string.backup_err_damaged)
+            DatabaseRestoreManager.Failure.UNSUPPORTED_PROTECTION ->
+                getString(R.string.backup_err_unsupported_protection)
+            DatabaseRestoreManager.Failure.INVALID_RECOVERY_CODE ->
+                getString(R.string.backup_err_mistyped_code)
+            DatabaseRestoreManager.Failure.WRONG_RECOVERY_KEY ->
+                getString(R.string.backup_err_wrong_key_or_header)
+            DatabaseRestoreManager.Failure.SOURCE_UNAVAILABLE ->
+                getString(R.string.restore_source_unavailable)
+            DatabaseRestoreManager.Failure.RESTORE_FAILED ->
+                getString(R.string.restore_database_failed)
+        }
+        setRestoreStatus(inlineType, message, busy = false)
+
+        if (source == RestoreSource.CURRENT) {
+            MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+                .setMessage(message)
+                .setPositiveButton(R.string.restore_choose_another) { _, _ ->
+                    showChooseRestoreSource(pendingRestoreType, inlineType)
+                }
+                .setNegativeButton(R.string.btn_cancel) { _, _ -> endRestoreSelection() }
+                .setOnCancelListener { endRestoreSelection() }
+                .show()
+        } else {
+            endRestoreSelection()
+        }
+    }
+
+    private fun endRestoreSelection() {
+        pendingUnlock?.discard()
+        pendingUnlock = null
+        pendingPrepared?.discard()
+        pendingPrepared = null
+        setRestoreFlowActive(false)
+        val inlineType = pendingRestoreInlineType
+        if (inlineType != null && inlineType !in inlineMessages) {
+            setRestoreStatus(inlineType, null, busy = false)
+        } else if (inlineType == null && restoreProgressText?.text.isNullOrEmpty()) {
+            setRestoreStatus(null, null, busy = false)
+        }
+    }
+
     override fun onDestroy() {
+        pendingUnlock?.discard()
+        pendingUnlock = null
+        pendingPrepared?.discard()
+        pendingPrepared = null
         cleanupStagedReadable()
         super.onDestroy()
     }
@@ -977,20 +1490,14 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
                     lastSuccessMillis = lastSuccess, lastFailed = failed, templates = templates
                 )
             }
-            // Inline recovery actions are gated STRICTLY on confirmed
-            // corruption (isDegraded), never on a backup-failure status — a
-            // space/permission failure must never surface repair language.
-            val memoryDegraded = DatabaseHealthState.isDegraded(this, BackupType.MEMORY)
-            val lorebookDegraded = DatabaseHealthState.isDegraded(this, BackupType.LOREBOOK)
-            val userImageDegraded = DatabaseHealthState.isDegraded(this, BackupType.USER_IMAGE)
             runOnUiThread {
                 textStatusMemory?.text = lines[BackupType.MEMORY]
                 textStatusLorebooks?.text = lines[BackupType.LOREBOOK]
                 textStatusChats?.text = lines[BackupType.CHATS]
                 textStatusUserImage?.text = lines[BackupType.USER_IMAGE]
-                healthActionsMemory?.visibility = if (memoryDegraded) View.VISIBLE else View.GONE
-                healthActionsLorebook?.visibility = if (lorebookDegraded) View.VISIBLE else View.GONE
-                healthActionsUserImage?.visibility = if (userImageDegraded) View.VISIBLE else View.GONE
+                applyInlineState(BackupType.MEMORY)
+                applyInlineState(BackupType.LOREBOOK)
+                applyInlineState(BackupType.USER_IMAGE)
             }
         }
     }
