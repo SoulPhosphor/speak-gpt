@@ -1414,7 +1414,10 @@
     <string name="recovery_fail_nothing">There is nothing to back up.</string>
     <!-- Supporting UI chrome for the recovery flow (NOT part of the owner's
          verbatim set — plain functional labels; flagged for owner review). -->
-    <string name="recovery_title">Recovery Backup</string>
+    <!-- RecoveryBackupActivity now handles ONLY the one-time Protected
+         Recovery Code setup/confirmation; the actual save runs inline on the
+         Memory Backup & Restore screen (owner directive, July 24 2026). -->
+    <string name="recovery_setup_title">Set Up Protected Recovery</string>
     <string name="recovery_your_code">Your Recovery Code</string>
     <string name="recovery_continue">Continue</string>
     <string name="recovery_confirm">Confirm</string>
@@ -1425,17 +1428,13 @@
     <string name="recovery_password_mismatch">The passwords do not match.</string>
     <string name="recovery_confirm_wrong">That code does not match. Check what you recorded and try again.</string>
     <string name="recovery_creating">Creating backup…</string>
-    <string name="recovery_preparing">Preparing backup. You will choose where to save it when it is ready.</string>
-    <string name="recovery_saving">Saving backup…</string>
     <!-- One optional plain-words detail line under recovery_fail_chats_unavailable,
          chosen by which part of chat storage failed — diagnosis for the user in
          human terms, never an enum or exception name. -->
     <string name="recovery_fail_chats_detail_list">The list of chats could not be read.</string>
     <string name="recovery_fail_chats_detail_history">The messages of one of your chats could not be read.</string>
     <string name="recovery_fail_chats_detail_settings">The settings of one of your chats could not be read.</string>
-    <string name="recovery_saved_to">Saved to %1$s</string>
     <string name="recovery_saved_file">File %1$s</string>
-    <string name="recovery_saved_generic">Recovery backup saved.</string>
     <string name="recovery_code_copied">Recovery Code copied.</string>
     <string name="recovery_key_saved">Recovery Key file saved.</string>
     <!-- The user-visible backup filename BRAND (owner filename architecture,
@@ -1459,14 +1458,21 @@
     <string name="recovery_type_label">Recovery Type</string>
     <string name="backup_current_location">Current Backup Location: %1$s</string>
     <string name="backup_location_none">No backup folder selected</string>
-    <string name="backup_change_location">Change Backup Location</string>
-    <string name="backup_create">Create Backup</string>
     <!-- Friendly backup-folder display (owner correction, July 22 2026): a
          location line may show a stored human-readable folder label, one of
          these two phrases, or "No backup folder selected" — NEVER a raw URI,
          tree document id, or provider authority string. -->
     <string name="backup_location_selected_generic">Selected folder location</string>
     <string name="backup_location_unavailable">Folder unavailable. Choose a new location.</string>
+    <!-- Recovery Backup save flow (owner directive, July 24 2026): one tap
+         opens the system Save dialog directly; everything after that is
+         inline text under the button — no separate build/result screens. -->
+    <string name="backup_recovery_location">Recovery Backup Location: %1$s</string>
+    <string name="backup_recovery_location_none">No recovery backup created yet.</string>
+    <string name="backup_recovery_preparing">Preparing Recovery Backup…</string>
+    <string name="backup_recovery_saving">Saving Recovery Backup…</string>
+    <string name="backup_recovery_success">Recovery Backup Successful!</string>
+    <string name="backup_recovery_cancelled">Cancelled.</string>
     <!-- 4. Human-Readable Chat Backup (new section — owner directive, July 22
          2026: separate from Recovery Backup and from Portable Data Copy). -->
     <string name="backup_readable_section">Human-Readable Chat Backup</string>

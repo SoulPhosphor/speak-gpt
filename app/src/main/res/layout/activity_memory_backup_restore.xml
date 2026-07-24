@@ -229,13 +229,23 @@
                     android:layout_weight="1" />
             </LinearLayout>
 
-            <!-- Portable recovery (format v2) entry — the owner-approved
-                 Create Recovery Backup flow, now the ONLY manual backup control.
-                 The installation-bound v1 controls (text_manual_location,
-                 btn_change_manual_location, btn_create_backup) are HIDDEN (owner
-                 ruling, July 22 2026, correction 1): kept in the tree so the
-                 activity's existing bindings/logic still resolve, but never
-                 shown. Do not un-hide without the owner's word. -->
+            <!-- Recovery Backup: one tap opens the system Save dialog directly
+                 (owner directive, July 24 2026 — supersedes the earlier
+                 multi-screen build/result flow). The location line shows
+                 where the last one landed, same breadcrumb format as
+                 Automatic Backup Location below; the spinner + status row
+                 underneath the button carries Preparing/Saving/Successful/
+                 failure text inline, matching the Human-Readable Chat Backup
+                 and Automatic Backups sections — no screen change. -->
+            <TextView
+                android:id="@+id/text_recovery_location"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="16dp"
+                android:textColor="@color/text"
+                android:textIsSelectable="true"
+                android:textSize="15sp" />
+
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_create_recovery"
                 style="@style/AppButton.Primary"
@@ -244,33 +254,34 @@
                 android:layout_marginTop="12dp"
                 android:text="@string/recovery_create" />
 
-            <TextView
-                android:id="@+id/text_manual_location"
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:paddingTop="16dp"
-                android:textColor="@color/text"
-                android:textIsSelectable="true"
-                android:textSize="15sp"
-                android:visibility="gone" />
+                android:layout_marginTop="8dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_change_manual_location"
-                style="@style/AppButton.Primary"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:text="@string/backup_change_location"
-                android:visibility="gone" />
+                <com.google.android.material.progressindicator.CircularProgressIndicator
+                    android:id="@+id/spinner_recovery_status"
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:layout_marginEnd="10dp"
+                    android:indeterminate="true"
+                    android:visibility="gone"
+                    app:indicatorSize="18dp"
+                    app:trackThickness="2dp"
+                    style="@style/Widget.Material3.CircularProgressIndicator" />
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_create_backup"
-                style="@style/AppButton.Primary"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:text="@string/backup_create"
-                android:visibility="gone" />
+                <TextView
+                    android:id="@+id/text_recovery_status"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:textColor="@color/text"
+                    android:textIsSelectable="true"
+                    android:textSize="13sp"
+                    android:visibility="gone" />
+            </LinearLayout>
 
             <!-- ============ 4. Human-Readable Chat Backup ============ -->
             <TextView

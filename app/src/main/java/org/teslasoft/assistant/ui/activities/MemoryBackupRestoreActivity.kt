@@ -50,6 +50,8 @@ import org.teslasoft.assistant.preferences.backup.AutoBackupScheduler
 import org.teslasoft.assistant.preferences.backup.AutoBackupScheduling
 import org.teslasoft.assistant.preferences.backup.AutoBackupStatusPresenter
 import org.teslasoft.assistant.preferences.backup.BackupBrand
+import org.teslasoft.assistant.preferences.backup.BackupFailureCategory
+import org.teslasoft.assistant.preferences.backup.BackupFailureClassifier
 import org.teslasoft.assistant.preferences.backup.BackupFailurePolicy
 import org.teslasoft.assistant.preferences.backup.BackupFrequency
 import org.teslasoft.assistant.preferences.backup.BackupLocationDisplay
@@ -61,6 +63,11 @@ import org.teslasoft.assistant.preferences.backup.DatabaseHealthState
 import org.teslasoft.assistant.preferences.backup.DatabaseRepairManager
 import org.teslasoft.assistant.preferences.backup.RecoveryBackupState
 import org.teslasoft.assistant.preferences.backup.RecoveryFileNaming
+import org.teslasoft.assistant.preferences.backup.portable.ChatLogicalSerializer
+import org.teslasoft.assistant.preferences.backup.portable.PackageCrypto
+import org.teslasoft.assistant.preferences.backup.portable.PortablePackageFormat
+import org.teslasoft.assistant.preferences.backup.portable.PortableRecoveryWriter
+import org.teslasoft.assistant.preferences.backup.portable.RecoveryKeyStore
 import org.teslasoft.assistant.ui.DatabaseRecoveryFlows
 import org.teslasoft.assistant.preferences.backup.readable.ReadableBackupState
 import org.teslasoft.assistant.preferences.backup.readable.ReadableChatBackup
@@ -77,12 +84,16 @@ import java.security.MessageDigest
  * "Memory Backup & Restore" — the Database Health & Backups screen. Section
  * order is owner-directed and EXACT (July 22 2026): 1. Database Health,
  * 2. Backup Status, 3. Recovery Backup, 4. Human-Readable Chat Backup,
- * 5. Portable Data Copy, 6. Automatic Backups, 7. Reset. Do not reorder. The
- * two backup LOCATIONS (manual vs automatic) are kept separate.
+ * 5. Portable Data Copy, 6. Automatic Backups, 7. Reset. Do not reorder.
  *
  * Three distinct systems live here and stay separate on screen (never
  * conflated — owner directive):
- *  - Recovery Backup — the portable recovery package (RecoveryBackupActivity).
+ *  - Recovery Backup — the portable recovery package. One tap opens the
+ *    system Save dialog directly (owner directive, July 24 2026); everything
+ *    else — build, save, verify, success/failure — renders inline under the
+ *    button, no separate screen. [RecoveryBackupActivity] now handles ONLY
+ *    the one-time Protected Recovery Code setup/confirmation, launched from
+ *    here exactly when needed and resumed via [recoverySetupLauncher].
  *  - Human-Readable Chat Backup — a ZIP of chats as readable Text/JSON files.
  *  - Portable Data Copy — the readable JSON export/import of memory data
  *    (import does NOT restore chats; the description says so).
@@ -122,15 +133,25 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
     private var textStatusChats: TextView? = null
     private var textStatusUserImage: TextView? = null
 
-    // 3. Recovery Backup (manual)
+    // 3. Recovery Backup (manual) — one tap opens the system Save dialog
+    // directly; Preparing/Saving/Successful/failure all render inline under
+    // the button (owner directive, July 24 2026), same pattern as Human-
+    // Readable Chat Backup and Automatic Backups below.
     private var btnCreateRecovery: MaterialButton? = null
-    private var textManualLocation: TextView? = null
-    private var btnChangeManualLocation: MaterialButton? = null
-    private var btnCreateBackup: MaterialButton? = null
+    private var textRecoveryLocation: TextView? = null
+    private var spinnerRecoveryStatus: CircularProgressIndicator? = null
+    private var textRecoveryStatus: TextView? = null
     private var textRecoveryTypeProtectedSummary: TextView? = null
     private var textRecoveryTypeUnencryptedSummary: TextView? = null
     private var btnRecoveryType: TextView? = null
     private var recoveryTypeProtected = true
+
+    // The built, verified package awaiting the user's Save As destination
+    // (build before Save As, same architecture as the readable chat backup
+    // below). Deleted on cancel, after a successful copy, and in onDestroy.
+    private var stagedRecoveryPackage: File? = null
+    private var stagedRecoverySha: ByteArray? = null
+    private var stagedRecoveryIncludedTypes: Set<BackupType> = emptySet()
 
     // 4. Human-Readable Chat Backup (Widget.App.Dropdown.* fields)
     private var btnReadableScope: TextView? = null
@@ -192,6 +213,18 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
     private val readableSaveLauncher = registerForActivityResult(
         ActivityResultContracts.CreateDocument("application/zip")
     ) { uri -> onReadableSaveAsResult(uri) }
+
+    private val createRecoveryLauncher = registerForActivityResult(
+        ActivityResultContracts.CreateDocument("application/zip")
+    ) { uri -> onRecoverySaveAsResult(uri) }
+
+    /** Launches the one-time Protected Recovery Code setup screen; on
+     *  RESULT_OK (confirmed) proceeds straight into the same inline
+     *  build-then-Save-As flow an already-confirmed or Unencrypted backup
+     *  uses. */
+    private val recoverySetupLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result -> if (result.resultCode == RESULT_OK) buildThenSaveAsRecovery(protected = true) }
 
     // Human-Readable Chat Backup selections + the staged, verified ZIP waiting
     // for its Save As destination (build-before-Save-As, same architecture as
@@ -256,9 +289,9 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         textStatusUserImage = findViewById(R.id.text_status_userimage)
 
         btnCreateRecovery = findViewById(R.id.btn_create_recovery)
-        textManualLocation = findViewById(R.id.text_manual_location)
-        btnChangeManualLocation = findViewById(R.id.btn_change_manual_location)
-        btnCreateBackup = findViewById(R.id.btn_create_backup)
+        textRecoveryLocation = findViewById(R.id.text_recovery_location)
+        spinnerRecoveryStatus = findViewById(R.id.spinner_recovery_status)
+        textRecoveryStatus = findViewById(R.id.text_recovery_status)
         textRecoveryTypeProtectedSummary = findViewById(R.id.text_recovery_type_protected_summary)
         textRecoveryTypeUnencryptedSummary = findViewById(R.id.text_recovery_type_unencrypted_summary)
         btnRecoveryType = findViewById(R.id.btn_recovery_type)
@@ -312,17 +345,8 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         btnCheckIntegrity?.setOnClickListener { onCheckIntegrity() }
 
         /* ---- 3. Recovery Backup (manual) ---- */
-        // The installation-bound v1 controls (btn_change_manual_location,
-        // btn_create_backup) are hidden AND unwired: the old writer must not be
-        // reachable from this screen (owner correction, July 22 2026). The v1
-        // backend classes stay for the future automatic implementation.
         initRecoveryTypeSection()
-        btnCreateRecovery?.setOnClickListener {
-            startActivity(
-                Intent(this, RecoveryBackupActivity::class.java)
-                    .putExtra(RecoveryBackupActivity.EXTRA_RECOVERY_PROTECTED, recoveryTypeProtected)
-            )
-        }
+        btnCreateRecovery?.setOnClickListener { onCreateRecoveryClicked() }
 
         /* ---- 4. Human-Readable Chat Backup ---- */
         initReadableSection()
@@ -379,6 +403,7 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
 
     override fun onDestroy() {
         cleanupStagedReadable()
+        cleanupStagedRecovery()
         super.onDestroy()
     }
 
@@ -443,6 +468,290 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
             recoveryTypeProtected = position == 0
             RecoveryBackupState.setLastRecoveryProtected(this, recoveryTypeProtected)
             updateRecoveryTypeLabel()
+        }
+    }
+
+    /** The Create Recovery Backup button. Unencrypted, or Protected once
+     *  already confirmed, goes straight into the build; Protected before its
+     *  one-time setup is confirmed opens that setup screen first and resumes
+     *  here (via [recoverySetupLauncher]) once it returns RESULT_OK. */
+    private fun onCreateRecoveryClicked() {
+        if (!recoveryTypeProtected) {
+            buildThenSaveAsRecovery(protected = false)
+            return
+        }
+        when (RecoveryKeyStore.getSetupState(this)) {
+            RecoveryKeyStore.SetupState.CONFIRMED -> buildThenSaveAsRecovery(protected = true)
+            RecoveryKeyStore.SetupState.UNAVAILABLE ->
+                showRecoveryFailure(getString(R.string.recovery_fail_keystore))
+            RecoveryKeyStore.SetupState.UNCONFIRMED, RecoveryKeyStore.SetupState.NOT_SET ->
+                recoverySetupLauncher.launch(Intent(this, RecoveryBackupActivity::class.java))
+        }
+    }
+
+    private fun setRecoveryStatus(text: String) {
+        textRecoveryStatus?.text = text
+        textRecoveryStatus?.visibility = View.VISIBLE
+    }
+
+    private fun showRecoveryFailure(text: String) = setRecoveryStatus(text)
+
+    /** The button + spinner return to their idle, tappable state. */
+    private fun finishRecoveryAttempt() {
+        btnCreateRecovery?.isEnabled = true
+        spinnerRecoveryStatus?.visibility = View.GONE
+    }
+
+    /**
+     * Build and verify the package into cache staging FIRST, then launch Save
+     * As directly (owner directive, July 24 2026: no intermediate "preparing"
+     * screen — the system Save dialog IS the one interruption, everything
+     * else is inline text under the button). The build worker re-reads the
+     * stored secret and password blob rather than sharing an activity field,
+     * and wipes the secret in a finally — same contract the old
+     * RecoveryBackupActivity build step had, only relocated.
+     */
+    private fun buildThenSaveAsRecovery(protected: Boolean) {
+        cleanupStagedRecovery()
+        btnCreateRecovery?.isEnabled = false
+        spinnerRecoveryStatus?.visibility = View.VISIBLE
+        setRecoveryStatus(getString(R.string.backup_recovery_preparing))
+
+        runOffThread {
+            val staged = File(cacheDir, "recovery_stage_${System.nanoTime()}.tmp")
+            var secret: ByteArray? = null
+            try {
+                if (protected) {
+                    secret = when (val s = RecoveryKeyStore.getSecret(this)) {
+                        is RecoveryKeyStore.SecretResult.Ok -> s.secret
+                        is RecoveryKeyStore.SecretResult.Unavailable -> {
+                            runOnUiThread { finishRecoveryAttempt(); showRecoveryFailure(getString(R.string.recovery_fail_keystore)) }
+                            return@runOffThread
+                        }
+                        is RecoveryKeyStore.SecretResult.NotSet -> {
+                            runOnUiThread { finishRecoveryAttempt(); showRecoveryFailure(getString(R.string.recovery_fail_generic)) }
+                            return@runOffThread
+                        }
+                    }
+                }
+
+                val passwordBlob: PortablePackageFormat.PasswordBlob? = if (protected) {
+                    when (val b = RecoveryKeyStore.getPasswordBlob(this)) {
+                        is RecoveryKeyStore.PasswordBlobResult.NotSet -> null
+                        is RecoveryKeyStore.PasswordBlobResult.Ok -> b.blob.toFormatBlob()
+                        is RecoveryKeyStore.PasswordBlobResult.Unavailable -> {
+                            runOnUiThread { finishRecoveryAttempt(); showRecoveryFailure(getString(R.string.recovery_fail_keystore)) }
+                            return@runOffThread
+                        }
+                    }
+                } else null
+
+                val appVersion = try {
+                    packageManager.getPackageInfo(packageName, 0).versionName ?: ""
+                } catch (_: Exception) { "" }
+
+                when (val result = PortableRecoveryWriter.createPackage(this, staged, secret, passwordBlob, appVersion)) {
+                    is PortableRecoveryWriter.Result.Failed -> {
+                        runCatching { if (staged.exists()) staged.delete() }
+                        recordRecoveryFailureStatus(result.reason)
+                        runOnUiThread {
+                            finishRecoveryAttempt()
+                            showRecoveryWriterFailure(result.reason, result.chatFailure)
+                        }
+                    }
+                    is PortableRecoveryWriter.Result.Ok -> {
+                        val sha = sha256(staged)
+                        runOnUiThread {
+                            // The user can leave/back out while this was
+                            // building; a posted launch() on a destroyed
+                            // screen's launcher would crash (the same race
+                            // fixed in RecoveryBackupActivity — this is the
+                            // same guard, relocated with the build step).
+                            if (isFinishing || isDestroyed) {
+                                runCatching { if (staged.exists()) staged.delete() }
+                                return@runOnUiThread
+                            }
+                            stagedRecoveryPackage = staged
+                            stagedRecoverySha = sha
+                            stagedRecoveryIncludedTypes = result.includedTypes
+                            val name = RecoveryFileNaming.manualRecoveryPackage(
+                                BackupBrand.resolve(this), protected, System.currentTimeMillis()
+                            )
+                            createRecoveryLauncher.launch(name)
+                        }
+                    }
+                }
+            } catch (_: Exception) {
+                runCatching { if (staged.exists()) staged.delete() }
+                recordRecoveryFailureStatusAll(BackupFailureCategory.SOURCE)
+                runOnUiThread {
+                    finishRecoveryAttempt()
+                    showRecoveryFailure(getString(R.string.recovery_fail_generic))
+                }
+            } finally {
+                secret?.let { PackageCrypto.wipe(it) }
+            }
+        }
+    }
+
+    /** Save As returned. Null == the user cancelled the picker. */
+    private fun onRecoverySaveAsResult(uri: Uri?) {
+        if (uri == null) {
+            cleanupStagedRecovery()
+            finishRecoveryAttempt()
+            setRecoveryStatus(getString(R.string.backup_recovery_cancelled))
+            return
+        }
+        copyStagedRecoveryToDestination(uri)
+    }
+
+    /** Copy the verified staged package to the chosen destination, then reopen
+     *  the destination and verify its SHA-256 matches the staged file. On any
+     *  mismatch/failure the destination is discarded and a visible failure is
+     *  shown. Staging is cleaned on every path. */
+    private fun copyStagedRecoveryToDestination(uri: Uri) {
+        val staged = stagedRecoveryPackage
+        val expectedSha = stagedRecoverySha
+        if (staged == null || expectedSha == null || !staged.exists()) {
+            cleanupStagedRecovery()
+            finishRecoveryAttempt()
+            showRecoveryFailure(getString(R.string.recovery_fail_generic))
+            return
+        }
+        setRecoveryStatus(getString(R.string.backup_recovery_saving))
+
+        val includedTypes = stagedRecoveryIncludedTypes
+        runOffThread {
+            try {
+                contentResolver.openOutputStream(uri, "wt")?.use { out ->
+                    staged.inputStream().use { it.copyTo(out) }
+                } ?: throw IllegalStateException("could not open destination")
+
+                val actualSha = contentResolver.openInputStream(uri)?.use { sha256(it) }
+                    ?: throw IllegalStateException("could not reopen destination")
+
+                if (!MessageDigest.isEqual(expectedSha, actualSha)) {
+                    discardRecoveryDestination(uri)
+                    recordRecoveryFailureStatusAll(BackupFailureCategory.VERIFY)
+                    runOnUiThread {
+                        finishRecoveryAttempt()
+                        showRecoveryFailure(getString(R.string.recovery_fail_verify))
+                    }
+                    return@runOffThread
+                }
+
+                // BOTH verifications passed (staged package + destination):
+                // only now may Backup Status claim success (owner rule). Types
+                // with no artifact in this package record the neutral
+                // "Nothing to Back Up" state for this run.
+                val now = System.currentTimeMillis()
+                for (type in BackupType.displayOrder) {
+                    if (type in includedTypes) RecoveryBackupState.recordSuccess(this, type, now)
+                    else RecoveryBackupState.recordNothingToBackUp(this, type, now)
+                }
+
+                val where = BackupLocationDisplay.describeSaveAs(this, uri)
+                RecoveryBackupState.setLastRecoveryLocation(this, where.breadcrumb ?: where.providerLabel)
+                RecoveryBackupState.setLastRecoveryAt(this, now)
+
+                runOnUiThread {
+                    finishRecoveryAttempt()
+                    setRecoveryStatus(getString(R.string.backup_recovery_success))
+                    refreshLocations()
+                    refreshBackupStatus()
+                }
+            } catch (e: Exception) {
+                discardRecoveryDestination(uri)
+                recordRecoveryFailureStatusAll(
+                    if (BackupFailureClassifier.isPermissionRelated(e)) BackupFailureCategory.DESTINATION_PERMISSION
+                    else BackupFailureCategory.DESTINATION_WRITE
+                )
+                runOnUiThread {
+                    finishRecoveryAttempt()
+                    showRecoveryFailure(getString(R.string.recovery_fail_generic))
+                }
+            } finally {
+                cleanupStagedRecovery()
+            }
+        }
+    }
+
+    /**
+     * Record a failed manual attempt in Backup Status. recordFailure keeps
+     * the last-success stamp untouched and marks the latest attempt failed —
+     * exactly the owner-required display ("Backup Failed. Last Good Backup:
+     * …"). NOTHING_TO_BACK_UP is neutral, not a failure.
+     */
+    private fun recordRecoveryFailureStatus(reason: PortableRecoveryWriter.Reason) {
+        val now = System.currentTimeMillis()
+        if (reason == PortableRecoveryWriter.Reason.NOTHING_TO_BACK_UP) {
+            for (type in BackupType.displayOrder) RecoveryBackupState.recordNothingToBackUp(this, type, now)
+            return
+        }
+        if (reason == PortableRecoveryWriter.Reason.STORE_DEGRADED) {
+            // A degraded-database refusal is a PAUSE, not a backup failure —
+            // see RecoveryBackupState's per-type docs. The status rows keep
+            // their last real result.
+            return
+        }
+        val category = when (reason) {
+            PortableRecoveryWriter.Reason.PACKAGE_VERIFY_FAILED -> BackupFailureCategory.VERIFY
+            else -> BackupFailureCategory.SOURCE
+        }
+        for (type in BackupType.displayOrder) RecoveryBackupState.recordFailure(this, type, now, category)
+    }
+
+    private fun recordRecoveryFailureStatusAll(category: BackupFailureCategory) {
+        val now = System.currentTimeMillis()
+        for (type in BackupType.displayOrder) RecoveryBackupState.recordFailure(this, type, now, category)
+    }
+
+    /** Remove a written-but-unverified destination so no corrupt package
+     *  remains: delete the document, or truncate it to empty if delete is not
+     *  permitted by the provider. */
+    private fun discardRecoveryDestination(uri: Uri) {
+        try {
+            if (DocumentsContract.deleteDocument(contentResolver, uri)) return
+        } catch (_: Exception) { /* fall through to truncate */ }
+        try {
+            contentResolver.openOutputStream(uri, "wt")?.use { /* write nothing = truncate */ }
+        } catch (_: Exception) { /* best-effort */ }
+    }
+
+    private fun cleanupStagedRecovery() {
+        stagedRecoveryPackage?.let { f -> runCatching { if (f.exists()) f.delete() } }
+        stagedRecoveryPackage = null
+        stagedRecoverySha = null
+        stagedRecoveryIncludedTypes = emptySet()
+    }
+
+    /** Show a writer failure inline. Only human-readable, owner-approved
+     *  wording reaches the screen — never an enum or exception name. */
+    private fun showRecoveryWriterFailure(
+        reason: PortableRecoveryWriter.Reason,
+        chatFailure: ChatLogicalSerializer.FailureCategory?
+    ) {
+        when (reason) {
+            PortableRecoveryWriter.Reason.KEY_MATERIAL_UNAVAILABLE ->
+                showRecoveryFailure(getString(R.string.recovery_fail_keystore))
+            PortableRecoveryWriter.Reason.CHATS_UNAVAILABLE -> {
+                val detail = when (chatFailure) {
+                    ChatLogicalSerializer.FailureCategory.LIST -> getString(R.string.recovery_fail_chats_detail_list)
+                    ChatLogicalSerializer.FailureCategory.HISTORY -> getString(R.string.recovery_fail_chats_detail_history)
+                    ChatLogicalSerializer.FailureCategory.SETTINGS -> getString(R.string.recovery_fail_chats_detail_settings)
+                    null -> null
+                }
+                val main = getString(R.string.recovery_fail_chats_unavailable)
+                showRecoveryFailure(if (detail != null) "$main\n$detail" else main)
+            }
+            PortableRecoveryWriter.Reason.SNAPSHOT_FAILED ->
+                showRecoveryFailure(getString(R.string.recovery_fail_snapshot))
+            PortableRecoveryWriter.Reason.PACKAGE_VERIFY_FAILED ->
+                showRecoveryFailure(getString(R.string.recovery_fail_verify))
+            PortableRecoveryWriter.Reason.NOTHING_TO_BACK_UP ->
+                showRecoveryFailure(getString(R.string.recovery_fail_nothing))
+            PortableRecoveryWriter.Reason.STORE_DEGRADED ->
+                showRecoveryFailure(getString(R.string.recovery_fail_degraded))
         }
     }
 
@@ -1172,14 +1481,25 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
      * (owner correction, July 22 2026).
      */
     private fun refreshLocations() {
-        val manual = RecoveryBackupState.getManualFolderUri(this)
+        refreshRecoveryLocation()
         val auto = RecoveryBackupState.getAutoFolderUri(this)
-        textManualLocation?.text = locationText(
-            manual, RecoveryBackupState.getManualFolderLabel(this), R.string.backup_current_location
-        )
         textAutoLocation?.text = locationText(
             auto, RecoveryBackupState.getAutoFolderLabel(this), R.string.backup_auto_location
         )
+    }
+
+    /** The Recovery Backup location line: the breadcrumb of where the last
+     *  one landed, or the "none yet" phrase. Unlike Automatic Backups there
+     *  is no persisted destination folder to lose access to — every save is
+     *  its own one-off Save As pick — so there is no "unavailable" state
+     *  here, only "none yet" or the last breadcrumb. */
+    private fun refreshRecoveryLocation() {
+        val loc = RecoveryBackupState.getLastRecoveryLocation(this)
+        textRecoveryLocation?.text = if (loc != null) {
+            getString(R.string.backup_recovery_location, loc)
+        } else {
+            getString(R.string.backup_recovery_location_none)
+        }
     }
 
     /** One shared rendering of a destination line, driven by the pure

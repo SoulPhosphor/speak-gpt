@@ -54,15 +54,12 @@ object RecoveryBackupState {
 
     private const val KEY_ENABLED = "backup.enabled"
 
-    // Two separate destinations — never combined (owner ruling, July 21 2026).
-    private const val KEY_MANUAL_FOLDER_URI = "backup.manual_folder_uri"
     private const val KEY_AUTO_FOLDER_URI = "backup.auto_folder_uri"
 
-    // Human-readable folder labels, resolved and persisted at pick time (owner
+    // Human-readable folder label, resolved and persisted at pick time (owner
     // correction, July 22 2026): the URI is for ACCESS, the label is for
     // DISPLAY, and the two are stored separately so the screen can never fall
     // back to showing a raw URI or tree document id after a restart.
-    private const val KEY_MANUAL_FOLDER_LABEL = "backup.manual_folder_label"
     private const val KEY_AUTO_FOLDER_LABEL = "backup.auto_folder_label"
 
     private fun prefs(context: Context) =
@@ -83,22 +80,12 @@ object RecoveryBackupState {
         try { prefs(context).edit(commit = true) { putBoolean(KEY_ENABLED, enabled) } } catch (_: Exception) { }
     }
 
-    // ----- destination folders (SAF tree URIs) -------------------------------
-    // The manual "Create Backup" location and the "Automatic Backups" location
-    // are kept SEPARATE and must never be combined (owner ruling, July 21 2026).
-
-    /** The persisted MANUAL (Create Backup) folder tree URI, or null when the
-     *  user has not chosen one yet. */
-    fun getManualFolderUri(context: Context): String? =
-        try { prefs(context).getString(KEY_MANUAL_FOLDER_URI, null) } catch (_: Exception) { null }
-
-    fun setManualFolderUri(context: Context, uri: String?) {
-        try {
-            prefs(context).edit(commit = true) {
-                if (uri.isNullOrEmpty()) remove(KEY_MANUAL_FOLDER_URI) else putString(KEY_MANUAL_FOLDER_URI, uri)
-            }
-        } catch (_: Exception) { }
-    }
+    // ----- destination folder (SAF tree URI) ---------------------------------
+    // Recovery Backup (manual) has no persisted destination folder of its own
+    // any more (owner directive, July 24 2026): every save is its own one-off
+    // Save As pick, and only the resulting breadcrumb is remembered — see
+    // getLastRecoveryLocation below. Automatic Backups keeps its own folder,
+    // kept SEPARATE and never combined (owner ruling, July 21 2026).
 
     /** The persisted AUTOMATIC-backup folder tree URI, or null when the user has
      *  not chosen one yet. */
@@ -113,22 +100,9 @@ object RecoveryBackupState {
         } catch (_: Exception) { }
     }
 
-    /** The persisted display label of the manual backup folder, or null when
-     *  none could be resolved at pick time (the UI shows a generic phrase —
-     *  never the URI). */
-    fun getManualFolderLabel(context: Context): String? =
-        try { prefs(context).getString(KEY_MANUAL_FOLDER_LABEL, null) } catch (_: Exception) { null }
-
-    fun setManualFolderLabel(context: Context, label: String?) {
-        try {
-            prefs(context).edit(commit = true) {
-                if (label.isNullOrBlank()) remove(KEY_MANUAL_FOLDER_LABEL) else putString(KEY_MANUAL_FOLDER_LABEL, label)
-            }
-        } catch (_: Exception) { }
-    }
-
-    /** The persisted display label of the automatic backup folder — same
-     *  contract as [getManualFolderLabel]. */
+    /** The persisted display label of the automatic backup folder, or null
+     *  when none could be resolved at pick time (the UI shows a generic
+     *  phrase — never the URI). */
     fun getAutoFolderLabel(context: Context): String? =
         try { prefs(context).getString(KEY_AUTO_FOLDER_LABEL, null) } catch (_: Exception) { null }
 
@@ -159,6 +133,38 @@ object RecoveryBackupState {
         try {
             prefs(context).edit(commit = true) { putBoolean(KEY_LAST_RECOVERY_PROTECTED, protected) }
         } catch (_: Exception) { }
+    }
+
+    // ----- last manual Recovery Backup save location (owner directive, July
+    // 24 2026) ---------------------------------------------------------------
+    // Recovery Backup has no persisted destination folder — every save is its
+    // own Save As pick — so, unlike the automatic/manual-v1 folder URIs above,
+    // only a DISPLAY breadcrumb of where the last one landed is kept (never a
+    // URI: a one-off Save As grant is not a durable access grant to re-open).
+
+    private const val KEY_LAST_RECOVERY_LOCATION = "backup.recovery.last_location"
+    private const val KEY_LAST_RECOVERY_AT = "backup.recovery.last_at"
+
+    /** The breadcrumb of where the last manual Recovery Backup was saved, or
+     *  null when none has ever been saved. */
+    fun getLastRecoveryLocation(context: Context): String? =
+        try { prefs(context).getString(KEY_LAST_RECOVERY_LOCATION, null) } catch (_: Exception) { null }
+
+    fun setLastRecoveryLocation(context: Context, breadcrumb: String?) {
+        try {
+            prefs(context).edit(commit = true) {
+                if (breadcrumb.isNullOrBlank()) remove(KEY_LAST_RECOVERY_LOCATION) else putString(KEY_LAST_RECOVERY_LOCATION, breadcrumb)
+            }
+        } catch (_: Exception) { }
+    }
+
+    /** Epoch millis of the last successfully saved manual Recovery Backup, or
+     *  0 when none has ever been saved. */
+    fun getLastRecoveryAt(context: Context): Long =
+        try { prefs(context).getLong(KEY_LAST_RECOVERY_AT, 0L) } catch (_: Exception) { 0L }
+
+    fun setLastRecoveryAt(context: Context, atMillis: Long) {
+        try { prefs(context).edit(commit = true) { putLong(KEY_LAST_RECOVERY_AT, atMillis) } } catch (_: Exception) { }
     }
 
     private const val KEY_AUTO_FREQUENCY = "backup.auto_frequency"

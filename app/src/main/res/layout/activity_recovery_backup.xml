@@ -16,11 +16,14 @@
 * limitations under the License.
 **************************************************************************/
 -->
-<!-- Manual Recovery Backup flow (portable format v2). One activity, five
-     panels shown one at a time by RecoveryBackupActivity's state machine:
-     choice -> (setup code -> confirm) OR direct -> create/result. Automatic
-     scheduling, rotation, deletion and live restore are NOT here. Wording is
-     owner-approved (July 22 2026); chrome labels are flagged in strings.xml. -->
+<!-- The one-time Protected Recovery Code setup/confirmation flow ONLY (owner
+     directive, July 24 2026 — supersedes the earlier five-panel design with a
+     choice panel and its own build/save/result UI). Three panels shown one at
+     a time: setup code -> (optional password) -> confirm, finishing with
+     RESULT_OK. A keystore failure dead-ends into panel_failed. The actual
+     backup build + Save As + inline status now live on the Memory Backup &
+     Restore screen. Wording is owner-approved (July 22 2026); chrome labels
+     are flagged in strings.xml. -->
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/root"
@@ -56,7 +59,7 @@
             android:id="@+id/activity_title"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="@string/recovery_title"
+            android:text="@string/recovery_setup_title"
             android:textColor="@color/text_title"
             android:textSize="20sp"
             android:textStyle="bold"
@@ -84,70 +87,7 @@
             android:paddingHorizontal="20dp"
             android:paddingTop="20dp">
 
-            <!-- ============ 1. Choice ============ -->
-            <LinearLayout
-                android:id="@+id/panel_choice"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical">
-
-                <LinearLayout
-                    android:id="@+id/btn_choice_protected"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:background="@drawable/expandable_window_background_16"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:orientation="vertical"
-                    android:padding="18dp">
-
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/recovery_choice_protected_title"
-                        android:textColor="@color/text"
-                        android:textSize="17sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:paddingTop="6dp"
-                        android:text="@string/recovery_choice_protected_desc"
-                        android:textColor="@color/text_subtitle"
-                        android:textSize="14sp" />
-                </LinearLayout>
-
-                <LinearLayout
-                    android:id="@+id/btn_choice_unencrypted"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="14dp"
-                    android:background="@drawable/expandable_window_background_16"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:orientation="vertical"
-                    android:padding="18dp">
-
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/recovery_choice_unencrypted_title"
-                        android:textColor="@color/text"
-                        android:textSize="17sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:paddingTop="6dp"
-                        android:text="@string/recovery_choice_unencrypted_desc"
-                        android:textColor="@color/text_subtitle"
-                        android:textSize="14sp" />
-                </LinearLayout>
-            </LinearLayout>
-
-            <!-- ============ 2. Setup: show Recovery Code ============ -->
+            <!-- ============ 1. Setup: show Recovery Code ============ -->
             <LinearLayout
                 android:id="@+id/panel_setup"
                 android:layout_width="match_parent"
@@ -217,7 +157,7 @@
                     android:text="@string/recovery_continue" />
             </LinearLayout>
 
-            <!-- ============ 3. Add password (optional sub-step) ============ -->
+            <!-- ============ 2. Add password (optional sub-step) ============ -->
             <LinearLayout
                 android:id="@+id/panel_password"
                 android:layout_width="match_parent"
@@ -280,7 +220,7 @@
                     android:text="@string/btn_cancel" />
             </LinearLayout>
 
-            <!-- ============ 4. Confirm re-entry ============ -->
+            <!-- ============ 3. Confirm re-entry ============ -->
             <LinearLayout
                 android:id="@+id/panel_confirm"
                 android:layout_width="match_parent"
@@ -326,40 +266,29 @@
                     android:text="@string/recovery_confirm" />
             </LinearLayout>
 
-            <!-- ============ 5. Create / result ============ -->
+            <!-- ============ 4. Setup failed (keystore dead-end) ============ -->
             <LinearLayout
-                android:id="@+id/panel_result"
+                android:id="@+id/panel_failed"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
                 android:visibility="gone">
 
                 <TextView
-                    android:id="@+id/text_result"
+                    android:id="@+id/text_failed"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:textColor="@color/text"
                     android:textIsSelectable="true"
                     android:textSize="16sp" />
 
-                <TextView
-                    android:id="@+id/text_result_detail"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:paddingTop="8dp"
-                    android:textColor="@color/text_subtitle"
-                    android:textIsSelectable="true"
-                    android:textSize="14sp"
-                    android:visibility="gone" />
-
                 <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btn_result_done"
+                    android:id="@+id/btn_failed_done"
                     style="@style/AppButton.Primary"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="24dp"
-                    android:text="@string/btn_ok"
-                    android:visibility="gone" />
+                    android:text="@string/btn_ok" />
             </LinearLayout>
         </LinearLayout>
     </ScrollView>
