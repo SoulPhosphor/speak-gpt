@@ -2092,6 +2092,11 @@ folder — never combined), and is deliberately conservative:
   fields, campaign-selector wording, the dialogs-not-toasts rule) and
   are part of the approved words. Read the spec's §9 agent rules before
   any roleplay work.
+- **Document & image includes (attach txt/md/csv/docx, later images, to a
+  chat) is planned and owner-approved but NOT built** — the full spec,
+  approved wording, and style mapping live in `document-includes-plan.md`
+  (root). Read it before touching attachments, the chat input area, or the
+  old image/vision path (which that plan's Step 3 deletes).
 - Whisper/voice work follows `whisper-local-plan.md`.
 
 ## Quick verification checklist before any push
