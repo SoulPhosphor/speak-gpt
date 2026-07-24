@@ -166,16 +166,19 @@ object DatabaseRepairManager {
     ): Boolean = try {
         val active = context.getDatabasePath(dbFileName(type))
         val preserved = File(quarantinePath)
-        if (!preserved.exists()) return false
-        deleteActiveFiles(context, type)
-        preserved.copyTo(active, overwrite = true)
-        for (suffix in SIDECAR_SUFFIXES) {
-            val preservedSidecar = File(quarantinePath + suffix)
-            if (preservedSidecar.exists()) {
-                preservedSidecar.copyTo(File(active.path + suffix), overwrite = true)
+        if (!preserved.exists()) {
+            false
+        } else {
+            deleteActiveFiles(context, type)
+            preserved.copyTo(active, overwrite = true)
+            for (suffix in SIDECAR_SUFFIXES) {
+                val preservedSidecar = File(quarantinePath + suffix)
+                if (preservedSidecar.exists()) {
+                    preservedSidecar.copyTo(File(active.path + suffix), overwrite = true)
+                }
             }
+            true
         }
-        true
     } catch (_: Exception) {
         false
     }
