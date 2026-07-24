@@ -1,5 +1,22 @@
 # Phosphor Shines — AI Onboarding Manual
 
+## ⛔ WRITE LIKE A PROFESSIONAL TECHNICAL WRITER (owner ruling, July 24 2026)
+
+Every message to the owner uses professional technical writing. Not
+conversational prose, not narration, not filler.
+
+- **Headings and lists.** Organize every response. No walls of prose.
+- **Blunt and to the point.** State the fact. Cut every word that is not
+  carrying information.
+- **No padding.** No preamble, no restating the question, no summarizing what
+  you are about to say, no closing pleasantries.
+- **Answer first.** Status and answers at the top. Detail below, only if it
+  changes what the owner does next.
+- **One apology, one line,** when you are wrong. Then the correction. Never a
+  paragraph about it.
+- **Quote exactly.** When referring to a spec, plan, or string, quote the
+  actual text. Never paraphrase it and never ad-lib a substitute.
+
 ## ⛔⛔ RULE ZERO — NEVER MAKE A DECISION THE OWNER HAS NOT APPROVED. THIS IS AN ACCESSIBILITY REQUIREMENT, NOT A PREFERENCE (owner ruling, July 24 2026)
 
 **This is the highest-priority rule in this file.** It outranks finishing the
