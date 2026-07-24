@@ -77,33 +77,6 @@ All strings live in `res/values/strings.xml` only, per house rule.
 | Artifact line default shape | "User sent …" — AI-written, ≤ ~12 words |
 | Collapse line (4+ items) | **Includes N Documents** — "Documents" capitalised per the app's Title Case rule (owner ruling, July 24 2026), followed by a **downward-facing chevron** |
 
-## Attach-failure messages (owner-approved mapping, July 24 2026)
-
-Shown as a dialog: the message as the title, one **Close** button. No toast
-(house rule). Each row is a distinct, detectable code condition; several
-rows share one message where the underlying causes cannot be told apart in
-code — never a falsely specific message per cause.
-
-| # | Detectable condition | Message | Causes collapsed here |
-|---|---|---|---|
-| 1 | Extension/MIME not supported | "This file type is not supported." | PDF, legacy `.doc`, images, anything outside `.txt`/`.md`/`.csv`/`.docx` |
-| 2 | `SecurityException` opening the file | "File is unable to be read. Permission has expired or been revoked, and the file is no longer available." | Grant expired; sharing app revoked access |
-| 3 | Open fails, content provider does not resolve | "File is unable to be read. The source app is not responding." | Source app uninstalled/disabled; provider dead |
-| 4 | Open fails, content provider resolves | "File is unable to be read. File is no longer available. It may have been moved or deleted." | File moved, deleted or renamed after picking |
-| 5 | Read fails after a successful open | "File could not be read completely. The storage or connection may have been interrupted." | Removable drive pulled mid-read; network share dropped; physical read failure; provider stream broke |
-| 6 | `.docx` is an OLE2/CFB container (signature check) | "File is unable to be read. Content is password protected and unreadable. Please try again with a non-protected file." | Password-protected Word document. Known limitation: a legacy `.doc` renamed to `.docx` reads the same signature and also shows this message — the signature check does not disambiguate further, per the approved mapping |
-| 7 | Not a zip at all | "File is unable to be read. Content does not match file type." | Any non-Word file renamed to `.docx` |
-| 8 | Valid zip, no `word/document.xml` | "File is unable to be read. Content does not match file type." | `.xlsx`/`.pptx`/other OOXML renamed to `.docx` |
-| 9 | `.docx` zip located `word/document.xml` but it is unreadable | "File is unable to be read. File is corrupted." | Truncated or damaged Word file — the only case detectably provable as corruption |
-| 10 | `.txt`/`.md`/`.csv` bytes are not text after decoding | "File is unable to be read. Content does not match file type." | Renamed binary and corrupted plain text are indistinguishable — no structure to verify against |
-| 11 | Zero bytes, or no text after extraction | "File contains no data." | Empty file; Word file with no body text |
-| 12 | Any other exception | "File could not be attached due to an unknown error." | Unanticipated failures |
-
-Implemented in `DocumentImporter.kt` (`Result` sealed class, one case per
-row above except 7/8/10 sharing `ContentMismatch`) and `DocxTextExtractor.kt`
-(`ExtractResult`: `NotDocx` = rows 7/8, `PasswordProtected` = row 6,
-`Corrupted` = row 9).
-
 ## UI specification, surface by surface, with the styles each uses
 
 Style authority: `ui-style-guide.md`. Every new shared style or layout this
@@ -294,12 +267,8 @@ No toasts anywhere (standing rule). All notices are persistent inline text.
     was self-contradictory: after a document is reduced to a bookmark the
     original figure would overstate what that message still costs every turn.
     `ChatInclude.sentTokens` still records the original for later use.
-  - Twelve attach-failure conditions, each mapped to owner-approved wording —
-    see "Attach-failure messages" above. Shown as a dialog (title + Close),
-    which is a deviation from this plan's original "persistent inline
-    message" wording for a refused file, made because there is no row to
-    attach inline text to when nothing was attached; not yet independently
-    approved as a UI choice, only used because no other surface exists.
+  - Four draft strings (`include_error_*`) cover the four failure cases. The
+    owner has not ruled on the wording yet; they are flagged in `strings.xml`.
 - **Step 2:** Condense + the Edit dialog (which also serves artifact-line
   editing from Step 1 — build the dialog in whichever step reaches it first).
 - **Step 3:** images join (image icon rows, Reduce to Text Only, ~token
