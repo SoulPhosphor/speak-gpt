@@ -1,7 +1,8 @@
 # Document & Image Includes — Build Plan
 
-Status: **Step 1 BUILT July 24 2026** (attach/extract/strip/Remove→artifact/
-history record/size guards). Steps 2 (Condense) and 3 (images) not started.
+Status: **Steps 1 and 2 BUILT July 24 2026** (attach/extract/strip/
+Remove→artifact/history record/size guards, plus Condense and the Edit
+dialog). Step 3 (images) not started.
 Everything below is the full approved design; see "Build order" at the end for
 what each step covers. Every user-facing
 word, behavior, and UI decision in this plan was settled with the owner in
@@ -266,12 +267,8 @@ No toasts anywhere (standing rule). All notices are persistent inline text.
     was self-contradictory: after a document is reduced to a bookmark the
     original figure would overstate what that message still costs every turn.
     `ChatInclude.sentTokens` still records the original for later use.
-  - **Condense is absent from the row menu**, gated by `CONDENSE_BUILT` in
-    `IncludeStripController` — a menu item that claimed to condense while
-    doing something else would be worse than none. Flip it in Step 2.
-  - Four draft strings (`include_error_*`) cover the failure cases the owner
-    has not yet ruled on; they are written in the approved voice and flagged
-    in `strings.xml`. **Still need owner confirmation.**
+  - Four draft strings (`include_error_*`) cover the four failure cases. The
+    owner has not ruled on the wording yet; they are flagged in `strings.xml`.
 - **Step 2:** Condense + the Edit dialog (which also serves artifact-line
   editing from Step 1 — build the dialog in whichever step reaches it first).
 - **Step 3:** images join (image icon rows, Reduce to Text Only, ~token

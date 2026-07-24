@@ -69,13 +69,6 @@ class IncludeStripController(
         /** Rows visible in the expanded list before it starts scrolling. */
         private const val MAX_VISIBLE_ROWS = 6
         private const val ROW_HEIGHT_DP = 52
-
-        /**
-         * Flip to true when Step 2 (Condense / Reduce to Text Only) is built.
-         * Until then the action is absent from the row menu rather than
-         * present and misleading.
-         */
-        private const val CONDENSE_BUILT = false
     }
 
     private var expanded = false
@@ -196,13 +189,14 @@ class IncludeStripController(
     }
 
     /**
-     * The row's action menu. Which actions exist depends on where the item
-     * sits on the ladder: a condensed item offers Edit so the user can fix
-     * anything the model's summary missed or trim it further.
+     * The row's action menu, per the plan's "Menus by state":
+     *  - Full document: Remove, Condense.
+     *  - Condensed document / reduced image: Remove, Edit.
+     *  - Full image: Remove, Reduce to Text Only.
      *
-     * Condense / Reduce to Text Only are Step 2 of the plan and are NOT
-     * offered until that step is built — an item claiming to condense while
-     * actually doing something else would be worse than no menu item at all.
+     * Condense and Reduce to Text Only are deliberately DIFFERENT words:
+     * condensing shrinks the same kind of thing, reducing an image destroys
+     * the visual entirely and keeps only words. Never merge them.
      */
     private fun showRowMenu(anchor: View, include: ChatInclude) {
         val popup = PopupMenu(context, anchor)
@@ -210,7 +204,7 @@ class IncludeStripController(
         menu.add(0, MENU_REMOVE, 0, R.string.include_action_remove)
         if (include.form == IncludeForm.CONDENSED) {
             menu.add(0, MENU_EDIT, 1, R.string.include_action_edit)
-        } else if (CONDENSE_BUILT) {
+        } else {
             menu.add(
                 0, MENU_CONDENSE, 1,
                 if (include.kind == IncludeKind.IMAGE) {

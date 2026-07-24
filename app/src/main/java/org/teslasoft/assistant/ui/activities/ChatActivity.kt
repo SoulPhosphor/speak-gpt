@@ -2917,12 +2917,62 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     }
 
     /**
-     * Condense is Step 2 of the plan and is not built yet. The menu item is
-     * not shown until it is, so this is unreachable from the UI today; it
-     * exists so the strip's callback contract is complete.
+     * Condense: ask the model for a compact version of the document, then
+     * show it to the user BEFORE it takes effect.
+     *
+     * Save applies it; Cancel discards it and the full form stays. The user
+     * seeing the words first is the point — for some purposes (a contract,
+     * exact wording being edited) a summary is worse than useless, and only
+     * the user knows which purpose today is.
      */
     private fun condenseInclude(include: ChatInclude) {
-        editInclude(include)
+        val scope = CoroutineScope(Dispatchers.Main)
+        scope.launch {
+            val condensed = requestCondensedText(include)
+            if (isFinishing || isDestroyed) return@launch
+            // On failure the full form stays, exactly as a Cancel would leave it.
+            if (condensed.isNullOrBlank()) return@launch
+            val latest = findIncludeById(include.id) ?: return@launch
+            IncludeEditDialog.show(this@ChatActivity, latest.fileName, condensed) { approved ->
+                val current = findIncludeById(include.id) ?: return@show
+                updateInclude(
+                    current.copy(form = IncludeForm.CONDENSED, condensedText = approved)
+                )
+            }
+        }
+    }
+
+    /**
+     * Asks the chat's own model to compact a document for its own future
+     * reference. Uses the chat's configured model, never a hardcoded id.
+     */
+    private suspend fun requestCondensedText(include: ChatInclude): String? {
+        val client = ai ?: return null
+        val condenseModel = model.ifBlank { preferences?.getModel() ?: "" }
+        if (condenseModel.isBlank()) return null
+
+        val request = ChatCompletionRequest(
+            model = ModelId(condenseModel),
+            messages = listOf(
+                ChatMessage(
+                    role = ChatRole.User,
+                    content = "Write a compact version of the document below, for your own " +
+                            "later reference in this conversation. Keep the facts, names, " +
+                            "numbers and decisions that a follow-up question would need. Drop " +
+                            "repetition and filler. Reply with the compact version only.\n\n" +
+                            "File name: ${include.fileName}\n\n" +
+                            include.fullText
+                )
+            )
+        )
+
+        return try {
+            withContext(Dispatchers.IO) {
+                client.chatCompletion(request).choices.firstOrNull()?.message?.content?.trim()
+            }
+        } catch (_: Exception) {
+            null
+        }
     }
 
     private fun consumePendingIncludesForSend(): List<ChatInclude> {
