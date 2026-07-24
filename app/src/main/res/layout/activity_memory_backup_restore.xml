@@ -117,19 +117,50 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:paddingTop="8dp"
-                android:orientation="horizontal"
+                android:orientation="vertical"
                 android:visibility="gone">
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btn_health_repair_memory"
-                    style="@style/AppButton.Primary.Inline"
-                    android:layout_marginEnd="8dp"
-                    android:text="@string/health_btn_repair" />
+                <LinearLayout
+                    android:id="@+id/health_buttons_memory"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btn_health_revert_memory"
-                    style="@style/AppButton.Primary.Inline"
-                    android:text="@string/health_btn_revert" />
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btn_health_repair_memory"
+                        style="@style/AppButton.Primary.Inline"
+                        android:layout_marginEnd="8dp"
+                        android:text="@string/health_btn_repair" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btn_health_revert_memory"
+                        style="@style/AppButton.Primary.Inline"
+                        android:text="@string/restore_database" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/health_progress_memory"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:visibility="gone">
+
+                    <com.google.android.material.progressindicator.CircularProgressIndicator
+                        android:id="@+id/health_spinner_memory"
+                        android:layout_width="18dp"
+                        android:layout_height="18dp"
+                        android:indeterminate="true" />
+
+                    <TextView
+                        android:id="@+id/health_progress_text_memory"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:textColor="@color/text"
+                        android:textSize="14sp" />
+                </LinearLayout>
             </LinearLayout>
 
             <TextView
@@ -145,19 +176,50 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:paddingTop="8dp"
-                android:orientation="horizontal"
+                android:orientation="vertical"
                 android:visibility="gone">
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btn_health_repair_lorebook"
-                    style="@style/AppButton.Primary.Inline"
-                    android:layout_marginEnd="8dp"
-                    android:text="@string/health_btn_repair" />
+                <LinearLayout
+                    android:id="@+id/health_buttons_lorebook"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btn_health_revert_lorebook"
-                    style="@style/AppButton.Primary.Inline"
-                    android:text="@string/health_btn_revert" />
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btn_health_repair_lorebook"
+                        style="@style/AppButton.Primary.Inline"
+                        android:layout_marginEnd="8dp"
+                        android:text="@string/health_btn_repair" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btn_health_revert_lorebook"
+                        style="@style/AppButton.Primary.Inline"
+                        android:text="@string/restore_database" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/health_progress_lorebook"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:visibility="gone">
+
+                    <com.google.android.material.progressindicator.CircularProgressIndicator
+                        android:id="@+id/health_spinner_lorebook"
+                        android:layout_width="18dp"
+                        android:layout_height="18dp"
+                        android:indeterminate="true" />
+
+                    <TextView
+                        android:id="@+id/health_progress_text_lorebook"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:textColor="@color/text"
+                        android:textSize="14sp" />
+                </LinearLayout>
             </LinearLayout>
 
             <TextView
@@ -185,19 +247,50 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:paddingTop="8dp"
-                android:orientation="horizontal"
+                android:orientation="vertical"
                 android:visibility="gone">
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btn_health_repair_userimage"
-                    style="@style/AppButton.Primary.Inline"
-                    android:layout_marginEnd="8dp"
-                    android:text="@string/health_btn_repair" />
+                <LinearLayout
+                    android:id="@+id/health_buttons_userimage"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btn_health_revert_userimage"
-                    style="@style/AppButton.Primary.Inline"
-                    android:text="@string/health_btn_revert" />
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btn_health_repair_userimage"
+                        style="@style/AppButton.Primary.Inline"
+                        android:layout_marginEnd="8dp"
+                        android:text="@string/health_btn_repair" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btn_health_revert_userimage"
+                        style="@style/AppButton.Primary.Inline"
+                        android:text="@string/restore_database" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/health_progress_userimage"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:visibility="gone">
+
+                    <com.google.android.material.progressindicator.CircularProgressIndicator
+                        android:id="@+id/health_spinner_userimage"
+                        android:layout_width="18dp"
+                        android:layout_height="18dp"
+                        android:indeterminate="true" />
+
+                    <TextView
+                        android:id="@+id/health_progress_text_userimage"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:textColor="@color/text"
+                        android:textSize="14sp" />
+                </LinearLayout>
             </LinearLayout>
 
             <!-- ============ 2. Database Health ============ -->
@@ -323,6 +416,61 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
                 android:text="@string/recovery_create" />
+
+            <!-- Reuse the screen's established dropdown pattern for the one
+                 restore target selection. This is not a separate restore
+                 section and does not multiply permanent action buttons. -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="20dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    style="@style/Widget.App.Dropdown.Label"
+                    android:text="@string/restore_type_label" />
+
+                <TextView
+                    android:id="@+id/btn_restore_type"
+                    style="@style/Widget.App.Dropdown.Value"
+                    android:layout_weight="1" />
+            </LinearLayout>
+
+            <!-- One familiar restore entry. It opens the same restore chooser
+                 used by a failed database row; no separate permanent forest
+                 of file/folder/latest buttons. -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_restore_database"
+                style="@style/AppButton.Primary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/restore_database" />
+
+            <LinearLayout
+                android:id="@+id/restore_progress"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:visibility="gone">
+
+                <com.google.android.material.progressindicator.CircularProgressIndicator
+                    android:id="@+id/restore_spinner"
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:indeterminate="true" />
+
+                <TextView
+                    android:id="@+id/restore_progress_text"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:textColor="@color/text"
+                    android:textSize="14sp" />
+            </LinearLayout>
 
             <TextView
                 android:id="@+id/text_manual_location"
