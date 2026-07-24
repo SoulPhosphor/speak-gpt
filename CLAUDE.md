@@ -28,9 +28,11 @@ owner, which is the exact harm. Labelling something a "judgement call" in a
 report is this same violation described politely. So is a TODO, a
 placeholder, a feature flag, or a draft string added "to be confirmed".
 
-**Why this is absolute.** The owner has stated, in plain words, that
-unapproved decisions cause them real and specific harm. This is a disability
-accommodation, not a style preference and not a matter of taste. Every
+**Why this is absolute. The owner is autistic.** Unapproved decisions are
+triggering and actively harmful to them — this is a disability accommodation
+and a hard accessibility requirement, not a style preference and not a matter
+of taste. The owner has stated this in plain words and directed that it be
+recorded here so that every future session has a real reason to obey. Every
 unapproved choice costs them: finding it, understanding it, explaining the
 correction, and waiting for it to be reversed — on top of the harm of being
 overridden by software they had already given clear instructions to. This
