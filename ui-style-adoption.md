@@ -13,15 +13,17 @@ This is a current-status map, not a rollout history.
 
 ### Shared
 
-All repeated visual components covered by the current style system use the appropriate shared styles or shared layouts.
+Every repeated visual component on the screen uses the appropriate approved shared style or shared layout.
 
-Feature-specific content and behavior may still remain local.
+This includes applicable headers, action icons, buttons, fields, hints, validation text, counters, image treatments, rows, sections, selectors, switches, checkboxes, dialogs, loading states, and spacing patterns.
+
+Feature-specific content and behavior may remain local. A component that is genuinely unique may remain local only after its uniqueness is verified rather than assumed.
 
 ### Partial
 
-The screen uses some shared styles but still contains copied visual attributes, an old component pattern, or a mixture of shared and local implementations.
+The screen uses some shared styles but still contains copied visual attributes, an old component pattern, a repeated element with no shared style, or a mixture of shared and local implementations.
 
-A partial screen must not be copied as a whole-screen reference.
+A Partial screen must not be copied as a whole-screen reference.
 
 ### Unconverted
 
@@ -41,27 +43,29 @@ Do not preserve, expand, restyle, repair for appearance, or create new dependenc
 
 ### Unaudited
 
-The current implementation has not yet been checked against `ui-style-guide.md` and `themes.xml`.
+The current implementation has not yet been checked against `ui-style-guide.md`, `themes.xml`, and any shared layouts it should use.
 
 Do not guess its status from appearance or from old documentation.
 
 ## Rules for maintaining this map
 
 - Verify the current XML and relevant code before assigning or changing a status.
+- Audit the whole screen, not only the component named in the current task.
 - Update this map in the same approved change that converts or intentionally exempts a screen.
 - Record the current state only. Do not add dates, rollout stories, old bugs, branches, or completed-work narratives.
 - Keep notes limited to the remaining shared-style gap or the reason for an approved exception.
-- Do not call a screen fully shared merely because it looks similar to another screen.
+- Do not call a screen Shared merely because it looks similar to another screen or because several shared styles appear in its XML.
 - Do not use a Partial, Unconverted, Legacy / remove, or Unaudited screen as a visual template.
 - When the owner asks one screen to match another, decompose both screens by component and use the approved shared style for each component.
+- If a repeated component has no adequate shared style, stop before copying attributes. Explain the missing style family and obtain approval for the shared solution.
 
 ## Current verified entries
 
-| Screen | Layout | Header | Body components | Status | Current gap or exception |
+| Screen | Layout | Header | Repeated body components | Status | Current gap or exception |
 |---|---|---|---|---|---|
-| Edit Companion | `activity_edit_persona.xml` | Partial | Shared field labels, hints, and boxes | Partial | Header uses the shared container, back control, title, and end-anchored Save icon. The additional Delete icon repeats the shared header-icon geometry locally. Do not copy this header as raw XML. |
-| Edit Persona | `activity_edit_user_persona.xml` | Partial | Shared field labels, hints, and boxes | Partial | Same mixed two-action header pattern as Edit Companion: the end-anchored Save icon is shared, while the additional Delete icon repeats geometry locally. |
-| Memory Backup & Restore | `activity_memory_backup_restore.xml` | Unconverted | Partial: shared section styles and some shared button variants are present | Partial | The top back-and-centered-title header is still copied XML instead of the shared simple-header styles. Remaining body components require a full current audit before the screen can be treated as shared. |
+| Edit Companion | `activity_edit_persona.xml` | Partial | Field labels, hints, boxes, and the main Add button use shared styles | Partial | The additional Delete header icon repeats the shared icon geometry locally. The 96dp editor image treatment, inline field-error text, and final checkbox styling remain local repeated patterns. The dynamically added lorebook rows have not yet been audited. Do not copy this screen as a complete style reference. |
+| Edit Persona | `activity_edit_user_persona.xml` | Partial | Field labels, hints, and boxes use shared styles | Partial | The additional Delete header icon repeats geometry locally. The matching 96dp editor image treatment, inline validation text, and text counter remain local repeated patterns. Do not call this screen fully converted or copy it as a complete reference. |
+| Memory Backup & Restore | `activity_memory_backup_restore.xml` | Unconverted | Partial: shared section styles and some shared button variants are present | Partial | The top back-and-centered-title header is still copied XML instead of the shared simple-header styles, including a local 20sp title. Remaining status text, progress rows, controls, and other body components require a full current audit before the screen can be treated as Shared. |
 
 All screens not listed above are **Unaudited** in this map until their current layouts and relevant code are checked.
 
@@ -69,12 +73,12 @@ All screens not listed above are **Unaudited** in this map until their current l
 
 | Component or mechanism | Status | Direction |
 |---|---|---|
-| Legacy per-screen AMOLED recoloring and its dedicated control | Legacy / remove | It is not part of the future shared theme architecture. Do not spend work preserving, expanding, restyling, or routing new shared components through it. The future theme system should use shared semantic colors, styles, and theme or palette definitions instead of per-screen recoloring. |
+| Legacy per-screen AMOLED recoloring and its dedicated control | Legacy / remove | Existing code does not make this mechanism a requirement. It is not part of the future shared theme architecture. Do not spend work preserving, expanding, restyling, repairing for appearance, or routing new shared components through it. The replacement theme system should use shared semantic colors, styles, and theme or palette definitions instead of per-screen recoloring. |
 
 ## Audit record format
 
 Add one concise row per screen or genuinely shared layout family:
 
-| Screen | Layout | Header | Body components | Status | Current gap or exception |
+| Screen | Layout | Header | Repeated body components | Status | Current gap or exception |
 |---|---|---|---|---|---|
 | Screen name | `layout_name.xml` | Shared / Partial / Unconverted / Custom approved / N/A | Short component summary | Status | Only the current gap or approved exception |
