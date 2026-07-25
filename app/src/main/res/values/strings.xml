@@ -2410,6 +2410,9 @@
     <string name="include_bookmark_desc">Previously attached items</string>
     <string name="include_icon_desc">Attached file</string>
     <string name="btn_attach_document">Document</string>
+    <!-- Paperclip popup row label. Owner's word, given verbatim July 25 2026:
+         "it's just supposed to be an image icon and then say image." -->
+    <string name="attach_option_image">Image</string>
 
     <!-- Save/Cancel pair on the Edit dialog (right-aligned, Cancel then Save,
          per the owner's layout ruling). -->

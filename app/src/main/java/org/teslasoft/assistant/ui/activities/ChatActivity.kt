@@ -290,9 +290,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     private var selectedImage: ImageView? = null
     private var btnRemoveImage: ImageButton? = null
     private var visionActions: LinearLayout? = null
-    private var btnVisionActionCamera: ImageButton? = null
-    private var btnVisionActionGallery: ImageButton? = null
-    private var btnVisionActionDocument: ImageButton? = null
+    // The paperclip popup rows (owner's stacked icon+word design, July 25
+    // 2026). Typed View, not ImageButton: each is now a labeled row, and the
+    // only thing the code does with them is attach a click listener.
+    private var btnVisionActionCamera: View? = null
+    private var btnVisionActionGallery: View? = null
+    private var btnVisionActionDocument: View? = null
 
     // ---- Document includes (document-includes-plan.md) --------------------
     // Attachments the user has picked but not yet sent. Once a message goes
