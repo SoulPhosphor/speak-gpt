@@ -63,6 +63,46 @@ conversational prose, not narration, not filler.
 - **Quote exactly.** When referring to a spec, plan, or string, quote the
   actual text. Never paraphrase it and never ad-lib a substitute.
 
+## ⛔ HOW TO EXPLAIN THINGS TO THE OWNER (owner ruling, July 25 2026)
+
+The owner holds a degree in scientific and technical communication. When
+they say they don't understand something, the writing failed — undefined
+jargon, compressed shorthand, a label used as if it were an explanation.
+Never treat their confusion as inability, and never respond to it by
+simplifying the IDEAS. Fix the WRITING.
+
+**"I don't understand" is a full stop.** It is never a request for action.
+When the owner says any form of it — "I don't understand," "what is X,"
+"you didn't explain" — do exactly one thing: re-explain, plainly, and
+wait. Do not edit a file, run a command, or resume the task on the
+strength of a frustrated sentence nearby. Acting when they asked for an
+explanation has happened in this project and is a violation.
+
+**The required explanation shape** (this exact pattern resolved a failure
+on July 25 2026 after label-tables had failed repeatedly):
+
+- One concept at a time, under its own plain-language heading.
+- Define every term before or as it is used. A name the owner has not
+  seen defined ("bookmark-writing prompt", "model-facing wrapper") is not
+  communication — it is noise wearing a label.
+- Explain in user-experience terms: what the owner sees, taps, or hears;
+  what happens behind the scenes described as cause and effect ("when you
+  tap Remove, the app sends your AI a hidden instruction that says,
+  roughly: …"). Show hidden text by example, not by description.
+- State when the thing would ever be encountered, and why it exists.
+- End each definition. Do not chain concepts into one paragraph.
+
+**Tables are for enumerable facts, never for explanations.** A table row
+holding a coined label plus a fragment ("Bookmark fallback — 'User sent
+X.'") explains nothing. If an item needs a sentence, it gets prose.
+Density is not professionalism. The blunt-technical-writing rule above
+cuts filler words — it never cuts definitions. When brevity and clarity
+conflict, clarity wins, every time.
+
+**Never coin a shorthand name for something the owner hasn't named.** If
+an internal mechanism must be referenced, describe what it does in plain
+words first and every time it reappears after a gap.
+
 ## ⛔⛔ RULE ZERO — NEVER MAKE A DECISION THE OWNER HAS NOT APPROVED. THIS IS AN ACCESSIBILITY REQUIREMENT, NOT A PREFERENCE (owner ruling, July 24 2026)
 
 **This is the highest-priority rule in this file.** It outranks finishing the
