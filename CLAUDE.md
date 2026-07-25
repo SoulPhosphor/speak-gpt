@@ -280,6 +280,33 @@ A shared-style change that alters existing screens requires owner approval befor
 
 UI consistency does not override approved wording or behavior. It supports them.
 
+### Product requirements outrank reuse
+
+Shared code is an implementation tool, not a product constraint.
+
+Never refuse, remove, weaken, relocate, or distort an approved control or behavior merely because the current screen uses a shared style, shared layout, scaffold, or shared code path.
+
+Do not say only that a screen is "shared." Define what is shared:
+
+- a visual style;
+- an XML layout or scaffold;
+- behavior or navigation code;
+- data;
+- or some combination.
+
+Explain which other screens use it and what would visibly change before editing the shared part.
+
+When the approved target screen needs something that the other screens do not, choose the smallest maintainable structure that preserves the product requirement:
+
+1. keep the unique element local while using shared visual styles when it belongs only on this screen;
+2. add an approved optional slot or variant when the pattern is reusable but not universal;
+3. extend the shared layout when every user of it should receive the change;
+4. split the target into its own layout when its structure has genuinely diverged.
+
+Do not make a control, behavior, or whole screen shared merely because it is new. Share stable repeated patterns. Keep genuinely unique product needs local and theme-compatible.
+
+When the owner asks for a toggle, button, field, explanation, or other element only on one screen, do not add it elsewhere or deny it because the current layout is reused. Present the impact and recommended structural option for approval.
+
 ### Existing code is not product intent
 
 The existence of a feature, control, theme, workaround, or implementation does not prove that the owner wants it preserved.
@@ -349,7 +376,7 @@ Current priorities belong in the active conversation, issue, work order, or bran
 - Read the relevant feature specification before changing that feature.
 - Make the smallest coherent change that satisfies the approved requirement.
 - Do not perform incidental refactors, wording cleanup, capitalization changes, or unrelated fixes without approval.
-- Keep feature behavior out of one-off UI code where a shared mechanism already exists.
+- Reuse applicable shared visual primitives without forcing unique product behavior into shared layouts or shared behavior.
 - Add or update tests for behavior that can be tested.
 - Work on a feature branch unless the owner explicitly directs otherwise.
 - Do not force-push `main`.
