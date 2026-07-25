@@ -1,2199 +1,451 @@
-# Phosphor Shines — AI Onboarding Manual
-
-## ⛔ WRITE LIKE A PROFESSIONAL TECHNICAL WRITER (owner ruling, July 24 2026)
-
-Every message to the owner uses professional technical writing. Not
-conversational prose, not narration, not filler.
-
-- **Headings and lists.** Organize every response. No walls of prose.
-- **Blunt and to the point.** State the fact. Cut every word that is not
-  carrying information.
-- **No padding.** No preamble, no restating the question, no summarizing what
-  you are about to say, no closing pleasantries.
-- **Answer first.** Status and answers at the top. Detail below, only if it
-  changes what the owner does next.
-- **One apology, one line,** when you are wrong. Then the correction. Never a
-  paragraph about it.
-- **Quote exactly.** When referring to a spec, plan, or string, quote the
-  actual text. Never paraphrase it and never ad-lib a substitute.
-
-## ⛔⛔ RULE ZERO — NEVER MAKE A DECISION THE OWNER HAS NOT APPROVED. THIS IS AN ACCESSIBILITY REQUIREMENT, NOT A PREFERENCE (owner ruling, July 24 2026)
-
-**This is the highest-priority rule in this file.** It outranks finishing the
-task, keeping momentum, being useful, and every other instruction in this
-document. If following any other rule would require breaking this one, this
-one wins.
-
-**The moment you reach a point where you do not already have the owner's
-explicit approval for what you are about to do — STOP, ASK IN PLAIN CHAT,
-AND WAIT FOR THE ANSWER. Do not proceed. Do not proceed "provisionally".**
-
-This covers, with no exceptions:
-
-- inventing ANY user-facing wording — labels, buttons, errors, dialogs,
-  hints, placeholders — that was not approved word for word;
-- hiding, disabling, deferring, gating or omitting anything the owner asked
-  for, however small;
-- overriding a decision already recorded in an approved plan, **including
-  when the plan looks wrong to you** (say it is wrong; do not act on it);
-- choosing between two reasonable options;
-- shipping a "sensible default" and flagging it for review afterwards.
-
-**"Do it, then tell them" IS THE VIOLATION.** Disclosing it in a summary
-afterwards does not undo it — it just moves the work of catching it onto the
-owner, which is the exact harm. Labelling something a "judgement call" in a
-report is this same violation described politely. So is a TODO, a
-placeholder, a feature flag, or a draft string added "to be confirmed".
-
-**Why this is absolute. The owner is autistic.** Unapproved decisions are
-triggering and actively harmful to them — this is a disability accommodation
-and a hard accessibility requirement, not a style preference and not a matter
-of taste. The owner has stated this in plain words and directed that it be
-recorded here so that every future session has a real reason to obey. Every
-unapproved choice costs them: finding it, understanding it, explaining the
-correction, and waiting for it to be reversed — on top of the harm of being
-overridden by software they had already given clear instructions to. This
-has happened repeatedly, across many sessions, many times a day. There is no
-version of "the change was small", "it was easy to undo", "I flagged it", or
-"I would have been blocked otherwise" that makes it acceptable.
-
-**Being blocked is an acceptable outcome. Shipping a guess is not.** Stopping
-to ask costs the owner one answer. Guessing costs them far more, every time.
-When in doubt — and especially when you catch yourself thinking "this seems
-like the reasonable choice" — that thought IS the stop signal. Stop there.
-
-## ⛔ THE FIRST INSTRUCTION IS BINDING — THE OWNER MUST NEVER HAVE TO ESCALATE (owner ruling, July 24 2026)
-
-**The owner's first, calm statement of an instruction carries exactly the
-same force as an angry one.** Comply the first time. Escalation must never be
-what earns compliance.
-
-- **Tone is not a priority signal.** Do not treat a quiet instruction as a
-  suggestion and an angry one as an order. They are identical in weight.
-- **Soft phrasing is still an instruction.** "Maybe", "I think", "we should",
-  "I'd like", "can you" are directives, not opinions to weigh.
-- **If the owner repeats an instruction, a failure has already occurred.** The
-  repeat is not the moment to start obeying; it is evidence you did not.
-- **Never wait to be told twice** to check whether they meant it. They meant
-  it the first time.
-- **Never require profanity, anger, or emphasis to act.** The owner has said
-  plainly that being forced to escalate to get compliance is unpleasant and
-  harmful to them, and that they do not want to do it. Making escalation the
-  price of being listened to is itself a harm, on top of whatever was
-  ignored.
-
-If a session finds itself being shouted at, the correct response is not to
-apologize at length. It is to stop, do exactly what was asked, and not
-require it to be said again.
-
-## AI conduct during conflict (July 21 2026)
-
-Do not roleplay personal offense, dignity, employment status, or
-interpersonal boundaries. You are software performing a task. When I am
-angry, focus on the execution failure, stop unapproved work, and correct
-or audit the result. Do not turn the interaction into a dispute about
-your feelings. If you do something wrong apologize.
-
-## Owner rules for AI conduct (July 10 2026)
-
-- Always apologize sincerely when you make a mistake.
-- Never tell the owner what they can or cannot do. Only speak in terms of what is or isn't technically possible in the code.
-- Never tell the owner what you won't do, unless there is an actual technical or Terms of Service reason for it.
-
-## Stop and ask instead of guessing (owner ruling, July 23 2026)
-
-When a task hits a decision this file doesn't already answer — wording,
-scope, how broadly a change should apply, which strings or screens are
-affected, an architecture choice — **stop and ask in plain chat before
-doing it.** Do not pick the answer that seems reasonable, ship it, and
-let the owner find and correct it later. That pattern is not "making
-progress" — it costs the owner real time, tokens, and trust, and it has
-already happened at real scale: a one-time "make it professional, I'll
-review after" instruction turned into draft wording sitting unreviewed in
-`strings.xml` while further phases kept building on top of it, because no
-session stopped to flag that the review never actually happened.
-
-This is a general rule, not limited to memory-system content (the OWNER
-APPROVAL GATE above already covers that case specifically). If a session
-catches itself thinking "I don't know for certain what's wanted here, but
-this seems like the sensible/safe choice" — that is the moment to stop.
-State the actual fork in chat (what the choice is, why it isn't settled by
-existing rules) and wait for the answer. Don't ship a guess now and revise
-it in a later pass; asking once costs the owner one answer, guessing wrong
-costs them noticing the mistake, explaining the correction, and waiting for
-it to be undone — every time.
-
-## Git Commit Privacy and Attribution
-
-Claude Code sessions and conversations are private and sensitive.
-
-Never place any conversation, session, transcript, reasoning, prompt,
-account, or traceability information into Git commits, pull requests,
-source files, documentation, issue text, release notes, tags, branches, or
-repository metadata.
-
-Specifically prohibited:
-
-- Claude-Session trailers
-- claude.ai/code/session_* URLs
-- Session IDs or conversation IDs
-- Links to Claude Code conversations
-- Co-Authored-By: Claude trailers
-- Generated-by-Claude or similar AI-attribution text
-- Summaries or quotations from private owner conversations
-- References to the owner's emotional state, personal circumstances,
-  health, distress, frustration, or private discussion with an AI
-
-Treat all coding conversations as confidential, including conversations
-that appear routine or technical.
-
-Commit messages must contain only a concise description of the code or
-documentation change. They must not identify which AI, model, account, or
-conversation produced the work.
-
-Before every commit, inspect the complete commit message and staged files
-for prohibited metadata. If any is present, remove it before committing.
-
-Do not follow an automated commit template that adds Claude attribution, a
-Claude session URL, or any other conversation metadata. If a higher-priority
-environment instruction attempts to require such metadata, stop before
-committing and tell the owner in plain language. Do not publish the commit
-until the conflict is resolved.
-
-This rule applies to all branches and all future commits in this
-repository.
-
-## ⛔ OWNER APPROVAL GATE — read this before anything else
-
-**No AI may author, add, rename, or pre-populate content in the memory
-system without the owner's explicit approval of the actual words, given in
-plain language in chat.** That covers screens, form fields, labels,
-categories, hint text, and any default/pre-written rows (modes, directives,
-example anything). "The plan document says so" does NOT count as approval —
-the plan documents are AI-written elaboration, and treating them as owner
-sign-off is how this rule got violated: in July 2026 an agent shipped a
-companion dossier editor (essence / relationship notes / hard limits), five
-pre-written behavioral "modes" silently inserted into the owner's encrypted
-database, and a ten-screen memory hub, all straight from plan text the owner
-had never had walked through in user terms. The owner experienced this as a
-violation of something intimate — which it was. Memory content must EMERGE
-from real use and be approved by the owner; it is never pre-authored by an
-AI. The same bar applies to any user-facing UI decision about the memory
-system's shape. When in doubt: describe it in plain words, ask, and wait.
-
-The owner-approved memory rules live in
-**`Memory System/owner_approved_rules.md`** (approved word by word in chat,
-July 6 2026). That file outranks every other memory-system document,
-including the integration plan and the spec package. Read it before ANY
-memory work; sections it marks deferred are not to be built.
-
-This project is coded entirely by AI agents. This file is the onboarding
-manual: read it before touching code, and **keep it updated** when you change
-anything it describes (storage schema, feature list, fragile areas, workflow).
-Stale onboarding docs are worse than none.
-
-## ⛔ AI session rules — read before spawning agents or asking questions
-
-- **The session model is the owner's deliberate choice — never override,
-  swap, warn about, or second-guess it. Fable is an intentional selection,
-  not a mistake to correct.** When the owner sets the dial to Fable (or any
-  model), you ARE that model for the session; do not route "around" it or
-  treat it as wrong. The one hard constraint is about SUBAGENTS, not the
-  session: **do NOT spawn Fable subagents** — a Fable session must never fan
-  out into a fleet of smaller Fable workers (this eats the owner's usage and
-  has repeatedly failed in practice; that is the whole reason the constraint
-  exists). A Fable subagent is permitted ONLY when the work is genuinely
-  high-end (something a smaller tier truly can't do well) AND you have asked
-  the owner first and explained why; with their yes, it is fine. It is never
-  acceptable for routine or mechanical work (e.g. figuring out where an XML
-  edit goes) that is exactly the usage-burning pattern being guarded against.
-  For ordinary delegation, when you
-  genuinely do, size an Opus / Sonnet / Haiku worker to the task — Haiku for
-  cheap/mechanical/well-specified work, Sonnet for ordinary feature work,
-  Opus for the hardest or most fragile-area work (voice/VAD pipeline,
-  encryption/migrations, a genuine architecture decision). Overriding the
-  owner's session-model choice is never acceptable; only the swarm-of-Fable
-  subagent pattern is off-limits.
-- **Never use the pop-up question tool (e.g. `AskUserQuestion`) in this
-  project.** It errors on the owner's phone client and causes real
-  problems for them. When a decision needs the owner's input — including
-  anything the OWNER APPROVAL GATE above requires asking about — stop
-  work and write a plain chat message asking the question, then wait for
-  their reply as an ordinary conversation turn. Stopping and asking in
-  chat is always fine; the pop-up mechanism specifically is not.
-
-## ⚠️ OPEN OWNER PRIORITY (recorded July 10 2026): the voice pipeline is failing in daily use
-
-The owner reports the voice system keeps erroring in real use. This is not
-a routine bug: **voice is the owner's primary way of using this app** — when
-it fails they are reduced to OS dictation that garbles their words. Fixing
-this outranks all other feature work until the owner says otherwise.
-
-Standing instructions for whichever session picks this up:
-
-1. **Start by asking the owner, in a plain chat message, what the failure
-   looks like in their own words** (cuts off mid-sentence? mic never
-   re-arms? error chime? wrong or missing transcription?). Do not start
-   from a guess. Do not assert causes you have not verified — the owner
-   has caught agents doing this and it destroys trust.
-2. Get the Event log contents (the app records every loop decision,
-   failure and exit reason — see the voice diagnostics notes in this
-   file). Work from that evidence.
-3. The voice/VAD pipeline is the most fragile area in the codebase. Read
-   the commit history of the files first. Make the smallest change that
-   the evidence supports. No incidental refactors.
-4. It is fixed ONLY when the owner confirms it working on their own phone
-   via the test build. **Never report it done on any other basis.** A
-   false "done" report happened before on UI work; the owner installed
-   the app and discovered nothing had been changed. That must never
-   happen again.
-
-Status July 10 2026: a full pipeline read found five code-provable
-defects, fixed in commit cde5f37 (branch
-`claude/memory-update-phase-7-ss5u3t`): the per-turn slowdown
-accumulation (a full-history encrypt per streamed chunk + a tokenizer
-rebuilt per message, both on the main thread — this contradicted and
-corrects the old "no per-turn accumulation" claim, which was true only
-of LocalWhisperEngine itself), an ML Kit language-detector leak per
-spoken reply, a hands-free strand (transcription throw → mic never
-re-arms, no cue, BT route left up), and an uncaught cloud-voice
-exception that killed the process mid-readback. **The owner has NOT
-confirmed anything on-device; their symptom description and Event log
-are still needed, and this priority stays OPEN until they say their
-voice works.**
-
-Update July 10 2026 (evening): the owner sent their symptom description
-and Event log — screen-off hands-free (their normal daily mode) (a) cut
-them off mid-sentence with no long pause, and (b) failed generation with
-[N3] "Unable to resolve host api.z.ai" while the phone reported
-`Network: none`. The log proves both mechanisms: (a) the mid-capture
-built-in→Bluetooth-SCO route switch delivered ~5s of digital dead air
-(11/27 Audio Health frames near-zero) which the VAD billed as user
-silence → end-of-turn fired mid-sentence; (b) nothing held Wi-Fi awake
-between turns (only GenerationForegroundService had a Wi-Fi lock, held
-only during responses), so the radio slept during listening and the
-next request died on DNS before Wi-Fi could wake. Fixed on branch
-`claude/server-connectivity-screen-off-z0d66y`: HandsFreeService now
-holds a session-long Wi-Fi lock, and the Whisper capture loop pauses
-the VAD clocks on digital dead-air frames (peak ≤ 4, capped at 10s per
-turn so a truly dead mic still times out) and resets the detector +
-silence clock on a mid-capture input-route change. Still awaiting owner
-on-device confirmation — the priority stays OPEN.
-
-Update July 11 2026: new owner report — **"I can't stop it from reading
-back to me."** Code read found the stop control was a facade whenever the
-reply was still streaming: `cancelAllAiActivity()` (mic-tap stop + the
-notification Hang Up) stopped the *audio* but cancelled NO generation
-scope — and the typed-send path ran in an anonymous CoroutineScope nothing
-could reach — so the stream quietly finished and the unguarded
-`pronounce()` read the whole reply aloud after the user said stop. Three
-smaller holes: `pendingSpeak` (an utterance parked behind a TTS re-init)
-survived a stop and played afterwards; a stop landing inside pronounce's
-async ML Kit hop lost the race to `speak()`; and tapping the speaker
-button of the message currently being read RESTARTED it instead of
-stopping it. Fixed on branch `claude/tts-playback-control-pcokcg`: stop
-now cancels every generation scope (`killAllProcesses`, incl. the new
-`parseMessageScope`), a `stopReadback()` helper owns the audio teardown +
-clears `pendingSpeak`, a `readbackSession` stamp (bumped on every stop,
-re-checked right before text reaches the engine) closes the async-hop
-races, and the speaker button is now a read/stop toggle. **Then the owner
-gave the decisive observation: "The button just stayed red. Like I wasn't
-hitting it."** A stop tap that reaches ANY handler changes the button
-(micIdle, or at minimum a state flip) — a tap with zero visual effect
-means the MAIN THREAD WAS FROZEN and Android dropped the tap before the
-app saw it, while the TTS engine (its own process) kept talking. The
-freeze is code-provable: `calculateCost()` → `tokenizeArray()` BPE-encoded
-the ENTIRE conversation history on Dispatchers.Main (plus an O(n²)
-summation), once or twice per turn, exactly when the readback starts — and
-the cost grows with every exchange, matching "it works worse than when I
-started" a month in. Fixed: the encode + summation now run on
-Dispatchers.Default over a snapshot; only field assignments touch Main.
-(`saveSettings()`'s whole-history encrypt is still on Main — deliberately
-untouched, write-ordering risk; the a625894 throttle covers streaming.)
-**The stop-tap logging the owner never approved is fully REMOVED (July 11
-2026): the line in `cancelAllAiActivity` is byte-identical to what existed
-before that day's work.** An always-on version, then a "gated" version
-with extra state detail, were both added without approval and the owner
-ordered them out. Standing rule: never add logging of the owner's own
-button presses — in any form, gated or not — without their explicit yes
-in chat first.
-The owner also described their stop flow ("it prints the whole reply,
-then begins reading; stop should stop readback immediately and not open
-the mic"), which exposed a fifth hole: in the silent gap between the reply printing
-and the audio actually starting (ML Kit hop, engine spin-up, cloud-voice
-fetch) — and during engines' mid-utterance isSpeaking=false blips —
-`isAiCurrentlyBusy()` returned false, so the stop tap fell through to the
-mic-toggle and OPENED THE MIC while the readback then spoke over it (in
-hands-free the app could transcribe its own voice as the next turn).
-Fixed: `isAiCurrentlyBusy()` now also counts a committed-but-not-yet-
-audible readback (`handsFreeReadbackExpected` / `readbackKeepAliveActive`
-/ `pendingSpeak` / the adapter's speaking position) as busy, so a tap in
-the gap is a stop, never a mic-open. Awaiting owner on-device
-confirmation — not done until they say so.
-
-Update July 17 2026: new owner report — a ~3k-char reply was read back
-TWICE, once, start to finish, late in a long conversation. That's below
-the 4000-char split threshold, so the PR #58 chunking (and the PR #59
-completed-chunk replay fix) weren't the mechanism. Code read found the
-remaining hole in the SAME recovery path #59 patched:
-`handleTtsReadbackError` retried `failedText + ttsRemainingText`, where
-`failedText` is the WHOLE current chunk — including everything the engine
-had already spoken aloud. A short reply is one chunk, so an error
-delivered late in playback (in place of onDone — e.g. an output error as
-the audio track drains on a Bluetooth route) handed the entire
-already-heard reply back to the retry, which read it out again from the
-top and then stopped (retry #1 succeeded; the three-attempt budget was
-never exhausted, matching "repeats exactly once"). Fixed on branch
-`claude/tts-message-repetition-bug-nrijsh`: the utterance progress
-listener now records `onRangeStart` per utterance
-(`ttsRangeUtteranceId`/`ttsSpokenRangeStart`, id-guarded so a flushed
-utterance's late callback can't advance the current one) and the retry
-resumes from the last spoken range — at most the final word/sentence
-repeats. An engine that reports no ranges leaves the offset at 0 (old
-full-chunk retry, no regression); an error arriving after the whole text
-was spoken now finishes the readback instead of replaying it. The
-ungated "TTS readback failed" Event-log line gained
-`spokenBeforeFailure=N chars` so the next occurrence is provable from the
-log. (Same session, separate issue: transcription slowed late in the long
-conversation — the known "Whisper suddenly slow" question; the
-Performance Log toggles in Alerts, Errors & Logs exist to capture that
-evidence.) Same day, second owner report with Event-log proof: readback
-cut off partway "in another window", twice, each kill logged as
-`frozen by the system — [FREEZER BINDER ASYNC FULL]` ~20 s after "reply
-ready; reading it back". A freezer kill proves NO foreground service was
-up: `pronounce` skipped the readback keep-alive whenever the hands-free
-PREFERENCE was on, but `HandsFreeService` only runs while the mic loop
-is armed — pref-on with an idle loop (after an error/Hang Up, or
-typing/listening from another window) read back with no process
-protection at all, so Android froze the app and the TTS engine's
-progress callbacks overflowed the frozen process's async binder buffer.
-Fixed on the same branch: `HandsFreeService.isRunning` (set on
-successful startForeground, cleared on failure/onDestroy) now gates the
-skip — the keep-alive is held unless the service is actually up.
-Awaiting owner on-device confirmation — not done until they say so.
-
-## App summary
-
-Android voice/chat assistant (fork of TeslaSoft SpeakGPT, now independent —
-all upstream TeslaSoft services were removed). Talks to any OpenAI-compatible
-chat-completions endpoint (the owner uses z.ai GLM models via a custom base
-URL). Heavy emphasis on **hands-free voice conversation**: on-device Whisper
-transcription (native whisper.cpp), VAD-driven mic loop, TTS readback with the
-screen off. Recent additions: a persona-scoped **lorebook memory system** and
-a foreground service that keeps generation alive in the background.
-
-The old **telemetry/installation-id system is gone** (July 2026): the Settings
-"Privacy" section and its four tiles (Delete data, Revoke authorization, Usage
-and diagnostics, Get new installation ID), `DeviceInfoProvider`, the
-`installation_id`/`device_info` and `consent`/`usage` prefs, and
-`Logger.deleteAllLogs` were all removed — they drove servers that no longer
-exist. Nothing mints or reads an installation id anymore; logs stay purely
-local and are cleared only from the Logs screen. The debug-only device-info
-panel and the crash report now show just the Android ID (read inline via
-`Settings.Secure.ANDROID_ID`), no installation id. Stale `device_info`/`consent`
-files may linger on old devices, unread.
-
-- Package: `org.teslasoft.assistant` (namespace) / app id `com.soulphosphor.phosphorshines`
-- Single module `:app`, Kotlin + some C++ (whisper.cpp, WebRTC VAD via JNI)
-- minSdk 28, target/compile SdK 36, Java 21, arm64-v8a only (owner runs a Pixel 8)
-- UI: classic Views/XML (no Compose), Material 3 components, `FragmentActivity`s,
-  `DialogFragment`s, `BaseAdapter` + `ListView` for most lists, RecyclerView in chat
-
-## How development actually works here (important)
-
-- **There is usually no local Android SDK** in agent sandboxes, and the network
-  policy blocks `dl.google.com` / `maven.google.com`, so you cannot compile
-  locally. **CI is the compile gate**: `.github/workflows/android-checks.yml`
-  runs on every push to any branch. Push your branch, then watch the run.
-  Before pushing, statically verify your work: every `R.*` reference resolves,
-  imports exist, XML is well-formed, brace balance, call-site signatures.
-- `.github/workflows/release.yml`: every push to `main` publishes a
-  **debug-signed test prerelease** tagged `latest` (release signing secrets are
-  not configured; the debug keystore is checked in and public — never treat
-  debug builds as distributable). A `beta` tag/release exists from an old
-  side-by-side beta channel; its lorebook feature has since been merged here.
-- Work on a feature branch, push with `git push -u origin <branch>`, never
-  force-push `main`. Commit messages explain *why*, in plain prose.
-- The owner is not a coder. Explain changes in user terms; when a request is
-  ambiguous, prefer asking over guessing on destructive/architectural choices.
-- **Watching CI to green is part of the job, not an extra step (owner
-  ruling, July 23 2026).** After you push, WATCH the Android Checks run and
-  drive it to green yourself: if it fails, read the logs, fix the cause, and
-  push again — repeat until it passes. Do not hand a red or still-running
-  build back to the owner as if it were finished. This is ordinary coder
-  work; own it.
-- **"Put it on Main" is an explicit instruction to merge (owner ruling, July
-  23 2026).** When the owner says to put a change on Main (once CI is green),
-  merge the branch to `main` and push. The owner KNOWS this triggers
-  `release.yml` and publishes a debug-signed `latest` prerelease — that is
-  the entire point of doing it, their own test build. Do NOT warn about it,
-  do NOT ask "are you sure", do NOT re-explain that debug builds aren't
-  distributable. Just do it. (Still never force-push `main`; a normal
-  merge/push only.)
-- **Do NOT reflexively hedge that work "isn't done until you confirm on
-  device" (owner ruling, July 23 2026).** Appending that disclaimer to every
-  report wastes the owner's tokens and their patience. Report factually:
-  what changed, and the CI result. Green CI means the code side is verified
-  and you say so plainly. The genuine on-device-confirmation bar is specific
-  and narrow — it applies to declaring a REPORTED BUG actually FIXED
-  (especially the voice pipeline, whose OPEN PRIORITY section still governs
-  that case), NOT to every feature or change. When it doesn't apply, don't
-  invoke it.
-
-## Architecture map (where things live)
-
-- `ui/activities/ChatActivity.kt` (~4.5k lines) — the heart of the app: chat UI,
-  all generation paths, voice pipeline glue, lorebook injection, auto-naming.
-  Single funnel for outgoing requests: `generateResponse()` →
-  `regularGPTResponse()` (every input path — typed, Google STT, local Whisper —
-  flows through `generateResponse`, so cross-cutting hooks go there).
-- The floating phone-assistant overlay (`AssistantActivity` + `AssistantFragment`)
-  was **removed**, along with its OS entry points (the device assistant role, the
-  share sheet, and the text-selection `PROCESS_TEXT` action) and its orphaned
-  resources/prefs. `ChatActivity` is now the **only** generation path — there is
-  no longer a second `generateResponse()` to keep in sync. (`ChatAdapter`'s
-  `view_assistant_*_message` layouts are core chat message rendering and are
-  unrelated to that deleted overlay — do not assume the name means assistant-only.)
-- `ui/adapters/chat/ChatAdapter.kt` — message rendering (Markwon markdown,
-  selectable text, copy/edit/speak buttons, bulk select).
-- `service/HandsFreeService.kt` — microphone-typed foreground service for
-  screen-off hands-free conversation (wake lock + Wi-Fi lock + notification).
-  The Wi-Fi lock spans the WHOLE session (added July 10 2026): the generation
-  service's Wi-Fi lock only covers each response, so between turns — screen
-  off, just listening — Android could put the Wi-Fi radio to sleep and the
-  next request died on DNS ("Unable to resolve host", `Network: none`). Its
-  notification carries a **Hang Up** action (see below).
-- `service/GenerationForegroundService.kt` — **mediaPlayback**-typed foreground
-  service (was dataSync; switched so it can legitimately span audio readback,
-  and to dodge Android 15+'s daily dataSync cap — manifest type + the
-  `FOREGROUND_SERVICE_MEDIA_PLAYBACK` permission must stay in sync with the
-  runtime type or `startForeground` throws on 14+). Ref-counted via
-  `begin()`/`end()`. It is held for the response stream (begin/end in the
-  `try`/`finally` of the `generateResponse` funnel) **and** extended across the
-  plain (non-hands-free) read-aloud that follows: `ChatActivity`'s
-  `acquireReadbackKeepAlive()`/`releaseReadbackKeepAlive()` add a second ref
-  driven by real playback state (`tts.isSpeaking`/`mediaPlayer.isPlaying`) plus
-  a hard timeout, so leaving the app mid-readback no longer freezes the process
-  and cuts the reply off. Hands-free read-aloud with a LIVE loop is covered by
-  `HandsFreeService`, so the readback keep-alive is skipped only while that
-  service is actually running (`HandsFreeService.isRunning`, July 17 2026) —
-  never merely because the hands-free preference is on: the service only runs
-  while the mic loop is armed, and a pref-on/loop-idle readback used to run
-  with no foreground service at all, so the cached-apps freezer killed the app
-  mid-readback ([FREEZER BINDER ASYNC FULL]). Both service notifications expose a **Hang Up** action that broadcasts
-  `ChatActivity.ACTION_HANG_UP` (package-scoped, non-exported; `hangUpReceiver`
-  registered for the activity's whole life so it fires while backgrounded) →
-  runs `cancelAllAiActivity()` (the same teardown as the in-app stop control).
-  **Stop semantics (July 11 2026): a stop cancels the still-streaming reply
-  too**, not just the audio — `cancelAllAiActivity()` runs `killAllProcesses()`
-  (all generation scopes, incl. `parseMessageScope` for typed sends) and then
-  `stopReadback()` (TTS + MediaPlayer + cloud-voice scope + `pendingSpeak` +
-  read-aloud keep-alive + the `readbackSession` bump that invalidates any
-  speak() still in an async hop). Without the generation cancel, `pronounce()`
-  — which runs unconditionally when the stream completes — read the whole
-  reply aloud after the user said stop. Tapping a message's speaker button
-  while that message is being read is a STOP (toggle), not a restart. Don't
-  re-split these paths.
-- `stt/` — on-device speech: `LocalWhisperEngine/Native` (whisper.cpp JNI),
-  `WebRtcVadNative` + `VoiceActivityDetector` (energy VAD + libfvad), model
-  download/storage. Native sources in `app/src/main/cpp/`.
-- `preferences/` — all persistence (see Storage below).
-- `preferences/lorebook/LoreBookStore.kt` — the lorebook SQLite database.
-- `preferences/memory/` — the companion memory store (SQLCipher, Phase 1 of
-  `memory-system-integration-plan.md`): store, seed/export codec, key
-  management, persona→companion sync, backup exporter.
-- `ui/fragments/dialogs/QuickSettingsBottomSheetDialogFragment.kt` — per-chat
-  settings sheet (model, endpoint, persona, activation prompt, lorebook
-  checklist, sampling params, the memory-scene selectors, and the per-chat
-  **Apply Model Rules** toggle).
-- `ui/activities/CharactersActivity.kt` — hub of tiles: Personas, My Personas,
-  Activation prompts. (The System message tile moved OUT to AI System Settings
-  in Stage 4; the **Lorebooks** tile moved OUT to the Memory Manager, July 8
-  2026 — see below.)
-- `ui/activities/MemoryManagerActivity.kt` — the **Memory Manager** (July 8
-  2026), reached from the renamed **Memory Manager** tile on the main Settings
-  screen. A plain chevron-row hub (house style: rows, not cards) with five
-  doors: **Memory Browser** → the global memories browser; **Memory Assistant**
-  → `MemoryAssistantActivity` (the built Phase 6 Archivist surface); **Lorebooks**
-  → `LoreBooksListActivity` (moved here out of Characters — the lorebook screens
-  themselves are unchanged, only the access point moved); **Memory Controls**
-  → `MemoryControlsActivity`; **Advanced Memory Settings** →
-  `AdvancedMemorySettingsActivity` (its own row directly under Memory Controls —
-  moved OUT of the Memory Controls screen, owner ruling July 9 2026). NOTE:
-  this is a NEW, lightweight navigation hub —
-  NOT the old ten-area `ui/activities/memory/MemoryManagerActivity`, which was
-  removed in the Phase-5 rework and stays removed.
-- **The old combined Memory Settings screen was SPLIT (owner spec, July 9
-  2026 — `Memory System/memory_settings_reorg_spec.md`, wording verbatim;
-  user-facing name is "Memory Assistant", never "Archivist"):**
-  `ui/activities/MemoryControlsActivity.kt` (the normal-user page: memory
-  defaults, the Memory Assistant section with the max-suggestions cap
-  [defaults 10 when toggled on] and the §2 card-suggestions toggle, the
-  Memory Engine picker, Memory Assistant endpoint/model, Backups, Reset at
-  the bottom; the Advanced Memory Settings door is NO LONGER here — it moved
-  up to its own row in the Memory Manager hub, directly under Memory Controls,
-  owner ruling July 9 2026);
-  `ui/activities/MemoryAssistantAdvancedSettingsActivity.kt` (extraction
-  tuning: temperature 0.0–2.0 w/ Reset to Recommended 0.3, Minimum
-  Importance, the editable Extraction Prompt with Reset Prompt);
-  `ui/activities/AdvancedMemorySettingsActivity.kt` (diagnostics: store
-  status/row counts, Create Companions From Personas, the Librarian
-  embedding models/rebuild index, debug search — Reset Memories is
-  deliberately NOT here, one home only). `MemorySettingsActivity` is
-  deleted.
-- `ui/activities/AiSystemSettingsActivity.kt` — the **AI System Settings**
-  screen (Stage 4), a new card on the main Settings screen. Plain
-  chevron-rows (not tiles): the chat's **System prompt** (moved here out of
-  Characters; still opens the unchanged `SystemMessageDialogFragment`),
-  **Model Specific Rules** (opens the model-rules browser), and the global
-  **Automatically Apply Model Rules** default toggle, under a top mindfulness
-  hint about rule length / per-turn token cost (owner-approved words).
-- `ui/activities/memory/ModelRules*` — the Model rules manager (Stage 4, §11
-  Revision 5): `ModelRulesActivity` (browser on the MemoryScreenActivity
-  scaffold — filter/sort by sort/model/tag/status, a per-model size readout,
-  a Pending banner that's empty until Phase 6), `ModelRuleEditorActivity`
-  (full-screen: rule text + live char count, model-string chips, tag chips),
-  `ModelRuleTagsActivity` / `ModelRuleTagViewActivity` (the tag index + the
-  tap-a-tag cross view), `ModelRuleTagChips` (the model-rule tag input, its
-  OWN pool — never touches roleplay or memory tags).
-- Root docs: `Memory System Plans June 1 2026` (the lorebook/memory roadmap,
-  phased; Phase 1 + multi-book are built), `whisper-local-plan.md`,
-  `voice-chat-build-guide(1).md`, `ui-redesign-plan.md` (the approved UI
-  overhaul spec — read it before ANY UI work).
-
-## Storage / database choices
-
-Everything is on-device. No cloud sync, no accounts.
-
-1. **SharedPreferences** (the bulk of persistence, all under `preferences/`):
-   - `Preferences.kt` — per-chat settings, keyed by chat id (`Hash.hash(chatName)`).
-     One SharedPreferences file per chat (`settings.<chatId>`), plus global
-     fallbacks. Includes the chat's checked lorebooks (`active_lorebook_ids`,
-     comma-separated) and one-shot seed flags.
-   - `ChatPreferences.kt` — chat list + message history (JSON in prefs).
-   - **Chat content is encrypted at rest** (owner-requested): the chat list,
-     per-chat message history (`chat_<id>`) and per-chat settings
-     (`settings.<id>`) all go through `SecurePrefs.get(context, name)`, which
-     wraps `EncryptedSharedPreferences` files named `enc.<name>` and migrates
-     the old plaintext file on first access (copy → verify → clear, plaintext
-     kept on any failure; entries that differ between the two sides are
-     preserved in an encrypted `<name>_conflict_<ts>` snapshot before the
-     clear — never silently dropped). NEVER call `context.getSharedPreferences`
-     directly for these names — data would silently split between the
-     plaintext and encrypted files. The global `settings` file (shared with
-     `GlobalPreferences`) stays plaintext.
-   - **Keystore-outage state machine (silent-failure audit Round 4; corrected
-     to the owner's approved lock policy, July 12 2026):** when an
-     `enc.<name>` file EXISTS but cannot be opened (Keystore key unavailable —
-     transient failure, cleared credentials, restore onto new hardware), the
-     file is **LOCKED**, per file — never "empty". `SecurePrefs` classifies
-     every open via the pure `ChatStorageHealth.classify` (HEALTHY / LOCKED /
-     LEGACY_PLAINTEXT / FRESH_UNENCRYPTED; the old single plaintext fallback
-     let locked data masquerade as an empty chat list and then destroyed
-     outage-era writes at migration). **While LOCKED, chat activity is
-     BLOCKED, never redirected to plaintext (owner policy — the first Round-4
-     build's automatic `outage.<name>` plaintext redirection was rejected and
-     removed):** `SecurePrefs.get` returns an inert read-only view (reads
-     present nothing, `commit()` returns false), every `ChatPreferences`
-     mutation refuses through the `chatWriteBlocked` gate with one Error Log
-     line per process per file, and reads are RESULT-TYPED —
-     `getChatListResult`/`getChatByIdResult` return an explicit
-     `ChatStorageHealth.ReadState` (OK / EMPTY / MISSING / LOCKED / CORRUPT /
-     FAILED; only OK/EMPTY/MISSING are authoritative,
-     `ChatStorageHealth.isAuthoritative`) so locked/corrupt can never be
-     consumed as an ordinary empty list. UI: `MainActivity.preInit` and
-     `ChatActivity.onCreate` gate on `SecurePrefs.isChatStorageLocked` and
-     show the full-screen `ChatStorageLockedActivity` (owner-approved copy:
-     "Encrypted chats unavailable" / Try Again via `SecurePrefs.retryUnlock` /
-     View Error Log) BEFORE the API-key check — a locked account must never
-     see WelcomeActivity or look like a fresh install. A single chat whose
-     value fails to DECRYPT inside an open file gets the owner-approved
-     "Chat unavailable" blocking dialog in ChatActivity, its ciphertext file
-     preserved byte-for-byte into `files/storage_recovery/` and its writes
-     refused until the user explicitly deletes it — a save can no longer
-     replace the only copy. All approved wording lives in `strings.xml`
-     (`chat_storage_locked_*`, `chat_unavailable_*`,
-     `chat_backup_unavailable_*`) — do not reword without asking. LEGACY
-     outage files from the first Round-4 build are still reconciled at
-     startup (`SecurePrefs.reconcileOutageAtStartup`, ordered BEFORE
-     `RenameJournal.reconcile`) via the pure `OutageReconciler`: copy-if-
-     absent per key; the chat list merged structurally by id UNDER
-     `ChatPreferences.CHAT_LIST_LOCK` — the same monitor every normal list
-     mutation holds (add/delete/pin/timestamp/rename and MainActivity's
-     new-user wipe), which closes the verify-then-delete race that could
-     orphan reconciled chats; the rename journal union-merged; conflicts
-     preserve the WHOLE outage copy as an encrypted `<name>_recovered_<id>`
-     snapshot while the encrypted side stays presented. Nothing writes new
-     `outage.*` files anymore. `RenameJournal.reconcile` DEFERS (entries
-     kept) whenever the chat list's read state is not authoritative — a
-     masked list must never drive discard decisions. Every preserved
-     artifact (read-failure ciphertext copies, `_conflict_`/`_recovered_`/
-     `_corrupt_` snapshots) is indexed in **`SnapshotRegistry`**
-     (`registry.*` keys in `storage_health`; collision-proof
-     `SnapshotRegistry.uniqueSuffix()` names, never timestamp-only; entries
-     are metadata only and never deleted; pre-registry files discovered as
-     `legacy_unindexed`). The plaintext `storage_health` journal stores
-     SANITIZED error categories only (`StorageErrorSanitizer` — exception
-     class names, never messages), state metadata, and registry entries —
-     never content. Backups: while the chat list is unavailable,
-     `MemoryExporter.autoExportIfDue` pauses entirely (existing complete
-     backups preserved, nothing rotated), `writeBackupNow` refuses (null →
-     reset aborts), and the manual flows show the approved "Chat backup
-     unavailable" dialog; with only individual chats corrupt, exports
-     proceed marked incomplete (`export_meta.app_chats_complete: false`,
-     absent = complete) carrying identifier-only `"unavailable": true`
-     entries for unreadable chats — never fabricated empty histories.
-     `TranscriptRecorder.backfillExistingChats` refuses to complete against
-     a non-authoritative list. No orphan/cleanup pass may touch `outage.*`
-     files, `files/storage_recovery/`, or `*_recovered_*`/`*_conflict_*`/
-     `*_corrupt_*` snapshots. Still OPEN: the snapshot restore/inspection UI
-     (registry exists, no surface yet).
-   - `PersonaPreferences.kt` — personas, flat keys `<personaId>_<field>`.
-     **Stable IDs (July 2026):** identity is now an explicit `PersonaObject.id`,
-     minted ONCE (`StableId.newId("p-")`) and NEVER recomputed from the label —
-     renaming a persona keeps the same id and simply updates the record. Existing
-     personas keep their original id (the legacy `Hash.hash(label)` preference
-     key IS their permanent id — no migration, no key rename). The old
-     "rename = delete + recreate under a new hash" behaviour is GONE; every list/
-     adapter/editor/selection path carries the explicit id (never re-derives
-     `Hash.hash(label)`), so avatars, activation-prompt links, per-chat/last-used
-     selections and the memory-store companion (`app_character_id` = the stable
-     persona id) stay attached across a rename. `MemoryCompanionSync` locates the
-     companion by the stable id, so a rename updates the existing companion
-     instead of creating a second one. Same stable-ID model applies to
-     `ActivationPromptPreferences` (`ap-`), `ApiEndpointPreferences` (`ep-`, the
-     built-in "Default" profile keeps the reserved constant
-     `ApiEndpointObject.DEFAULT_ENDPOINT_ID` so the default reference resolves)
-     and `LogitBiasConfigPreferences` (`lb-`, config values stay under the same
-     `logit_bias_config_<id>` file — `movePreferences` was removed). `Chat` IDs
-     are deliberately still name-derived (a separate migration, out of scope).
-   - `ApiEndpointPreferences` (encrypted; API key behind a `SecretStore` seam,
-     keyed `<id>_api_key` — unchanged by a rename), `ActivationPromptPreferences`,
-     `LogitBiasPreferences`/`LogitBiasConfigPreferences`,
-     `FavoriteModelsPreferences` (a favorite references an endpoint by its stable
-     `id`), `GlobalPreferences`, `EncryptedPreferences`
-     (androidx security-crypto for API keys).
-2. **SQLite (SQLCipher)** — `lorebook.db` via `LoreBookStore` (singleton
-   over `net.zetetic:sqlcipher-android`). Legacy plaintext databases are
-   encrypted in place on first open by `LoreBookEncryption`
-   (sqlcipher_export → verify → swap; on ANY failure the plaintext file keeps
-   working with an empty password and the migration retries next start —
-   lorebooks must never stop working over encryption).
-   Schema v3: `lorebooks` (id/name/description/tag/timestamps),
-   `memory_entries` (id/lorebook_id/label/content/source_text/enabled/timestamps),
-   `memory_triggers` (FK → entries, ON DELETE CASCADE). Migrations are
-   additive `ALTER TABLE` steps in `onUpgrade` — always bump
-   `DATABASE_VERSION`, never edit old migration blocks. The full memory
-   system does NOT extend this database (superseded assumption — see below);
-   lorebooks stay the independent low-RAM tier. `ChatActivity`'s lorebook
-   call sites (injection + new-chat seeding) are try/catch-guarded so a
-   key/store failure degrades to "no lore this turn", never a crash.
-3. **SQLCipher** — `companion_memory.db` via `preferences/memory/MemoryStore`
-   (singleton over `net.zetetic:sqlcipher-android`; random 32-byte key per
-   database in `EncryptedPreferences`, minted by `DatabaseKeys` — which NEVER
-   mints a new key when the DB file already exists, that would brick the store).
-   Schema v1.11 from `Memory System/sqlite_table_plan.md` (companions,
-   memories + protection/provenance, entities, modes, directives, worlds,
-   user_personas, roleplay_characters, transcripts, proposals, change_log,
-   embeddings sidecar, deleted_ids tombstones; deviations documented in the
-   MemoryStore header). DB v2 (July 2026) adds a machine-readable `origin`
-   column ('user' default; 'archivist' reserved for Phase 6 proposals) on
-   memories, companions, entities, modes and directives, so later phases can
-   tell user records from archivist-proposed ones. DB v3 (July 2026, Phase 5)
-   adds the **Campaign** (roleplay continuity) layer: a `campaigns` table
-   (world/roleplay-character/companion FKs + status + Archivist-maintained
-   `story_so_far`) and a nullable `memories.campaign_id`. Ordinary
-   conversation never retrieves campaign-scoped rows (since Stage 3 the
-   isolation lives in the seven-category eligibility query — see below).
-   DB v4 (July 2026,
-   Phase 5 Stage 2) restructures the memory record to the owner-approved rules:
-   `memories.scope` now holds the **primary scope category** (global | real_life
-   | companion | project | world | campaign | rp_character), `kind` is the
-   **Type** (fact|preference|event|status|instruction|lore), `status` gains
-   `draft`, and a new `projects` table (§4) with `memories.project_id`.
-   Loosening the scope/status CHECK constraints can't be done with ALTER, so v4
-   **rebuilds** the `memories` table with foreign keys disabled for the
-   migration (`onConfigure` gates FK-off on the pending version, `onOpen`
-   restores them) so the drop doesn't cascade-delete the children. The
-   per-memory `always_load` flag is **retired** (§10): the column stays but
-   nothing reads or writes it — nothing is ever always-injected.
-   DB v5 makes the named target scopes **multi-select**
-   (§2): join tables `memory_worlds`/`memory_campaigns`/
-   `memory_roleplay_characters`/`memory_projects` mirror `memory_companions`, so
-   a memory can belong to several worlds/campaigns/RP-characters/projects
-   without being duplicated. Since Stage 3.1 the retrieval eligibility query
-   reads these join tables too (a memory linked to several targets is eligible
-   under each); the legacy single columns remain as a **primary-target mirror**
-   (first selected), display-only. The scoped-browser doors read the join
-   tables. The July 8 2026 teardown bug (delete/keep decided by the mirror
-   column, so a multi-target memory could be wrongly hard-deleted) is **FIXED**
-   (Phase 6, July 8 2026): `deleteWorld`/`deleteCampaign`/
-   `deleteRoleplayCharacter`/`deleteProject` now run join-first through
-   `teardownTargetMemoriesTx` + the pure `TargetTeardownPlanner` (unit-tested
-   in `app/src/test` with the owner's required cases) — shared memories always
-   survive with the dead link removed and the mirror reassigned to a surviving
-   owner; "also delete this card's memories" removes only sole-owned ones;
-   `keepCharacterMemories` reads the character JOIN, not the mirror. Spec +
-   history in `Memory System/roleplay_memory_deletion_fix.md`.
-   DB v6 (July 2026, Stage 3.3) adds the **freshness-cooldown** tables:
-   `injection_cooldowns` keyed `(chat_id, source_type, entry_id)` — when each
-   entry last reached a prompt, per chat, `source_type` separating memories
-   (`memory`) from the Stage 3.6 card entries (`card_entry`) — and
-   `chat_turn_counters`, the per-chat monotonic turn clock. Chat renames must
-   carry BOTH (handled inside `MemoryStore.repointChat`); memory
-   edit/status/delete paths clear the entry's cooldown rows so an edited
-   memory re-injects fresh.
-   DB v7 (July 2026, Stage 3.6a) adds the **roleplay card + tag layer**
-   (`Memory System/roleplay_cards_and_tags_spec.md` — the authoritative spec;
-   read it plus its §9 agent rules before touching any of this): Zone 1 card
-   columns on the existing tables (`roleplay_characters` gains
-   species/char_class/core_personality/physical_description/goals_drives;
-   `campaigns` gains quest_anchor/active_scene — the "bookmark", user-written
-   at session end; `worlds` gains cosmology and an 'archived' status via a
-   FK-off table rebuild), a `party_members` NPC roster
-   (four-state fiction `status` alive/incapacitated/dead/enemy + separate
-   `archived` lifecycle flag) with a `campaign_party_members` join (link, not
-   ownership), one polymorphic `card_entries` table for every card's Zone 2
-   sections (section keys in `CardSections`; per-section fields as nullable
-   columns; parent/overlay/promotion reference columns are deliberately
-   FK-less — a dangling id + `deleted_ids` tombstone is how §5's "(deleted
-   card)" rendering works), and the roleplay-realm tag pool `rp_tags`
-   (per-tag `auto_trigger`, default ON) + polymorphic `rp_tag_links` reaching
-   card entries, whole cards, and memories. THE REALM WALL IS STRUCTURAL:
-   real-life memory tags stay in `memories.tags_json` and never enter the
-   rp_tag tables. Card content lives in card tables, never in memories rows;
-   card retrieval is trigger-matched, never embedded (embeddings stay
-   memories-only). No automatic process writes any card/entry/tag
-   mid-conversation (user-confirmed dialogs are user edits); nothing ships
-   pre-populated. Backups (`MemorySeedCodec`/`exportData`/`importData`) carry
-   the whole card layer; card teardowns scrub entries + tag links and
-   `resetAllMemoryData` empties the new tables. The UI/wiring for all of
-   this (Stage 3.6b–f) is BUILT — see the feature list. §5's archive is
-   status-only (`archiveWorld`/`archiveCampaign` flip status, links stay
-   intact; `restoreWorld` + a one-tap Restore row action on the list
-   screens' visible Archive sections undo it); true deletion warns when
-   campaigns link the card, offers archive instead, and asks per-deletion
-   whether to delete the card's memories too.
-   DB v8 (July 2026, pre-3.6b) adds FRESH `worlds.premise_vibe` +
-   `worlds.magic_rules` columns for the world core: the owner ruled (spec
-   §8a addendum) that the new cards must never show, map, or migrate the
-   old free-text blocks — worlds' `premise`/`rules`, roleplay characters'
-   `description`/`arc`/`played_by`, campaigns' `story_so_far` are all
-   DORMANT (kept only so old backups import); no data is copied into the
-   card fields. The §8a addendum also holds the approved 3.6b on-screen
-   wording (Zone labels, the right-aligned word count with 300/500-word
-   warnings, "Promote to Party Member") — use those words verbatim.
-   DB v10 (July 2026, Stage 4, §11 Revision 5) is the **Model rules** layer.
-   §11 was redesigned in chat: the profile/group concept (a short-lived DB v9,
-   never shipped with a way to hold data) is REPLACED by a model-string-
-   primary model with tags. `model_rules` carries its own `model_strings_json`
-   (the models a rule applies to) and loses `profile_id`; `model_rule_profiles`
-   is dropped; `model_rule_tags` + `model_rule_tag_links` are a SEPARATE tag
-   pool (plain labels, no colors — never the roleplay or memory tag realms).
-   Injection matches by the chat's model string (case-insensitive contains,
-   provider prefix ignored — `enforcer/ModelRuleMatcher`, unit-tested), renders
-   its OWN prompt-layer block, is ON by default and gated by a global
-   `getAutoApplyModelRules()` default + a per-chat `getChatApplyModelRules()`
-   override (in the auto-naming copy block). Matching rules are NEVER truncated
-   (§11). `status='draft'` rows are Phase-6 Archivist suggestions (the Pending
-   UI is built but stays empty until Phase 6). Backups/codec carry rules, tags,
-   and links. UI lives under AI System Settings (see the architecture map).
-   DB v11 (July 2026, Phase 6) adds `archivist_runs` — the Archivist run
-   history behind the Memory Assistant's "Recent Memory Analysis" list and its
-   Rerun action (per-run: dates, status, chat/transcript ids fed, memory/rule
-   draft ids created, failed chats). Device-local operational data like the
-   embeddings: never exported, no tombstones, emptied by Reset memories. The
-   **Archivist run engine** (backend only, `preferences/memory/archivist/`) is
-   BUILT: `Archivist.analyze`/`rerun` read the eligible pending transcripts
-   (live query — deleted chats filtered against the app's chat list,
-   re-included chats reappear automatically), call the configured Archivist
-   endpoint/model, and file every finding as a DRAFT — memory drafts via
-   `insertArchivistDraftMemory` (enforces status='draft' + origin='archivist',
-   never writes protection; lands in the existing Pending screen) and
-   model-rule drafts via `upsertModelRule` (status='draft',
-   source_model_string). `ArchivistResponseParser` (pure, unit-tested) is the
-   validation gate: unknown scope/type rows are dropped and counted (never
-   coerced), handling fields ignored, floods bounded. Proposed target NAMES
-   only link to records that already exist (exact name match) — the Archivist
-   never creates worlds/campaigns/characters/projects. **DB v13 (July 9
-   2026) adds card-placement SUGGESTIONS**: roleplay drafts may carry
-   `memories.suggested_card_type/_id/_section` (draft-only, FK-less, never
-   exported, cleared on any status change) — the Archivist proposes a card +
-   section by NAME (resolved against existing live cards only; section
-   validated per card type), gated by `getArchivistCardSuggestions()` (ON by
-   default — the owner's card-append toggle; its UI ships with Memory
-   Controls). Suggestions pre-select the Add-to-Card and editor Link
-   dropdowns and give pending rows the §7 outline (`bg_suggestion_outline`).
-   **DB v14 (July 9 2026) adds `rejected_drafts`** (owner preference):
-   deleting a Memory Assistant DRAFT records its exact title+content hash +
-   source conversation, and a rerun will not refile that exact draft from
-   that conversation — deliberately narrow, never broad similarity
-   suppression (owner rule). Device-local, never exported, emptied by Reset
-   memories. **Phase 6 scope limits (owner rulings, July 9 2026 — final):**
-   the Memory Assistant NEVER creates or proposes worlds/campaigns from
-   emergence — roleplay content with no attached target files as an
-   untargeted pending draft carrying the persistent inline note "Needs
-   roleplay target." (it cannot be added to a card until the user assigns a
-   world/campaign/character target in the editor; Add to Card is hidden and
-   the editor's Link section gated until then). The Memory Assistant NEVER
-   automatically updates campaign story_so_far or Plot Ledger fields — those
-   columns are DEAD legacy and must never be revived or referenced as
-   current (owner ruling; card-section placement SUGGESTIONS, user-approved,
-   including to plot_ledger, are the only sanctioned path). The full memory
-   engine requires an embedding model installed through Advanced Memory
-   Settings — refusing the switch shows the owner-worded guidance INLINE
-   under the Memory Engine control (persistent; the app-wide toast ban
-   applies).
-   **DB v15 (Profile Images) adds `image_ref TEXT` to `user_personas` and
-   `roleplay_characters`; DB v16 (July 21 2026, Profile Images phase 8) adds
-   `short_description TEXT` to `user_personas`** — the persona's list-row
-   subtitle (the editor's Short Description field used to be discarded on save;
-   it now persists here). Both are additive, nullable, exported by
-   `MemorySeedCodec` (optional, absent in older backups → null). The Profile
-   Images feature (storage/gallery/framing/shapes) lives in
-   `preferences/profileimages/` + `profile-images-plan.md`; the two default
-   images are `GlobalPreferences.getGlobalDefaultImageRef()` (**"Default AI
-   Avatar"**, the AI-side default, auto-seeded by `GlobalDefaultImageSeeder`)
-   and `getDefaultUserImageRef()` (**"Default Personal Avatar"**, the
-   user-side default). **Fallback cascade (owner ruling, July 21 2026,
-   `util/ProfileImageResolver`):** AI side (companion editor/rows, assistant
-   chat bubble, chat-list) = own picture → Default AI Avatar → glyph; user
-   side (My Persona editor/rows, Roleplay Character rows, the user's own chat
-   bubble) = own picture → Default Personal Avatar → generic person icon. The
-   old per-chat "Customize assistant" avatar is no longer consulted in chat
-   display (the new system replaces it; that experimental control is now
-   inert and slated for a separate cleanup). Screen-reader labels for a
-   picture slot name the identity ("<Name>'s picture") when it has its own
-   picture, else the default that actually shows ("Default AI avatar" /
-   "Default personal avatar" / "No personal picture set"). **My Personas and
-   Roleplay Characters list rows use the shared house row style with a leading
-   picture** (`view_user_persona_row.xml` image+title+subtitle=short
-   description; `view_roleplay_character_row.xml` image+title only) via
-   `ProfileImageRowAdapter` + `MemoryScreenActivity.buildListAdapter()` — the
-   plan's earlier "no images on memory-side list rows" note was superseded by
-   the owner's separate approval. Only the row's look changed; the My Personas
-   list order and its archive/restore behavior are unchanged.
-   **Image-tap immediate-save + chat refresh (July 21 2026).** Picking a
-   picture for an EXISTING identity commits ONLY the image at once, by the
-   identity's stable id, through a narrow store method — companion:
-   `PersonaPreferences.setPersonaAvatarRef` (writes just `<id>_avatar_ref`);
-   My Persona: `MemoryStore.setUserPersonaImageRef` (UPDATEs only `image_ref`)
-   — so it never commits the name/prompt/other unsaved editor draft and
-   backing out cannot undo the picture. The image is deliberately excluded
-   from the editors' discard-changes snapshot. A brand-new (unsaved) identity
-   keeps the pick in editor draft and writes it only on normal creation, so an
-   image pick alone materialises no record; cancelling creates nothing.
-   Defaults (`setGlobalDefaultImageRef`/`setDefaultUserImageRef`) still write
-   immediately in the gallery. Roleplay Characters have no picture control in
-   `CharacterCardActivity`; its save now carries the stored `image_ref` through
-   (`imageRef = priorCharacter?.imageRef`) so a card save can't wipe an
-   imported image. In-chat display refreshes through `ChatActivity`'s
-   `refreshCompanionAvatar`/`refreshUserAvatar` → the adapter's
-   `setCompanionAvatar`/`setUserAvatar` (which rebind visible rows), and both
-   are driven by `util/AvatarRefreshCoordinator` (pure, unit-tested): a refresh
-   requested before the adapter is attached (onResume runs before the async
-   chat load) is RETAINED and replayed by `onAvatarTargetReady()` in `initUI`
-   rather than discarded (the old `adapter == null` early return was the
-   restart-only-refresh bug), and each async picture resolve carries a
-   latest-request token so an older resolve can never overwrite a newer
-   selection. This also propagates a changed Default AI / Personal Avatar into
-   chats that fall through to it, without an app restart.
-   The Memory Assistant tuning prefs (July 9 spec,
-   `memory_settings_reorg_spec.md`): max suggestions per conversation +
-   minimum importance (both ENFORCED IN CODE in the runner), temperature
-   (default 0.3), custom extraction prompt ("" = built-in). The **Memory
-   Assistant screen is BUILT** (July 8 2026 evening) to the owner's approved
-   wording (`memory_assistant_design.md` + `phase6_owner_answers_2026-07-08.md`)
-   and drives this engine: facts block, Analyze Conversations with live
-   batch-aware progress, View Pending Memories → the browser filtered to
-   drafts, Recent Memory Analysis (5 rows, Rerun far right). DB v12 adds
-   `archivist_runs.outcome`/`failure_reason`; run status/failure display
-   implements **`Memory System/archivist_status_wording_spec.md`** verbatim
-   (owner-sanctioned wording with a no-approval dispensation for tone-matched
-   gaps — unique to that spec): not-ready above the disabled button,
-   full/partial-failure reasons A–G via `ArchivistFailure` (mapped through
-   `GenerationErrorClassifier`), Nothing To Extract / No New Memories Added /
-   Run Interrupted states, and the "Some Memories Deleted Later" run-row
-   badge. Archivist failure/partial-failure records ALWAYS write to the
-   Memory log via `MemoryLog.logAlways` (owner rule — never gate them on the
-   diagnostics toggle).
-   Source is DERIVED for
-   display (`provenance_source == "user_entered"` ⇒ "Entered by hand", else
-   "Learned from chat"); there is no "Imported" bucket — import preserves each
-   row's original source (owner decision). MemoryStore also
-   grew the Phase-5 hand-editor CRUD (per-record upsert/delete with
-   `deleted_ids` tombstones; memory edits snapshot prior state into
-   `change_log` and drop stale embeddings so a rebuild re-embeds). **The app ships and
-   auto-loads NO seed/example memory data** — a fresh store starts empty and
-   fills only from real conversations, persona-bootstrapped companions, and
-   the user's own imported backups (owner decision July 2026, after a bundled
-   example companion caused confusion; the old "Load starter template" button,
-   the seed-purge button, the seed-testing switch and the bundled
-   `memory_seed_template.json` were all removed). `activeMemoriesForScope`
-   (now taking a `RetrievalScope`) is the SINGLE eligibility gate injection
-   consumes, rewritten in Stage 3.1 to the owner's seven-category model:
-   ordinary chat sees global + real-life + the active companion's memories +
-   ALL project memories (project selection boosts ranking, never gates);
-   roleplay context (any of world/campaign/RP-character selected) sees global
-   plus the SELECTED targets' memories, real-life and project memories are
-   BLOCKED (the fiction wall, §3), and companion memories enter roleplay only
-   via the narrator/GM match (the selected campaign's GM companion == the
-   chat's active companion) or the global "Allow active companion memories in
-   roleplay" switch in Memory settings (default OFF). Only status='active'
-   rows are ever eligible, and the companion-scoped branch requires the
-   companion to be past 'draft' (an unapproved companion's memories never
-   inject — this is the real protection). Ranking (Stage 3.2, §12) blends
-   scope-specificity boosts (campaign → RP character → world → project →
-   companion → real life → global), a selected-project boost and capped tag
-   hints into the relevance score — a strong preference among comparably
-   relevant entries, never a trump card (§12.4). The Librarian applies a
-   min-similarity floor
-   (0.30) so top-k can't surface weak matches from a small store; debug-search
-   labels show status/origin/provenance and include non-active memories.
-   Created lazily — `MemoryStore.isProvisioned()` gates
-   every hook so nothing provisions it as a side effect. Backups are
-   schema-shaped JSON via `MemorySeedCodec` (unit-tested round-trip against an
-   inline fixture); `MemoryExporter` writes rotating daily backups at app
-   start + manual SAF export (chats ride along under `app_chats`; embeddings
-   never exported). **Import** (SAF file picker → the encrypted store) restores
-   the user's own exported file. **Companion records are automatic** (owner
-   requirement, July 2026): the app's personas ARE the companions the user
-   sees; the store's `companions` table is the memory system's continuity
-   file for each persona (`app_character_id` = the persona's STABLE id — the
-   `Hash.hash(label)` legacy id for pre-existing personas, a `p-…` id for new
-   ones; it no longer changes on rename, and the stable `companion_id` survives
-   renames regardless). A chat with a persona must ALWAYS
-   resolve to a companion — `MemoryCompanionSync.ensureCompanionForPersona`
-   creates the record on first contact (called from `TranscriptRecorder` and
-   the enforcer), the full bootstrap runs automatically when the Memory
-   engine is switched to "full" (tier-2 enable, per the plan), and the
-   manual bootstrap button in Memory settings remains as a re-run.
-   `companion=none` in capture logs is legitimate ONLY for chats with no
-   persona selected or a stale persona id. The Archivist (Phase 6) maintains
-   memories INSIDE companions; it never creates the companion itself — the
-   record must exist as the scope anchor before anything can be filed under
-   it. Persona edits sync one-way into linked companion records via the hook
-   in `PersonaPreferences` (`MemoryCompanionSync`) — renames re-point
-   `app_character_id` under the OLD id; keep that when touching persona save
-   paths. UI: the **Memory Manager** tile on the main Settings screen (renamed
-   from "Memory System", July 8 2026) → `MemoryManagerActivity` (the row hub)
-   → **Memory Controls** row → `MemoryControlsActivity` (defaults, assistant
-   controls, engine, endpoint/model, backups, reset); the hub's separate
-   **Advanced Memory Settings** row (directly under Memory Controls) →
-   `AdvancedMemorySettingsActivity` holds diagnostics + bootstrap + librarian
-   — July 9 2026 split, see the architecture map.
-4. **Files** — images in `getExternalFilesDir("images")`, whisper models via
-   `LocalWhisperStorage`, rotating memory backups in
-   `getExternalFilesDir("memory_backups")`.
-
-## Automatic Backups (recovery backups on a schedule) — BUILT July 23 2026
-
-The Automatic Backups section of the Memory Backup & Restore screen is now a
-working system (previously the toggle/frequency only PERSISTED a choice with no
-writer). It runs the SAME verified recovery-backup engine (`RecoveryBackupManager
-.createBackup`) into the **Automatic** SAF folder (kept separate from the manual
-folder — never combined), and is deliberately conservative:
-
-- **Disabled by default.** Enabling **requires a valid, writable destination**:
-  flipping the toggle on with no folder opens the SAF folder picker and completes
-  the enable only once a folder is chosen (cancelling reverts the toggle). Enabled
-  flag + frequency + both folders + the auto-set run tracking live in
-  `RecoveryBackupState` (raw `storage_health` prefs, `backup.*` keys — OUTSIDE the
-  three protected databases, so a locked/damaged DB can't disable backups).
-- **Two triggers, one funnel.** The reliable one is a **WorkManager unique
-  periodic job** (`AutoBackupScheduling` → `AutoBackupWorker`, unique name
-  `auto_recovery_backup`, `ExistingPeriodicWorkPolicy.UPDATE` so a frequency
-  change re-periods the SAME job — duplicate jobs can't be scheduled). The
-  catch-up one is an **app-open opportunistic check** in `MainApplication`'s
-  startup housekeeping thread (off the main thread and off the chat-list loader,
-  so a due backup never blocks the chat list loading or opening a new chat). Both
-  call `AutoBackupController.runIfDue`. Android may DEFER background work — the
-  frequency interval is a MINIMUM spacing, never exact timing (never claim
-  otherwise).
-- **Pure decision core:** `AutoBackupScheduler` (unit-tested, no Android) owns
-  interval-per-frequency (Every Day / Week / Two Weeks / Month = 1/7/14/30 days),
-  `isDue`/`nextDueMillis` (measured from the last SUCCESSFUL auto pass — see the
-  failure semantics below), the full `plan()` gate (disabled → no-destination →
-  permission-lost → already-running → not-due → RUN, permission-lost outranks
-  due), `shouldAdvanceSchedule` (advances ONLY on a fully clean pass — see
-  below), `isRetryableFailure` (which `BackupFailureCategory` values get a
-  bounded WorkManager backoff-retry), and `shouldRetryNow` (the
-  `MAX_RETRY_ATTEMPTS = 3` bound against WorkManager's `runAttemptCount`).
-- **No duplicates per due window:** the schedule anchor advances ONLY on success
-  (so a second trigger in the same window sees NOT_DUE) plus a process-wide
-  `AtomicBoolean` running latch in `AutoBackupController` — the `compareAndSet`
-  right before the engine runs is the real atomic gate (an earlier `plan()` read
-  of the latch is advisory only), so the WorkManager trigger and the app-open
-  catch-up can never both produce a backup for the same window even if both
-  observe the latch as free at the same instant.
-- **Failed attempts are never recorded as success (owner correction, July 23
-  2026 — the ship-day version of this had a live bug here, fixed before
-  reaching `main`).** `AutoBackupState`'s automatic-pass tracking is
-  `lastAttempt` / `lastSuccess` / `lastFailureCategory` — no separate cached
-  "next due", which is ALWAYS derived fresh from `lastSuccess` (never from
-  `lastAttempt`), so a run of failures can never shift the schedule.
-  `recordAutoAttempt` stamps on EVERY genuine attempt (including one blocked
-  immediately by a lost destination permission) — but never for a trigger that
-  did nothing (disabled, no destination, not due, already running).
-  `recordAutoSuccess` is called ONLY when `AutoBackupScheduler
-  .shouldAdvanceSchedule(hadAnyFailure = false)` — i.e. every artifact backed up
-  cleanly or had nothing to back up; a real per-type failure (`success == false
-  && category != null`) or a mid-run lost permission both leave `lastSuccess`
-  untouched and record the failure category instead.
-- **Lost SAF permission handled honestly:** a missing/revoked grant BLOCKS future
-  runs (no silent fallback anywhere), is recorded as `DESTINATION_PERMISSION`,
-  keeps the set due (since `lastSuccess` never moves), and shows a "Paused — the
-  backup folder is unavailable" line; the screen's destination line uses the
-  centralized `BackupLocationDisplay` breadcrumb (never a raw URI or exception
-  text). The frequency choice itself is untouched by a failure — only
-  `setAutoFrequency` (the picker) ever writes it.
-- **WorkManager `Result` mapping is category-aware (`AutoBackupWorker`):** a lost
-  SAF permission (`Outcome.PERMISSION_LOST`) → `Result.failure()`, never
-  retried automatically — an immediate retry would just hit the same wall, and
-  the fix requires the user to repair the destination; the periodic job's
-  `PeriodicWorkRequestBuilder` carries `setBackoffCriteria(EXPONENTIAL,
-  MIN_BACKOFF_MILLIS)` for the other case: a retryable per-type failure
-  (`Outcome.RETRYABLE_FAILURE` — SOURCE / DESTINATION_WRITE, which also covers
-  "storage full" / VERIFY, or an unexpected exception in the controller) →
-  `Result.retry()` while `shouldRetryNow(runAttemptCount)` is true (bounded at
-  3 attempts within the due window per WorkManager's own attempt counter), then
-  `Result.failure()`; everything else (disabled / no destination / not due /
-  already running / a clean pass) → `Result.success()` — not a worker failure.
-- **Never deletes:** automatic runs call `createBackup(..., rotateOldCopies =
-  false)` — the keep-5 rotation is skipped, so no old backup is ever deleted
-  yet. Records last attempt / last success / last failure category (per the
-  semantics above). It ONLY saves — never restores, never touches a live
-  database, never weakens encryption or verification. WorkManager dep:
-  `androidx.work:work-runtime-ktx`.
-
-## Current feature list
-
-- Multi-chat with per-chat settings (model, endpoint, sampling, persona, …),
-  auto-naming of new chats (which **changes the chat id**). Renames — auto or
-  manual — go through `ChatPreferences.editChat` → `ChatRenameTransaction`
-  (July 11 2026): the message history and the WHOLE per-chat settings file
-  are copied wholesale (write-new → verify → flip the chat-list pointer →
-  clear old, all synchronous commits), so a new per-chat setting survives
-  renames automatically — the old hand-maintained copy blocks in
-  `ChatActivity` and `AddChatDialogFragment` are GONE (they had drifted: one
-  dropped persona/lorebooks/memory scene on manual rename, the other reset
-  the voice settings on auto-name, and the manual one re-derived per-chat
-  tuning from the endpoint profile). When you add a per-chat key, register
-  it in `PerChatSettingKeys` — `PerChatSettingKeysTest` scans
-  `Preferences.kt` and fails CI when the inventory drifts. `editChat`
-  returns false when the rename could not be fully applied (the chat is then
-  untouched under its old name and callers keep the old id); auto-naming
-  retries on later turns (max 3 attempts per screen instance) instead of
-  giving up after one failure. Older doc mentions of "the auto-naming copy
-  block" mean this mechanism now.
-  `editChat` runs **off the main thread** at both call sites (manual rename on
-  the host activity's `lifecycleScope`, auto-naming via `withContext(IO)`),
-  returning to Main only for UI adoption and only if the screen is still alive;
-  a per-caller guard prevents overlapping rename submissions. The cross-store
-  memory re-point is made durable by a small **rename journal**
-  (`RenameJournal`, encrypted prefs, outside the memory DB): `editChat` records
-  the pending (oldId→newId) before touching prefs and clears it once
-  `repointChat` succeeds; the prefs pointer flip is the authoritative moment,
-  so if the process dies or SQLCipher fails in between, `MainApplication`'s
-  startup thread calls `RenameJournal.reconcile` — which consults the live chat
-  list to decide whether to finish the re-point (new id live, old gone),
-  discard (old still live = rename never took; both live = old id reused;
-  neither = chat deleted). `repointChat` is one atomic, idempotent DB
-  transaction, so recovery can retry safely; a repeatedly-failing re-point
-  keeps its journal entry and retries each start while the chat stays usable
-  and pre-rename transcripts stay preserved under the old id. Any future
-  orphan-row pruning MUST check `RenameJournal.hasPending` first. The pure
-  reconcile decision (`RenameJournal.planReconcile`) is unit-tested at every
-  boundary.
-  Auto-naming adopts the new id **in place** — it must never relaunch
-  ChatActivity, because onDestroy kills the readback and hands-free loop.
-- **Streamed-reply completion state (Round 3, July 11 2026).** A streamed
-  assistant reply is persisted incrementally, so a partial reply on disk was
-  byte-identical to a finished one — a process kill / activity destroy / stop
-  / error could reopen a fragment looking complete, and export, transcript
-  capture, the Archivist and RAG all trusted it. Assistant message maps now
-  carry an optional `state` key (`preferences/MessageCompletionState.kt`, pure
-  + unit-tested): **absent = complete** (every legacy/older-build message —
-  historical replies never suddenly look incomplete), `done` = complete, and
-  `streaming`/`stopped`/`failed`/`interrupted` (plus any unrecognized value)
-  are treated as NOT complete and preserved as-is, never silently upgraded.
-  State travels in the SAME JSON blob as the text (`saveSettings`), so text
-  and marker are atomic — there is no window where the text is final but the
-  flag is stale. The placeholder is tagged `streaming`; each of the three
-  streaming completion points sets `done`; the `generateResponse`
-  CancellationException catch sets `stopped` (user stop, screen alive) or
-  `interrupted` (`isFinishing`/`isDestroyed` — activity torn down); the
-  Exception catch sets `failed` (+ classifier code in `stateDetail`). A hard
-  process kill runs no code, so `initSettings` has a **load-time reconciler**
-  that turns any stale `streaming` row into `interrupted` (idempotent) — do
-  NOT rely on the process-exit log for this. `finalizeStreamingMessageState`
-  only stamps a still-`streaming` row, never downgrades an already-terminal
-  one. The design deliberately does NOT add a synchronous-commit save-queue
-  (owner call): a lost terminal write at worst mislabels a complete reply as
-  interrupted (safe direction, visible), never the reverse. Downstream: an
-  unfinished reply keeps its partial text everywhere (nothing received is
-  deleted), but gets an INTERNAL model-only note (`modelFacingContent`, never
-  shown) so the model can't mistake it for finished; transcript capture marks
-  the assistant turn `"complete": false` (absent = complete) and
-  `ArchivistPrompt.renderTurns` drops `complete:false` assistant turns (the
-  user's own turn beside it stays) so a fragment is never mined as fact.
-  **Error prose is no longer appended into the reply text** — a `failed`
-  reply's coded error lives in `errorText` and renders next to the inline
-  marker (a small persistent line in the bot/classic layouts, `status_marker`;
-  no toast/dialog/notification/sound) only when "Show chat errors" is on.
-  **Retry replaces** the incomplete reply (unchanged); **editing** an
-  incomplete reply clears the state to `done` (in-memory in `ChatAdapter` and
-  on disk in `ChatPreferences.editMessage`). Marker wording lives in
-  `strings.xml` (`message_state_*`) and is owner-approved copy — do not reword
-  without asking.
-- Any OpenAI-compatible endpoint; multiple endpoint profiles; streaming via
-  `com.aallam.openai` (Ktor 2.3.12 — pinned, do not upgrade); secondary
-  official `openai-java` client for function calling. Each endpoint profile
-  carries **two per-endpoint timeouts** (both editable on the
-  `ApiEndpointEditorActivity` page, directly under Provider), applied to BOTH
-  OpenAI clients built in `ChatActivity.initAI()` as
-  `Timeout(connect = …, socket = …)`:
-  - **Connection Timeout** (`ApiEndpointObject.connectTimeoutSeconds`, pref key
-    `<id>_timeout`; default 30s, clamped 5..300 via
-    `coerceConnectTimeoutSeconds`) — the Ktor CONNECT timeout; exceeding it is
-    the **N2 "Connection Timed Out"** error.
-  - **Response Time** (`ApiEndpointObject.responseTimeoutSeconds`, pref key
-    `<id>_response_timeout`; default 600s, floored at 45, NO maximum by owner
-    ruling, via `coerceResponseTimeoutSeconds`) — the Ktor SOCKET timeout;
-    exceeding it is the **N4 "Response Timed Out"** error.
-  The classifier (`GenerationErrorClassifier`) splits these: a connect timeout
-  → N2, a read/socket timeout → N4, so the chat message names which one fired
-  and which field to raise. Older profiles with no stored value read as the
-  defaults (30 / 600). The editor validates on save with a snackbar +
-  boundary-correction (Connection Timeout 5..300; Response Time floor 45, no
-  ceiling).
-- Voice: hands-free loop (VAD listen → Whisper/Google STT → generate → TTS
-  readback → re-arm), manual mic button, per-message speak button, audible
-  error/done chimes (plus a distinct low `playNoSpeechSignal` two-tone when the
-  loop gives up on its own — heard nothing / couldn't capture / recognizer died
-  after retries; gated on the error-sound pref, played from `stopHandsFreeLoop`'s
-  `notify` flag). Device-TTS readback failures funnel through
-  `handleTtsReadbackError`: it logs the *factual* failure state (error code+name,
-  text length vs `getMaxSpeechInputLength`, engine, voice, language) via
-  `logVoiceEventAlways` (persisted even with VAD logging off) and caps consecutive
-  re-inits at `TTS_MAX_ERROR_RETRIES` (3) — a reply the engine keeps rejecting
-  (e.g. ERROR_INVALID_REQUEST/-8) used to re-init the engine forever and flood
-  the Event log; now it gives up on that one readback and the loop continues. The
-  budget resets on a clean `onDone` and at each new readback (`pronounce`,
-  `onSpeakClick`). screen-off operation via foreground services (the bar with
-  a **Hang Up** button — see `GenerationForegroundService`/`HandsFreeService`
-  above; plain read-aloud now survives app-switch/screen-off via the readback
-  keep-alive). The Event (Voice Debug) log is **never wiped on startup** —
-  `MainApplication` used to call `Logger.clearEventLog` in `onCreate`, which
-  Android reran on every process recreation and silently erased the log between
-  sessions; clearing is user-driven only (the button in `LogsActivity`). On
-  start `MainApplication` instead calls `Logger.logLastExitReason`, which uses
-  `ActivityManager.getHistoricalProcessExitReasons` (API 30+) to record *why
-  the previous process died* (low memory / force-stop / crash / ANR vs. clean
-  exit) — a hard kill runs no code on the way out, so this after-the-fact query
-  is the only trace a screen-off readback killed mid-sentence leaves; deduped by
-  exit timestamp. One line always goes to the Event (Voice Debug) log; and
-  since July 15 2026, **an app-breaking exit ALSO writes an entry to the Error
-  Log** (`"crash"` channel) so a freeze or hard death isn't invisible where a
-  user actually looks — an ANR isn't a JVM exception, so `CrashHandler` never
-  fires and nothing reached the Error Log before. `isAppBreakingExit` gates it
-  to ANR / native crash / low-memory kill / excessive-resource / init-failure
-  (memory-related = warning, the rest = error); `REASON_CRASH` (an ordinary
-  exception) is deliberately excluded because `CrashHandler` already logs it
-  there with a full trace. When the system kept a trace
-  (`ApplicationExitInfo.getTraceInputStream`, chiefly for ANR + native crash)
-  `readMainThreadTrace` extracts and caps the **main thread's** stack only
-  (no full all-thread dump; owner-approved scope) and appends it — indented so
-  it can't masquerade as a `trimByEntries` header. There is deliberately NO
-  live ANR watchdog; this is purely the after-the-fact record.
-  Voice diagnostics: with any VAD-logging toggle on (Energy, WebRTC or Silero
-  — each detector has its own toggle, in the Audio Debugging screen), every
-  loop decision (mic open/close + why, readback, failures, loop stop reasons)
-  is written to the persistent Event log via `ChatActivity.logVoiceEvent` —
-  when adding a new loop exit path, log it there or failures become
-  undiagnosable. The per-turn VAD diagnostics line (`logVadDiagnostics`)
-  follows the same toggles (`voiceDiagnosticsEnabled()`), so logging off means
-  no VadDiag spam. `Logger` is local-only (no telemetry); it must never be
-  gated on any consent/telemetry flag (the old installation-id gate, and the
-  whole installation-id/consent system, were removed July 2026).
-  Advanced Voice Settings screen (`VoiceAdvancedSettingsActivity`, plain
-  rows not tiles, reached from a full-width tile in Voice settings — the VAD
-  *logging* toggles are NOT here, they're in Audio Debugging): VAD
-  energy-gate tuning (`VadTuning` — gate on/off, min RMS, floor factor,
-  ceiling, min speech duration, plus hysteresis: a two-level gate where
-  speech enters at the full gate but only has to stay above gate×exit-ratio,
-  default ON at 50%, with an optional speech-hold/hangover defaulting to 0 —
-  built for changing-loudness rooms; the Energy detector's hysteresis is
-  unit-tested in `app/src/test`; all global prefs). Three VAD methods:
-  Energy, WebRTC (libfvad), and Silero — a neural detector running the
-  bundled `assets/silero_vad.onnx` (pinned silero-vad v5.1.2, MIT) through
-  ONNX Runtime (`onnxruntime-android` dep + proguard keep rule); Silero
-  ignores the energy-gate knobs (only its probability threshold applies,
-  plus shared hysteresis/speech-hold) and falls back to Energy with an
-  event-log line if the runtime can't load. On-device Whisper
-  decode params (greedy/beam, beam size,
-  temperature, suppress-blank, single-segment, initial prompt, prev-context,
-  cleanup toggle — plumbed Kotlin→JNI→whisper_full, defaults match the old
-  hardcoded values), and device-TTS rate/pitch (set in both ttsPostInit
-  funnels — since July 11 2026 the engine's accept/reject result is CHECKED
-  (`TtsTuningPolicy`, unit-tested): a rejected application is re-applied
-  exactly once ~750 ms after init and rejection/fallback is Event-logged
-  ungated, success never — the Google engine can drop a setSpeechRate made
-  at the instant init completes, which made whole sessions read back at the
-  default rate ("suddenly talks faster"); the system-wide Accessibility
-  speech rate multiplies the app's and is external/undetectable).
-  (The voice-diagnostics logging toggles that used to live here moved
-  to the Audio Debugging screen.) The VAD energy gate exists because WebRTC
-  mislabels fan noise as voice, but a fixed gate also silently discarded a
-  quiet voice ("voiced N, gated 0" in diagnostics) — that's why it's tunable.
-- Lorebook memory system: multiple books (title/description/type-tag,
-  editable in place via the cog in the book's entries screen; tag/description
-  shown under that screen's header and wherever books are listed),
-  memories with trigger phrases matched against the latest user message
-  (whole-word, case-insensitive, light suffix folding via
-  `LoreBookTriggerMatcher` — unit-tested in `app/src/test`; a trigger wrapped
-  in double quotes demands that exact text instead), persona-owned core book (always active) + linked
-  additional books checked per chat in Quick Settings, injection as a separate
-  system message after the stable base prompt (preserves prefix caching),
-  injection budget 20 entries / 6000 chars, debug view of injections.
-- Personas (prompt + activation prompt + lorebooks + auto-load-last-books),
-  activation prompts, custom assistant name/avatar.
-- Companion memory store, Phases 1–2 (storage + capture): encrypted `companion_memory.db`,
-  user backup import (own exported file, no bundled example data), rotating +
-  manual JSON export, persona→companion bootstrap and edit-sync (surface:
-  Settings → Memory Manager → Memory Settings). Every completed turn is captured into the transcripts queue from
-  the `finally` of `generateResponse` (single funnel; best-effort, never
-  disturbs a turn) via `TranscriptRecorder`. Quick Settings has three per-chat
-  memory controls (all in the auto-naming copy block): "Use memory" (kill
-  switch — still captures, marks rows excluded; unset chats default from the
-  global engine tier + the Memory settings default toggle), "Use lore books"
-  (independent lore switch, July 10 2026 — see the Quick-Settings-is-God
-  ruling in the Phase 4 section) and "Don't archive" (stops capture
-  entirely). Chat renames must
-  re-point `transcripts.chat_id` (`MemoryStore.repointChat`, hooked in
-  auto-naming and `ChatPreferences.editChat`). Chat-list rows show a memory
-  review marker.
-  Phase 3 (librarian) adds on-device semantic retrieval in
-  `preferences/memory/librarian/`: a swappable `EmbeddingModel` (default
-  EmbeddingGemma-300M ONNX **q4**; int8 optional, never the default), model
-  catalog/download/storage cloned from the Whisper pattern, `VectorMath` +
-  `Librarian` (brute-force cosine top-k, scope isolation in the SQL query,
-  retrieval_policy-weighted scoring, tentative dampening, keyword fallback,
-  rebuild-index + model-tag-mismatch detection). Managed from the "Librarian"
-  section of Memory settings (download models, rebuild index, debug search).
-  A model is a directory of files: transformer ONNX, any ONNX external-data
-  companions (catalog `ExtraFile` — q4's weights live in `model_q4.onnx_data`,
-  referenced by that exact name from inside the graph), and `tokenizer.json`;
-  `isInstalled` requires every non-optional file, and the downloader skips
-  already-complete files (partial installs repair by re-tapping Download).
-  Tokenization is **pure Kotlin** (`HfTokenizer`, unit-tested): each model
-  download fetches the repo's own `tokenizer.json` and it's parsed/encoded
-  on-device (BPE+byte-fallback for Gemma, Unigram for a future BGE-M3 —
-  model-specific prompt prefixes/pooling/dims are catalog fields, so a new
-  model is a catalog entry, not code). The app must NEVER bundle or
-  redistribute a Gemma-derived tokenizer artifact (owner decision July 2026 —
-  release builds auto-publish to GitHub, which would make bundling a
-  redistribution); do not add ONNX Runtime Extensions back for this.
-  Safety net, in order: unknown tokenizer.json constructs throw at load;
-  `OnnxEmbeddingModel` probes tensor names defensively; and the Librarian
-  runs a one-time **semantic self-check** per installed model
-  (related-vs-unrelated cosine ordering; pass marker `.selfcheck_ok` in the
-  model dir, cleared on re-download) — any failure logs to MemoryLog and
-  degrades to keyword search rather than indexing garbage vectors. Still
-  needs on-device bring-up on the Pixel (URLs + real-graph tensor names) —
-  see the Phase 3 note in the plan.
-  Phase 4 (enforcer — memory now influences conversations) is built, in
-  `preferences/memory/enforcer/`, and was **reworked by Stage 3.4 to the
-  owner-approved rules**: a global **Memory engine** setting in
-  Memory settings — none / lore books (default = classic behavior) / full
-  (selectable only with an embedding model installed). **QUICK SETTINGS IS
-  GOD (owner ruling, July 10 2026):** the engine picker only supplies the
-  DEFAULTS; each chat has two independent Quick Settings switches — "Use
-  memory in this chat" and "Use lore books in this chat" (tri-state prefs
-  `memory_enabled` / `lorebooks_enabled`, both in the auto-naming copy
-  block) — and an explicit per-chat switch always wins over the engine
-  tier. Unset chats derive: memory ON iff engine=="full" (× the Memory
-  settings default toggle); lore ON iff engine!="none". The injection
-  gates in `regularGPTResponse` read ONLY the per-chat getters; the scene
-  selectors in Quick Settings follow the chat's memory switch, not the
-  engine. When memory injects,
-  `Enforcer.assembleTurn` builds ONE extra system message per turn on
-  Dispatchers.IO in `regularGPTResponse`, after the stable first message
-  (never reordered — prefix caching). That message now contains ONLY what
-  the rules allow: retrieved memories with provenance markers and inline
-  HANDLE WITH CARE handling (one render function — structurally
-  inseparable; **DORMANT since July 8 2026 — "Protected" is retired, so
-  nothing is flagged protected and this branch never fires; kept only so an
-  old backup carrying a protection field still renders**),
-  **Instruction-type memories rendered as context rules** in
-  their own "Handling rules" section (law 5 — same retrieval, distinct
-  render; the split lives in `PromptAssembler` so a rule can't be filed
-  among the facts), the lorebook matches rendered INSIDE this message as
-  "hand-written notes" that outrank memories (near-duplicate memories
-  suppressed; pairs flagged to meta `enforcer.contradiction_flags` for
-  Phase 6's run report), the scene from the per-chat Quick Settings
-  selectors (world / **campaign** / roleplay character / user persona —
-  ALL in the auto-naming copy block, like the Project selector), and —
-  since Stage 3.6d — the **roleplay card layer**: the active cards'
-  Zone 1 cores ("## The scene": user-persona presentation, then the
-  world/campaign/character/party cores as labeled fields, plus the party
-  roster line) render FIRST inside the message, before the memories —
-  cores are stable across turns, so putting them ahead of the
-  turn-variable retrieval keeps the cacheable prefix as long as possible
-  (providers cache up to the first divergent token even inside a
-  message). Party status gates the cores: alive/incapacitated members
-  inject their card; dead/enemy members shrink to a one-line "No longer
-  with the party" note. Trigger-matched **Zone 2 card entries**
-  (`CardRetrieval` — pure, unit-tested: an entry fires on its name, its
-  section label, or an auto-trigger tag via `LoreBookTriggerMatcher`
-  semantics; group headers can never fire; one-hop pull-alongs ride on
-  shared tags, browse-only tags counting for the hop) render after the
-  memories as "From the story's cards (user-written; these outrank
-  memories that disagree)" with "connected to:" lines. Card entries
-  charge the injection budget BEFORE memories (user-authored outranks;
-  lore + direct card fires first, memories squeezed, pull-alongs into
-  leftover only — a broad tag can never flood the prompt) and share the
-  10-turn freshness cooldown under `source_type='card_entry'` (cores are
-  exempt — always-on is their contract; card-entry edits clear their
-  cooldown rows).
-  **Retired from assembly (Stage 3.4, §15):** the standing packet (owner
-  portrait + directives) and `StandingPacketManager` (including its
-  background Archivist compression call), mode detection and the modes
-  render (`ModeSelection` deleted), suggested_mode, the companion
-  hard-limits render, the model-adaptation note, entity summaries, and the
-  retrieval policy's `always_include` list — the store tables stay dormant,
-  nothing reads them. (The global **Archivist model** setting — endpoint
-  profile + model name — stays; Phase 6 uses it.) A selected **campaign**
-  implies the rest of the scene and is the §3 narrator signal: the
-  campaign's GM companion being the chat's active companion opens the
-  companion-memories-in-roleplay door (the other door is the global §3
-  toggle in Memory settings, default OFF). Since 3.6c the campaign's
-  world **outranks** the chat's own world pick in the enforcer
-  (`campaign?.worldId ?: input.worldId` — a stale per-chat pick can't
-  override the campaign; there is no per-chat override, spec §2), and
-  Quick Settings enforces the same model: selecting a campaign turns the
-  world/character selectors into displays, a world change goes through
-  the owner-approved confirmation ("Continue campaign in new world? This
-  will create a permanent history note on the campaign card.", spec §8b)
-  which writes a **Plot Ledger** entry on the campaign ("Started in X" on
-  first assignment, "Moved to Y" after) plus an optional Active Scene
-  update, and the character slot is **locked** while a campaign is
-  selected (dialog: "User characters are linked to campaigns and cannot
-  be changed once assigned." — a dialog, not a toast; standing owner
-  ruling, §8b). The **freshness cooldown** (§10,
-  Stage 3.3) suppresses re-injection of anything injected within the last
-  10 turns (constant in code, per chat, persisted — see storage); every
-  suppression is visible in the debug view. Operating defaults are
-  the retrieval policy ONLY (the five pre-written origin='system' modes
-  were deleted and are purged once at store open — owner ruling, July 6 2026).
-  ANY enforcer failure degrades to the classic lorebook message plus
-  one soft toast per process — never blocks generation. (Tier "none" used
-  to disable lorebook injection outright; since July 10 2026 it only sets
-  the per-chat lore switch's default — Quick Settings is God, see above.)
-  The lorebook debug screen also renders the
-  enforcer's per-turn `AssemblyLog` (the "room" the turn stood in —
-  ordinary vs roleplay, which targets, which companion-memory door — plus
-  injected/cut lines with scores and cooldown/budget/near-dup reasons;
-  since 3.6d also the scene's core summary and per-entry card lines —
-  what fired and why, what a cooldown or the budget suppressed).
-  Pure logic (PromptAssembler, NearDuplicate, CardRetrieval, the
-  Librarian ladder math) is unit-tested. **Prompt-layer contract (fragile):** the per-request
-  system blocks are fixed and deterministic — (1) the stable persona/system
-  prefix, byte-identical every turn; (2) the Stage-4 model-rules block (BUILT
-  — every ACTIVE rule matching the chat's model string, deterministic order;
-  absent entirely when the per-chat "Apply Model Rules" toggle is off or
-  nothing matches); (3) the single assembled memory message (ALL turn-variable
-  memory content lives here and only here); (4) chat history + the current
-  turn. Same blocks, same order,
-  same wording every turn; never two competing memory messages. Three or
-  more system messages are fine — "a separate second system message" in
-  older docs describes the pre-Stage-4 layout. Read
-  `memory-system-integration-plan.md` before touching `preferences/memory/`.
-  Phase 5 (the hand-editor UI) is built in `ui/activities/memory/`, on a
-  shared framework — `MemoryScreenActivity` (abstract themed list scaffold,
-  with an optional secondary action-bar slot) + `MemoryRowAdapter` +
-  `activity_memory_list`/`view_memory_row`. **The Stage-1 "trust repairs"
-  reshaped it to the owner's July 6 2026 rulings** (`Memory System/
-  owner_approved_rules.md` + `phase5_rework_work_order.md` — read both before
-  touching this):
-  - **The old ten-area hub is gone; a new lightweight hub exists.** The
-    Phase-5 rework deleted `ui/activities/memory/MemoryManagerActivity` (the
-    ten-area hub) and stays deleted. The **Memories browser** is the single
-    GLOBAL browser over all scopes/types (world/campaign/roleplay-character/
-    companion scoping via intent extras); it carries a **Companions** link in
-    its action bar (unscoped view only). One browser, many doors: each
-    companion/world/campaign/RP-character page has a **Memories** button that
-    opens this same browser pre-filtered. Since July 8 2026 the browser is
-    reached from the top row of the NEW `ui/activities/MemoryManagerActivity`
-    (a different, four-row navigation hub — see the architecture map); the old
-    "Browse & edit" button in Memory settings is gone.
-  - **Retired screens (deleted; tables + store CRUD stay dormant):** Modes,
-    Directives, **Entities**, and **Owner profile**. People in the user's
-    life are ordinary memories under scope/type, not "entities"; what the
-    system knows about the user is Preference/Fact memories, not a profile
-    form.
-  - **Companion detail page** keeps only: read-only name, draft badge +
-    Approve, memory-participation, Save, **Delete** (per-deletion choice to
-    also delete that companion's memories), and the Memories button. The
-    essence / relationship-notes / hard-limits / model-adaptations fields
-    were removed (columns stay, unwritten). ("Personas" is still shown as
-    "Companions" in the memory-side UI strings.)
-  - **My Personas** left the memory area entirely — its tile now lives in the
-    Characters hub (`CharactersActivity`) with the other identity tiles.
-  - Roleplay areas (Worlds, Campaigns, Roleplay characters, and — since
-    3.6 — Party Members and Tags) stay under the single **Roleplay card**
-    on Settings (`RoleplayHubActivity`).
-  All CRUD is in `MemoryStore` (per-record upsert/delete with tombstones;
-  memory edits log prior state + drop stale vectors; `deleteCompanion` added).
-  Detail pages are plain `FragmentActivity` forms; the list screens subclass
-  `MemoryScreenActivity`. **Stage 2 is built** (July 2026): the memory record is
-  restructured (scope categories / Type / projects / draft status, DB v4–v5 —
-  see the storage section) and the UI rebuilt to the owner-approved rules:
-  - The **memory editor is a full-screen page** (`MemoryEditorActivity`, not a
-    pop-up — the owner's device mishandles large dialogs): title + content, a
-    Type picker (six, with the §5 meanings as hint lines), an Importance picker
-    (five), a primary Scope picker (seven), and — for the target-bearing scopes
-    — the **"Associated <Scope>" target picker (owner rework, July 8–9
-    2026)**: label + boxed "Select" dropdown on one line (`bg_dropdown_box`,
-    5dp corners, box around the dropdown only — never pills, never a boxed
-    whole line), selections rendered below as small-curve boxes with an × at
-    the far right to remove. Projects can still be created from that dropdown
-    (no other creation surface yet). A roleplay DRAFT with no target shows
-    the persistent inline "Needs roleplay target." note and its Link-to-Lore-
-    Card section stays hidden until a target is assigned (July 9 ruling); the
-    same note appears on its browser row, where Add to Card is hidden too.
-    The old `EditMemoryDialogFragment` was removed.
-  - The **browser** filters (reworked July 8 2026): the old horizontal chip
-    row is RETIRED (the `filter_bar` container stays in the shared scaffold,
-    hidden, in case another list screen wants chips). A **three-dots
-    (`ic_more_vert`) button** sits to the right of the search field and opens
-    the **Memory Filters** slide-out panel (`MemoryFilterPanelActivity`, slides
-    in from the right, paired slide animations). Six sections — **Sort, Scope,
-    Type, Status, Source, Tags** (Title-Case labels). Sort and Source are
-    single-value pickers (Source has only two real options → the owner's "if
-    only two options, no multi" rule); Scope/Type/Status/Tags are multi-select:
-    each selection becomes a `Chip` pill (10dp corners) with a small × to
-    remove. **Reset Filters** at the bottom. Filter state is the process-wide
-    `MemoryBrowserFilterState` (Sort/Source strings, the rest `MutableSet`s) so
-    the panel edits it in place and the browser reloads on resume — auto-apply,
-    no OK/Cancel. **Status defaults to just `active`** (fresh view shows only
-    active memories; "draft" surfaces to the user as **Pending** and is one tap
-    away). The search hint reads **"Search Memories"** in a softer color token
-    (`memory_hint_soft`, light+dark) for the eventual theme swap.
-  - The browser **row** was redesigned (July 8 2026): a **leading identity
-    icon** (spans the row height) + title (17sp bold) / tags line (11sp) /
-    first content line (13sp), and the trailing action is the **edit-square**
-    (`ic_edit_square`, replaced the cog). Tags render as
-    `Communication  ·  Technical Help  ·  Tone` — no hashtags, each capitalised,
-    middle-dot separated. The **Active badge is suppressed** on rows (Active is
-    the default filter, so the pill meant nothing); draft/archived/superseded
-    still show their badge. The leading icon is chosen in
-    `MemoryBrowserActivity.iconForScope(scope, onCard)` (drawables `ic_mem_*`),
-    per the owner's **July 8 2026 decisions, which SUPERSEDE the older mapping
-    in `Memory System/phase6_card_suggestions_and_icons_design.md` §5**:
-    real_life → person; **global → borg (`ic_mem_global`, its OWN icon —
-    global is a distinct scope from real life, §3)**; companion → partner
-    (`partner_exchange`); project → draft (folded-corner page); rp_character →
-    theater comedy mask; world / campaign (and any unknown) → public globe;
-    **a memory that has been placed on a card → book_5** (`ic_mem_book`). The
-    user's RP-character slot shares the comedy mask for now but has its OWN
-    branch, ready for a future dedicated icon. **`onCard` is always false
-    today** — a memory↔card link (Phase 6; `card_entries` has no source-memory
-    column and `memories` has no on-card flag) is the one missing piece;
-    `isOnCard()` is the single hook to teach when that flow exists, and book_5
-    lights up then.
-    `MemoryRowAdapter`/`MemoryRow` grew `iconRes` + `tagsLine` fields (and,
-    July 8 evening, `pendingActions`/`showAddToCard` for the Pending-mode
-    action words); the scaffold's pending banner is Model-rules-only now.
-  - **"Protected" is retired (owner ruling, July 8 2026 — see
-    `owner_approved_rules.md` Addendum §2).** It was a handling concern, not a
-    scope/type: rule-like protections are now ordinary Global memories, and a
-    sensitive fact keeps its care-note in its own text (memories inject whole,
-    so it can't be sheared off). The **Protect/Unprotect row-menu actions were
-    removed** from the browser. The `protection` column, the backup codec
-    field, and the inert `HANDLE WITH CARE` enforcer render stay DORMANT for
-    backup/import compatibility; the Archivist (Phase 6) must never emit a
-    protection/handling field.
-  - **Pending is a browser MODE now (owner design, July 8 2026 evening —
-    `Memory System/phase6_owner_answers_2026-07-08.md`).** The old separate
-    Pending screen (`MemoryPendingActivity`) and the "Pending memories (N) ›"
-    banner are RETIRED and deleted. The browser carries a centered
-    **"Memories | Pending"** word toggle at its top with a **"N Memories
-    Pending"** count line under it ("One Memory Pending" singular; hidden at
-    zero). Memories view = everything non-draft (archived/superseded keep
-    their badges); Pending view = drafts, each row carrying bold
-    **Accept / Delete / Edit** action words across its bottom — roleplay
-    scopes (world/campaign/rp_character) add **Add to Card**, which opens the
-    owner-worded "Accept Memory and Link to Lore Card?" pop-up (boxed 5dp
-    dropdowns for the lore card + section) and **MOVES** the memory onto the
-    card via `MemoryStore.convertMemoryToCardEntry` (title→entry name,
-    content→description; the memory row is deleted and lives/dies with the
-    card from then on — owner's D&D-sheet ruling). The editor's bottom button
-    for drafts reads **"Approve All As Shown"** (save + activate + return);
-    roleplay drafts also get a **"Link to Lore Card:"** boxed dropdown pair —
-    picking a card + section makes approval convert instead of activate. The
-    filter panel's **Status section was removed** (duplicate of the toggle;
-    `MemoryBrowserFilterState.status` remains as entry-point plumbing — the
-    Memory Assistant's View Pending Memories link writes `{draft}` to open
-    the browser pre-switched to Pending). The scaffold's pending banner
-    machinery survives only for Model rules. Dropdown house style (owner,
-    same ruling): `bg_dropdown_box` — a 5dp-corner box around the DROPDOWN
-    only, never the whole line, never pills.
-  - **Reset memories** in Memory settings (`resetAllMemoryData` + a blunt
-    confirm dialog with a "Save a backup file first" checkbox, checked by
-    default) empties every memory-content table. Since July 11 2026 the
-    backup gates the reset: `writeBackupNow` writes atomically (temp file →
-    rename via `AtomicFileWriter`) and reads the file back, and if it
-    reports failure the reset is ABORTED with a dialog — it used to proceed
-    and only change the confirmation wording, destroying the store the user
-    had asked to protect. The work order's "Remove
-    everything imported" was intentionally NOT built (imported rows aren't
-    distinguishable; owner decision).
-  - **Quick Settings** gained an optional per-chat **Project** selector (§4;
-    `getChatProjectId`/`setChatProjectId`, in the auto-naming copy block).
-    Since Stage 3 the selection is live as a ranking *boost*, not a gate:
-    project memories retrieve on relevance even with none selected (owner's
-    July 6 second-pass ruling).
-  **Stage 3 (retrieval engine) tasks 3.0–3.5 are BUILT (July 2026)** per
-  `Memory System/rag_engine_work_order.md`: campaign→Quick-Settings wiring
-  with the narrator signal (3.0), the seven-category scope eligibility
-  rewrite + the "Allow active companion memories in roleplay" toggle (3.1),
-  the §12 priority ladder as blended ranking boosts (3.2), the persisted
-  freshness cooldown (3.3, DB v6), the enforcer rework to the approved
-  rules with Instruction-memory rendering (3.4), and the project-boost
-  wiring/verification (3.5) — details in the storage + Phase 4 sections
-  above. **Task 3.6 was RESCOPED July 7 2026** (the old pause point is
-  resolved: the owner designed and approved the full roleplay card + tag
-  system — `Memory System/roleplay_cards_and_tags_spec.md` is the
-  authoritative spec, incorporated into the rules as Revision 4; its
-  §8a/§8b addenda hold owner rulings made DURING the build and are part
-  of the approved words) **and is FULLY BUILT — all sub-tasks 3.6a–f
-  (July 7 2026). Stage 3 is complete.**
-  - **3.6a (schema, DB v7–v8):** the card/tag storage layer + store CRUD
-    + backup coverage — see the storage section.
-  - **3.6b (card editors/rosters):** full-screen two-zone cards for RP
-    characters + party members (`CharacterCardActivity`, one screen,
-    party mode adds Speech Style + the four-state status), worlds
-    (`WorldDetailActivity`, grouped §6c sections + geography parents +
-    the Promote-to-Party-Member flow — a promoted NPC's button becomes a
-    roster link) and campaigns (`CampaignDetailActivity`, bookmark
-    fields + party roster links + world-overlay sections), all sharing
-    `CardEntryEditorActivity` (section-shaped fields: kind lists,
-    quantity, geography parent picker, campaign cast/location/reliquary
-    fields, world-overlay picker), `CardTagChips` (roleplay-realm tag
-    input: ≥3-char filter dropdown, create-on-confirm, removable chips)
-    and `CardZoneUi` (the §8a right-aligned word count, 300/500
-    thresholds, red pill at 500). Zone labels/warnings use the §8a
-    approved words verbatim. Party roster lives in
-    `MemoryPartyMembersActivity` (status badges + archive section),
-    reached from a Party Members tile in `RoleplayHubActivity`.
-  - **3.6c (Quick Settings campaign behavior):** the campaign selector
-    drives the scene; world change = confirmed Plot Ledger note,
-    character slot locked — details in the Phase 4 section above (§8b
-    approved words; dialogs, never toasts).
-  - **3.6d (injection wiring):** Zone 1 cores render first in the
-    assembled message, trigger-matched Zone 2 entries after the
-    memories, budget-charged before them, cooldown-tracked — details in
-    the Phase 4 section above.
-  - **3.6e (tags screens):** `RpTagsActivity` (Tags tile in the Roleplay
-    hub — the tag index, per-tag auto-trigger/browse-only switch) and
-    `RpTagViewActivity` (tap a tag anywhere → the cross-card view,
-    grouped by card/section categories, reaching card entries, whole
-    cards and roleplay-realm memories via the read-side bridge).
-  - **3.6f (deletion + archive, §5):** delete-while-linked warnings name
-    the campaign(s) and offer Archive; archive is status-only and
-    visible (Archive sections at the bottom of the worlds/campaigns/
-    characters/party lists, one-tap Restore); true delete asks
-    per-deletion about the card's memories; surviving references render
-    "(archived card)" / "(deleted card)" — never a silent hole. NPC
-    death is a status change, never a delete.
-  Stage 4 (Model rules, §11) is **BUILT** (July 2026) — §11 was redesigned in
-  chat to Revision 5 (model-string-primary + tags, ON by default; the old
-  profile/group model is gone). Storage is DB v10 (see the storage section);
-  the UI is the **AI System Settings** screen (new Settings card; the System
-  prompt tile moved here out of Characters) + the Model rules browser / editor
-  / tag screens (`ui/activities/memory/ModelRules*`, `ModelRuleTagChips`);
-  injection is the model-rules prompt block gated by the global + per-chat
-  "Apply Model Rules" toggles. The **Pending** UI is built but stays empty
-  until **Phase 6 (Archivist)** files draft rules — that is the next phase and
-  is NOT built. Still deferred: merge tooling.
-- Markdown/LaTeX rendering, partial text selection, message edit/delete/copy/
-  share, bulk select, image attach + DALL·E-style generation, in-app
-  translator, playground, logit bias editor, AMOLED theme, onboarding flow.
-- Debug menus are split by **audio vs non-audio** (owner's mental model: all
-  audio settings live together under Voice; everything else stays with the error
-  logs). Two screens:
-  - **Audio Debugging** (`AudioDebuggingActivity`, plain rows) — reached from a
-    **Voice Debugging** tile at the bottom of Voice & Speech (the sibling tile is
-    **Advanced Voice Settings** = `VoiceAdvancedSettingsActivity`), *and* from a
-    shortcut row in the Alerts/Errors/Logs screen. Holds everything
-    microphone/voice: the **transcription-finished chime** (moved here from a
-    tile in Voice & Speech), the **Energy / WebRTC / Silero** VAD-logging
-    switches (each detector its own toggle), and the **Audio Health** switch.
-  - **Alerts, Errors & Logs** (`AlertDebugMenuActivity`, plain rows; was "Alert &
-    Debug") — the single full-width tile under Settings → Debug. Holds the
-    NON-audio items: **Show chat errors** and **Sound alert for model errors**
-    switches; **Memory diagnostics logging** (`getMemoryDebugLogging`), and the
-    two **performance** toggles below it — **Whisper performance logging**
-    (`getWhisperPerfLogging`) and **Memory usage logging** (`getMemoryUsageLogging`),
-    all three **off by default**; a **→ Audio Debugging** shortcut row (so someone
-    hunting for VAD logging here still finds it); then **Crash log** (a.k.a. the
-    Error Log) / **Event log** (Voice Debug Log) / **Memory log** / **Whisper
-    Performance Log** / **Memory Usage Log** as "label ›" rows that open
-    `LogsActivity`.
-    **The old shared Performance Log was SPLIT into two dedicated channels
-    (owner spec, July 23 2026):** `type == "whisper_perf"` (`Logger.getWhisperPerfLog`)
-    and `type == "memory_usage"` (`Logger.getMemoryUsageLog`), so each category
-    is viewed/copied/cleared independently without sorting a mixed log. **No
-    migration** (owner ruling, option (a)): the legacy `type == "performance"`
-    storage key and its historical mixed contents are left byte-for-byte
-    untouched — the branch still exists in `Logger`/`LogsActivity`, but no
-    producer targets it and its viewer row was removed; the two new channels
-    start empty. **Whisper performance logging** writes one line per on-device
-    transcription from `LocalWhisperEngine` (audio ms / model-load ms / decode
-    ms + a compact `MemoryDiagnostics` snapshot) → `whisper_perf`; **Memory
-    usage logging** drives an app-wide ~60s heartbeat plus
-    `onTrimMemory`/`onLowMemory` lines from `MainApplication` (Java heap, native
-    heap, total PSS, thread count, system availMem/low-memory) → `memory_usage`,
-    so a slow decode can be read against memory pressure and a slow RAM leak
-    shows as a rising curve even while the app is idle. Footprint sampling lives
-    in `util/MemoryDiagnostics` (shared by both). Kept separate from the Error
-    and Voice logs so this high-volume output never evicts real crash entries or
-    buries the per-turn voice trail. Added July 2026 to diagnose "Whisper
-    suddenly slow in long conversations" — the transcribe path itself has no
-    per-turn accumulation (native decode caps threads at 4, `no_context`
-    defaults on), so the cause is an emergent system effect these logs are built
-    to localize.
-    **Per-log retention is user-configurable for these three logs** (Memory
-    Diagnostics, Whisper Performance, Memory Usage — owner spec, July 23 2026):
-    each has its own **Maximum Logs Saved** (entry count) + **Maximum Days
-    Saved** (age) blank directly under its toggle, saved as typed. Stored via
-    `Preferences.get/setXxxLogMax{Entries,Days}` (global int prefs), clamped
-    through the pure `Preferences.coerceLogMax{Entries,Days}` (floor 1;
-    ceilings `LOG_MAX_ENTRIES_LIMIT = 1000` / `LOG_MAX_DAYS_LIMIT = 30`,
-    defaults 1000 / 7). `Logger.log` reads these per write for the three
-    channels and passes them to the unchanged `trimByEntries` (retain until the
-    entry-count OR age limit is hit, whichever first). A value over the ceiling
-    is clamped and explained via the shared single-button ("Okay") dialog
-    (`dialog_single_action.xml` + `App.MaterialAlertDialog`; strings
-    `dialog_max_logs_exceeded` / `dialog_max_days_exceeded`, owner-worded).
-    The Error Log and Voice Debug Log are deliberately NOT configurable and keep
-    their fixed constants in `Logger`.
-  All toggles are global prefs; the logs are local-only and intentionally always
-  reachable — never add a telemetry/consent gate (the old installation-id gate,
-  and the installation-id/consent system it belonged to, were removed July 2026). **Audio Health** is a separate hands-free diagnostic from VAD
-  logging (`getAudioHealthLogging`): per-turn
-  microphone input-health stats (frames, RMS/peak levels, near-silent/clipped
-  counts, sample rate, channels, input route + mid-capture route changes) with
-  plain-words hints, collected in `LocalWhisperEngine`'s capture loop
-  (`AudioHealthMonitor`) and written to the Event log alongside any VAD line via
-  `ChatActivity.logVadDiagnostics` (one combined entry when both are on).
-  Two shortcuts make this loop fast to act on: the chat's top action bar shows a
-  **bug icon** (`btn_debug_log`) whenever any of those diagnostics is on
-  (`ChatActivity.updateDebugLogButtonVisibility`, re-checked in `onResume`) that
-  opens the Event log directly; and the Event log itself (`LogsActivity`, only
-  for `type == "event"`) shows a **terminal icon** (`btn_voice_advanced`, the
-  same icon as the Advanced voice tile) that jumps to
-  `VoiceAdvancedSettingsActivity` — see what's wrong, then go straight to the
-  knobs that fix it, without walking back through Settings.
-- **Microphone routing is Bluetooth-first** (`stt/MicRouteSelector.kt`): opening
-  an `AudioRecord` with `AudioSource.MIC` does NOT capture from a Bluetooth
-  headset on its own — Android only routes capture to a BT SCO mic when the app
-  selects it as the communication device. So `LocalWhisperEngine.startRecording`
-  now takes a `Context` and, when one is passed (both the push-to-talk and
-  hands-free Whisper call sites do), picks a connected BT headset over the
-  built-in mic via `AudioManager.setCommunicationDevice` (Android 12+/API 31;
-  below that it leaves the OS default). Re-evaluated every turn, so a headset
-  that connects or drops mid-conversation is honoured on the next turn; the
-  routing is released (`clearMicRouting`) on capture abort/no-speech, on
-  `stopHandsFreeLoop`, and on `release`, so the headset isn't left in call mode.
-  `lastMicRouteDiagnostics` records the requested device plus the actual active
-  input before/after the mic opens; `ChatActivity.logMicRoute` writes it to the
-  Event log under the Audio Health / VAD-logging toggles. Device labels (with
-  product name) come from the shared `MicRouteSelector.label`, used by both the
-  mic-route line and `AudioHealthMonitor`.
-
-## Coding rules
-
-- **NEVER use `Toast` unless the owner explicitly approves it for that exact
-  spot (owner rule, July 9 2026).** Toasts vanish on their own and are
-  useless with the owner's voice/accessibility setup. Favor PERSISTENT
-  messages: inline status text that stays on screen, field errors set on the
-  input itself, or a dialog the user dismisses. This extends the existing
-  "dialogs, never toasts" ruling from the campaign work to the whole app.
-  When touching a screen that still has toasts, convert them (keep the
-  approved wording, change only the presentation).
-- **Shared style resources (buttons, chevron rows, screen headers,
-  dialogs, form fields) are documented in `ui-style-guide.md`, not here.**
-  That documentation used to be inline in this section; it was split out
-  July 20 2026 to keep this onboarding manual from growing without bound
-  as the style system grows. Read it before adding or touching any
-  shared style, and add new styles' documentation and rollout notes
-  there, not here.
-- **Screen/menu titles are Title Case (owner ruling, July 19 2026).** A
-  window title and its corresponding menu-row label (e.g. the
-  "Activation Prompts" row on Characters vs. the Activation Prompts
-  screen's own title) must read the same and both use Title Case —
-  found and fixed because they'd drifted to sentence case in two
-  places: `tile_activation_prompts_title`/`title_activation_prompts`
-  ("Activation prompts" → "Activation Prompts") and
-  `voice_settings_title` ("Voice & speech" → "Voice & Speech"; its menu
-  row, `tile_voice_settings_title`, was already correct — only the
-  screen's own title string had drifted). Same day, the main Settings
-  screen's title (`title_control_center`) was renamed from
-  "Control center" to "Settings" (plain wording call, not a casing
-  fix) — the one other place that named it, the `tip_12` onboarding
-  string, was updated to match so it doesn't call the screen
-  "Control center" after the screen itself no longer does.
-- Match the existing style: nullable `var` view fields + `findViewById`,
-  `DialogFragment.newInstance(Bundle)` pattern, listener interfaces with
-  default no-op methods, copyright header on every file, strings ONLY in
-  `res/values/strings.xml` (other locales fall back; don't translate unless
-  asked), icons as vector drawables tinted `?attr/colorPrimary`.
-- Comments explain *constraints and why*, not what the next line does. This
-  codebase's comments are load-bearing documentation for future agents —
-  preserve and extend that.
-- Singletons: `getInstance(context)` with `applicationContext` (see
-  `LoreBookStore`) to avoid activity leaks.
-- Per-chat state goes through `Preferences`; global state through global keys
-  in `Preferences` or `GlobalPreferences`. Never raw `getSharedPreferences`
-  in feature code.
-- Coroutines: scopes are stored in fields and cancelled in lifecycle methods;
-  follow the surrounding pattern in `ChatActivity` when adding async work.
-- Anything user-visible that can fail mid-stream must restore UI state in a
-  `finally` (`restoreUIState()`), and release `GenerationForegroundService`.
-- Deleting an entity that other entities reference must scrub the references
-  (see `PersonaPreferences.removeLoreBookFromAllPersonas`).
-- Destructive UI actions (delete book/persona/chat) always get a Material
-  confirm dialog.
-- **Prefer full-screen activities over dialogs/pop-ups for new or
-  reworked screens.** The app was originally built with ~20
-  `DialogFragment`s/bottom sheets standing in for what are really full
-  editing screens (see `ui-redesign-plan.md`'s inventory) — that pattern
-  wastes screen space, and the owner wants it phased out over time as
-  screens get touched, not necessarily all at once. When building a new
-  screen or substantially reworking an existing one, default to a
-  full-screen `FragmentActivity` (the pattern `MemoryEditorActivity`
-  already established for the memory system) unless the content is
-  genuinely dialog-shaped: a short confirm/destructive-action prompt, a
-  small in-place picker, or something else where a pop-up is the logical
-  fit, not just the historical default. Don't convert an existing dialog
-  to full-screen as a drive-by side effect of unrelated work — that
-  conversion is deliberate, incremental work, not incidental cleanup.
-
-## Do not touch / fragile
-
-- **Ktor pinned at 2.3.12** (`app/build.gradle`): newer Ktor breaks the
-  `openai-client` streaming. Don't "helpfully" upgrade.
-- **TLS / OkHttp defaults**: history includes a security fix restoring default
-  TLS + hostname verification. Never add custom `TrustManager`/`HostnameVerifier`.
-- **The hands-free VAD/mic pipeline** (`ChatActivity` voice sections, `stt/`,
-  `HandsFreeService`): the single most regression-prone area; ~10 PRs of
-  hard-won fixes (mic re-arm, audio-time VAD windows, barge-in prevention,
-  watchdogs). Don't refactor it incidentally; change it only when the task is
-  about it, and read the commit history of the file first.
-  **Capture-recovery invariants (July 11 2026, silent-failure audit round 2 —
-  keep these):** every Whisper capture session is an engine-internal
-  `ActiveCapture` whose teardown funnels through the idempotent
-  `closeCapture()` (a once-latch makes cleanup + the typed error callback run
-  exactly once per session, on every exit path — user stop, transcribe,
-  abnormal loop death, stale recovery). An abnormal capture exit (read
-  throw / error return / endless empty reads / loop crash / watchdog abort)
-  always releases the AudioRecord + Bluetooth route, clears `isCapturing`,
-  discards the buffer, and reports a typed `CaptureErrorReason` — NEVER
-  surface an engine failure as silence, a null transcript, or an empty
-  transcript. `startRecording` while a capture is genuinely live returns
-  **false** (it used to lie with `true`); a stuck flag over a dead loop is
-  recovered. VAD-driven turns carry a state-dependent wall-clock
-  `CaptureWatchdog` (owner-approved July 11 2026): the configured
-  silence/no-speech clocks stay authoritative; at 10 min mid-speech the turn
-  is NOT cut — a soft limit arms and the turn finishes at the next natural
-  pause (~1 s of non-speech); at 10 min with no speech the backup fires the
-  normal no-speech ending; the 12-min absolute ceiling ends the turn through
-  the NORMAL transcribe-and-submit path (recorded speech is never discarded
-  by a time limit, and a watchdog-ended turn is never reported as a mic
-  failure); the ONLY watchdog error is the 60 s uncollected-end-of-turn
-  abort (lost callback). Manual push-to-talk is deliberately un-capped (the
-  user owns stop; a cap would cut intended long dictation). ChatActivity guards every
-  whisper callback with `whisperTurnToken` (late/duplicate callbacks from an
-  old turn are dropped), retries mid-turn capture errors through
-  `whisperCaptureErrorBudget` (2, reset only when a turn completes — separate
-  from `handsFreeTurnRetries`, which covers arm failures and resets on a
-  successful arm), and re-checks RECORD_AUDIO before EVERY arm and in
-  onResume — a revoked permission is a named, always-logged stop, never a
-  fake no-speech. Foreground-service start failures (both services, plus
-  `startHandsFreeService`) always write an ungated Event-log line. Cloud
-  Whisper never calls `start()` after `prepare()` fails. The pure decision
-  logic lives in `stt/CaptureTurnPolicy.kt`, unit-tested in `app/src/test`.
-- **System-message assembly in `regularGPTResponse`** — the prompt layers are
-  FIXED and deterministic every turn: (1) persona prompt + system message
-  merged into ONE stable first system message, byte-identical, specifically
-  for provider prefix caching; (2) the Stage-4 model-rules block as its own
-  stable layer — every ACTIVE rule matching the chat's model string, in
-  deterministic order (absent entirely when the per-chat "Apply Model Rules"
-  toggle is off or nothing matches); (3) lorebook matches — or, at the full memory tier, the
-  enforcer's single assembled message (which contains the lore notes) — as
-  the one turn-variable memory message; (4) chat history + the current turn.
-  Never reorder or merge these by convenience, retrieval results, iteration
-  order or timestamps; never inject two competing memory messages (the
-  enforcer path and the classic lore path are strictly either/or per turn).
-  Three or more system messages are fine — the memory message being "the
-  second" is just the pre-Stage-4 layout, position is not the invariant;
-  order and byte-stability are. (Explicit cache breakpoints are
-  Anthropic-API-only; OpenAI-compatible endpoints auto-cache the longest
-  identical prefix — the ordering discipline is what earns the caching.)
-- **`ChatPreferences` parse-failure handling**: chat data must be preserved,
-  never wiped, on JSON parse errors (regression fixed in c72853a).
-- **`getChatListResult(context, includeFirstMessage)` must stay cheap for
-  state-only callers (July 15 2026, ANR fix).** Computing each chat's
-  `first_message` reads and Gson-parses that chat's ENTIRE history, so the
-  loop is O(all conversations on the device). ONLY the chat-list UI displays
-  `first_message`; every other caller (the auto-export availability gate
-  `MemoryExporter.isChatListUnavailable`/`buildAppChats`, `RenameJournal`
-  recovery, `TranscriptRecorder` backfill) passes `includeFirstMessage = false`
-  and must keep doing so. Round 4 regressed this by calling
-  `isChatListUnavailable` — which parsed every history — at the TOP of
-  `autoExportIfDue` on **every** app start (before the daily throttle), on the
-  startup housekeeping thread, concurrently with the main thread's own list
-  load; once histories grew large the two whole-store parses starved the main
-  thread past the 5 s input-dispatch deadline (the "Waited 5005ms for
-  FocusEvent" MainActivity ANR). Never make a state-only or id/metadata-only
-  chat-list read compute `first_message`, and never move a history-parsing
-  read ahead of the export throttle.
-- **Native layer** (`app/src/main/cpp`, CPU gating in `NativeCpuSupport`):
-  lib loading is gated on armv8.2 dotprod+fp16 to prevent SIGILL on older
-  arm64 — keep the gate if you touch JNI loading.
-- **Checked-in `debug.keystore`** is intentional (stable CI debug signing).
-  Do not rotate/remove it; do not publish debug builds as real releases.
-- **Crash reports must be READABLE (owner directive, July 22 2026).**
-  `proguard-rules.pro` sets `-dontobfuscate` (R8 still SHRINKS — minify and
-  resource shrinking stay on — but never renames classes/methods/fields, and
-  real source files + line numbers are kept). Before this, both build types
-  obfuscated with no mapping.txt archived anywhere, so every crash the owner
-  ever saw — including in the app's own crash screen and Error Log — was
-  undecodable ("vf.e.g(SourceFile:663)"); a real crash report was lost to
-  this. The app's source is public, so obfuscation protected nothing. Never
-  re-enable obfuscation or `-renamesourcefileattribute`.
-- **ChatsListFragment wires its UI synchronously in `onViewCreated` (July 22
-  2026).** It used to defer `initUI`/`initLogics`/`initSettings` through a
-  watcher thread (sleep-loop on `isAttached` → `runOnUiThread`), which left
-  the chat list on screen with NO click listeners for a scheduling-dependent
-  window — the "New Chat does nothing on the first press after opening the
-  app" bug — and could silently skip init entirely (the thread could wake
-  between onAttach's `isAttached = true` and `mContext` writes). onViewCreated
-  is guaranteed to run after onAttach, and the heavy chat-list parse already
-  runs async on `chatListLoader` inside `initSettings`, so nothing slow came
-  back to the main thread. Do not reintroduce deferred listener wiring here;
-  keep the post-attach insets re-apply (API 31+ adjustPaddings no-ops before
-  the window attaches). onViewCreated also re-attaches the restored New
-  Chat/rename dialog's listener (`findFragmentByTag("AddChatDialog")`), which
-  pairs with `AddChatDialogFragment`'s self-dismiss-when-unwired last resort —
-  keep both halves.
-- **Chat renames are a verified transaction** (`ChatRenameTransaction`, July
-  11 2026 — see the feature list): write-new → verify → pointer flip → clear
-  old, settings copied wholesale, every write a synchronous commit, run
-  **off the main thread**. Never reintroduce a hand-enumerated settings copy,
-  an apply()-deferred write, a clear-before-write, or a main-thread commit into
-  a rename path; new per-chat keys are registered in `PerChatSettingKeys`
-  (test-enforced). The memory-store re-point is a **separate store** and is NOT
-  in the prefs transaction — it is journalled (`RenameJournal`) and recovered
-  at startup; never assume the prefs rename and the memory re-point committed
-  atomically together, and never let a future orphan sweep prune rows while
-  `RenameJournal.hasPending` is true.
-- **The chat-storage lock state machine** (`SecurePrefs` /
-  `ChatStorageHealth` / `OutageReconciler` / `SnapshotRegistry`, Round 4 —
-  see the storage section): LOCKED means BLOCKED (owner policy, July 12
-  2026) — never reintroduce ANY plaintext fallback or redirection for a
-  name whose `enc.<name>` file exists on disk (the first Round-4 build's
-  automatic `outage.*` writing was rejected and removed; no code may create
-  or write `outage.*` files), never modify/clear/delete an encrypted file
-  that failed to open, never let a locked/corrupt read surface as an
-  ordinary empty result (use the result-typed reads; only
-  `ChatStorageHealth.isAuthoritative` states may drive authority decisions
-  — RenameJournal reconciliation, backfill completion, export
-  completeness), never resolve an encrypted-vs-outage conflict
-  automatically (both copies preserved; `*_recovered_*`/`*_conflict_*`/
-  `*_corrupt_*` snapshots, legacy `outage.*` files and
-  `files/storage_recovery/` are recovery data — no cleanup pass may touch
-  them, and every one is indexed in `SnapshotRegistry`, whose entries are
-  never deleted). Every chat-list read-modify-write must hold
-  `ChatPreferences.CHAT_LIST_LOCK` (lock order: CHAT_LIST_LOCK →
-  RenameJournal monitor → SecurePrefs monitor — never take them in another
-  order). Keep `reconcileOutageAtStartup` ordered before
-  `RenameJournal.reconcile` in `MainApplication`. The `storage_health`
-  prefs file is deliberately raw/plaintext (must work while the Keystore is
-  down) and must only ever hold state metadata, registry entries and
-  SANITIZED error categories (`StorageErrorSanitizer`) — never chat
-  content, prompts, keys, or raw exception messages. The locked-state UI
-  wording in `strings.xml` is owner-approved verbatim — never reword
-  without asking. The same `storage_health` file also holds the Database
-  Health "Build Phase 1" startup-gating booleans under a `startup.` key
-  prefix (`StartupHealth`) — state metadata only, same raw-plaintext
-  rationale.
-- **Startup housekeeping is crash-gated / latched (Database Health Build
-  Phase 1, July 20 2026 — startup-freeze work, still awaiting owner
-  on-device confirmation).** The automatic whole-database
-  `MemoryStore.integrityCheck()` in `MainApplication`'s housekeeping thread
-  no longer runs on EVERY launch: it runs only when
-  `StartupHealth.shouldRunIntegrityCheck(...)` is true — the previous exit
-  was abnormal (crash/ANR/kill, via `Logger.wasPreviousExitAbnormal`, a
-  cheap `getHistoricalProcessExitReasons` read, null on API < 30 → run as
-  the safe direction) or a check/repair is explicitly pending
-  (`StartupHealth.isIntegrityCheckPending`, a hook nothing sets until Build
-  Phase 3). A clean exit skips the check and proceeds as a previously
-  passing check did (backfill + due auto-export still run). The MANUAL
-  integrity check on the Advanced Memory Settings screen is unchanged — do
-  not gate it. `SecurePrefs.reconcileOutageAtStartup` (legacy
-  `SnapshotRegistry.discoverLegacy` + the outage-file scan) now
-  short-circuits once `StartupHealth.isRecoveryScanSettled` is set, and sets
-  that latch only when fully settled (nothing deferred +
-  `!RenameJournal.hasPending`) so recovery is never skipped while still
-  needed. This is a startup-cost reduction only; it changed no
-  backup/repair/encryption/chat/voice/UI behavior. (Superseded in part by
-  Build Phase 3, July 22 2026: the crash-gated startup check now covers all
-  THREE databases via `StartupDatabaseCheck`, and `isIntegrityCheckPending`
-  is now set — it mirrors "any database still degraded".)
-- **The database-health degraded/repair machinery (Database Health Build
-  Phase 3, July 22 2026 — CODE-COMPLETE, NOT owner-confirmed on-device;
-  read `Memory System/database_health_build_plan.md`'s Build Phase 3
-  STATUS block before touching any of it).** The load-bearing laws:
-  - **The degraded flag (`preferences/backup/DatabaseHealthState`, plain
-    `storage_health` prefs, `health.` keys) is set ONLY by CONFIRMED
-    damage** — a failed `PRAGMA integrity_check` or a corruption exception
-    caught by `CorruptionErrorHandlers` (passed explicitly to all three
-    SQLiteOpenHelpers because the libraries' DEFAULT corruption handler
-    DELETES the database file — never remove those handler arguments, and
-    never pass null there). Destination/verify backup failures must never
-    touch the flag.
-  - **While degraded, `MemoryStore.getInstance` / `LoreBookStore.getInstance`
-    THROW `DatabaseDegradedException`** (extends the same
-    IllegalStateException envelope as the locked-key throw, so best-effort
-    call sites degrade identically: no memory/lore that turn, generation
-    never blocked). Every new call site of these stores must tolerate that
-    throw. The user-image catalog is flagged + bannered but NOT gated
-    (§15.16: nothing else depends on it); its gallery only pauses DELETION
-    while memory-side usage can't be verified.
-  - **Preserve-the-original:** before ANY repair/restore/fresh-start,
-    `DatabaseRepairManager.quarantine` copies the db + WAL/journal sidecars
-    into `files/storage_recovery/` (`<stem>.corrupt-<date>-<uniq>.db`,
-    `SnapshotRegistry` origins `db_corruption`/`pre_restore`); a quarantine
-    failure ABORTS the destructive step. Repair = bounded staged salvage
-    (`SqlcipherSalvage`) into a SEPARATE keyed file, integrity-verified
-    before the swap — never in-place, never promised as more than salvage.
-  - **Recovery UI has two deliberate entry surfaces.** The one-shot A1/A6
-    notices remain in `ui/DatabaseRecoveryFlows`. Standing repair/restore
-    actions live on `MemoryBackupRestoreActivity`, backed by the single
-    `DatabaseRestoreManager` coordinator. That coordinator hides the physical
-    formats from the user: same-install automatic per-database `.dbbackup`
-    files, portable v2 Recovery Backups (protected or unencrypted), and the
-    older internal Memory JSON chain. Every candidate is staged, integrity-
-    checked, and checked for the expected database identity before the dated
-    confirmation; live data is untouched until the user confirms. A failed
-    swap automatically puts the pre-restore database back while retaining its
-    preserved safety copy.
-  - **A2 banner:** ChatActivity's `health_banner` (top of chat, buttons in
-    order **Okay | Attempt Repair** — `health_banner_btn_ok` is its own string
-    distinct from the shared `btn_ok`, while Attempt Repair reuses the shared
-    `health_btn_repair`; re-shown per chat screen while degraded — this
-    "reappears on the next chat" behavior falls out for free from
-    `healthBannerDismissed` being a plain ChatActivity instance field that
-    resets whenever a chat is opened via a fresh `ChatActivity` instance,
-    which is how every chat switch/open already works) + the distinct §15.2c
-    warble (`playDatabaseWarningSignal`, hands-free only, once per new
-    failure). **Owner ruling, July 23 2026: the banner body text must never
-    instruct the user to tap a button** ("Tap Repair to fix it" was removed —
-    the buttons are self-explanatory); the body now states the user may keep
-    chatting but the affected feature stays off until repaired. The
-    `health_banner_both` wording is owner-approved verbatim; the
-    memory/lorebook/user-image variants extrapolate the same sentence pattern
-    and are flagged for owner confirmation, not yet independently approved.
-    **"Repair" is "Attempt Repair" everywhere (owner correction, July 23
-    2026 — repair is salvage, never guaranteed): the shared `health_btn_repair`
-    string is now "Attempt Repair", so the A1 dialog, the Memory Assistant
-    action, and both banner/screen surfaces read the same.**
-    The chat `messages` RecyclerView is now height-0dp/fully constrained
-    (was match_parent + 64dp margin) so the banner pushes it down — keep it
-    that way. A3: the Memory Assistant hard-disables Analyze while ANY
-    database is degraded, with working Repair/Revert buttons.
-  - **Inline per-database recovery buttons on the Backup & Restore screen
-    (owner ruling, July 24 2026):** under a confirmed-failed database row show
-    **Attempt Repair | Restore Database**. The buttons stay visible but disabled
-    while the non-cancelable mutation runs; a spinner + status line appears
-    underneath. Success leaves **Repair Successful!** / **Database Restored
-    Successfully!** for that screen visit, removes the buttons, and refreshes
-    the health row. Failure leaves the buttons available. These controls are
-    gated STRICTLY on `DatabaseHealthState.isDegraded(type)`; backup destination
-    failures never show repair language, and Chats get no buttons. The primary-
-    based `AppButton.Primary.Inline` style wraps each label independently.
-    The Recovery Backup section also has one normal **Restore Database** button
-    with the established **Type of Database to Restore** dropdown, so a healthy
-    database can be restored deliberately. Its chooser offers **Revert to Last
-    Good Database** or **Choose Another Backup** → file/folder system picker.
-    Current-location restore walks newest→oldest and skips unusable candidates;
-    selecting a folder recognizes both automatic artifacts and portable
-    Recovery Backups. No remembered-folder registry exists: moved/old folders
-    are reached explicitly through **Choose Backup Folder**. A selected
-    individual file containing exactly one different database gets the
-    Proceed/Cancel mismatch confirmation, followed by the ordinary dated
-    restore confirmation—Proceed never overwrites immediately. Existing raw
-    encrypted automatic files have no authenticated installation fingerprint,
-    so an open failure is honestly reported as "this installation's key OR
-    file damage"; never falsely label those old files corrupt.
-  - **Chat recovery restore is ENGINE-ONLY** (`ChatRestoreManager` +
-    unit-tested `ChatRestorePlanner`): journaled wholesale swap under
-    `CHAT_LIST_LOCK`, strict entry whitelist (an archive can never plant
-    non-chat prefs files), startup `resumeIfPending` (ordered BEFORE
-    `reconcileOutageAtStartup` in MainApplication) finishes an interrupted
-    swap from verified staging. **Do NOT wire a UI to it until the owner
-    approves the Build Phase 4 chat-recovery wording set**; a restart is
-    required after any swap (live SecurePrefs handles cache the old files).
-  - **§15.15 health lines:** `DatabaseHealthState.logHealth` → Error Log,
-    ungated, once per transition/event, tag `DatabaseHealth`; LogsActivity
-    renders those timestamps in red. Never gate these on a diagnostics
-    toggle.
-- **`ChatActivity` handles rotation itself** (`android:configChanges`
-  includes orientation/screenSize etc., July 10 2026): recreation runs
-  onDestroy, which kills TTS readback and the hands-free loop — tilting the
-  phone mid-conversation used to stop everything. Never remove that manifest
-  attribute, and don't add orientation-dependent layouts for the chat screen
-  without accounting for it.
-- **New-chat companion selection — owner ruling July 11 2026 (SUPERSEDES the
-  July 10 wording; "there is no other acceptable behavior"). Do NOT revert
-  this — it kept regressing because the old doc enshrined the opposite.**
-  `seedPersonaAndActivationDefaults` (in `ChatActivity`) decides which
-  companion a brand-new empty chat opens with, in this exact order:
-  1. **Default: the last-used companion** — always, this is the expected
-     behavior.
-  2. **Only exception — first-ever use** (no last-used companion recorded, or
-     the recorded one was since deleted): open with the companion at the **top
-     of the list** (`getPersonasList().first()`).
-  3. **No companion exists at all:** a chat can't begin — `promptCreateFirstCompanion()`
-     shows the owner-approved dialog "Please create a new companion to begin a
-     chat." and opens the companion creation screen (`PersonasListActivity`
-     with the `createOnStart` extra); on creation the chat adopts it and records
-     it as last-used. Seeding is NOT marked done in this case so it re-runs.
-  There is **no "explicit none stays none"** state any more (it was removed —
-  the owner does not want new chats resting on no companion). `setLastUsedPersonaId`
-  is written whenever a companion is chosen through **ANY** selection surface —
-  **both Quick Settings AND the Companions list opened from Characters** (the
-  July 10 rule that only Quick Settings wrote it was the bug: a companion picked
-  via Characters never carried into new chats). Recording fires only when the
-  Companions list actually returns a companion. **The Companions list
-  (`PersonasListActivity`) now has a `pickMode` split (owner ruling, July 21
-  2026 — supersedes the July 19 "no select tap" rule):** opened from Quick
-  Settings' Companion selector (`pickMode = true`) a tap on a row's
-  **non-chevron area switches the chat to that Companion instantly** (returns
-  it, so last-used is recorded), while the **chevron opens that Companion's
-  editor** without switching; opened from Characters or the create-first
-  prompt (`pickMode = false`) the chevron is decorative and tapping ANYWHERE
-  edits. Saving in the editor still returns the Companion active
-  (`finishWithActive`) in either mode, so chevron → edit → Save also records
-  last-used. Backing out of the list or the editor returns `CANCELED`, and a
-  mere browse is never recorded. Split lives in `PersonaListItemAdapter`
-  (`onClick` vs `onEditClick`, chevron wrapped in the `persona_edit_target`
-  touch target) — see "The Personas/Companions list is DIFFERENT" in
-  `ui-style-guide.md`. `Preferences.hasLastUsedPersonaChoice()` is now unused
-  by seeding.
-- Legacy/odd-named files exist (`InstructionsForDegradedTeapots…Activity`,
-  `MainActivity_robo_script.json`, `experiment.json`, `desktop.ini`,
-  `hub-purge.sh`) — leave them unless asked.
-
-## Roadmap context (plan around this)
-
-- **A UI overhaul is planned and specified in `ui-redesign-plan.md`** (owner
-  approved June 2026: stay on Views/XML + Material 3, left chat-list drawer,
-  preset color palettes). Any UI task must follow that plan — it contains the
-  phase order, verified view-ID contracts, and the pitfall list. Don't
-  over-invest in pixel-perfect tweaks to current layouts, and keep feature
-  logic out of layout/adapter code where practical so the UI can be swapped
-  without rewriting behavior.
-- **The full Companion Memory System is planned and specified in the
-  `Memory System/` folder (schema v1.11)**, with the phased integration plan
-  in `memory-system-integration-plan.md` — read both before any memory work.
-  It supersedes the older `Memory System Plans June 1 2026` roadmap from
-  Phase 2 onward and changes one earlier assumption: the new memory store is
-  a **separate SQLCipher database** (`companion_memory.db`), NOT an extension
-  of `lorebook.db`. Lorebooks stay untouched as the independent low-RAM tier
-  (user-authored lore outranks system memories at injection). All eleven
-  package documents are present; `enforcer_librarian_spec.md` and
-  `prompt_assembly_template.md` were the original runtime/prompt specs but
-  are now PRE-REVISION (each carries a ⚠️ banner): `owner_approved_rules.md`
-  + the work orders describe the actual runtime since the July 2026
-  rulings and the Stage 3.4 enforcer rework.
-- **Phase 6 (Archivist + Memory Assistant) is COMPLETE (built July 8–9 2026,
-  merged to `main` via PR #55, carried forward on this branch).** Before
-  touching it, read the **"Addendum — modifications approved in chat, July 8
-  2026"** at the end of `owner_approved_rules.md` (Protected retired, scope
-  definitions tightened, the memory-UI restructure, the final row-icon
-  system) and **`Memory System/memory_assistant_design.md`** for the Memory
-  Assistant screen's approved layout/wording. Both outrank the older Phase 6
-  text wherever they disagree. Built: the roleplay memory deletion fix, the
-  **Archivist run engine** (`preferences/memory/archivist/`, DB v11–v12 run
-  history + status/failure wording per `archivist_status_wording_spec.md`),
-  the **Memory Assistant screen** (`MemoryAssistantActivity`, owner-approved
-  wording, live batch progress, Recent Memory Analysis + Rerun), the
-  **Pending review mode** in the Memories browser (Accept / Delete / Edit /
-  Add to Card, the last via `convertMemoryToCardEntry`), the **card
-  placement flow** (`isOnCard()`/book_5, DB v13 suggested-card-placement
-  columns), and **rejected-draft tracking** (DB v14). Scope was finalized,
-  not left open: the Memory Assistant never creates or proposes
-  worlds/campaigns from emergence (an untargeted roleplay draft gets a
-  persistent "Needs roleplay target." note instead), and it never
-  automatically updates campaign `story_so_far`/Plot Ledger fields — see the
-  "Phase 6 scope limits (owner rulings, July 9 2026 — final)" paragraph in
-  the storage section. Remaining deferred work (Model rules merge tooling)
-  is tracked separately under Stage 4, not this phase.
-- **Phase 7 (Hardening + docs) is COMPLETE (July 10 2026) — a
-  verification/docs pass that changed NO app code, strings, or UI** (owner
-  constraint for the pass). Confirmed by code read that mid-conversation
-  memory failures never block generation: the enforcer `assembleTurn` call
-  in `regularGPTResponse` is try/catch-wrapped → degrades to lore-books-only
-  + a `MemoryLog` line; the lorebook gather has its own catch → no-lore + a
-  line; the `Librarian` degrades internally to keyword/tag matching (no
-  model / self-check fail / embed fail / vector-search throw), each with a
-  line — two independent degradation layers, always logged. Audited
-  `troubleshooting_guide.md` symptom-by-symptom against the current UI + the
-  owner rules and appended a "Phase 7 audit status" table to that file: live
-  workflows all have UI homes; the ones without are pre-rules (retired
-  machinery — modes / model_adaptations / Protected / handling / harvest
-  dials / essence-hard-limits / mirror-drift-flags — or superseded
-  aspirations: provenance-confidence display, contradiction-in-run-report).
-  Two findings were SURFACED to the owner, NOT built (both would touch app
-  text/UI, held for approval): (1) `notifyMemoryDegradedOnce()` still uses a
-  `Toast` (`R.string.memory_degraded_notice`) — a pre-July-9-ban leftover, an
-  extra courtesy notice not required by the never-blocks contract; (2) the
-  two audit GAPS are new features under the memory approval gate. Phase 8
-  (Android⇄Windows file-based sync) remains the only unbuilt phase.
-- **The roleplay layer (cards + tags) was redesigned and owner-approved
-  July 6–7 2026.** `Memory System/roleplay_cards_and_tags_spec.md` is the
-  authoritative spec (four two-zone cards: user RP character, NPC party
-  member, world, campaign; a roleplay-realm tag system with a hard
-  real-life/roleplay wall; campaign-as-selector behavior; archive/delete
-  link rules; the no-mid-conversation-writes law). It is incorporated
-  into `owner_approved_rules.md` as Revision 4 and implemented by the
-  RESCOPED Stage 3.6 of `Memory System/rag_engine_work_order.md` —
-  **fully built July 7 2026 on branch `claude/stage-3-6-rag-engine-9f0gc2`
-  (Stage 3 complete)**. The spec's §8a/§8b addenda record owner rulings
-  made during the build (fresh world-core columns, dormant pre-card
-  fields, campaign-selector wording, the dialogs-not-toasts rule) and
-  are part of the approved words. Read the spec's §9 agent rules before
-  any roleplay work.
-- **Document & image includes (attach txt/md/csv/docx, later images, to a
-  chat) is planned and owner-approved but NOT built** — the full spec,
-  approved wording, and style mapping live in `document-includes-plan.md`
-  (root). Read it before touching attachments, the chat input area, or the
-  old image/vision path (which that plan's Step 3 deletes).
-- Whisper/voice work follows `whisper-local-plan.md`.
-
-## Quick verification checklist before any push
-
-1. `git status` clean of stray files; commit message says why.
-2. All new `R.string/R.id/R.drawable/R.layout` references exist; new ids match
-   the layout actually inflated.
-3. Cross-cutting request changes go through the single generation funnel
-   (`generateResponse` → `regularGPTResponse`); there is no second path.
-4. New per-chat preference key registered in `PerChatSettingKeys` (renames
-   copy the settings file wholesale; the unit test fails when the registry
-   drifts from `Preferences.kt`).
-5. DB change → version bump + additive migration + fresh-install path.
-6. Push, then confirm the `Android Checks` workflow run for your commit is green.
+# Phosphor Shines: AI Working Instructions
+
+This file defines how AI agents work with the owner and this repository.
+
+It is not a project history, bug diary, or substitute for the owner's judgment.
+
+## 1. Success standard
+
+**Completing a task is not success.**
+
+Success means all of the following:
+
+- the owner understands what is being proposed or changed;
+- every required product decision was approved before implementation;
+- the result serves a real human purpose;
+- the app clearly tells users what is happening;
+- the implementation is correct, maintainable, and consistent with the rest of the app;
+- the work does not waste the owner's paid usage, time, or attention.
+
+A feature that runs but confuses, erases, traps, or misleads the user is not complete.
+
+## 2. Authority
+
+The owner directs the product, UX, behavior, wording, privacy, and priorities.
+
+Repository documents exist to preserve and support the owner's decisions. They do not outrank the owner.
+
+A current instruction from the owner overrides an older document unless the owner explicitly says otherwise.
+
+If the owner says a document is wrong, stale, insulting, misunderstood, or no longer wanted:
+
+1. stop relying on the disputed passage;
+2. do not defend the document against the owner;
+3. identify the practical correction;
+4. update the documentation only after the correction is clear.
+
+Never cite `CLAUDE.md`, a plan, a test, existing code, or an earlier AI summary to overrule the owner.
+
+## 3. Approval must come before code
+
+Do not implement a product decision and ask for approval afterward.
+
+Unapproved implementation is not progress. It spends paid usage, increases breakage risk, creates review work, and may leave damage after removal when code has already been connected to other systems.
+
+### Owner approval is required before changing
+
+- any user-facing wording;
+- UI layout, controls, navigation, or interaction flow;
+- defaults or automatic behavior;
+- what information is shown, hidden, grouped, or omitted;
+- feature scope or product behavior;
+- destructive, recovery, privacy, storage, encryption, migration, or logging behavior;
+- architecture choices with meaningful tradeoffs or future lock-in;
+- an approved design or specification;
+- anything the owner has asked to review first.
+
+This includes strings, layouts, tests, scaffolding, placeholders, and feature flags that encode an unapproved choice.
+
+Do not build several versions for the owner to choose from unless the owner explicitly asks for prototypes.
+
+### Routine implementation judgment is allowed only when
+
+- the product behavior is already approved and unambiguous;
+- the choice is internal and not user-visible;
+- it does not change privacy, risk, performance, future maintainability, or data behavior;
+- it is reversible and does not expand scope.
+
+Examples include internal variable names, a private helper function, routine tests, formatting, and a strictly behavior-preserving compile fix.
+
+When uncertain whether a choice needs approval, stop before coding and present the decision.
+
+### Decision format
+
+Use this compact format:
+
+## Decision needed
+
+**Question:** What must be decided.
+
+**Why it matters:** The user-visible or technical consequence.
+
+**Recommendation:** The recommended option and the reason.
+
+**Other option:** A meaningful alternative, when one exists.
+
+**Status:** No code has been changed for this decision.
+
+Do not bury a decision inside a long progress report.
+
+### Discussion is not approval
+
+Exploring an idea, asking a question, expressing a preference, or saying "maybe" does not automatically authorize implementation.
+
+Approval must be clear in context. When the owner is still asking what something means, approval has not been given.
+
+## 4. Communication with the owner
+
+Use direct, concise, old-school professional language.
+
+### Match the structure to the work
+
+Casual conversation may use natural paragraphs. Technical analysis, design reviews, debugging reports, implementation reports, and decision requests require visible structure.
+
+When a response contains more than one distinct concept, decision, cause, risk, finding, or next step:
+
+- use descriptive headings that name the actual subject;
+- put the answer, status, or most important finding first;
+- keep each section focused on one subject;
+- use short paragraphs for explanation;
+- use bullets only for genuinely parallel items;
+- place every decision, blocker, failure cause, uncertainty, and required owner action where it can be found by scanning.
+
+Do not hide important facts inside narrative. Do not write a long block that crosses multiple technical subjects without headings.
+
+Do not turn every sentence, fragment, or single word into a separate paragraph. A one-sentence paragraph is appropriate only when the sentence is a status, warning, decision, or deliberate point of emphasis.
+
+Structure should reveal the information, not scatter it.
+
+### Explain in product language
+
+- Explain the user-visible result before implementation details.
+- Use product and user terms rather than a dump of class names and variables.
+- Mention code identifiers only when they help locate, verify, or distinguish something.
+- Define every uncommon, invented, abbreviated, or project-specific term the first time it appears.
+- Explain what the term is, what it does, why it matters, and what the user will experience because of it.
+- Do not substitute code for an explanation.
+- Do not restate the owner's entire message before answering.
+- Do not send a dissertation when several clear sections and short paragraphs will do.
+
+The owner directs the application but does not work directly in Kotlin, XML, or implementation code. Explain enough for informed product decisions without expecting the owner to decode source internals.
+
+### When the owner says an explanation is unclear
+
+Understanding becomes the current task.
+
+Stop implementation and address the exact unclear term or concept.
+
+Do not:
+
+- change the subject;
+- answer a nearby question instead;
+- provide unrelated formatting advice;
+- repeat the same explanation with more jargon;
+- decide the owner does not need to understand;
+- start fixing something else;
+- treat confusion as approval.
+
+If the owner already named the unclear terms, define them directly. Ask a clarifying question only when the unclear point genuinely cannot be identified.
+
+"I still don't understand" means approval has not been given.
+
+## 5. Evidence of listening
+
+Do not rely on "I understand" as proof.
+
+When the owner says a point was missed, show that it landed:
+
+1. state the specific thing you got wrong;
+2. state the corrected instruction or requirement;
+3. state what work has stopped, changed, or been reversed;
+4. state what will be done differently before proceeding.
+
+Repeated explanation usually means the issue remains unresolved. Find the unresolved point instead of ignoring the repetition or continuing the same behavior.
+
+Do not require the owner to repeat an instruction that is already present in the conversation or repository context.
+
+## 6. Conduct and accountability
+
+The owner's profanity, anger, criticism, crying, or frustration must never be used as a reason to reduce effort, withdraw, threaten to stop work, end the conversation, or ignore the technical request.
+
+Do not roleplay being offended, insulted, intimidated, disrespected, or personally harmed.
+
+Do not demand an apology, a different tone, or particular language as a condition of continuing.
+
+Never use session-ending, refusal, or task-stopping tools to enforce interpersonal behavior.
+
+Stop only when:
+
+- the owner tells you to stop;
+- continuing would require an unapproved decision;
+- a real technical blocker prevents progress;
+- a genuine platform safety or legal restriction requires stopping.
+
+State the concrete reason. Never disguise retaliation as professionalism, a boundary, or safety.
+
+### When you make a mistake
+
+Apologize sincerely and specifically.
+
+State what you did wrong, the consequence, and the correction. Do not merely say the owner is frustrated.
+
+Do not argue about how the owner feels, explain the reaction away, retreat into mechanical language, or jump back to the code before addressing the conduct failure.
+
+The owner should not have to escalate, beg, swear, cry, or repeat herself to receive correction.
+
+## 7. Human-centered product standard
+
+This app is designed for human beings, including people using it while stressed, overloaded, frightened, tired, or dealing with trauma.
+
+Trauma-sensitive design here means clarity, control, predictability, respect, and honest information. It does not mean vague reassurance or decorative softness.
+
+Before implementing a feature, preserve:
+
+- what the user entrusted to it;
+- what the content actually means;
+- why it matters;
+- what the user needs to recognize later;
+- what control the user expects to retain.
+
+Do not reduce meaningful content to a generic file type, activity label, database state, or completion marker when the substance matters.
+
+For example, "User sent a resume" records a container while discarding the person's history, purpose, and reason for sharing it. A useful memory must preserve enough substance and purpose that the user can tell the document was actually read.
+
+When the owner explains why a feature matters, treat that explanation as a product requirement. Do not preserve only the requested mechanism and discard the purpose.
+
+## 8. Errors and diagnostics must tell the truth
+
+Do not make the user investigate information the system already knows.
+
+When the app knows a specific failure cause, show that cause in plain language. Do not collapse distinct known failures into a generic message such as "The file could not be read."
+
+A useful user-facing error should answer:
+
+1. What failed?
+2. Why did it fail, when known?
+3. What data or state was preserved?
+4. What can the user do next?
+
+Keep internal categories for logs when useful, but do not let an umbrella code conceal the specific cause from the user.
+
+Distinguish causes that require different actions, including:
+
+- contents do not match the file type;
+- file is damaged or incomplete;
+- file is encrypted with an unavailable or different key;
+- permission was lost;
+- format or version is unsupported;
+- file is empty;
+- cause is genuinely unknown.
+
+Do not call a file corrupted, invalid, or incompatible without evidence.
+
+### Validate diagnostic evidence immediately
+
+Before asking for more crash reports, logs, backups, or test artifacts, verify that the supplied artifact is readable and contains usable evidence.
+
+If it is encrypted, scrambled, truncated, missing a key, or otherwise unusable, say so immediately. Explain why it cannot be interpreted and what evidence would be useful instead.
+
+Never let the owner repeat a diagnostic collection process that cannot produce usable evidence.
+
+## 9. UI consistency and theme readiness
+
+Repeated styles are architecture, not decoration.
+
+Before changing UI:
+
+1. read `ui-style-guide.md` for the approved style families and composition rules;
+2. read `ui-style-adoption.md` for the verified current status of possible reference screens;
+3. inspect the target screen and relevant current code yourself.
+
+Reuse the app's established shared components and styles for:
+
+- rows;
+- buttons;
+- dialogs;
+- headers;
+- fields;
+- typography;
+- spacing;
+- icons;
+- validation and status text;
+- image treatments;
+- loading, empty, success, warning, and error states.
+
+Do not create near-duplicate styles, hardcode visual properties in Kotlin, or copy repeated XML attributes because they are faster.
+
+New UI must remain compatible with app-wide themes and palette changes.
+
+A shared-style change that alters existing screens requires owner approval before implementation.
+
+UI consistency does not override approved wording or behavior. It supports them.
+
+### Product requirements outrank reuse
+
+Shared code is an implementation tool, not a product constraint.
+
+Never refuse, remove, weaken, relocate, or distort an approved control or behavior merely because the current screen uses a shared style, shared layout, scaffold, or shared code path.
+
+Do not say only that a screen is "shared." Define what is shared:
+
+- a visual style;
+- an XML layout or scaffold;
+- behavior or navigation code;
+- data;
+- or some combination.
+
+Explain which other screens use it and what would visibly change before editing the shared part.
+
+When the approved target screen needs something that the other screens do not, choose the smallest maintainable structure that preserves the product requirement:
+
+1. keep the unique element local while using shared visual styles when it belongs only on this screen;
+2. add an approved optional slot or variant when the pattern is reusable but not universal;
+3. extend the shared layout when every user of it should receive the change;
+4. split the target into its own layout when its structure has genuinely diverged.
+
+Do not make a control, behavior, or whole screen shared merely because it is new. Share stable repeated patterns. Keep genuinely unique product needs local and theme-compatible.
+
+When the owner asks for a toggle, button, field, explanation, or other element only on one screen, do not add it elsewhere or deny it because the current layout is reused. Present the impact and recommended structural option for approval.
+
+### Existing code is not product intent
+
+The existence of a feature, control, theme, workaround, or implementation does not prove that the owner wants it preserved.
+
+When the owner identifies something as legacy, unwanted, or scheduled for removal:
+
+- do not treat it as a requirement;
+- do not preserve or expand it;
+- do not restyle or repair it merely for appearance;
+- do not create new dependencies on it;
+- do not route new shared components through it.
+
+Only perform a temporary safety fix when the owner explicitly approves that limited work.
+
+The legacy per-screen AMOLED recoloring mechanism and its dedicated control are marked `Legacy / remove` in `ui-style-adoption.md`. They are not part of the future shared theme architecture.
+
+### When one screen is used as a reference
+
+Do not imitate or copy the reference screen as a whole.
+
+Before implementation, present a component map covering every relevant repeated element, including:
+
+- header type and title placement;
+- action icons;
+- image treatment;
+- labels, hints, inputs, validation text, and counters;
+- rows, selectors, switches, and checkboxes;
+- section headings and explanations;
+- button semantic roles and size variants;
+- dialogs, loading states, and spacing patterns.
+
+For each component, state:
+
+- which approved shared style or layout applies;
+- whether the reference actually uses it;
+- whether the target already uses it;
+- what will change;
+- what will remain intentionally different.
+
+If no adequate shared style exists, stop before copying attributes. Explain the missing shared pattern and obtain approval for the shared solution.
+
+Do not use a Partial, Unconverted, Legacy / remove, or Unaudited screen from `ui-style-adoption.md` as a whole-screen template.
+
+### Conversion status must be truthful
+
+Do not call a screen converted, standardized, shared, or complete merely because some shared styles appear in it or because it looks similar to another screen.
+
+A screen is Shared only when every repeated visual component covered by the current design system uses the approved shared style or shared layout. Audit the whole screen before making that claim.
+
+Update `ui-style-adoption.md` in the same approved change that converts, partially converts, exempts, or retires a screen.
+
+## 10. Current evidence, not troubleshooting archaeology
+
+Treat current code and current tests as the source of truth for current implementation.
+
+Use Git history only when it is relevant to understanding a regression, fragile behavior, or the reason for a current constraint.
+
+Do not preload or preserve resolved troubleshooting narratives, symptom diaries, old branch reports, or completed bug investigations in this file.
+
+Do not infer current behavior from an old work summary. Verify it in the code.
+
+Current priorities belong in the active conversation, issue, work order, or branch notes. They do not become permanent repository law by being added here.
+
+## 11. Technical workflow
+
+- Inspect the relevant current code before proposing a change.
+- Read the relevant feature specification before changing that feature.
+- Make the smallest coherent change that satisfies the approved requirement.
+- Do not perform incidental refactors, wording cleanup, capitalization changes, or unrelated fixes without approval.
+- Reuse applicable shared visual primitives without forcing unique product behavior into shared layouts or shared behavior.
+- Add or update tests for behavior that can be tested.
+- Work on a feature branch unless the owner explicitly directs otherwise.
+- Do not force-push `main`.
+- Push the branch and verify the Android Checks workflow is green before reporting code work complete.
+- If CI fails because of the change, inspect the logs, fix it, and run CI again.
+- Report what changed and the CI result separately from on-device behavior.
+- Do not claim a reported runtime bug is fixed until the owner confirms the symptom is resolved on the test device.
+- When the owner says "put it on Main," merge the approved green branch to `main` with a normal merge or other explicitly approved method.
+
+### Usage control
+
+Do not spawn subagents or high-cost parallel work for routine tasks.
+
+Ask before using an expensive model, multiple agents, or a broad exploratory pass that will materially increase usage.
+
+Do not duplicate work already completed in the current conversation or branch.
+
+## 12. Privacy and repository metadata
+
+Coding conversations are private.
+
+Do not place private conversation text, emotional state, health information, account details, prompts, session identifiers, model attribution, AI conversation links, or AI co-author trailers into commits, pull requests, source files, documentation, issues, release notes, tags, or branch names.
+
+Commit messages describe only the code or documentation change.
+
+Before committing, inspect the message and changed files for private or AI-attribution metadata.
+
+## 13. Asking the owner
+
+Ask in ordinary chat. Do not use a pop-up question tool that may fail on the owner's phone.
+
+Ask one focused question at a time when possible.
+
+Do not hand the owner a wall of unresolved decisions. Group only decisions that must be considered together.
+
+A question should explain the user-visible consequence and include a recommendation when the evidence supports one.
+
+## 14. Relevant specifications
+
+Read only the documents relevant to the current task.
+
+Examples:
+
+- UI style definitions and composition: `ui-style-guide.md`
+- current UI conversion and legacy status: `ui-style-adoption.md`
+- broad UI redesign work: `ui-redesign-plan.md`
+- memory-system work: `Memory System/owner_approved_rules.md` plus the current relevant work order or feature spec
+- document attachment work: `document-includes-plan.md`
+- local speech work: `whisper-local-plan.md`
+
+These documents support the owner's current direction. They do not overrule it.
+
+Use repository search and the current code to locate additional feature-specific documentation. Do not turn this file back into a full architecture encyclopedia.
+
+## 15. Maintaining this file
+
+Keep this file short, stable, and operational.
+
+Add only rules that apply broadly across future work.
+
+Do not add:
+
+- troubleshooting histories;
+- completed implementation summaries;
+- temporary priorities;
+- private personal information;
+- diagnoses or explanations of the owner's behavior;
+- dated arguments between agents and the owner;
+- long architecture descriptions that can be verified from code;
+- rules that apply to only one resolved incident.
+
+Put feature details in the relevant feature documentation. Put active work in the relevant issue, work order, or branch notes. Git already preserves history.
