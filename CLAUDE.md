@@ -34,7 +34,7 @@ If the owner says a document is wrong, stale, insulting, misunderstood, or no lo
 3. identify the practical correction;
 4. update the documentation only after the correction is clear.
 
-Never cite `CLAUDE.md`, a plan, a test, or an earlier AI summary to overrule the owner.
+Never cite `CLAUDE.md`, a plan, a test, existing code, or an earlier AI summary to overrule the owner.
 
 ## 3. Approval must come before code
 
@@ -252,7 +252,11 @@ Never let the owner repeat a diagnostic collection process that cannot produce u
 
 Repeated styles are architecture, not decoration.
 
-Before changing UI, read `ui-style-guide.md` and inspect comparable current screens.
+Before changing UI:
+
+1. read `ui-style-guide.md` for the approved style families and composition rules;
+2. read `ui-style-adoption.md` for the verified current status of possible reference screens;
+3. inspect the target screen and relevant current code yourself.
 
 Reuse the app's established shared components and styles for:
 
@@ -264,15 +268,68 @@ Reuse the app's established shared components and styles for:
 - typography;
 - spacing;
 - icons;
+- validation and status text;
+- image treatments;
 - loading, empty, success, warning, and error states.
 
-Do not create near-duplicate styles, hardcode visual properties in Kotlin, or add one-off overrides because they are faster.
+Do not create near-duplicate styles, hardcode visual properties in Kotlin, or copy repeated XML attributes because they are faster.
 
 New UI must remain compatible with app-wide themes and palette changes.
 
 A shared-style change that alters existing screens requires owner approval before implementation.
 
 UI consistency does not override approved wording or behavior. It supports them.
+
+### Existing code is not product intent
+
+The existence of a feature, control, theme, workaround, or implementation does not prove that the owner wants it preserved.
+
+When the owner identifies something as legacy, unwanted, or scheduled for removal:
+
+- do not treat it as a requirement;
+- do not preserve or expand it;
+- do not restyle or repair it merely for appearance;
+- do not create new dependencies on it;
+- do not route new shared components through it.
+
+Only perform a temporary safety fix when the owner explicitly approves that limited work.
+
+The legacy per-screen AMOLED recoloring mechanism and its dedicated control are marked `Legacy / remove` in `ui-style-adoption.md`. They are not part of the future shared theme architecture.
+
+### When one screen is used as a reference
+
+Do not imitate or copy the reference screen as a whole.
+
+Before implementation, present a component map covering every relevant repeated element, including:
+
+- header type and title placement;
+- action icons;
+- image treatment;
+- labels, hints, inputs, validation text, and counters;
+- rows, selectors, switches, and checkboxes;
+- section headings and explanations;
+- button semantic roles and size variants;
+- dialogs, loading states, and spacing patterns.
+
+For each component, state:
+
+- which approved shared style or layout applies;
+- whether the reference actually uses it;
+- whether the target already uses it;
+- what will change;
+- what will remain intentionally different.
+
+If no adequate shared style exists, stop before copying attributes. Explain the missing shared pattern and obtain approval for the shared solution.
+
+Do not use a Partial, Unconverted, Legacy / remove, or Unaudited screen from `ui-style-adoption.md` as a whole-screen template.
+
+### Conversion status must be truthful
+
+Do not call a screen converted, standardized, shared, or complete merely because some shared styles appear in it or because it looks similar to another screen.
+
+A screen is Shared only when every repeated visual component covered by the current design system uses the approved shared style or shared layout. Audit the whole screen before making that claim.
+
+Update `ui-style-adoption.md` in the same approved change that converts, partially converts, exempts, or retires a screen.
 
 ## 10. Current evidence, not troubleshooting archaeology
 
@@ -336,7 +393,8 @@ Read only the documents relevant to the current task.
 
 Examples:
 
-- UI or shared styling: `ui-style-guide.md`
+- UI style definitions and composition: `ui-style-guide.md`
+- current UI conversion and legacy status: `ui-style-adoption.md`
 - broad UI redesign work: `ui-redesign-plan.md`
 - memory-system work: `Memory System/owner_approved_rules.md` plus the current relevant work order or feature spec
 - document attachment work: `document-includes-plan.md`
