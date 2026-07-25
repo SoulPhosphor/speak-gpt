@@ -1,10 +1,9 @@
 # Document & Image Includes — Build Plan
 
-Status: **Step 1 repair in progress.** The first implementation reached
-`main` with working pieces and material defects; it must not be treated as
-complete until the repair branch passes tests and Android Checks. Step 2 code
-exists on `main` but is outside the Step 1 acceptance boundary. Step 3
-(images) has not been built.
+Status: **Step 1 repaired and verified.** The first implementation reached
+`main` with working pieces and material defects; the repair now passes its
+tests and Android Checks. Step 2 code exists but remains outside the Step 1
+acceptance boundary. Step 3 (images) has not been built.
 
 This document records the current implementation baseline and build boundary.
 It does not turn an old discussion, uncertainty, or existing code into user
@@ -302,7 +301,7 @@ dialog containing the approved error descriptor.
 
 ## Build order and done-ness
 
-- **Step 1 — REPAIR IN PROGRESS.** Acceptance covers:
+- **Step 1 — REPAIRED AND VERIFIED.** Acceptance covers:
   - Camera, Image, Document in that order in the paperclip menu, shown as a
     vertical stack of icon-and-word rows.
   - `.txt`, `.md`, `.csv`, and `.docx` extraction on device.
