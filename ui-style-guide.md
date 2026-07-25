@@ -2,22 +2,66 @@
 
 This file is the usage map for the app's shared visual system.
 
-The actual style values live in `app/src/main/res/values/themes.xml`. This guide explains which shared style to use and when to use it. Git history preserves rollout history and old fixes; they do not belong here.
+The actual style values live in `app/src/main/res/values/themes.xml`. This guide explains which shared style or shared layout to use and when to use it. Conversion status belongs in `ui-style-adoption.md`. Git history preserves rollout history and old fixes.
+
+## Terms
+
+### Shared style
+
+A shared style is the CSS-like layer. It controls repeated visual properties such as color, typography, shape, size, spacing, and component geometry.
+
+Examples: `AppButton.Primary`, `Widget.App.Field.Label`, and `Widget.App.ActionBar.Title`.
+
+### Shared layout or scaffold
+
+A shared layout or scaffold is a reusable XML template that supplies an arrangement of views for more than one screen.
+
+Changing it may change every screen that uses the template. Before editing one, identify all current users and explain the visible effect on each.
+
+### Shared behavior
+
+Shared behavior is reusable Kotlin or another shared code path used by more than one screen. It is not the same as a shared visual style or shared layout.
+
+### Do not say only "the screen is shared"
+
+State exactly what is shared:
+
+- a visual style;
+- an XML layout or scaffold;
+- behavior;
+- data;
+- or some combination.
+
+A screen may use shared styles while retaining its own layout. It may also use a shared layout while adding local controls or behavior.
 
 ## Core rule
 
-Reuse an existing shared style or shared layout instead of copying visual attributes into a new layout.
+Reuse shared visual rules for repeated components. Do not force screens to have identical structure when the approved product needs differ.
 
-Repeated styles are architecture. They allow buttons, rows, headers, fields, dialogs, and other components to change together when the app gains new themes or palettes.
+Before creating or changing UI:
 
-Before creating a new visual pattern:
-
-1. inspect the comparable current screens;
+1. inspect the target screen;
 2. check this guide and `themes.xml` for an existing style family;
-3. use the existing family when it matches;
-4. ask the owner before inventing a new shared pattern or changing an existing one.
+3. check `ui-style-adoption.md` before treating another screen as a reference;
+4. use the existing family when it matches;
+5. ask the owner before inventing a new shared pattern or changing an existing one.
 
-Do not hardcode repeated colors, sizes, typography, shapes, or spacing in Kotlin when a shared resource can control them.
+Do not hardcode repeated colors, sizes, typography, shapes, spacing, or geometry in Kotlin or XML when a shared resource should control them.
+
+If an existing shared style cannot represent the approved design, stop before copying attributes. Explain the missing shared variant and obtain approval for the shared solution.
+
+### Reuse supports the product
+
+A shared layout is not a reason to reject a needed control or force it onto every related screen.
+
+When one screen needs an element that the others do not:
+
+- keep it local while using shared visual styles when it is genuinely unique;
+- add an optional slot or approved variant when the pattern is reusable but not universal;
+- extend the shared layout only when every user should receive the change;
+- split the screen into its own layout when its structure has genuinely diverged.
+
+Do not make an entire screen or behavior shared merely because it is new. Share stable repeated patterns.
 
 ## Theme and palette contract
 
@@ -30,7 +74,9 @@ Every `ThemeOverlay.Phosphor.*` palette must define:
 
 These attributes supply the shared row title, subtitle, and chevron colors.
 
-A change to a shared style may alter every screen using it. Treat that as an app-wide visual decision, not a local cleanup.
+A change to a shared style or shared layout may alter every screen using it. Treat that as an app-wide visual decision, not a local cleanup.
+
+Legacy per-screen AMOLED recoloring is not part of the future theme system. Its current status is recorded in `ui-style-adoption.md`.
 
 ## Buttons
 
@@ -49,7 +95,7 @@ Then use the size or placement variant required by the screen:
 - single dialog action;
 - two-button dialog action row.
 
-A button does not become secondary or destructive because it is shorter, narrower, placed beside another button, or shown in a dialog. Size variants must inherit the semantic style so the same role remains visually consistent throughout the app.
+A button does not become secondary or destructive because it is shorter, narrower, beside another button, or inside a dialog. Size variants must inherit the semantic style.
 
 Do not create a new appearance merely to obtain a different button width or length.
 
@@ -59,7 +105,7 @@ Do not create a new appearance merely to obtain a different button width or leng
 
 Use as the app-wide default `MaterialButton` appearance when no explicit semantic button style is assigned. It supplies the shared semi-square button shape.
 
-New UI should prefer the named semantic styles below when the button's role is known.
+New UI should prefer a named semantic style when the role is known.
 
 ### Primary action
 
@@ -73,11 +119,11 @@ A group should normally have one clearly primary action.
 
 `AppButton.Secondary`
 
-Keep this semantic role available for a neutral alternative action that is not the main commitment and is not a cancel, discard, remove, reset, revert, or delete action.
+Use for a neutral alternative action that is not the main commitment and is not Cancel, Discard, Remove, Reset, Revert, or Delete.
 
-The owner has not approved a distinct visual treatment for secondary buttons. Do not invent one. The current implementation may resemble another button role until its appearance is reviewed separately.
+The owner has not approved a distinct visual treatment for secondary buttons. Do not invent one. The current implementation may resemble another role until reviewed separately.
 
-Possible uses include Preview, Test, Learn More, Choose Another Source, or another neutral alternate path when appropriate to the feature.
+Possible uses include Preview, Test, Learn More, or Choose Another Source when appropriate to the feature.
 
 ### Destructive, cancel, or back-out action
 
@@ -85,7 +131,7 @@ Possible uses include Preview, Test, Learn More, Choose Another Source, or anoth
 
 Use for Cancel and other actions that back out of a pending operation, as well as Remove, Reset, Revert, Discard, or Delete.
 
-The exact wording and consequence still determine whether confirmation is required. The style alone does not authorize destructive behavior.
+The style does not authorize destructive behavior. The wording and consequence still determine whether confirmation is required.
 
 ### Single dialog action
 
@@ -107,8 +153,6 @@ Use for the established two-button confirmation shape with the primary action fi
 
 Required shared layout: `layout/dialog_two_actions.xml`.
 
-Example: the standard discard-changes dialog.
-
 ### Inline actions
 
 `AppButton.Primary.Inline`
@@ -119,7 +163,7 @@ Use when actions should size to their labels rather than fill the available widt
 
 For the established right-aligned Cancel-then-Save dialog row, use `layout/dialog_two_actions_end.xml` with these inline styles.
 
-A future inline secondary button should inherit `AppButton.Secondary` and change only its geometry. Do not give it a new visual identity merely because it is inline.
+A future inline secondary button should inherit `AppButton.Secondary` and change only its geometry.
 
 ## Dialogs
 
@@ -133,7 +177,7 @@ This theme supplies the standard dialog appearance and centers dialog titles.
 
 ### Title and explanatory text
 
-Use `setTitle` for the dialog's heading or its single short question.
+Use `setTitle` for the dialog heading or its single short question.
 
 Use `setMessage` only for separate explanatory text beneath the title.
 
@@ -180,7 +224,7 @@ Use these pieces in order:
 
 Use when the row opens another screen and the subtitle helps explain the destination or current state.
 
-`Widget.App.Row.Subtitle` is one line with end ellipsis by default. Override the line count only when the approved content genuinely needs more room.
+`Widget.App.Row.Subtitle` is one line with end ellipsis by default. Override the line count only when approved content genuinely needs more room.
 
 ### Leading image choices
 
@@ -206,13 +250,17 @@ Use for a setting that changes a Boolean value directly instead of navigating to
 
 A toggle row has no chevron. The row container is not the tap target; the switch is.
 
+A toggle may exist on only one screen. Its use of shared row and switch styling does not require adding the toggle to other screens.
+
 ## Screen headers
 
 ### Header container
 
 `Widget.App.ActionBar`
 
-Use as the shared container for a full-screen activity or panel header.
+Use as the shared visual container for a full-screen activity or panel header.
+
+Using this style does not require several screens to share the same XML layout.
 
 ### Simple screen header
 
@@ -221,25 +269,31 @@ Use:
 - `Widget.App.ActionBar.BackButton`
 - `Widget.App.ActionBar.Title`
 
-Use when the header contains only a back button and title. The title is centered.
+Use when the header contains only a back button and centered title.
 
 The back button style expects the view id `btn_back`.
 
-### Header with trailing action icons
+### Header with one trailing action icon
 
 Use:
 
 - `Widget.App.ActionBar.BackButton`
 - `Widget.App.ActionBar.Title.NearBack`
-- one or more `Widget.App.ActionBar.SecondaryButton` views
+- `Widget.App.ActionBar.SecondaryButton`
 
-Use when the header contains Save, Delete, Help, Debug, Edit, or another trailing icon action.
+Use when the header contains one trailing Save, Delete, Help, Debug, Edit, or similar icon action.
 
-`Title.NearBack` is left-aligned after the back button and ellipsizes before the first trailing icon. Each layout must set its end constraint to the trailing icon nearest the title.
+`Title.NearBack` is left-aligned after the back button and ellipsizes before the trailing icon. The layout must set the title's end constraint to that icon.
 
-Use `SecondaryButton` for the icon anchored to the end of the header. Additional icons may chain before it while retaining the same shared geometry.
+`Widget.App.ActionBar.SecondaryButton` is a positional header-icon style. It is unrelated to the semantic `AppButton.Secondary` role.
 
-`Widget.App.ActionBar.SecondaryButton` is a positional header-icon style. It is not the same concept as the semantic `AppButton.Secondary` action role.
+### Header with two or more trailing action icons
+
+No complete approved shared pattern currently covers additional chained icons. `Widget.App.ActionBar.SecondaryButton` directly covers only the end-anchored icon.
+
+Do not copy its geometry into the additional icon and call the header converted. Present the missing shared variant or shared header-layout decision for owner approval.
+
+Until that gap is resolved, a screen with locally repeated additional-icon geometry is Partial in `ui-style-adoption.md`.
 
 ### Close-panel header
 
@@ -268,11 +322,11 @@ Do not replace the separate label with a floating `TextInputLayout` hint when us
 
 Keep field-specific behavior on the individual input, including:
 
-- `inputType`
-- line count
-- gravity
-- character limits
-- any extra spacing unique to that field
+- `inputType`;
+- line count;
+- gravity;
+- character limits;
+- spacing unique to that field.
 
 ### Small inline number field
 
@@ -280,7 +334,7 @@ Keep field-specific behavior on the individual input, including:
 
 Use for a short whole-number input that sits on the same line as its label.
 
-Set `android:ems` and `android:maxLength` on the individual field according to the number of digits it must accept.
+Set `android:ems` and `android:maxLength` on the individual field according to the digits it must accept.
 
 ## Screen sections
 
@@ -367,9 +421,9 @@ Do not add:
 - rollout histories;
 - dated corrections;
 - old bugs;
-- lists of every converted or unconverted screen;
+- lists of converted or unconverted screens;
 - superseded decisions;
 - branch names or commit narratives;
 - feature behavior unrelated to choosing and composing the style.
 
-When the guide and current style definitions disagree, inspect `themes.xml`, verify the intended current behavior, and correct the stale documentation before using it as authority.
+When this guide and current style definitions disagree, inspect `themes.xml`, verify the intended behavior, and correct the stale documentation before using it as authority.
