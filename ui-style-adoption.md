@@ -17,7 +17,7 @@ Every repeated visual component on the screen uses the appropriate approved shar
 
 This includes applicable headers, action icons, buttons, fields, hints, validation text, counters, image treatments, rows, sections, selectors, switches, checkboxes, dialogs, loading states, and spacing patterns.
 
-Feature-specific content and behavior may remain local. A component that is genuinely unique may remain local only after its uniqueness is verified rather than assumed.
+Feature-specific content and behavior may remain local. A genuinely unique control may remain local while using shared visual styles. A screen does not need to share its whole XML layout to be theme-ready.
 
 ### Partial
 
@@ -45,7 +45,7 @@ Do not preserve, expand, restyle, repair for appearance, or create new dependenc
 
 The current implementation has not yet been checked against `ui-style-guide.md`, `themes.xml`, and any shared layouts it should use.
 
-Do not guess its status from appearance or from old documentation.
+Do not guess its status from appearance or old documentation.
 
 ## Rules for maintaining this map
 
@@ -58,6 +58,8 @@ Do not guess its status from appearance or from old documentation.
 - Do not use a Partial, Unconverted, Legacy / remove, or Unaudited screen as a visual template.
 - When the owner asks one screen to match another, decompose both screens by component and use the approved shared style for each component.
 - If a repeated component has no adequate shared style, stop before copying attributes. Explain the missing style family and obtain approval for the shared solution.
+- Do not force a unique product requirement onto every screen that shares a style, layout, scaffold, or code path.
+- When a shared layout blocks an approved screen-specific control, record whether the solution is a local addition, optional variant, shared-layout extension, or separate layout. Shared implementation is not a veto.
 
 ## Current verified entries
 
