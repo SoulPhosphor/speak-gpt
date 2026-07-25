@@ -2088,14 +2088,31 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     }
 
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {
-        if (event.action == MotionEvent.ACTION_DOWN &&
-            includeStripController?.isExpanded() == true
-        ) {
-            val bounds = Rect()
-            val touchedInsideStrip =
-                includeStrip?.getGlobalVisibleRect(bounds) == true &&
-                    bounds.contains(event.rawX.toInt(), event.rawY.toInt())
-            if (!touchedInsideStrip) includeStripController?.collapseIfExpanded()
+        if (event.action == MotionEvent.ACTION_DOWN) {
+            if (includeStripController?.isExpanded() == true) {
+                val bounds = Rect()
+                val touchedInsideStrip =
+                    includeStrip?.getGlobalVisibleRect(bounds) == true &&
+                        bounds.contains(event.rawX.toInt(), event.rawY.toInt())
+                if (!touchedInsideStrip) includeStripController?.collapseIfExpanded()
+            }
+
+            if (visionActions?.visibility == View.VISIBLE) {
+                val bounds = Rect()
+                val touchedInsideMenu =
+                    visionActions?.getGlobalVisibleRect(bounds) == true &&
+                        bounds.contains(event.rawX.toInt(), event.rawY.toInt())
+                val touchedPaperclip =
+                    btnAttachFile?.getGlobalVisibleRect(bounds) == true &&
+                        bounds.contains(event.rawX.toInt(), event.rawY.toInt())
+
+                // Leave paperclip taps for its click listener so it can still
+                // toggle the menu closed. Every other outside tap dismisses
+                // the menu before the tapped control handles its own action.
+                if (!touchedInsideMenu && !touchedPaperclip) {
+                    visionActions?.visibility = View.GONE
+                }
+            }
         }
         return super.dispatchTouchEvent(event)
     }
