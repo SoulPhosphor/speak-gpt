@@ -34,6 +34,25 @@ A change to a shared style may alter every screen using it. Treat that as an app
 
 ## Buttons
 
+### Button meaning and button size are separate
+
+Choose the semantic role first:
+
+- primary;
+- secondary;
+- destructive.
+
+Then use the size or placement variant required by the screen:
+
+- ordinary screen or section button;
+- inline button sized to its label;
+- single dialog action;
+- two-button dialog action row.
+
+A button does not become secondary or destructive because it is shorter, narrower, placed beside another button, or shown in a dialog. Size variants must inherit the semantic style so the same role remains visually consistent throughout the app.
+
+Do not create a new appearance merely to obtain a different button width or length.
+
 ### Default button
 
 `App.Button`
@@ -46,27 +65,33 @@ New UI should prefer the named semantic styles below when the button's role is k
 
 `AppButton.Primary`
 
-Use for the main affirmative action on a screen or within a section, such as Save, Import, Export, Continue, or Create.
+Use for the main affirmative or committing action on a screen, dialog, or section, such as Save, Import, Export, Continue, Create, or Confirm.
+
+A group should normally have one clearly primary action.
 
 ### Secondary action
 
 `AppButton.Secondary`
 
-Use for a secondary, non-destructive action. It is currently outlined.
+Keep this semantic role available for a neutral alternative action that is not the main commitment and is not a cancel, discard, remove, reset, revert, or delete action.
 
-### Destructive or cautionary action
+The owner has not approved a distinct visual treatment for secondary buttons. Do not invent one. The current implementation may resemble another button role until its appearance is reviewed separately.
+
+Possible uses include Preview, Test, Learn More, Choose Another Source, or another neutral alternate path when appropriate to the feature.
+
+### Destructive, cancel, or back-out action
 
 `AppButton.Destructive`
 
-Use for actions that remove, reset, revert, discard, or otherwise deserve distinct cautionary treatment.
+Use for Cancel and other actions that back out of a pending operation, as well as Remove, Reset, Revert, Discard, or Delete.
 
-It currently matches `AppButton.Secondary` visually but remains separately named so destructive actions can be restyled app-wide later.
+The exact wording and consequence still determine whether confirmation is required. The style alone does not authorize destructive behavior.
 
 ### Single dialog action
 
 `AppButton.Primary.Dialog`
 
-Use for one centered filled action inside a custom dialog.
+Use for one centered filled primary action inside a custom dialog.
 
 Required shared layout: `layout/dialog_single_action.xml`.
 
@@ -78,7 +103,7 @@ This style requires a `ConstraintLayout` parent because its width is percentage-
 
 `AppButton.Destructive.DialogAction`
 
-Use for the established two-button confirmation shape with the primary action first and the destructive action second.
+Use for the established two-button confirmation shape with the primary action first and the destructive or cancel action second.
 
 Required shared layout: `layout/dialog_two_actions.xml`.
 
@@ -93,6 +118,8 @@ Example: the standard discard-changes dialog.
 Use when actions should size to their labels rather than fill the available width.
 
 For the established right-aligned Cancel-then-Save dialog row, use `layout/dialog_two_actions_end.xml` with these inline styles.
+
+A future inline secondary button should inherit `AppButton.Secondary` and change only its geometry. Do not give it a new visual identity merely because it is inline.
 
 ## Dialogs
 
@@ -212,6 +239,8 @@ Use when the header contains Save, Delete, Help, Debug, Edit, or another trailin
 
 Use `SecondaryButton` for the icon anchored to the end of the header. Additional icons may chain before it while retaining the same shared geometry.
 
+`Widget.App.ActionBar.SecondaryButton` is a positional header-icon style. It is not the same concept as the semantic `AppButton.Secondary` action role.
+
 ### Close-panel header
 
 Use:
@@ -273,7 +302,7 @@ The required order is:
 2. all section explanation or warning text;
 3. the section's controls.
 
-Do not place explanatory text beneath the button or control it explains.
+The user must receive the explanation before reaching the control that depends on it. Do not place explanatory text beneath the button, switch, field, or other control it explains.
 
 ## Multiple-choice dropdowns
 
