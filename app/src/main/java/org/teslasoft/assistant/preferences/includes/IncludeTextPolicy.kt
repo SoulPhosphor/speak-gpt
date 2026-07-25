@@ -21,13 +21,11 @@ package org.teslasoft.assistant.preferences.includes
  * it is safe to send whole, and how to shrink it honestly when it isn't.
  * No Android dependencies, so all of it is unit-tested.
  *
- * Weight is measured in ESTIMATED TOKENS, not characters (owner ruling, July
- * 24 2026) — tokens are what the user actually pays for, so that is the one
- * unit shown everywhere in the UI. The estimate is deliberately arithmetic
- * rather than a real tokenizer pass: running the app's tokenizer here would
- * repeat the main-thread stall that froze readback (see CLAUDE.md), and an
- * estimate within roughly a quarter of the true count is all the UI claims —
- * every number is rendered with a leading "~".
+ * Weight is measured in estimated tokens, not characters. The estimate is
+ * deliberately arithmetic rather than a real tokenizer pass: running the
+ * app's tokenizer here would repeat the main-thread stall that froze readback
+ * (see CLAUDE.md). Every number is rendered with a leading "~" because
+ * tokenization differs by model.
  */
 object IncludeTextPolicy {
 
@@ -53,10 +51,23 @@ object IncludeTextPolicy {
      */
     private const val GARBAGE_RATIO = 0.05
 
-    fun estimateTokens(text: String): Int =
-        if (text.isEmpty()) 0 else (text.length + CHARS_PER_TOKEN - 1) / CHARS_PER_TOKEN
+    fun estimateTokens(text: String): Int {
+        if (text.isEmpty()) return 0
 
-    private fun tokensToChars(tokens: Int): Int = tokens * CHARS_PER_TOKEN
+        var asciiCharacters = 0
+        var nonAsciiTokens = 0
+        var index = 0
+        while (index < text.length) {
+            val codePoint = text.codePointAt(index)
+            if (codePoint <= 0x7F) {
+                asciiCharacters++
+            } else {
+                nonAsciiTokens += if (Character.charCount(codePoint) == 2) 2 else 1
+            }
+            index += Character.charCount(codePoint)
+        }
+        return (asciiCharacters + CHARS_PER_TOKEN - 1) / CHARS_PER_TOKEN + nonAsciiTokens
+    }
 
     /**
      * Decides whether extracted text looks like a real text document. A
@@ -81,7 +92,7 @@ object IncludeTextPolicy {
     data class SizedText(val text: String, val notice: IncludeNotice)
 
     /**
-     * Applies the owner-approved size rules to extracted text.
+     * Applies the documented size rules to extracted text.
      *
      * Under [LARGE_TOKENS] it goes as-is. Between there and [MAX_TOKENS] it
      * still goes whole, but carries the large-file notice so the cost is
@@ -93,19 +104,32 @@ object IncludeTextPolicy {
      * which would let the model analyse a fragment as though it were the
      * whole file.
      */
-    fun applySizeGuard(text: String, kind: IncludeKind): SizedText {
+    fun applySizeGuard(
+        text: String,
+        kind: IncludeKind,
+        sourceTruncated: Boolean = false,
+        csvTotalRows: Int? = null
+    ): SizedText {
         val tokens = estimateTokens(text)
-        if (tokens <= LARGE_TOKENS) return SizedText(text, IncludeNotice.None)
+        if (!sourceTruncated && tokens <= LARGE_TOKENS) {
+            return SizedText(text, IncludeNotice.None)
+        }
+
+        if (!sourceTruncated && tokens <= MAX_TOKENS) {
+            return SizedText(text, IncludeNotice.Large(tokens))
+        }
 
         if (kind == IncludeKind.CSV) {
-            val trimmed = trimCsv(text)
+            val trimmed = trimCsv(
+                text = text,
+                totalRowsOverride = csvTotalRows,
+                sourceTruncated = sourceTruncated
+            )
             if (trimmed != null) return trimmed
             // Not row-shaped after all; fall through to the plain rules.
         }
 
-        if (tokens <= MAX_TOKENS) return SizedText(text, IncludeNotice.Large(tokens))
-
-        val cut = text.substring(0, minOf(text.length, tokensToChars(MAX_TOKENS)))
+        val cut = truncateToEstimatedTokens(text, MAX_TOKENS)
         return SizedText(cut, IncludeNotice.Truncated(estimateTokens(cut)))
     }
 
@@ -115,20 +139,141 @@ object IncludeTextPolicy {
      * Returns null when the text has too few rows to be worth trimming this
      * way (the caller then applies the ordinary rules).
      */
-    fun trimCsv(text: String): SizedText? {
-        val lines = text.split("\n")
-        // Header + the row cap + at least one dropped row, else nothing to do.
-        if (lines.size <= CSV_MAX_ROWS + 2) return null
+    fun trimCsv(
+        text: String,
+        totalRowsOverride: Int? = null,
+        sourceTruncated: Boolean = false
+    ): SizedText? {
+        val parsed = parseCsvRecords(text)
+        val records = parsed.records.toMutableList()
+        if (sourceTruncated && !parsed.endsAtRecordBoundary && records.isNotEmpty()) {
+            records.removeAt(records.lastIndex)
+        }
 
-        val header = lines.first()
-        val kept = lines.subList(1, minOf(lines.size, CSV_MAX_ROWS + 1))
-        val totalRows = lines.count { it.isNotBlank() } - 1
+        val nonBlankRecords = records.filter { it.isNotBlank() }
+        if (nonBlankRecords.isEmpty()) return null
+
+        val header = nonBlankRecords.first()
+        val availableRows = nonBlankRecords.drop(1)
+        val totalRows = totalRowsOverride ?: availableRows.size
+        if (totalRows <= CSV_MAX_ROWS || availableRows.isEmpty()) return null
+
+        val kept = availableRows.take(CSV_MAX_ROWS)
         val body = StringBuilder(header)
-        for (line in kept) body.append('\n').append(line)
+        for (record in kept) body.append('\n').append(record)
         return SizedText(
             body.toString(),
             IncludeNotice.CsvTrimmed(sentRows = kept.size, totalRows = maxOf(totalRows, kept.size))
         )
+    }
+
+    /** Counts logical CSV records without treating a newline inside quotes as
+     * a new row. The first non-empty record is the header. */
+    fun countCsvDataRows(reader: java.io.Reader): Int {
+        var inQuotes = false
+        var recordHasContent = false
+        var records = 0
+        var previousBoundaryWasCr = false
+        val buffer = CharArray(8 * 1024)
+
+        while (true) {
+            val read = reader.read(buffer)
+            if (read < 0) break
+            if (read == 0) continue
+            for (index in 0 until read) {
+                val c = buffer[index]
+                if (c == '"') {
+                    inQuotes = !inQuotes
+                    recordHasContent = true
+                    previousBoundaryWasCr = false
+                    continue
+                }
+
+                if (!inQuotes && (c == '\n' || c == '\r')) {
+                    if (c == '\n' && previousBoundaryWasCr) {
+                        previousBoundaryWasCr = false
+                        continue
+                    }
+                    if (recordHasContent) records++
+                    recordHasContent = false
+                    previousBoundaryWasCr = c == '\r'
+                    continue
+                }
+
+                if (!c.isWhitespace()) recordHasContent = true
+                previousBoundaryWasCr = false
+            }
+        }
+
+        if (recordHasContent) records++
+        return maxOf(0, records - 1)
+    }
+
+    private data class CsvRecords(
+        val records: List<String>,
+        val endsAtRecordBoundary: Boolean
+    )
+
+    private fun parseCsvRecords(text: String): CsvRecords {
+        val records = ArrayList<String>()
+        val current = StringBuilder()
+        var inQuotes = false
+        var index = 0
+        var endsAtBoundary = false
+
+        while (index < text.length) {
+            val c = text[index]
+            if (c == '"') {
+                inQuotes = !inQuotes
+                current.append(c)
+                endsAtBoundary = false
+                index++
+                continue
+            }
+
+            if (!inQuotes && (c == '\n' || c == '\r')) {
+                records.add(current.toString())
+                current.setLength(0)
+                if (c == '\r' && index + 1 < text.length && text[index + 1] == '\n') {
+                    index++
+                }
+                endsAtBoundary = true
+                index++
+                continue
+            }
+
+            current.append(c)
+            endsAtBoundary = false
+            index++
+        }
+
+        if (current.isNotEmpty()) records.add(current.toString())
+        return CsvRecords(records, endsAtBoundary)
+    }
+
+    private fun truncateToEstimatedTokens(text: String, maxTokens: Int): String {
+        var asciiCharacters = 0
+        var nonAsciiTokens = 0
+        var index = 0
+        var safeEnd = 0
+
+        while (index < text.length) {
+            val codePoint = text.codePointAt(index)
+            val charCount = Character.charCount(codePoint)
+            if (codePoint <= 0x7F) {
+                asciiCharacters++
+            } else {
+                nonAsciiTokens += if (charCount == 2) 2 else 1
+            }
+
+            val tokens =
+                (asciiCharacters + CHARS_PER_TOKEN - 1) / CHARS_PER_TOKEN + nonAsciiTokens
+            if (tokens > maxTokens) break
+            index += charCount
+            safeEnd = index
+        }
+
+        return text.substring(0, safeEnd)
     }
 
     /**

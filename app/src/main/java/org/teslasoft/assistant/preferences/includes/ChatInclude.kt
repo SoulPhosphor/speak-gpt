@@ -21,7 +21,7 @@ import org.json.JSONObject
 
 /**
  * One attached item ("include") in a chat — a document today, an image in a
- * later step. See `document-includes-plan.md` for the owner-approved design.
+ * later step. See `document-includes-plan.md` for the current design.
  *
  * The ladder (heaviest to lightest) is FULL -> CONDENSED -> ARTIFACT, and it
  * only ever moves DOWN, by an explicit user action. Nothing automatic changes
@@ -62,8 +62,8 @@ data class ChatInclude(
 
     /**
      * Whether this include shows a row in the strip above the message box.
-     * The owner's rule: anything heavier than an artifact is a live data
-     * drain, so it stays plainly visible; artifacts retire to the bookmark.
+     * Anything heavier than an artifact is a live data drain, so it stays
+     * plainly visible; artifacts retire to the bookmark.
      */
     fun showsInStrip(): Boolean = form != IncludeForm.ARTIFACT
 
@@ -168,8 +168,8 @@ enum class IncludeForm(val key: String) {
 
 /**
  * A size notice attached to an include, shown as persistent inline text under
- * its row (never a toast). Carries the numbers the owner-approved wording
- * needs so the strings can be filled in without recomputing anything.
+ * its row (never a toast). Carries the numbers needed to format the current
+ * wording without recomputing anything.
  */
 sealed class IncludeNotice {
     data object None : IncludeNotice()

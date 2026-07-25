@@ -172,7 +172,9 @@ import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.includes.ChatInclude
 import org.teslasoft.assistant.preferences.includes.DocumentImporter
 import org.teslasoft.assistant.preferences.includes.IncludeForm
-import org.teslasoft.assistant.preferences.includes.IncludeRenderer
+import org.teslasoft.assistant.preferences.includes.IncludeKind
+import org.teslasoft.assistant.preferences.includes.IncludeMessageProjection
+import org.teslasoft.assistant.preferences.includes.IncludeNotice
 import org.teslasoft.assistant.preferences.includes.IncludeTextPolicy
 import org.teslasoft.assistant.ui.util.IncludeEditDialog
 import org.teslasoft.assistant.ui.util.IncludeStripController
@@ -290,9 +292,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     private var selectedImage: ImageView? = null
     private var btnRemoveImage: ImageButton? = null
     private var visionActions: LinearLayout? = null
-    private var btnVisionActionCamera: ImageButton? = null
-    private var btnVisionActionGallery: ImageButton? = null
-    private var btnVisionActionDocument: ImageButton? = null
+    // Each paperclip-menu action is a labeled row, not an icon-only button.
+    private var btnVisionActionCamera: View? = null
+    private var btnVisionActionGallery: View? = null
+    private var btnVisionActionDocument: View? = null
 
     // ---- Document includes (document-includes-plan.md) --------------------
     // Attachments the user has picked but not yet sent. Once a message goes
@@ -2021,7 +2024,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             onBackInvokedDispatcher.registerOnBackInvokedCallback(
                 OnBackInvokedDispatcher.PRIORITY_DEFAULT
             ) {
-                if (bulkSelectionMode) {
+                if (includeStripController?.collapseIfExpanded() == true) {
+                    // The expanded Includes overlay consumes Back first.
+                } else if (bulkSelectionMode) {
                     deselectAll()
                 } else {
                     finishActivity()
@@ -2030,7 +2035,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         } else {
             onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
                 override fun handleOnBackPressed() {
-                    if (bulkSelectionMode) {
+                    if (includeStripController?.collapseIfExpanded() == true) {
+                        // The expanded Includes overlay consumes Back first.
+                    } else if (bulkSelectionMode) {
                         deselectAll()
                     } else {
                         finishActivity()
@@ -2078,6 +2085,19 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         }
 
         chatStartupComplete = true
+    }
+
+    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        if (event.action == MotionEvent.ACTION_DOWN &&
+            includeStripController?.isExpanded() == true
+        ) {
+            val bounds = Rect()
+            val touchedInsideStrip =
+                includeStrip?.getGlobalVisibleRect(bounds) == true &&
+                    bounds.contains(event.rawX.toInt(), event.rawY.toInt())
+            if (!touchedInsideStrip) includeStripController?.collapseIfExpanded()
+        }
+        return super.dispatchTouchEvent(event)
     }
 
     public override fun onDestroy() {
@@ -2647,7 +2667,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     }
 
     // ==== Document includes ================================================
-    // See document-includes-plan.md for the owner-approved design. The short
+    // See document-includes-plan.md for the current design. The short
     // version: an attached document is extracted to text on THIS device and
     // rides inside the user message it was attached to, so it works
     // identically on every OpenAI-compatible endpoint (GLM, DeepSeek,
@@ -2675,8 +2695,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     /**
      * Every include the strip should show: the ones waiting to be sent, plus
      * the ones already sent that are still in a form heavier than a bookmark.
-     * Both are live costs on every turn, so the owner's rule — "if you can see
-     * it, it's being sent" — requires showing them together.
+     * Both are live costs on every turn, so they are shown together.
      */
     private fun liveIncludes(): List<ChatInclude> {
         val out = ArrayList<ChatInclude>(pendingIncludes)
@@ -2695,16 +2714,26 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     private fun includesOf(message: HashMap<String, Any>): List<ChatInclude> =
         ChatInclude.listFromJson(message[INCLUDES_KEY]?.toString())
 
-    private fun savePendingIncludes() {
+    private fun savePendingIncludes(synchronous: Boolean = false) {
         preferences?.setPendingIncludes(
-            if (pendingIncludes.isEmpty()) "" else ChatInclude.listToJson(pendingIncludes)
+            if (pendingIncludes.isEmpty()) "" else ChatInclude.listToJson(pendingIncludes),
+            synchronous = synchronous
         )
     }
 
     private fun loadPendingIncludes() {
+        val loaded = ChatInclude.listFromJson(preferences?.getPendingIncludes())
+        val sentIds = messages
+            .flatMap(::includesOf)
+            .mapTo(HashSet()) { it.id }
         pendingIncludes = ArrayList(
-            ChatInclude.listFromJson(preferences?.getPendingIncludes())
+            loaded.filter { it.form != IncludeForm.ARTIFACT && it.id !in sentIds }
         )
+        if (pendingIncludes.size != loaded.size) {
+            // Recover safely if a process stopped after the chat-history side
+            // of a pending-to-sent transfer was committed.
+            savePendingIncludes(synchronous = true)
+        }
     }
 
     /**
@@ -2720,7 +2749,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         val pendingIndex = pendingIncludes.indexOfFirst { it.id == updated.id }
         if (pendingIndex >= 0) {
             pendingIncludes[pendingIndex] = updated
-            savePendingIncludes()
+            savePendingIncludes(synchronous = true)
             changed = true
         }
 
@@ -2748,15 +2777,18 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         chatMessages = arrayListOf()
         for (message in messages) {
             if (message["message"].toString().contains("data:image")) continue
-            if (message["isBot"] == true) {
-                chatMessages.add(
-                    ChatMessage(role = ChatRole.Assistant, content = modelFacingContent(message))
+            val content = modelFacingContent(message)
+            if (content.isBlank()) continue
+            chatMessages.add(
+                ChatMessage(
+                    role = if (message["isBot"] == true) {
+                        ChatRole.Assistant
+                    } else {
+                        ChatRole.User
+                    },
+                    content = content
                 )
-            } else {
-                chatMessages.add(
-                    ChatMessage(role = ChatRole.User, content = modelFacingContent(message))
-                )
-            }
+            )
         }
     }
 
@@ -2792,7 +2824,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 try {
                     DocumentImporter.import(this@ChatActivity, uri)
                 } catch (_: Exception) {
-                    DocumentImporter.Result.Unknown("")
+                    DocumentImporter.Result.Unknown("document")
                 }
             }
             if (isFinishing || isDestroyed) return@launch
@@ -2831,7 +2863,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
      *  why their file did not attach at their own pace. */
     private fun showIncludeProblem(messageRes: Int, fileName: String) {
         MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-            .setTitle(getString(messageRes, fileName))
+            .setTitle(fileName)
+            .setMessage(messageRes)
             .setPositiveButton(R.string.btn_close, null)
             .show()
     }
@@ -2848,10 +2881,26 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
      * way.
      */
     private fun removeInclude(include: ChatInclude) {
+        val pendingIndex = pendingIncludes.indexOfFirst { it.id == include.id }
+        if (pendingIndex >= 0) {
+            // It was never sent, so detaching it must leave no model-facing
+            // history or artifact claiming that the user shared it.
+            pendingIncludes.removeAt(pendingIndex)
+            savePendingIncludes(synchronous = true)
+            refreshIncludeStrip()
+            return
+        }
+
         // Show the cheap form at once so the strip responds to the tap; the
         // model-written line replaces the fallback when/if it arrives.
         val fallback = IncludeTextPolicy.fallbackArtifactLine(include.fileName)
-        updateInclude(include.copy(form = IncludeForm.ARTIFACT, artifactLine = fallback))
+        updateInclude(
+            include.copy(
+                form = IncludeForm.ARTIFACT,
+                artifactLine = fallback,
+                notice = IncludeNotice.None
+            )
+        )
 
         val scope = CoroutineScope(Dispatchers.Main)
         scope.launch {
@@ -2922,10 +2971,19 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             updateInclude(
                 when (latest.form) {
                     IncludeForm.ARTIFACT -> latest.copy(artifactLine = edited)
-                    else -> latest.copy(form = IncludeForm.CONDENSED, condensedText = edited)
+                    else -> latest.withCondensedText(edited)
                 }
             )
         }
+    }
+
+    private fun ChatInclude.withCondensedText(text: String): ChatInclude {
+        val sized = IncludeTextPolicy.applySizeGuard(text, IncludeKind.TXT)
+        return copy(
+            form = IncludeForm.CONDENSED,
+            condensedText = sized.text,
+            notice = sized.notice
+        )
     }
 
     /**
@@ -2947,9 +3005,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             val latest = findIncludeById(include.id) ?: return@launch
             IncludeEditDialog.show(this@ChatActivity, latest.fileName, condensed) { approved ->
                 val current = findIncludeById(include.id) ?: return@show
-                updateInclude(
-                    current.copy(form = IncludeForm.CONDENSED, condensedText = approved)
-                )
+                updateInclude(current.withCondensedText(approved))
             }
         }
     }
@@ -2991,7 +3047,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         if (pendingIncludes.isEmpty()) return emptyList()
         val sent = pendingIncludes.map { it.copy(sentTokens = it.currentTokens()) }
         pendingIncludes = arrayListOf()
-        savePendingIncludes()
         return sent
     }
 
@@ -4240,14 +4295,21 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
     /** SYSTEM INITIALIZATION END **/
 
-    private fun saveSettings() {
+    private fun saveSettings(
+        synchronous: Boolean = false
+    ): ChatStorageHealth.WriteOutcome {
         // Guarded save (Round 4): ChatPreferences refuses the write when the
         // chat's storage is locked or its stored value is preserved-corrupt —
         // this screen's in-memory list came from that unreadable read, and
         // persisting it would overwrite the only copy. The refusal is logged
         // by the guard; the "Chat unavailable" state already blocks the UI.
-        if (chatStorageUnavailable) return
-        ChatPreferences.getChatPreferences().saveChatHistory(this, chatId, messages)
+        if (chatStorageUnavailable) return ChatStorageHealth.WriteOutcome.BLOCKED_CORRUPT
+        return ChatPreferences.getChatPreferences().saveChatHistory(
+            this,
+            chatId,
+            messages,
+            synchronous = synchronous
+        )
     }
 
     /**
@@ -4322,14 +4384,24 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             // in history that the provider's prefix cache can cover on every
             // later turn. Only on shouldAdd — a retry re-sends an existing
             // message that already carries its own attachments.
+            var transferredPendingIncludes = false
             if (shouldAdd) {
                 val attached = consumePendingIncludesForSend()
                 if (attached.isNotEmpty() && messages.isNotEmpty()) {
                     messages[messages.size - 1][INCLUDES_KEY] = ChatInclude.listToJson(attached)
+                    transferredPendingIncludes = true
                 }
                 refreshIncludeStrip()
             }
-            saveSettings()
+            val saveOutcome = saveSettings(synchronous = transferredPendingIncludes)
+            if (transferredPendingIncludes &&
+                saveOutcome == ChatStorageHealth.WriteOutcome.OK
+            ) {
+                // Commit the chat side first. If the process stops between
+                // these writes, loadPendingIncludes de-duplicates by include
+                // id; the document is never lost.
+                savePendingIncludes(synchronous = true)
+            }
 
             btnMicro?.isEnabled = false
             btnSend?.isEnabled = false
@@ -4830,9 +4902,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             }
             return content
         }
-        val includes = includesOf(message)
-        if (includes.isEmpty()) return content
-        return IncludeRenderer.renderUserMessage(content, includes)
+        return IncludeMessageProjection.userContent(
+            typedText = content,
+            includesJson = message[INCLUDES_KEY]?.toString()
+        )
     }
 
     private fun scroll(mode: Boolean) {
@@ -6759,42 +6832,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     }
 
     private fun syncChatProjection() {
-        if (chatMessages == null) chatMessages = arrayListOf()
-
-        if (chatMessages.isNotEmpty()) chatMessages.clear()
-
-        if (chatMessages == null) chatMessages = arrayListOf()
-
-        for (message: HashMap<String, Any> in messages) {
-            val content = message["message"].toString()
-            // Skip blank-content turns. An empty user/assistant message (e.g. an
-            // error placeholder, or a turn the user blanked out while editing)
-            // makes OpenAI-compatible servers reject the whole request with HTTP
-            // 400. With streaming on (Accept: text/event-stream) the Ktor client
-            // then can't parse the non-SSE error body and throws the opaque
-            // NoTransformationFoundException instead of a real error.
-            if (!content.contains("data:image") && content.isNotBlank()) {
-                if (message["isBot"] == true) {
-                    chatMessages.add(
-                        ChatMessage(
-                            role = ChatRole.Assistant,
-                            // An unfinished reply carries an internal, model-only
-                            // note so the model treats it as truncated (not shown
-                            // to the user; see modelFacingContent).
-                            content = modelFacingContent(message)
-                        )
-                    )
-                } else {
-                    chatMessages.add(
-                        ChatMessage(
-                            role = ChatRole.User,
-                            content = content
-                        )
-                    )
-                }
-            }
-        }
-
+        rebuildModelProjection()
         updateMessagesSelectionProjection()
         calculateCost()
     }
@@ -6805,6 +6843,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
     override fun onMessageDeleted() {
         syncChatProjection()
+    }
+
+    override fun onIncludeEdit(includeId: String) {
+        findIncludeById(includeId)?.let(::editInclude)
     }
 
     @SuppressLint("SetTextI18n")

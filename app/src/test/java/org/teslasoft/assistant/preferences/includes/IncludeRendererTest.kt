@@ -70,7 +70,8 @@ class IncludeRendererTest {
         // The heavy text is gone, but the conversation still makes sense.
         assertFalse(out.contains("THE BODY"))
         assertTrue(out.contains("User sent a resume."))
-        assertTrue(out.startsWith("thoughts?"))
+        assertTrue(out.contains("thoughts?"))
+        assertTrue(out.indexOf("User sent a resume.") < out.indexOf("thoughts?"))
     }
 
     @Test fun truncationIsDisclosedToTheModelToo() {
@@ -107,7 +108,7 @@ class IncludeRendererTest {
         assertTrue(out.indexOf("ALPHA") < out.indexOf("BETA"))
     }
 
-    @Test fun bookmarksAreGatheredAfterLiveDocuments() {
+    @Test fun bookmarksComeFirstForCaching() {
         val out = IncludeRenderer.renderUserMessage(
             "hi",
             listOf(
@@ -115,7 +116,8 @@ class IncludeRendererTest {
                 doc(id = "b", name = "live.txt", text = "STILL HERE")
             )
         )
-        assertTrue(out.indexOf("STILL HERE") < out.indexOf("User sent an old file."))
+        assertTrue(out.indexOf("User sent an old file.") < out.indexOf("hi"))
+        assertTrue(out.indexOf("hi") < out.indexOf("STILL HERE"))
     }
 
     /**

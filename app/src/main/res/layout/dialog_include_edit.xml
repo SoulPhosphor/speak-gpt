@@ -5,8 +5,7 @@
   one-line bookmark). The user can correct a detail the model missed, or
   shorten it further.
 
-  Deliberately a pop-up rather than a full-screen editor — the owner chose
-  that shape for this one case. The action buttons come from
+  Deliberately a pop-up rather than a full-screen editor. The action buttons come from
   dialog_two_actions_end.xml; this file is only the field.
 -->
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"

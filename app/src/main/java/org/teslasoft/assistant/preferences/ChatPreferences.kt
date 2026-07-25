@@ -414,7 +414,8 @@ class ChatPreferences private constructor() {
     fun saveChatHistory(
         context: Context,
         chatId: String,
-        messages: List<HashMap<String, Any>>
+        messages: List<HashMap<String, Any>>,
+        synchronous: Boolean = false
     ): ChatStorageHealth.WriteOutcome {
         val name = "chat_$chatId"
         SecurePrefs.get(context, name)
@@ -427,8 +428,19 @@ class ChatPreferences private constructor() {
             return ChatStorageHealth.WriteOutcome.BLOCKED_CORRUPT
         }
         return try {
-            SecurePrefs.get(context, name).edit { putString("chat", Gson().toJson(messages)) }
-            ChatStorageHealth.WriteOutcome.OK
+            val editor = SecurePrefs.get(context, name)
+                .edit()
+                .putString("chat", Gson().toJson(messages))
+            if (synchronous) {
+                if (editor.commit()) {
+                    ChatStorageHealth.WriteOutcome.OK
+                } else {
+                    ChatStorageHealth.WriteOutcome.FAILED
+                }
+            } else {
+                editor.apply()
+                ChatStorageHealth.WriteOutcome.OK
+            }
         } catch (_: Exception) {
             ChatStorageHealth.WriteOutcome.FAILED
         }

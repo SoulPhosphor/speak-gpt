@@ -20,8 +20,10 @@ import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
 import org.teslasoft.assistant.util.StableId
-import java.nio.charset.CharacterCodingException
-import java.nio.charset.CodingErrorAction
+import java.io.FileNotFoundException
+import java.io.InputStream
+import java.io.InputStreamReader
+import java.io.PushbackInputStream
 
 /**
  * Turns a picked file into a [ChatInclude], on the device, with no network
@@ -39,7 +41,7 @@ object DocumentImporter {
     private const val MAX_BYTES = 24 * 1024 * 1024
 
     /**
-     * Every distinguishable attach failure, per the owner-approved mapping
+     * Every distinguishable attach failure, per the approved mapping
      * of detectable code conditions to messages (document-includes-plan.md).
      * Each case corresponds to exactly one row of that mapping; several rows
      * that are not distinguishable in code share one case on purpose (never
@@ -59,8 +61,7 @@ object DocumentImporter {
          *  the source app is gone or not responding. */
         data class SourceUnavailable(val fileName: String) : Result()
 
-        /** Row 4: open failed but the content provider resolves — the file
-         *  itself is gone (moved or deleted). */
+        /** Row 4: FileNotFoundException from a live content provider. */
         data class FileGone(val fileName: String) : Result()
 
         /** Row 5: the file opened, but reading it stopped part-way. */
@@ -107,39 +108,92 @@ object DocumentImporter {
 
     private fun importOrThrow(context: Context, uri: Uri): Result {
         val fileName = displayName(context, uri)
-        val kind = IncludeKind.fromFileName(fileName)
-            ?: kindFromMime(context.contentResolver.getType(uri))
-            ?: return Result.Unsupported(fileName)
+        val extension = fileName.substringAfterLast('.', "").lowercase()
+        val kindFromName = IncludeKind.fromFileName(fileName)
+        if (extension.isNotEmpty() && kindFromName == null) {
+            return Result.Unsupported(fileName)
+        }
+        val kind = kindFromName ?: try {
+            kindFromMime(context.contentResolver.getType(uri))
+        } catch (_: SecurityException) {
+            return Result.PermissionDenied(fileName)
+        } catch (_: Exception) {
+            return openFailureResult(context, uri, fileName)
+        } ?: return if (providerResolves(context, uri)) {
+            Result.Unsupported(fileName)
+        } else {
+            Result.SourceUnavailable(fileName)
+        }
 
         val inputStream = try {
             context.contentResolver.openInputStream(uri)
         } catch (_: SecurityException) {
             return Result.PermissionDenied(fileName)
+        } catch (_: FileNotFoundException) {
+            return openFailureResult(context, uri, fileName, fileMissing = true)
         } catch (_: Exception) {
             return openFailureResult(context, uri, fileName)
         }
 
         if (inputStream == null) return openFailureResult(context, uri, fileName)
 
-        val bytes = try {
-            inputStream.use { it.readBytesCapped(MAX_BYTES) }
-        } catch (_: Exception) {
-            // The file opened successfully; failing partway through reading
-            // it is row 5, not an open failure.
-            return Result.InterruptedRead(fileName)
-        }
+        val text: String
+        val sourceTruncated: Boolean
+        var csvTotalRows: Int? = null
 
-        if (bytes.isEmpty()) return Result.Empty(fileName)
-
-        val text = when (kind) {
-            IncludeKind.DOCX -> when (val extracted = DocxTextExtractor.extract(bytes)) {
-                is DocxTextExtractor.ExtractResult.Success -> extracted.text
-                DocxTextExtractor.ExtractResult.NotDocx -> return Result.ContentMismatch(fileName)
-                DocxTextExtractor.ExtractResult.PasswordProtected -> return Result.PasswordProtected(fileName)
-                DocxTextExtractor.ExtractResult.Corrupted -> return Result.Corrupted(fileName)
+        if (kind == IncludeKind.DOCX) {
+            val extracted = try {
+                PushbackInputStream(inputStream, 1).use { stream ->
+                    val firstByte = stream.read()
+                    if (firstByte < 0) return Result.Empty(fileName)
+                    stream.unread(firstByte)
+                    DocxTextExtractor.extract(stream)
+                }
+            } catch (_: Exception) {
+                return Result.InterruptedRead(fileName)
             }
+            when (extracted) {
+                is DocxTextExtractor.ExtractResult.Success -> {
+                    text = extracted.text
+                    sourceTruncated = extracted.sourceTruncated
+                }
+                DocxTextExtractor.ExtractResult.NotDocx ->
+                    return Result.ContentMismatch(fileName)
+                DocxTextExtractor.ExtractResult.PasswordProtected ->
+                    return Result.PasswordProtected(fileName)
+                DocxTextExtractor.ExtractResult.Corrupted ->
+                    return Result.Corrupted(fileName)
+            }
+        } else {
+            val capped = try {
+                inputStream.use { it.readBytesCapped(MAX_BYTES) }
+            } catch (_: Exception) {
+                return Result.InterruptedRead(fileName)
+            }
+            if (capped.bytes.isEmpty()) return Result.Empty(fileName)
 
-            else -> decodeText(bytes) ?: return Result.ContentMismatch(fileName)
+            text = DocumentTextDecoder.decode(
+                bytes = capped.bytes,
+                allowTruncatedTail = capped.sourceTruncated
+            )
+                ?: return Result.ContentMismatch(fileName)
+            sourceTruncated = capped.sourceTruncated
+
+            if (kind == IncludeKind.CSV && sourceTruncated) {
+                csvTotalRows = try {
+                    val countStream = context.contentResolver.openInputStream(uri)
+                        ?: return Result.InterruptedRead(fileName)
+                    countStream.use { stream ->
+                        csvReader(stream).use { reader ->
+                            IncludeTextPolicy.countCsvDataRows(reader)
+                        }
+                    }
+                } catch (_: SecurityException) {
+                    return Result.PermissionDenied(fileName)
+                } catch (_: Exception) {
+                    return Result.InterruptedRead(fileName)
+                }
+            }
         }
 
         if (text.isBlank()) return Result.Empty(fileName)
@@ -150,7 +204,12 @@ object DocumentImporter {
             return Result.ContentMismatch(fileName)
         }
 
-        val sized = IncludeTextPolicy.applySizeGuard(text, kind)
+        val sized = IncludeTextPolicy.applySizeGuard(
+            text = text,
+            kind = kind,
+            sourceTruncated = sourceTruncated,
+            csvTotalRows = csvTotalRows
+        )
         return Result.Success(
             ChatInclude(
                 id = StableId.newId("inc-"),
@@ -164,15 +223,22 @@ object DocumentImporter {
     }
 
     /**
-     * Distinguishes rows 3 and 4 for an open failure: if the content
-     * provider itself resolves, the failure is the FILE (moved/deleted); if
-     * it does not, the failure is the SOURCE APP (gone or not responding).
+     * A missing provider identifies a source-app failure. A moved/deleted
+     * file is only reported after FileNotFoundException; other failures from
+     * a live provider stay generic rather than guessing.
      */
-    private fun openFailureResult(context: Context, uri: Uri, fileName: String): Result =
-        if (providerResolves(context, uri)) {
+    private fun openFailureResult(
+        context: Context,
+        uri: Uri,
+        fileName: String,
+        fileMissing: Boolean = false
+    ): Result =
+        if (!providerResolves(context, uri)) {
+            Result.SourceUnavailable(fileName)
+        } else if (fileMissing) {
             Result.FileGone(fileName)
         } else {
-            Result.SourceUnavailable(fileName)
+            Result.Unknown(fileName)
         }
 
     private fun providerResolves(context: Context, uri: Uri): Boolean {
@@ -188,36 +254,6 @@ object DocumentImporter {
         displayName(context, uri)
     } catch (_: Exception) {
         "document"
-    }
-
-    /**
-     * Decodes bytes as text. Strict UTF-8 first (the overwhelmingly common
-     * case); a file that is not valid UTF-8 falls back to ISO-8859-1, which
-     * cannot fail and keeps a Windows-era document readable rather than
-     * turning it into replacement characters. Whichever path is taken, the
-     * caller still runs the binary guard afterwards.
-     */
-    private fun decodeText(bytes: ByteArray): String? {
-        val stripped = stripBom(bytes)
-        return try {
-            val decoder = Charsets.UTF_8.newDecoder()
-                .onMalformedInput(CodingErrorAction.REPORT)
-                .onUnmappableCharacter(CodingErrorAction.REPORT)
-            decoder.decode(java.nio.ByteBuffer.wrap(stripped)).toString()
-        } catch (_: CharacterCodingException) {
-            String(stripped, Charsets.ISO_8859_1)
-        } catch (_: Exception) {
-            null
-        }
-    }
-
-    private fun stripBom(bytes: ByteArray): ByteArray {
-        if (bytes.size >= 3 &&
-            bytes[0] == 0xEF.toByte() && bytes[1] == 0xBB.toByte() && bytes[2] == 0xBF.toByte()
-        ) {
-            return bytes.copyOfRange(3, bytes.size)
-        }
-        return bytes
     }
 
     private fun kindFromMime(mime: String?): IncludeKind? = when {
@@ -244,17 +280,57 @@ object DocumentImporter {
 
     /** Named distinctly from the stdlib's own InputStream.readBytes so the
      *  capped version can never be shadowed by (or resolve to) that one. */
-    private fun java.io.InputStream.readBytesCapped(limit: Int): ByteArray {
+    private data class CappedRead(
+        val bytes: ByteArray,
+        val sourceTruncated: Boolean
+    )
+
+    private fun InputStream.readBytesCapped(limit: Int): CappedRead {
         val out = java.io.ByteArrayOutputStream()
         val buffer = ByteArray(16 * 1024)
         var total = 0
         while (true) {
             val read = read(buffer)
-            if (read <= 0) break
-            total += read
-            if (total > limit) break
-            out.write(buffer, 0, read)
+            if (read < 0) break
+            if (read == 0) continue
+            val remaining = limit - total
+            if (remaining <= 0) return CappedRead(out.toByteArray(), true)
+            val kept = minOf(read, remaining)
+            out.write(buffer, 0, kept)
+            total += kept
+            if (kept < read) return CappedRead(out.toByteArray(), true)
         }
-        return out.toByteArray()
+        return CappedRead(out.toByteArray(), false)
+    }
+
+    private fun csvReader(input: InputStream): InputStreamReader {
+        val stream = PushbackInputStream(input, 3)
+        val prefix = ByteArray(3)
+        var read = 0
+        while (read < prefix.size) {
+            val count = stream.read(prefix, read, prefix.size - read)
+            if (count < 0) break
+            if (count == 0) continue
+            read += count
+        }
+
+        val (bomBytes, charset) = when {
+            read >= 3 &&
+                prefix[0] == 0xEF.toByte() &&
+                prefix[1] == 0xBB.toByte() &&
+                prefix[2] == 0xBF.toByte() -> 3 to Charsets.UTF_8
+            read >= 2 &&
+                prefix[0] == 0xFF.toByte() &&
+                prefix[1] == 0xFE.toByte() -> 2 to Charsets.UTF_16LE
+            read >= 2 &&
+                prefix[0] == 0xFE.toByte() &&
+                prefix[1] == 0xFF.toByte() -> 2 to Charsets.UTF_16BE
+            else -> 0 to Charsets.UTF_8
+        }
+
+        if (read > bomBytes) {
+            stream.unread(prefix, bomBytes, read - bomBytes)
+        }
+        return InputStreamReader(stream, charset)
     }
 }

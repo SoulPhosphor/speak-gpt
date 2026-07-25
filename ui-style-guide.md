@@ -387,8 +387,8 @@ Do not use the QuickTile family as the general app-wide dropdown pattern. Genera
 Use these pieces in order for each attachment shown above the chat message box:
 
 1. `Widget.App.Include.Row`
-2. `Widget.App.Include.Icon`
-3. `Widget.App.Include.Label`
+2. `Widget.App.Include.Label`
+3. `Widget.App.Include.Icon`
 4. `Widget.App.Include.Name`
 5. `Widget.App.Include.Weight`
 6. `Widget.App.Include.Menu`

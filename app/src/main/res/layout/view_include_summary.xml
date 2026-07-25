@@ -2,14 +2,14 @@
 <!--
   The "Includes" record inside a sent chat message: a small box under the
   user's name that opens like an accordion to list what was attached to THAT
-  message (owner design, July 24 2026).
+  message.
 
   This is a record of the past, not a control: it shows what went with this
   turn, which is why it stays after the attachment has been condensed or
   removed. The live strip above the message box shows the present.
 
-  When everything attached has been reduced to a bookmark, the leading icon
-  becomes the bookmark-with-check glyph — the owner's "artifact" marker.
+  Removed items are accessible through the bookmark-with-check marker after
+  the user's name.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/include_summary"
@@ -22,20 +22,11 @@
         android:id="@+id/include_summary_header"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:background="?attr/selectableItemBackground"
+        android:background="@drawable/bg_field_box"
         android:gravity="center_vertical"
         android:minHeight="32dp"
         android:orientation="horizontal"
         android:paddingHorizontal="8dp">
-
-        <ImageView
-            android:id="@+id/include_summary_icon"
-            android:layout_width="18dp"
-            android:layout_height="18dp"
-            android:layout_marginEnd="6dp"
-            android:contentDescription="@string/include_icon_desc"
-            android:src="@drawable/ic_file"
-            android:tint="?attr/colorPrimary" />
 
         <TextView
             android:id="@+id/include_summary_label"
