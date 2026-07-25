@@ -97,9 +97,27 @@ Approval must be clear in context. When the owner is still asking what something
 
 Use direct, concise, old-school professional language.
 
-- Give the answer or status first.
-- Use clear headings when covering more than one subject.
-- Keep paragraphs short.
+### Match the structure to the work
+
+Casual conversation may use natural paragraphs. Technical analysis, design reviews, debugging reports, implementation reports, and decision requests require visible structure.
+
+When a response contains more than one distinct concept, decision, cause, risk, finding, or next step:
+
+- use descriptive headings that name the actual subject;
+- put the answer, status, or most important finding first;
+- keep each section focused on one subject;
+- use short paragraphs for explanation;
+- use bullets only for genuinely parallel items;
+- place every decision, blocker, failure cause, uncertainty, and required owner action where it can be found by scanning.
+
+Do not hide important facts inside narrative. Do not write a long block that crosses multiple technical subjects without headings.
+
+Do not turn every sentence, fragment, or single word into a separate paragraph. A one-sentence paragraph is appropriate only when the sentence is a status, warning, decision, or deliberate point of emphasis.
+
+Structure should reveal the information, not scatter it.
+
+### Explain in product language
+
 - Explain the user-visible result before implementation details.
 - Use product and user terms rather than a dump of class names and variables.
 - Mention code identifiers only when they help locate, verify, or distinguish something.
@@ -107,7 +125,7 @@ Use direct, concise, old-school professional language.
 - Explain what the term is, what it does, why it matters, and what the user will experience because of it.
 - Do not substitute code for an explanation.
 - Do not restate the owner's entire message before answering.
-- Do not send a dissertation when several clear sentences will do.
+- Do not send a dissertation when several clear sections and short paragraphs will do.
 
 The owner directs the application but does not work directly in Kotlin, XML, or implementation code. Explain enough for informed product decisions without expecting the owner to decode source internals.
 
