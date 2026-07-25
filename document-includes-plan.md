@@ -19,6 +19,13 @@ Decisions explicitly reconfirmed during the Step 1 repair:
   error. Successful attachment size/cost notices remain inline.
 - Removing a pending document before Send detaches it completely. It is never
   sent to the model, written into chat history, or converted to an artifact.
+- The live Includes strip collapses at **4 or more** documents.
+- Full-document history uses the under-name metadata record. A condensed
+  document uses the bookmark-with-plus; a fully removed sent document uses
+  the empty bookmark. Both bookmarks reopen editable text with Cancel/Save.
+- Model-facing order is the user's text, then documents in stable attachment
+  order, with images last in Step 3. Document boundaries use a compact
+  semantic wrapper rather than decorative punctuation.
 - Visible but provisional Condense controls do not block Step 1 completion.
 
 Other details below describe the current baseline being repaired. They must
@@ -204,23 +211,26 @@ dialog containing the approved error descriptor.
   fallback line, immediately, never a blocked removal, never an error dialog
   for this — the fallback IS the success path. The line is editable later
   either way.
-- Artifact access point: the **bookmark-with-checkmark icon** (Material
-  Symbols `bookmark_added` glyph, added as a vector drawable, tinted
-  `?attr/colorPrimary`) shown after the user name on affected messages and
-  wherever artifact state needs indicating. Tapping opens an **anchored
-  popup** listing the artifact lines; tapping anywhere outside closes it.
-  Each line in that popup is tappable to open the Edit dialog on it.
+- Artifact access point: the empty Material Symbols `bookmark` glyph, tinted
+  `?attr/colorPrimary`, shown after the user name. One item opens its
+  Cancel/Save Edit dialog directly. If several removed items share a message,
+  an anchored file picker appears first; tapping outside closes it.
 
 ### 5. The history record (inside the chat transcript)
 
-- A user message that carried includes gets a small **Includes** box directly
-  under the user label in that message's bubble area. Tap = accordion opens
-  listing each item: small type icon + name + explicit document format +
-  ~N tokens. Tap again closes.
-- This box permanently records which items went with that message. Its form
-  and displayed weight reflect the current payload: after an item is
-  condensed or removed, the provider is sent the new form at that same
-  history position.
+- A full document gets a small **Includes** box directly under the user label
+  in that message's bubble area. Tap = accordion opens listing each full item:
+  small type icon + name + explicit document format + ~N tokens. Tap again
+  closes.
+- Once condensed, that document leaves the full-document box and uses the
+  bookmark-with-plus Material Symbols `bookmark_add` glyph after the user
+  name. Tapping opens the condensed text in the Cancel/Save Edit dialog. If
+  several condensed items share a message, an anchored file picker appears
+  first.
+- Once fully removed, the item uses the empty artifact bookmark described
+  above. Mixed full, condensed, and removed items can therefore show the
+  full-document box and either or both bookmark markers without conflating
+  their states.
 - Renders in `ChatAdapter` rows (RecyclerView, recycled views — the accordion
   open/closed state must not bleed between recycled rows).
 
@@ -259,6 +269,12 @@ dialog containing the approved error descriptor.
   message's stable position in history → providers' prefix caching covers it
   automatically on every later turn, on every OpenAI-compatible endpoint
   (GLM, DeepSeek, OpenRouter — nothing provider-specific anywhere).
+- Inside that user message, the user's own words come first, followed by
+  Includes in stable attachment order. Full and condensed documents use the
+  compact `<document name="…">…</document>` wrapper; only a short
+  `form`, `partial`, or `rows` attribute is added when the model needs that
+  fact. Artifacts use a compact `<bookmark name="…">…</bookmark>` line.
+  There are no repeated decorative `---` delimiters.
 - **Images are always the LAST content in their message block** (Step 3): if
   a provider can't cache image content, everything before
   the image still caches. Text parts always precede the image part.

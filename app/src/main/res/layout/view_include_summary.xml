@@ -1,15 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  The "Includes" record inside a sent chat message: a small box under the
-  user's name that opens like an accordion to list what was attached to THAT
-  message.
+  The full-document "Includes" record inside a sent chat message: a small box
+  under the user's name that opens like an accordion.
 
-  This is a record of the past, not a control: it shows what went with this
-  turn, which is why it stays after the attachment has been condensed or
-  removed. The live strip above the message box shows the present.
-
-  Removed items are accessible through the bookmark-with-check marker after
-  the user's name.
+  Condensed items move to the bookmark-with-plus marker. Fully removed sent
+  items move to the empty bookmark marker. Both markers open editable text.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/include_summary"

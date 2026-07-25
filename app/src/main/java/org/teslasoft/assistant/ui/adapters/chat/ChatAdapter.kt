@@ -71,7 +71,7 @@ import io.noties.markwon.inlineparser.MarkwonInlineParserPlugin
 import java.text.NumberFormat
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.includes.ChatInclude
-import org.teslasoft.assistant.preferences.includes.IncludeForm
+import org.teslasoft.assistant.preferences.includes.IncludeHistoryPresentation
 import org.teslasoft.assistant.preferences.includes.IncludeKind
 import org.teslasoft.assistant.ui.activities.ChatActivity
 import org.teslasoft.assistant.preferences.ChatPreferences
@@ -300,6 +300,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         private val includeSummary: LinearLayout? = itemView.findViewById(R.id.include_summary)
         private val includeSummaryHeader: LinearLayout? = itemView.findViewById(R.id.include_summary_header)
         private val includeSummaryList: LinearLayout? = itemView.findViewById(R.id.include_summary_list)
+        private val condensedBookmark: ImageView? = itemView.findViewById(R.id.condensed_bookmark)
         private val artifactBookmark: ImageView? = itemView.findViewById(R.id.artifact_bookmark)
 
         @SuppressLint("SetTextI18n", "SetJavaScriptEnabled")
@@ -430,19 +431,27 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
 
             if (chatMessage["isBot"] == true || includes.isEmpty()) {
                 summary.visibility = View.GONE
+                condensedBookmark?.visibility = View.GONE
                 artifactBookmark?.visibility = View.GONE
                 includeSummaryList?.removeAllViews()
                 return
             }
 
-            summary.visibility = View.VISIBLE
-            updateArtifactBookmark(includes)
+            val groups = IncludeHistoryPresentation.group(includes)
+            updateIncludeBookmarks(groups)
+            val fullIncludes = groups.fullRecords
+            if (fullIncludes.isEmpty()) {
+                summary.visibility = View.GONE
+                includeSummaryList?.removeAllViews()
+                return
+            }
 
-            val summaryKey = includes.joinToString(separator = "\u001F") { it.id }
+            summary.visibility = View.VISIBLE
+            val summaryKey = fullIncludes.joinToString(separator = "\u001F") { it.id }
             val expanded = expandedIncludeRows.contains(summaryKey)
             includeSummaryList?.visibility = if (expanded) View.VISIBLE else View.GONE
             if (expanded) {
-                buildIncludeSummaryRows(includes)
+                buildIncludeSummaryRows(fullIncludes)
             } else {
                 includeSummaryList?.removeAllViews()
             }
@@ -457,25 +466,51 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             }
         }
 
-        /** Shows removed attachments in a dismissible popup after the user's name. */
-        private fun updateArtifactBookmark(includes: List<ChatInclude>) {
-            val marker = artifactBookmark ?: return
-            val artifacts = includes.filter { it.form == IncludeForm.ARTIFACT }
-            if (artifacts.isEmpty()) {
-                marker.setOnClickListener(null)
+        /**
+         * Full documents keep their metadata row. Condensed documents use the
+         * bookmark-with-plus; removed sent documents use the empty bookmark.
+         * One item opens its editor immediately. When several share a marker,
+         * the anchored menu selects the file before opening the same editor.
+         */
+        private fun updateIncludeBookmarks(groups: IncludeHistoryPresentation.Groups) {
+            updateBookmark(
+                marker = condensedBookmark,
+                items = groups.condensedBookmarks
+            )
+            updateBookmark(
+                marker = artifactBookmark,
+                items = groups.artifactBookmarks
+            )
+        }
+
+        private fun updateBookmark(marker: ImageView?, items: List<ChatInclude>) {
+            marker ?: return
+            if (items.isEmpty()) {
                 marker.visibility = View.GONE
+                marker.setOnClickListener(null)
                 return
             }
+
             marker.visibility = View.VISIBLE
             marker.setOnClickListener { anchor ->
+                if (items.size == 1) {
+                    listener?.onIncludeEdit(items.first().id)
+                    return@setOnClickListener
+                }
+
                 val popup = PopupMenu(context, anchor)
-                for ((index, artifact) in artifacts.withIndex()) {
-                    popup.menu.add(0, index, index, artifact.modelText())
+                for ((index, include) in items.withIndex()) {
+                    popup.menu.add(
+                        0,
+                        index,
+                        index,
+                        "${include.fileName} (${include.kind.key.uppercase(Locale.ROOT)})"
+                    )
                 }
                 popup.setOnMenuItemClickListener { item ->
-                    val artifact = artifacts.getOrNull(item.itemId)
+                    val include = items.getOrNull(item.itemId)
                         ?: return@setOnMenuItemClickListener false
-                    listener?.onIncludeEdit(artifact.id)
+                    listener?.onIncludeEdit(include.id)
                     true
                 }
                 popup.show()

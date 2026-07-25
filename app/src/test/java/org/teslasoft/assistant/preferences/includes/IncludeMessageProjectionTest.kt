@@ -42,7 +42,7 @@ class IncludeMessageProjectionTest {
 
         assertTrue(projected.contains("What do you think?"))
         assertTrue(projected.contains("LOAD-BEARING DOCUMENT TEXT"))
-        assertTrue(projected.contains("Attached document: notes.txt"))
+        assertTrue(projected.contains("<document name=\"notes.txt\">"))
     }
 
     @Test fun anArtifactProjectionDoesNotResendTheRemovedDocumentBody() {

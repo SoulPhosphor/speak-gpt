@@ -2403,7 +2403,8 @@
     <string name="include_menu_desc">Options for %1$s</string>
     <string name="include_expand_desc">Show attached documents</string>
     <string name="include_collapse_desc">Hide attached documents</string>
-    <string name="include_bookmark_desc">Previously attached items</string>
+    <string name="include_condensed_bookmark_desc">Edit condensed documents</string>
+    <string name="include_artifact_bookmark_desc">Edit removed document bookmarks</string>
     <string name="include_icon_desc">Attached file</string>
     <string name="btn_attach_document">Document</string>
     <string name="attach_option_image">Image</string>
