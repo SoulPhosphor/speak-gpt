@@ -15,21 +15,23 @@
     android:layout_height="wrap_content"
     android:orientation="vertical">
 
+<!-- Order is the owner's, verbatim: "Includes (doc icon)docname.format
+         then Maybe three dots" — label, then icon, then name (July 24 2026). -->
     <LinearLayout
         android:id="@+id/include_row"
         style="@style/Widget.App.Include.Row">
+
+        <TextView
+            android:id="@+id/include_label"
+            style="@style/Widget.App.Include.Label"
+            android:text="@string/include_label" />
 
         <ImageView
             android:id="@+id/include_icon"
             style="@style/Widget.App.Include.Icon"
             android:contentDescription="@string/include_icon_desc"
             android:tint="?attr/colorPrimary"
-            android:src="@drawable/ic_doc_text" />
-
-        <TextView
-            android:id="@+id/include_label"
-            style="@style/Widget.App.Include.Label"
-            android:text="@string/include_label" />
+            android:src="@drawable/ic_file" />
 
         <TextView
             android:id="@+id/include_name"

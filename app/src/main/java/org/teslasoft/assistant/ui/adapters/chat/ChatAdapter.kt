@@ -46,6 +46,7 @@ import android.view.ViewGroup
 import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.PopupMenu
 import android.widget.TextView
 import android.widget.Toast
 import androidx.constraintlayout.widget.ConstraintLayout
@@ -301,8 +302,9 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         // assistant bubble (attachments are user-side only), so nullable.
         private val includeSummary: LinearLayout? = itemView.findViewById(R.id.include_summary)
         private val includeSummaryHeader: LinearLayout? = itemView.findViewById(R.id.include_summary_header)
-        private val includeSummaryIcon: ImageView? = itemView.findViewById(R.id.include_summary_icon)
         private val includeSummaryList: LinearLayout? = itemView.findViewById(R.id.include_summary_list)
+        // The owner-designed artifact bookmark after the user's name.
+        private val artifactBookmark: ImageView? = itemView.findViewById(R.id.artifact_bookmark)
 
         @SuppressLint("SetTextI18n", "SetJavaScriptEnabled")
         open fun bind(chatMessage: HashMap<String, Any>, position: Int) {
@@ -432,18 +434,13 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
 
             if (chatMessage["isBot"] == true || includes.isEmpty()) {
                 summary.visibility = View.GONE
+                artifactBookmark?.visibility = View.GONE
                 includeSummaryList?.removeAllViews()
                 return
             }
 
             summary.visibility = View.VISIBLE
-
-            // Once everything attached here has been reduced to a bookmark,
-            // the box wears the artifact marker instead of a file glyph.
-            val allArtifacts = includes.all { it.form == IncludeForm.ARTIFACT }
-            includeSummaryIcon?.setImageResource(
-                if (allArtifacts) R.drawable.ic_bookmark_added else R.drawable.ic_file
-            )
+            updateArtifactBookmark(includes)
 
             val expanded = expandedIncludeRows.contains(position)
             includeSummaryList?.visibility = if (expanded) View.VISIBLE else View.GONE
@@ -463,27 +460,49 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             }
         }
 
+        /**
+         * The artifact bookmark, built to the owner's design, verbatim:
+         * "once something is an artifact at that point then maybe there's
+         * just a little icon after the user's name and if they click on it
+         * they can see the things that are in there kind of like a hover
+         * text that can be closed simply by clicking out of there."
+         * (July 24 2026.) The icon is the owner-named Google
+         * bookmark-with-check; the popup lists each removed item's one-line
+         * bookmark and dismisses on an outside tap.
+         */
+        private fun updateArtifactBookmark(includes: List<ChatInclude>) {
+            val marker = artifactBookmark ?: return
+            val artifacts = includes.filter { it.form == IncludeForm.ARTIFACT }
+            if (artifacts.isEmpty()) {
+                marker.visibility = View.GONE
+                return
+            }
+            marker.visibility = View.VISIBLE
+            marker.setOnClickListener { anchor ->
+                val popup = PopupMenu(context, anchor)
+                for ((index, artifact) in artifacts.withIndex()) {
+                    popup.menu.add(0, index, index, artifact.modelText())
+                }
+                popup.show()
+            }
+        }
+
         private fun buildIncludeSummaryRows(includes: List<ChatInclude>) {
             val list = includeSummaryList ?: return
             list.removeAllViews()
             val inflater = LayoutInflater.from(context)
             for (include in includes) {
                 val row = inflater.inflate(R.layout.view_include_summary_item, list, false)
+                // Row content is the owner's spec, verbatim: "the appropriate
+                // icon plus the file name plus approximate amount" (July 24
+                // 2026) — always the file name, never a substitute. Weight is
+                // the CURRENT weight, also the owner's ruling, verbatim: "The
+                // weight is whatever it is at that time. If it's condensed
+                // change the token weight." Removed items' bookmark lines are
+                // read from the bookmark icon after the user's name.
                 row.findViewById<ImageView>(R.id.summary_item_icon)
                     ?.setImageResource(includeIcon(include.kind))
-                // For an item that has been reduced to a bookmark, the
-                // bookmark line IS the informative content — the file name
-                // alone would not tell the user what they are still sending.
-                row.findViewById<TextView>(R.id.summary_item_name)?.text =
-                    if (include.form == IncludeForm.ARTIFACT) {
-                        include.modelText()
-                    } else {
-                        include.fileName
-                    }
-                // Deliberately the CURRENT weight, not the weight recorded
-                // when this turn was sent: after an item has been condensed or
-                // reduced to a bookmark, the original figure would overstate
-                // what this message still costs on every turn.
+                row.findViewById<TextView>(R.id.summary_item_name)?.text = include.fileName
                 row.findViewById<TextView>(R.id.summary_item_weight)?.text = context.getString(
                     R.string.include_weight,
                     NumberFormat.getIntegerInstance().format(include.currentTokens())
@@ -492,12 +511,12 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             }
         }
 
+        /** One DOCUMENT icon and one PICTURE icon — the owner's ruling,
+         *  verbatim: "I literally said document icon or picture icon."
+         *  (July 25 2026). Never per-file-type glyphs. */
         private fun includeIcon(kind: IncludeKind): Int = when (kind) {
-            IncludeKind.TXT -> R.drawable.ic_doc_text
-            IncludeKind.MARKDOWN -> R.drawable.ic_doc_markdown
-            IncludeKind.CSV -> R.drawable.ic_doc_table
-            IncludeKind.DOCX -> R.drawable.ic_doc_word
             IncludeKind.IMAGE -> R.drawable.ic_image
+            else -> R.drawable.ic_file
         }
 
         private fun updateStatusMarker(chatMessage: HashMap<String, Any>) {

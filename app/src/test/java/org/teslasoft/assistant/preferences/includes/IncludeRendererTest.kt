@@ -67,10 +67,13 @@ class IncludeRendererTest {
             "thoughts?",
             listOf(doc(form = IncludeForm.ARTIFACT, artifact = "User sent a resume."))
         )
-        // The heavy text is gone, but the conversation still makes sense.
+        // The heavy text is gone, but the conversation still makes sense —
+        // and the bookmark block leads, per the owner's ruling ("sent at the
+        // top for caching").
         assertFalse(out.contains("THE BODY"))
         assertTrue(out.contains("User sent a resume."))
-        assertTrue(out.startsWith("thoughts?"))
+        assertTrue(out.contains("thoughts?"))
+        assertTrue(out.indexOf("User sent a resume.") < out.indexOf("thoughts?"))
     }
 
     @Test fun truncationIsDisclosedToTheModelToo() {
@@ -107,7 +110,9 @@ class IncludeRendererTest {
         assertTrue(out.indexOf("ALPHA") < out.indexOf("BETA"))
     }
 
-    @Test fun bookmarksAreGatheredAfterLiveDocuments() {
+    @Test fun bookmarksComeFirstForCaching() {
+        // Owner ruling, verbatim: "It of course would be sent at the top for
+        // caching." Bookmarks lead the block; live documents follow the text.
         val out = IncludeRenderer.renderUserMessage(
             "hi",
             listOf(
@@ -115,7 +120,8 @@ class IncludeRendererTest {
                 doc(id = "b", name = "live.txt", text = "STILL HERE")
             )
         )
-        assertTrue(out.indexOf("STILL HERE") < out.indexOf("User sent an old file."))
+        assertTrue(out.indexOf("User sent an old file.") < out.indexOf("hi"))
+        assertTrue(out.indexOf("hi") < out.indexOf("STILL HERE"))
     }
 
     /**

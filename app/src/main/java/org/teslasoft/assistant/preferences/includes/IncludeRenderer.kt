@@ -35,32 +35,40 @@ object IncludeRenderer {
     /**
      * Builds the model-facing content of a user message.
      *
-     * The user's own words come FIRST, then the attachments. Documents that
-     * have been reduced to a bookmark are gathered into one short block so a
-     * conversation that once discussed a removed file still reads coherently
-     * — the model is never left answering questions about something that has
-     * silently vanished from its view.
+     * Bookmark lines for removed items come FIRST — the owner's ruling,
+     * verbatim: "It of course would be sent at the top for caching."
+     * (July 24 2026.) Then the user's own words, then the live documents.
+     * The bookmark block keeps the conversation coherent: the model is never
+     * left answering questions about something that silently vanished from
+     * its view.
      */
     fun renderUserMessage(typedText: String, includes: List<ChatInclude>): String {
         if (includes.isEmpty()) return typedText
 
-        val body = StringBuilder(typedText)
         val artifacts = ArrayList<String>()
-
+        val documents = ArrayList<ChatInclude>()
         for (include in includes) {
             when (include.form) {
                 IncludeForm.ARTIFACT -> artifacts.add(include.modelText())
-                else -> {
-                    if (body.isNotEmpty()) body.append("\n\n")
-                    body.append(renderDocument(include))
-                }
+                else -> documents.add(include)
             }
         }
 
+        val body = StringBuilder()
+
         if (artifacts.isNotEmpty()) {
-            if (body.isNotEmpty()) body.append("\n\n")
             body.append(ARTIFACT_HEADER)
             for (line in artifacts) body.append('\n').append(line)
+        }
+
+        if (typedText.isNotEmpty()) {
+            if (body.isNotEmpty()) body.append("\n\n")
+            body.append(typedText)
+        }
+
+        for (document in documents) {
+            if (body.isNotEmpty()) body.append("\n\n")
+            body.append(renderDocument(document))
         }
 
         return body.toString()

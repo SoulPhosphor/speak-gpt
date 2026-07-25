@@ -77,6 +77,24 @@
         app:layout_constraintStart_toEndOf="@+id/icon"
         app:layout_constraintTop_toTopOf="@+id/icon" />
 
+    <!-- Artifact bookmark, the owner's design verbatim: "a little icon after
+         the user's name and if they click on it they can see the things that
+         are in there" (July 24 2026). GONE unless this message has removed
+         attachments; icon is the owner-named Google bookmark-with-check. -->
+    <ImageView
+        android:id="@+id/artifact_bookmark"
+        android:layout_width="20dp"
+        android:layout_height="20dp"
+        android:layout_marginEnd="20dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:contentDescription="@string/include_bookmark_desc"
+        android:src="@drawable/ic_bookmark_added"
+        android:tint="?attr/colorPrimary"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="@+id/username"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="@+id/username" />
+
     <ImageView
         android:id="@+id/icon"
         android:layout_width="24dp"

@@ -238,12 +238,12 @@ class IncludeStripController(
 
     private fun grouped(value: Int): String = NumberFormat.getIntegerInstance().format(value)
 
+    /** One DOCUMENT icon and one PICTURE icon — the owner's ruling, verbatim:
+     *  "I literally said document icon or picture icon." (July 25 2026).
+     *  Never per-file-type glyphs. */
     private fun iconFor(kind: IncludeKind): Int = when (kind) {
-        IncludeKind.TXT -> R.drawable.ic_doc_text
-        IncludeKind.MARKDOWN -> R.drawable.ic_doc_markdown
-        IncludeKind.CSV -> R.drawable.ic_doc_table
-        IncludeKind.DOCX -> R.drawable.ic_doc_word
         IncludeKind.IMAGE -> R.drawable.ic_image
+        else -> R.drawable.ic_file
     }
 }
 

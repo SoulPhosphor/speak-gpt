@@ -14,13 +14,9 @@
     style="@style/Widget.App.Include.Row"
     android:background="?attr/selectableItemBackground">
 
-    <ImageView
-        android:id="@+id/include_collapsed_icon"
-        style="@style/Widget.App.Include.Icon"
-        android:contentDescription="@string/include_icon_desc"
-        android:tint="?attr/colorPrimary"
-        android:src="@drawable/ic_file" />
-
+<!-- No leading icon: the owner's ruling names exactly two pieces —
+         "includes X documents ... and then at the end make it downward
+         facing Chevron" (July 24 2026). -->
     <TextView
         android:id="@+id/include_collapsed_text"
         style="@style/Widget.App.Include.Name"
