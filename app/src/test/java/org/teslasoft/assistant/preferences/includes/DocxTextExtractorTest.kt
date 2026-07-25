@@ -149,6 +149,15 @@ class DocxTextExtractorTest {
         val bytes = docxBytes(document(paragraph("Contract terms.") + paragraph("Signed.")))
         val result = DocxTextExtractor.extract(bytes) as DocxTextExtractor.ExtractResult.Success
         assertEquals("Contract terms.\nSigned.", result.text)
+        assertFalse(result.sourceTruncated)
+    }
+
+    @Test fun utf8CharactersSurviveExtractorBufferBoundaries() {
+        val prefix = "a".repeat(8 * 1024 - 1)
+        val bytes = docxBytes(document(paragraph(prefix + "漢字")))
+        val result = DocxTextExtractor.extract(bytes) as DocxTextExtractor.ExtractResult.Success
+        assertTrue(result.text.endsWith("漢字"))
+        assertFalse(result.text.contains("�"))
     }
 
     @Test fun aZipWithoutADocumentPartIsNotADocx() {
@@ -181,17 +190,29 @@ class DocxTextExtractorTest {
 
     // ---- password protection (row 6) ---------------------------------------
 
-    @Test fun anOle2CfbContainerIsReportedAsPasswordProtected() {
-        // The magic bytes a password-protected Office file is wrapped in;
-        // the rest of the bytes are irrelevant to the signature check.
+    @Test fun anEncryptedOoxmlCfbContainerIsReportedAsPasswordProtected() {
         val cfbSignature = byteArrayOf(
             0xD0.toByte(), 0xCF.toByte(), 0x11.toByte(), 0xE0.toByte(),
             0xA1.toByte(), 0xB1.toByte(), 0x1A.toByte(), 0xE1.toByte()
         )
-        val bytes = cfbSignature + ByteArray(100) { 0 }
+        val bytes = cfbSignature +
+            "EncryptionInfo".toByteArray(Charsets.UTF_16LE) +
+            ByteArray(32) +
+            "EncryptedPackage".toByteArray(Charsets.UTF_16LE)
         assertEquals(
             DocxTextExtractor.ExtractResult.PasswordProtected,
             DocxTextExtractor.extract(bytes)
+        )
+    }
+
+    @Test fun aCfbSignatureWithoutEncryptionMarkersIsNotCalledPasswordProtected() {
+        val cfbSignature = byteArrayOf(
+            0xD0.toByte(), 0xCF.toByte(), 0x11.toByte(), 0xE0.toByte(),
+            0xA1.toByte(), 0xB1.toByte(), 0x1A.toByte(), 0xE1.toByte()
+        )
+        assertEquals(
+            DocxTextExtractor.ExtractResult.NotDocx,
+            DocxTextExtractor.extract(cfbSignature + ByteArray(100))
         )
     }
 

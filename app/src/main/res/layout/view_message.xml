@@ -74,8 +74,42 @@
         android:textSize="18sp"
         android:textStyle="bold"
         android:visibility="visible"
+        app:layout_constraintEnd_toStartOf="@+id/include_bookmarks"
         app:layout_constraintStart_toEndOf="@+id/icon"
         app:layout_constraintTop_toTopOf="@+id/icon" />
+
+    <LinearLayout
+        android:id="@+id/include_bookmarks"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginEnd="20dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        app:layout_constraintBottom_toBottomOf="@+id/username"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="@+id/username">
+
+        <ImageView
+            android:id="@+id/condensed_bookmark"
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/include_condensed_bookmark_desc"
+            android:src="@drawable/ic_bookmark_add"
+            android:tint="?attr/colorPrimary"
+            android:visibility="gone" />
+
+        <ImageView
+            android:id="@+id/artifact_bookmark"
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:layout_marginStart="4dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/include_artifact_bookmark_desc"
+            android:src="@drawable/ic_bookmark"
+            android:tint="?attr/colorPrimary"
+            android:visibility="gone" />
+    </LinearLayout>
 
     <ImageView
         android:id="@+id/icon"

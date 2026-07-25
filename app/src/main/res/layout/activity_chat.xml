@@ -423,8 +423,7 @@
 
 <!-- Includes strip: one row per attached document, directly above the
              message box, visible whenever anything heavier than a bookmark is
-             attached. "If you can see it, it's being sent" is the owner's rule
-             for this surface, so it is never hidden while an item is live.
+             attached. If a live item is being sent, it remains visible here.
 
              Rows are inflated into include_list from view_include_row.xml; at
              four or more items include_collapsed takes over instead and the
@@ -481,101 +480,119 @@
             app:layout_constraintStart_toStartOf="parent"
             tools:visibility="visible">
 
+            <!-- Paperclip popup: a vertical stack of labeled actions. -->
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 app:cardBackgroundColor="@color/transparent"
-                app:cardCornerRadius="48dp"
+                app:cardCornerRadius="24dp"
                 app:strokeWidth="0dp">
 
                 <eightbitlab.com.blurview.BlurView
                     android:id="@+id/attach_bg"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    app:blurOverlayColor="@color/blur_background"
-                    app:layout_constraintBottom_toBottomOf="parent"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toTopOf="parent">
+                    app:blurOverlayColor="@color/blur_background">
 
-                    <androidx.constraintlayout.widget.ConstraintLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent">
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:paddingVertical="6dp">
 
-                        <ImageButton
+                        <LinearLayout
                             android:id="@+id/action_camera"
-                            android:layout_width="48dp"
-                            android:layout_height="48dp"
-                            android:layout_marginStart="12dp"
-                            android:layout_marginTop="12dp"
-                            android:layout_marginBottom="12dp"
-                            android:background="@drawable/btn_accent_50_v2"
-                            android:contentDescription="@string/btn_camera"
-                            android:src="@drawable/ic_camera"
-                            android:tooltipText="@string/btn_camera"
-                            app:layout_constraintBottom_toBottomOf="parent"
-                            app:layout_constraintStart_toStartOf="parent"
-                            app:layout_constraintTop_toTopOf="parent"
-                            app:srcCompat="@drawable/ic_camera" />
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:background="?attr/selectableItemBackground"
+                            android:gravity="center_vertical"
+                            android:minHeight="48dp"
+                            android:orientation="horizontal"
+                            android:paddingHorizontal="16dp">
 
-                        <ImageButton
+                            <ImageView
+                                android:layout_width="24dp"
+                                android:layout_height="24dp"
+                                android:layout_marginEnd="12dp"
+                                android:importantForAccessibility="no"
+                                android:src="@drawable/ic_camera"
+                                android:tint="?attr/colorPrimary" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:paddingEnd="8dp"
+                                android:text="@string/btn_camera"
+                                android:textColor="@color/text"
+                                android:textSize="16sp" />
+                        </LinearLayout>
+
+                        <LinearLayout
                             android:id="@+id/action_gallery"
-                            android:layout_width="48dp"
-                            android:layout_height="48dp"
-                            android:layout_marginStart="12dp"
-                            android:layout_marginTop="12dp"
-                            android:layout_marginBottom="12dp"
-                            android:background="@drawable/btn_accent_50_v2"
-                            android:contentDescription="@string/label_select_from_gallery"
-                            android:src="@drawable/ic_photo"
-                            android:tooltipText="@string/label_select_from_gallery"
-                            app:layout_constraintBottom_toBottomOf="parent"
-                            app:layout_constraintEnd_toStartOf="@+id/action_document"
-                            app:layout_constraintStart_toEndOf="@+id/action_camera"
-                            app:layout_constraintTop_toTopOf="parent"
-                            app:srcCompat="@drawable/ic_photo" />
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:background="?attr/selectableItemBackground"
+                            android:gravity="center_vertical"
+                            android:minHeight="48dp"
+                            android:orientation="horizontal"
+                            android:paddingHorizontal="16dp">
 
-<!-- Document attach (document-includes-plan.md, Step 1). Third choice
-                             in the existing attach selector, alongside Camera and Gallery —
-                             deliberately not a separate top-level button. -->
-                        <ImageButton
+                            <ImageView
+                                android:layout_width="24dp"
+                                android:layout_height="24dp"
+                                android:layout_marginEnd="12dp"
+                                android:importantForAccessibility="no"
+                                android:src="@drawable/ic_image"
+                                android:tint="?attr/colorPrimary" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:paddingEnd="8dp"
+                                android:text="@string/attach_option_image"
+                                android:textColor="@color/text"
+                                android:textSize="16sp" />
+                        </LinearLayout>
+
+                        <LinearLayout
                             android:id="@+id/action_document"
-                            android:layout_width="48dp"
-                            android:layout_height="48dp"
-                            android:layout_marginStart="12dp"
-                            android:layout_marginTop="12dp"
-                            android:layout_marginEnd="12dp"
-                            android:layout_marginBottom="12dp"
-                            android:background="@drawable/btn_accent_50_v2"
-                            android:contentDescription="@string/btn_attach_document"
-                            android:src="@drawable/ic_doc_text"
-                            android:tooltipText="@string/btn_attach_document"
-                            app:layout_constraintBottom_toBottomOf="parent"
-                            app:layout_constraintEnd_toEndOf="parent"
-                            app:layout_constraintStart_toEndOf="@+id/action_gallery"
-                            app:layout_constraintTop_toTopOf="parent"
-                            app:srcCompat="@drawable/ic_doc_text" />
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:background="?attr/selectableItemBackground"
+                            android:gravity="center_vertical"
+                            android:minHeight="48dp"
+                            android:orientation="horizontal"
+                            android:paddingHorizontal="16dp">
 
+                            <ImageView
+                                android:layout_width="24dp"
+                                android:layout_height="24dp"
+                                android:layout_marginEnd="12dp"
+                                android:importantForAccessibility="no"
+                                android:src="@drawable/ic_file"
+                                android:tint="?attr/colorPrimary" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:paddingEnd="8dp"
+                                android:text="@string/btn_attach_document"
+                                android:textColor="@color/text"
+                                android:textSize="16sp" />
+                        </LinearLayout>
+
+                        <!-- Pre-existing hidden legacy action. -->
                         <ImageButton
                             android:id="@+id/action_sources"
                             android:layout_width="48dp"
                             android:layout_height="48dp"
-                            android:layout_marginStart="12dp"
-                            android:layout_marginTop="12dp"
-                            android:layout_marginEnd="12dp"
-                            android:layout_marginBottom="12dp"
                             android:background="@drawable/btn_accent_50_v2"
                             android:contentDescription="@string/label_select_from_gallery"
                             android:src="@drawable/ic_book"
                             android:tooltipText="Data Sources"
                             android:visibility="gone"
-                            app:layout_constraintBottom_toBottomOf="parent"
-                            app:layout_constraintEnd_toEndOf="parent"
-                            app:layout_constraintStart_toEndOf="@+id/action_gallery"
-                            app:layout_constraintTop_toTopOf="parent"
                             app:srcCompat="@drawable/ic_book" />
-
-                    </androidx.constraintlayout.widget.ConstraintLayout>
+                    </LinearLayout>
                 </eightbitlab.com.blurview.BlurView>
             </com.google.android.material.card.MaterialCardView>
         </LinearLayout>

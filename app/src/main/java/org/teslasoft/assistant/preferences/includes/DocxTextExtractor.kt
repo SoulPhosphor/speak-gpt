@@ -16,6 +16,10 @@
 
 package org.teslasoft.assistant.preferences.includes
 
+import java.io.BufferedInputStream
+import java.io.InputStream
+import java.io.InputStreamReader
+import java.nio.charset.CodingErrorAction
 import java.util.zip.ZipInputStream
 
 /**
@@ -40,19 +44,14 @@ object DocxTextExtractor {
 
     private const val DOCUMENT_ENTRY = "word/document.xml"
 
-    /** Guards against a zip bomb: stop reading a single entry past this. */
-    private const val MAX_XML_CHARS = 40_000_000
+    /** Guards against a zip bomb while leaving ample room for Word markup. */
+    private const val MAX_XML_CHARS = 4_000_000
+    private const val CFB_SCAN_BYTES = 2 * 1024 * 1024
 
     /**
-     * Magic bytes at the start of an OLE2 Compound File Binary container —
-     * the format a password-protected Office file is wrapped in (Office
-     * cannot encrypt a plain zip entry-by-entry, so a protected .docx is not
-     * a zip at all at the top level; it is a CFB container holding an
-     * encrypted package stream). The same signature also opens a legacy
-     * binary .doc/.xls/.ppt — this app only routes files with a `.docx`
-     * extension here, and a legacy `.doc` renamed to `.docx` would also read
-     * as this signature, which is a known limitation of a signature-only
-     * check rather than something this detection tries to resolve further.
+     * Magic bytes at the start of an OLE2 Compound File Binary container.
+     * Both encrypted Office files and legacy binary Office files use this
+     * container, so the signature alone is not evidence of encryption.
      */
     private val CFB_SIGNATURE = byteArrayOf(
         0xD0.toByte(), 0xCF.toByte(), 0x11.toByte(), 0xE0.toByte(),
@@ -61,13 +60,16 @@ object DocxTextExtractor {
 
     /** Outcome of attempting to read a .docx. */
     sealed class ExtractResult {
-        data class Success(val text: String) : ExtractResult()
+        data class Success(
+            val text: String,
+            val sourceTruncated: Boolean = false
+        ) : ExtractResult()
 
         /** Not a zip at all, or a zip with no `word/document.xml` entry —
          *  no positive evidence this was ever a genuine Word document. */
         data object NotDocx : ExtractResult()
 
-        /** An OLE2/CFB container — a password-protected Office file. */
+        /** An OLE2/CFB container with an encrypted OOXML package stream. */
         data object PasswordProtected : ExtractResult()
 
         /** `word/document.xml` was located, but reading or decompressing it
@@ -83,18 +85,36 @@ object DocxTextExtractor {
      */
     private class DocumentEntryUnreadable(cause: Throwable) : Exception(cause)
 
-    fun extract(bytes: ByteArray): ExtractResult {
-        if (isCfbContainer(bytes)) return ExtractResult.PasswordProtected
+    fun extract(bytes: ByteArray): ExtractResult = extract(bytes.inputStream())
 
-        val xml = try {
-            locateDocumentXml(bytes) ?: return ExtractResult.NotDocx
+    fun extract(input: InputStream): ExtractResult {
+        val buffered = if (input is BufferedInputStream) input else BufferedInputStream(input)
+        buffered.mark(CFB_SCAN_BYTES + 1)
+        val signature = readPrefix(buffered, CFB_SIGNATURE.size)
+        if (isCfbContainer(signature)) {
+            val prefix = signature +
+                readPrefix(buffered, CFB_SCAN_BYTES - signature.size)
+            buffered.reset()
+            return if (containsEncryptedPackageMarker(prefix)) {
+                ExtractResult.PasswordProtected
+            } else {
+                ExtractResult.NotDocx
+            }
+        }
+        buffered.reset()
+
+        val entry = try {
+            locateDocumentXml(buffered) ?: return ExtractResult.NotDocx
         } catch (_: DocumentEntryUnreadable) {
             return ExtractResult.Corrupted
         } catch (_: Exception) {
             return ExtractResult.NotDocx
         }
 
-        return ExtractResult.Success(xmlToText(xml))
+        return ExtractResult.Success(
+            text = xmlToText(entry.text),
+            sourceTruncated = entry.sourceTruncated
+        )
     }
 
     private fun isCfbContainer(bytes: ByteArray): Boolean {
@@ -105,8 +125,13 @@ object DocxTextExtractor {
         return true
     }
 
-    private fun locateDocumentXml(bytes: ByteArray): String? {
-        ZipInputStream(bytes.inputStream()).use { zip ->
+    private data class EntryText(
+        val text: String,
+        val sourceTruncated: Boolean
+    )
+
+    private fun locateDocumentXml(input: InputStream): EntryText? {
+        ZipInputStream(input).use { zip ->
             var entry = zip.nextEntry
             while (entry != null) {
                 if (entry.name == DOCUMENT_ENTRY) {
@@ -122,16 +147,59 @@ object DocxTextExtractor {
         return null
     }
 
-    private fun readEntryText(zip: ZipInputStream): String {
+    private fun readEntryText(zip: ZipInputStream): EntryText {
+        val decoder = Charsets.UTF_8.newDecoder()
+            .onMalformedInput(CodingErrorAction.REPORT)
+            .onUnmappableCharacter(CodingErrorAction.REPORT)
+        val reader = InputStreamReader(zip, decoder)
         val out = StringBuilder()
-        val buffer = ByteArray(8 * 1024)
-        while (true) {
-            val read = zip.read(buffer)
-            if (read <= 0) break
-            out.append(String(buffer, 0, read, Charsets.UTF_8))
-            if (out.length > MAX_XML_CHARS) break
+        val buffer = CharArray(8 * 1024)
+
+        while (out.length < MAX_XML_CHARS) {
+            val remaining = MAX_XML_CHARS - out.length
+            val read = reader.read(buffer, 0, minOf(buffer.size, remaining))
+            if (read < 0) return EntryText(out.toString(), false)
+            if (read == 0) continue
+            out.append(buffer, 0, read)
         }
-        return out.toString()
+
+        return EntryText(
+            text = out.toString(),
+            sourceTruncated = reader.read() >= 0
+        )
+    }
+
+    private fun readPrefix(input: InputStream, limit: Int): ByteArray {
+        val out = java.io.ByteArrayOutputStream()
+        val buffer = ByteArray(16 * 1024)
+        while (out.size() < limit) {
+            val read = input.read(buffer, 0, minOf(buffer.size, limit - out.size()))
+            if (read < 0) break
+            if (read == 0) continue
+            out.write(buffer, 0, read)
+        }
+        return out.toByteArray()
+    }
+
+    private fun containsEncryptedPackageMarker(bytes: ByteArray): Boolean {
+        return containsUtf16Le(bytes, "EncryptedPackage") &&
+            containsUtf16Le(bytes, "EncryptionInfo")
+    }
+
+    private fun containsUtf16Le(bytes: ByteArray, text: String): Boolean {
+        val needle = text.toByteArray(Charsets.UTF_16LE)
+        if (needle.size > bytes.size) return false
+        for (start in 0..(bytes.size - needle.size)) {
+            var matches = true
+            for (offset in needle.indices) {
+                if (bytes[start + offset] != needle[offset]) {
+                    matches = false
+                    break
+                }
+            }
+            if (matches) return true
+        }
+        return false
     }
 
     /**

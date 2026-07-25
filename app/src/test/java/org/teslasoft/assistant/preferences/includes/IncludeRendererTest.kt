@@ -49,15 +49,15 @@ class IncludeRendererTest {
 
     @Test fun theDocumentIsNamedAndDelimited() {
         val out = IncludeRenderer.renderUserMessage("hi", listOf(doc(name = "resume.docx")))
-        assertTrue(out.contains("Attached document: resume.docx"))
-        assertTrue(out.contains("End of resume.docx"))
+        assertTrue(out.contains("<document name=\"resume.docx\">"))
+        assertTrue(out.contains("</document>"))
     }
 
     @Test fun aCondensedDocumentSaysSoAndSendsTheSummary() {
         val out = IncludeRenderer.renderUserMessage(
             "", listOf(doc(form = IncludeForm.CONDENSED, condensed = "SHORT VERSION"))
         )
-        assertTrue(out.contains("condensed by the user"))
+        assertTrue(out.contains("form=\"condensed\""))
         assertTrue(out.contains("SHORT VERSION"))
         assertFalse(out.contains("THE BODY"))
     }
@@ -70,21 +70,22 @@ class IncludeRendererTest {
         // The heavy text is gone, but the conversation still makes sense.
         assertFalse(out.contains("THE BODY"))
         assertTrue(out.contains("User sent a resume."))
-        assertTrue(out.startsWith("thoughts?"))
+        assertTrue(out.contains("thoughts?"))
+        assertTrue(out.indexOf("thoughts?") < out.indexOf("User sent a resume."))
     }
 
     @Test fun truncationIsDisclosedToTheModelToo() {
         val out = IncludeRenderer.renderUserMessage(
             "", listOf(doc(notice = IncludeNotice.Truncated(30000)))
         )
-        assertTrue(out.contains("only the beginning"))
+        assertTrue(out.contains("partial=\"beginning only\""))
     }
 
     @Test fun aTrimmedSpreadsheetTellsTheModelWhatItIsMissing() {
         val out = IncludeRenderer.renderUserMessage(
             "", listOf(doc(name = "sales.csv", notice = IncludeNotice.CsvTrimmed(500, 47000)))
         )
-        assertTrue(out.contains("first 500 rows of 47000"))
+        assertTrue(out.contains("rows=\"header + first 500 of 47000\""))
     }
 
     @Test fun aMerelyLargeFileNeedsNoModelSideNote() {
@@ -92,8 +93,8 @@ class IncludeRendererTest {
             "", listOf(doc(notice = IncludeNotice.Large(12000)))
         )
         // Nothing was withheld, so there is nothing to disclose.
-        assertFalse(out.contains("only the beginning"))
-        assertFalse(out.contains("rows of"))
+        assertFalse(out.contains("partial="))
+        assertFalse(out.contains("rows="))
     }
 
     @Test fun severalDocumentsKeepTheirAttachOrder() {
@@ -107,7 +108,7 @@ class IncludeRendererTest {
         assertTrue(out.indexOf("ALPHA") < out.indexOf("BETA"))
     }
 
-    @Test fun bookmarksAreGatheredAfterLiveDocuments() {
+    @Test fun userWordsComeFirstAndIncludesKeepTheirStableOrderForCaching() {
         val out = IncludeRenderer.renderUserMessage(
             "hi",
             listOf(
@@ -115,7 +116,8 @@ class IncludeRendererTest {
                 doc(id = "b", name = "live.txt", text = "STILL HERE")
             )
         )
-        assertTrue(out.indexOf("STILL HERE") < out.indexOf("User sent an old file."))
+        assertTrue(out.indexOf("hi") < out.indexOf("User sent an old file."))
+        assertTrue(out.indexOf("User sent an old file.") < out.indexOf("STILL HERE"))
     }
 
     /**
@@ -137,7 +139,15 @@ class IncludeRendererTest {
 
     @Test fun anEmptyTypedMessageStillCarriesItsDocument() {
         val out = IncludeRenderer.renderUserMessage("", listOf(doc()))
-        assertTrue(out.startsWith("--- Attached document"))
+        assertTrue(out.startsWith("<document name=\"report.txt\">"))
         assertTrue(out.contains("THE BODY"))
+    }
+
+    @Test fun fileNamesAreEscapedInsideTheCompactWrapper() {
+        val out = IncludeRenderer.renderUserMessage(
+            "",
+            listOf(doc(name = "A&B \"draft\".txt"))
+        )
+        assertTrue(out.startsWith("<document name=\"A&amp;B &quot;draft&quot;.txt\">"))
     }
 }

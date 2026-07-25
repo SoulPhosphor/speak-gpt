@@ -1,9 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   One line inside an expanded "Includes" record: the file's type icon, its
-  name, and roughly what it weighed when the message was sent. Each type has
-  its own icon so a later attachment kind (an image, say) is identifiable at a
-  glance without reading the name.
+  name, explicit format, and approximate token weight.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="wrap_content"
@@ -18,7 +16,7 @@
         android:layout_height="16dp"
         android:layout_marginEnd="6dp"
         android:contentDescription="@string/include_icon_desc"
-        android:src="@drawable/ic_doc_text"
+        android:src="@drawable/ic_file"
         android:tint="?attr/colorPrimary" />
 
     <TextView
@@ -29,6 +27,14 @@
         android:ellipsize="middle"
         android:textColor="@color/text"
         android:textSize="13sp" />
+
+    <TextView
+        android:id="@+id/summary_item_format"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="8dp"
+        android:textColor="@color/text_subtitle"
+        android:textSize="11sp" />
 
     <TextView
         android:id="@+id/summary_item_weight"

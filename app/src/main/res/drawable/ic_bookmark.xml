@@ -1,4 +1,4 @@
-<!-- Google Material Symbols "keyboard_arrow_down" (Outlined, 24px). -->
+<!-- Google Material Symbols "bookmark" (Outlined, 48px). -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
@@ -8,6 +8,6 @@
     <group android:translateY="960">
         <path
             android:fillColor="@android:color/white"
-            android:pathData="M480-344 240-584l56-56 184 184 184-184 56 56-240 240Z" />
+            android:pathData="M200-120v-665q0-24 18-42t42-18h440q24 0 42 18t18 42v665L480-240 200-120Zm60-91 220-93 220 93v-574H260v574Zm0-574h440-440Z" />
     </group>
 </vector>

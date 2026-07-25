@@ -37,8 +37,8 @@ import java.text.NumberFormat
 /**
  * Drives the Includes strip above the chat's message box.
  *
- * The owner's rule for this surface is the whole design: **if you can see it,
- * it is being sent.** There is no hidden "included / not included" state to
+ * **If you can see it, it is being sent.** There is no hidden
+ * "included / not included" state to
  * remember — a row's presence IS the state, and Remove is the off switch. So
  * this controller never hides a live item, and every row states what form is
  * going to the model ("Includes" vs "Includes condensed") and what it weighs.
@@ -239,11 +239,8 @@ class IncludeStripController(
     private fun grouped(value: Int): String = NumberFormat.getIntegerInstance().format(value)
 
     private fun iconFor(kind: IncludeKind): Int = when (kind) {
-        IncludeKind.TXT -> R.drawable.ic_doc_text
-        IncludeKind.MARKDOWN -> R.drawable.ic_doc_markdown
-        IncludeKind.CSV -> R.drawable.ic_doc_table
-        IncludeKind.DOCX -> R.drawable.ic_doc_word
         IncludeKind.IMAGE -> R.drawable.ic_image
+        else -> R.drawable.ic_file
     }
 }
 

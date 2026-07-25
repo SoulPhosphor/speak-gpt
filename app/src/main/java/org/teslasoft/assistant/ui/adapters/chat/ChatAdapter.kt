@@ -46,6 +46,7 @@ import android.view.ViewGroup
 import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.PopupMenu
 import android.widget.TextView
 import android.widget.Toast
 import androidx.constraintlayout.widget.ConstraintLayout
@@ -70,7 +71,7 @@ import io.noties.markwon.inlineparser.MarkwonInlineParserPlugin
 import java.text.NumberFormat
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.includes.ChatInclude
-import org.teslasoft.assistant.preferences.includes.IncludeForm
+import org.teslasoft.assistant.preferences.includes.IncludeHistoryPresentation
 import org.teslasoft.assistant.preferences.includes.IncludeKind
 import org.teslasoft.assistant.ui.activities.ChatActivity
 import org.teslasoft.assistant.preferences.ChatPreferences
@@ -87,6 +88,7 @@ import java.io.FileInputStream
 import java.io.InputStreamReader
 import java.util.Base64
 import java.util.Collections
+import java.util.Locale
 import androidx.core.graphics.createBitmap
 import androidx.core.net.toUri
 import androidx.core.content.edit
@@ -157,7 +159,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
      * on the view would make an unrelated message inherit an open accordion
      * as soon as it scrolled into that recycled slot.
      */
-    private val expandedIncludeRows: MutableSet<Int> = mutableSetOf()
+    private val expandedIncludeRows: MutableSet<String> = mutableSetOf()
 
     override fun getItemViewType(position: Int): Int {
         return if (preferences.getLayout() == "bubbles" || isAssistant) {
@@ -224,10 +226,6 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
 
     private fun deleteMessage(position: Int) {
         if (position < 0 || position >= dataArray.size) return
-        // Open "Includes" records are tracked by position, and a deletion
-        // shifts every position after it — so drop the tracking rather than
-        // let an accordion reopen against the wrong message.
-        expandedIncludeRows.clear()
         dataArray.removeAt(position)
         notifyItemRemoved(position)
         if (position > 0) {
@@ -301,8 +299,9 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         // assistant bubble (attachments are user-side only), so nullable.
         private val includeSummary: LinearLayout? = itemView.findViewById(R.id.include_summary)
         private val includeSummaryHeader: LinearLayout? = itemView.findViewById(R.id.include_summary_header)
-        private val includeSummaryIcon: ImageView? = itemView.findViewById(R.id.include_summary_icon)
         private val includeSummaryList: LinearLayout? = itemView.findViewById(R.id.include_summary_list)
+        private val condensedBookmark: ImageView? = itemView.findViewById(R.id.condensed_bookmark)
+        private val artifactBookmark: ImageView? = itemView.findViewById(R.id.artifact_bookmark)
 
         @SuppressLint("SetTextI18n", "SetJavaScriptEnabled")
         open fun bind(chatMessage: HashMap<String, Any>, position: Int) {
@@ -432,34 +431,89 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
 
             if (chatMessage["isBot"] == true || includes.isEmpty()) {
                 summary.visibility = View.GONE
+                condensedBookmark?.visibility = View.GONE
+                artifactBookmark?.visibility = View.GONE
+                includeSummaryList?.removeAllViews()
+                return
+            }
+
+            val groups = IncludeHistoryPresentation.group(includes)
+            updateIncludeBookmarks(groups)
+            val fullIncludes = groups.fullRecords
+            if (fullIncludes.isEmpty()) {
+                summary.visibility = View.GONE
                 includeSummaryList?.removeAllViews()
                 return
             }
 
             summary.visibility = View.VISIBLE
-
-            // Once everything attached here has been reduced to a bookmark,
-            // the box wears the artifact marker instead of a file glyph.
-            val allArtifacts = includes.all { it.form == IncludeForm.ARTIFACT }
-            includeSummaryIcon?.setImageResource(
-                if (allArtifacts) R.drawable.ic_bookmark_added else R.drawable.ic_file
-            )
-
-            val expanded = expandedIncludeRows.contains(position)
+            val summaryKey = fullIncludes.joinToString(separator = "\u001F") { it.id }
+            val expanded = expandedIncludeRows.contains(summaryKey)
             includeSummaryList?.visibility = if (expanded) View.VISIBLE else View.GONE
             if (expanded) {
-                buildIncludeSummaryRows(includes)
+                buildIncludeSummaryRows(fullIncludes)
             } else {
                 includeSummaryList?.removeAllViews()
             }
 
             includeSummaryHeader?.setOnClickListener {
-                if (expandedIncludeRows.contains(position)) {
-                    expandedIncludeRows.remove(position)
+                if (expandedIncludeRows.contains(summaryKey)) {
+                    expandedIncludeRows.remove(summaryKey)
                 } else {
-                    expandedIncludeRows.add(position)
+                    expandedIncludeRows.add(summaryKey)
                 }
                 notifyItemChanged(position)
+            }
+        }
+
+        /**
+         * Full documents keep their metadata row. Condensed documents use the
+         * bookmark-with-plus; removed sent documents use the empty bookmark.
+         * One item opens its editor immediately. When several share a marker,
+         * the anchored menu selects the file before opening the same editor.
+         */
+        private fun updateIncludeBookmarks(groups: IncludeHistoryPresentation.Groups) {
+            updateBookmark(
+                marker = condensedBookmark,
+                items = groups.condensedBookmarks
+            )
+            updateBookmark(
+                marker = artifactBookmark,
+                items = groups.artifactBookmarks
+            )
+        }
+
+        private fun updateBookmark(marker: ImageView?, items: List<ChatInclude>) {
+            marker ?: return
+            if (items.isEmpty()) {
+                marker.visibility = View.GONE
+                marker.setOnClickListener(null)
+                return
+            }
+
+            marker.visibility = View.VISIBLE
+            marker.setOnClickListener { anchor ->
+                if (items.size == 1) {
+                    listener?.onIncludeEdit(items.first().id)
+                    return@setOnClickListener
+                }
+
+                val popup = PopupMenu(context, anchor)
+                for ((index, include) in items.withIndex()) {
+                    popup.menu.add(
+                        0,
+                        index,
+                        index,
+                        "${include.fileName} (${include.kind.key.uppercase(Locale.ROOT)})"
+                    )
+                }
+                popup.setOnMenuItemClickListener { item ->
+                    val include = items.getOrNull(item.itemId)
+                        ?: return@setOnMenuItemClickListener false
+                    listener?.onIncludeEdit(include.id)
+                    true
+                }
+                popup.show()
             }
         }
 
@@ -471,19 +525,9 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 val row = inflater.inflate(R.layout.view_include_summary_item, list, false)
                 row.findViewById<ImageView>(R.id.summary_item_icon)
                     ?.setImageResource(includeIcon(include.kind))
-                // For an item that has been reduced to a bookmark, the
-                // bookmark line IS the informative content — the file name
-                // alone would not tell the user what they are still sending.
-                row.findViewById<TextView>(R.id.summary_item_name)?.text =
-                    if (include.form == IncludeForm.ARTIFACT) {
-                        include.modelText()
-                    } else {
-                        include.fileName
-                    }
-                // Deliberately the CURRENT weight, not the weight recorded
-                // when this turn was sent: after an item has been condensed or
-                // reduced to a bookmark, the original figure would overstate
-                // what this message still costs on every turn.
+                row.findViewById<TextView>(R.id.summary_item_name)?.text = include.fileName
+                row.findViewById<TextView>(R.id.summary_item_format)?.text =
+                    include.kind.key.uppercase(Locale.ROOT)
                 row.findViewById<TextView>(R.id.summary_item_weight)?.text = context.getString(
                     R.string.include_weight,
                     NumberFormat.getIntegerInstance().format(include.currentTokens())
@@ -493,11 +537,8 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         }
 
         private fun includeIcon(kind: IncludeKind): Int = when (kind) {
-            IncludeKind.TXT -> R.drawable.ic_doc_text
-            IncludeKind.MARKDOWN -> R.drawable.ic_doc_markdown
-            IncludeKind.CSV -> R.drawable.ic_doc_table
-            IncludeKind.DOCX -> R.drawable.ic_doc_word
             IncludeKind.IMAGE -> R.drawable.ic_image
+            else -> R.drawable.ic_file
         }
 
         private fun updateStatusMarker(chatMessage: HashMap<String, Any>) {
@@ -1017,6 +1058,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         fun onRetryClick()
         fun onMessageEdited()
         fun onMessageDeleted()
+        fun onIncludeEdit(includeId: String)
         fun onBulkSelectionChanged(position: Int, selected: Boolean)
         fun onChangeBulkActionMode(mode: Boolean)
         fun onSpeakClick(message: String, position: Int)

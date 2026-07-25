@@ -28,15 +28,13 @@ import org.teslasoft.assistant.R
  * The include Edit pop-up: shows the text that is actually being sent for an
  * attachment and lets the user change it.
  *
- * This exists because the alternative — trusting a model-written summary
- * sight unseen — is exactly what the owner refused. Whatever the model writes
- * (a condensed document, a one-line bookmark) is presented here for approval
- * or correction before it stands in for the real thing, and it stays editable
- * afterwards, so a missed detail is typed in rather than re-rolled.
+ * Model-written text (a condensed document or a one-line bookmark) is
+ * presented here for approval or correction before it stands in for the real
+ * thing, and it stays editable afterwards.
  *
- * Deliberately a dialog rather than a full-screen editor (owner's call for
- * this one case), and deliberately uses [R.layout.dialog_two_actions_end] —
- * Cancel then Save, right-aligned — which is a different approved shape from
+ * This is a dialog rather than a full-screen editor and uses
+ * [R.layout.dialog_two_actions_end] —
+ * Cancel then Save, right-aligned — which is a different shape from
  * the primary/destructive confirmation pair in `dialog_two_actions.xml`.
  */
 object IncludeEditDialog {

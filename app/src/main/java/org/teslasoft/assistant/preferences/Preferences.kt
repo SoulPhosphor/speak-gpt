@@ -1860,8 +1860,14 @@ class Preferences private constructor(private var preferences: SharedPreferences
         return getString("pending_includes", "")
     }
 
-    fun setPendingIncludes(json: String) {
-        putString("pending_includes", json)
+    fun setPendingIncludes(json: String, synchronous: Boolean = false) {
+        if (synchronous) {
+            preferences.edit(commit = true) {
+                putString("pending_includes", json)
+            }
+        } else {
+            putString("pending_includes", json)
+        }
     }
 
     /**

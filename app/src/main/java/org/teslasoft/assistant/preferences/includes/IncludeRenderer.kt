@@ -35,65 +35,71 @@ object IncludeRenderer {
     /**
      * Builds the model-facing content of a user message.
      *
-     * The user's own words come FIRST, then the attachments. Documents that
-     * have been reduced to a bookmark are gathered into one short block so a
-     * conversation that once discussed a removed file still reads coherently
-     * — the model is never left answering questions about something that has
-     * silently vanished from its view.
+     * The user's own words form the stable prefix. Includes follow in their
+     * original attachment order, so editing or reducing one item invalidates
+     * no more of the provider's prefix cache than necessary.
      */
     fun renderUserMessage(typedText: String, includes: List<ChatInclude>): String {
         if (includes.isEmpty()) return typedText
 
         val body = StringBuilder(typedText)
-        val artifacts = ArrayList<String>()
-
         for (include in includes) {
-            when (include.form) {
-                IncludeForm.ARTIFACT -> artifacts.add(include.modelText())
-                else -> {
-                    if (body.isNotEmpty()) body.append("\n\n")
-                    body.append(renderDocument(include))
-                }
-            }
-        }
-
-        if (artifacts.isNotEmpty()) {
             if (body.isNotEmpty()) body.append("\n\n")
-            body.append(ARTIFACT_HEADER)
-            for (line in artifacts) body.append('\n').append(line)
+            body.append(
+                if (include.form == IncludeForm.ARTIFACT) {
+                    renderBookmark(include)
+                } else {
+                    renderDocument(include)
+                }
+            )
         }
-
         return body.toString()
     }
 
     private fun renderDocument(include: ChatInclude): String {
-        val label = if (include.form == IncludeForm.CONDENSED) {
-            "Attached document (condensed by the user): ${include.fileName}"
-        } else {
-            "Attached document: ${include.fileName}"
-        }
-        val note = sizeNote(include.notice)
-        val head = if (note == null) label else "$label — $note"
         return buildString {
-            append("--- ").append(head).append(" ---\n")
+            append("<document name=\"")
+                .append(escapeAttribute(include.fileName))
+                .append('"')
+            if (include.form == IncludeForm.CONDENSED) {
+                append(" form=\"condensed\"")
+            }
+            when (val notice = include.notice) {
+                is IncludeNotice.None,
+                is IncludeNotice.Large -> Unit
+                is IncludeNotice.Truncated ->
+                    append(" partial=\"beginning only\"")
+                is IncludeNotice.CsvTrimmed -> {
+                    append(" rows=\"header + first ")
+                        .append(notice.sentRows)
+                        .append(" of ")
+                        .append(notice.totalRows)
+                        .append('"')
+                }
+            }
+            append(">\n")
             append(include.modelText())
-            append("\n--- End of ").append(include.fileName).append(" ---")
+            append("\n</document>")
         }
     }
 
-    /**
-     * The model's own copy of a size warning. The user sees the approved
-     * wording in the UI; the model needs the same fact in its own view, or it
-     * will confidently reason about a truncated file as if it were complete.
-     */
-    private fun sizeNote(notice: IncludeNotice): String? = when (notice) {
-        is IncludeNotice.None -> null
-        is IncludeNotice.Large -> null
-        is IncludeNotice.Truncated ->
-            "only the beginning of this file is included; the rest was too long to send"
-        is IncludeNotice.CsvTrimmed ->
-            "column names and the first ${notice.sentRows} rows of ${notice.totalRows} total rows"
+    private fun renderBookmark(include: ChatInclude): String = buildString {
+        append("<bookmark name=\"")
+            .append(escapeAttribute(include.fileName))
+            .append("\">")
+        append(include.modelText())
+        append("</bookmark>")
     }
 
-    private const val ARTIFACT_HEADER = "Previously attached (content no longer included):"
+    private fun escapeAttribute(value: String): String = buildString(value.length) {
+        for (character in value) {
+            when (character) {
+                '&' -> append("&amp;")
+                '"' -> append("&quot;")
+                '<' -> append("&lt;")
+                '>' -> append("&gt;")
+                else -> append(character)
+            }
+        }
+    }
 }

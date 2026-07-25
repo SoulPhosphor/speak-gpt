@@ -1,17 +1,36 @@
 # Document & Image Includes — Build Plan
 
-Status: **Steps 1 and 2 BUILT July 24 2026** (attach/extract/strip/
-Remove→artifact/history record/size guards, plus Condense and the Edit
-dialog). Step 3 (images) not started.
-Everything below is the full approved design; see "Build order" at the end for
-what each step covers. Every user-facing
-word, behavior, and UI decision in this plan was settled with the owner in
-plain chat, July 24 2026. Where this plan and that conversation disagree, the
-conversation wins. Any fork this plan does not settle → stop and ask in chat
-before building (standing owner ruling, July 23 2026). Do not use the pop-up
-question tool — plain chat only.
+Status: **Step 1 repaired and verified.** The first implementation reached
+`main` with working pieces and material defects; the repair now passes its
+tests and Android Checks. Step 2 code exists but remains outside the Step 1
+acceptance boundary. Step 3 (images) has not been built.
 
-## What this feature is, in the owner's terms
+This document records the current implementation baseline and build boundary.
+It does not turn an old discussion, uncertainty, or existing code into user
+approval. Current instructions in chat override stale passages here. If a
+product choice is not settled, stop and ask before building it.
+
+Decisions explicitly reconfirmed during the Step 1 repair:
+
+- The paperclip opens a vertical icon-and-word menu in this order:
+  **Camera**, **Image**, **Document**.
+- Upload failures use a pop-up dialog with the file name and a descriptive
+  error. Successful attachment size/cost notices remain inline.
+- Removing a pending document before Send detaches it completely. It is never
+  sent to the model, written into chat history, or converted to an artifact.
+- The live Includes strip collapses at **4 or more** documents.
+- Full-document history uses the under-name metadata record. A condensed
+  document uses the bookmark-with-plus; a fully removed sent document uses
+  the empty bookmark. Both bookmarks reopen editable text with Cancel/Save.
+- Model-facing order is the user's text, then documents in stable attachment
+  order, with images last in Step 3. Document boundaries use a compact
+  semantic wrapper rather than decorative punctuation.
+- Visible but provisional Condense controls do not block Step 1 completion.
+
+Other details below describe the current baseline being repaired. They must
+not be cited as independently user-approved merely because they appear here.
+
+## Feature intent
 
 The user can attach documents (and later images) to a chat so the AI can read
 them and discuss them over multiple rounds. Everything currently being sent is
@@ -26,13 +45,14 @@ Every attached item exists in exactly one of three forms, heaviest to lightest:
 1. **Full** — the real thing (extracted document text, or the actual image).
 2. **Condensed** (documents) / **Reduced** (images) — an AI-written text
    version, always shown to the user before it takes effect, and editable by
-   the user at any time afterward. The owner chose two different words
-   deliberately: condensing makes the same kind of thing smaller; reducing an
+   the user at any time afterward. The two terms remain distinct:
+   condensing makes the same kind of thing smaller; reducing an
    image *removes* the visual data entirely and keeps only words. Never merge
    these terms.
 3. **Artifact** — a one-line bookmark ("User sent a photo of a purple
    amethyst cluster"), so the AI never faces replies to something that no
-   longer exists. **Remove converts to artifact; it never erases outright.**
+   longer exists. **Removing an item that was already sent converts it to an
+   artifact. Removing a still-pending item detaches it without a trace.**
    The artifact line is AI-written at removal time (bounded, ~12 words max,
    via the chat's own endpoint/model), falls back to a filename-based line if
    the AI is unreachable, and is user-editable afterward like everything else.
@@ -43,20 +63,20 @@ changes an include's form.
 ## Scope
 
 - **Step 1 — documents:** attach `.txt`, `.md`, `.csv`, `.docx`. The Includes
-  strip, Remove→artifact, the artifact bookmark popup, the history accordion,
-  token estimates, size guards.
+  strip, pending detach, sent-item Remove→artifact, the artifact bookmark
+  popup, the history accordion, token estimates, size guards.
 - **Step 2 — Condense** for documents, with the Edit dialog.
 - **Step 3 — images** join the same system ("Reduce to Text Only"); the old
   broken image path (hard-coded `gpt-4o`, bypasses history/memory) is
   **deleted**, not left behind.
 
-**Non-goals (owner rulings):** no PDF (deferred), no legacy `.doc` (only
+**Current non-goals:** no PDF (deferred), no legacy `.doc` (only
 `.docx`), no image generation changes, no writing edited documents back to
 disk (`.docx` is read-only — the AI's editing help arrives as chat text; the
 extraction is words-only, formatting is not preserved), no automatic
 summarization of anything.
 
-## Approved wording inventory (exact strings — do not reword without asking)
+## Current wording inventory
 
 All strings live in `res/values/strings.xml` only, per house rule.
 
@@ -68,20 +88,40 @@ All strings live in `res/values/strings.xml` only, per house rule.
 | Menu item (documents) | **Condense** |
 | Menu item (images) | **Reduce to Text Only** |
 | Menu item (condensed/reduced state) | **Edit** |
-| Edit dialog buttons | **Cancel**, then **Save** — right-aligned, in that order (owner-specified layout) |
+| Edit dialog buttons | **Cancel**, then **Save** — right-aligned, in that order |
 | Weight display | **~N tokens** (tilde always shown — it is an estimate) |
 | Large-file note | *"Large file — adds about ~30,000 tokens to every message while included."* (N is the item's real estimate) |
 | Too-big note | *"This file is too large to send in full. The beginning was included, up to about ~30,000 tokens."* |
 | Oversized CSV note | *"Large spreadsheet — sent the column names and first 500 rows of 47,000."* (real numbers substituted) |
 | History box label | **Includes** |
 | Artifact line default shape | "User sent …" — AI-written, ≤ ~12 words |
-| Collapse line (4+ items) | **Includes N Documents** — "Documents" capitalised per the app's Title Case rule (owner ruling, July 24 2026), followed by a **downward-facing chevron** |
+| Collapse line (4+ items) | **Includes N Documents** — "Documents" capitalised per the app's Title Case rule, followed by a **downward-facing chevron** |
+
+### Upload failure dialogs
+
+The dialog title is the selected file name. The body uses the approved
+descriptor below, and the dialog has a Close action.
+
+| Detectable condition | Dialog body |
+|---|---|
+| Unsupported extension or MIME type | **This file type is not supported.** |
+| Read permission rejected | **File is unable to be read. Permission has expired or been revoked, and the file is no longer available.** |
+| Content provider is unavailable | **File is unable to be read. The source app is not responding.** |
+| Live provider reports file not found | **File is unable to be read. File is no longer available. It may have been moved or deleted.** |
+| Read fails after the file opened | **File could not be read completely. The storage or connection may have been interrupted.** |
+| Encrypted OOXML package detected | **File is unable to be read. Content is password protected and unreadable. Please try again with a non-protected file.** |
+| Content does not match the declared file type | **File is unable to be read. Content does not match file type.** |
+| A DOCX document part is present but unreadable | **File is unable to be read. File is corrupted.** |
+| File contains no data | **File contains no data.** |
+| No more specific condition is proven | **File could not be attached due to an unknown error.** |
 
 ## UI specification, surface by surface, with the styles each uses
 
 Style authority: `ui-style-guide.md`. Every new shared style or layout this
 feature adds gets documented THERE (not in CLAUDE.md), with rollout notes.
-No toasts anywhere (standing rule). All notices are persistent inline text.
+No toasts. Size and cost notices are persistent inline text. A failed upload
+has no attachment row to hold an inline notice, so it uses a readable modal
+dialog containing the approved error descriptor.
 
 ### 1. The Includes strip (above the message box)
 
@@ -89,17 +129,13 @@ No toasts anywhere (standing rule). All notices are persistent inline text.
   the chat screen, full-width, on the same surface family as the input bar so
   it reads as part of the composition area, not a floating element.
 - One row per included item, visible **at all times** while anything heavier
-  than an artifact is included (owner ruling: full/condensed/reduced items are
+  than an artifact is included (full/condensed/reduced items are
   the data drain, so they stay plainly shown; only artifacts retire to the
   bookmark popup).
-- Row anatomy: leading type icon → name → **~N tokens** → three-dots menu.
-  - Leading icon: 36dp slot per `Widget.App.Row.Icon` sizing convention,
-    vector drawable tinted `?attr/colorPrimary` (house icon rule). Type
-    icons: text-document glyph (`.txt`), markdown-document glyph (`.md`),
-    table glyph (`.csv`), Word-document glyph (`.docx`), image glyph
-    (Step 3). Distinct glyphs are the owner's requirement ("easy
-    identification" as more types arrive); exact glyph picks are reviewable
-    on device.
+- Row anatomy: **Includes** label → document/picture icon → name →
+  **~N tokens** → three-dots menu.
+  - The icon uses the document glyph for document formats and the picture
+    glyph for images (Step 3), tinted `?attr/colorPrimary`.
   - Text styling follows the row vocabulary: name in the
     `Widget.App.Row.Title` role, token count in the subtitle role
     (`@color/text_subtitle`, 13sp — the `Widget.App.Row.Subtitle` /
@@ -120,8 +156,8 @@ No toasts anywhere (standing rule). All notices are persistent inline text.
   (13sp, `@color/text_subtitle`).
 - **Collapse at 4+:** with four or more rows the strip becomes a single line
   reading **Includes N Documents** with a **downward-facing chevron at the
-  end** (owner ruling, July 24 2026 — this supersedes the earlier
-  upward-facing note; the chevron glyph points down even though the list
+  end** (this supersedes the earlier upward-facing note; the chevron glyph
+  points down even though the list
   opens upward). Tapping expands the full list **upward as an overlay
   covering the chat** (the conversation must not be shoved around),
   scrollable, collapsed again the same way or by tapping outside. With three
@@ -129,23 +165,22 @@ No toasts anywhere (standing rule). All notices are persistent inline text.
 
 ### 2. The Edit dialog (condensed/reduced text, and artifact lines)
 
-- Owner chose the pop-up style deliberately for this one case (not a
-  full-screen editor).
+- The current baseline uses a pop-up rather than a full-screen editor.
 - Built on `App.MaterialAlertDialog` (`R.style.App_MaterialAlertDialog`) —
   the one standard dialog theme; centered title comes free from the theme.
 - Body: a multi-line editable text box skinned with `Widget.App.Field.Box`
   (`bg_field_box`), pre-filled with the current condensed/reduced/artifact
   text.
-- Buttons: **Cancel**, then **Save**, right-aligned in that order
-  (owner-specified). Button LOOK comes from the AppButton dialog-action
+- Buttons: **Cancel**, then **Save**, right-aligned in that order.
+  Button LOOK comes from the AppButton dialog-action
   family (`AppButton.Destructive.DialogAction` look for Cancel,
   `AppButton.Primary.DialogAction` look for Save) so they retheme with every
   other dialog button — but the ARRANGEMENT (right-aligned pair) is this
-  dialog's own, per the owner, so it needs its own shared layout file in the
+  dialog's own, so it needs its own shared layout file in the
   `dialog_two_actions.xml` family (e.g. an end-aligned variant). That layout
   + any style it needs gets documented in `ui-style-guide.md` when added.
   Do NOT reuse `dialog_two_actions.xml` as-is (its chain is
-  primary-start/destructive-end, centered — a different approved shape for a
+  primary-start/destructive-end, centered — a different shape for a
   different dialog).
 - Save commits the edited text as the item's active condensed/reduced/
   artifact text; Cancel changes nothing. Editable again at any time.
@@ -163,29 +198,38 @@ No toasts anywhere (standing rule). All notices are persistent inline text.
 - The full original is gone from what gets SENT once condensed (that is the
   point), but the original file is untouched on the user's device.
 
-### 4. Remove → artifact
+### 4. Remove
 
-- Remove (from any state) asks the AI for the ≤ ~12-word bookmark line,
-  swaps the item to artifact form, and the row leaves the strip.
+- Before the message is sent, Remove detaches the pending item completely.
+  Nothing from that file is sent, retained in chat history, or converted to
+  an artifact.
+- After the item has been sent, Remove asks the AI for the ≤ ~12-word
+  bookmark line, swaps the item to artifact form, and the row leaves the
+  strip.
 - If the line can't be fetched (offline, endpoint error): filename-based
   fallback line, immediately, never a blocked removal, never an error dialog
   for this — the fallback IS the success path. The line is editable later
   either way.
-- Artifact access point: the **bookmark-with-checkmark icon** (Material
-  Symbols `bookmark_added` glyph, added as a vector drawable, tinted
-  `?attr/colorPrimary`) shown after the user name on affected messages and
-  wherever artifact state needs indicating. Tapping opens an **anchored
-  popup** listing the artifact lines; tapping anywhere outside closes it.
-  Each line in that popup is tappable to open the Edit dialog on it.
+- Artifact access point: the empty Material Symbols `bookmark` glyph, tinted
+  `?attr/colorPrimary`, shown after the user name. One item opens its
+  Cancel/Save Edit dialog directly. If several removed items share a message,
+  an anchored file picker appears first; tapping outside closes it.
 
 ### 5. The history record (inside the chat transcript)
 
-- A user message that carried includes gets a small **Includes** box directly
-  under the user label in that message's bubble area. Tap = accordion opens
-  listing each item: type icon + name + ~N tokens. Tap again closes.
-- This box is a permanent snapshot of what went with THAT message. It does
-  not change when the live include later gets condensed/removed — the strip
-  shows the present; the history box shows the past.
+- A full document gets a small **Includes** box directly under the user label
+  in that message's bubble area. Tap = accordion opens listing each full item:
+  small type icon + name + explicit document format + ~N tokens. Tap again
+  closes.
+- Once condensed, that document leaves the full-document box and uses the
+  bookmark-with-plus Material Symbols `bookmark_add` glyph after the user
+  name. Tapping opens the condensed text in the Cancel/Save Edit dialog. If
+  several condensed items share a message, an anchored file picker appears
+  first.
+- Once fully removed, the item uses the empty artifact bookmark described
+  above. Mixed full, condensed, and removed items can therefore show the
+  full-document box and either or both bookmark markers without conflating
+  their states.
 - Renders in `ChatAdapter` rows (RecyclerView, recycled views — the accordion
   open/closed state must not bleed between recycled rows).
 
@@ -195,24 +239,24 @@ No toasts anywhere (standing rule). All notices are persistent inline text.
 
 - `.txt` / `.md` / `.csv`: read directly. UTF-8 assumed; other encodings
   degrade gracefully (charset detection best-effort, never mojibake dumped
-  silently — if the text comes out garbled-looking/binary, refuse with a
-  persistent inline explanation).
+  silently — if the text comes out garbled-looking/binary, refuse with the
+  approved upload-error dialog).
 - `.docx`: it is a zip of XML — extracted with the platform's own zip + XML
   parsing. Words only; formatting, images, tracked changes are not carried.
   No third-party document library is added for this.
 - **Garbage guard:** a file that is not genuinely text (renamed binary) is
-  refused with a persistent inline message, never injected.
-- **Oversized CSV rule:** header row + first 500 rows + the owner-approved
+  refused with the approved upload-error dialog, never injected.
+- **Oversized CSV rule:** header row + first 500 rows + the defined
   total-count line. A truncated CSV without the header/count would mislead
   the AI into analyzing a fragment as the whole — this rule exists so it
   can't.
 
-### Weight display and limits (tokens, owner ruling)
+### Weight display and limits
 
-- Everything displays **~N tokens** (one unit everywhere). Documents estimate
-  from text length (a standard characters-per-token heuristic — accurate to
-  roughly ±25% across models, hence the tilde). Images (Step 3) estimate from
-  pixel dimensions.
+- Everything displays **~N tokens** (one unit everywhere). Documents use a
+  fast, model-independent estimate that treats non-Latin text more
+  conservatively than ASCII. The tilde is required because tokenization
+  differs by model. Images (Step 3) estimate from pixel dimensions.
 - Thresholds: under **~10,000 tokens** send quietly; **~10,000–30,000**
   send with the persistent large-file note; above **~30,000** the item is cut
   at the cap with the too-big note stating so plainly. No silent truncation,
@@ -224,8 +268,14 @@ No toasts anywhere (standing rule). All notices are persistent inline text.
   message's stable position in history → providers' prefix caching covers it
   automatically on every later turn, on every OpenAI-compatible endpoint
   (GLM, DeepSeek, OpenRouter — nothing provider-specific anywhere).
-- **Images are always the LAST content in their message block** (owner
-  ruling, Step 3): if a provider can't cache image content, everything before
+- Inside that user message, the user's own words come first, followed by
+  Includes in stable attachment order. Full and condensed documents use the
+  compact `<document name="…">…</document>` wrapper; only a short
+  `form`, `partial`, or `rows` attribute is added when the model needs that
+  fact. Artifacts use a compact `<bookmark name="…">…</bookmark>` line.
+  There are no repeated decorative `---` delimiters.
+- **Images are always the LAST content in their message block** (Step 3): if
+  a provider can't cache image content, everything before
   the image still caches. Text parts always precede the image part.
 - All sends go through the single generation funnel
   (`generateResponse` → `regularGPTResponse`) — no second path. The
@@ -233,8 +283,8 @@ No toasts anywhere (standing rule). All notices are persistent inline text.
   messages and never reorder the fixed layers; they ride inside user
   messages.
 - Any form change (remove, condense, edit, artifact) changes the history the
-  provider sees → one full-price turn, then caching resumes. Known and
-  accepted by the owner; the UI does not need to warn about it.
+  provider sees → one full-price turn, then caching resumes. This is accepted
+  behavior; the UI does not need to warn about it.
 - Voice pipeline untouched. Includes apply to typed and spoken turns
   identically because they live in history, not in the turn path.
 
@@ -251,37 +301,27 @@ No toasts anywhere (standing rule). All notices are persistent inline text.
 
 ## Build order and done-ness
 
-- **Step 1 — BUILT July 24 2026.** Picker accepts the four document types (a
-  Document choice alongside the existing Camera/Gallery in the attach
-  selector) → extraction → strip with token counts and notes →
-  Remove→artifact → per-message history record → size guards.
-  Notes on what shipped:
-  - The artifact's bookmark marker appears as the **icon on the message's own
-    "Includes" record** (which switches to `ic_bookmark_added` once everything
-    that message carried has been reduced to a bookmark), and the accordion
-    lists the bookmark LINES. A separate popup hung off the user name was the
-    original sketch; folding it into the existing accordion gives the same
-    "see what's in there" behaviour with one control instead of two.
-  - The accordion shows each item's **current** weight, not the weight
-    recorded at send time. The plan's earlier "permanent snapshot" wording
-    was self-contradictory: after a document is reduced to a bookmark the
-    original figure would overstate what that message still costs every turn.
-    `ChatInclude.sentTokens` still records the original for later use.
-  - Four draft strings (`include_error_*`) cover the four failure cases. The
-    owner has not ruled on the wording yet; they are flagged in `strings.xml`.
-- **Step 2:** Condense + the Edit dialog (which also serves artifact-line
-  editing from Step 1 — build the dialog in whichever step reaches it first).
+- **Step 1 — REPAIRED AND VERIFIED.** Acceptance covers:
+  - Camera, Image, Document in that order in the paperclip menu, shown as a
+    vertical stack of icon-and-word rows.
+  - `.txt`, `.md`, `.csv`, and `.docx` extraction on device.
+  - Correct size guards, logical CSV row handling, token estimates, and
+    approved upload-error dialogs.
+  - The live Includes strip, Remove→artifact, bookmark popup and editing,
+    per-message Includes accordion, persistence, and model-request projection.
+  - Regression tests proving attached text remains in the model request and
+    that truncation/counting disclosures are accurate.
+- **Step 2:** Condense + the Edit dialog. Partial code may remain visible
+  while Step 1 is repaired; it is not part of Step 1 completion and must not
+  be used to claim Step 1 is unfinished merely because Condense is provisional.
 - **Step 3:** images join (image icon rows, Reduce to Text Only, ~token
   estimate from dimensions, image-last ordering), and the old vision path —
   the hard-coded `gpt-4o` branch and everything only it used — is deleted.
-  No orphaned layouts, strings, or drawables left behind (owner directive:
-  no trash).
+  No orphaned layouts, strings, or drawables are left behind.
 
-Each step: static verification per the CLAUDE.md checklist, push, **watch
-Android Checks to green** (owner ruling — driving CI green is part of the
-job). Feature-level "done" for each step is the owner seeing it work on
-their own phone from a test build; report factually (what changed + CI
-result) without over-hedging, per the July 23 ruling.
+Each step: static verification per the `CLAUDE.md` checklist, push, and watch
+Android Checks to green. A step is not complete until its own acceptance
+boundary is verified; later-step placeholders do not block an earlier step.
 
 ## Documentation upkeep when building
 
