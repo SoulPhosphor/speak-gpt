@@ -88,6 +88,7 @@ import java.io.FileInputStream
 import java.io.InputStreamReader
 import java.util.Base64
 import java.util.Collections
+import java.util.Locale
 import androidx.core.graphics.createBitmap
 import androidx.core.net.toUri
 import androidx.core.content.edit
@@ -490,6 +491,8 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 row.findViewById<ImageView>(R.id.summary_item_icon)
                     ?.setImageResource(includeIcon(include.kind))
                 row.findViewById<TextView>(R.id.summary_item_name)?.text = include.fileName
+                row.findViewById<TextView>(R.id.summary_item_format)?.text =
+                    include.kind.key.uppercase(Locale.ROOT)
                 row.findViewById<TextView>(R.id.summary_item_weight)?.text = context.getString(
                     R.string.include_weight,
                     NumberFormat.getIntegerInstance().format(include.currentTokens())

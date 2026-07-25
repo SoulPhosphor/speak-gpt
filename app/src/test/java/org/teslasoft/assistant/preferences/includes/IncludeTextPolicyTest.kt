@@ -126,7 +126,7 @@ class IncludeTextPolicyTest {
     @Test fun largeButNotOversizeSpreadsheetIsSentWhole() {
         val csv = buildString {
             append("name,amount")
-            repeat(3_000) { append("\nrow$it,$it") }
+            repeat(3_300) { append("\nrow$it,$it") }
         }
         val result = IncludeTextPolicy.applySizeGuard(csv, IncludeKind.CSV)
         assertEquals(csv, result.text)

@@ -215,7 +215,8 @@ dialog containing the approved error descriptor.
 
 - A user message that carried includes gets a small **Includes** box directly
   under the user label in that message's bubble area. Tap = accordion opens
-  listing each item: type icon + name + ~N tokens. Tap again closes.
+  listing each item: small type icon + name + explicit document format +
+  ~N tokens. Tap again closes.
 - This box permanently records which items went with that message. Its form
   and displayed weight reflect the current payload: after an item is
   condensed or removed, the provider is sent the new form at that same
