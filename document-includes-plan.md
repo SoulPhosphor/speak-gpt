@@ -14,6 +14,8 @@ Decisions explicitly reconfirmed during the Step 1 repair:
 
 - The paperclip opens a vertical icon-and-word menu in this order:
   **Camera**, **Image**, **Document**.
+- Tapping anywhere outside that menu dismisses it. The paperclip itself
+  continues to toggle the menu open and closed.
 - Upload failures use a pop-up dialog with the file name and a descriptive
   error. Successful attachment size/cost notices remain inline.
 - Removing a pending document before Send detaches it completely. It is never
