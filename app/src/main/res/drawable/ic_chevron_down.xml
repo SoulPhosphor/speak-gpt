@@ -1,10 +1,20 @@
+<!-- Google Material Symbols "keyboard_arrow_down" (Outlined, 24px) — the
+     downward-facing chevron the owner named for the collapsed Includes line.
+     Path data is the OFFICIAL asset, fetched verbatim from fonts.gstatic.com
+     (short-term/release/materialsymbolsoutlined/keyboard_arrow_down/default/
+     24px.svg) — not a redrawing. The source viewBox is "0 -960 960 960", so
+     the group translates Y by +960 into the 0-based Android viewport. Never
+     substitute hand-drawn path data for an owner-named Google icon (owner
+     ruling, July 25 2026). -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
     android:viewportWidth="960"
     android:viewportHeight="960"
     android:tint="?attr/colorPrimary">
-    <path
-        android:fillColor="@android:color/white"
-        android:pathData="M480,616L240,376L296,320L480,504L664,320L720,376L480,616Z" />
+    <group android:translateY="960">
+        <path
+            android:fillColor="@android:color/white"
+            android:pathData="M480-344 240-584l56-56 184 184 184-184 56 56-240 240Z" />
+    </group>
 </vector>
