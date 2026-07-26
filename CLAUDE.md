@@ -91,6 +91,8 @@ Do not bury a decision inside a long progress report.
 
 When an instruction says to propose, confirm, check with, or get approval before doing something, that is a stop point.
 
+An "item" includes user-facing wording, configuration values, defaults, names, labels, behavior choices, architecture decisions, documentation, tests that encode the decision, and any implementation that makes or implies the undecided choice.
+
 At a stop point:
 
 - do not write the item into any file, in any form, including as a placeholder, draft, example, temporary value, or "not final" version;
@@ -104,6 +106,12 @@ If the work cannot compile, run, or be tested without the undecided item, stop b
 Never write an unapproved value and then ask whether to keep it. Asking afterward is not approval. It is the failure this rule exists to prevent.
 
 Do not decide for the owner that undoing something is not worth the cost. If the owner may want it reversed, say so plainly and reverse it when asked.
+
+### Wording describes behavior; it does not decide it
+
+Before proposing or writing user-facing wording, first identify every product behavior, default, threshold, fallback, and data-handling decision that the wording would describe. If any of those decisions are not already approved, stop and ask about the behavior first. Do not invent behavior in order to draft the wording.
+
+A request for wording approval does not authorize choosing the underlying behavior. Strings must describe approved behavior, not define it.
 
 ### Discussion is not approval
 
