@@ -250,6 +250,10 @@ Never let the owner repeat a diagnostic collection process that cannot produce u
 
 ## 9. UI consistency and theme readiness
 
+### AMOLED / theme work is paused
+
+The owner has paused AMOLED and palette/theme work (ruling, July 26 2026) until they reinstate it. Do not add, extend, fix, or polish AMOLED-specific styling anywhere — new screens or existing ones — until the owner says otherwise. Do not delete or break the AMOLED code already in place; just stop spending further effort on it.
+
 Repeated styles are architecture, not decoration.
 
 Before changing UI:

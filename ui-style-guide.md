@@ -4,6 +4,10 @@ This file is the usage map for the app's shared visual system.
 
 The actual style values live in `app/src/main/res/values/themes.xml`. This guide explains which shared style or shared layout to use and when to use it. Conversion status belongs in `ui-style-adoption.md`. Git history preserves rollout history and old fixes.
 
+## AMOLED / theme work is paused
+
+The owner has paused AMOLED and palette/theme work (ruling, July 26 2026) until they reinstate it. Do not add, extend, fix, or polish AMOLED-specific styling anywhere — new screens or existing ones — until the owner says otherwise. Do not delete or break the AMOLED code already in place; just stop spending further effort on it.
+
 ## Terms
 
 ### Shared style
