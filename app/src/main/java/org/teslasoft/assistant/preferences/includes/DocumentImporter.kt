@@ -18,6 +18,7 @@ package org.teslasoft.assistant.preferences.includes
 
 import android.content.Context
 import android.net.Uri
+import android.provider.DocumentsContract
 import android.provider.OpenableColumns
 import org.teslasoft.assistant.util.Hash
 import org.teslasoft.assistant.util.StableId
@@ -83,18 +84,43 @@ object DocumentImporter {
         /** Row 11: opened fine, but there was nothing in it. */
         data class Empty(val fileName: String) : Result()
 
+        /**
+         * The file has no bytes of its own and the app that owns it offered
+         * no format this app can read. Distinct from [Unsupported]: the file
+         * type is fine, the conversion is what is unavailable.
+         */
+        data class ExportUnavailable(val fileName: String) : Result()
+
+        /**
+         * The conversion was offered but did not produce anything — the
+         * owning app is offline, signed out, or its export failed. Distinct
+         * from every local read failure because the user's next step is
+         * different: check the connection and the account, then retry.
+         */
+        data class ExportFailed(val fileName: String) : Result()
+
         /** Row 12: any other, unanticipated failure. */
         data class Unknown(val fileName: String) : Result()
     }
 
-    /** MIME types offered to the system file picker. */
+    /**
+     * MIME types offered to the system file picker.
+     *
+     * The last two are Google Docs and Google Sheets. They are listed by
+     * their own Google-native types, not by the format they end up as: a
+     * Google Doc identifies itself as a Google Doc, so filtering for .docx
+     * alone would hide every one of them. Google Slides is deliberately
+     * absent — this app has no presentation reader.
+     */
     val PICKER_MIME_TYPES = arrayOf(
         "text/plain",
         "text/markdown",
         "text/csv",
         "text/comma-separated-values",
         "application/csv",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        GoogleExport.NATIVE_DOCUMENT,
+        GoogleExport.NATIVE_SPREADSHEET
     )
 
     /** Opaque, stable pending-only identity for an Android document URI. */
@@ -111,35 +137,91 @@ object DocumentImporter {
     }
 
     private fun importOrThrow(context: Context, uri: Uri): Result {
-        val fileName = displayName(context, uri)
+        val rawName = displayName(context, uri)
+
+        val sourceMime = try {
+            context.contentResolver.getType(uri)
+        } catch (_: SecurityException) {
+            return Result.PermissionDenied(rawName)
+        } catch (_: Exception) {
+            return openFailureResult(context, uri, rawName)
+        }
+
+        // Google Slides, and any other Google-native type this app has no
+        // reader for, is refused by name here. It is filtered out of the
+        // picker already; this is the second line of defence so it can never
+        // fail later with a vaguer reason.
+        if (GoogleExport.isUnsupportedNative(sourceMime)) return Result.Unsupported(rawName)
+
+        val export: GoogleExport.Export? = when {
+            GoogleExport.isSupportedNative(sourceMime) -> {
+                val offered = try {
+                    context.contentResolver.getStreamTypes(uri, "*/*")
+                } catch (_: SecurityException) {
+                    return Result.PermissionDenied(rawName)
+                } catch (_: Exception) {
+                    null
+                }
+                GoogleExport.chooseExport(sourceMime, offered)
+                    ?: return Result.ExportUnavailable(rawName)
+            }
+            // A file with no bytes of its own, from a provider whose
+            // conversions this app does not read.
+            isVirtualDocument(context, uri) -> return Result.ExportUnavailable(rawName)
+            else -> null
+        }
+
+        val fileName = export?.let { GoogleExport.exportedFileName(rawName, it) } ?: rawName
         val extension = fileName.substringAfterLast('.', "").lowercase()
         val kindFromName = IncludeKind.fromFileName(fileName)
         if (extension.isNotEmpty() && kindFromName == null) {
             return Result.Unsupported(fileName)
         }
-        val kind = kindFromName ?: try {
-            kindFromMime(context.contentResolver.getType(uri))
-        } catch (_: SecurityException) {
-            return Result.PermissionDenied(fileName)
-        } catch (_: Exception) {
-            return openFailureResult(context, uri, fileName)
-        } ?: return if (providerResolves(context, uri)) {
-            Result.Unsupported(fileName)
+        val kind = kindFromName
+            ?: kindFromMime(sourceMime)
+            ?: return if (providerResolves(context, uri)) {
+                Result.Unsupported(fileName)
+            } else {
+                Result.SourceUnavailable(fileName)
+            }
+
+        val opened: InputStream? = if (export != null) {
+            // A virtual document is converted on demand by the app that owns
+            // it, so this is the only way to get bytes for one — and the
+            // conversion is network work in that app, which is why its
+            // failures are reported as an export problem rather than as a
+            // local storage problem.
+            try {
+                context.contentResolver
+                    .openTypedAssetFileDescriptor(uri, export.mimeType, null)
+                    ?.createInputStream()
+            } catch (_: SecurityException) {
+                return Result.PermissionDenied(fileName)
+            } catch (_: Exception) {
+                return Result.ExportFailed(fileName)
+            }
         } else {
-            Result.SourceUnavailable(fileName)
+            try {
+                context.contentResolver.openInputStream(uri)
+            } catch (_: SecurityException) {
+                return Result.PermissionDenied(fileName)
+            } catch (_: FileNotFoundException) {
+                return openFailureResult(context, uri, fileName, fileMissing = true)
+            } catch (_: Exception) {
+                return openFailureResult(context, uri, fileName)
+            }
         }
 
-        val inputStream = try {
-            context.contentResolver.openInputStream(uri)
-        } catch (_: SecurityException) {
-            return Result.PermissionDenied(fileName)
-        } catch (_: FileNotFoundException) {
-            return openFailureResult(context, uri, fileName, fileMissing = true)
-        } catch (_: Exception) {
-            return openFailureResult(context, uri, fileName)
-        }
+        val inputStream = opened
+            ?: return if (export != null) {
+                Result.ExportFailed(fileName)
+            } else {
+                openFailureResult(context, uri, fileName)
+            }
 
-        if (inputStream == null) return openFailureResult(context, uri, fileName)
+        if (kind == IncludeKind.XLSX) {
+            return importWorkbook(inputStream, fileName, uri, export != null)
+        }
 
         val text: String
         val sourceTruncated: Boolean
@@ -154,7 +236,7 @@ object DocumentImporter {
                     DocxTextExtractor.extract(stream)
                 }
             } catch (_: Exception) {
-                return Result.InterruptedRead(fileName)
+                return readFailure(fileName, export != null)
             }
             when (extracted) {
                 is DocxTextExtractor.ExtractResult.Success -> {
@@ -172,7 +254,7 @@ object DocumentImporter {
             val capped = try {
                 inputStream.use { it.readBytesCapped(MAX_BYTES) }
             } catch (_: Exception) {
-                return Result.InterruptedRead(fileName)
+                return readFailure(fileName, export != null)
             }
             if (capped.bytes.isEmpty()) return Result.Empty(fileName)
 
@@ -228,6 +310,96 @@ object DocumentImporter {
     }
 
     /**
+     * Reads an .xlsx workbook. Kept separate from the text path because a
+     * workbook is not one block of text: it is worksheets of rows, and the
+     * row budget has to be spent across all of them before it becomes text.
+     */
+    private fun importWorkbook(
+        inputStream: InputStream,
+        fileName: String,
+        uri: Uri,
+        exported: Boolean
+    ): Result {
+        val extracted = try {
+            PushbackInputStream(inputStream, 1).use { stream ->
+                val firstByte = stream.read()
+                if (firstByte < 0) return Result.Empty(fileName)
+                stream.unread(firstByte)
+                XlsxTextExtractor.extract(stream)
+            }
+        } catch (_: Exception) {
+            return readFailure(fileName, exported)
+        }
+
+        val success = when (extracted) {
+            is XlsxTextExtractor.ExtractResult.Success -> extracted
+            XlsxTextExtractor.ExtractResult.NotXlsx ->
+                return Result.ContentMismatch(fileName)
+            XlsxTextExtractor.ExtractResult.PasswordProtected ->
+                return Result.PasswordProtected(fileName)
+            XlsxTextExtractor.ExtractResult.Corrupted ->
+                return Result.Corrupted(fileName)
+        }
+
+        // Worksheet labels alone are not content: a workbook whose sheets are
+        // all empty has nothing in it, and saying so is more use than sending
+        // a list of sheet names.
+        if (success.sheets.all { it.rows.isEmpty() }) return Result.Empty(fileName)
+
+        val sized = IncludeTextPolicy.applyWorkbookSizeGuard(
+            sheets = success.sheets,
+            sourceTruncated = success.sourceTruncated
+        )
+        if (sized.text.isBlank()) return Result.Empty(fileName)
+
+        return Result.Success(
+            ChatInclude(
+                id = StableId.newId("inc-"),
+                fileName = fileName,
+                kind = IncludeKind.XLSX,
+                form = IncludeForm.FULL,
+                fullText = sized.text,
+                notice = sized.notice,
+                sourceFingerprint = sourceFingerprint(uri.toString())
+            )
+        )
+    }
+
+    /**
+     * A read that stopped part-way means different things and needs
+     * different advice depending on where the bytes were coming from: a
+     * converted Google file was being produced over the network by another
+     * app, an ordinary file was being read from storage.
+     */
+    private fun readFailure(fileName: String, exported: Boolean): Result =
+        if (exported) Result.ExportFailed(fileName) else Result.InterruptedRead(fileName)
+
+    /**
+     * Whether this document has no byte representation of its own. Google
+     * Docs and Sheets are the case this app handles; anything else virtual
+     * is refused with a specific reason instead of a generic read failure.
+     */
+    private fun isVirtualDocument(context: Context, uri: Uri): Boolean = try {
+        context.contentResolver.query(
+            uri,
+            arrayOf(DocumentsContract.Document.COLUMN_FLAGS),
+            null,
+            null,
+            null
+        )?.use { cursor ->
+            val index = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_FLAGS)
+            if (index >= 0 && cursor.moveToFirst()) {
+                val flags = cursor.getInt(index)
+                flags and DocumentsContract.Document.FLAG_VIRTUAL_DOCUMENT != 0
+            } else {
+                false
+            }
+        } ?: false
+    } catch (_: Exception) {
+        false
+    }
+
+    /**
      * A missing provider identifies a source-app failure. A moved/deleted
      * file is only reported after FileNotFoundException; other failures from
      * a live provider stay generic rather than guessing.
@@ -266,6 +438,7 @@ object DocumentImporter {
         mime.equals("text/markdown", true) -> IncludeKind.MARKDOWN
         mime.contains("csv", true) -> IncludeKind.CSV
         mime.contains("wordprocessingml", true) -> IncludeKind.DOCX
+        mime.contains("spreadsheetml", true) -> IncludeKind.XLSX
         mime.startsWith("text/") -> IncludeKind.TXT
         else -> null
     }

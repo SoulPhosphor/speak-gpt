@@ -2819,7 +2819,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
     private fun openDocumentPicker() {
         val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-            addCategory(Intent.CATEGORY_OPENABLE)
+            // CATEGORY_OPENABLE is deliberately NOT set. It restricts the
+            // picker to files that can be opened byte-for-byte, which hides
+            // Google Docs and Sheets entirely — those have no bytes of their
+            // own and are converted on request instead. Anything that turns
+            // up as a result and cannot be converted is refused by the
+            // importer with a specific reason.
+            //
             // "*/*" with an EXTRA_MIME_TYPES filter, because some providers
             // hand back documents typed as octet-stream and a strict type
             // filter would make real .md/.csv files unpickable.
@@ -2886,6 +2892,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     showIncludeProblem(R.string.include_error_corrupted, result.fileName)
                 is DocumentImporter.Result.Empty ->
                     showIncludeProblem(R.string.include_error_empty, result.fileName)
+                is DocumentImporter.Result.ExportUnavailable ->
+                    showIncludeProblem(R.string.include_error_export_unavailable, result.fileName)
+                is DocumentImporter.Result.ExportFailed ->
+                    showIncludeProblem(R.string.include_error_export_failed, result.fileName)
                 is DocumentImporter.Result.Unknown ->
                     showIncludeProblem(R.string.include_error_unknown, result.fileName)
             }

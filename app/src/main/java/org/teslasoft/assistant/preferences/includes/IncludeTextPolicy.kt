@@ -275,6 +275,109 @@ object IncludeTextPolicy {
      */
     fun fallbackArtifactLine(fileName: String): String = "User sent $fileName."
 
+    // ---- workbooks --------------------------------------------------------
+
+    /**
+     * How a worksheet is announced in the text the AI receives. A workbook is
+     * flattened into one block of text, so without a label per worksheet the
+     * AI would read several unrelated tables as one continuous sheet.
+     */
+    fun workbookSheetLabel(name: String): String = "[Sheet: $name]"
+
+    /** A trimmed workbook plus the counts needed to describe what was cut. */
+    data class WorkbookTrim(
+        val text: String,
+        val sheetsTotal: Int,
+        val sentRows: Int,
+        val totalRows: Int
+    )
+
+    /** Data rows across the whole workbook, excluding each header row. */
+    fun countWorkbookDataRows(sheets: List<XlsxTextExtractor.SheetData>): Int =
+        sheets.sumOf { maxOf(0, it.rows.size - 1) }
+
+    fun renderWorkbook(sheets: List<XlsxTextExtractor.SheetData>): String {
+        val out = StringBuilder()
+        for (sheet in sheets) {
+            if (out.isNotEmpty()) out.append("\n\n")
+            out.append(workbookSheetLabel(sheet.name))
+            for (row in sheet.rows) out.append('\n').append(row)
+        }
+        return out.toString()
+    }
+
+    /**
+     * Keeps the first [maxRows] data rows of the WHOLE workbook, spent in
+     * workbook order, with every worksheet reached keeping its label and its
+     * header row.
+     *
+     * The budget is workbook-wide rather than per worksheet on purpose: a
+     * per-worksheet allowance would let a workbook of forty sheets quietly
+     * send twenty thousand rows. The cost of that choice is real and is
+     * disclosed rather than hidden — one large first worksheet can spend the
+     * whole budget, and the notice then reports how many worksheets and rows
+     * the workbook actually held.
+     *
+     * Returns null when the workbook fits and the ordinary rules apply.
+     */
+    fun trimWorkbook(
+        sheets: List<XlsxTextExtractor.SheetData>,
+        maxRows: Int = CSV_MAX_ROWS
+    ): WorkbookTrim? {
+        val totalRows = countWorkbookDataRows(sheets)
+        if (totalRows <= maxRows) return null
+
+        var budget = maxRows
+        var sent = 0
+        val out = StringBuilder()
+        for (sheet in sheets) {
+            if (budget <= 0) break
+            if (out.isNotEmpty()) out.append("\n\n")
+            out.append(workbookSheetLabel(sheet.name))
+            if (sheet.rows.isEmpty()) continue
+            out.append('\n').append(sheet.rows.first())
+            val data = sheet.rows.subList(1, sheet.rows.size)
+            val take = minOf(budget, data.size)
+            for (i in 0 until take) out.append('\n').append(data[i])
+            budget -= take
+            sent += take
+        }
+        return WorkbookTrim(out.toString(), sheets.size, sent, totalRows)
+    }
+
+    /**
+     * The workbook counterpart of [applySizeGuard]. Same two-stage shape as a
+     * CSV: send whole when it fits, otherwise cut by rows and say so, and
+     * only fall back to a blunt character cut when even the trimmed workbook
+     * is too heavy.
+     */
+    fun applyWorkbookSizeGuard(
+        sheets: List<XlsxTextExtractor.SheetData>,
+        sourceTruncated: Boolean = false
+    ): SizedText {
+        val full = renderWorkbook(sheets)
+        if (!sourceTruncated && estimateTokens(full) <= MAX_TOKENS) {
+            return SizedText(full, IncludeNotice.None)
+        }
+
+        val trimmed = trimWorkbook(sheets)
+        if (trimmed != null && estimateTokens(trimmed.text) <= MAX_TOKENS) {
+            return SizedText(trimmed.text, workbookNotice(trimmed))
+        }
+
+        val cut = truncateToEstimatedTokens(trimmed?.text ?: full, MAX_TOKENS)
+        return SizedText(cut, IncludeNotice.Truncated(estimateTokens(cut)))
+    }
+
+    /** A single-worksheet workbook is just a spreadsheet, and the existing
+     *  spreadsheet wording already describes it accurately. */
+    private fun workbookNotice(trim: WorkbookTrim): IncludeNotice =
+        if (trim.sheetsTotal <= 1) {
+            IncludeNotice.CsvTrimmed(trim.sentRows, trim.totalRows)
+        } else {
+            IncludeNotice.WorkbookTrimmed(trim.sheetsTotal, trim.sentRows, trim.totalRows)
+        }
+
     /**
      * Trims a model-written bookmark line down to a single short sentence.
      * Models over-deliver on "one line"; this keeps the artifact genuinely

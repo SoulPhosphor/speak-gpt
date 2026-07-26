@@ -153,6 +153,7 @@ enum class IncludeKind(val key: String) {
     MARKDOWN("md"),
     CSV("csv"),
     DOCX("docx"),
+    XLSX("xlsx"),
     IMAGE("image");
 
     companion object {
@@ -166,6 +167,7 @@ enum class IncludeKind(val key: String) {
                 "md", "markdown" -> MARKDOWN
                 "csv" -> CSV
                 "docx" -> DOCX
+                "xlsx" -> XLSX
                 else -> null
             }
     }
@@ -197,10 +199,22 @@ sealed class IncludeNotice {
     /** Oversized spreadsheet — header + [sentRows] of [totalRows]. */
     data class CsvTrimmed(val sentRows: Int, val totalRows: Int) : IncludeNotice()
 
+    /**
+     * Oversized multi-worksheet workbook. Carries the worksheet count as
+     * well as the row counts, because "500 of 47,000 rows" alone would not
+     * tell the user that the workbook had more than one worksheet in it.
+     */
+    data class WorkbookTrimmed(
+        val sheets: Int,
+        val sentRows: Int,
+        val totalRows: Int
+    ) : IncludeNotice()
+
     fun encode(): String = when (this) {
         is None -> ""
         is Truncated -> "trunc:$tokens"
         is CsvTrimmed -> "csv:$sentRows:$totalRows"
+        is WorkbookTrimmed -> "wb:$sheets:$sentRows:$totalRows"
     }
 
     companion object {
@@ -214,6 +228,9 @@ sealed class IncludeNotice {
                     "large" -> None
                     "trunc" -> Truncated(parts[1].toInt())
                     "csv" -> CsvTrimmed(parts[1].toInt(), parts[2].toInt())
+                    "wb" -> WorkbookTrimmed(
+                        parts[1].toInt(), parts[2].toInt(), parts[3].toInt()
+                    )
                     else -> None
                 }
             } catch (_: Exception) {
