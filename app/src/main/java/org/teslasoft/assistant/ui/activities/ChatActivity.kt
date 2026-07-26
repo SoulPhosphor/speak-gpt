@@ -1912,6 +1912,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 preferences?.setPersonaId(personaId)
                 preferences?.setLastUsedPersonaId(personaId)
                 preferences?.setPersonaActivationSeeded(true)
+                // onResume painted before this result assigned the new
+                // Companion, so resolve its picture now instead of leaving
+                // the default avatar visible until another resume.
+                refreshCompanionAvatar()
             }
         }
     }
@@ -4206,6 +4210,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         }
 
         preferences?.setPersonaActivationSeeded(true)
+
+        // initUI performs the first avatar paint before initAI reaches this
+        // new-chat seeding step. Re-resolve after assigning the Companion;
+        // AvatarRefreshCoordinator drops the earlier fallback result if its
+        // storage lookup finishes later.
+        refreshCompanionAvatar()
 
         if (preferences?.getActivationPromptId().isNullOrEmpty()) {
             val lastActivation = preferences?.getLastUsedActivationPromptId().orEmpty()

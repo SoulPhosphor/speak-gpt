@@ -85,4 +85,17 @@ class AvatarRefreshCoordinatorTest {
         assertFalse("the pre-adapter token is now stale", c.isCurrent(preAdapter))
         assertTrue("the replay token is current", c.isCurrent(replay))
     }
+
+    @Test fun newChatCompanionSeedInvalidatesTheInitialFallbackPaint() {
+        val c = AvatarRefreshCoordinator()
+        c.markTargetReady()
+
+        // initUI first resolves with no Companion and starts a fallback lookup.
+        val fallback = c.newRequest()
+        // initAI then seeds the last-used Companion and requests its picture.
+        val seededCompanion = c.newRequest()
+
+        assertFalse("the pre-seed fallback must not repaint", c.isCurrent(fallback))
+        assertTrue("the seeded Companion picture applies", c.isCurrent(seededCompanion))
+    }
 }
