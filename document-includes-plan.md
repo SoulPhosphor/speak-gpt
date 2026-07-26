@@ -66,7 +66,8 @@ changes an include's form.
 
 - **Step 1 — documents:** attach `.txt`, `.md`, `.csv`, `.docx`. The Includes
   strip, pending detach, sent-item Remove→artifact, the artifact bookmark
-  popup, the history accordion, token estimates, size guards.
+  popup, the history accordion, token estimates, size guards, and exact-source
+  duplicate protection within one pending message.
 - **Step 2 — Condense** for documents, with the Edit dialog.
 - **Step 3 — images** join the same system ("Reduce to Text Only"); the old
   broken image path (hard-coded `gpt-4o`, bypasses history/memory) is
@@ -92,9 +93,9 @@ All strings live in `res/values/strings.xml` only, per house rule.
 | Menu item (condensed/reduced state) | **Edit** |
 | Edit dialog buttons | **Cancel**, then **Save** — right-aligned, in that order |
 | Weight display | **~N tokens** (tilde always shown — it is an estimate) |
-| Large-file note | *"Large file — adds about ~30,000 tokens to every message while included."* (N is the item's real estimate) |
 | Too-big note | *"This file is too large to send in full. The beginning was included, up to about ~30,000 tokens."* |
 | Oversized CSV note | *"Large spreadsheet — sent the column names and first 500 rows of 47,000."* (real numbers substituted) |
+| Duplicate pending source | **Document already attached.** with an **Okay** button |
 | History box label | **Includes** |
 | Artifact line default shape | "User sent …" — AI-written, ≤ ~12 words |
 | Collapse line (4+ items) | **Includes N Documents** — "Documents" capitalised per the app's Title Case rule, followed by a **downward-facing chevron** |
@@ -135,7 +136,11 @@ dialog containing the approved error descriptor.
   the data drain, so they stay plainly shown; only artifacts retire to the
   bookmark popup).
 - Row anatomy: **Includes** label → document/picture icon → name →
-  **~N tokens** → three-dots menu.
+  **~N tokens** → trailing action.
+  - Before Send, the trailing action is an **X** and its only action is
+    **Remove**. Condense, Reduce to Text Only, and Edit are unavailable.
+  - After Send, the trailing action is the three-dots state menu described
+    below.
   - The icon uses the document glyph for document formats and the picture
     glyph for images (Step 3), tinted `?attr/colorPrimary`.
   - Text styling follows the row vocabulary: name in the
@@ -146,15 +151,16 @@ dialog containing the approved error descriptor.
     shapes — no chevron, trailing menu instead). If a shared style is minted
     for it, it goes into `ui-style-guide.md` as its own named entry; do not
     silently extend the five-phrase chevron-row vocabulary.
-- **Menus by state** (anchored popup attached to the three-dots, dismissed by
+- **Sent-item menus by state** (anchored popup attached to the three-dots, dismissed by
   tapping outside — the app's anchored-popup pattern, never a centered picker
   dialog):
   - Full document: **Remove**, **Condense**.
   - Condensed document / reduced image: **Remove**, **Edit**.
   - Full image (Step 3): **Remove**, **Reduce to Text Only**.
-- **Per-row persistent notes** (never toasts): the large-file note appears
-  directly under a row whose estimate crosses the warning threshold; the
-  too-big and CSV notes likewise. Styled in the hint family
+- **Per-row persistent notes** (never toasts): the too-big and CSV notes
+  appear directly under the affected row because they disclose omitted
+  content. The visible ~token count is sufficient for files sent whole; there
+  is no redundant "Large file" note. Styled in the hint family
   (13sp, `@color/text_subtitle`).
 - **Collapse at 4+:** with four or more rows the strip becomes a single line
   reading **Includes N Documents** with a **downward-facing chevron at the
@@ -204,7 +210,7 @@ dialog containing the approved error descriptor.
 
 - Before the message is sent, Remove detaches the pending item completely.
   Nothing from that file is sent, retained in chat history, or converted to
-  an artifact.
+  an artifact. The pending row exposes this as a direct X, not a menu.
 - After the item has been sent, Remove asks the AI for the ≤ ~12-word
   bookmark line, swaps the item to artifact form, and the row leaves the
   strip.
@@ -259,9 +265,9 @@ dialog containing the approved error descriptor.
   fast, model-independent estimate that treats non-Latin text more
   conservatively than ASCII. The tilde is required because tokenization
   differs by model. Images (Step 3) estimate from pixel dimensions.
-- Thresholds: under **~10,000 tokens** send quietly; **~10,000–30,000**
-  send with the persistent large-file note; above **~30,000** the item is cut
-  at the cap with the too-big note stating so plainly. No silent truncation,
+- Threshold: at or below **~30,000 tokens**, send whole with the visible
+  ~token estimate and no redundant size warning. Above **~30,000**, cut at
+  the cap with the too-big note stating so plainly. No silent truncation,
   ever.
 
 ### Sending mechanics (results the user cares about; constraints that bind)

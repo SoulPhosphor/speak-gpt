@@ -134,10 +134,15 @@
          The row that sits above the message box for every attached item, and
          its pieces. A NEW row shape, deliberately not one of the five
          chevron-row shapes in ui-style-guide.md: it has no chevron and ends
-         in a three-dots menu instead, so extending the chevron-row vocabulary
-         would have been wrong. Typography/colour roles are borrowed from the
-         row styles so the strip reads as part of the same system.
+         in a state-specific attachment action instead, so extending the
+         chevron-row vocabulary would have been wrong. Typography/colour roles
+         are borrowed from the row styles so the strip reads as part of the
+         same system.
          See document-includes-plan.md for the owner-approved design. -->
+    <style name="Widget.App.Include.Container" parent="">
+        <item name="android:background">@drawable/bg_attachment_tile</item>
+    </style>
+
     <style name="Widget.App.Include.Row" parent="">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
@@ -192,11 +197,10 @@
         <item name="android:textSize">12sp</item>
     </style>
 
-    <style name="Widget.App.Include.Menu" parent="">
+    <style name="Widget.App.Include.Action" parent="">
         <item name="android:layout_width">40dp</item>
         <item name="android:layout_height">40dp</item>
         <item name="android:background">?attr/selectableItemBackgroundBorderless</item>
-        <item name="android:src">@drawable/ic_more_vert</item>
         <item name="android:tint">?attr/colorPrimary</item>
         <item name="android:scaleType">centerInside</item>
     </style>

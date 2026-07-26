@@ -3,8 +3,9 @@
   One attached item in the Includes strip above the message box.
 
   Row shape: type icon, the "Includes"/"Includes condensed" label, the file
-  name, the "~N tokens" weight, then a three-dots menu. Any size notice for
-  this item is a persistent line underneath (never a toast).
+  name, the "~N tokens" weight, then a trailing action. An unsent attachment
+  shows a direct X; a sent attachment shows its state menu. Any size notice
+  for this item is a persistent line underneath (never a toast).
 
   Every attribute of the look lives in the Widget.App.Include.* styles
   (values/themes.xml); only ids and per-instance content belong here.
@@ -42,9 +43,8 @@
             android:text="@string/include_label" />
 
         <ImageButton
-            android:id="@+id/include_menu"
-            style="@style/Widget.App.Include.Menu"
-            android:contentDescription="@string/include_menu_desc" />
+            android:id="@+id/include_action"
+            style="@style/Widget.App.Include.Action" />
     </LinearLayout>
 
     <TextView

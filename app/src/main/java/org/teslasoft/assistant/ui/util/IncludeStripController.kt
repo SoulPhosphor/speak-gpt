@@ -73,6 +73,7 @@ class IncludeStripController(
 
     private var expanded = false
     private var current: List<ChatInclude> = emptyList()
+    private var pendingIds: Set<String> = emptySet()
 
     init {
         collapsedRow.setOnClickListener { toggleExpanded() }
@@ -90,8 +91,9 @@ class IncludeStripController(
         return true
     }
 
-    fun bind(includes: List<ChatInclude>) {
+    fun bind(includes: List<ChatInclude>, pendingIncludeIds: Set<String>) {
         current = includes.filter { it.showsInStrip() }
+        pendingIds = pendingIncludeIds
         // An item removed while the overlay was open must not leave the user
         // staring at an expanded box with nothing left in it.
         if (current.size < COLLAPSE_AT) expanded = false
@@ -183,9 +185,18 @@ class IncludeStripController(
             notice?.text = noticeText
         }
 
-        val menu = row.findViewById<ImageButton>(R.id.include_menu)
-        menu?.contentDescription = context.getString(R.string.include_menu_desc, include.fileName)
-        menu?.setOnClickListener { showRowMenu(it, include) }
+        val action = row.findViewById<ImageButton>(R.id.include_action)
+        if (include.id in pendingIds) {
+            action?.setImageResource(R.drawable.ic_close)
+            action?.contentDescription =
+                context.getString(R.string.include_remove_desc, include.fileName)
+            action?.setOnClickListener { callbacks.onRemoveInclude(include) }
+        } else {
+            action?.setImageResource(R.drawable.ic_more_vert)
+            action?.contentDescription =
+                context.getString(R.string.include_menu_desc, include.fileName)
+            action?.setOnClickListener { showRowMenu(it, include) }
+        }
     }
 
     /**
@@ -227,8 +238,6 @@ class IncludeStripController(
 
     private fun noticeText(notice: IncludeNotice): String? = when (notice) {
         is IncludeNotice.None -> null
-        is IncludeNotice.Large ->
-            context.getString(R.string.include_notice_large, grouped(notice.tokens))
         is IncludeNotice.Truncated ->
             context.getString(R.string.include_notice_truncated, grouped(notice.tokens))
         is IncludeNotice.CsvTrimmed -> context.getString(

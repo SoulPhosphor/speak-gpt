@@ -384,6 +384,13 @@ Do not use the QuickTile family as the general app-wide dropdown pattern. Genera
 
 ## Attached-document strip
 
+`Widget.App.Include.Container`
+
+Use for the attachment tile above the chat message box. Its
+`bg_attachment_tile` background uses the canonical
+`@dimen/button_corner_radius` (4dp), matching the app's semi-square buttons.
+Use the same background for the pending image preview.
+
 Use these pieces in order for each attachment shown above the chat message box:
 
 1. `Widget.App.Include.Row`
@@ -391,7 +398,12 @@ Use these pieces in order for each attachment shown above the chat message box:
 3. `Widget.App.Include.Icon`
 4. `Widget.App.Include.Name`
 5. `Widget.App.Include.Weight`
-6. `Widget.App.Include.Menu`
+6. `Widget.App.Include.Action`
+
+The action slot is state-specific: an unsent attachment uses a direct X whose
+only action is Remove; a sent attachment may use the three-dots menu for its
+available post-send actions. Do not offer Condense, Reduce to Text Only, or
+Edit for an unsent attachment.
 
 Use `Widget.App.Include.Notice` for persistent explanatory or size-warning text beneath the row.
 

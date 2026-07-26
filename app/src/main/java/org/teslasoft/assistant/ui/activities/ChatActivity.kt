@@ -304,6 +304,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     private var includeStrip: LinearLayout? = null
     private var includeStripController: IncludeStripController? = null
     private var pendingIncludes: ArrayList<ChatInclude> = arrayListOf()
+    private val pendingDocumentImports: MutableSet<String> = HashSet()
     private var bulkContainer: ConstraintLayout? = null
     private var btnSelectAll: ImageButton? = null
     private var btnDeselectAll: ImageButton? = null
@@ -2725,7 +2726,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     }
 
     private fun refreshIncludeStrip() {
-        includeStripController?.bind(liveIncludes())
+        includeStripController?.bind(
+            liveIncludes(),
+            pendingIncludes.mapTo(HashSet()) { it.id }
+        )
     }
 
     private fun includesOf(message: HashMap<String, Any>): List<ChatInclude> =
@@ -2826,7 +2830,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     ) { result ->
         if (result.resultCode != RESULT_OK) return@registerForActivityResult
         val uri = result.data?.data ?: return@registerForActivityResult
-        importDocument(uri)
+        val fingerprint = DocumentImporter.sourceFingerprint(uri.toString())
+        if (pendingIncludes.any { it.sourceFingerprint == fingerprint } ||
+            !pendingDocumentImports.add(fingerprint)
+        ) {
+            showDocumentAlreadyAttached()
+            return@registerForActivityResult
+        }
+        importDocument(uri, fingerprint)
     }
 
     /**
@@ -2834,7 +2845,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
      * and either attaches it or explains why it could not be. A failure is
      * always stated — never a silently ignored tap.
      */
-    private fun importDocument(uri: Uri) {
+    private fun importDocument(uri: Uri, sourceFingerprint: String) {
         val scope = CoroutineScope(Dispatchers.Main)
         scope.launch {
             val result = withContext(Dispatchers.IO) {
@@ -2844,6 +2855,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     DocumentImporter.Result.Unknown("document")
                 }
             }
+            pendingDocumentImports.remove(sourceFingerprint)
             if (isFinishing || isDestroyed) return@launch
 
             when (result) {
@@ -2883,6 +2895,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             .setTitle(fileName)
             .setMessage(messageRes)
             .setPositiveButton(R.string.btn_close, null)
+            .show()
+    }
+
+    private fun showDocumentAlreadyAttached() {
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.include_error_duplicate)
+            .setPositiveButton(R.string.okay, null)
             .show()
     }
 
@@ -3062,7 +3081,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
     private fun consumePendingIncludesForSend(): List<ChatInclude> {
         if (pendingIncludes.isEmpty()) return emptyList()
-        val sent = pendingIncludes.map { it.copy(sentTokens = it.currentTokens()) }
+        val sent = pendingIncludes.map { it.forSentMessage() }
         pendingIncludes = arrayListOf()
         return sent
     }

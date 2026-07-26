@@ -76,18 +76,18 @@ class IncludeTextPolicyTest {
         assertEquals(charsFor(100), result.text)
     }
 
-    @Test fun fileAtTheLargeThresholdIsStillQuiet() {
+    @Test fun fileAtTheWholeFileLimitIsStillQuiet() {
         val result = IncludeTextPolicy.applySizeGuard(
-            charsFor(IncludeTextPolicy.LARGE_TOKENS), IncludeKind.TXT
+            charsFor(IncludeTextPolicy.MAX_TOKENS), IncludeKind.TXT
         )
         assertEquals(IncludeNotice.None, result.notice)
     }
 
-    @Test fun largeFileIsSentWholeButFlagged() {
-        val text = charsFor(IncludeTextPolicy.LARGE_TOKENS + 1000)
+    @Test fun wholeFileTokenCountNeedsNoRedundantLargeNotice() {
+        val text = charsFor(IncludeTextPolicy.MAX_TOKENS - 1000)
         val result = IncludeTextPolicy.applySizeGuard(text, IncludeKind.TXT)
         assertEquals(text, result.text)
-        assertTrue(result.notice is IncludeNotice.Large)
+        assertEquals(IncludeNotice.None, result.notice)
     }
 
     @Test fun oversizeFileIsCutAtTheCapAndSaysSo() {
@@ -130,7 +130,7 @@ class IncludeTextPolicyTest {
         }
         val result = IncludeTextPolicy.applySizeGuard(csv, IncludeKind.CSV)
         assertEquals(csv, result.text)
-        assertTrue(result.notice is IncludeNotice.Large)
+        assertEquals(IncludeNotice.None, result.notice)
     }
 
     @Test fun quotedNewlinesDoNotInflateCsvRowCounts() {
@@ -240,7 +240,7 @@ class IncludeTextPolicyTest {
             ChatInclude(
                 id = "inc-1", fileName = "a.txt", kind = IncludeKind.TXT,
                 form = IncludeForm.FULL, fullText = "hello",
-                notice = IncludeNotice.Large(12345), sentTokens = 7
+                sentTokens = 7, sourceFingerprint = "source-hash"
             ),
             ChatInclude(
                 id = "inc-2", fileName = "b.csv", kind = IncludeKind.CSV,
@@ -288,12 +288,29 @@ class IncludeTextPolicyTest {
     @Test fun noticeEncodingSurvivesARoundTrip() {
         val cases = listOf(
             IncludeNotice.None,
-            IncludeNotice.Large(9),
             IncludeNotice.Truncated(30000),
             IncludeNotice.CsvTrimmed(500, 47000)
         )
         for (c in cases) assertEquals(c, IncludeNotice.decode(c.encode()))
+        assertEquals(IncludeNotice.None, IncludeNotice.decode("large:9000"))
         assertEquals(IncludeNotice.None, IncludeNotice.decode("garbage:::"))
+    }
+
+    @Test fun sentSnapshotDropsThePendingSourceFingerprint() {
+        val pending = ChatInclude(
+            id = "inc-5", fileName = "notes.txt", kind = IncludeKind.TXT,
+            form = IncludeForm.FULL, fullText = "hello",
+            sourceFingerprint = "source-hash"
+        )
+        val sent = pending.forSentMessage()
+        assertNull(sent.sourceFingerprint)
+        assertEquals(pending.currentTokens(), sent.sentTokens)
+    }
+
+    @Test fun sourceFingerprintMatchesOnlyTheSameDocumentIdentity() {
+        val first = DocumentImporter.sourceFingerprint("content://drive/document/123")
+        assertEquals(first, DocumentImporter.sourceFingerprint("content://drive/document/123"))
+        assertFalse(first == DocumentImporter.sourceFingerprint("content://drive/document/456"))
     }
 
     @Test fun docxIsRecognisedFromItsMimeShapedName() {

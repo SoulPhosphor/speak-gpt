@@ -32,9 +32,6 @@ object IncludeTextPolicy {
     /** Average characters per token across the models this app talks to. */
     private const val CHARS_PER_TOKEN = 4
 
-    /** Above this, an item is flagged large but still sent whole. */
-    const val LARGE_TOKENS = 10_000
-
     /** Above this, an item cannot be sent whole and is cut at the cap. */
     const val MAX_TOKENS = 30_000
 
@@ -94,10 +91,9 @@ object IncludeTextPolicy {
     /**
      * Applies the documented size rules to extracted text.
      *
-     * Under [LARGE_TOKENS] it goes as-is. Between there and [MAX_TOKENS] it
-     * still goes whole, but carries the large-file notice so the cost is
-     * visible. Above [MAX_TOKENS] it is cut at the cap and says so — the one
-     * thing never allowed is silent truncation.
+     * At or below [MAX_TOKENS] it goes as-is; the row's token estimate already
+     * states its size. Above [MAX_TOKENS] it is cut at the cap and says so —
+     * the one thing never allowed is silent truncation.
      *
      * A spreadsheet takes a different road ([trimCsv]): cutting a CSV at a
      * character count can strip the header and hide how much was dropped,
@@ -111,12 +107,8 @@ object IncludeTextPolicy {
         csvTotalRows: Int? = null
     ): SizedText {
         val tokens = estimateTokens(text)
-        if (!sourceTruncated && tokens <= LARGE_TOKENS) {
-            return SizedText(text, IncludeNotice.None)
-        }
-
         if (!sourceTruncated && tokens <= MAX_TOKENS) {
-            return SizedText(text, IncludeNotice.Large(tokens))
+            return SizedText(text, IncludeNotice.None)
         }
 
         if (kind == IncludeKind.CSV) {
