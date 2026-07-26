@@ -591,11 +591,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         }
 
         private fun updateReportButton(chatMessage: HashMap<String, Any>) {
-            if (chatMessage["isBot"] == true) {
-                btnReport.visibility = View.VISIBLE
-            } else {
-                btnReport.visibility = View.GONE
-            }
+            btnReport.visibility = View.GONE
         }
 
         private fun updateShareButton(chatMessage: HashMap<String, Any>) {
