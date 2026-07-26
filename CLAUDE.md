@@ -390,9 +390,11 @@ Current priorities belong in the active conversation, issue, work order, or bran
 
 Subagents are a normal, permitted tool. Choosing a high-end model (e.g. Fable) for a subagent is likewise permitted — it is not restricted.
 
-The rule is against unnecessary volume: do not spawn a bunch of subagents, especially on a high-end model, for a routine task that does not call for that scale. Match the number of agents and the model tier to what the task genuinely needs.
+The rule is against unnecessary volume: match the number of agents and the model tier to what the task genuinely needs. A routine task does not need a subagent at all; a subagent, when one is warranted, does not need a high-end model unless the task specifically calls for that tier's reasoning.
 
-Ask before spawning multiple agents or running a broad exploratory pass that will materially increase usage.
+Fable in particular has a known habit of over-spawning — producing far more subagents than a task needs once it starts. Watch for this specifically. Do not let a task balloon into a large batch of Fable-tier subagents by default; a handful of routine lookups do not each need one.
+
+Ask before spawning multiple agents, before using a high-end model for a subagent, or before running a broad exploratory pass that will materially increase usage.
 
 Do not duplicate work already completed in the current conversation or branch.
 
