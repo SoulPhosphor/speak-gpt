@@ -243,6 +243,12 @@ class IncludeStripController(
         is IncludeNotice.CsvTrimmed -> context.getString(
             R.string.include_notice_csv, grouped(notice.sentRows), grouped(notice.totalRows)
         )
+        is IncludeNotice.WorkbookTrimmed -> context.getString(
+            R.string.include_notice_workbook,
+            grouped(notice.sheets),
+            grouped(notice.sentRows),
+            grouped(notice.totalRows)
+        )
     }
 
     private fun grouped(value: Int): String = NumberFormat.getIntegerInstance().format(value)
