@@ -45,7 +45,20 @@ enum class GenErrorCode(val code: String, val includeStackTrace: Boolean) {
 
 /** Result of classifying a failure: the code, plus the HTTP status when the
  *  server actually answered (null for transport drops, which have no status). */
-data class GenErrorResult(val code: GenErrorCode, val httpStatus: Int?)
+enum class ProviderLimitKind {
+    MODEL_CONTEXT,
+    MODEL_INPUT,
+    REQUEST_BODY,
+    RATE_OR_THROUGHPUT,
+    QUOTA_OR_SPENDING,
+    UNIDENTIFIED
+}
+
+data class GenErrorResult(
+    val code: GenErrorCode,
+    val httpStatus: Int?,
+    val providerLimit: ProviderLimitKind? = null
+)
 
 /**
  * Pure, framework-free classifier that maps a generation failure to a
@@ -72,63 +85,219 @@ object GenerationErrorClassifier {
             append(error.stackTraceToString())
         }
         val status = extractHttpStatus(text)
+        val lower = text.lowercase()
+        val structured = extractStructuredEvidence(chain)
+        val structuredCodes = structured.codesAndTypes.lowercase()
+        val structuredBodies = structured.bodies.lowercase()
 
         // 1. Auth.
-        if (status == 401 || text.contains("Incorrect API key") || hasType(chain, "AuthenticationException")) {
+        if (status == 401 || lower.contains("incorrect api key") ||
+            hasType(chain, "AuthenticationException")
+        ) {
             return GenErrorResult(GenErrorCode.A1, status)
         }
-        // 2. Quota.
-        if (status == 429 || text.contains("You exceeded your current quota") || hasType(chain, "RateLimitException")) {
-            return GenErrorResult(GenErrorCode.Q1, status)
-        }
-        // 3. Network / transport. No HTTP response exists for these, so status is
+        // 2. Network / transport. No HTTP response exists for these, so status is
         //    forced null even if a stray number appeared in the trace.
         if (chain.any { it is UnknownHostException } || hasType(chain, "UnknownHostException") ||
-            text.contains("No address associated with hostname")) {
+            lower.contains("no address associated with hostname")) {
             return GenErrorResult(GenErrorCode.N3, null)
         }
-        if (text.contains("Software caused connection abort")) {
+        if (lower.contains("software caused connection abort")) {
             return GenErrorResult(GenErrorCode.N1, null)
         }
         // Connect timeout — the app could not establish the connection in time.
         // Ktor's ConnectTimeoutException carries "Connect timeout has expired";
         // it is NOT a java.net.SocketTimeoutException, so it is matched first and
         // separately from the read timeout below.
-        if (text.contains("Connect timeout has expired") || hasType(chain, "ConnectTimeoutException")) {
+        if (lower.contains("connect timeout has expired") ||
+            hasType(chain, "ConnectTimeoutException")
+        ) {
             return GenErrorResult(GenErrorCode.N2, null)
         }
         // Read / response timeout — connected, but no response arrived in time.
         // Ktor's SocketTimeoutException extends java.net's and carries "Socket
         // timeout has expired"; a plain read timeout surfaces as either.
-        if (chain.any { it is SocketTimeoutException } || text.contains("Socket timeout has expired") ||
-            text.contains("SocketTimeoutException") || hasType(chain, "HttpRequestTimeoutException")) {
+        if (chain.any { it is SocketTimeoutException } ||
+            lower.contains("socket timeout has expired") ||
+            lower.contains("sockettimeoutexception") ||
+            hasType(chain, "HttpRequestTimeoutException")
+        ) {
             return GenErrorResult(GenErrorCode.N4, null)
         }
-        // 4. Context length.
-        if (text.contains("This model's maximum")) {
-            return GenErrorResult(GenErrorCode.M3, status)
+
+        // 3. Provider limits. HTTP 413 is explicit request-body evidence.
+        // Otherwise a structured provider code/type/body wins before any
+        // fallback inspection of exception prose.
+        if (status == 413) {
+            return providerLimitResult(ProviderLimitKind.REQUEST_BODY, status)
         }
-        // 5. Model-specific. A model-not-found body is M2 even when the HTTP
+        providerLimitFromEvidence(structuredCodes)?.let {
+            return providerLimitResult(it, status)
+        }
+        providerLimitFromEvidence(structuredBodies)?.let {
+            return providerLimitResult(it, status)
+        }
+        providerLimitFromEvidence(lower)?.let {
+            return providerLimitResult(it, status)
+        }
+        if (status == 429 || hasType(chain, "RateLimitException")) {
+            return providerLimitResult(ProviderLimitKind.RATE_OR_THROUGHPUT, status)
+        }
+
+        // 4. Model-specific. A model-not-found body is M2 even when the HTTP
         //    status is 404, so this is checked before the bare-404 rule below.
-        if (text.contains("invalid model") || text.contains("you must provide a model")) {
+        if (lower.contains("invalid model") || lower.contains("you must provide a model")) {
             return GenErrorResult(GenErrorCode.M1, status)
         }
-        if (text.contains("does not exist")) {
+        if (lower.contains("does not exist")) {
             return GenErrorResult(GenErrorCode.M2, status)
         }
-        // 6. Bare HTTP 404 with no model-specific body.
-        if (status == 404 || text.contains("Not Found")) {
+        // 5. Bare HTTP 404 with no model-specific body.
+        if (status == 404 || lower.contains("not found")) {
             return GenErrorResult(GenErrorCode.S1, 404)
         }
-        // 7. Response-shape failure / content rejection.
-        if (text.contains("NoTransformationFoundException") || text.contains("Expected response body of the type")) {
+        // 6. Response-shape failure / content rejection.
+        if (lower.contains("notransformationfoundexception") ||
+            lower.contains("expected response body of the type")
+        ) {
             return GenErrorResult(GenErrorCode.S2, status)
         }
-        if (text.contains("Your request was rejected")) {
+        if (lower.contains("your request was rejected")) {
             return GenErrorResult(GenErrorCode.S3, status)
         }
-        // 8. Unknown catch-all.
+        if ((status == 400 || status == 422) &&
+            containsAny(
+                "$structuredCodes\n$structuredBodies\n$lower",
+                "limit",
+                "too large",
+                "maximum",
+                "exceeded"
+            )
+        ) {
+            return providerLimitResult(ProviderLimitKind.UNIDENTIFIED, status)
+        }
+        // 7. Unknown catch-all.
         return GenErrorResult(GenErrorCode.U0, status)
+    }
+
+    private fun containsAny(text: String, vararg values: String): Boolean =
+        values.any(text::contains)
+
+    private fun providerLimitFromEvidence(evidence: String): ProviderLimitKind? {
+        if (evidence.isBlank()) return null
+        return when {
+            containsAny(
+                evidence,
+                "request_body_too_large",
+                "request_too_large",
+                "request_entity_too_large",
+                "payload_too_large",
+                "body_size_limit_exceeded",
+                "content length exceeded",
+                "request body is too large",
+                "request body was larger",
+                "maximum request size",
+                "entity too large"
+            ) -> ProviderLimitKind.REQUEST_BODY
+            containsAny(
+                evidence,
+                "context_length_exceeded",
+                "maximum_context_length",
+                "input_too_long",
+                "this model's maximum context",
+                "maximum context length"
+            ) -> ProviderLimitKind.MODEL_CONTEXT
+            containsAny(
+                evidence,
+                "max_input_tokens",
+                "maximum_input_tokens",
+                "input_limit_exceeded",
+                "maximum input length",
+                "input token limit"
+            ) -> ProviderLimitKind.MODEL_INPUT
+            containsAny(
+                evidence,
+                "insufficient_quota",
+                "billing_hard_limit",
+                "spending_limit",
+                "billing limit",
+                "current quota",
+                "account quota"
+            ) -> ProviderLimitKind.QUOTA_OR_SPENDING
+            containsAny(
+                evidence,
+                "rate_limit_exceeded",
+                "tokens per minute",
+                "tokens-per-minute",
+                "requests per minute",
+                "requests-per-minute",
+                " tpm ",
+                " rpm ",
+                "too many requests"
+            ) -> ProviderLimitKind.RATE_OR_THROUGHPUT
+            else -> null
+        }
+    }
+
+    private fun providerLimitResult(
+        kind: ProviderLimitKind,
+        status: Int?
+    ): GenErrorResult {
+        val code = when (kind) {
+            ProviderLimitKind.REQUEST_BODY -> GenErrorCode.S2
+            ProviderLimitKind.MODEL_CONTEXT,
+            ProviderLimitKind.MODEL_INPUT -> GenErrorCode.M3
+            ProviderLimitKind.RATE_OR_THROUGHPUT,
+            ProviderLimitKind.QUOTA_OR_SPENDING -> GenErrorCode.Q1
+            ProviderLimitKind.UNIDENTIFIED -> GenErrorCode.U0
+        }
+        return GenErrorResult(code, status, kind)
+    }
+
+    /**
+     * Common SDK exceptions expose provider code/type/body as no-argument
+     * accessors or fields. Read those conservatively so an explicit provider
+     * code wins even when the exception's prose is localized or generic.
+     */
+    private data class StructuredEvidence(
+        val codesAndTypes: String,
+        val bodies: String
+    )
+
+    private fun extractStructuredEvidence(chain: List<Throwable>): StructuredEvidence {
+        val codesAndTypes = StringBuilder()
+        val bodies = StringBuilder()
+        val codeNames = setOf("code", "errorcode", "type", "errortype")
+        val bodyNames = setOf("body", "responsebody", "errorbody")
+
+        fun append(name: String, value: Any?) {
+            when (name) {
+                in codeNames -> codesAndTypes.append(value).append('\n')
+                in bodyNames -> bodies.append(value).append('\n')
+            }
+        }
+
+        for (throwable in chain) {
+            for (method in throwable.javaClass.methods) {
+                if (method.parameterCount != 0) continue
+                val normalized = method.name
+                    .removePrefix("get")
+                    .lowercase()
+                if (normalized !in codeNames && normalized !in bodyNames) continue
+                runCatching { method.invoke(throwable) }
+                    .getOrNull()
+                    ?.let { append(normalized, it) }
+            }
+            for (field in throwable.javaClass.declaredFields) {
+                val normalized = field.name.lowercase()
+                if (normalized !in codeNames && normalized !in bodyNames) continue
+                runCatching {
+                    field.isAccessible = true
+                    field.get(throwable)
+                }.getOrNull()?.let { append(normalized, it) }
+            }
+        }
+        return StructuredEvidence(codesAndTypes.toString(), bodies.toString())
     }
 
     /** The throwable and its cause chain, guarding against a cyclic `cause`. */
@@ -161,7 +330,8 @@ object GenerationErrorClassifier {
             Regex("""\bHTTP/?\d?(?:\.\d)?\s+(\d{3})\b"""),
             Regex(
                 """\b(\d{3})\s+(?:Unauthorized|Forbidden|Not Found|Bad Request|Too Many Requests|""" +
-                    """Internal Server Error|Bad Gateway|Service Unavailable|Gateway Timeout)\b"""
+                    """Payload Too Large|Request Entity Too Large|Internal Server Error|""" +
+                    """Bad Gateway|Service Unavailable|Gateway Timeout)\b"""
             )
         )
         for (p in patterns) {
