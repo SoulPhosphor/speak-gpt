@@ -632,6 +632,19 @@
         <item name="android:textSize">13sp</item>
     </style>
 
+    <!-- Plain standalone paragraph at the top of a screen, with no title of
+         its own above it (owner ruling, July 26 2026). Distinct from both
+         Section.Title (bold, larger, colorPrimary) and Section.Hint/
+         Row.Subtitle (13sp, muted text_subtitle) - this is normal-weight
+         body text at full text_title strength, for a screen-level
+         explanation that isn't paired with a heading. -->
+    <style name="Widget.App.Screen.Intro" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textColor">@color/text_title</item>
+        <item name="android:textSize">14sp</item>
+    </style>
+
     <!-- Summoning Circle tile pieces (owner ruling, July 21 2026). The four
          container tiles (Companion / Glamour / Activation / System Prompt) each
          show a bold label, an inline dropdown value, and an edit button. These

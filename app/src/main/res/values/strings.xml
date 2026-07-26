@@ -2179,6 +2179,7 @@
     <string name="tile_roleplay_title">Roleplay</string>
     <string name="tile_roleplay_desc">Worlds, campaigns and the characters you play.</string>
     <string name="title_roleplay">Roleplay</string>
+    <string name="roleplay_hub_memory_notice">The roleplay feature is only available when memory is turned on, as appropriate information is dynamically chosen from conversation context.</string>
 
     <!-- ============ Round 4: locked chat storage (owner-approved copy, July 12 2026 —
          do not reword without explicit approval in chat) ============ -->
