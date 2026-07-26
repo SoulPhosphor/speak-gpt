@@ -397,6 +397,8 @@
     <string name="okay">Okay</string>
     <string name="label_max_tokens">Maximum response tokens</string>
     <string name="label_context_window">Context window</string>
+    <string name="title_context_window">Context Window</string>
+    <string name="hint_context_window">The context window is the maximum number of tokens the model can process in one request. It is used to calculate whether the instructions, conversation, attachments, message, and response will fit before sending. Setting it too low may incorrectly block valid documents; setting it too high may allow requests the provider later rejects. Leave it blank if you are unsure.</string>
     <string name="unit_tokens">tokens</string>
     <string name="label_end_separator">End separator</string>
     <string name="label_prefix">Prefix</string>

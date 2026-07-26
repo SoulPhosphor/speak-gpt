@@ -347,7 +347,25 @@
                     android:textColorHint="@color/text_hint" />
             </com.google.android.material.textfield.TextInputLayout>
 
-            <!-- Optional capacity for this exact endpoint profile and model id -->
+            <!-- Optional capacity for this exact endpoint profile and model id.
+                 Title + hint: shared Widget.App.Section.Title/.Hint, same
+                 pattern as the sampling-parameter sections above (owner
+                 ruling, July 26 2026). title_context_window/hint_context_window
+                 are separate from label_context_window (the field's own
+                 floating hint), which stays untouched since it's also used by
+                 the legacy in-chat "Edit API Endpoint" dialog. -->
+            <TextView
+                style="@style/Widget.App.Section.Title"
+                android:layout_marginStart="24dp"
+                android:layout_marginEnd="24dp"
+                android:text="@string/title_context_window" />
+
+            <TextView
+                style="@style/Widget.App.Section.Hint"
+                android:layout_marginStart="24dp"
+                android:layout_marginEnd="24dp"
+                android:text="@string/hint_context_window" />
+
             <com.google.android.material.textfield.TextInputLayout
                 android:id="@+id/textInputLayoutContextWindow"
                 android:layout_width="match_parent"
