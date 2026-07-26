@@ -373,6 +373,14 @@
     <string name="auth_mode_api_key">API key header (api-key)</string>
     <string name="api_endpoint_model">Model</string>
     <string name="api_endpoint_model_help">Tap to choose from models available on this endpoint.</string>
+    <string name="api_endpoint_label_temperature">Temperature</string>
+    <string name="api_endpoint_hint_temperature">Temperature controls model creativity. Low settings will create more conservative, predictable responses. High temperatures may be more creative. If settings are too high responses may become less coherent.</string>
+    <string name="api_endpoint_label_top_p">Top P</string>
+    <string name="api_endpoint_hint_top_p">Top-p controls how wide a pool of likely next words the model may choose from. A low value makes it stick to the safest, most predictable wording, which can become repetitive or dull; a high value admits more unusual choices, which can make writing lively but also more rambling, inconsistent, or strange.</string>
+    <string name="api_endpoint_label_frequency_penalty">Frequency Penalty</string>
+    <string name="api_endpoint_hint_frequency_penalty">Frequency penalty discourages the model from repeating words or phrases it has already used. A low value allows natural repetition but can become redundant; a high value pushes it toward fresher wording, but if set too high it may avoid necessary terms, sound unnatural, or wander just to keep finding different words.</string>
+    <string name="api_endpoint_label_presence_penalty">Presence Penalty</string>
+    <string name="api_endpoint_hint_presence_penalty">Presence penalty discourages the model from returning to topics or ideas it has already mentioned. A low value lets it stay focused and develop the same ideas; a high value pushes it toward new territory, but if set too high it can become scattered, change subjects too quickly, or introduce unnecessary ideas.</string>
     <string name="api_endpoint_provider">Provider</string>
     <string name="api_endpoint_connection_timeout">Connection Timeout (In Seconds)</string>
     <string name="api_endpoint_response_time">Response Time (In Seconds)</string>
