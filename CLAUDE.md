@@ -87,6 +87,24 @@ Use this compact format:
 
 Do not bury a decision inside a long progress report.
 
+### Approval gates
+
+When an instruction says to propose, confirm, check with, or get approval before doing something, that is a stop point.
+
+At a stop point:
+
+- do not write the item into any file, in any form, including as a placeholder, draft, example, temporary value, or "not final" version;
+- do not commit or push it;
+- stop, ask the question, and end the turn.
+
+A stop point outranks "proceed," "implement," or "continue" in the same instruction. Being told to proceed never authorizes passing a gate that the same instruction set. Do the work that does not depend on the answer, then stop and ask.
+
+If the work cannot compile, run, or be tested without the undecided item, stop before starting that part and ask first.
+
+Never write an unapproved value and then ask whether to keep it. Asking afterward is not approval. It is the failure this rule exists to prevent.
+
+Do not decide for the owner that undoing something is not worth the cost. If the owner may want it reversed, say so plainly and reverse it when asked.
+
 ### Discussion is not approval
 
 Exploring an idea, asking a question, expressing a preference, or saying "maybe" does not automatically authorize implementation.
