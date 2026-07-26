@@ -91,6 +91,24 @@ class ApiEndpointStableIdTest {
         assertEquals("glm-4-plus", store.getApiEndpoint(id).model)
     }
 
+    @Test fun contextWindowBelongsToTheExactStoredModelId() {
+        val endpoint = sample("z.ai").apply {
+            model = "glm-4-plus"
+            contextWindowTokens = 128_000
+            contextWindowModelId = "glm-4-plus"
+        }
+        val id = store.setApiEndpoint(endpoint)
+        assertEquals(128_000, store.getApiEndpoint(id).contextWindowTokens)
+
+        // A model change cannot inherit the old model's capacity.
+        val changed = store.getApiEndpoint(id).apply {
+            model = "glm-5"
+        }
+        store.setApiEndpoint(changed)
+        assertEquals(null, store.getApiEndpoint(id).contextWindowTokens)
+        assertEquals("", store.getApiEndpoint(id).contextWindowModelId)
+    }
+
     @Test fun renamingCreatesNoDuplicateAndKeepsFavoriteAndSelectionRefsValid() {
         val id = store.setApiEndpoint(sample("z.ai"))
         // A favorite / per-chat selection stored this id.
