@@ -362,6 +362,16 @@ The required order is:
 
 The user must receive the explanation before reaching the control that depends on it. Do not place explanatory text beneath the button, switch, field, or other control it explains.
 
+## Screen intro text
+
+### Standalone top-of-screen paragraph
+
+`Widget.App.Screen.Intro`
+
+Use for a plain explanatory paragraph at the top of a screen that has no title of its own above it. 14sp, regular weight, full-strength `text_title` color.
+
+Distinct from `Widget.App.Section.Title`/`Widget.App.Section.Hint`, which are a heading-plus-explanation pair belonging to one section within a screen, and from `Widget.App.Row.Subtitle`, which is muted 13sp text describing a single row. Use `Screen.Intro` only when the text is not paired with a heading directly above it.
+
 ## Multiple-choice dropdowns
 
 ### Standard dropdown field
