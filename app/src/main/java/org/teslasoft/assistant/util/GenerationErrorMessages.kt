@@ -46,3 +46,21 @@ fun GenErrorCode.messageRes(): Int = when (this) {
  *  URL, model, or stack trace — those go only to the Error Log. */
 fun GenErrorResult.chatMessage(context: Context): String =
     "[${code.code}] " + context.getString(code.messageRes())
+
+/** Exact explanation for a provider-confirmed capacity system. */
+fun GenErrorResult.providerLimitMessage(context: Context): String? =
+    when (providerLimit) {
+        ProviderLimitKind.MODEL_CONTEXT ->
+            context.getString(R.string.provider_context_overflow)
+        ProviderLimitKind.MODEL_INPUT ->
+            context.getString(R.string.provider_input_limit)
+        ProviderLimitKind.REQUEST_BODY ->
+            context.getString(R.string.provider_request_body_limit)
+        ProviderLimitKind.RATE_OR_THROUGHPUT ->
+            context.getString(R.string.provider_rate_limit)
+        ProviderLimitKind.QUOTA_OR_SPENDING ->
+            context.getString(R.string.provider_quota_limit)
+        ProviderLimitKind.UNIDENTIFIED ->
+            context.getString(R.string.provider_unknown_limit)
+        null -> null
+    }
