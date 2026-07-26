@@ -200,7 +200,7 @@ class ApiEndpointEditorActivity : FragmentActivity() {
         } else {
             apiEndpointPreferences!!.getApiEndpoint(this, endpointId)
         }
-        // The record's current label anchors the "Default" rename guard; the id
+        // The record's current label anchors the "Default" delete guard; the id
         // stays in [endpointId] and is what the record is saved/deleted under.
         oldLabel = endpoint.label
 
@@ -398,13 +398,6 @@ class ApiEndpointEditorActivity : FragmentActivity() {
 
         if (!isValidEndpointUrl(host)) {
             hostInputLayout?.error = getString(R.string.label_error_api_endpoint_invalid_url)
-            return
-        }
-
-        // The built-in "Default" profile must keep its name (other code resolves
-        // it by that label).
-        if (position != -1 && oldLabel == "Default" && label != "Default") {
-            showNoticeDialog(getString(R.string.default_api_endpoint_error))
             return
         }
 

@@ -68,8 +68,8 @@ class ApiEndpointObject(
 ) {
     companion object {
         /* Reserved, fixed id for the built-in "Default" endpoint. It is NOT a
-         * name-derived identity in the mutable sense: the "Default" profile can
-         * never be renamed (the editor forbids it) and it is the value every
+         * name-derived identity in the mutable sense: the profile keeps this id
+         * even if the user renames its label, and it is the value every
          * install's default per-chat reference already points at
          * (Preferences.getApiEndpointId defaults to it), so it is preserved
          * verbatim as this record's permanent, constant id. */
