@@ -111,10 +111,11 @@ object DocxTextExtractor {
             return ExtractResult.NotDocx
         }
 
-        return ExtractResult.Success(
-            text = xmlToText(entry.text),
-            sourceTruncated = entry.sourceTruncated
-        )
+        // A secondary XML guard is a failure, never a successful beginning-
+        // only document. New imports use CompleteOfficeTextExtractor; this
+        // compatibility entry point follows the same complete-or-none rule.
+        if (entry.sourceTruncated) return ExtractResult.Corrupted
+        return ExtractResult.Success(text = xmlToText(entry.text))
     }
 
     private fun isCfbContainer(bytes: ByteArray): Boolean {
