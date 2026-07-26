@@ -99,6 +99,10 @@ class ApiEndpointPreferences private constructor(
             ?: ApiEndpointObject.DEFAULT_PRESENCE_PENALTY
         val maxTokens = getString(id + "_max_tokens", ApiEndpointObject.DEFAULT_MAX_TOKENS.toString()).toIntOrNull()
             ?: ApiEndpointObject.DEFAULT_MAX_TOKENS
+        val storedContextModel = getString(id + "_context_window_model", "")
+        val contextWindowTokens = getString(id + "_context_window_tokens", "")
+            .toIntOrNull()
+            ?.takeIf { it > 0 && storedContextModel == model }
         val endSeparator = getString(id + "_end_separator", "")
         val prefix = getString(id + "_prefix", "")
         val provider = getString(id + "_provider", "")
@@ -115,7 +119,8 @@ class ApiEndpointPreferences private constructor(
             label, host, apiKey, chatEndpoint, authType,
             model, temperature, topP, frequencyPenalty, presencePenalty,
             maxTokens, endSeparator, prefix, provider,
-            connectTimeoutSeconds, responseTimeoutSeconds, id
+            connectTimeoutSeconds, responseTimeoutSeconds, id,
+            contextWindowTokens, storedContextModel
         )
     }
 
@@ -132,6 +137,8 @@ class ApiEndpointPreferences private constructor(
         preferences.edit { remove(id + "_frequency_penalty") }
         preferences.edit { remove(id + "_presence_penalty") }
         preferences.edit { remove(id + "_max_tokens") }
+        preferences.edit { remove(id + "_context_window_tokens") }
+        preferences.edit { remove(id + "_context_window_model") }
         preferences.edit { remove(id + "_end_separator") }
         preferences.edit { remove(id + "_prefix") }
         preferences.edit { remove(id + "_provider") }
@@ -167,6 +174,19 @@ class ApiEndpointPreferences private constructor(
         putString(id + "_frequency_penalty", endpoint.frequencyPenalty.toString())
         putString(id + "_presence_penalty", endpoint.presencePenalty.toString())
         putString(id + "_max_tokens", endpoint.maxTokens.toString())
+        val contextWindow = endpoint.contextWindowTokens?.takeIf { it > 0 }
+        if (contextWindow != null &&
+            endpoint.contextWindowModelId == endpoint.model &&
+            endpoint.model.isNotBlank()
+        ) {
+            putString(id + "_context_window_tokens", contextWindow.toString())
+            putString(id + "_context_window_model", endpoint.model)
+        } else {
+            preferences.edit {
+                remove(id + "_context_window_tokens")
+                remove(id + "_context_window_model")
+            }
+        }
         putString(id + "_end_separator", endpoint.endSeparator)
         putString(id + "_prefix", endpoint.prefix)
         putString(id + "_provider", endpoint.provider)

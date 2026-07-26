@@ -203,10 +203,17 @@ import org.teslasoft.assistant.ui.permission.CameraPermissionActivity
 import org.teslasoft.assistant.ui.permission.MicrophonePermissionActivity
 import org.teslasoft.assistant.util.Hash
 import org.teslasoft.assistant.util.GenErrorResult
+import org.teslasoft.assistant.util.FrozenChatPayload
+import org.teslasoft.assistant.util.FrozenPayloadMessage
 import org.teslasoft.assistant.util.GenerationErrorClassifier
 import org.teslasoft.assistant.util.LocaleParser
+import org.teslasoft.assistant.util.ModelContextCapacity
+import org.teslasoft.assistant.util.ModelContextDecision
+import org.teslasoft.assistant.util.RequestCapacity
+import org.teslasoft.assistant.util.RequestHeapState
 import org.teslasoft.assistant.util.WindowInsetsUtil
 import org.teslasoft.assistant.util.chatMessage
+import org.teslasoft.assistant.util.providerLimitMessage
 import java.io.BufferedReader
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -218,6 +225,7 @@ import java.io.InputStreamReader
 import java.net.URL
 import java.util.EnumSet
 import java.util.Locale
+import java.text.NumberFormat
 import java.util.Optional
 import kotlin.time.Duration.Companion.seconds
 import androidx.core.content.edit
@@ -395,6 +403,25 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         val preparedChat: PreparedChatStartup? = null
     )
 
+    /** One normal chat request, frozen before the visible turn is committed. */
+    private data class PreparedRegularTurn(
+        val rawMessage: String,
+        val storedMessage: String,
+        val modelFacingMessage: String,
+        val pendingIncludes: List<ChatInclude>,
+        val historyBeforeSend: List<ChatMessage>,
+        val selectedModel: String,
+        val selectedEndpointId: String,
+        val request: ChatCompletionRequest,
+        val payload: FrozenChatPayload,
+        val contextDecision: ModelContextDecision
+    )
+
+    private data class FrozenRegularRequest(
+        val request: ChatCompletionRequest,
+        val payload: FrozenChatPayload
+    )
+
     // Init DALL-e
     private var resolution = "512x152"
 
@@ -535,6 +562,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     // killAllProcesses()/cancelAllAiActivity() can cancel it like every other
     // generation path.
     private var parseMessageScope: CoroutineScope? = null
+    private var requestPreparationInProgress = false
     private var generateGptImageJob: Job? = null
 
     private fun killAllProcesses() {
@@ -546,6 +574,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         imageRequestScope?.coroutineContext?.cancel(CancellationException("Killed"))
         speakScope?.coroutineContext?.cancel(CancellationException("Killed"))
         parseMessageScope?.coroutineContext?.cancel(CancellationException("Killed"))
+        requestPreparationInProgress = false
         generateGptImageJob?.cancel(CancellationException("Killed"))
         generateGptImageJob = null
         handsFreeStopped = true
@@ -2819,7 +2848,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
     private fun openDocumentPicker() {
         val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-            addCategory(Intent.CATEGORY_OPENABLE)
+            // CATEGORY_OPENABLE is deliberately NOT set. It restricts the
+            // picker to files that can be opened byte-for-byte, which hides
+            // Google Docs and Sheets entirely — those have no bytes of their
+            // own and are converted on request instead. Anything that turns
+            // up as a result and cannot be converted is refused by the
+            // importer with a specific reason.
+            //
             // "*/*" with an EXTRA_MIME_TYPES filter, because some providers
             // hand back documents typed as octet-stream and a strict type
             // filter would make real .md/.csv files unpickable.
@@ -2877,7 +2912,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 is DocumentImporter.Result.FileGone ->
                     showIncludeProblem(R.string.include_error_file_gone, result.fileName)
                 is DocumentImporter.Result.InterruptedRead ->
-                    showIncludeProblem(R.string.include_error_interrupted_read, result.fileName)
+                    showIncludeCapacityProblem(
+                        R.string.document_attach_failed_title,
+                        R.string.document_attach_interrupted_body
+                    )
                 is DocumentImporter.Result.PasswordProtected ->
                     showIncludeProblem(R.string.include_error_password_protected, result.fileName)
                 is DocumentImporter.Result.ContentMismatch ->
@@ -2886,6 +2924,28 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     showIncludeProblem(R.string.include_error_corrupted, result.fileName)
                 is DocumentImporter.Result.Empty ->
                     showIncludeProblem(R.string.include_error_empty, result.fileName)
+                is DocumentImporter.Result.ExportUnavailable ->
+                    showIncludeProblem(R.string.include_error_export_unavailable, result.fileName)
+                is DocumentImporter.Result.ExportFailed ->
+                    showIncludeCapacityProblem(
+                        R.string.document_export_failed_title,
+                        R.string.document_export_incomplete_body
+                    )
+                is DocumentImporter.Result.DeviceMemoryLimit ->
+                    showIncludeCapacityProblem(
+                        R.string.document_attach_failed_title,
+                        R.string.document_attach_memory_body
+                    )
+                is DocumentImporter.Result.ArchiveExpansionLimit ->
+                    showIncludeCapacityProblem(
+                        R.string.document_attach_failed_title,
+                        R.string.document_attach_expansion_body
+                    )
+                is DocumentImporter.Result.StorageLimit ->
+                    showIncludeCapacityProblem(
+                        R.string.document_storage_failed_title,
+                        R.string.document_attach_storage_body
+                    )
                 is DocumentImporter.Result.Unknown ->
                     showIncludeProblem(R.string.include_error_unknown, result.fileName)
             }
@@ -2899,6 +2959,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             .setTitle(fileName)
             .setMessage(messageRes)
             .setPositiveButton(R.string.btn_close, null)
+            .show()
+    }
+
+    private fun showIncludeCapacityProblem(titleRes: Int, messageRes: Int) {
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(titleRes)
+            .setMessage(messageRes)
+            .setPositiveButton(R.string.okay, null)
             .show()
     }
 
@@ -3018,11 +3086,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     }
 
     private fun ChatInclude.withCondensedText(text: String): ChatInclude {
-        val sized = IncludeTextPolicy.applySizeGuard(text, IncludeKind.TXT)
         return copy(
             form = IncludeForm.CONDENSED,
-            condensedText = sized.text,
-            notice = sized.notice
+            condensedText = text
         )
     }
 
@@ -3223,7 +3289,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     }
 
                     if (keyCode == KeyEvent.KEYCODE_ENTER && isHardKB() && preferences!!.getDesktopMode()) {
-                        parseMessage((v as EditText).text.toString())
+                        prepareTypedTurn((v as EditText).text.toString())
                         return@run true
                     }
 
@@ -4141,7 +4207,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 headers = extraHeaders,
                 host = OpenAIHost(composeChatHost(apiEndpointObject?.host, apiEndpointObject?.chatEndpoint)),
                 proxy = null,
-                retry = RetryStrategy()
+                retry = RetryStrategy(maxRetries = 0)
             )
 
             ai = OpenAI(config)
@@ -4156,7 +4222,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 headers = extraHeaders,
                 host = OpenAIHost(apiEndpointObject?.host!!),
                 proxy = null,
-                retry = RetryStrategy()
+                retry = RetryStrategy(maxRetries = 0)
             )
             openAIAI = OpenAI(configOpenAI)
             loadModel()
@@ -4380,10 +4446,26 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         logVoiceEvent("manual turn restored the hands-free loop and restarted its keep-alive service after a prior error/hang-up")
     }
 
-    private fun parseMessage(message: String, shouldAdd: Boolean = true) {
+    private fun parseMessage(
+        message: String,
+        shouldAdd: Boolean = true,
+        preparedTurn: PreparedRegularTurn? = null
+    ) {
         // No sends into a chat whose stored history is locked or preserved-
         // corrupt (Round 4) — the blocking dialog owns this screen.
         if (chatStorageUnavailable) return
+        if (preparedTurn != null) {
+            val stillExact = message == preparedTurn.rawMessage &&
+                messageInput?.text?.toString() == preparedTurn.rawMessage &&
+                pendingIncludes.toList() == preparedTurn.pendingIncludes &&
+                chatMessages.toList() == preparedTurn.historyBeforeSend &&
+                model == preparedTurn.selectedModel &&
+                preferences?.getApiEndpointId().orEmpty() == preparedTurn.selectedEndpointId
+            if (!stillExact) {
+                restoreUIState()
+                return
+            }
+        }
         // Put timestamp to chat to sort chats by last message
         ChatPreferences.getChatPreferences().putTimestampToChatById(this, chatId)
         try {
@@ -4403,7 +4485,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             // mic re-arms once the reply finishes reading back.
             resumeHandsFreeForManualTurn()
 
-            val m = prefix + message + endSeparator
+            val m = preparedTurn?.storedMessage ?: (prefix + message + endSeparator)
 
             if (imageIsSelected) {
                 val bytes = Base64.decode(baseImageString!!.split(",")[1], Base64.DEFAULT)
@@ -4432,7 +4514,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             // message that already carries its own attachments.
             var transferredPendingIncludes = false
             if (shouldAdd) {
-                val attached = consumePendingIncludesForSend()
+                val attached = if (preparedTurn != null) {
+                    pendingIncludes = arrayListOf()
+                    preparedTurn.pendingIncludes.map { it.forSentMessage() }
+                } else {
+                    consumePendingIncludesForSend()
+                }
                 if (attached.isNotEmpty() && messages.isNotEmpty()) {
                     messages[messages.size - 1][INCLUDES_KEY] = ChatInclude.listToJson(attached)
                     transferredPendingIncludes = true
@@ -4478,8 +4565,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                             role = ChatRole.User,
                             // Not plain `m`: if this turn carried attachments
                             // they are part of what the model receives.
-                            content = messages.lastOrNull()
-                                ?.let { modelFacingContent(it) } ?: m
+                            content = preparedTurn?.modelFacingMessage
+                                ?: messages.lastOrNull()?.let { modelFacingContent(it) }
+                                ?: m
                         )
                     )
                     syncChatProjection()
@@ -4496,7 +4584,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     }
 
                     try {
-                        generateResponse(m, false)
+                        generateResponse(m, false, preparedTurn)
                     } catch (_: CancellationException) {
                         restoreUIState()
                     }
@@ -4631,6 +4719,194 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     }
 
     /**
+     * Prepares a normal typed turn without touching the composer, attachment
+     * strip, or persisted history. Only [commitPreparedTurn] crosses that
+     * boundary, after every capacity decision has completed.
+     */
+    private fun prepareTypedTurn(rawMessage: String) {
+        if (chatStorageUnavailable || rawMessage.isEmpty() ||
+            requestPreparationInProgress
+        ) {
+            return
+        }
+
+        // Preserve the existing non-chat command and multimodal/tool pipelines.
+        // They do not use the normal chat-completions request built below.
+        val imagineCommand = rawMessage.lowercase().contains("/imagine") &&
+            preferences?.getImagineCommand() == true
+        if (imageIsSelected || imagineCommand ||
+            model.contains(":ft") || model.contains("ft:") ||
+            preferences?.getFunctionCalling() == true
+        ) {
+            parseMessage(rawMessage)
+            return
+        }
+
+        requestPreparationInProgress = true
+        val pendingSnapshot = pendingIncludes.toList()
+        val historySnapshot = chatMessages.toList()
+        val selectedModel = model
+        val endpointId = preferences?.getApiEndpointId().orEmpty()
+        val maximumResponseTokens = preferences?.getMaxTokens() ?: 0
+        val storedMessage = prefix + rawMessage + endSeparator
+        val sentIncludes = pendingSnapshot.map { it.forSentMessage() }
+        val modelFacingMessage = IncludeMessageProjection.userContent(
+            storedMessage,
+            ChatInclude.listToJson(sentIncludes)
+        )
+        val requestMessages = ArrayList(historySnapshot)
+        requestMessages.add(
+            ChatMessage(role = ChatRole.User, content = modelFacingMessage)
+        )
+
+        btnMicro?.isEnabled = false
+        btnSend?.isEnabled = false
+        progress?.visibility = View.VISIBLE
+
+        parseMessageScope = CoroutineScope(Dispatchers.Main)
+        parseMessageScope?.launch {
+            try {
+                val frozen = buildFrozenRegularRequest(
+                    requestMessages = requestMessages,
+                    loreQuery = storedMessage,
+                    selectedModel = selectedModel,
+                    maximumResponseTokens = maximumResponseTokens
+                )
+                val measurement = RequestCapacity.measure(frozen.payload)
+                if (!RequestCapacity.canAssemble(
+                        measurement,
+                        RequestHeapState.current()
+                    )
+                ) {
+                    requestPreparationInProgress = false
+                    restoreUIState()
+                    showRequestHardBlock(
+                        R.string.request_prepare_failed_title,
+                        getString(R.string.request_prepare_failed_body)
+                    )
+                    return@launch
+                }
+
+                val contextWindow = apiEndpointObject
+                    ?.takeIf {
+                        it.contextWindowModelId == selectedModel &&
+                            preferences?.getApiEndpointId().orEmpty() == endpointId
+                    }
+                    ?.contextWindowTokens
+                val decision = ModelContextCapacity.decide(
+                    contextWindow,
+                    RequestCapacity.approximateInputTokens(frozen.payload),
+                    maximumResponseTokens
+                )
+                val prepared = PreparedRegularTurn(
+                    rawMessage = rawMessage,
+                    storedMessage = storedMessage,
+                    modelFacingMessage = modelFacingMessage,
+                    pendingIncludes = pendingSnapshot,
+                    historyBeforeSend = historySnapshot,
+                    selectedModel = selectedModel,
+                    selectedEndpointId = endpointId,
+                    request = frozen.request,
+                    payload = frozen.payload,
+                    contextDecision = decision
+                )
+
+                when (decision) {
+                    ModelContextDecision.Send -> commitPreparedTurn(prepared)
+                    is ModelContextDecision.Block -> {
+                        requestPreparationInProgress = false
+                        restoreUIState()
+                        showRequestHardBlock(
+                            R.string.request_context_exceeded_title,
+                            getString(
+                                R.string.request_context_exceeded_body,
+                                formatTokenCount(decision.requiredAtLeast),
+                                formatTokenCount(decision.contextWindow)
+                            )
+                        )
+                    }
+                    is ModelContextDecision.WarnRange -> {
+                        requestPreparationInProgress = false
+                        restoreUIState()
+                        showRequestWarning(
+                            getString(
+                                R.string.request_context_range_warning_body,
+                                formatTokenCount(decision.minimumRequired),
+                                formatTokenCount(decision.maximumRequired),
+                                formatTokenCount(decision.contextWindow)
+                            ),
+                            prepared
+                        )
+                    }
+                    is ModelContextDecision.WarnApproximate -> {
+                        requestPreparationInProgress = false
+                        restoreUIState()
+                        showRequestWarning(
+                            getString(
+                                R.string.request_context_approximate_warning_body,
+                                formatTokenCount(decision.approximateRequired),
+                                formatTokenCount(decision.contextWindow)
+                            ),
+                            prepared
+                        )
+                    }
+                }
+            } catch (_: OutOfMemoryError) {
+                requestPreparationInProgress = false
+                restoreUIState()
+                showRequestHardBlock(
+                    R.string.request_prepare_failed_title,
+                    getString(R.string.request_prepare_failed_body)
+                )
+            } catch (e: CancellationException) {
+                requestPreparationInProgress = false
+                restoreUIState()
+                throw e
+            } catch (e: Exception) {
+                requestPreparationInProgress = false
+                restoreUIState()
+                val genError = GenerationErrorClassifier.classify(e)
+                logGenerationError(genError, e, "request preparation")
+                MaterialAlertDialogBuilder(
+                    this@ChatActivity,
+                    R.style.App_MaterialAlertDialog
+                )
+                    .setTitle(R.string.label_error)
+                    .setMessage(genError.chatMessage(this@ChatActivity))
+                    .setPositiveButton(R.string.okay, null)
+                    .show()
+            }
+        }
+    }
+
+    private fun commitPreparedTurn(prepared: PreparedRegularTurn) {
+        requestPreparationInProgress = false
+        parseMessage(prepared.rawMessage, preparedTurn = prepared)
+    }
+
+    private fun formatTokenCount(value: Int): String =
+        NumberFormat.getIntegerInstance().format(value)
+
+    private fun showRequestHardBlock(titleRes: Int, body: String) {
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(titleRes)
+            .setMessage(body)
+            .setPositiveButton(R.string.okay, null)
+            .show()
+    }
+
+    private fun showRequestWarning(body: String, prepared: PreparedRegularTurn) {
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.request_context_warning_title)
+            .setMessage(body)
+            .setPositiveButton(R.string.send_anyway) { _, _ ->
+                commitPreparedTurn(prepared)
+            }
+            .setNegativeButton(R.string.btn_cancel, null)
+            .show()
+    }
+
+    /**
      * The conversation/send button (btnSend) was tapped. One button, three roles
      * decided by state:
      *   - a hands-free conversation is live  → STOP it (tap again ends it),
@@ -4643,7 +4919,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     private fun onConversationButtonTapped() {
         when {
             isHandsFreeEngaged() -> stopHandsFreeByUser()
-            !messageInput?.text.isNullOrEmpty() -> parseMessage(messageInput?.text.toString())
+            !messageInput?.text.isNullOrEmpty() ->
+                prepareTypedTurn(messageInput?.text.toString())
             isAiCurrentlyBusy() -> cancelAllAiActivity("conversation button tap on this screen")
             else -> startHandsFreeByUser()
         }
@@ -5006,7 +5283,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     }
 
     @Suppress("deprecation")
-    private suspend fun generateResponse(request: String, shouldPronounce: Boolean) {
+    private suspend fun generateResponse(
+        request: String,
+        shouldPronounce: Boolean,
+        preparedTurn: PreparedRegularTurn? = null
+    ) {
         // The single generation funnel is also the single guard point: no
         // generation into a chat whose stored history is locked or
         // preserved-corrupt (Round 4) — typed, voice and retry paths all
@@ -5044,6 +5325,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 val chatCompletionRequest = if (preferences?.getLogitBiasesConfigId() == null || preferences?.getLogitBiasesConfigId() == "null" || preferences?.getLogitBiasesConfigId() == "") {
                     ChatCompletionRequest(
                         model = ModelId("gpt-4o"),
+                        maxTokens = preferences!!.getMaxTokens(),
                         temperature = if (preferences!!.getTemperature().toDouble() == 0.7) null else preferences!!.getTemperature().toDouble(),
                         topP = if (preferences!!.getTopP().toDouble() == 1.0) null else preferences!!.getTopP().toDouble(),
                         frequencyPenalty = if (preferences!!.getFrequencyPenalty().toDouble() == 0.0) null else preferences!!.getFrequencyPenalty().toDouble(),
@@ -5064,6 +5346,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 } else {
                     ChatCompletionRequest(
                         model = ModelId("gpt-4o"),
+                        maxTokens = preferences!!.getMaxTokens(),
                         temperature = if (preferences!!.getTemperature().toDouble() == 0.7) null else preferences!!.getTemperature().toDouble(),
                         topP = if (preferences!!.getTopP().toDouble() == 1.0) null else preferences!!.getTopP().toDouble(),
                         frequencyPenalty = if (preferences!!.getFrequencyPenalty().toDouble() == 0.0) null else preferences!!.getFrequencyPenalty().toDouble(),
@@ -5131,6 +5414,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 val completionRequest = if (preferences?.getLogitBiasesConfigId() == null || preferences?.getLogitBiasesConfigId() == "null" || preferences?.getLogitBiasesConfigId() == "") {
                     CompletionRequest(
                         model = ModelId(model),
+                        maxTokens = preferences!!.getMaxTokens(),
                         temperature = if (model.contains("gpt-5") || model.contains("o1") || model.contains("o3")) 1.0 else if (preferences!!.getTemperature().toDouble() == 0.7) null else preferences!!.getTemperature().toDouble(),
                         topP = if (preferences!!.getTopP().toDouble() == 1.0) null else preferences!!.getTopP().toDouble(),
                         frequencyPenalty = if (preferences!!.getFrequencyPenalty().toDouble() == 0.0) null else preferences!!.getFrequencyPenalty().toDouble(),
@@ -5142,6 +5426,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 } else {
                     CompletionRequest(
                         model = ModelId(model),
+                        maxTokens = preferences!!.getMaxTokens(),
                         temperature = if (model.contains("gpt-5") || model.contains("o1") || model.contains("o3")) 1.0 else if (preferences!!.getTemperature().toDouble() == 0.7) null else preferences!!.getTemperature().toDouble(),
                         topP = if (preferences!!.getTopP().toDouble() == 1.0) null else preferences!!.getTopP().toDouble(),
                         frequencyPenalty = if (preferences!!.getFrequencyPenalty().toDouble() == 0.0) null else preferences!!.getFrequencyPenalty().toDouble(),
@@ -5248,7 +5533,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                         val toolsCalls = message.toolCalls!!
 
                         if (toolsCalls.isEmpty()) {
-                            regularGPTResponse(shouldPronounce)
+                            regularGPTResponse(shouldPronounce, preparedTurn)
                         } else {
                             for (toolCall in toolsCalls) {
                                 require(toolCall is ToolCall.Function) { "Tool call is not a function" }
@@ -5259,7 +5544,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                             ChatPreferences.getChatPreferences().putTimestampToChatById(this, chatId)
                         }
                     } else {
-                        regularGPTResponse(shouldPronounce)
+                        regularGPTResponse(shouldPronounce, preparedTurn)
                     }
                 } else if (functionCallingEnabled) {
                     putMessage("Function calling requires OpenAI endpoint which is missing on your device. Please go to the settings and add OpenAI endpoint or disable Function Calling. OpenAI base url (host) is: https://api.openai.com/v1/ (don't forget to add slash at the end otherwise you will receive an error).", true)
@@ -5274,7 +5559,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                         .setNegativeButton("Cancel") { _, _ -> }
                         .show()
                 } else {
-                    regularGPTResponse(shouldPronounce)
+                    regularGPTResponse(shouldPronounce, preparedTurn)
                 }
             }
         } catch (_: CancellationException) {
@@ -5305,7 +5590,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             // ERROR_CODES.md.
             val genError = GenerationErrorClassifier.classify(e)
             logGenerationError(genError, e, "message")
-            val response = genError.chatMessage(this)
+            val response = genError.providerLimitMessage(this)
+                ?: genError.chatMessage(this)
 
             if (messages.isEmpty() || messages[messages.size - 1]["isBot"] == false) {
                 putMessage("", true)
@@ -5383,9 +5669,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
      *  spec: the message plus a summary of the last few turns, so
      *  mid-conversation topics keep retrieving — not just the latest line).
      *  The current user message is already the list's tail, so it's dropped. */
-    private fun recentTurnsContext(): String {
+    private fun recentTurnsContext(
+        requestMessages: List<ChatMessage> = chatMessages
+    ): String {
         return try {
-            chatMessages.dropLast(1)
+            requestMessages.dropLast(1)
                 .takeLast(org.teslasoft.assistant.preferences.memory.enforcer.Enforcer.RECENT_CONTEXT_TURNS)
                 .joinToString("\n") {
                     (it.content ?: "").take(
@@ -5471,7 +5759,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         val voiceLive = isVoiceLive()
         try {
             val sb = StringBuilder()
-            sb.append(result.chatMessage(this)).append('\n')
+            sb.append(result.providerLimitMessage(this) ?: result.chatMessage(this)).append('\n')
             sb.append("Profile: ${apiEndpointObject?.label ?: "unknown"}\n")
             sb.append("Base URL: ${apiEndpointObject?.host ?: "unknown"}\n")
             sb.append("Model: ${model.ifBlank { "unknown" }}\n")
@@ -5874,14 +6162,226 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         }
     }
 
-    private suspend fun regularGPTResponse(shouldPronounce: Boolean) {
+    /**
+     * Builds the provider request once. The returned Aallam request and the
+     * provider-neutral measurement payload are made from the same immutable
+     * snapshots; callers must send [FrozenRegularRequest.request] directly.
+     */
+    private suspend fun buildFrozenRegularRequest(
+        requestMessages: List<ChatMessage>,
+        loreQuery: String,
+        selectedModel: String,
+        maximumResponseTokens: Int
+    ): FrozenRegularRequest {
+        val msgs = ArrayList<ChatMessage>()
+
+        // Stable base prompt: companion persona first, then the chat's system
+        // instructions, exactly as before.
+        val systemMessage = preferences!!.getSystemMessage()
+        val personaId = preferences!!.getPersonaId()
+        val personaPrompt = if (personaId != "") {
+            PersonaPreferences.getPersonaPreferences(this).getPersona(personaId).prompt
+        } else {
+            ""
+        }
+        val effectiveSystemMessage = listOf(personaPrompt, systemMessage)
+            .filter { it.isNotBlank() }
+            .joinToString("\n\n")
+        if (effectiveSystemMessage.isNotEmpty()) {
+            msgs.add(ChatMessage(role = ChatRole.System, content = effectiveSystemMessage))
+        }
+
+        // Selected-model rules are a separate prompt layer after the stable
+        // companion/system content.
+        if (preferences!!.getChatApplyModelRules() && MemoryStore.isProvisioned(this)) {
+            val modelRulesBlock: String? = try {
+                withContext(Dispatchers.IO) {
+                    val rules = MemoryStore.getInstance(this@ChatActivity)
+                        .getActiveModelRulesForModel(selectedModel)
+                    if (rules.isEmpty()) null
+                    else rules.joinToString(
+                        separator = "\n",
+                        prefix = getString(R.string.model_rules_injection_header) + "\n"
+                    ) { "- " + it.text }
+                }
+            } catch (e: Exception) {
+                org.teslasoft.assistant.preferences.memory.MemoryLog.log(
+                    this,
+                    "ModelRules",
+                    "error",
+                    "Model rules unavailable this turn: ${e.message}"
+                )
+                null
+            }
+            modelRulesBlock?.let {
+                msgs.add(ChatMessage(role = ChatRole.System, content = it))
+            }
+        }
+
+        val loreBooksEnabled = preferences?.getChatLoreBooksEnabled() == true
+        val allLoreMatches = ArrayList<LoreBookMatch>()
+        var activeLoreBookCount = -1
+        if (loreBooksEnabled) {
+            try {
+                val loreStore = LoreBookStore.getInstance(this)
+                val activeBookIds = LinkedHashSet<String>()
+                val checkedIds = preferences?.getActiveLoreBookIds() ?: arrayListOf()
+                if (personaId != "") {
+                    val loreBookPersona =
+                        PersonaPreferences.getPersonaPreferences(this).getPersona(personaId)
+                    if (loreBookPersona.coreLoreBookId != "") {
+                        activeBookIds.add(loreBookPersona.coreLoreBookId)
+                    }
+                    val linked = loreBookPersona.additionalLoreBookIdList()
+                    activeBookIds.addAll(checkedIds.filter { linked.contains(it) })
+                } else {
+                    activeBookIds.addAll(checkedIds)
+                }
+                for (bookId in activeBookIds) {
+                    allLoreMatches.addAll(loreStore.findMatches(loreQuery, bookId))
+                }
+                activeLoreBookCount = activeBookIds.size
+            } catch (e: Exception) {
+                org.teslasoft.assistant.preferences.memory.MemoryLog.log(
+                    this,
+                    "LoreBook",
+                    "error",
+                    "Lorebook unavailable this turn: ${e.message}"
+                )
+            }
+            LoreBookInjectionLog.record(loreQuery, allLoreMatches, activeLoreBookCount)
+        }
+
+        var memoryAssembly: String? = null
+        if (preferences?.getChatMemoryEnabled() == true && MemoryStore.isProvisioned(this)) {
+            memoryAssembly = try {
+                withContext(Dispatchers.IO) {
+                    org.teslasoft.assistant.preferences.memory.enforcer.Enforcer
+                        .getInstance(this@ChatActivity)
+                        .assembleTurn(
+                            org.teslasoft.assistant.preferences.memory.enforcer.Enforcer.TurnInput(
+                                chatId = chatId,
+                                personaId = personaId,
+                                userMessage = loreQuery,
+                                recentContext = recentTurnsContext(requestMessages),
+                                modelTag = selectedModel,
+                                // Lore is frozen as its own complete request
+                                // layer immediately after memory below. Passing
+                                // it into Enforcer would apply its legacy
+                                // injection cap before request-capacity checks.
+                                loreMatches = emptyList(),
+                                worldId = preferences?.getChatWorldId(),
+                                campaignId = preferences?.getChatCampaignId(),
+                                roleplayCharacterId =
+                                    preferences?.getChatRoleplayCharacterId(),
+                                userPersonaId = preferences?.getChatUserPersonaId(),
+                                projectId = preferences?.getChatProjectId()
+                            )
+                        )
+                }
+            } catch (e: Exception) {
+                org.teslasoft.assistant.preferences.memory.MemoryLog.log(
+                    this,
+                    "Enforcer",
+                    "error",
+                    "Assembly failed, lore-books-only this turn: ${e.message}"
+                )
+                notifyMemoryDegradedOnce()
+                null
+            }
+        }
+
+        if (memoryAssembly != null) {
+            msgs.add(ChatMessage(role = ChatRole.System, content = memoryAssembly))
+        }
+
+        if (allLoreMatches.isNotEmpty()) {
+            val loreText = StringBuilder(getString(R.string.lorebook_injection_header))
+            for (match in allLoreMatches) {
+                loreText.append("\n- ").append(match.entry.content)
+            }
+            msgs.add(ChatMessage(role = ChatRole.System, content = loreText.toString()))
+        }
+
+        // Conversation history, all active attachments embedded in their user
+        // turns, and the current input have already been frozen in this list.
+        msgs.addAll(requestMessages)
+
+        val usesRestrictedSampling = selectedModel.contains("gpt-5") ||
+            selectedModel.contains("o1") || selectedModel.contains("o3")
+        val temperature = if (usesRestrictedSampling) {
+            1.0
+        } else {
+            preferences!!.getTemperature().toDouble().takeUnless { it == 0.7 }
+        }
+        val topP = preferences!!.getTopP().toDouble().takeUnless { it == 1.0 }
+        val frequencyPenalty =
+            preferences!!.getFrequencyPenalty().toDouble().takeUnless { it == 0.0 }
+        val presencePenalty =
+            preferences!!.getPresencePenalty().toDouble().takeUnless { it == 0.0 }
+        val seed = preferences!!.getSeed().takeIf { it.isNotEmpty() }?.toInt()
+        val hasNoBiasConfig = preferences?.getLogitBiasesConfigId().isNullOrEmpty() ||
+            preferences?.getLogitBiasesConfigId() == "null"
+        val logitBias = if (hasNoBiasConfig && !usesRestrictedSampling) {
+            logitBiasPreferences?.getLogitBiasesMap()?.toMap()
+        } else {
+            null
+        }
+
+        val request = ChatCompletionRequest(
+            model = ModelId(selectedModel),
+            maxTokens = maximumResponseTokens,
+            temperature = temperature,
+            topP = topP,
+            frequencyPenalty = frequencyPenalty,
+            presencePenalty = presencePenalty,
+            seed = seed,
+            logitBias = logitBias,
+            messages = msgs.toList()
+        )
+        val payloadMessages = msgs.map { message ->
+            val role = when (message.role) {
+                ChatRole.System -> "system"
+                ChatRole.User -> "user"
+                ChatRole.Assistant -> "assistant"
+                ChatRole.Tool -> "tool"
+                else -> message.role.toString().lowercase(Locale.ROOT)
+            }
+            FrozenPayloadMessage(role, message.content?.toString().orEmpty())
+        }
+        val payload = FrozenChatPayload(
+            model = selectedModel,
+            messages = payloadMessages,
+            maximumResponseTokens = maximumResponseTokens,
+            temperature = temperature,
+            topP = topP,
+            frequencyPenalty = frequencyPenalty,
+            presencePenalty = presencePenalty,
+            seed = seed,
+            logitBias = logitBias
+        )
+        return FrozenRegularRequest(request, payload)
+    }
+
+    private suspend fun regularGPTResponse(
+        shouldPronounce: Boolean,
+        preparedTurn: PreparedRegularTurn? = null
+    ) {
         disableAutoScroll = false
 
         var response = ""
         putMessage("", true)
         markLastAssistantStreaming()
 
-        val msgs: ArrayList<ChatMessage> = arrayListOf()
+        val msgs: ArrayList<ChatMessage>
+        val chatCompletionRequest: ChatCompletionRequest
+        if (preparedTurn != null) {
+            // This is the object that was measured before the composer was
+            // committed. Do not rebuild any part of it here.
+            chatCompletionRequest = preparedTurn.request
+            msgs = ArrayList(preparedTurn.request.messages)
+        } else {
+            msgs = arrayListOf()
 
         // Merge the selected persona prompt (first) with the always-on system message
         // into a single, stable System message. Keeping it identical and first on every
@@ -6070,9 +6570,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
         msgs.addAll(chatMessages)
 
-        val chatCompletionRequest = if (preferences?.getLogitBiasesConfigId() == null || preferences?.getLogitBiasesConfigId() == "null" || preferences?.getLogitBiasesConfigId() == "") {
+        chatCompletionRequest = if (preferences?.getLogitBiasesConfigId() == null || preferences?.getLogitBiasesConfigId() == "null" || preferences?.getLogitBiasesConfigId() == "") {
             ChatCompletionRequest(
                 model = ModelId(model),
+                maxTokens = preferences!!.getMaxTokens(),
                 temperature = if (model.contains("gpt-5") || model.contains("o1") || model.contains("o3")) 1.0 else if (preferences!!.getTemperature().toDouble() == 0.7) null else preferences!!.getTemperature().toDouble(),
                 topP = if (preferences!!.getTopP().toDouble() == 1.0) null else preferences!!.getTopP().toDouble(),
                 frequencyPenalty = if (preferences!!.getFrequencyPenalty().toDouble() == 0.0) null else preferences!!.getFrequencyPenalty().toDouble(),
@@ -6084,6 +6585,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         } else {
             ChatCompletionRequest(
                 model = ModelId(model),
+                maxTokens = preferences!!.getMaxTokens(),
                 temperature = if (model.contains("gpt-5") || model.contains("o1") || model.contains("o3")) 1.0 else if (preferences!!.getTemperature().toDouble() == 0.7) null else preferences!!.getTemperature().toDouble(),
                 topP = if (preferences!!.getTopP().toDouble() == 1.0) null else preferences!!.getTopP().toDouble(),
                 frequencyPenalty = if (preferences!!.getFrequencyPenalty().toDouble() == 0.0) null else preferences!!.getFrequencyPenalty().toDouble(),
@@ -6091,6 +6593,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 seed = if (preferences!!.getSeed() != "") preferences!!.getSeed().toInt() else null,
                 messages = msgs
             )
+        }
         }
 
         val completions: Flow<ChatCompletionChunk> =
@@ -6741,7 +7244,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             val genError = GenerationErrorClassifier.classify(e)
             logGenerationError(genError, e, "image-generation")
             if (preferences?.showChatErrors() == true) {
-                putMessage(genError.chatMessage(this), true)
+                putMessage(genError.providerLimitMessage(this) ?: genError.chatMessage(this), true)
             }
 
             saveSettings()
@@ -7007,7 +7510,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     headers = emptyMap(),
                     host = OpenAIHost(apiEndpoint.host),
                     proxy = null,
-                    retry = RetryStrategy()
+                    retry = RetryStrategy(maxRetries = 0)
                 )
                 openAIAI = OpenAI(configOpenAI)
                 onOpenAIAction(feature, prompt)

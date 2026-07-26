@@ -97,6 +97,7 @@ class ApiEndpointEditorActivity : FragmentActivity() {
     private var fieldModel: TextInputEditText? = null
     private var fieldProvider: TextInputEditText? = null
     private var fieldMaxTokens: TextInputEditText? = null
+    private var fieldContextWindow: TextInputEditText? = null
     private var fieldTimeout: TextInputEditText? = null
     private var fieldResponseTime: TextInputEditText? = null
     private var fieldEndSeparator: TextInputEditText? = null
@@ -163,6 +164,7 @@ class ApiEndpointEditorActivity : FragmentActivity() {
         fieldModel = findViewById(R.id.field_model)
         fieldProvider = findViewById(R.id.field_provider)
         fieldMaxTokens = findViewById(R.id.field_max_tokens)
+        fieldContextWindow = findViewById(R.id.field_context_window)
         fieldTimeout = findViewById(R.id.field_timeout)
         fieldResponseTime = findViewById(R.id.field_response_time)
         fieldEndSeparator = findViewById(R.id.field_end_separator)
@@ -252,6 +254,12 @@ class ApiEndpointEditorActivity : FragmentActivity() {
         sliderPresencePenalty?.setLabelFormatter { "${it / 10.0}" }
 
         fieldMaxTokens?.setText(endpoint.maxTokens.toString())
+        fieldContextWindow?.setText(
+            endpoint.contextWindowTokens
+                ?.takeIf { endpoint.contextWindowModelId == selectedModel }
+                ?.toString()
+                .orEmpty()
+        )
         fieldTimeout?.setText(endpoint.connectTimeoutSeconds.toString())
         fieldResponseTime?.setText(endpoint.responseTimeoutSeconds.toString())
         fieldEndSeparator?.setText(endpoint.endSeparator)
@@ -331,6 +339,7 @@ class ApiEndpointEditorActivity : FragmentActivity() {
     private fun showModelChooser() {
         val modelDialog = AdvancedModelSelectorDialogFragment.newInstance(selectedModel, "")
         modelDialog.setModelSelectedListener { model ->
+            if (model != selectedModel) fieldContextWindow?.setText("")
             selectedModel = model
             fieldModel?.setText(model)
         }
@@ -372,7 +381,16 @@ class ApiEndpointEditorActivity : FragmentActivity() {
             ),
             // Rename keeps the same id; a new profile carries "" and is minted an
             // id (or the reserved Default id) on first save.
-            id = endpointId
+            id = endpointId,
+            contextWindowTokens = fieldContextWindow?.text.toString()
+                .trim()
+                .toIntOrNull()
+                ?.takeIf { it > 0 },
+            contextWindowModelId = if (fieldContextWindow?.text.toString().isBlank()) {
+                ""
+            } else {
+                selectedModel
+            }
         )
     }
 
@@ -578,6 +596,7 @@ class ApiEndpointEditorActivity : FragmentActivity() {
             sliderFrequencyPenalty?.value.toString(),
             sliderPresencePenalty?.value.toString(),
             fieldMaxTokens?.text.toString(),
+            fieldContextWindow?.text.toString(),
             fieldTimeout?.text.toString(),
             fieldResponseTime?.text.toString(),
             fieldEndSeparator?.text.toString(),

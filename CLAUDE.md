@@ -87,6 +87,32 @@ Use this compact format:
 
 Do not bury a decision inside a long progress report.
 
+### Approval gates
+
+When an instruction says to propose, confirm, check with, or get approval before doing something, that is a stop point.
+
+An "item" includes user-facing wording, configuration values, defaults, names, labels, behavior choices, architecture decisions, documentation, tests that encode the decision, and any implementation that makes or implies the undecided choice.
+
+At a stop point:
+
+- do not write the item into any file, in any form, including as a placeholder, draft, example, temporary value, or "not final" version;
+- do not commit or push it;
+- stop, ask the question, and end the turn.
+
+A stop point outranks "proceed," "implement," or "continue" in the same instruction. Being told to proceed never authorizes passing a gate that the same instruction set. Do the work that does not depend on the answer, then stop and ask.
+
+If the work cannot compile, run, or be tested without the undecided item, stop before starting that part and ask first.
+
+Never write an unapproved value and then ask whether to keep it. Asking afterward is not approval. It is the failure this rule exists to prevent.
+
+Do not decide for the owner that undoing something is not worth the cost. If the owner may want it reversed, say so plainly and reverse it when asked.
+
+### Wording describes behavior; it does not decide it
+
+Before proposing or writing user-facing wording, first identify every product behavior, default, threshold, fallback, and data-handling decision that the wording would describe. If any of those decisions are not already approved, stop and ask about the behavior first. Do not invent behavior in order to draft the wording.
+
+A request for wording approval does not authorize choosing the underlying behavior. Strings must describe approved behavior, not define it.
+
 ### Discussion is not approval
 
 Exploring an idea, asking a question, expressing a preference, or saying "maybe" does not automatically authorize implementation.
@@ -392,9 +418,13 @@ Current priorities belong in the active conversation, issue, work order, or bran
 
 ### Usage control
 
-Do not spawn subagents or high-cost parallel work for routine tasks.
+Subagents are a normal, permitted tool. Choosing a high-end model (e.g. Fable) for a subagent is likewise permitted — it is not restricted.
 
-Ask before using an expensive model, multiple agents, or a broad exploratory pass that will materially increase usage.
+The rule is against unnecessary volume: match the number of agents and the model tier to what the task genuinely needs. A routine task does not need a subagent at all; a subagent, when one is warranted, does not need a high-end model unless the task specifically calls for that tier's reasoning.
+
+Fable in particular has a known habit of over-spawning — producing far more subagents than a task needs once it starts. Watch for this specifically. Do not let a task balloon into a large batch of Fable-tier subagents by default; a handful of routine lookups do not each need one.
+
+Ask before spawning multiple agents, before using a high-end model for a subagent, or before running a broad exploratory pass that will materially increase usage.
 
 Do not duplicate work already completed in the current conversation or branch.
 
@@ -453,3 +483,16 @@ Do not add:
 - rules that apply to only one resolved incident.
 
 Put feature details in the relevant feature documentation. Put active work in the relevant issue, work order, or branch notes. Git already preserves history.
+
+## 16. Work-mode build limits
+
+Do not spend task time bootstrapping a full Android SDK or reproducing the
+GitHub Actions Android build inside the limited Work Mode environment. Use
+available focused checks locally and leave the authoritative full compile to
+the repository's GitHub Actions workflow.
+
+## 17. Work-mode GitHub publishing limits
+
+When the configured GitHub HTTPS remote has no usable credential, do not spend
+task time attempting to authenticate or retrying a direct push. Leave the
+verified commit ready for a credentialed environment to publish.

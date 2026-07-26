@@ -395,7 +395,9 @@
     <string name="message_delete_profile">Delete profile? This can\'t be undone.</string>
     <string name="discard_changes_q">Discard changes?</string>
     <string name="okay">Okay</string>
-    <string name="label_max_tokens">Max tokens</string>
+    <string name="label_max_tokens">Maximum response tokens</string>
+    <string name="label_context_window">Context window</string>
+    <string name="unit_tokens">tokens</string>
     <string name="label_end_separator">End separator</string>
     <string name="label_prefix">Prefix</string>
     <string name="btn_save_to_profile">Save to profile</string>
@@ -727,6 +729,12 @@
     <string name="gen_error_s2">The server returned a response the app could not read as a stream. Check whether this endpoint and model support streaming.</string>
     <string name="gen_error_s3">The request was rejected as inappropriate content and could not be processed.</string>
     <string name="gen_error_u0">An unexpected error occurred. The technical details were saved to the Error Log.</string>
+    <string name="provider_context_overflow">The provider rejected the complete request because it exceeded the selected model’s context limit. Nothing was shortened or retried. Remove content or attachments, start a new chat, or choose a model with a larger context window.</string>
+    <string name="provider_input_limit">The provider rejected the request because the complete input exceeded the selected model’s input limit. Nothing was shortened or retried. Remove content or attachments, start a new chat, or choose another model.</string>
+    <string name="provider_request_body_limit">The server rejected the request because the request body was larger than it accepts. This is a server request-size limit, not necessarily the model’s context limit. Nothing was shortened or retried.</string>
+    <string name="provider_rate_limit">The provider rejected the request because it exceeded the account’s current rate or token-throughput limit. This is not a document or context-size limit. Nothing was shortened or retried. Try again later or send a smaller request.</string>
+    <string name="provider_quota_limit">The provider rejected the request because the account’s quota or spending limit has been reached. This is not a document-size limit. Nothing was shortened or retried. Check the provider account’s usage and billing limits.</string>
+    <string name="provider_unknown_limit">The server rejected the request but did not provide enough information to identify which limit was exceeded. Nothing was shortened or retried. Technical details were saved to the Error Log.</string>
     <string name="label_debug">Debug</string>
     <string name="label_permission_denied">Permission denied</string>
     <string name="label_use_camera">Use camera</string>
@@ -2396,6 +2404,7 @@
     <!-- Size notices. Persistent inline text under the row, never a toast. -->
     <string name="include_notice_truncated">This file is too large to send in full. The beginning was included, up to about ~%1$s tokens.</string>
     <string name="include_notice_csv">Large spreadsheet — sent the column names and first %1$s rows of %2$s.</string>
+    <string name="include_notice_workbook">Large workbook — %1$s worksheets; sent the column names and first %2$s rows of %3$s.</string>
 
     <!-- Attach failures. Each maps to a detectable-condition row in
          document-includes-plan.md. -->
@@ -2408,8 +2417,28 @@
     <string name="include_error_content_mismatch">File is unable to be read. Content does not match file type.</string>
     <string name="include_error_corrupted">File is unable to be read. File is corrupted.</string>
     <string name="include_error_empty">File contains no data.</string>
+    <string name="include_error_export_unavailable">File is unable to be read. The app that owns this file did not offer a format this app can read.</string>
+    <string name="include_error_export_failed">File is unable to be read. The file could not be exported. Check that you are online and signed in to the app that owns it, then try again.</string>
     <string name="include_error_unknown">File could not be attached due to an unknown error.</string>
     <string name="include_error_duplicate">Document already attached.</string>
+    <string name="document_attach_failed_title">Document could not be attached</string>
+    <string name="document_attach_memory_body">SpeakGPT could not process the complete document within this device’s safe memory limit. No part of the document was attached. Try attaching a smaller copy.</string>
+    <string name="document_attach_expansion_body">This document expands into more data than SpeakGPT can safely process. No part of the document was attached. Try saving a smaller copy and attaching that instead.</string>
+    <string name="document_storage_failed_title">Not enough storage</string>
+    <string name="document_attach_storage_body">SpeakGPT does not have enough free device storage to finish and safely save this document. No part of the document was attached. Free some storage and try again.</string>
+    <string name="document_attach_interrupted_body">The document could not be read completely because the file connection was interrupted. No part of the document was attached. Try again.</string>
+    <string name="document_export_failed_title">Document could not be exported</string>
+    <string name="document_export_incomplete_body">The source app did not finish exporting the complete document. No part of the document was attached. Check that you are online and signed in to the source app, then try again.</string>
+    <string name="request_prepare_failed_title">Request could not be prepared</string>
+    <string name="request_prepare_failed_body">The complete request is too large for this device to assemble safely with the current conversation and attachments. Nothing was sent or shortened. Remove some content or attachments, or start a new chat.</string>
+    <string name="response_limit_too_high_title">Response limit is too high</string>
+    <string name="response_limit_too_high_body">This chat is configured to request up to %1$s response tokens, but the selected model supports a maximum of %2$s. Nothing was sent. Lower the response-token setting or choose another model.</string>
+    <string name="request_context_exceeded_title">Request exceeds this model’s context limit</string>
+    <string name="request_context_exceeded_body">The complete request requires at least %1$s tokens after including the conversation, instructions, memory, attachments, and space for the reply. The selected model supports %2$s. Nothing was sent or shortened. Remove content or attachments, start a new chat, or choose a model with a larger context window.</string>
+    <string name="request_context_warning_title">This request may exceed the model’s context limit</string>
+    <string name="request_context_range_warning_body">Sending this request is not recommended because SpeakGPT cannot confirm that it fits. The complete request is estimated at %1$s to %2$s tokens after including the conversation, instructions, memory, attachments, and space for the reply. The selected model supports %3$s. The provider may reject it, and nothing will be shortened automatically.</string>
+    <string name="request_context_approximate_warning_body">Sending this request is not recommended because SpeakGPT cannot confirm that it fits. The complete request is approximately %1$s tokens after including the conversation, instructions, memory, attachments, and space for the reply. The selected model supports %2$s. The provider may reject it, and nothing will be shortened automatically.</string>
+    <string name="send_anyway">Send anyway</string>
 
     <!-- Accessibility labels. -->
     <string name="include_menu_desc">Options for %1$s</string>
