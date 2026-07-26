@@ -64,7 +64,14 @@ class ApiEndpointObject(
      * preference key). The built-in "Default" profile uses the reserved
      * [DEFAULT_ENDPOINT_ID] so the default per-chat reference keeps resolving.
      * Kept at the END of the constructor so existing positional callers stay valid. */
-    var id: String = ""
+    var id: String = "",
+    /**
+     * Optional total context capacity for this exact endpoint profile and
+     * [contextWindowModelId]. Null means unknown and never blocks Send.
+     */
+    var contextWindowTokens: Int? = null,
+    /** Exact model id the optional context value belongs to. */
+    var contextWindowModelId: String = ""
 ) {
     companion object {
         /* Reserved, fixed id for the built-in "Default" endpoint. It is NOT a
