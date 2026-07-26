@@ -26,6 +26,10 @@ import java.net.UnknownHostException
 class GenerationErrorClassifierTest {
 
     private fun code(t: Throwable) = GenerationErrorClassifier.classify(t).code
+    private class StructuredProviderException(
+        val code: String,
+        message: String
+    ) : RuntimeException(message)
 
     // ---- transport / network (no HTTP status) --------------------------
 
@@ -71,6 +75,57 @@ class GenerationErrorClassifierTest {
 
     @Test fun maxTokensIsM3() {
         assertEquals(GenErrorCode.M3, code(RuntimeException("This model's maximum context length is 8192 tokens")))
+    }
+
+    @Test fun structuredContextCodeIsModelContext() {
+        assertEquals(
+            ProviderLimitKind.MODEL_CONTEXT,
+            GenerationErrorClassifier.classify(
+                RuntimeException("""{"error":{"code":"context_length_exceeded"}}""")
+            ).providerLimit
+        )
+    }
+
+    @Test fun explicitInputLimitStaysSeparateFromContext() {
+        assertEquals(
+            ProviderLimitKind.MODEL_INPUT,
+            GenerationErrorClassifier.classify(
+                RuntimeException("""{"error":{"code":"maximum_input_tokens"}}""")
+            ).providerLimit
+        )
+    }
+
+    @Test fun http413IsRequestBodyNotContext() {
+        val result = GenerationErrorClassifier.classify(
+            RuntimeException("HTTP 413 Payload Too Large")
+        )
+        assertEquals(ProviderLimitKind.REQUEST_BODY, result.providerLimit)
+        assertEquals(413, result.httpStatus)
+    }
+
+    @Test fun throughputAndQuotaAreDistinguished() {
+        assertEquals(
+            ProviderLimitKind.RATE_OR_THROUGHPUT,
+            GenerationErrorClassifier.classify(
+                RuntimeException("429 Too Many Requests: tokens per minute exceeded")
+            ).providerLimit
+        )
+        assertEquals(
+            ProviderLimitKind.QUOTA_OR_SPENDING,
+            GenerationErrorClassifier.classify(
+                RuntimeException("""{"error":{"code":"insufficient_quota"}}""")
+            ).providerLimit
+        )
+    }
+
+    @Test fun structuredCodeWinsOverConflictingExceptionProse() {
+        val result = GenerationErrorClassifier.classify(
+            StructuredProviderException(
+                "insufficient_quota",
+                "wrapper mentioned maximum context length"
+            )
+        )
+        assertEquals(ProviderLimitKind.QUOTA_OR_SPENDING, result.providerLimit)
     }
 
     @Test fun invalidModelIsM1() {
