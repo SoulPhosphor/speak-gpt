@@ -228,13 +228,13 @@
                 style="@style/Widget.App.Section.Title"
                 android:layout_marginStart="24dp"
                 android:layout_marginEnd="24dp"
-                android:text="@string/api_endpoint_label_temperature" />
+                android:text="@string/sampling_label_temperature" />
 
             <TextView
                 style="@style/Widget.App.Section.Hint"
                 android:layout_marginStart="24dp"
                 android:layout_marginEnd="24dp"
-                android:text="@string/api_endpoint_hint_temperature" />
+                android:text="@string/sampling_hint_temperature" />
 
             <com.google.android.material.slider.Slider
                 android:id="@+id/slider_temperature"
@@ -253,13 +253,13 @@
                 style="@style/Widget.App.Section.Title"
                 android:layout_marginStart="24dp"
                 android:layout_marginEnd="24dp"
-                android:text="@string/api_endpoint_label_top_p" />
+                android:text="@string/sampling_label_top_p" />
 
             <TextView
                 style="@style/Widget.App.Section.Hint"
                 android:layout_marginStart="24dp"
                 android:layout_marginEnd="24dp"
-                android:text="@string/api_endpoint_hint_top_p" />
+                android:text="@string/sampling_hint_top_p" />
 
             <com.google.android.material.slider.Slider
                 android:id="@+id/slider_top_p"
@@ -278,13 +278,13 @@
                 style="@style/Widget.App.Section.Title"
                 android:layout_marginStart="24dp"
                 android:layout_marginEnd="24dp"
-                android:text="@string/api_endpoint_label_frequency_penalty" />
+                android:text="@string/sampling_label_frequency_penalty" />
 
             <TextView
                 style="@style/Widget.App.Section.Hint"
                 android:layout_marginStart="24dp"
                 android:layout_marginEnd="24dp"
-                android:text="@string/api_endpoint_hint_frequency_penalty" />
+                android:text="@string/sampling_hint_frequency_penalty" />
 
             <com.google.android.material.slider.Slider
                 android:id="@+id/slider_frequency_penalty"
@@ -303,13 +303,13 @@
                 style="@style/Widget.App.Section.Title"
                 android:layout_marginStart="24dp"
                 android:layout_marginEnd="24dp"
-                android:text="@string/api_endpoint_label_presence_penalty" />
+                android:text="@string/sampling_label_presence_penalty" />
 
             <TextView
                 style="@style/Widget.App.Section.Hint"
                 android:layout_marginStart="24dp"
                 android:layout_marginEnd="24dp"
-                android:text="@string/api_endpoint_hint_presence_penalty" />
+                android:text="@string/sampling_hint_presence_penalty" />
 
             <com.google.android.material.slider.Slider
                 android:id="@+id/slider_presence_penalty"
