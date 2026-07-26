@@ -75,6 +75,19 @@ object IncludeRenderer {
                         .append(notice.totalRows)
                         .append('"')
                 }
+                // The worksheet count has to reach the model too. Without it
+                // the AI would read a fragment of a large workbook as though
+                // it were the whole thing — the same mistake the row counts
+                // exist to prevent, one level up.
+                is IncludeNotice.WorkbookTrimmed -> {
+                    append(" sheets=\"")
+                        .append(notice.sheets)
+                        .append("\" rows=\"header + first ")
+                        .append(notice.sentRows)
+                        .append(" of ")
+                        .append(notice.totalRows)
+                        .append('"')
+                }
             }
             append(">\n")
             append(include.modelText())
