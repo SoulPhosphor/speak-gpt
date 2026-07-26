@@ -388,9 +388,11 @@ Current priorities belong in the active conversation, issue, work order, or bran
 
 ### Usage control
 
-Do not spawn subagents or high-cost parallel work for routine tasks.
+Subagents are a normal, permitted tool. Choosing a high-end model (e.g. Fable) for a subagent is likewise permitted — it is not restricted.
 
-Ask before using an expensive model, multiple agents, or a broad exploratory pass that will materially increase usage.
+The rule is against unnecessary volume: do not spawn a bunch of subagents, especially on a high-end model, for a routine task that does not call for that scale. Match the number of agents and the model tier to what the task genuinely needs.
+
+Ask before spawning multiple agents or running a broad exploratory pass that will materially increase usage.
 
 Do not duplicate work already completed in the current conversation or branch.
 
