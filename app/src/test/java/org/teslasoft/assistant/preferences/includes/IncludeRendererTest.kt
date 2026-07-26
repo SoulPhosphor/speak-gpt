@@ -88,15 +88,6 @@ class IncludeRendererTest {
         assertTrue(out.contains("rows=\"header + first 500 of 47000\""))
     }
 
-    @Test fun aMerelyLargeFileNeedsNoModelSideNote() {
-        val out = IncludeRenderer.renderUserMessage(
-            "", listOf(doc(notice = IncludeNotice.Large(12000)))
-        )
-        // Nothing was withheld, so there is nothing to disclose.
-        assertFalse(out.contains("partial="))
-        assertFalse(out.contains("rows="))
-    }
-
     @Test fun severalDocumentsKeepTheirAttachOrder() {
         val out = IncludeRenderer.renderUserMessage(
             "compare these",
@@ -128,7 +119,7 @@ class IncludeRendererTest {
     @Test fun renderingIsDeterministic() {
         val includes = listOf(
             doc(id = "a", name = "one.txt", text = "AAA"),
-            doc(id = "b", name = "two.csv", text = "BBB", notice = IncludeNotice.Large(11000)),
+            doc(id = "b", name = "two.csv", text = "BBB"),
             doc(id = "c", form = IncludeForm.ARTIFACT, artifact = "User sent a note.")
         )
         val first = IncludeRenderer.renderUserMessage("stable", includes)

@@ -19,6 +19,7 @@ package org.teslasoft.assistant.preferences.includes
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
+import org.teslasoft.assistant.util.Hash
 import org.teslasoft.assistant.util.StableId
 import java.io.FileNotFoundException
 import java.io.InputStream
@@ -95,6 +96,9 @@ object DocumentImporter {
         "application/csv",
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     )
+
+    /** Opaque, stable pending-only identity for an Android document URI. */
+    fun sourceFingerprint(sourceIdentity: String): String = Hash.hash(sourceIdentity)
 
     fun import(context: Context, uri: Uri): Result {
         return try {
@@ -217,7 +221,8 @@ object DocumentImporter {
                 kind = kind,
                 form = IncludeForm.FULL,
                 fullText = sized.text,
-                notice = sized.notice
+                notice = sized.notice,
+                sourceFingerprint = sourceFingerprint(uri.toString())
             )
         )
     }

@@ -65,8 +65,7 @@ object IncludeRenderer {
                 append(" form=\"condensed\"")
             }
             when (val notice = include.notice) {
-                is IncludeNotice.None,
-                is IncludeNotice.Large -> Unit
+                is IncludeNotice.None -> Unit
                 is IncludeNotice.Truncated ->
                     append(" partial=\"beginning only\"")
                 is IncludeNotice.CsvTrimmed -> {

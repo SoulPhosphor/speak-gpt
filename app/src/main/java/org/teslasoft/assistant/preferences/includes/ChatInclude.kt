@@ -48,7 +48,13 @@ data class ChatInclude(
     /** Which size notice (if any) this item must display. */
     val notice: IncludeNotice = IncludeNotice.None,
     /** Token estimate recorded when this item was first sent (0 if unsent). */
-    val sentTokens: Int = 0
+    val sentTokens: Int = 0,
+    /**
+     * Opaque hash of the document-provider URI, used only to prevent selecting
+     * the exact same source twice for one pending message. Cleared on Send so
+     * chat history retains no source-location evidence.
+     */
+    val sourceFingerprint: String? = null
 ) {
     /** Estimated tokens of what would be SENT for this include right now. */
     fun currentTokens(): Int = IncludeTextPolicy.estimateTokens(modelText())
@@ -67,6 +73,10 @@ data class ChatInclude(
      */
     fun showsInStrip(): Boolean = form != IncludeForm.ARTIFACT
 
+    /** Snapshot this pending include into sent history without its source key. */
+    fun forSentMessage(): ChatInclude =
+        copy(sentTokens = currentTokens(), sourceFingerprint = null)
+
     fun toJson(): JSONObject = JSONObject().apply {
         put(KEY_ID, id)
         put(KEY_NAME, fileName)
@@ -77,6 +87,7 @@ data class ChatInclude(
         if (artifactLine != null) put(KEY_ARTIFACT, artifactLine)
         if (notice != IncludeNotice.None) put(KEY_NOTICE, notice.encode())
         if (sentTokens > 0) put(KEY_SENT_TOKENS, sentTokens)
+        if (sourceFingerprint != null) put(KEY_SOURCE_FINGERPRINT, sourceFingerprint)
     }
 
     companion object {
@@ -89,6 +100,7 @@ data class ChatInclude(
         private const val KEY_ARTIFACT = "artifact"
         private const val KEY_NOTICE = "notice"
         private const val KEY_SENT_TOKENS = "sentTokens"
+        private const val KEY_SOURCE_FINGERPRINT = "sourceFingerprint"
 
         fun fromJson(o: JSONObject): ChatInclude? {
             val id = o.optString(KEY_ID).takeIf { it.isNotEmpty() } ?: return null
@@ -101,7 +113,12 @@ data class ChatInclude(
                 condensedText = if (o.has(KEY_CONDENSED)) o.optString(KEY_CONDENSED) else null,
                 artifactLine = if (o.has(KEY_ARTIFACT)) o.optString(KEY_ARTIFACT) else null,
                 notice = IncludeNotice.decode(o.optString(KEY_NOTICE)),
-                sentTokens = o.optInt(KEY_SENT_TOKENS, 0)
+                sentTokens = o.optInt(KEY_SENT_TOKENS, 0),
+                sourceFingerprint = if (o.has(KEY_SOURCE_FINGERPRINT)) {
+                    o.optString(KEY_SOURCE_FINGERPRINT).takeIf { it.isNotEmpty() }
+                } else {
+                    null
+                }
             )
         }
 
@@ -174,9 +191,6 @@ enum class IncludeForm(val key: String) {
 sealed class IncludeNotice {
     data object None : IncludeNotice()
 
-    /** Large but sent whole. */
-    data class Large(val tokens: Int) : IncludeNotice()
-
     /** Too large — only the beginning was included. */
     data class Truncated(val tokens: Int) : IncludeNotice()
 
@@ -185,7 +199,6 @@ sealed class IncludeNotice {
 
     fun encode(): String = when (this) {
         is None -> ""
-        is Large -> "large:$tokens"
         is Truncated -> "trunc:$tokens"
         is CsvTrimmed -> "csv:$sentRows:$totalRows"
     }
@@ -196,7 +209,9 @@ sealed class IncludeNotice {
             val parts = raw.split(":")
             return try {
                 when (parts[0]) {
-                    "large" -> Large(parts[1].toInt())
+                    // Older prereleases persisted this redundant warning.
+                    // The visible token estimate already states the size.
+                    "large" -> None
                     "trunc" -> Truncated(parts[1].toInt())
                     "csv" -> CsvTrimmed(parts[1].toInt(), parts[2].toInt())
                     else -> None
