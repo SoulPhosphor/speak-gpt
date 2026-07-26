@@ -9,8 +9,16 @@
   Each button carries its whole AppButton.Primary/AppButton.Destructive
   look via AppButton.Primary.DialogAction/AppButton.Destructive.DialogAction,
   which also supply their percentage width — do not set width here. The
-  chain between the two buttons (spread inside, primary on the start side)
-  is defined here because a chain needs both buttons' ids.
+  chain between the two buttons (packed/centered as one group, primary on
+  the start side, 12dp gap between them) is defined here because a chain
+  needs both buttons' ids.
+
+  Centered, not spread to the dialog's edges (owner ruling, July 26 2026):
+  the pair used to chain "spread_inside", which pinned each button flush
+  against its own side of the dialog with the gap only in the middle: it
+  read as two buttons pushed apart rather than one centered pair under the
+  (already-centered) title. "packed" centers the whole two-button group
+  instead, matching the title above it.
 
   Horizontal/bottom padding (owner ruling, July 21 2026): the dialog
   window's own corner radius is much larger than a button's 4dp corner
@@ -30,11 +38,12 @@
     <com.google.android.material.button.MaterialButton
         android:id="@+id/btn_dialog_primary_action"
         style="@style/AppButton.Primary.DialogAction"
+        android:layout_marginEnd="12dp"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toStartOf="@id/btn_dialog_destructive_action"
-        app:layout_constraintHorizontal_chainStyle="spread_inside" />
+        app:layout_constraintHorizontal_chainStyle="packed" />
 
     <com.google.android.material.button.MaterialButton
         android:id="@+id/btn_dialog_destructive_action"

@@ -380,6 +380,10 @@
     <string name="api_endpoint_timeout_too_high">Timeouts cannot be more than 300 seconds</string>
     <string name="api_endpoint_response_time_too_low">Timeouts cannot be less than 45 seconds</string>
     <string name="title_api_endpoint_profiles">API Chat Endpoint Profiles</string>
+    <string name="title_api_endpoint_new">New API Endpoint</string>
+    <string name="title_api_endpoint_named">%1$s API Endpoint</string>
+    <string name="api_endpoint_delete_title">Delete this API endpoint profile?</string>
+    <string name="api_endpoint_delete_message">This cannot be undone.</string>
     <string name="message_delete_profile">Delete profile? This can\'t be undone.</string>
     <string name="discard_changes_q">Discard changes?</string>
     <string name="okay">Okay</string>

@@ -30,6 +30,7 @@ import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
 import androidx.core.widget.doAfterTextChanged
 import androidx.fragment.app.FragmentActivity
+import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.snackbar.Snackbar
@@ -53,8 +54,12 @@ import org.teslasoft.assistant.ui.util.DiscardChangesDialog
  * - The upper-left double-chevron back button (and the system back gesture)
  *   is "cancel"; backing out with unsaved edits shows a "Discard changes?"
  *   dialog first.
- * - "Delete" and "Save" sit as tappable words at the top-left of the page.
- *   Save just saves (no confirm). Delete confirms first.
+ * - The header title reads "<profile name> API Endpoint" (or "New API
+ *   Endpoint" while adding one), keeping whatever capitalization the user
+ *   gave the label. Save and Delete are the disk and trash-can icons at the
+ *   header's trailing edge (same chained-icon shape as Edit Companion/Edit
+ *   Persona) — Save just saves (no confirm), Delete confirms first with the
+ *   house two-button dialog shape (dialog_two_actions.xml).
  * - The API-key field shows a run of stars when a key already exists; tapping
  *   in clears it to an empty cursor. Leaving it untouched (or blank) keeps the
  *   existing key, even on save.
@@ -84,8 +89,9 @@ class ApiEndpointEditorActivity : FragmentActivity() {
 
     private var actionBar: ConstraintLayout? = null
     private var btnBack: ImageButton? = null
-    private var btnDelete: TextView? = null
-    private var btnSave: TextView? = null
+    private var activityTitle: TextView? = null
+    private var btnDelete: ImageButton? = null
+    private var btnSave: ImageButton? = null
 
     private var fieldLabel: TextInputEditText? = null
     private var fieldModel: TextInputEditText? = null
@@ -149,8 +155,9 @@ class ApiEndpointEditorActivity : FragmentActivity() {
     private fun bindViews() {
         actionBar = findViewById(R.id.action_bar)
         btnBack = findViewById(R.id.btn_back)
-        btnDelete = findViewById(R.id.btn_delete_text)
-        btnSave = findViewById(R.id.btn_save_text)
+        activityTitle = findViewById(R.id.activity_title)
+        btnDelete = findViewById(R.id.btn_delete)
+        btnSave = findViewById(R.id.btn_save)
         fieldLabel = findViewById(R.id.field_label)
         labelInputLayout = findViewById(R.id.textInputLayout10)
         fieldModel = findViewById(R.id.field_model)
@@ -182,7 +189,10 @@ class ApiEndpointEditorActivity : FragmentActivity() {
                 window.statusBarColor = ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme)
             }
             actionBar?.setBackgroundColor(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
-            btnBack?.backgroundTintList = ColorStateList.valueOf(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
+            val amoledTint = ColorStateList.valueOf(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
+            btnBack?.backgroundTintList = amoledTint
+            btnSave?.backgroundTintList = amoledTint
+            btnDelete?.backgroundTintList = amoledTint
         } else {
             window.setBackgroundDrawable(SurfaceColors.SURFACE_0.getColor(this).toDrawable())
             if (Build.VERSION.SDK_INT <= 34) {
@@ -190,7 +200,10 @@ class ApiEndpointEditorActivity : FragmentActivity() {
                 window.statusBarColor = SurfaceColors.SURFACE_4.getColor(this)
             }
             actionBar?.setBackgroundColor(SurfaceColors.SURFACE_4.getColor(this))
-            btnBack?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(this))
+            val barTint = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(this))
+            btnBack?.backgroundTintList = barTint
+            btnSave?.backgroundTintList = barTint
+            btnDelete?.backgroundTintList = barTint
         }
     }
 
@@ -203,6 +216,16 @@ class ApiEndpointEditorActivity : FragmentActivity() {
         // The record's current label anchors the "Default" delete guard; the id
         // stays in [endpointId] and is what the record is saved/deleted under.
         oldLabel = endpoint.label
+
+        // Header title: the profile's own name plus the app's fixed "API
+        // Endpoint" suffix, preserving whatever capitalization the user gave
+        // the label. A brand-new profile has no label yet, so it falls back
+        // to a generic title instead of "  API Endpoint".
+        activityTitle?.text = if (endpoint.label.isBlank()) {
+            getString(R.string.title_api_endpoint_new)
+        } else {
+            getString(R.string.title_api_endpoint_named, endpoint.label)
+        }
 
         fieldLabel?.setText(endpoint.label)
         fieldHost?.setText(endpoint.host)
@@ -245,17 +268,8 @@ class ApiEndpointEditorActivity : FragmentActivity() {
             apiKeyMasked = false
         }
 
-        // A brand-new profile has nothing to delete. With Delete hidden, drop
-        // Save's leading gap so it sits flush at the left instead of floating in.
-        if (position == -1) {
-            btnDelete?.visibility = TextView.GONE
-            (btnSave?.layoutParams as? android.widget.LinearLayout.LayoutParams)?.let {
-                it.marginStart = 0
-                btnSave?.layoutParams = it
-            }
-        } else {
-            btnDelete?.visibility = TextView.VISIBLE
-        }
+        // A brand-new profile has nothing to delete yet.
+        btnDelete?.visibility = if (position == -1) ImageButton.GONE else ImageButton.VISIBLE
 
         updateHostWarning()
         initialSnapshot = snapshot()
@@ -489,11 +503,32 @@ class ApiEndpointEditorActivity : FragmentActivity() {
             return
         }
 
-        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-            .setMessage(R.string.message_delete_profile)
-            .setPositiveButton(R.string.okay) { _, _ -> commitDelete() }
-            .setNegativeButton(R.string.btn_cancel) { _, _ -> }
-            .show()
+        // House two-button destructive shape (same as Edit Companion/Edit
+        // Persona's delete confirm and the Discard Changes dialog): a real
+        // Primary button first ("Delete", proceeds) and a real Destructive-
+        // styled button second ("Cancel", just dismisses).
+        val actionsView = layoutInflater.inflate(R.layout.dialog_two_actions, null)
+
+        val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.api_endpoint_delete_title)
+            .setMessage(R.string.api_endpoint_delete_message)
+            .setView(actionsView)
+            .create()
+
+        actionsView.findViewById<MaterialButton>(R.id.btn_dialog_primary_action).apply {
+            setText(R.string.btn_delete)
+            setOnClickListener {
+                dialog.dismiss()
+                commitDelete()
+            }
+        }
+
+        actionsView.findViewById<MaterialButton>(R.id.btn_dialog_destructive_action).apply {
+            setText(R.string.btn_cancel)
+            setOnClickListener { dialog.dismiss() }
+        }
+
+        dialog.show()
     }
 
     private fun commitDelete() {

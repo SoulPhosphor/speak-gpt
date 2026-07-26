@@ -24,30 +24,52 @@
 
     <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/action_bar"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:background="?attr/colorSurfaceContainerHigh"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent">
+        style="@style/Widget.App.ActionBar">
 
         <!-- Upper-left double chevron = back / cancel. Backing out with unsaved
              edits triggers the discard-changes dialog (see the activity). -->
         <ImageButton
             android:id="@+id/btn_back"
+            style="@style/Widget.App.ActionBar.BackButton" />
+
+        <!-- Title shows the profile's own name ("<label> API Endpoint"), set in
+             ApiEndpointEditorActivity.loadValues() so it can preserve whatever
+             capitalization the user gave the label. -->
+        <TextView
+            android:id="@+id/activity_title"
+            style="@style/Widget.App.ActionBar.Title.NearBack"
+            app:layout_constraintEnd_toStartOf="@+id/btn_delete" />
+
+        <!-- Same chained-icon shape as Edit Companion/Edit Persona's header
+             (activity_edit_persona.xml/activity_edit_user_persona.xml): no
+             shared style yet covers a second trailing icon, so this repeats
+             that geometry locally (see SecondaryButton's doc comment in
+             values/themes.xml). Hidden for a brand-new profile (nothing to
+             delete yet). -->
+        <ImageButton
+            android:id="@+id/btn_delete"
             android:layout_width="48dp"
             android:layout_height="48dp"
-            android:layout_marginStart="8dp"
+            android:layout_marginEnd="8dp"
             android:layout_marginTop="8dp"
             android:layout_marginBottom="8dp"
             android:background="@drawable/btn_accent_icon_large_100"
-            android:contentDescription="@string/go_back"
-            android:src="@drawable/ic_back"
-            android:tooltipText="@string/go_back"
+            android:contentDescription="@string/btn_delete"
+            android:src="@drawable/ic_delete"
+            android:tooltipText="@string/btn_delete"
+            android:visibility="gone"
             app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toStartOf="@+id/btn_save"
             app:layout_constraintTop_toTopOf="parent"
-            app:srcCompat="@drawable/ic_back" />
+            app:srcCompat="@drawable/ic_delete" />
+
+        <ImageButton
+            android:id="@+id/btn_save"
+            style="@style/Widget.App.ActionBar.SecondaryButton"
+            android:contentDescription="@string/btn_save"
+            android:src="@drawable/ic_save"
+            android:tooltipText="@string/btn_save"
+            app:srcCompat="@drawable/ic_save" />
     </androidx.constraintlayout.widget.ConstraintLayout>
 
     <ScrollView
@@ -67,50 +89,12 @@
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
-            <!-- Delete / Save action words, left-aligned at the top of the page.
-                 Delete is hidden when adding a brand-new profile. The gap between
-                 them is roughly four letters wide. -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
-                android:orientation="horizontal"
-                android:paddingHorizontal="24dp">
-
-                <TextView
-                    android:id="@+id/btn_delete_text"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:background="?attr/selectableItemBackground"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:paddingVertical="8dp"
-                    android:text="@string/btn_delete"
-                    android:textColor="?attr/colorPrimary"
-                    android:textSize="18sp"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:id="@+id/btn_save_text"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="40dp"
-                    android:background="?attr/selectableItemBackground"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:paddingVertical="8dp"
-                    android:text="@string/btn_save"
-                    android:textColor="?attr/colorPrimary"
-                    android:textSize="18sp"
-                    android:textStyle="bold" />
-            </LinearLayout>
-
             <com.google.android.material.textfield.TextInputLayout
                 android:id="@+id/textInputLayout10"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="24dp"
-                android:layout_marginTop="12dp"
+                android:layout_marginTop="24dp"
                 android:layout_marginEnd="24dp"
                 android:textColorHint="@color/text_hint"
                 app:boxCornerRadiusBottomEnd="16dp"
