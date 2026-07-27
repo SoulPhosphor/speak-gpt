@@ -19,13 +19,10 @@ package org.teslasoft.assistant.preferences.includes
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.ImageDecoder
-import android.graphics.Matrix
 import android.net.Uri
 import android.provider.OpenableColumns
-import androidx.exifinterface.media.ExifInterface
 import org.teslasoft.assistant.util.Hash
 import org.teslasoft.assistant.util.StableId
-import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
@@ -113,9 +110,30 @@ object ImageImporter {
     }
 
     /** Delete the bytes-on-disk for one include. Called from Reduce and Remove
-     *  so the user's copy leaves the device the moment it is no longer sent. */
-    fun deleteImageFile(context: Context, chatId: String, include: ChatInclude) {
+     *  so the user's copy leaves the device the moment it is no longer sent.
+     *
+     *  Files are content-hashed, so two includes can point at the same file.
+     *  The delete is refused when any OTHER live FULL image include in the
+     *  chat still references the same hash — passed in via [stillReferenced]
+     *  so this stays a pure filesystem helper. The caller must have persisted
+     *  the include's new (reduced/removed) state BEFORE calling this, so a
+     *  crash mid-delete never leaves a saved FULL include pointing at bytes
+     *  that are gone. */
+    fun deleteImageFileIfUnreferenced(
+        context: Context,
+        chatId: String,
+        include: ChatInclude,
+        stillReferenced: Boolean
+    ) {
+        if (stillReferenced) return
         imageFile(context, chatId, include)?.takeIf { it.exists() }?.delete()
+    }
+
+    /** Delete a freshly written file whose include never got persisted (the
+     *  activity went away between the disk write and the save). Safe to call
+     *  with the [Result.Success.onDiskFile] directly. */
+    fun deleteOrphanFile(file: File?) {
+        file?.takeIf { it.exists() }?.delete()
     }
 
     /** Remove every image the chat ever stored. Called when a chat is deleted
@@ -127,6 +145,79 @@ object ImageImporter {
         if (!subDir.exists()) return
         subDir.listFiles()?.forEach { it.delete() }
         subDir.delete()
+    }
+
+    /**
+     * Move a chat's image directory when its id changes (a rename derives a
+     * new id from the new name). Called from the rename orchestration AFTER
+     * the prefs transaction has flipped the chat-list pointer, so the include
+     * JSON already lives under [newChatId]; this makes the hashes it
+     * references resolvable again.
+     *
+     * `renameTo` is a single filesystem operation on the same volume (both
+     * paths are under the app's external files dir), so it either moves the
+     * whole directory or does nothing. On the rare failure it falls back to a
+     * copy; whatever it cannot move is left for [reconcileChatImages] to clean
+     * up, and a missing file surfaces as a normal "image unavailable" at send
+     * rather than as corruption.
+     */
+    fun moveChatImages(context: Context, oldChatId: String, newChatId: String) {
+        if (oldChatId == newChatId) return
+        val root = context.getExternalFilesDir(CHAT_IMAGES_ROOT)
+            ?: File(context.filesDir, CHAT_IMAGES_ROOT)
+        val from = File(root, sanitizeChatId(oldChatId))
+        if (!from.exists()) return
+        val to = File(root, sanitizeChatId(newChatId))
+        if (to.exists()) {
+            // A prior partial move (or a name-hash collision with a deleted
+            // chat) left a destination behind. Merge file-by-file; content
+            // hashes make same-named files identical, so an existing file is
+            // simply kept.
+            from.listFiles()?.forEach { src ->
+                val dst = File(to, src.name)
+                if (!dst.exists()) {
+                    if (!src.renameTo(dst)) src.copyTo(dst, overwrite = false)
+                }
+                src.delete()
+            }
+            from.delete()
+            return
+        }
+        if (from.renameTo(to)) return
+        // renameTo can fail across some provider-backed volumes; fall back to
+        // a recursive copy and best-effort clear of the source.
+        try {
+            to.mkdirs()
+            from.listFiles()?.forEach { src ->
+                src.copyTo(File(to, src.name), overwrite = false)
+            }
+            from.listFiles()?.forEach { it.delete() }
+            from.delete()
+        } catch (_: Exception) {
+            // Reconciliation cleans whatever is left; a missing image is a
+            // normal, recoverable "image unavailable", never data corruption.
+        }
+    }
+
+    /**
+     * Delete any file in the chat's image directory not referenced by a live
+     * FULL image include. [referencedHashes] is the set of `imageFileHash`
+     * values still in use (pending + every saved message). Run on chat load
+     * so an import that wrote a file but never persisted its include — the
+     * activity died in the gap — does not leave bytes behind forever.
+     */
+    fun reconcileChatImages(
+        context: Context,
+        chatId: String,
+        referencedHashes: Set<String>
+    ) {
+        val root = context.getExternalFilesDir(CHAT_IMAGES_ROOT) ?: return
+        val subDir = File(root, sanitizeChatId(chatId))
+        if (!subDir.exists()) return
+        subDir.listFiles()?.forEach { file ->
+            val hash = file.name.substringBeforeLast('.', "")
+            if (hash.isNotEmpty() && hash !in referencedHashes) file.delete()
+        }
     }
 
     /**
@@ -207,25 +298,18 @@ object ImageImporter {
             }
         }
 
-        // EXIF orientation must be applied even after ImageDecoder — some
-        // devices deliver a rotated bitmap, some deliver the raw pixels plus
-        // an orientation tag we must honour ourselves.
-        val orientation = readOrientation(bytes)
-        val oriented = try {
-            applyOrientation(decoded, orientation)
+        // NOTE: ImageDecoder already honours EXIF orientation while decoding
+        // (unlike BitmapFactory, which the profile-image code has to correct
+        // by hand). Re-applying orientation here would rotate/mirror a second
+        // time, so there is deliberately no EXIF step between decode and
+        // downsample.
+        val downsized = try {
+            downsampleToCap(decoded)
         } catch (_: OutOfMemoryError) {
             decoded.recycle()
             return Result.TooLarge(rawName)
         }
-        if (oriented !== decoded) decoded.recycle()
-
-        val downsized = try {
-            downsampleToCap(oriented)
-        } catch (_: OutOfMemoryError) {
-            oriented.recycle()
-            return Result.TooLarge(rawName)
-        }
-        if (downsized !== oriented) oriented.recycle()
+        if (downsized !== decoded) decoded.recycle()
 
         val outputMime = when (inputKind) {
             InputKind.JPEG, InputKind.HEIC -> "image/jpeg"
@@ -252,12 +336,12 @@ object ImageImporter {
             }
         }
 
-        val hash = Hash.hash(encoded)
+        val hash = Hash.hash(encoded.bytes)
         val dir = chatImagesDir(context, chatId)
         val target = File(dir, "$hash.$outputExt")
         try {
             if (!target.exists()) {
-                FileOutputStream(target).use { out -> out.write(encoded) }
+                FileOutputStream(target).use { out -> out.write(encoded.bytes) }
             }
         } catch (_: OutOfMemoryError) {
             target.delete()
@@ -283,8 +367,8 @@ object ImageImporter {
             fullText = "",
             imageFileHash = hash,
             imageMimeType = outputMime,
-            imageWidth = downsizedDimensions.width,
-            imageHeight = downsizedDimensions.height,
+            imageWidth = encoded.width,
+            imageHeight = encoded.height,
             sourceFingerprint = sourceFingerprint(uri.toString())
         )
         return Result.Success(include, target)
@@ -304,18 +388,17 @@ object ImageImporter {
         return sanitized.ifEmpty { "unassigned" }
     }
 
-    /** Two static ints holding the last-decoded bitmap's dimensions. Kept as
-     *  a tiny mutable holder so [importOrThrow] can name the numbers without
-     *  a third-tier data class just for this one call. */
-    private data class Dimensions(var width: Int = 0, var height: Int = 0)
-    private val downsizedDimensions = Dimensions()
+    /** Encoded output bytes plus the transmitted dimensions. Returned per
+     *  call so overlapping imports never share dimension state (a static
+     *  holder would let one import read another's width/height). */
+    private data class EncodedImage(val bytes: ByteArray, val width: Int, val height: Int)
 
-    private fun encode(bitmap: Bitmap, mime: String): ByteArray? {
-        // Save dimensions BEFORE recycling; the estimator on the include reads
+    private fun encode(bitmap: Bitmap, mime: String): EncodedImage? {
+        // Read dimensions BEFORE recycling; the estimator on the include uses
         // them and cannot re-derive them from bytes without a redecode.
-        downsizedDimensions.width = bitmap.width
-        downsizedDimensions.height = bitmap.height
-        val output = ByteArrayOutputStream(bitmap.width * bitmap.height / 4)
+        val width = bitmap.width
+        val height = bitmap.height
+        val output = ByteArrayOutputStream(width * height / 4)
         val format = if (mime == "image/png") {
             Bitmap.CompressFormat.PNG
         } else {
@@ -323,7 +406,7 @@ object ImageImporter {
         }
         val ok = bitmap.compress(format, JPEG_QUALITY, output)
         if (!ok) return null
-        return output.toByteArray()
+        return EncodedImage(output.toByteArray(), width, height)
     }
 
     private fun downsampleToCap(bitmap: Bitmap): Bitmap {
@@ -333,38 +416,6 @@ object ImageImporter {
         val newWidth = kotlin.math.max(1, (bitmap.width * scale).toInt())
         val newHeight = kotlin.math.max(1, (bitmap.height * scale).toInt())
         return bitmap.scale(newWidth, newHeight)
-    }
-
-    private fun applyOrientation(bitmap: Bitmap, orientation: Int): Bitmap {
-        val matrix = Matrix()
-        when (orientation) {
-            ExifInterface.ORIENTATION_ROTATE_90 -> matrix.postRotate(90f)
-            ExifInterface.ORIENTATION_ROTATE_180 -> matrix.postRotate(180f)
-            ExifInterface.ORIENTATION_ROTATE_270 -> matrix.postRotate(270f)
-            ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> matrix.postScale(-1f, 1f)
-            ExifInterface.ORIENTATION_FLIP_VERTICAL -> matrix.postScale(1f, -1f)
-            ExifInterface.ORIENTATION_TRANSPOSE -> {
-                matrix.postRotate(90f); matrix.postScale(-1f, 1f)
-            }
-            ExifInterface.ORIENTATION_TRANSVERSE -> {
-                matrix.postRotate(270f); matrix.postScale(-1f, 1f)
-            }
-            else -> return bitmap
-        }
-        return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
-    }
-
-    private fun readOrientation(bytes: ByteArray): Int {
-        return try {
-            ByteArrayInputStream(bytes).use { input ->
-                ExifInterface(input).getAttributeInt(
-                    ExifInterface.TAG_ORIENTATION,
-                    ExifInterface.ORIENTATION_NORMAL
-                )
-            }
-        } catch (_: Exception) {
-            ExifInterface.ORIENTATION_NORMAL
-        }
     }
 
     /** Two-power sample size chosen so the decoded bitmap is not wildly

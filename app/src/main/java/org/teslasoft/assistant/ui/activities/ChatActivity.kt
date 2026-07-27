@@ -174,6 +174,7 @@ import org.teslasoft.assistant.preferences.MessageCompletionState
 import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.includes.ChatInclude
 import org.teslasoft.assistant.preferences.includes.DocumentImporter
+import org.teslasoft.assistant.preferences.includes.ImageImporter
 import org.teslasoft.assistant.preferences.includes.IncludeAuxiliaryRequestPolicy
 import org.teslasoft.assistant.preferences.includes.IncludeForm
 import org.teslasoft.assistant.preferences.includes.IncludeKind
@@ -314,6 +315,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     private var includeStripController: IncludeStripController? = null
     private var pendingIncludes: ArrayList<ChatInclude> = arrayListOf()
     private val pendingDocumentImports: MutableSet<String> = HashSet()
+    private val pendingImageImports: MutableSet<String> = HashSet()
+    // Import coroutines are scoped here so they can be cancelled when the
+    // screen goes away; a job that finished decoding but never persisted its
+    // include is a source of orphaned image files otherwise.
+    private val imageImportScopes: MutableList<CoroutineScope> = mutableListOf()
     private var condenseJob: Job? = null
     private var condenseDialog: AlertDialog? = null
     private val artifactJobs: MutableMap<String, Job> = HashMap()
@@ -2161,6 +2167,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         recognizer = null
         try { LocalWhisperEngine.get().cancel() } catch (_: Exception) { /* ignore */ }
 
+        // Cancel any in-flight image import. Its own completion handler sees
+        // isDestroyed and deletes freshly written bytes that never became a
+        // persisted include, so cancelling here just stops the work promptly.
+        for (scope in imageImportScopes.toList()) {
+            try { scope.cancel() } catch (_: Exception) { /* ignore */ }
+        }
+        imageImportScopes.clear()
+
         super.onDestroy()
     }
 
@@ -2257,6 +2271,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             }
 
             loadPendingIncludes()
+            reconcileChatImages()
 
             updateMessagesSelectionProjection()
 
@@ -2617,9 +2632,25 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     /** Turns a picked-or-captured image URI into a pending image include, or
      *  raises the approved failure dialog when the file cannot be prepared.
      *  The old preview above the chat is gone; a failure never shows a
-     *  half-attached row. */
+     *  half-attached row.
+     *
+     *  Duplicate-source protection mirrors documents: the same picked source
+     *  cannot be attached twice to one pending message, and a second tap while
+     *  the first import is still running is ignored. The import scope is
+     *  tracked so that if the screen goes away between the file write and the
+     *  include being persisted, the freshly written bytes are deleted instead
+     *  of orphaned. */
     private fun importPendingImage(uri: Uri, displayNameOverride: String?) {
+        val fingerprint = ImageImporter.sourceFingerprint(uri.toString())
+        if (pendingIncludes.any { it.sourceFingerprint == fingerprint } ||
+            !pendingImageImports.add(fingerprint)
+        ) {
+            showDocumentAlreadyAttached()
+            return
+        }
+
         val scope = CoroutineScope(Dispatchers.Main)
+        imageImportScopes.add(scope)
         scope.launch {
             val result = withContext(Dispatchers.IO) {
                 try {
@@ -2630,7 +2661,18 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     ImageImporter.Result.Unknown(displayNameOverride ?: "image")
                 }
             }
-            if (isFinishing || isDestroyed) return@launch
+            pendingImageImports.remove(fingerprint)
+            imageImportScopes.remove(scope)
+            if (isFinishing || isDestroyed) {
+                // The screen is gone before the include could be persisted:
+                // drop the bytes we just wrote so they never orphan.
+                if (result is ImageImporter.Result.Success) {
+                    withContext(Dispatchers.IO) {
+                        ImageImporter.deleteOrphanFile(result.onDiskFile)
+                    }
+                }
+                return@launch
+            }
 
             when (result) {
                 is ImageImporter.Result.Success -> {
@@ -2946,15 +2988,36 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         if (pendingIndex >= 0) {
             // It was never sent, so detaching it must leave no model-facing
             // history or artifact claiming that the user shared it.
-            pendingIncludes.removeAt(pendingIndex)
+            val removed = pendingIncludes.removeAt(pendingIndex)
+            // Persist the removal BEFORE touching bytes, so a crash mid-delete
+            // never leaves a saved include pointing at bytes that are gone.
             savePendingIncludes(synchronous = true)
             refreshIncludeStrip()
+            if (removed.kind.isImage()) maybeDeleteImageBytes(removed)
+            return
+        }
+
+        val fallback = IncludeTextPolicy.fallbackArtifactLine(include.fileName)
+
+        if (include.kind.isImage()) {
+            // A removed image keeps only its bookmark; its bytes are no longer
+            // sent, so drop the on-disk reference and delete the file once no
+            // other live include shares its hash. The proper vision-written
+            // reminder is part of the Reduce/Remove-image flow (not yet wired);
+            // the filename fallback is the honest interim.
+            updateInclude(
+                include.copy(
+                    form = IncludeForm.ARTIFACT,
+                    artifactLine = fallback,
+                    notice = IncludeNotice.None
+                ).withoutImageBytes()
+            )
+            maybeDeleteImageBytes(include)
             return
         }
 
         // Show the cheap form at once so the transcript responds to the tap;
         // the model-written reminder replaces the fallback when/if it arrives.
-        val fallback = IncludeTextPolicy.fallbackArtifactLine(include.fileName)
         updateInclude(
             include.copy(
                 form = IncludeForm.ARTIFACT,
@@ -2977,6 +3040,63 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         artifactJobs[include.id] = job
         job.invokeOnCompletion {
             if (artifactJobs[include.id] === job) artifactJobs.remove(include.id)
+        }
+    }
+
+    /**
+     * Deletes an image include's on-disk bytes, but only when no OTHER live
+     * FULL image include (pending or in any saved message) still points at the
+     * same content hash. Images dedupe by hash, so the same file can back more
+     * than one include; deleting it out from under a surviving include would
+     * break that include's send. The reference check runs on the main thread
+     * (reads in-memory lists), the delete on IO.
+     */
+    private fun maybeDeleteImageBytes(include: ChatInclude) {
+        val hash = include.imageFileHash?.takeIf { it.isNotEmpty() } ?: return
+        val referenced = imageBytesStillReferenced(hash, excludingId = include.id)
+        val chat = chatId
+        CoroutineScope(Dispatchers.IO).launch {
+            ImageImporter.deleteImageFileIfUnreferenced(
+                this@ChatActivity, chat, include, referenced
+            )
+        }
+    }
+
+    private fun imageBytesStillReferenced(hash: String, excludingId: String): Boolean {
+        if (pendingIncludes.any {
+                it.id != excludingId && it.imageFileHash == hash && it.hasLiveImageBytes()
+            }
+        ) return true
+        for (message in messages) {
+            if (includesOf(message).any {
+                    it.id != excludingId && it.imageFileHash == hash && it.hasLiveImageBytes()
+                }
+            ) return true
+        }
+        return false
+    }
+
+    /**
+     * One-shot sweep on chat load: delete any file in this chat's image
+     * directory that no live FULL image include references. Covers an import
+     * that wrote its file but never persisted its include (the screen died in
+     * the gap) and any bytes a prior rename move could not carry over.
+     */
+    private fun reconcileChatImages() {
+        val referenced = HashSet<String>()
+        for (include in pendingIncludes) {
+            if (include.hasLiveImageBytes()) include.imageFileHash?.let(referenced::add)
+        }
+        for (message in messages) {
+            for (include in includesOf(message)) {
+                if (include.hasLiveImageBytes()) include.imageFileHash?.let(referenced::add)
+            }
+        }
+        val chat = chatId
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                ImageImporter.reconcileChatImages(this@ChatActivity, chat, referenced)
+            } catch (_: Exception) { /* best-effort cleanup */ }
         }
     }
 
