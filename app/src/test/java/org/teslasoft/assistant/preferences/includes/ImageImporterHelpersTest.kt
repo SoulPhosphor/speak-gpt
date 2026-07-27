@@ -53,14 +53,16 @@ class ImageImporterHelpersTest {
         assertNull(ImageImporter.classify(null, "noextension"))
     }
 
-    @Test fun sampleSizeDoublesUntilTheDecodedBitmapWouldFit() {
-        // The decoded bitmap should not be much larger than the eventual
-        // 2048-cap output; power-of-two divisions are the ImageDecoder
-        // contract for setTargetSampleSize.
+    @Test fun sampleSizeKeepsTheDecodedBitmapAtOrAboveTheCap() {
+        // The sample is the largest power of two that keeps the decoded
+        // longest edge AT OR ABOVE the 2048 cap, so the later downsample only
+        // ever scales DOWN to the cap and never has to upscale. A 4032 photo
+        // therefore decodes at full size (halving to 2016 would drop below
+        // the cap); an 8000 photo decodes at 4000; a 16384 giant at 2048.
         assertEquals(1, ImageImporter.computeSampleSize(2048, 1536))
         assertEquals(1, ImageImporter.computeSampleSize(2048, 2048))
-        assertEquals(2, ImageImporter.computeSampleSize(4032, 3024))
-        assertEquals(4, ImageImporter.computeSampleSize(8000, 6000))
+        assertEquals(1, ImageImporter.computeSampleSize(4032, 3024))
+        assertEquals(2, ImageImporter.computeSampleSize(8000, 6000))
         assertEquals(8, ImageImporter.computeSampleSize(16384, 12288))
     }
 
