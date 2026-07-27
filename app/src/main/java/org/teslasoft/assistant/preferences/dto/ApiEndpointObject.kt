@@ -71,7 +71,16 @@ class ApiEndpointObject(
      */
     var contextWindowTokens: Int? = null,
     /** Exact model id the optional context value belongs to. */
-    var contextWindowModelId: String = ""
+    var contextWindowModelId: String = "",
+    /**
+     * Compact JSON map of `model-id -> capability key` recording which of this
+     * endpoint's models are known to accept (or refuse) image input. Only
+     * proven or user-overridden classifications persist; models not in the map
+     * read as [ImageCapability.UNKNOWN] at the check site. See
+     * [ImageCapabilityStore] for the format. Kept at the END of the
+     * constructor so existing positional callers stay valid.
+     */
+    var imageCapabilityByModel: String = ""
 ) {
     companion object {
         /* Reserved, fixed id for the built-in "Default" endpoint. It is NOT a

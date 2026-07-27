@@ -269,7 +269,8 @@ object DocumentImporter {
                         return readFailure(fileName, export != null)
                     }
                 }
-                IncludeKind.IMAGE -> return Result.Unsupported(fileName)
+                IncludeKind.JPEG, IncludeKind.PNG ->
+                    return Result.Unsupported(fileName)
             }
 
             if (text.isBlank()) return Result.Empty(fileName)

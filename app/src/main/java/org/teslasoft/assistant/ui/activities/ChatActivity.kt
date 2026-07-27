@@ -300,9 +300,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     private var root: ConstraintLayout? = null
     private var threadLoader: LinearLayout? = null
     private var btnAttachFile: ImageButton? = null
-    private var attachedImage: LinearLayout? = null
-    private var selectedImage: ImageView? = null
-    private var btnRemoveImage: ImageButton? = null
     private var visionActions: LinearLayout? = null
     // Each paperclip-menu action is a labeled row, not an icon-only button.
     private var btnVisionActionCamera: View? = null
@@ -373,7 +370,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     private var autoLangDetect = false
     private var cancelState = false
     private var disableAutoScroll = false
-    private var imageIsSelected = false
     private var inCost: Float = 0.0f
     private var outCost: Float = 0.0f
     private var usageIn: Int = 0
@@ -1257,67 +1253,20 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         }
     }
 
-    fun resizeBitmapToMaxHeight(bitmap: Bitmap, maxHeight: Int = 100): Bitmap {
-        val originalHeight = bitmap.height
-        val originalWidth = bitmap.width
-
-        if (originalHeight <= maxHeight) {
-            // Return a copy of the original bitmap if already smaller than or equal to maxHeight
-            return bitmap.copy(bitmap.config ?: return bitmap, true)
-        }
-
-        // Calculate the new dimensions while keeping the aspect ratio
-        val aspectRatio = originalWidth.toFloat() / originalHeight.toFloat()
-        val newWidth = (maxHeight * aspectRatio).toInt()
-
-        // Create the scaled bitmap
-        return bitmap.scale(newWidth, maxHeight)
-    }
-
-
+    /**
+     * Camera capture landing point. The system camera has written the JPEG
+     * bytes into a fixed tmp.jpg under the app's own pictures dir; the flow
+     * now hands that URI to [ImageImporter] on an IO thread so the image is
+     * decoded, orientation-corrected, downsampled to the 2048-longest-edge
+     * cap and copied into the chat's own images directory before it appears
+     * as a pending include in the Includes strip. The tmp.jpg is overwritten
+     * on the next capture; nothing here keeps it around.
+     */
     private var cameraIntentLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode == RESULT_OK) {
-            val imageFile = File(getExternalFilesDir(Environment.DIRECTORY_PICTURES), "tmp.jpg")
-            val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", imageFile)
-
-            bitmap = readFile(uri)
-
-            if (bitmap != null) {
-                attachedImage?.visibility = View.VISIBLE
-
-                val bitmapResizedForPreview = resizeBitmapToMaxHeight(bitmap!!, 100)
-
-                selectedImage?.setImageBitmap(roundCorners(bitmapResizedForPreview))
-                imageIsSelected = true
-
-                val mimeType = contentResolver.getType(uri)
-                val format = when {
-                    mimeType.equals("image/png", ignoreCase = true) -> {
-                        selectedImageType = "png"
-                        Bitmap.CompressFormat.PNG
-                    }
-                    else -> {
-                        selectedImageType = "jpg"
-                        Bitmap.CompressFormat.JPEG
-                    }
-                }
-
-                // Step 3: Convert the Bitmap to a Base64-encoded string
-                val outputStream = ByteArrayOutputStream()
-                bitmap!!.compress(format, 100, outputStream) // Note: Adjust the quality as necessary
-                val base64Image = Base64.encodeToString(outputStream.toByteArray(), Base64.DEFAULT)
-
-                // Step 4: Generate the data URL
-                val imageType = when(format) {
-                    Bitmap.CompressFormat.JPEG -> "jpeg"
-                    Bitmap.CompressFormat.PNG -> "png"
-                    // Add more mappings as necessary
-                    else -> ""
-                }
-
-                baseImageString = "data:image/$imageType;base64,$base64Image"
-            }
-        }
+        if (result.resultCode != RESULT_OK) return@registerForActivityResult
+        val imageFile = File(getExternalFilesDir(Environment.DIRECTORY_PICTURES), "tmp.jpg")
+        val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", imageFile)
+        importPendingImage(uri, displayNameOverride = cameraCaptureDisplayName())
     }
 
     private val permissionResultLauncherCamera = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -2290,22 +2239,20 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             if (reconciledStreaming) saveSettings()
 
             for (message: HashMap<String, Any> in messages) {
-                if (!message["message"].toString().contains("data:image")) {
-                    if (message["isBot"] == true) {
-                        chatMessages.add(
-                            ChatMessage(
-                                role = ChatRole.Assistant,
-                                content = modelFacingContent(message)
-                            )
+                if (message["isBot"] == true) {
+                    chatMessages.add(
+                        ChatMessage(
+                            role = ChatRole.Assistant,
+                            content = modelFacingContent(message)
                         )
-                    } else {
-                        chatMessages.add(
-                            ChatMessage(
-                                role = ChatRole.User,
-                                content = modelFacingContent(message)
-                            )
+                    )
+                } else {
+                    chatMessages.add(
+                        ChatMessage(
+                            role = ChatRole.User,
+                            content = modelFacingContent(message)
                         )
-                    }
+                    )
                 }
             }
 
@@ -2343,9 +2290,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         keyboardFrame = findViewById(R.id.keyboard_frame)
         root = findViewById(R.id.root)
         btnAttachFile = findViewById(R.id.btn_attach)
-        attachedImage = findViewById(R.id.attachedImage)
-        selectedImage = findViewById(R.id.selectedImage)
-        btnRemoveImage = findViewById(R.id.btnRemoveImage)
         visionActions = findViewById(R.id.vision_action_selector)
         btnVisionActionCamera = findViewById(R.id.action_camera)
         btnVisionActionGallery = findViewById(R.id.action_gallery)
@@ -2406,8 +2350,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         chat?.itemAnimator = null
 
         visionActions?.visibility = View.GONE
-
-        attachedImage?.visibility = View.GONE
 
         btnExport?.setImageResource(R.drawable.ic_upload)
         btnBack?.setImageResource(R.drawable.ic_back)
@@ -2651,83 +2593,100 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         return ResourcesCompat.getColor(context.resources, R.color.amoled_accent_200, null)
     }
 
-    private var bitmap: Bitmap? = null
-    private var baseImageString: String? = null
-    private var selectedImageType: String? = null
-
-    private fun roundCorners(bitmap: Bitmap): Bitmap {
-        // Create a bitmap with the same size as the original.
-        val output = createBitmap(bitmap.width, bitmap.height)
-
-        // Prepare a canvas with the new bitmap.
-        val canvas = Canvas(output)
-
-        // The paint used to draw the original bitmap onto the new one.
-        val paint = Paint().apply {
-            isAntiAlias = true
-            color = -0xbdbdbe
-        }
-
-        // The rectangle bounds for the original bitmap.
-        val rect = Rect(0, 0, bitmap.width, bitmap.height)
-        val rectF = RectF(rect)
-
-        // Draw rounded rectangle as background.
-        canvas.drawRoundRect(rectF, 16f, 16f, paint)
-
-        // Change the paint mode to draw the original bitmap on top.
-        paint.xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_IN)
-
-        // Draw the original bitmap.
-        canvas.drawBitmap(bitmap, rect, rect, paint)
-
-        return output
+    /**
+     * Gallery image picker landing point. Hands the URI off to
+     * [ImageImporter] which handles JPEG/PNG/HEIC conversion, EXIF
+     * orientation, downsampling to the 2048 longest-edge cap and the copy
+     * into this chat's own images directory. Failure surfaces through the
+     * approved image-attach dialogs, never as a preview above the chat.
+     */
+    private val imageIntentLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode != RESULT_OK) return@registerForActivityResult
+        val uri = result.data?.data ?: return@registerForActivityResult
+        importPendingImage(uri, displayNameOverride = null)
     }
 
-    private val fileIntentLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        run {
-            if (result.resultCode == RESULT_OK) {
-                result.data?.data?.also { uri ->
-                    bitmap = readFile(uri)
+    // ==== Image includes ====================================================
+    // Camera and Image both flow through here so the pending Includes strip
+    // is the ONE surface that ever holds an attached picture. The image bytes
+    // live under the chat's private images dir; the ChatInclude carries just
+    // the hash reference plus dimensions and mime for the model estimate.
 
-                    if (bitmap != null) {
-                        attachedImage?.visibility = View.VISIBLE
-
-                        val resizedBitmap = resizeBitmapToMaxHeight(bitmap!!, 100)
-
-                        selectedImage?.setImageBitmap(roundCorners(resizedBitmap))
-                        imageIsSelected = true
-
-                        val mimeType = contentResolver.getType(uri)
-                        val format = when {
-                            mimeType.equals("image/png", ignoreCase = true) -> {
-                                selectedImageType = "png"
-                                Bitmap.CompressFormat.PNG
-                            }
-                            else -> {
-                                selectedImageType = "jpg"
-                                Bitmap.CompressFormat.JPEG
-                            }
-                        }
-
-                        // Step 3: Convert the Bitmap to a Base64-encoded string
-                        val outputStream = ByteArrayOutputStream()
-                        bitmap!!.compress(format, 100, outputStream) // Note: Adjust the quality as necessary
-                        val base64Image = Base64.encodeToString(outputStream.toByteArray(), Base64.DEFAULT)
-
-                        // Step 4: Generate the data URL
-                        val imageType = when(format) {
-                            Bitmap.CompressFormat.JPEG -> "jpeg"
-                            Bitmap.CompressFormat.PNG -> "png"
-                            // Add more mappings as necessary
-                            else -> ""
-                        }
-
-                        baseImageString = "data:image/$imageType;base64,$base64Image"
-                    }
+    /** Turns a picked-or-captured image URI into a pending image include, or
+     *  raises the approved failure dialog when the file cannot be prepared.
+     *  The old preview above the chat is gone; a failure never shows a
+     *  half-attached row. */
+    private fun importPendingImage(uri: Uri, displayNameOverride: String?) {
+        val scope = CoroutineScope(Dispatchers.Main)
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                try {
+                    ImageImporter.import(
+                        this@ChatActivity, uri, chatId, displayNameOverride
+                    )
+                } catch (_: Exception) {
+                    ImageImporter.Result.Unknown(displayNameOverride ?: "image")
                 }
             }
+            if (isFinishing || isDestroyed) return@launch
+
+            when (result) {
+                is ImageImporter.Result.Success -> {
+                    pendingIncludes.add(result.include)
+                    savePendingIncludes()
+                    refreshIncludeStrip()
+                }
+                is ImageImporter.Result.Unsupported ->
+                    showImageAttachDialog(
+                        R.string.image_attach_unsupported_title,
+                        R.string.image_attach_unsupported_body
+                    )
+                is ImageImporter.Result.HeicConversionFailed ->
+                    showImageAttachDialog(
+                        R.string.image_attach_conversion_failed_title,
+                        R.string.image_attach_conversion_failed_body
+                    )
+                is ImageImporter.Result.ReadFailed ->
+                    showImageAttachDialog(
+                        R.string.image_attach_read_failed_title,
+                        R.string.image_attach_read_failed_body
+                    )
+                is ImageImporter.Result.TooLarge ->
+                    showImageAttachDialog(
+                        R.string.image_attach_too_large_title,
+                        R.string.image_attach_too_large_body
+                    )
+                is ImageImporter.Result.Unknown ->
+                    showImageAttachDialog(
+                        R.string.image_attach_read_failed_title,
+                        R.string.image_attach_read_failed_body
+                    )
+            }
         }
+    }
+
+    private fun showImageAttachDialog(titleRes: Int, bodyRes: Int) {
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(titleRes)
+            .setMessage(bodyRes)
+            .setPositiveButton(R.string.okay, null)
+            .show()
+    }
+
+    /** Camera captures name themselves after the chat plus a timestamp so a
+     *  transcript's summary rows stay readable ("Trip planning 07-27-26
+     *  14-32.jpg") instead of showing the always-`tmp.jpg` placeholder. */
+    private fun cameraCaptureDisplayName(): String {
+        val safeName = (chatName.ifBlank { "Untitled" })
+            .replace(Regex("[/\\\\:*?\"<>|]"), " ")
+            .trim()
+            .ifBlank { "Untitled" }
+        val stamp = java.text.SimpleDateFormat(
+            "MM-dd-yy HH-mm", java.util.Locale.getDefault()
+        ).format(java.util.Date())
+        return "$safeName $stamp.jpg"
     }
 
     // ==== Document includes ================================================
@@ -2825,7 +2784,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     private fun rebuildModelProjection() {
         chatMessages = arrayListOf()
         for (message in messages) {
-            if (message["message"].toString().contains("data:image")) continue
             val content = modelFacingContent(message)
             if (content.isBlank()) continue
             chatMessages.add(
@@ -3238,23 +3196,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         return sent
     }
 
-    private fun readFile(uri: Uri) : Bitmap? {
-        return contentResolver.openInputStream(uri)?.use { inputStream ->
-            BufferedReader(InputStreamReader(inputStream)).use { _ ->
-                BitmapFactory.decodeStream(inputStream)
-            }
-        }
-    }
-
-    private fun openFile(pickerInitialUri: Uri) {
+    /** Opens the system image picker, filtered to JPEG, PNG and HEIC. HEIC
+     *  is converted to JPEG at import time. Any other file the user
+     *  navigates to is refused by [ImageImporter] with the approved dialog. */
+    private fun openImagePicker() {
         val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
-            type = "image/*"
-
-            putExtra(DocumentsContract.EXTRA_INITIAL_URI, pickerInitialUri)
+            type = "*/*"
+            putExtra(Intent.EXTRA_MIME_TYPES, ImageImporter.PICKER_MIME_TYPES)
         }
-
-        fileIntentLauncher.launch(intent)
+        imageIntentLauncher.launch(intent)
     }
 
     private fun initLogic() {
@@ -3289,8 +3240,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 false
             }
         }
-
-        attachedImage?.setOnClickListener { /* ignored */ }
 
         // (No long-press listener on btnMicro: View.performLongClick is gated
         // on isEnabled, which is exactly false during generation — the only
@@ -3342,7 +3291,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
         btnVisionActionGallery?.setOnClickListener {
             visionActions?.visibility = View.GONE
-            openFile("/storage/emulated/0/image.png".toUri())
+            openImagePicker()
         }
 
         btnVisionActionCamera?.setOnClickListener {
@@ -3354,12 +3303,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         btnVisionActionDocument?.setOnClickListener {
             visionActions?.visibility = View.GONE
             openDocumentPicker()
-        }
-
-        btnRemoveImage?.setOnClickListener {
-            attachedImage?.visibility = View.GONE
-            imageIsSelected = false
-            bitmap = null
         }
 
         messageInput?.setOnKeyListener { v, keyCode, event -> run {
@@ -4569,24 +4512,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
             val m = preparedTurn?.storedMessage ?: (prefix + message + endSeparator)
 
-            if (imageIsSelected) {
-                val bytes = Base64.decode(baseImageString!!.split(",")[1], Base64.DEFAULT)
-                writeImageToCache(bytes, selectedImageType!!)
-
-                val encoded = java.util.Base64.getEncoder().encodeToString(bytes)
-
-                val file = Hash.hash(encoded)
-
-                if (shouldAdd) {
-                    putMessage(m, false, file, selectedImageType!!)
-                } else {
-                    messages[messages.size - 1]["image"] = file
-                    messages[messages.size - 1]["imageType"] = selectedImageType!!
-                    messages[messages.size - 1]["message"] = m
-                }
-            } else {
-                if (shouldAdd) putMessage(m, false)
-            }
+            if (shouldAdd) putMessage(m, false)
 
             // Attachments waiting in the strip belong to THIS message: they
             // move into its record so the document text is saved atomically
@@ -4816,7 +4742,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         // They do not use the normal chat-completions request built below.
         val imagineCommand = rawMessage.lowercase().contains("/imagine") &&
             preferences?.getImagineCommand() == true
-        if (imageIsSelected || imagineCommand ||
+        if (imagineCommand ||
             model.contains(":ft") || model.contains("ft:") ||
             preferences?.getFunctionCalling() == true
         ) {
@@ -5230,16 +5156,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         } catch (_: Exception) { /* ignore */ }
     }
 
-    private fun putMessage(message: String, isBot: Boolean, image: String = "", imageType: String = "") {
+    private fun putMessage(message: String, isBot: Boolean) {
         val map: HashMap<String, Any> = HashMap()
 
         map["message"] = message
         map["isBot"] = isBot
-
-        if (image != "") {
-            map["image"] = image
-            map["imageType"] = imageType
-        }
 
         messages.add(map)
         adapter?.notifyItemInserted(messages.size - 1)
@@ -5393,104 +5314,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         try {
             var response = ""
 
-            if (imageIsSelected) {
-                imageIsSelected = false
-
-                attachedImage?.visibility = View.GONE
-
-                putMessage("", true)
-                markLastAssistantStreaming()
-
-                val reqList: ArrayList<ContentPart> = arrayListOf()
-                reqList.add(TextPart(request))
-                reqList.add(ImagePart(baseImageString!!))
-                val chatCompletionRequest = if (preferences?.getLogitBiasesConfigId() == null || preferences?.getLogitBiasesConfigId() == "null" || preferences?.getLogitBiasesConfigId() == "") {
-                    ChatCompletionRequest(
-                        model = ModelId("gpt-4o"),
-                        maxTokens = preferences!!.getMaxTokens(),
-                        temperature = if (preferences!!.getTemperature().toDouble() == 0.7) null else preferences!!.getTemperature().toDouble(),
-                        topP = if (preferences!!.getTopP().toDouble() == 1.0) null else preferences!!.getTopP().toDouble(),
-                        frequencyPenalty = if (preferences!!.getFrequencyPenalty().toDouble() == 0.0) null else preferences!!.getFrequencyPenalty().toDouble(),
-                        presencePenalty = if (preferences!!.getPresencePenalty().toDouble() == 0.0) null else preferences!!.getPresencePenalty().toDouble(),
-                        logitBias = logitBiasPreferences?.getLogitBiasesMap(),
-                        seed = if (preferences!!.getSeed() != "") preferences!!.getSeed().toInt() else null,
-                        messages = listOf(
-                            ChatMessage(
-                                role = ChatRole.System,
-                                content = "You are a helpful assistant!"
-                            ),
-                            ChatMessage(
-                                role = ChatRole.User,
-                                content = reqList
-                            )
-                        )
-                    )
-                } else {
-                    ChatCompletionRequest(
-                        model = ModelId("gpt-4o"),
-                        maxTokens = preferences!!.getMaxTokens(),
-                        temperature = if (preferences!!.getTemperature().toDouble() == 0.7) null else preferences!!.getTemperature().toDouble(),
-                        topP = if (preferences!!.getTopP().toDouble() == 1.0) null else preferences!!.getTopP().toDouble(),
-                        frequencyPenalty = if (preferences!!.getFrequencyPenalty().toDouble() == 0.0) null else preferences!!.getFrequencyPenalty().toDouble(),
-                        presencePenalty = if (preferences!!.getPresencePenalty().toDouble() == 0.0) null else preferences!!.getPresencePenalty().toDouble(),
-                        seed = if (preferences!!.getSeed() != "") preferences!!.getSeed().toInt() else null,
-                        messages = listOf(
-                            ChatMessage(
-                                role = ChatRole.System,
-                                content = "You are a helpful assistant!"
-                            ),
-                            ChatMessage(
-                                role = ChatRole.User,
-                                content = reqList
-                            )
-                        )
-                    )
-                }
-
-                val completions: Flow<ChatCompletionChunk> = ai!!.chatCompletions(chatCompletionRequest)
-
-                scroll(true)
-
-                completions.flowOn(Dispatchers.IO).collect { v ->
-                    run {
-                        if (!currentCoroutineContext().isActive) throw CancellationException()
-                        else if (v.choices[0].delta != null && v.choices[0].delta?.content != null && v.choices[0].delta?.content.toString() != "null") {
-                            response += v.choices[0].delta?.content
-                            if (response != "null") {
-                                messages[messages.size - 1]["message"] = response
-                                if (messages.size > 2) {
-                                    adapter?.notifyItemRangeChanged(messages.size - 3, messages.size - 1)
-                                } else {
-                                    adapter?.notifyItemChanged(messages.size - 1)
-                                }
-                                scroll(false)
-                                saveSettings()
-                            }
-                        }
-                    }
-                }
-
-                messages[messages.size - 1]["message"] = "${response}\n"
-                markLastAssistantDone()
-
-                if (messages.size > 2) {
-                    adapter?.notifyItemRangeChanged(messages.size - 3, messages.size - 1)
-                } else {
-                    adapter?.notifyItemChanged(messages.size - 1)
-                }
-
-                syncChatProjection()
-
-                pronounce(shouldPronounce, response)
-
-                saveSettings()
-                calculateCost()
-
-                btnMicro?.isEnabled = true
-                btnSend?.isEnabled = true
-                progress?.visibility = View.GONE
-                messageInput?.requestFocus()
-            } else if (model.contains(":ft") || model.contains("ft:")) {
+            if (model.contains(":ft") || model.contains("ft:")) {
                 putMessage("", true)
                 markLastAssistantStreaming()
                 val completionRequest = if (preferences?.getLogitBiasesConfigId() == null || preferences?.getLogitBiasesConfigId() == "null" || preferences?.getLogitBiasesConfigId() == "") {
@@ -7417,48 +7241,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         saveSettings()
 
         val message = findLastUserMessage()
-
-        if (message["image"] != null) {
-            btnMicro?.isEnabled = false
-            btnSend?.isEnabled = false
-            progress?.visibility = View.VISIBLE
-
-            val uri = Uri.fromFile(File(getExternalFilesDir("images")?.absolutePath + "/" + message["image"] + "." + message["imageType"]))
-            imageIsSelected = true
-            bitmap = readFile(uri)
-
-            if (bitmap != null) {
-                imageIsSelected = true
-
-                val mimeType = contentResolver.getType(uri)
-                val format = when {
-                    mimeType.equals("image/png", ignoreCase = true) -> {
-                        selectedImageType = "png"
-                        Bitmap.CompressFormat.PNG
-                    }
-                    else -> {
-                        selectedImageType = "jpg"
-                        Bitmap.CompressFormat.JPEG
-                    }
-                }
-
-                // Step 3: Convert the Bitmap to a Base64-encoded string
-                val outputStream = ByteArrayOutputStream()
-                bitmap!!.compress(format, 100, outputStream) // Note: Adjust the quality as necessary
-                val base64Image = Base64.encodeToString(outputStream.toByteArray(), Base64.DEFAULT)
-
-                // Step 4: Generate the data URL
-                val imageType = when(format) {
-                    Bitmap.CompressFormat.JPEG -> "jpeg"
-                    Bitmap.CompressFormat.PNG -> "png"
-                    // Add more mappings as necessary
-                    else -> ""
-                }
-
-                baseImageString = "data:image/$imageType;base64,$base64Image"
-            }
-        }
-
+        // Image attachments now ride as structured includes on the user
+        // message record; a retry re-sends the same message and includes
+        // via the normal send path — no legacy [image]/[imageType] fields
+        // to unpack here.
         parseMessage(message["message"].toString(), false)
     }
 
@@ -7531,42 +7317,18 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
-        if (imageIsSelected) {
-            outState.putString("image", baseImageString)
-            outState.putString("imageType", selectedImageType)
-        }
+        // Pending image attachments survive a config change through the
+        // per-chat pending_includes preference (loadPendingIncludes), not
+        // through the instance-state bundle, so there is nothing image-side
+        // to write here anymore.
         super.onSaveInstanceState(outState)
     }
 
-    private fun base64ToBitmap(base64Str: String): Bitmap? {
-        return try {
-            // Decode Base64 string to bytes
-            val decodedBytes = Base64.decode(base64Str, Base64.DEFAULT)
-            // Decode byte array to Bitmap
-            BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.size)
-        } catch (_: IllegalArgumentException) {
-            // Handle the case where the Base64 string was not correctly formatted
-            null
-        }
-    }
-
     private fun onRestoredState(savedInstanceState: Bundle?) {
-        val image = savedInstanceState?.getString("image")
-
-        if (image != null) {
-            baseImageString = image
-            imageIsSelected = true
-            selectedImageType = savedInstanceState.getString("imageType")
-
-            bitmap = base64ToBitmap(baseImageString!!.split(",")[1])
-
-            if (bitmap != null) {
-                attachedImage?.visibility = View.VISIBLE
-
-                val resizedBitmap = resizeBitmapToMaxHeight(bitmap!!, 100)
-                selectedImage?.setImageBitmap(roundCorners(resizedBitmap))
-            }
-        }
+        // Left as a no-op after the vision path was retired; pending image
+        // includes rehydrate from preferences on load, not from the instance
+        // state bundle. Kept as a hook in case a future piece of state needs
+        // the same lifecycle place.
     }
 
     private fun requestAddApiEndpoint(feature: String, prompt: String) {
@@ -7657,8 +7419,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     mapOf(
                         "message" to m["message"],
                         "isBot" to m["isBot"],
-                        "image" to m["image"],
-                        "imageType" to m["imageType"],
                         "selected" to false
                     )
                 )

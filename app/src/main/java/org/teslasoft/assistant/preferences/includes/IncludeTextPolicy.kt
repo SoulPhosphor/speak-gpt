@@ -29,6 +29,21 @@ object IncludeTextPolicy {
     private const val GARBAGE_SAMPLE = 4_000
     private const val GARBAGE_RATIO = 0.05
 
+    /**
+     * Fallback image estimate baseline (matches the low-detail floor several
+     * vision providers publish). The estimate is never allowed below this even
+     * for tiny images, so the tilde number does not misrepresent the request.
+     */
+    const val IMAGE_TOKEN_FLOOR = 85
+
+    /**
+     * Divisor for the pixel-based image estimate. Chosen conservatively so
+     * the tilde number does not understate real photos on the most common
+     * vision APIs, while remaining deliberately model-agnostic. It is not a
+     * provider-specific tokenizer — the tilde communicates that.
+     */
+    const val IMAGE_TOKEN_PIXELS_PER_TOKEN = 750
+
     /** Approximate display count. Callers must render it with a leading "~". */
     fun estimateTokens(text: String): Int {
         if (text.isEmpty()) return 0
@@ -68,6 +83,21 @@ object IncludeTextPolicy {
     }
 
     fun fallbackArtifactLine(fileName: String): String = "User sent $fileName."
+
+    /**
+     * Conservative, model-agnostic image estimate for the ~N tokens readout.
+     * Uses the transmitted (post-downsample) dimensions the caller passes in,
+     * not the original source. Always at least [IMAGE_TOKEN_FLOOR]; the tilde
+     * around it communicates that this is a warning number, not a provider
+     * token count.
+     */
+    fun estimateImageTokens(widthPx: Int, heightPx: Int): Int {
+        if (widthPx <= 0 || heightPx <= 0) return IMAGE_TOKEN_FLOOR
+        val pixels = widthPx.toLong() * heightPx.toLong()
+        val pixelBased = ((pixels + IMAGE_TOKEN_PIXELS_PER_TOKEN - 1) /
+                IMAGE_TOKEN_PIXELS_PER_TOKEN).toInt()
+        return kotlin.math.max(IMAGE_TOKEN_FLOOR, pixelBased)
+    }
 
     fun workbookSheetLabel(name: String): String = "[Sheet: $name]"
 

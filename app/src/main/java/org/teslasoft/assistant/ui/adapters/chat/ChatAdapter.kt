@@ -99,7 +99,6 @@ import org.teslasoft.assistant.util.ShareUtil.Companion.sharePlainText
 class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, private val selectorProjection: ArrayList<HashMap<String, Any>>, private val context: FragmentActivity, private val preferences: Preferences, private val isAssistant: Boolean, private var chatId: String) : RecyclerView.Adapter<ChatAdapter.ViewHolder>(), EditMessageDialogFragment.StateChangesListener {
 
     private var dalleImageStringList = ArrayList<String>(Collections.nCopies(itemCount + 1, ""))
-    private var imageStringList = ArrayList<String>(Collections.nCopies(itemCount + 1, ""))
     private var listener: OnUpdateListener? = null
     private var bulkActionMode = false
 
@@ -366,18 +365,11 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 Toast.makeText(context, context.getString(R.string.label_copy), Toast.LENGTH_SHORT).show()
             }
 
-            if (chatMessage["message"].toString().contains("data:image")) {
-                dalleImage.visibility = View.VISIBLE
-                message.visibility = View.GONE
-                btnCopy.visibility = View.GONE
-
-                loadImage(chatMessage["message"].toString())
-                updateImageClickListener(chatMessage["message"].toString())
-            } else if (chatMessage["message"].toString().contains("~file:")) {
+            if (chatMessage["message"].toString().contains("~file:")) {
                 if (chatMessage["isBot"] == true) {
                     message.visibility = View.GONE
                 }
-                processFile(chatMessage, position, "png", dalleImageStringList, true)
+                processDalleFile(chatMessage, position)
             } else {
                 (debugContext as FragmentActivity).runOnUiThread {
                     applyMarkdown(chatMessage)
@@ -389,16 +381,14 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                     }
                 }, 100)
 
-                if (chatMessage["isBot"] == false && chatMessage["image"] !== null) {
-                    dalleImage.visibility = View.VISIBLE
+                // User-attached images now belong to the Includes system
+                // (renderer + summary row), never inline as a big preview in
+                // the message bubble. The dalleImage slot is reserved for
+                // DALL-E replies via the ~file: branch above.
+                dalleImage.visibility = View.GONE
 
-                    processFile(chatMessage, position, chatMessage["imageType"].toString(), imageStringList, false)
-                } else {
-                    dalleImage.visibility = View.GONE
-
-                    btnShare.setOnClickListener {
-                        sharePlainText(context, chatMessage["message"].toString())
-                    }
+                btnShare.setOnClickListener {
+                    sharePlainText(context, chatMessage["message"].toString())
                 }
 
                 message.visibility = View.VISIBLE
@@ -618,7 +608,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 0,
                 MENU_INCLUDE_CONDENSE,
                 1,
-                if (include.kind == IncludeKind.IMAGE) {
+                if (include.kind.isImage()) {
                     R.string.include_action_reduce
                 } else {
                     R.string.include_action_condense
@@ -640,10 +630,8 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             popup.show()
         }
 
-        private fun includeIcon(kind: IncludeKind): Int = when (kind) {
-            IncludeKind.IMAGE -> R.drawable.ic_image
-            else -> R.drawable.ic_file
-        }
+        private fun includeIcon(kind: IncludeKind): Int =
+            if (kind.isImage()) R.drawable.ic_image else R.drawable.ic_file
 
         private fun updateStatusMarker(chatMessage: HashMap<String, Any>) {
             val marker = statusMarker ?: return
@@ -707,11 +695,11 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         }
 
         private fun updateSpeakButton(chatMessage: HashMap<String, Any>, position: Int) {
-            // Re-read only makes sense for assistant text replies. Hide it for
-            // user messages and for image/file messages (nothing to speak).
+            // Re-read only makes sense for assistant text replies. DALL-E
+            // outputs land as `~file:` markers and are not speakable.
             val msg = chatMessage["message"].toString()
             val speakable = chatMessage["isBot"] == true &&
-                    !msg.contains("data:image") && !msg.contains("~file:")
+                    !msg.contains("~file:")
             if (speakable) {
                 btnSpeak.visibility = View.VISIBLE
                 if (position == speakingPosition) {
@@ -999,48 +987,45 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             return sb.toString()
         }
 
+        /** Loads a DALL-E-generated image bubble from its `~file:<hash>` slot
+         *  in the shared images cache. User-attached images no longer flow
+         *  through this path — they render as Includes summary rows under
+         *  the user's own message. */
         @SuppressLint("SetTextI18n")
-        private fun processFile(chatMessage: HashMap<String, Any>, position: Int, imageType: String, searchArray: ArrayList<String>, u: Boolean) {
-            val mimeType = if (u || imageType == "png") "image/png" else "image/jpeg"
-
-            val path = if(u) {
-                chatMessage["message"].toString().replace("~file:", "")
-            } else {
-                chatMessage["image"]
-            }
+        private fun processDalleFile(chatMessage: HashMap<String, Any>, position: Int) {
+            val mimeType = "image/png"
+            val path = chatMessage["message"].toString().replace("~file:", "")
 
             try {
-                val fullPath = context.getExternalFilesDir("images")?.absolutePath + "/" + path + "." + imageType
+                val fullPath = context.getExternalFilesDir("images")?.absolutePath +
+                    "/" + path + ".png"
 
-                while (searchArray.size < itemCount + 1) {
-                    searchArray.add("")
+                while (dalleImageStringList.size < itemCount + 1) {
+                    dalleImageStringList.add("")
                 }
 
-                if (searchArray[position] == "") {
+                if (dalleImageStringList[position] == "") {
                     context.contentResolver?.openFileDescriptor(
-                        Uri.fromFile(
-                            File(fullPath)
-                        ), "r"
+                        Uri.fromFile(File(fullPath)), "r"
                     )?.use { file ->
                         FileInputStream(file.fileDescriptor).use { stream ->
-                            run {
-                                val c: ByteArray = stream.readBytes()
-                                searchArray[position] = "data:$mimeType;base64," + Base64.getEncoder().encodeToString(c)
-                                loadImage(searchArray[position])
-                                updateImageClickListener(searchArray[position])
-                            }
+                            val c: ByteArray = stream.readBytes()
+                            dalleImageStringList[position] =
+                                "data:$mimeType;base64," + Base64.getEncoder().encodeToString(c)
+                            loadImage(dalleImageStringList[position])
+                            updateImageClickListener(dalleImageStringList[position])
                         }
                     }
                 } else {
-                    loadImage(searchArray[position])
-                    updateImageClickListener(searchArray[position])
+                    loadImage(dalleImageStringList[position])
+                    updateImageClickListener(dalleImageStringList[position])
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
                 dalleImage.visibility = View.GONE
                 message.visibility = View.VISIBLE
                 btnCopy.visibility = View.VISIBLE
-                message.text = "${message.text}\n<IMAGE NOT FOUND: $path.$mimeType>\nStacktrace: ${e.stackTraceToString()}"
+                message.text = "${message.text}\n<IMAGE NOT FOUND: $path.png>\nStacktrace: ${e.stackTraceToString()}"
             }
         }
 

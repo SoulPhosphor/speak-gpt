@@ -100,12 +100,119 @@ class IncludeTextPolicyTest {
         assertEquals(IncludeKind.CSV, IncludeKind.fromFileName("data.csv"))
         assertEquals(IncludeKind.DOCX, IncludeKind.fromFileName("resume.docx"))
         assertEquals(IncludeKind.XLSX, IncludeKind.fromFileName("budget.xlsx"))
+        assertEquals(IncludeKind.JPEG, IncludeKind.fromFileName("Photo 07-27-26.jpg"))
+        assertEquals(IncludeKind.JPEG, IncludeKind.fromFileName("Screenshot.JPEG"))
+        assertEquals(IncludeKind.PNG, IncludeKind.fromFileName("chart.png"))
     }
 
     @Test fun deferredAndUnsupportedTypesAreRejected() {
         assertNull(IncludeKind.fromFileName("manual.pdf"))
         assertNull(IncludeKind.fromFileName("old.doc"))
         assertNull(IncludeKind.fromFileName("noextension"))
+        // HEIC is converted to JPEG at import time, so a raw .heic name is not
+        // a stored kind and never round-trips through this mapping.
+        assertNull(IncludeKind.fromFileName("photo.heic"))
+        assertNull(IncludeKind.fromFileName("motion.gif"))
+    }
+
+    @Test fun imageKindsClassifyAsImages() {
+        assertTrue(IncludeKind.JPEG.isImage())
+        assertTrue(IncludeKind.PNG.isImage())
+        assertFalse(IncludeKind.TXT.isImage())
+        assertFalse(IncludeKind.DOCX.isImage())
+    }
+
+    @Test fun imageTokenEstimateHasAFloor() {
+        // A trivially small image still costs a base amount to send, so the
+        // ~N tokens reading never claims "0" for a real attachment.
+        assertEquals(IncludeTextPolicy.IMAGE_TOKEN_FLOOR,
+            IncludeTextPolicy.estimateImageTokens(1, 1))
+        assertEquals(IncludeTextPolicy.IMAGE_TOKEN_FLOOR,
+            IncludeTextPolicy.estimateImageTokens(0, 0))
+    }
+
+    @Test fun imageTokenEstimateScalesWithPixels() {
+        // Post-downsample cap of 2048 longest edge yields ~5.6k tokens at
+        // 2048x2048, ~1k around 1024x768. The exact numbers matter less than
+        // the property that a larger image reads as heavier than a smaller one.
+        val small = IncludeTextPolicy.estimateImageTokens(512, 512)
+        val medium = IncludeTextPolicy.estimateImageTokens(1024, 768)
+        val large = IncludeTextPolicy.estimateImageTokens(2048, 2048)
+        assertTrue(small < medium)
+        assertTrue(medium < large)
+    }
+
+    @Test fun imageIncludeUsesDimensionEstimateInFullForm() {
+        val image = ChatInclude(
+            id = "img-1",
+            fileName = "Photo 07-27-26 14-32.jpg",
+            kind = IncludeKind.JPEG,
+            form = IncludeForm.FULL,
+            fullText = "",
+            imageFileHash = "abc123",
+            imageMimeType = "image/jpeg",
+            imageWidth = 1024,
+            imageHeight = 768
+        )
+        assertEquals(
+            IncludeTextPolicy.estimateImageTokens(1024, 768),
+            image.currentTokens()
+        )
+        // A FULL image contributes nothing on the TEXT side; its content is a
+        // separate image part the caller emits.
+        assertEquals("", image.modelText())
+    }
+
+    @Test fun reducedImageBehavesLikeCondensedText() {
+        val reduced = ChatInclude(
+            id = "img-2",
+            fileName = "chart.png",
+            kind = IncludeKind.PNG,
+            form = IncludeForm.CONDENSED,
+            fullText = "",
+            condensedText = "A bar chart showing 2024 quarterly revenue."
+        )
+        assertEquals(
+            "A bar chart showing 2024 quarterly revenue.",
+            reduced.modelText()
+        )
+    }
+
+    @Test fun imageBytesReferenceIsClearedOnceGone() {
+        val image = ChatInclude(
+            id = "img-3",
+            fileName = "photo.jpg",
+            kind = IncludeKind.JPEG,
+            form = IncludeForm.FULL,
+            fullText = "",
+            imageFileHash = "abc123",
+            imageMimeType = "image/jpeg",
+            imageWidth = 1024,
+            imageHeight = 768
+        )
+        assertTrue(image.hasLiveImageBytes())
+        val gone = image.withoutImageBytes()
+        assertNull(gone.imageFileHash)
+        assertEquals(0, gone.imageWidth)
+        assertFalse(gone.hasLiveImageBytes())
+    }
+
+    @Test fun imageIncludeRoundTripsThroughJson() {
+        val image = ChatInclude(
+            id = "img-4",
+            fileName = "Photo 07-27-26 14-32.jpg",
+            kind = IncludeKind.JPEG,
+            form = IncludeForm.FULL,
+            fullText = "",
+            imageFileHash = "hash-abc",
+            imageMimeType = "image/jpeg",
+            imageWidth = 1600,
+            imageHeight = 1200
+        )
+        val restored = ChatInclude.listFromJson(
+            ChatInclude.listToJson(listOf(image))
+        ).single()
+        assertEquals(image, restored)
     }
 
     @Test fun oldPartialIncludesSurviveAJsonRoundTrip() {

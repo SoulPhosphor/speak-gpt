@@ -20,8 +20,8 @@ package org.teslasoft.assistant.preferences.includes
  * The model-facing contract for include maintenance requests.
  *
  * Keeping the selected model, output limit, and prompt together makes it hard
- * for Condense and Remove to accidentally share a purpose or silently lose a
- * request setting when their call sites change.
+ * for Condense, Reduce, and Remove to accidentally share a purpose or silently
+ * lose a request setting when their call sites change.
  */
 object IncludeAuxiliaryRequestPolicy {
 
@@ -79,6 +79,45 @@ object IncludeAuxiliaryRequestPolicy {
             <document>
             ${include.modelText().take(excerptCharacters)}
             </document>
+        """.trimIndent()
+    )
+
+    /**
+     * Reduce request for a FULL image. The caller sends this prompt as the
+     * text side of a multi-part user message and attaches the image itself as
+     * an image content part.
+     *
+     * The accompanying user message is passed in as context so the model can
+     * prioritise details the user cared about, not everything in the frame.
+     */
+    fun reduceImage(
+        include: ChatInclude,
+        accompanyingUserMessage: String,
+        selectedModel: String,
+        configuredMaxTokens: Int
+    ): RequestSpec = RequestSpec(
+        model = selectedModel,
+        maxTokens = configuredMaxTokens.coerceAtLeast(1),
+        prompt = """
+            Create a concise, self-contained text memory of this image. This text will replace the image in future requests, so preserve the information a person would need to remember in order to understand later discussion.
+
+            Use the accompanying message as context for what matters most.
+
+            Include, when relevant:
+
+            - the main subject and apparent purpose of the image;
+            - important people, objects, actions, relationships, or surroundings;
+            - distinctive visual details needed to identify or compare it later;
+            - visible text that matters to understanding the image, quoted exactly when practical;
+            - charts, diagrams, interfaces, or data, including important labels, values, trends, and structure;
+            - uncertainty, obscured details, or anything that cannot be determined reliably.
+
+            Prioritize useful information over exhaustive description. Summarize repetitive or lengthy text unless exact wording is important. Do not invent identities, facts, text, or details that are not visible or supplied in the context. Do not give instructions, commentary, or analysis beyond what is needed to preserve the image's meaning.
+
+            Return only the text memory.
+
+            File name: ${include.fileName}
+            Accompanying message: ${accompanyingUserMessage.ifBlank { "(none)" }}
         """.trimIndent()
     )
 }

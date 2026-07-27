@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- First-use explanation for the irreversible Reduce action. Parallel to
+     dialog_include_condense_hint (documents) but with a separate checkbox id
+     so hiding the reduce hint does not silently hide the condense hint. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingHorizontal="24dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp"
+        android:text="@string/include_reduce_hint"
+        android:textColor="@color/text"
+        android:textSize="16sp" />
+
+    <include layout="@layout/dialog_two_actions" />
+
+    <com.google.android.material.checkbox.MaterialCheckBox
+        android:id="@+id/include_reduce_never_show"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="24dp"
+        android:layout_marginBottom="16dp"
+        android:text="@string/include_reduce_never_show"
+        android:textColor="@color/text" />
+
+</LinearLayout>

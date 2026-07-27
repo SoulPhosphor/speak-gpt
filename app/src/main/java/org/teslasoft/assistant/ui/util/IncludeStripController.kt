@@ -66,6 +66,8 @@ class IncludeStripController(
     private var current: List<ChatInclude> = emptyList()
     private val documentHint: TextView? =
         strip.findViewById(R.id.include_document_hint)
+    private val imageHint: TextView? =
+        strip.findViewById(R.id.include_image_hint)
 
     init {
         collapsedRow.setOnClickListener { toggleExpanded() }
@@ -100,12 +102,18 @@ class IncludeStripController(
         if (current.isEmpty()) {
             strip.visibility = View.GONE
             documentHint?.visibility = View.GONE
+            imageHint?.visibility = View.GONE
             list.removeAllViews()
             return
         }
 
         strip.visibility = View.VISIBLE
-        documentHint?.visibility = if (current.any { it.kind != IncludeKind.IMAGE }) {
+        documentHint?.visibility = if (current.any { !it.kind.isImage() }) {
+            View.VISIBLE
+        } else {
+            View.GONE
+        }
+        imageHint?.visibility = if (current.any { it.kind.isImage() }) {
             View.VISIBLE
         } else {
             View.GONE
@@ -200,8 +208,6 @@ class IncludeStripController(
 
     private fun grouped(value: Int): String = NumberFormat.getIntegerInstance().format(value)
 
-    private fun iconFor(kind: IncludeKind): Int = when (kind) {
-        IncludeKind.IMAGE -> R.drawable.ic_image
-        else -> R.drawable.ic_file
-    }
+    private fun iconFor(kind: IncludeKind): Int =
+        if (kind.isImage()) R.drawable.ic_image else R.drawable.ic_file
 }

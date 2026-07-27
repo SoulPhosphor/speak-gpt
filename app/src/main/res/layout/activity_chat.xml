@@ -456,6 +456,15 @@
                 android:text="@string/include_document_pending_hint"
                 android:visibility="gone" />
 
+            <TextView
+                android:id="@+id/include_image_hint"
+                style="@style/Widget.App.Include.Notice"
+                android:paddingStart="12dp"
+                android:paddingTop="8dp"
+                android:paddingBottom="2dp"
+                android:text="@string/include_image_pending_hint"
+                android:visibility="gone" />
+
 <!-- No android:id here on purpose: an id on an <include> REPLACES the
                  included layout's own root id, which would make
                  findViewById(R.id.include_collapsed_row) return null. -->
@@ -606,53 +615,5 @@
             </com.google.android.material.card.MaterialCardView>
         </LinearLayout>
 
-        <LinearLayout
-            android:id="@+id/attachedImage"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="12dp"
-            android:layout_marginBottom="12dp"
-            android:background="@drawable/bg_attachment_tile"
-            android:elevation="12dp"
-            android:orientation="vertical"
-            android:visibility="gone"
-            app:layout_constraintBottom_toTopOf="@+id/include_strip"
-            app:layout_constraintStart_toStartOf="parent">
-
-            <androidx.constraintlayout.widget.ConstraintLayout
-                android:layout_width="match_parent"
-                android:layout_height="match_parent">
-
-                <ImageView
-                    android:id="@+id/selectedImage"
-                    android:layout_width="120dp"
-                    android:layout_height="120dp"
-                    android:layout_marginStart="12dp"
-                    android:layout_marginTop="12dp"
-                    android:layout_marginEnd="12dp"
-                    android:layout_marginBottom="12dp"
-                    android:contentDescription="@string/label_selected_image"
-                    app:layout_constraintBottom_toBottomOf="parent"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toTopOf="parent"
-                    app:srcCompat="@drawable/assistant" />
-
-                <ImageButton
-                    android:id="@+id/btnRemoveImage"
-                    android:layout_width="32dp"
-                    android:layout_height="32dp"
-                    android:layout_marginTop="-12dp"
-                    android:layout_marginEnd="-12dp"
-                    android:background="@drawable/btn_accent_selector_v2"
-                    android:contentDescription="@string/btn_discard_image"
-                    android:elevation="15dp"
-                    android:src="@drawable/ic_close"
-                    app:layout_constraintEnd_toEndOf="@+id/selectedImage"
-                    app:layout_constraintTop_toTopOf="@+id/selectedImage"
-                    app:srcCompat="@drawable/ic_close" />
-
-            </androidx.constraintlayout.widget.ConstraintLayout>
-        </LinearLayout>
     </androidx.constraintlayout.widget.ConstraintLayout>
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

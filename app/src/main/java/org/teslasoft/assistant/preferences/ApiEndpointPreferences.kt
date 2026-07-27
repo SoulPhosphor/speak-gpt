@@ -114,13 +114,15 @@ class ApiEndpointPreferences private constructor(
             getString(id + "_response_timeout", ApiEndpointObject.DEFAULT_RESPONSE_TIMEOUT_SECONDS.toString()).toIntOrNull()
                 ?: ApiEndpointObject.DEFAULT_RESPONSE_TIMEOUT_SECONDS
         )
+        val imageCapabilityByModel = getString(id + "_image_capability_by_model", "")
 
         return ApiEndpointObject(
             label, host, apiKey, chatEndpoint, authType,
             model, temperature, topP, frequencyPenalty, presencePenalty,
             maxTokens, endSeparator, prefix, provider,
             connectTimeoutSeconds, responseTimeoutSeconds, id,
-            contextWindowTokens, storedContextModel
+            contextWindowTokens, storedContextModel,
+            imageCapabilityByModel
         )
     }
 
@@ -144,6 +146,7 @@ class ApiEndpointPreferences private constructor(
         preferences.edit { remove(id + "_provider") }
         preferences.edit { remove(id + "_timeout") }
         preferences.edit { remove(id + "_response_timeout") }
+        preferences.edit { remove(id + "_image_capability_by_model") }
         secrets.set(id + "_api_key", "null")
 
         for (listener in listeners) {
@@ -192,6 +195,14 @@ class ApiEndpointPreferences private constructor(
         putString(id + "_provider", endpoint.provider)
         putString(id + "_timeout", ApiEndpointObject.coerceConnectTimeoutSeconds(endpoint.connectTimeoutSeconds).toString())
         putString(id + "_response_timeout", ApiEndpointObject.coerceResponseTimeoutSeconds(endpoint.responseTimeoutSeconds).toString())
+        val capabilityJson = endpoint.imageCapabilityByModel
+        if (capabilityJson.isBlank() ||
+            capabilityJson == org.teslasoft.assistant.preferences.includes.ImageCapabilityStore.EMPTY
+        ) {
+            preferences.edit { remove(id + "_image_capability_by_model") }
+        } else {
+            putString(id + "_image_capability_by_model", capabilityJson)
+        }
         secrets.set(id + "_api_key", endpoint.apiKey)
 
         for (listener in listeners) {
@@ -239,6 +250,32 @@ class ApiEndpointPreferences private constructor(
         }
 
         return list
+    }
+
+    /**
+     * Read the raw image-capability-by-model JSON for [id], or the empty
+     * marker if nothing is recorded. Callers pass this to [ImageCapabilityStore]
+     * to read individual model entries.
+     */
+    fun getImageCapabilityByModel(id: String): String =
+        getString(id + "_image_capability_by_model", "")
+
+    /**
+     * Persist an updated image-capability-by-model JSON for [id]. Empty
+     * strings and [ImageCapabilityStore.EMPTY] both remove the stored value
+     * so a cleared record does not linger as an "{}" placeholder.
+     */
+    fun setImageCapabilityByModel(id: String, capabilityJson: String) {
+        if (capabilityJson.isBlank() ||
+            capabilityJson == org.teslasoft.assistant.preferences.includes.ImageCapabilityStore.EMPTY
+        ) {
+            preferences.edit { remove(id + "_image_capability_by_model") }
+        } else {
+            putString(id + "_image_capability_by_model", capabilityJson)
+        }
+        for (listener in listeners) {
+            listener.onApiEndpointChange()
+        }
     }
 
     fun getApiEndpointByUrlOrNull(context: Context, url: String): ApiEndpointObject? {

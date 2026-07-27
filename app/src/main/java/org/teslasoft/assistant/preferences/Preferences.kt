@@ -304,6 +304,18 @@ class Preferences private constructor(private var preferences: SharedPreferences
         putGlobalBoolean("never_show_condense_hint", value)
     }
 
+    /** Whether the user permanently dismissed the Reduce (image) hint. Kept
+     *  separate from the Condense hint on purpose: reducing an image is a
+     *  different action from condensing a document, and hiding one must not
+     *  silently hide the other. */
+    fun getNeverShowReduceHint(): Boolean {
+        return getGlobalBoolean("never_show_reduce_hint", false)
+    }
+
+    fun setNeverShowReduceHint(value: Boolean) {
+        putGlobalBoolean("never_show_reduce_hint", value)
+    }
+
     /**
      * Retrieves the image model name from the shared preferences.
      *

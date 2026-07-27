@@ -23,6 +23,11 @@ package org.teslasoft.assistant.preferences.includes
  */
 object IncludeMessageProjection {
 
+    /**
+     * Text-side content of a user message, with document/reduced-image/
+     * artifact wrappers inline. Callers that also need to attach FULL image
+     * parts should use [userMessageParts] instead.
+     */
     fun userContent(typedText: String, includesJson: String?): String {
         val includes = ChatInclude.listFromJson(includesJson)
         return if (includes.isEmpty()) {
@@ -31,4 +36,35 @@ object IncludeMessageProjection {
             IncludeRenderer.renderUserMessage(typedText, includes)
         }
     }
+
+    /**
+     * Full user-message projection: the text side plus every FULL image part
+     * that must accompany it. When [imageParts] is empty the caller sends the
+     * message as ordinary text content; when it is non-empty the caller sends
+     * a multi-part message with the text piece first and image parts last, in
+     * the returned order.
+     */
+    fun userMessageParts(typedText: String, includesJson: String?): ProjectedUserMessage {
+        val includes = ChatInclude.listFromJson(includesJson)
+        val text = if (includes.isEmpty()) {
+            typedText
+        } else {
+            IncludeRenderer.renderUserMessage(typedText, includes)
+        }
+        val imageParts = if (includes.isEmpty()) {
+            emptyList()
+        } else {
+            IncludeRenderer.imagePartsFor(includes)
+        }
+        return ProjectedUserMessage(text, imageParts)
+    }
+}
+
+/** Text + optional trailing image parts for one user message. */
+data class ProjectedUserMessage(
+    val text: String,
+    val imageParts: List<RenderedImagePart>
+) {
+    /** True when this message has no bytes-on-disk image parts to attach. */
+    fun isTextOnly(): Boolean = imageParts.isEmpty()
 }
