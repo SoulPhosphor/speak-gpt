@@ -2,10 +2,9 @@
 <!--
   One attached item in the Includes strip above the message box.
 
-  Row shape: type icon, the "Includes"/"Includes condensed" label, the file
-  name, the "~N tokens" weight, then a trailing action. An unsent attachment
-  shows a direct X; a sent attachment shows its state menu. Any size notice
-  for this item is a persistent line underneath (never a toast).
+  Row shape: type icon, the "Includes" label, the file name, the "~N tokens"
+  weight, then a direct X. Only unsent attachments appear here. Any size
+  notice for this item is a persistent line underneath (never a toast).
 
   Every attribute of the look lives in the Widget.App.Include.* styles
   (values/themes.xml); only ids and per-instance content belong here.

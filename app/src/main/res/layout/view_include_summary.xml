@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  The full-document "Includes" record inside a sent chat message: a small box
-  under the user's name that opens like an accordion.
+  The full-document "Includes" record inside a sent chat message. One to three
+  rows show directly under the user's name; the header becomes an accordion
+  only when four or more full items are present.
 
   Condensed items move to the bookmark-with-plus marker. Fully removed sent
   items move to the empty bookmark marker. Both markers open editable text.

@@ -421,9 +421,9 @@
             app:layout_constraintTop_toBottomOf="@+id/health_banner"
             tools:listitem="@layout/view_message" />
 
-<!-- Includes strip: one row per attached document, directly above the
-             message box, visible whenever anything heavier than a bookmark is
-             attached. If a live item is being sent, it remains visible here.
+<!-- Pending Includes strip: one row per unsent document, directly above the
+             message box. Sent attachments leave this surface and appear in
+             the transcript under the user name.
 
              Rows are inflated into include_list from view_include_row.xml; at
              four or more items include_collapsed takes over instead and the
@@ -446,6 +446,15 @@
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             tools:visibility="visible">
+
+            <TextView
+                android:id="@+id/include_document_hint"
+                style="@style/Widget.App.Include.Notice"
+                android:paddingStart="12dp"
+                android:paddingTop="8dp"
+                android:paddingBottom="2dp"
+                android:text="@string/include_document_pending_hint"
+                android:visibility="gone" />
 
 <!-- No android:id here on purpose: an id on an <include> REPLACES the
                  included layout's own root id, which would make

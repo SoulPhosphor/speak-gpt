@@ -147,6 +147,9 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         private const val TYPE_USER = 0
         private const val TYPE_BOT = 1
         private const val TYPE_CLASSIC = 2
+        private const val MENU_INCLUDE_REMOVE = 101
+        private const val MENU_INCLUDE_CONDENSE = 102
+        private const val MENU_INCLUDE_EDIT = 103
     }
 
     fun setChatId(chatId: String) {
@@ -299,6 +302,8 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         // assistant bubble (attachments are user-side only), so nullable.
         private val includeSummary: LinearLayout? = itemView.findViewById(R.id.include_summary)
         private val includeSummaryHeader: LinearLayout? = itemView.findViewById(R.id.include_summary_header)
+        private val includeSummaryLabel: TextView? = itemView.findViewById(R.id.include_summary_label)
+        private val includeSummaryChevron: ImageView? = itemView.findViewById(R.id.include_summary_chevron)
         private val includeSummaryList: LinearLayout? = itemView.findViewById(R.id.include_summary_list)
         private val condensedBookmark: ImageView? = itemView.findViewById(R.id.condensed_bookmark)
         private val artifactBookmark: ImageView? = itemView.findViewById(R.id.artifact_bookmark)
@@ -411,13 +416,8 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
          * dialog, notification, or sound — just this line.
          */
         /**
-         * Renders this message's record of what it carried: a small
-         * "Includes" box under the user's name that opens like an accordion.
-         *
-         * It is a record of the PAST — the weights shown are what each item
-         * cost when this turn was sent, so the transcript does not silently
-         * rewrite itself when the user later condenses or removes something.
-         * The live strip above the message box is what shows the present.
+         * Renders sent documents directly under the user's name. One to three
+         * rows remain visible; only four or more collapse behind the count.
          *
          * Every branch sets visibility explicitly: these rows are recycled, so
          * an early return would let one message's open accordion reappear on
@@ -447,43 +447,68 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             }
 
             summary.visibility = View.VISIBLE
+            val collapsible = IncludeHistoryPresentation.shouldCollapse(fullIncludes.size)
             val summaryKey = fullIncludes.joinToString(separator = "\u001F") { it.id }
-            val expanded = expandedIncludeRows.contains(summaryKey)
+            val expanded = !collapsible || expandedIncludeRows.contains(summaryKey)
+
+            includeSummaryHeader?.visibility = if (collapsible) View.VISIBLE else View.GONE
             includeSummaryList?.visibility = if (expanded) View.VISIBLE else View.GONE
+            includeSummaryLabel?.text = if (collapsible) {
+                context.getString(R.string.include_collapsed_count, fullIncludes.size)
+            } else {
+                context.getString(R.string.include_label)
+            }
+            includeSummaryChevron?.rotation = if (expanded) 180f else 0f
+            includeSummaryChevron?.contentDescription = context.getString(
+                if (expanded) R.string.include_collapse_desc else R.string.include_expand_desc
+            )
+
             if (expanded) {
                 buildIncludeSummaryRows(fullIncludes)
             } else {
                 includeSummaryList?.removeAllViews()
             }
 
-            includeSummaryHeader?.setOnClickListener {
-                if (expandedIncludeRows.contains(summaryKey)) {
-                    expandedIncludeRows.remove(summaryKey)
+            includeSummaryHeader?.setOnClickListener(
+                if (collapsible) {
+                    View.OnClickListener {
+                        if (expandedIncludeRows.contains(summaryKey)) {
+                            expandedIncludeRows.remove(summaryKey)
+                        } else {
+                            expandedIncludeRows.add(summaryKey)
+                        }
+                        notifyItemChanged(position)
+                    }
                 } else {
-                    expandedIncludeRows.add(summaryKey)
+                    null
                 }
-                notifyItemChanged(position)
-            }
+            )
         }
 
         /**
          * Full documents keep their metadata row. Condensed documents use the
          * bookmark-with-plus; removed sent documents use the empty bookmark.
-         * One item opens its editor immediately. When several share a marker,
-         * the anchored menu selects the file before opening the same editor.
+         * The plus bookmark offers Edit or Remove. The empty bookmark opens
+         * its already-removed reminder for optional editing.
          */
         private fun updateIncludeBookmarks(groups: IncludeHistoryPresentation.Groups) {
             updateBookmark(
                 marker = condensedBookmark,
-                items = groups.condensedBookmarks
+                items = groups.condensedBookmarks,
+                canRemove = true
             )
             updateBookmark(
                 marker = artifactBookmark,
-                items = groups.artifactBookmarks
+                items = groups.artifactBookmarks,
+                canRemove = false
             )
         }
 
-        private fun updateBookmark(marker: ImageView?, items: List<ChatInclude>) {
+        private fun updateBookmark(
+            marker: ImageView?,
+            items: List<ChatInclude>,
+            canRemove: Boolean
+        ) {
             marker ?: return
             if (items.isEmpty()) {
                 marker.visibility = View.GONE
@@ -494,7 +519,11 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             marker.visibility = View.VISIBLE
             marker.setOnClickListener { anchor ->
                 if (items.size == 1) {
-                    listener?.onIncludeEdit(items.first().id)
+                    if (canRemove) {
+                        showCondensedBookmarkMenu(anchor, items.first())
+                    } else {
+                        listener?.onIncludeEdit(items.first().id)
+                    }
                     return@setOnClickListener
                 }
 
@@ -510,11 +539,47 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 popup.setOnMenuItemClickListener { item ->
                     val include = items.getOrNull(item.itemId)
                         ?: return@setOnMenuItemClickListener false
-                    listener?.onIncludeEdit(include.id)
+                    if (canRemove) {
+                        // Let the file picker close before opening its action
+                        // menu on the same anchor.
+                        anchor.post { showCondensedBookmarkMenu(anchor, include) }
+                    } else {
+                        listener?.onIncludeEdit(include.id)
+                    }
                     true
                 }
                 popup.show()
             }
+        }
+
+        private fun showCondensedBookmarkMenu(anchor: View, include: ChatInclude) {
+            val popup = PopupMenu(context, anchor)
+            popup.menu.add(
+                0,
+                MENU_INCLUDE_EDIT,
+                0,
+                R.string.include_action_edit
+            )
+            popup.menu.add(
+                0,
+                MENU_INCLUDE_REMOVE,
+                1,
+                R.string.include_action_remove
+            )
+            popup.setOnMenuItemClickListener { item ->
+                when (item.itemId) {
+                    MENU_INCLUDE_EDIT -> {
+                        listener?.onIncludeEdit(include.id)
+                        true
+                    }
+                    MENU_INCLUDE_REMOVE -> {
+                        listener?.onIncludeRemove(include.id)
+                        true
+                    }
+                    else -> false
+                }
+            }
+            popup.show()
         }
 
         private fun buildIncludeSummaryRows(includes: List<ChatInclude>) {
@@ -532,8 +597,47 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                     R.string.include_weight,
                     NumberFormat.getIntegerInstance().format(include.currentTokens())
                 )
+                row.findViewById<ImageButton>(R.id.summary_item_action)?.let { action ->
+                    action.contentDescription =
+                        context.getString(R.string.include_menu_desc, include.fileName)
+                    action.setOnClickListener { showIncludeRowMenu(it, include) }
+                }
                 list.addView(row)
             }
+        }
+
+        private fun showIncludeRowMenu(anchor: View, include: ChatInclude) {
+            val popup = PopupMenu(context, anchor)
+            popup.menu.add(
+                0,
+                MENU_INCLUDE_REMOVE,
+                0,
+                R.string.include_action_remove
+            )
+            popup.menu.add(
+                0,
+                MENU_INCLUDE_CONDENSE,
+                1,
+                if (include.kind == IncludeKind.IMAGE) {
+                    R.string.include_action_reduce
+                } else {
+                    R.string.include_action_condense
+                }
+            )
+            popup.setOnMenuItemClickListener { item ->
+                when (item.itemId) {
+                    MENU_INCLUDE_REMOVE -> {
+                        listener?.onIncludeRemove(include.id)
+                        true
+                    }
+                    MENU_INCLUDE_CONDENSE -> {
+                        listener?.onIncludeCondense(include.id)
+                        true
+                    }
+                    else -> false
+                }
+            }
+            popup.show()
         }
 
         private fun includeIcon(kind: IncludeKind): Int = when (kind) {
@@ -1055,6 +1159,8 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         fun onMessageEdited()
         fun onMessageDeleted()
         fun onIncludeEdit(includeId: String)
+        fun onIncludeRemove(includeId: String)
+        fun onIncludeCondense(includeId: String)
         fun onBulkSelectionChanged(position: Int, selected: Boolean)
         fun onChangeBulkActionMode(mode: Boolean)
         fun onSpeakClick(message: String, position: Int)

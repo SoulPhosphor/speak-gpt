@@ -295,6 +295,15 @@ class Preferences private constructor(private var preferences: SharedPreferences
         putString("max_tokens", tokens.toString())
     }
 
+    /** Whether the user permanently dismissed the destructive Condense hint. */
+    fun getNeverShowCondenseHint(): Boolean {
+        return getGlobalBoolean("never_show_condense_hint", false)
+    }
+
+    fun setNeverShowCondenseHint(value: Boolean) {
+        putGlobalBoolean("never_show_condense_hint", value)
+    }
+
     /**
      * Retrieves the image model name from the shared preferences.
      *

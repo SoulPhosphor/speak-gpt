@@ -414,10 +414,14 @@ Use these pieces in order for each attachment shown above the chat message box:
 5. `Widget.App.Include.Weight`
 6. `Widget.App.Include.Action`
 
-The action slot is state-specific: an unsent attachment uses a direct X whose
-only action is Remove; a sent attachment may use the three-dots menu for its
-available post-send actions. Do not offer Condense, Reduce to Text Only, or
-Edit for an unsent attachment.
+The composer strip contains unsent attachments only. Its action is a direct X
+whose only action is Remove. Sent attachments move to
+`view_include_summary_item.xml`, where the three-dots menu exposes post-send
+actions. Do not offer Condense, Reduce to Text Only, or Edit in the composer.
+
+When at least one pending item is a document, the strip shows the persistent
+document-cost helper above the rows. It uses `Widget.App.Include.Notice` with
+the strip's 12dp leading inset; image-only pending state does not show it.
 
 Use `Widget.App.Include.Notice` for persistent explanatory or size-warning text beneath the row.
 
@@ -427,6 +431,8 @@ Shared layouts:
 - `layout/view_include_collapsed.xml`
 - `layout/view_include_summary.xml`
 - `layout/view_include_summary_item.xml`
+- `layout/dialog_include_condense_hint.xml`
+- `layout/dialog_include_condense_progress.xml`
 
 Do not assign an id to an XML `<include>` tag that includes these layouts. Android replaces the included root id with the `<include>` id, which breaks code expecting the root's original id.
 

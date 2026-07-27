@@ -46,7 +46,7 @@ data class ChatInclude(
     val fullText: String,
     /** User-visible/editable condensed text; null until the user condenses. */
     val condensedText: String? = null,
-    /** One-line bookmark; null until the user removes the item. */
+    /** Very short bookmark; null until the user removes the item. */
     val artifactLine: String? = null,
     /** Which size notice (if any) this item must display. */
     val notice: IncludeNotice = IncludeNotice.None,
@@ -69,11 +69,7 @@ data class ChatInclude(
         IncludeForm.ARTIFACT -> artifactLine ?: IncludeTextPolicy.fallbackArtifactLine(fileName)
     }
 
-    /**
-     * Whether this include shows a row in the strip above the message box.
-     * Anything heavier than an artifact is a live data drain, so it stays
-     * plainly visible; artifacts retire to the bookmark.
-     */
+    /** Whether this form is eligible for the pending composer strip. */
     fun showsInStrip(): Boolean = form != IncludeForm.ARTIFACT
 
     /** Snapshot this pending include into sent history without its source key. */

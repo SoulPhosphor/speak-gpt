@@ -86,6 +86,14 @@ class IncludeTextPolicyTest {
         assertEquals("User sent a resume.", line)
     }
 
+    @Test fun artifactReminderKeepsAtMostThreeSentences() {
+        val line = IncludeTextPolicy.sanitizeArtifactLine(
+            "One. Two! Three? Four.",
+            "a.docx"
+        )
+        assertEquals("One. Two! Three?", line)
+    }
+
     @Test fun supportedExtensionsMapToKinds() {
         assertEquals(IncludeKind.TXT, IncludeKind.fromFileName("notes.txt"))
         assertEquals(IncludeKind.MARKDOWN, IncludeKind.fromFileName("README.MD"))

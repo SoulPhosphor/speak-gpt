@@ -2,7 +2,7 @@
 <!--
   Body of the include Edit dialog: one editable box holding the text that is
   actually being sent for this item (a condensed document, or an artifact's
-  one-line bookmark). The user can correct a detail the model missed, or
+  short bookmark). The user can correct a detail the model missed, or
   shorten it further.
 
   Deliberately a pop-up rather than a full-screen editor. The action buttons come from

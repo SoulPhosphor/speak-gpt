@@ -24,24 +24,17 @@ import android.view.ViewGroup
 import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
-import android.widget.PopupMenu
 import android.widget.ScrollView
 import android.widget.TextView
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.includes.ChatInclude
-import org.teslasoft.assistant.preferences.includes.IncludeForm
 import org.teslasoft.assistant.preferences.includes.IncludeKind
 import org.teslasoft.assistant.preferences.includes.IncludeNotice
 import java.text.NumberFormat
 
 /**
- * Drives the Includes strip above the chat's message box.
- *
- * **If you can see it, it is being sent.** There is no hidden
- * "included / not included" state to
- * remember — a row's presence IS the state, and Remove is the off switch. So
- * this controller never hides a live item, and every row states what form is
- * going to the model ("Includes" vs "Includes condensed") and what it weighs.
+ * Drives the pending Includes strip above the chat's message box. Sent
+ * attachments leave this strip and are controlled from their transcript row.
  *
  * At [COLLAPSE_AT] items the individual rows give way to a single
  * "Includes N Documents" line, because four rows of attachments would eat the
@@ -58,8 +51,6 @@ class IncludeStripController(
 
     interface Callbacks {
         fun onRemoveInclude(include: ChatInclude)
-        fun onCondenseInclude(include: ChatInclude)
-        fun onEditInclude(include: ChatInclude)
     }
 
     companion object {
@@ -73,7 +64,8 @@ class IncludeStripController(
 
     private var expanded = false
     private var current: List<ChatInclude> = emptyList()
-    private var pendingIds: Set<String> = emptySet()
+    private val documentHint: TextView? =
+        strip.findViewById(R.id.include_document_hint)
 
     init {
         collapsedRow.setOnClickListener { toggleExpanded() }
@@ -91,9 +83,8 @@ class IncludeStripController(
         return true
     }
 
-    fun bind(includes: List<ChatInclude>, pendingIncludeIds: Set<String>) {
+    fun bind(includes: List<ChatInclude>) {
         current = includes.filter { it.showsInStrip() }
-        pendingIds = pendingIncludeIds
         // An item removed while the overlay was open must not leave the user
         // staring at an expanded box with nothing left in it.
         if (current.size < COLLAPSE_AT) expanded = false
@@ -108,11 +99,17 @@ class IncludeStripController(
     private fun render() {
         if (current.isEmpty()) {
             strip.visibility = View.GONE
+            documentHint?.visibility = View.GONE
             list.removeAllViews()
             return
         }
 
         strip.visibility = View.VISIBLE
+        documentHint?.visibility = if (current.any { it.kind != IncludeKind.IMAGE }) {
+            View.VISIBLE
+        } else {
+            View.GONE
+        }
         val collapsible = current.size >= COLLAPSE_AT
         val showList = !collapsible || expanded
 
@@ -163,13 +160,7 @@ class IncludeStripController(
     private fun bindRow(row: View, include: ChatInclude) {
         row.findViewById<ImageView>(R.id.include_icon)?.setImageResource(iconFor(include.kind))
 
-        row.findViewById<TextView>(R.id.include_label)?.setText(
-            if (include.form == IncludeForm.CONDENSED) {
-                R.string.include_label_condensed
-            } else {
-                R.string.include_label
-            }
-        )
+        row.findViewById<TextView>(R.id.include_label)?.setText(R.string.include_label)
 
         row.findViewById<TextView>(R.id.include_name)?.text = include.fileName
 
@@ -186,54 +177,10 @@ class IncludeStripController(
         }
 
         val action = row.findViewById<ImageButton>(R.id.include_action)
-        if (include.id in pendingIds) {
-            action?.setImageResource(R.drawable.ic_close)
-            action?.contentDescription =
-                context.getString(R.string.include_remove_desc, include.fileName)
-            action?.setOnClickListener { callbacks.onRemoveInclude(include) }
-        } else {
-            action?.setImageResource(R.drawable.ic_more_vert)
-            action?.contentDescription =
-                context.getString(R.string.include_menu_desc, include.fileName)
-            action?.setOnClickListener { showRowMenu(it, include) }
-        }
-    }
-
-    /**
-     * The row's action menu, per the plan's "Menus by state":
-     *  - Full document: Remove, Condense.
-     *  - Condensed document / reduced image: Remove, Edit.
-     *  - Full image: Remove, Reduce to Text Only.
-     *
-     * Condense and Reduce to Text Only are deliberately DIFFERENT words:
-     * condensing shrinks the same kind of thing, reducing an image destroys
-     * the visual entirely and keeps only words. Never merge them.
-     */
-    private fun showRowMenu(anchor: View, include: ChatInclude) {
-        val popup = PopupMenu(context, anchor)
-        val menu = popup.menu
-        menu.add(0, MENU_REMOVE, 0, R.string.include_action_remove)
-        if (include.form == IncludeForm.CONDENSED) {
-            menu.add(0, MENU_EDIT, 1, R.string.include_action_edit)
-        } else {
-            menu.add(
-                0, MENU_CONDENSE, 1,
-                if (include.kind == IncludeKind.IMAGE) {
-                    R.string.include_action_reduce
-                } else {
-                    R.string.include_action_condense
-                }
-            )
-        }
-        popup.setOnMenuItemClickListener { item ->
-            when (item.itemId) {
-                MENU_REMOVE -> { callbacks.onRemoveInclude(include); true }
-                MENU_CONDENSE -> { callbacks.onCondenseInclude(include); true }
-                MENU_EDIT -> { callbacks.onEditInclude(include); true }
-                else -> false
-            }
-        }
-        popup.show()
+        action?.setImageResource(R.drawable.ic_close)
+        action?.contentDescription =
+            context.getString(R.string.include_remove_desc, include.fileName)
+        action?.setOnClickListener { callbacks.onRemoveInclude(include) }
     }
 
     private fun noticeText(notice: IncludeNotice): String? = when (notice) {
@@ -258,7 +205,3 @@ class IncludeStripController(
         else -> R.drawable.ic_file
     }
 }
-
-private const val MENU_REMOVE = 1
-private const val MENU_CONDENSE = 2
-private const val MENU_EDIT = 3

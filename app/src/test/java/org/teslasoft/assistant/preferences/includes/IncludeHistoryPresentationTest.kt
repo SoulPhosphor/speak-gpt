@@ -17,6 +17,8 @@
 package org.teslasoft.assistant.preferences.includes
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class IncludeHistoryPresentationTest {
@@ -58,5 +60,13 @@ class IncludeHistoryPresentationTest {
             listOf("condensed-1", "condensed-2"),
             groups.condensedBookmarks.map { it.id }
         )
+    }
+
+    @Test fun historyRowsCollapseOnlyAtFourOrMore() {
+        assertFalse(IncludeHistoryPresentation.shouldCollapse(0))
+        assertFalse(IncludeHistoryPresentation.shouldCollapse(1))
+        assertFalse(IncludeHistoryPresentation.shouldCollapse(3))
+        assertTrue(IncludeHistoryPresentation.shouldCollapse(4))
+        assertTrue(IncludeHistoryPresentation.shouldCollapse(8))
     }
 }

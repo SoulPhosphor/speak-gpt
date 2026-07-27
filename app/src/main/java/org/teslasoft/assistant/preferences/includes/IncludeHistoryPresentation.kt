@@ -19,6 +19,9 @@ package org.teslasoft.assistant.preferences.includes
 /** Separates the three history presentations without changing item order. */
 object IncludeHistoryPresentation {
 
+    /** Full attachment rows remain visible until a fourth row is present. */
+    const val COLLAPSE_AT = 4
+
     data class Groups(
         val fullRecords: List<ChatInclude>,
         val condensedBookmarks: List<ChatInclude>,
@@ -30,4 +33,7 @@ object IncludeHistoryPresentation {
         condensedBookmarks = includes.filter { it.form == IncludeForm.CONDENSED },
         artifactBookmarks = includes.filter { it.form == IncludeForm.ARTIFACT }
     )
+
+    fun shouldCollapse(fullRecordCount: Int): Boolean =
+        fullRecordCount >= COLLAPSE_AT
 }

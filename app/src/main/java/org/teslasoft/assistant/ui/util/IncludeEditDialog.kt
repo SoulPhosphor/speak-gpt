@@ -28,9 +28,8 @@ import org.teslasoft.assistant.R
  * The include Edit pop-up: shows the text that is actually being sent for an
  * attachment and lets the user change it.
  *
- * Model-written text (a condensed document or a one-line bookmark) is
- * presented here for approval or correction before it stands in for the real
- * thing, and it stays editable afterwards.
+ * Model-written text (a condensed document or a short bookmark) stays
+ * optionally editable after it has taken effect.
  *
  * This is a dialog rather than a full-screen editor and uses
  * [R.layout.dialog_two_actions_end] —
@@ -74,8 +73,13 @@ object IncludeEditDialog {
         save?.setOnClickListener {
             val edited = field?.text?.toString().orEmpty().trim()
             // An empty box would silently delete what the model can see; keep
-            // the previous text instead of accepting nothing.
-            if (edited.isNotEmpty()) onSave(edited)
+            // the dialog open and explain what must be fixed.
+            if (edited.isEmpty()) {
+                field?.error = context.getString(R.string.include_edit_empty)
+                field?.requestFocus()
+                return@setOnClickListener
+            }
+            onSave(edited)
             dialog.dismiss()
         }
 

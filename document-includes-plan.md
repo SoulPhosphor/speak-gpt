@@ -20,10 +20,14 @@ Decisions explicitly reconfirmed during the Step 1 repair:
   error. Successful attachment size/cost notices remain inline.
 - Removing a pending document before Send detaches it completely. It is never
   sent to the model, written into chat history, or converted to an artifact.
-- The live Includes strip collapses at **4 or more** documents.
+- The composer Includes strip contains pending, unsent attachments only and
+  collapses at **4 or more** documents.
 - Full-document history uses the under-name metadata record. A condensed
   document uses the bookmark-with-plus; a fully removed sent document uses
   the empty bookmark. Both bookmarks reopen editable text with Cancel/Save.
+- Sent full-document rows stay open at one to three items and collapse only
+  at **4 or more** documents/images. Their three-dot menus contain the
+  post-send actions.
 - Model-facing order is the user's text, then documents in stable attachment
   order, with images last in Step 3. Document boundaries use a compact
   semantic wrapper rather than decorative punctuation.
@@ -46,17 +50,17 @@ Every attached item exists in exactly one of three forms, heaviest to lightest:
 
 1. **Full** — the real thing (extracted document text, or the actual image).
 2. **Condensed** (documents) / **Reduced** (images) — an AI-written text
-   version, always shown to the user before it takes effect, and editable by
-   the user at any time afterward. The two terms remain distinct:
+   version that takes effect when the request completes and is optionally
+   viewable/editable by the user at any time afterward. The two terms remain distinct:
    condensing makes the same kind of thing smaller; reducing an
    image *removes* the visual data entirely and keeps only words. Never merge
    these terms.
-3. **Artifact** — a one-line bookmark ("User sent a photo of a purple
-   amethyst cluster"), so the AI never faces replies to something that no
-   longer exists. **Removing an item that was already sent converts it to an
+3. **Artifact** — a very short bookmark, no more than three sentences,
+   so the AI never faces replies to something that no longer exists.
+   **Removing an item that was already sent converts it to an
    artifact. Removing a still-pending item detaches it without a trace.**
-   The artifact line is AI-written at removal time (bounded, ~12 words max,
-   via the chat's own endpoint/model), falls back to a filename-based line if
+   The artifact is AI-written at removal time (bounded, via the chat's own
+   endpoint/model), falls back to a filename-based line if
    the AI is unreachable, and is user-editable afterward like everything else.
 
 Moving DOWN the ladder is always user-initiated. Nothing automatic ever
@@ -68,7 +72,8 @@ changes an include's form.
   strip, pending detach, sent-item Remove→artifact, the artifact bookmark
   popup, the history accordion, token estimates, size guards, and exact-source
   duplicate protection within one pending message.
-- **Step 2 — Condense** for documents, with the Edit dialog.
+- **Step 2 — Condense** for documents, with automatic application and
+  optional later editing from the bookmark-with-plus icon.
 - **Step 3 — images** join the same system ("Reduce to Text Only"); the old
   broken image path (hard-coded `gpt-4o`, bypasses history/memory) is
   **deleted**, not left behind.
@@ -76,8 +81,8 @@ changes an include's form.
 **Current non-goals:** no PDF (deferred), no legacy `.doc` (only
 `.docx`), no image generation changes, no writing edited documents back to
 disk (`.docx` is read-only — the AI's editing help arrives as chat text; the
-extraction is words-only, formatting is not preserved), no automatic
-summarization of anything.
+extraction is words-only, formatting is not preserved), and no summarization
+unless the user explicitly chooses Condense or Remove.
 
 ## Current wording inventory
 
@@ -87,17 +92,21 @@ All strings live in `res/values/strings.xml` only, per house rule.
 |---|---|
 | Strip label, full form | **Includes** |
 | Strip label, condensed form | **Includes condensed** |
+| Pending document helper | **File will be sent to AI every turn. Condensing produces a summary of the document and reduces token count.** |
+| Pending image helper (Step 3) | **Images will be sent every turn to the AI. Reducing it will produce a small text summary to save tokens.** |
 | Menu item | **Remove** |
 | Menu item (documents) | **Condense** |
 | Menu item (images) | **Reduce to Text Only** |
 | Menu item (condensed/reduced state) | **Edit** |
 | Edit dialog buttons | **Cancel**, then **Save** — right-aligned, in that order |
+| Condense hint buttons | **Condense**, **Cancel**, then **Never show this hint again.** underneath |
+| Condense progress | **Document is being condensed.** → **Complete** → **Okay** |
 | Weight display | **~N tokens** (tilde always shown — it is an estimate) |
 | Too-big note | *"This file is too large to send in full. The beginning was included, up to about ~30,000 tokens."* |
 | Oversized CSV note | *"Large spreadsheet — sent the column names and first 500 rows of 47,000."* (real numbers substituted) |
 | Duplicate pending source | **Document already attached.** with an **Okay** button |
 | History box label | **Includes** |
-| Artifact line default shape | "User sent …" — AI-written, ≤ ~12 words |
+| Artifact default shape | AI-written reminder, no more than 3 short sentences |
 | Collapse line (4+ items) | **Includes N Documents** — "Documents" capitalised per the app's Title Case rule, followed by a **downward-facing chevron** |
 
 ### Upload failure dialogs
@@ -131,16 +140,17 @@ dialog containing the approved error descriptor.
 - Sits directly **above the input bar** (`keyboard_input`) at the bottom of
   the chat screen, full-width, on the same surface family as the input bar so
   it reads as part of the composition area, not a floating element.
-- One row per included item, visible **at all times** while anything heavier
-  than an artifact is included (full/condensed/reduced items are
-  the data drain, so they stay plainly shown; only artifacts retire to the
-  bookmark popup).
+- One row per pending item. Immediately after Send, the row leaves the
+  composer and appears in the transcript under the user name.
+- The helper sits inside the pending Includes box, above the attachment rows.
+  Documents use the approved pending-document helper. In Step 3, an image
+  uses **"Images will be sent every turn to the AI. Reducing it will produce
+  a small text summary to save tokens."** instead. If documents and images are
+  pending together, show each applicable helper once.
 - Row anatomy: **Includes** label → document/picture icon → name →
   **~N tokens** → trailing action.
   - Before Send, the trailing action is an **X** and its only action is
     **Remove**. Condense, Reduce to Text Only, and Edit are unavailable.
-  - After Send, the trailing action is the three-dots state menu described
-    below.
   - The icon uses the document glyph for document formats and the picture
     glyph for images (Step 3), tinted `?attr/colorPrimary`.
   - Text styling follows the row vocabulary: name in the
@@ -151,12 +161,6 @@ dialog containing the approved error descriptor.
     shapes — no chevron, trailing menu instead). If a shared style is minted
     for it, it goes into `ui-style-guide.md` as its own named entry; do not
     silently extend the five-phrase chevron-row vocabulary.
-- **Sent-item menus by state** (anchored popup attached to the three-dots, dismissed by
-  tapping outside — the app's anchored-popup pattern, never a centered picker
-  dialog):
-  - Full document: **Remove**, **Condense**.
-  - Condensed document / reduced image: **Remove**, **Edit**.
-  - Full image (Step 3): **Remove**, **Reduce to Text Only**.
 - **Per-row persistent notes** (never toasts): the too-big and CSV notes
   appear directly under the affected row because they disclose omitted
   content. The visible ~token count is sufficient for files sent whole; there
@@ -196,24 +200,46 @@ dialog containing the approved error descriptor.
 ### 3. Condense / Reduce flow (Step 2 for docs, Step 3 for images)
 
 - Menu action → one request to the chat's configured endpoint/model asking
-  for a compact self-reference version (internal prompt, bounded output).
-- The result is ALWAYS shown to the user in the Edit dialog before it takes
-  effect — Save applies it, Cancel discards it and the full form stays.
-  Nothing replaces the full form without the user seeing the words.
-- After applying: row label flips to **Includes condensed** (or the reduced
-  image equivalent), token count re-estimated, three-dots now carries
-  Remove/Edit.
+  for substantially shorter Cliff Notes or a structured outline (internal
+  prompt, configured bounded output).
+- Before the first request, show the approved hint with **Condense**,
+  **Cancel**, and **Never show this hint again.** underneath. Checking it
+  suppresses the hint globally from then on.
+- Condense opens a non-toast progress dialog with a rotating indicator and
+  **Document is being condensed.** On success, the summary takes effect
+  automatically, the dialog says **Complete**, and the user closes it with
+  **Okay**. A failed or non-shorter result leaves the full form unchanged.
+- The bookmark-with-plus next to the user name opens a small **Edit** /
+  **Remove** menu. Edit opens the active summary; Remove converts it to the
+  plain artifact bookmark. Editing is not a prerequisite for Condense.
 - The full original is gone from what gets SENT once condensed (that is the
   point), but the original file is untouched on the user's device.
+- The Condense prompt must preserve, when relevant: document identity and
+  purpose; main sections, subjects, arguments, or sequence; important facts,
+  findings, decisions, instructions, and conclusions; notable names, dates,
+  numbers, examples, relationships, and distinctive details; and warnings,
+  limitations, uncertainty, caveats, and unresolved issues. It adapts to the
+  document type (including résumés, reports, and plans), and must not return a
+  vague description, invent information, erase uncertainty, or produce
+  something as long as the original.
+- Phase 2 verification covers the exact prompt, selected endpoint/model, and
+  output limit used in the request. Condense does not add a chunking system.
 
 ### 4. Remove
 
 - Before the message is sent, Remove detaches the pending item completely.
   Nothing from that file is sent, retained in chat history, or converted to
   an artifact. The pending row exposes this as a direct X, not a menu.
-- After the item has been sent, Remove asks the AI for the ≤ ~12-word
-  bookmark line, swaps the item to artifact form, and the row leaves the
-  strip.
+- After the item has been sent, Remove asks the AI for a very short reminder
+  of what the document was, its general subject/purpose, and at most one or
+  two especially important details. Use no more than three short sentences.
+- Remove/artifact generation is distinct from Condense and does not try to
+  preserve a discussable outline of the full document. Verification covers
+  its exact prompt, selected endpoint/model, and output limit too.
+- The reminder takes effect automatically; there is no required review
+  dialog. The plain bookmark (without the plus) appears in the same
+  after-name icon area and opens the reminder only when the user chooses to
+  view or edit it.
 - If the line can't be fetched (offline, endpoint error): filename-based
   fallback line, immediately, never a blocked removal, never an error dialog
   for this — the fallback IS the success path. The line is editable later
@@ -225,15 +251,23 @@ dialog containing the approved error descriptor.
 
 ### 5. The history record (inside the chat transcript)
 
-- A full document gets a small **Includes** box directly under the user label
-  in that message's bubble area. Tap = accordion opens listing each full item:
-  small type icon + name + explicit document format + ~N tokens. Tap again
-  closes.
+- A full document gets a row directly under the user label containing its
+  type icon, name, explicit format, ~N tokens, and three-dot menu. One to three
+  documents/images remain shown. At four or more, **Includes N Documents**
+  becomes the collapsed accordion header.
+- Sent-item menus are anchored to those row three-dots: a full document has
+  **Remove** and **Condense**; a full image (Step 3) has **Remove** and
+  **Reduce to Text Only**.
 - Once condensed, that document leaves the full-document box and uses the
   bookmark-with-plus Material Symbols `bookmark_add` glyph after the user
-  name. Tapping opens the condensed text in the Cancel/Save Edit dialog. If
+  name. Tapping opens an anchored **Edit** / **Remove** menu. Edit opens the
+  condensed text in the Cancel/Save dialog; Remove creates the artifact. If
   several condensed items share a message, an anchored file picker appears
   first.
+- Step 3 uses this same completed bridge for reduced images: after **Reduce to
+  Text Only**, the image uses `bookmark_add`; its menu offers **Edit** and
+  **Remove**; Edit opens the reduced text, and Remove creates the plain
+  artifact bookmark. Do not build a separate image-only bookmark interaction.
 - Once fully removed, the item uses the empty artifact bookmark described
   above. Mixed full, condensed, and removed items can therefore show the
   full-document box and either or both bookmark markers without conflating
@@ -319,10 +353,11 @@ dialog containing the approved error descriptor.
     per-message Includes accordion, persistence, and model-request projection.
   - Regression tests proving attached text remains in the model request and
     that truncation/counting disclosures are accurate.
-- **Step 2:** Condense + the Edit dialog. Partial code may remain visible
-  while Step 1 is repaired; it is not part of Step 1 completion and must not
-  be used to claim Step 1 is unfinished merely because Condense is provisional.
-- **Step 3:** images join (image icon rows, Reduce to Text Only, ~token
+- **Step 2:** Automatic Condense + optional bookmark editing, first-use hint,
+  progress/completion dialog, distinct Condense and Remove prompts, selected
+  endpoint/model and output-limit verification, and safe failure/race handling.
+- **Step 3:** images join (image icon rows, the approved pending-image helper,
+  Reduce to Text Only, the Phase 2 bookmark Edit/Remove bridge, ~token
   estimate from dimensions, image-last ordering), and the old vision path —
   the hard-coded `gpt-4o` branch and everything only it used — is deleted.
   No orphaned layouts, strings, or drawables are left behind.

@@ -2395,6 +2395,16 @@
     <string name="include_action_condense">Condense</string>
     <string name="include_action_reduce">Reduce to Text Only</string>
     <string name="include_action_edit">Edit</string>
+    <string name="include_document_pending_hint">File will be sent to AI every turn. Condensing produces a summary of the document and reduces token count.</string>
+
+    <string name="include_condense_title">Condense Document</string>
+    <string name="include_condense_hint">Condense creates a shortened summary of the document to send to your AI each turn so it can remember the contents without costing as many tokens.\n\nWhen complete, you can view and edit the summary from the icon next to your name. Removing the document creates an even shorter summary so the AI can remember what was sent.\n\nThis can’t be undone.</string>
+    <string name="include_condense_never_show">Never show this hint again.</string>
+    <string name="include_condense_working">Document is being condensed.</string>
+    <string name="include_condense_complete">Complete</string>
+    <string name="include_condense_failed">Document could not be condensed. The full document is still included.</string>
+    <string name="include_condense_not_shorter">The AI did not return a shorter summary. The full document is still included.</string>
+    <string name="include_edit_empty">Summary cannot be empty.</string>
 
     <!-- Collapse line shown once four or more items are attached. "Documents"
          is capitalised per the app's Title Case rule. -->

@@ -71,12 +71,21 @@ object IncludeTextPolicy {
 
     fun workbookSheetLabel(name: String): String = "[Sheet: $name]"
 
-    fun sanitizeArtifactLine(raw: String?, fileName: String, maxWords: Int = 12): String {
+    fun sanitizeArtifactLine(
+        raw: String?,
+        fileName: String,
+        maxWords: Int = 48,
+        maxSentences: Int = 3
+    ): String {
         val flat = raw?.replace(Regex("\\s+"), " ")?.trim().orEmpty()
         if (flat.isEmpty()) return fallbackArtifactLine(fileName)
-        val words = flat.split(" ")
+        val sentenceLimited = flat
+            .split(Regex("(?<=[.!?])\\s+"))
+            .take(maxSentences.coerceAtLeast(1))
+            .joinToString(" ")
+        val words = sentenceLimited.split(" ")
         val clipped = if (words.size <= maxWords) {
-            flat
+            sentenceLimited
         } else {
             words.take(maxWords).joinToString(" ")
         }
