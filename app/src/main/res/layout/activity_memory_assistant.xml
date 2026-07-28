@@ -256,6 +256,64 @@
                 android:textStyle="bold"
                 android:visibility="gone" />
 
+            <!-- Computer review package (barebones per the owner's ruling,
+                 2026-07-28): a plain status line and the §6-named actions.
+                 Reuses this screen's own section-header, divider, status
+                 and tonal-button patterns. -->
+            <TextView
+                android:id="@+id/package_header"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="28dp"
+                android:text="@string/memory_package_header"
+                android:textColor="@color/text_title"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginTop="8dp"
+                android:background="?attr/colorSurfaceContainerHigh" />
+
+            <TextView
+                android:id="@+id/package_status"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:gravity="center"
+                android:textColor="@color/text_subtitle"
+                android:textSize="14sp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_create_package"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="8dp"
+                android:text="@string/memory_package_btn_create" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_import_suggestions"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="8dp"
+                android:text="@string/memory_package_btn_import"
+                android:visibility="gone" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_cancel_package"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="4dp"
+                android:text="@string/memory_package_btn_cancel"
+                android:visibility="gone" />
+
             <TextView
                 android:id="@+id/recent_header"
                 android:layout_width="match_parent"

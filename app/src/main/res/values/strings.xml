@@ -611,6 +611,26 @@
     <string name="memory_analysis_channel_desc">Shown while Memory Assistant reviews conversations so analysis survives the screen turning off or switching to another app.</string>
     <string name="memory_analysis_notification_title">Analyzing Conversations</string>
     <string name="memory_analysis_notification_text">Memory Assistant is reviewing %1$d of %2$d conversations.</string>
+    <!-- Computer review package (barebones per the owner's ruling,
+         2026-07-28: plain what's-happening lines, success, partial
+         failure; button labels are the §6 recorded terms). -->
+    <string name="memory_package_header">Review on a Computer</string>
+    <string name="memory_package_btn_create">Create Review Package</string>
+    <string name="memory_package_btn_import">Import Suggestions</string>
+    <string name="memory_package_btn_cancel">Cancel Package</string>
+    <string name="memory_package_state_ready">%1$d conversations ready to export.</string>
+    <string name="memory_package_state_none">No conversations waiting.</string>
+    <string name="memory_package_state_waiting">Waiting for Suggestions. The exported conversations stay reserved until you import or cancel.</string>
+    <string name="memory_package_creating">Creating package…</string>
+    <string name="memory_package_created">Package saved. %1$d conversations included.</string>
+    <string name="memory_package_create_failed">The package couldn\'t be created. No conversations were reserved.</string>
+    <string name="memory_package_importing">Importing suggestions…</string>
+    <string name="memory_package_imported">%1$d suggestions added to Pending.</string>
+    <string name="memory_package_imported_partial">%1$d suggestions added to Pending. %2$d couldn\'t be used.</string>
+    <string name="memory_package_imported_none">Nothing new to add to Pending.</string>
+    <string name="memory_package_import_failed">The file couldn\'t be imported. The package is still waiting.</string>
+    <string name="memory_package_wrong_file">That file doesn\'t match the waiting package.</string>
+    <string name="memory_package_cancelled">Package cancelled. Its conversations are available to analyze again.</string>
     <string name="tile_text_model_title">Text generation model</string>
     <string name="tile_text_generation_model_desc">This feature allows you to set text generation model as well as model\'s params.</string>
     <string name="tile_activation_prompt_title">Activation prompt</string>

@@ -18,6 +18,7 @@ package org.teslasoft.assistant.ui.activities
 
 import android.content.Intent
 import android.content.res.ColorStateList
+import androidx.activity.result.contract.ActivityResultContracts
 import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
@@ -48,6 +49,7 @@ import org.teslasoft.assistant.preferences.memory.ArchivistRunRecord
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.memory.archivist.Archivist
 import org.teslasoft.assistant.preferences.memory.archivist.ArchivistFailure
+import org.teslasoft.assistant.preferences.memory.archivist.ReviewPackage
 import org.teslasoft.assistant.service.MemoryAnalysisForegroundService
 import org.teslasoft.assistant.service.MemoryAnalysisState
 import org.teslasoft.assistant.theme.ThemeManager
@@ -99,6 +101,25 @@ class MemoryAssistantActivity : FragmentActivity() {
     private var linkViewPending: TextView? = null
     private var runsContainer: LinearLayout? = null
 
+    // Computer review package (barebones, owner ruling 2026-07-28): one
+    // status line plus the §6-named actions. The heavy lifting lives in
+    // ReviewPackage; this screen only picks files and reports plainly.
+    private var packageStatus: TextView? = null
+    private var btnCreatePackage: MaterialButton? = null
+    private var btnImportSuggestions: MaterialButton? = null
+    private var btnCancelPackage: MaterialButton? = null
+    private var packageBusy = false
+
+    private val createPackageDocument =
+        registerForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
+            if (uri != null) runCreatePackage(uri)
+        }
+
+    private val openSuggestionsDocument =
+        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            if (uri != null) runImportSuggestions(uri)
+        }
+
     private var running = false
     /** True after a run finished during THIS visit — Complete! is not sticky
      *  across a fresh visit (owner behavior rule). */
@@ -130,6 +151,18 @@ class MemoryAssistantActivity : FragmentActivity() {
         degradedContainer = findViewById(R.id.degraded_container)
         btnDegradedRepair = findViewById(R.id.btn_degraded_repair)
         btnDegradedRevert = findViewById(R.id.btn_degraded_revert)
+
+        packageStatus = findViewById(R.id.package_status)
+        btnCreatePackage = findViewById(R.id.btn_create_package)
+        btnImportSuggestions = findViewById(R.id.btn_import_suggestions)
+        btnCancelPackage = findViewById(R.id.btn_cancel_package)
+        btnCreatePackage?.setOnClickListener {
+            if (!packageBusy) createPackageDocument.launch("memory-review-package.zip")
+        }
+        btnImportSuggestions?.setOnClickListener {
+            if (!packageBusy) openSuggestionsDocument.launch(arrayOf("*/*"))
+        }
+        btnCancelPackage?.setOnClickListener { if (!packageBusy) runCancelPackage() }
 
         applyTheme()
         btnBack?.setOnClickListener { finish() }
@@ -205,7 +238,11 @@ class MemoryAssistantActivity : FragmentActivity() {
                 }
             }
             val configured = isArchivistConfigured()
+            val outstandingPackage = if (storeUsable)
+                try { ReviewPackage.outstandingPackage(this@MemoryAssistantActivity) } catch (_: Exception) { null }
+            else null
             withContext(Dispatchers.Main) {
+                renderPackageState(outstandingPackage, eligible, anyDegraded || !storeUsable)
                 factSinceRun?.text = getString(R.string.memory_assistant_fact_since_run, eligible)
                 factPending?.text = getString(R.string.memory_assistant_fact_pending, pendingChats)
                 val lastRun = runs.firstOrNull()
@@ -276,6 +313,101 @@ class MemoryAssistantActivity : FragmentActivity() {
                 if (!running) startRun(run.runId)
             }
             container.addView(row)
+        }
+    }
+
+    /* ---------------- computer review package (barebones) ---------------- */
+
+    /** One plain line saying what's happening, and only the buttons that
+     *  currently make sense (owner ruling 2026-07-28: just basic). */
+    private fun renderPackageState(
+        outstanding: org.teslasoft.assistant.preferences.memory.ArchivistRunRecord?,
+        eligibleCount: Int,
+        blocked: Boolean
+    ) {
+        if (packageBusy) return
+        if (outstanding != null) {
+            packageStatus?.text = getString(R.string.memory_package_state_waiting)
+            btnCreatePackage?.visibility = View.GONE
+            btnImportSuggestions?.visibility = View.VISIBLE
+            btnCancelPackage?.visibility = View.VISIBLE
+            btnImportSuggestions?.isEnabled = !blocked
+            btnCancelPackage?.isEnabled = !blocked
+        } else {
+            packageStatus?.text =
+                if (eligibleCount > 0) getString(R.string.memory_package_state_ready, eligibleCount)
+                else getString(R.string.memory_package_state_none)
+            btnCreatePackage?.visibility = View.VISIBLE
+            btnImportSuggestions?.visibility = View.GONE
+            btnCancelPackage?.visibility = View.GONE
+            btnCreatePackage?.isEnabled = !blocked && eligibleCount > 0
+        }
+    }
+
+    private fun runCreatePackage(uri: android.net.Uri) {
+        packageBusy = true
+        packageStatus?.text = getString(R.string.memory_package_creating)
+        lifecycleScope.launch(Dispatchers.IO) {
+            val outcome = try {
+                contentResolver.openOutputStream(uri, "wt")?.use { out ->
+                    ReviewPackage.createPackage(this@MemoryAssistantActivity, out)
+                } ?: ReviewPackage.ExportOutcome("failed", error = "could not open the chosen location")
+            } catch (e: Exception) {
+                ReviewPackage.ExportOutcome("failed", error = e.message)
+            }
+            withContext(Dispatchers.Main) {
+                packageBusy = false
+                packageStatus?.text = when (outcome.outcome) {
+                    "created" -> getString(R.string.memory_package_created, outcome.conversations)
+                    "nothing" -> getString(R.string.memory_package_state_none)
+                    "outstanding_exists" -> getString(R.string.memory_package_state_waiting)
+                    else -> getString(R.string.memory_package_create_failed)
+                }
+                refreshFactsAndRuns()
+            }
+        }
+    }
+
+    private fun runImportSuggestions(uri: android.net.Uri) {
+        packageBusy = true
+        packageStatus?.text = getString(R.string.memory_package_importing)
+        lifecycleScope.launch(Dispatchers.IO) {
+            val outcome = try {
+                contentResolver.openInputStream(uri)?.use { input ->
+                    ReviewPackage.importSuggestions(this@MemoryAssistantActivity, input)
+                } ?: ReviewPackage.ImportOutcome("failed", error = "could not open the chosen file")
+            } catch (e: Exception) {
+                ReviewPackage.ImportOutcome("failed", error = e.message)
+            }
+            withContext(Dispatchers.Main) {
+                packageBusy = false
+                packageStatus?.text = when (outcome.outcome) {
+                    "imported" -> getString(R.string.memory_package_imported, outcome.filed)
+                    "imported_partial" -> getString(
+                        R.string.memory_package_imported_partial, outcome.filed, outcome.invalidDropped
+                    )
+                    "nothing_new" -> getString(R.string.memory_package_imported_none)
+                    "wrong_package", "unreadable" -> getString(R.string.memory_package_wrong_file)
+                    "no_package" -> getString(R.string.memory_package_state_none)
+                    else -> getString(R.string.memory_package_import_failed)
+                }
+                if (outcome.filed > 0) linkViewPending?.visibility = View.VISIBLE
+                refreshFactsAndRuns()
+            }
+        }
+    }
+
+    private fun runCancelPackage() {
+        packageBusy = true
+        lifecycleScope.launch(Dispatchers.IO) {
+            val cancelled = try {
+                ReviewPackage.cancelPackage(this@MemoryAssistantActivity)
+            } catch (_: Exception) { false }
+            withContext(Dispatchers.Main) {
+                packageBusy = false
+                if (cancelled) packageStatus?.text = getString(R.string.memory_package_cancelled)
+                refreshFactsAndRuns()
+            }
         }
     }
 
