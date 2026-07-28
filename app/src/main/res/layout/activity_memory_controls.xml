@@ -29,37 +29,22 @@
 
     <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/action_bar"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:background="?attr/colorSurfaceContainerHigh"
+        style="@style/Widget.App.ActionBar"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent">
 
         <ImageButton
             android:id="@+id/btn_back"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:layout_marginStart="8dp"
-            android:layout_marginTop="8dp"
-            android:layout_marginBottom="8dp"
-            android:background="@drawable/btn_accent_icon_large_100"
-            android:contentDescription="@string/go_back"
-            android:src="@drawable/ic_back"
-            android:tooltipText="@string/go_back"
+            style="@style/Widget.App.ActionBar.BackButton"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent"
-            app:srcCompat="@drawable/ic_back" />
+            app:layout_constraintTop_toTopOf="parent" />
 
         <TextView
             android:id="@+id/activity_title"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
+            style="@style/Widget.App.ActionBar.Title"
             android:text="@string/title_memory_controls"
-            android:textColor="@color/text_title"
-            android:textSize="20sp"
-            android:textStyle="bold"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
@@ -84,22 +69,14 @@
             android:paddingHorizontal="20dp">
 
             <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
+                style="@style/Widget.App.Screen.Intro"
                 android:paddingTop="16dp"
-                android:text="@string/memory_controls_intro"
-                android:textColor="@color/text_subtitle"
-                android:textSize="14sp" />
+                android:text="@string/memory_controls_intro" />
 
             <!-- ============ Memory Defaults ============ -->
             <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="24dp"
-                android:text="@string/memory_controls_section_defaults"
-                android:textColor="?attr/colorPrimary"
-                android:textSize="18sp"
-                android:textStyle="bold" />
+                style="@style/Widget.App.Section.Title"
+                android:text="@string/memory_controls_section_defaults" />
 
             <LinearLayout style="@style/Widget.App.Row.Toggle">
 
@@ -160,13 +137,8 @@
 
             <!-- ============ Memory Assistant ============ -->
             <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="24dp"
-                android:text="@string/memory_controls_section_assistant"
-                android:textColor="?attr/colorPrimary"
-                android:textSize="18sp"
-                android:textStyle="bold" />
+                style="@style/Widget.App.Section.Title"
+                android:text="@string/memory_controls_section_assistant" />
 
             <LinearLayout style="@style/Widget.App.Row.Toggle">
 
@@ -194,50 +166,31 @@
 
             <!-- ============ Memory Engine ============ -->
             <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="24dp"
-                android:text="@string/memory_controls_section_engine"
-                android:textColor="?attr/colorPrimary"
-                android:textSize="18sp"
-                android:textStyle="bold" />
+                style="@style/Widget.App.Section.Title"
+                android:text="@string/memory_controls_section_engine" />
 
             <LinearLayout
                 android:id="@+id/row_memory_engine"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:background="?attr/selectableItemBackground"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center_vertical"
-                android:orientation="horizontal"
-                android:paddingTop="12dp">
+                style="@style/Widget.App.Row.WithSubtitle">
 
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/memory_controls_row_engine"
-                    android:textColor="@color/text"
-                    android:textSize="16sp" />
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/memory_controls_row_engine" />
+
+                    <TextView
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:maxLines="10"
+                        android:text="@string/memory_controls_row_engine_hint" />
+                </LinearLayout>
 
                 <TextView
                     android:id="@+id/text_memory_engine_value"
+                    style="@style/Widget.App.Dropdown.Value"
                     android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="12dp"
-                    android:text="@string/memory_controls_engine_lorebooks"
-                    android:textColor="@color/text_subtitle"
-                    android:textSize="14sp" />
+                    android:text="@string/memory_controls_engine_lorebooks" />
             </LinearLayout>
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="8dp"
-                android:text="@string/memory_controls_row_engine_hint"
-                android:textColor="@color/text_subtitle"
-                android:textSize="13sp" />
 
             <!-- Setup guidance (owner wording + placement, July 9 2026):
                  INLINE and persistent under the Memory Engine control —
@@ -245,9 +198,7 @@
                  embedding model; stays visible until the screen is left. -->
             <TextView
                 android:id="@+id/text_engine_needs_model"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="8dp"
+                style="@style/Widget.App.Section.Hint"
                 android:text="@string/memory_engine_full_needs_model"
                 android:textColor="?attr/colorPrimary"
                 android:textSize="14sp"
