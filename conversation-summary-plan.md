@@ -251,7 +251,17 @@ reduction, more the longer the chat runs.
    paragraph uses the shared intro/section-hint style per the style
    guide.
 
-9. **UI construction rules.** All UI uses the shared style families from
+9. **Summary storage and lifecycle (owner, July 28 2026).** The summary
+   is stored on the device as part of its chat's data — along with the
+   fold-in bookmark and pause state — because regenerating it would cost
+   API money, user edits must survive, and the bookmark depends on it.
+   It lives and dies with the chat: deleting the conversation deletes
+   the summary and all summarizer state, on every deletion path. Because
+   the summary is condensed conversation content, it receives the same
+   storage protection as the chat's messages (encrypted if they are) and
+   follows the chat through renames.
+
+10. **UI construction rules.** All UI uses the shared style families from
    `ui-style-guide.md` (toggle rows, label-above-box and inline number
    fields, dropdown fields, section titles/hints, action-bar headers,
    shared button roles). No hardcoded colors, typography, or geometry —
