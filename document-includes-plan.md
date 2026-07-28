@@ -3,8 +3,8 @@
 Status: **Step 3 in progress.** Steps 1 and 2 are complete. Step 3 data
 model, image importer, capability store, kind-aware UI wording, and legacy
 vision-path deletion have landed and are CI-green (all tests pass, debug APK
-builds). Four integration pieces remain before Step 3 is complete (see
-Build order section).
+builds). Four integration pieces remain before Step 3 is complete (Steps
+3a–3d, fully documented in the Build order section).
 
 This document records the current implementation baseline and build boundary.
 It does not turn an old discussion, uncertainty, or existing code into user
@@ -536,22 +536,225 @@ time, with `.jpg` extension (camera always produces JPEG).
   error dialogs, camera display naming, legacy vision-path deletion
   (hard-coded `gpt-4o` branch, `attachedImage` view, old gallery picker,
   old `chatMessage["image"]/["imageType"]` fields — all removed).
-  **Remaining before Step 3 is complete:**
-  1. Wire the multi-part sending path — text + image content parts,
-     images-last ordering, base64 loaded from disk on IO thread, no empty
-     text part for image-only messages.
-  2. Wire the Reduce flow — first-use hint dialog, vision request with
-     approved prompt + image part, delete on-disk bytes on Reduce/Remove.
-  3. Wire capability validation at Send — block on UNSUPPORTED, warn on
-     UNKNOWN (Cancel/Send Anyway), proceed on SUPPORTED, auto-learn on
-     success/clear-rejection.
-  4. Add manual override section to endpoint editor — collapsed "Image
-     capability by model" section, three-state control per recorded model,
-     "Clear image capability history" with confirmation dialog.
+  **Remaining before Step 3 is complete (4 integration pieces):**
 
-Each step: static verification per the `CLAUDE.md` checklist, push, and watch
-Android Checks to green. A step is not complete until its own acceptance
-boundary is verified; later-step placeholders do not block an earlier step.
+### Step 3a — Wire the multi-part sending path
+
+The pure-data layer is complete: `IncludeMessageProjection.userMessageParts()`
+returns a `ProjectedUserMessage` with text + a list of `RenderedImagePart`
+records, and `IncludeRenderer.imagePartsFor()` enumerates FULL images that
+need to accompany a message. The library types `ContentPart`, `ImagePart`,
+and `TextPart` are imported in `ChatActivity`. What remains is wiring the
+callers.
+
+**What to change:**
+
+1. **Parallel includes list.** Add a `chatMessageIncludes: ArrayList<String?>`
+   field alongside `chatMessages`. In `rebuildModelProjection()`, populate
+   it in lock-step: each entry is the includes JSON for user messages,
+   `null` for assistant messages. This keeps the projection itself fast
+   (no IO, no base64) while preserving the information needed to resolve
+   images at send time.
+
+2. **Send-time resolution.** Add a suspend helper
+   `resolveImagePartsForSend(textMessages, includesList)` that runs on
+   `Dispatchers.IO` and returns a new `List<ChatMessage>` where every user
+   message with FULL image includes becomes a multi-part `ChatMessage`:
+   - If the text side is non-blank, emit a `TextPart(text)` first.
+   - For each `RenderedImagePart`, load bytes via
+     `ImageImporter.imageFile(context, chatId, include)?.readBytes()`,
+     base64-encode with `Base64.NO_WRAP`, and emit
+     `ImagePart("data:$mime;base64,$encoded")`.
+   - An image-only message (no typed text, no documents, no reduced/artifact
+     wrappers) must not emit an empty `TextPart`.
+   - If bytes are missing on disk (already Reduced/Removed), skip that
+     image part silently — the text side already omits it.
+   - Images are always last in the content-part list (text, then documents
+     inline in the text, then image parts), so prefix caching covers
+     everything before the image bytes.
+
+3. **Prepared-turn path** (`prepareTypedTurn` → `buildFrozenRegularRequest`):
+   use `userMessageParts()` instead of `userContent()` for the current
+   turn's message. Append the current turn's includes JSON to the history
+   snapshot's includes list. Call the resolution helper on the full
+   `requestMessages` + `requestIncludes` pair before they enter the
+   `ChatCompletionRequest`.
+
+4. **Legacy path** (`regularGPTResponse`): call the resolution helper on
+   `chatMessages` + `chatMessageIncludes` before adding them to `msgs`.
+
+5. **Payload measurement** (`FrozenPayloadMessage`): multi-part messages
+   carry image bytes that do not appear in `message.content?.toString()`.
+   Update the payload builder so images contribute their estimated token
+   count rather than their base64 length.
+
+6. **History rebuild** (`modelFacingContent`): no change needed — it
+   continues returning text-only content. Image parts are resolved only
+   at send time.
+
+### Step 3b — Wire the Reduce flow
+
+The policy (`IncludeAuxiliaryRequestPolicy.reduceImage()`), the hint dialog
+layout (`dialog_include_reduce_hint.xml`), the preference
+(`neverShowReduceHint`), and all strings exist. The condense flow
+(`condenseInclude` → `showCondenseHint` → `startCondensing` →
+`requestCondensedText`) serves as the pattern. What remains is the
+image-specific version.
+
+**What to change:**
+
+1. **Add `onIncludeReduce` callback** to `ChatAdapter.OnChatItemClickListener`
+   so the adapter can distinguish Reduce from Condense. In the adapter's
+   sent-item three-dot menu, route the "Reduce to Text Only" tap to
+   `onIncludeReduce` instead of `onIncludeCondense`.
+
+2. **`reduceInclude(include)`** in `ChatActivity` — mirrors
+   `condenseInclude`:
+   - Guard: `include.form == IncludeForm.FULL && include.kind.isImage()`
+     and no reduce job already running.
+   - Check `preferences?.getNeverShowReduceHint()`. If suppressed, go
+     straight to `startReducing`. Otherwise show the reduce hint dialog.
+
+3. **`showReduceHint(include)`** — inflate
+   `dialog_include_reduce_hint.xml`, wire **Reduce** / **Cancel** /
+   **Never show this hint again** using the same dialog pattern as
+   `showCondenseHint`.
+
+4. **`startReducing(include)`** — show progress dialog with
+   **Image is being reduced.** and a spinner. Launch a coroutine that
+   calls `requestReducedText(include)`.
+
+5. **`requestReducedText(include)`** — the key difference from
+   `requestCondensedText`: this is a **multi-part vision request**. It
+   sends the reduce prompt as the text side and the image bytes as an
+   `ImagePart` in the same user message. Uses the chat's own configured
+   endpoint/model and maxTokens. Steps:
+   - Build the `RequestSpec` via
+     `IncludeAuxiliaryRequestPolicy.reduceImage(...)` with the
+     accompanying user message from the turn the image was attached to.
+   - Load image bytes from disk via `ImageImporter.imageFile(...)`.
+   - Construct a `ChatCompletionRequest` with a single multi-part user
+     message containing `TextPart(spec.prompt)` + `ImagePart(dataUrl)`,
+     using the spec's model and maxTokens.
+   - Send via `ai!!.chatCompletion(request)`.
+   - Return the result text.
+
+6. **On success**: apply the reduced text with
+   `include.copy(form = IncludeForm.CONDENSED, condensedText = result)`
+   and `.withoutImageBytes()`. Then call `maybeDeleteImageBytes(include)`
+   to remove the on-disk bytes once no other FULL include in the chat
+   references the same hash.
+
+7. **On failure or non-shorter result**: leave the image unchanged (same
+   as the condense failure path).
+
+8. **Remove path for images**: the existing `removeInclude` already
+   handles image includes with `withoutImageBytes()` +
+   `maybeDeleteImageBytes()` and uses the filename fallback. Once the
+   Reduce flow is wired, update Remove for sent images to also request an
+   AI-written artifact (same as documents), with the image bytes sent as
+   a vision request so the model can see what it is describing. If the
+   vision request fails, the filename fallback stands immediately (same
+   as documents).
+
+### Step 3c — Wire capability validation at Send
+
+The `ImageCapabilityStore` and `ImageCapability` enum are complete, persisted
+per endpoint in `ApiEndpointPreferences`, and unit-tested. What remains is
+checking them at send time and recording results.
+
+**What to change:**
+
+1. **Pre-send check.** Before the message enters the generation path,
+   check whether the current turn (or any history message) contains FULL
+   image includes. If so, read the capability for the current
+   endpoint + model:
+   - **SUPPORTED**: proceed normally.
+   - **UNSUPPORTED**: show the approved blocking dialog (**Images Not
+     Supported** / body / **Okay**). Do not send.
+   - **UNKNOWN**: show the approved warning dialog (**Image Support
+     Unknown** / body / **Cancel** + **Send Anyway**). On **Send
+     Anyway**, proceed. On **Cancel**, return to the composer.
+
+2. **Placement**: the check runs in `prepareTypedTurn` for typed messages,
+   after includes are snapshotted but before `parseMessage` commits the
+   turn. For voice messages, the check runs before
+   `generateResponse`. The check is a UI dialog, so it must run on the
+   main thread. The dialog suspends the coroutine until the user acts.
+
+3. **Auto-learn on success.** After `regularGPTResponse` completes
+   successfully and the request included image parts, record
+   `ImageCapability.SUPPORTED` for the current endpoint + model.
+
+4. **Auto-learn on clear rejection.** In the error handler, when the
+   provider returns an error that `GenerationErrorClassifier` identifies
+   as a vision-specific rejection (not a transient error, not a rate
+   limit, not a context-length error), record
+   `ImageCapability.UNSUPPORTED` for the current endpoint + model. The
+   classifier already distinguishes error categories; a new
+   `isVisionRejection` flag or category may be needed if one does not
+   exist.
+
+5. **Scope of the check.** The check is per-turn: if the conversation
+   already contains sent images from earlier turns (whose bytes are still
+   FULL), those will be resent this turn, so the model must support
+   vision for ANY turn that re-sends them. The check therefore fires
+   whenever the resolved message list contains any image content parts,
+   not only when the current turn's pending includes have images.
+
+### Step 3d — Manual override section in endpoint editor
+
+Data plumbing (`ApiEndpointObject.imageCapabilityByModel`,
+`ApiEndpointPreferences` getters/setters) and string resources are complete.
+What remains is the UI section in `ApiEndpointEditorActivity`.
+
+**Approved UI (owner decision, July 28 2026):** a dropdown per model. Model
+name on the left, dropdown on the right, using the app's
+`Widget.App.Dropdown.Label` / `Widget.App.Dropdown.Value` styles and an
+anchored `ListPopupWindow`. The section is collapsed by default with a
+chevron, consistent with other expandable sections. The three dropdown
+options are **Unknown**, **Supported**, and **Unsupported**.
+
+**What to change:**
+
+1. **Layout.** Add a collapsible section to the bottom of
+   `activity_api_endpoint_editor.xml`:
+   - Section header: `Widget.App.Section.Title` with the approved title
+     string, plus a trailing chevron that rotates on expand/collapse.
+   - Section description: `Widget.App.Section.Hint` with the approved
+     description string.
+   - A `LinearLayout` container (initially `GONE`) that holds
+     dynamically-inflated model rows.
+   - A **Clear image capability history** button
+     (`AppButton.Destructive`) at the bottom of the section, visible
+     only when entries exist.
+
+2. **Model rows.** Each recorded model is one horizontal `LinearLayout`
+   with:
+   - `Widget.App.Dropdown.Label` — the model id string.
+   - `Widget.App.Dropdown.Value` — shows the current state label;
+     tapping opens a `ListPopupWindow` with the three options.
+   - Selecting an option writes back via `ImageCapabilityStore.set()`.
+
+3. **Clear action.** Tapping the clear button shows a confirmation
+   dialog (title: approved string, body: approved string, actions:
+   **Cancel** + approved confirm button). On confirm, calls
+   `ImageCapabilityStore.clear()`, persists, and removes all model rows
+   from the section.
+
+4. **Empty state.** When no models are recorded, the section shows the
+   approved empty-state string and hides the clear button.
+
+5. **Lifecycle.** The section is populated in `loadValues()` from the
+   endpoint's stored `imageCapabilityByModel` JSON. Changes are
+   persisted in `buildEndpointObject()` so they save with the rest of
+   the endpoint profile. `buildEndpointObject` must include the
+   `imageCapabilityByModel` field.
+
+Each piece: static verification per the `CLAUDE.md` checklist, push, and
+watch Android Checks to green. A piece is not complete until its own
+acceptance boundary is verified; later-piece placeholders do not block an
+earlier piece.
 
 ## Documentation upkeep when building
 

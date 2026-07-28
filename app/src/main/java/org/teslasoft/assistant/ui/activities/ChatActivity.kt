@@ -345,6 +345,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     private var messagesUsageProjection: ArrayList<HashMap<String, Any>> = arrayListOf()
     private var adapter: ChatAdapter? = null
     private var chatMessages: ArrayList<ChatMessage> = arrayListOf()
+    private var chatMessageIncludes: ArrayList<String?> = arrayListOf()
 
     // Avatar refresh coordinators, one per side (Profile Images refresh fix,
     // July 21 2026). They keep a refresh requested before the adapter exists
@@ -2825,6 +2826,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
      */
     private fun rebuildModelProjection() {
         chatMessages = arrayListOf()
+        chatMessageIncludes = arrayListOf()
         for (message in messages) {
             val content = modelFacingContent(message)
             if (content.isBlank()) continue
@@ -2837,6 +2839,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     },
                     content = content
                 )
+            )
+            chatMessageIncludes.add(
+                if (message["isBot"] != true) message[INCLUDES_KEY]?.toString() else null
             )
         }
     }
@@ -4881,19 +4886,23 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         requestPreparationInProgress = true
         val pendingSnapshot = pendingIncludes.toList()
         val historySnapshot = chatMessages.toList()
+        val historyIncludesSnapshot = chatMessageIncludes.toList()
         val selectedModel = model
         val endpointId = preferences?.getApiEndpointId().orEmpty()
         val maximumResponseTokens = preferences?.getMaxTokens() ?: 0
         val storedMessage = prefix + rawMessage + endSeparator
         val sentIncludes = pendingSnapshot.map { it.forSentMessage() }
+        val sentIncludesJson = ChatInclude.listToJson(sentIncludes)
         val modelFacingMessage = IncludeMessageProjection.userContent(
             storedMessage,
-            ChatInclude.listToJson(sentIncludes)
+            sentIncludesJson
         )
         val requestMessages = ArrayList(historySnapshot)
         requestMessages.add(
             ChatMessage(role = ChatRole.User, content = modelFacingMessage)
         )
+        val requestIncludes = ArrayList(historyIncludesSnapshot)
+        requestIncludes.add(sentIncludesJson)
 
         btnMicro?.isEnabled = false
         btnSend?.isEnabled = false
@@ -4904,6 +4913,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             try {
                 val frozen = buildFrozenRegularRequest(
                     requestMessages = requestMessages,
+                    requestIncludes = requestIncludes,
                     loreQuery = storedMessage,
                     selectedModel = selectedModel,
                     maximumResponseTokens = maximumResponseTokens
@@ -5360,6 +5370,61 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             typedText = content,
             includesJson = message[INCLUDES_KEY]?.toString()
         )
+    }
+
+    private suspend fun resolveImagePartsForSend(
+        textMessages: List<ChatMessage>,
+        includesList: List<String?>
+    ): List<ChatMessage> = withContext(Dispatchers.IO) {
+        val cid = chatId
+        textMessages.mapIndexed { i, msg ->
+            if (msg.role != ChatRole.User) return@mapIndexed msg
+            val json = includesList.getOrNull(i) ?: return@mapIndexed msg
+            val projection = IncludeMessageProjection.userMessageParts(
+                msg.content?.toString().orEmpty(), json
+            )
+            if (projection.isTextOnly()) msg
+            else buildMultiPartUserMessage(projection, cid)
+        }
+    }
+
+    private fun buildMultiPartUserMessage(
+        projection: ProjectedUserMessage,
+        cid: String
+    ): ChatMessage {
+        val parts = ArrayList<ContentPart>()
+        if (projection.text.isNotBlank()) {
+            parts.add(TextPart(projection.text))
+        }
+        for (ref in projection.imageParts) {
+            val include = ChatInclude(
+                id = ref.includeId,
+                fileName = ref.fileName,
+                kind = if (ref.imageMimeType == "image/png") IncludeKind.PNG else IncludeKind.JPEG,
+                form = IncludeForm.FULL,
+                fullText = "",
+                imageFileHash = ref.imageFileHash,
+                imageMimeType = ref.imageMimeType
+            )
+            val file = ImageImporter.imageFile(this, cid, include) ?: continue
+            if (!file.exists()) continue
+            val bytes = try { file.readBytes() } catch (_: Exception) { continue }
+            val encoded = Base64.encodeToString(bytes, Base64.NO_WRAP)
+            parts.add(ImagePart("data:${ref.imageMimeType};base64,$encoded"))
+        }
+        return if (parts.isEmpty()) {
+            ChatMessage(role = ChatRole.User, content = "")
+        } else if (parts.size == 1 && parts[0] is TextPart) {
+            ChatMessage(role = ChatRole.User, content = projection.text)
+        } else {
+            ChatMessage(role = ChatRole.User, content = parts)
+        }
+    }
+
+    private fun conversationHasFullImages(
+        includesList: List<String?>
+    ): Boolean = includesList.any { json ->
+        json != null && ChatInclude.listFromJson(json).any { it.hasLiveImageBytes() }
     }
 
     private fun scroll(mode: Boolean) {
@@ -6203,6 +6268,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
      */
     private suspend fun buildFrozenRegularRequest(
         requestMessages: List<ChatMessage>,
+        requestIncludes: List<String?>,
         loreQuery: String,
         selectedModel: String,
         maximumResponseTokens: Int
@@ -6339,7 +6405,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
         // Conversation history, all active attachments embedded in their user
         // turns, and the current input have already been frozen in this list.
-        msgs.addAll(requestMessages)
+        // Image bytes are loaded from disk and base64-encoded here (IO thread)
+        // so they are never held in memory between turns.
+        msgs.addAll(resolveImagePartsForSend(requestMessages, requestIncludes))
 
         val usesRestrictedSampling = selectedModel.contains("gpt-5") ||
             selectedModel.contains("o1") || selectedModel.contains("o3")
@@ -6602,7 +6670,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             )
         }
 
-        msgs.addAll(chatMessages)
+        msgs.addAll(resolveImagePartsForSend(chatMessages, chatMessageIncludes))
 
         chatCompletionRequest = if (preferences?.getLogitBiasesConfigId() == null || preferences?.getLogitBiasesConfigId() == "null" || preferences?.getLogitBiasesConfigId() == "") {
             ChatCompletionRequest(
