@@ -70,7 +70,7 @@ These were decided explicitly by the owner. Do not re-litigate them.
 | Decision | Choice |
 |---|---|
 | UI technology | **Stay on classic Views/XML + Material 3 (MDC-Android).** No Jetpack Compose, not even for new screens. |
-| Navigation | **Left slide-out drawer** containing the chat list (new chat, search) plus quick navigation (Characters hub, Playground, Settings). The chat screen becomes the effective home screen, like the ChatGPT/Claude apps. No right-side panel. |
+| Navigation | **Left slide-out drawer** containing *only* the chat list plus a single bottom action row (search · gear→global Settings · new-chat). Characters/personas/lorebooks and the other per-chat options live in **Quick Settings**, **not** the drawer; Playground is not a drawer row either. The chat screen is the home screen, like the ChatGPT/Claude apps. No right-side panel. *(Revised 2026-06-24 by owner — see §5.1.)* |
 | Theming | **Preset hand-designed color palettes** in light and dark variants, selectable in settings. Material You / wallpaper-dynamic color was explicitly **not** chosen. The existing AMOLED pitch-black mode must keep working. |
 | Style target | Clean, elegant, modern Material 3 — rounded surfaces, proper spacing, M3 type scale. |
 
@@ -282,19 +282,46 @@ Two-stage plan:
 
 ### 5.1 What the drawer contains (top to bottom)
 
-1. **Header** — app name; optionally the active persona's avatar/name later.
-2. **"New chat" row** (replaces the chats-tab FAB; opens the existing
-   `AddChatDialogFragment`).
-3. **Search field** filtering the chat list (reuse the filter logic from
-   `ChatsListFragment`'s `search_input`).
-4. **Chat list** — RecyclerView, reusing `ChatPreferences` as the data
-   source and the visual style of `view_chat_name_min.xml` rows (name +
-   snippet; model labels stay out of the drawer for cleanliness). Current
-   chat highlighted with a `colorSecondaryContainer` pill.
-5. **Divider**, then static nav rows: **Characters** (→ `CharactersActivity`
-   hub: personas / activation prompts / system message / lorebooks),
-   **Playground** (→ the existing `PlaygroundFragment` rehosted or its own
-   activity), **Settings** (→ `SettingsActivity`).
+**Revised 2026-06-24 by owner — this list supersedes the original below.** The
+drawer is deliberately just the chat list plus one bottom action row. The
+Characters hub, personas, lorebooks, and the other per-chat options are
+reached from the **Quick Settings** sheet (the per-chat gear on the chat top
+bar), **not** from the drawer. Playground is not a drawer row.
+
+1. **Header row** — left-aligned a **`>>`** button that slides the panel away
+   and brings the chat back (the second of two ways to move between panel and
+   chat; the chat top bar's `<<` is the first), and right-aligned an
+   **add-folder** icon that prompts for a name and creates a folder (§5.4).
+   Nothing between them yet. *(Revised 2026-06-24: the `>>` was previously
+   described as a floating circle — it now lives in this header row.)*
+2. **Chat list** — RecyclerView, data source `ChatPreferences`, row visual
+   style from `view_chat_name_min.xml` (name + snippet; model labels stay out
+   of the drawer for cleanliness). Current chat highlighted with a
+   `colorSecondaryContainer` pill.
+   - **Long-press a chat row → context menu**, in order: **Rename**, **Export**,
+     **Pin** (shown as **Unpin** when the chat is already pinned), **Add to
+     Folder** *(arrives with folders — Phase 3.5, §5.4)*, **Delete**. Rename
+     reuses the existing rename path; **Export** exports that chat's data (the
+     new home for the old top-bar `btn_export`, §5.2 Step A / §9.1); **Pin/
+     Unpin** toggles the existing `pinned` flag (`switchPinState`); **Delete**
+     shows a Material confirm dialog (destructive-action rule) and scrubs the
+     chat as today.
+3. **Bottom action row**, pinned to the bottom of the panel, left to right:
+   - **Search field** that filters the chat list (reuse `ChatsListFragment`'s
+     `search_input` filter logic).
+   - **Gear → global Settings** (`SettingsActivity`).
+   - **New-chat button** (opens the existing `AddChatDialogFragment`).
+
+> **Note for implementers:** there are now two gear icons with different
+> scopes — the **chat top-bar gear** opens per-chat **Quick Settings**, the
+> **drawer bottom gear** opens **global Settings**. They are not the same
+> screen; keep their targets straight.
+
+> *Original (2026-06-13) drawer list — obsolete, kept for history:* header /
+> "New chat" row / search field / chat list / divider / static nav rows for
+> Characters, Playground, Settings. The owner removed the Characters &
+> Playground nav rows (those live behind Quick Settings) and collapsed search +
+> settings + new-chat into the single bottom action row above.
 
 Implement as a `DrawerLayout` whose drawer pane is a **custom layout**
 (header + RecyclerView + rows). Do **not** use `NavigationView` menu items —
@@ -309,13 +336,27 @@ the left. Get there in three separately-shippable steps:
 - **Step A — drawer inside ChatActivity.** Wrap the root of
   `activity_chat.xml` in a `DrawerLayout` (the existing
   `expandable_window_root` CoordinatorLayout becomes the main pane —
-  preserve its ID and the `chat_expand` transitionName). Add a hamburger
-  button to the chat top bar. Keep `btn_back` working as today.
-- **Step B — launch into the last chat.** Record the last-opened chat id in
-  `GlobalPreferences`; `MainActivity` forwards straight into `ChatActivity`
-  for that chat when it exists (first-run/no-chats still shows the current
-  chats screen). When ChatActivity is the task root, `btn_back` shows the
-  hamburger icon and opens the drawer instead of finishing.
+  preserve its ID and the `chat_expand` transitionName).
+  **Chat top-bar layout (owner-specified 2026-06-24):** left-aligned `<<`
+  button (re-icon the existing `btn_back` ImageButton — **keep the id**) that
+  **opens the drawer**; the chat title **centered**; right-aligned the **bug**
+  shortcut (`btn_debug_log`, shown only when diagnostics are on — unchanged)
+  then the **gear** (`btn_settings`, opens the per-chat **Quick Settings**
+  sheet). The old top-bar **export** icon (`btn_export`) is **not** in this
+  layout — its function needs a new home (**open item; confirm with owner
+  before dropping the action**, and do not orphan the id without relocating
+  what it does — see §9.1). The drawer opens/closes by **edge swipe** as well
+  as the `<<` button, and the panel header's `>>` button (§5.1) closes it.
+- **Step B — launch straight into the chat screen.** The app opens directly
+  into `ChatActivity` showing an **empty, ready-to-type conversation** (no
+  bottom-tab home, no forced greeting yet — a greeting may be added later).
+  AMOLED users see the pitch-black ready screen with the top-bar icons
+  present. `MainActivity` becomes a router that forwards into `ChatActivity`
+  (first-run/no-chats still routes through onboarding as today). When
+  ChatActivity is the task root, the `<<` button opens the drawer instead of
+  finishing. *(Reopening the **last** chat on launch instead of a fresh empty
+  one is a possible later refinement; the current owner decision is the empty
+  ready screen.)*
 - **Step C — retire the bottom tab bar.** Once the drawer covers everything
   (chats, Playground, settings), remove `BottomNavigationView` from
   `MainActivity` and slim it down to a router + first-run host. Tips/Tools
@@ -332,6 +373,19 @@ Ship A, then B, then C — never as one PR.
   **Never** implement in-place chat swapping inside a live ChatActivity in
   this redesign — the voice loop, streaming state, and per-chat preferences
   all assume one chat per activity instance.
+- **Launch lands on an empty, ready-to-type chat** (Step B) with the top-bar
+  icons visible; the drawer is reachable via the `<<` button or an edge swipe.
+  No forced greeting in v1.
+- **Two ways to toggle the panel** — the chat top-bar `<<` button opens it; a
+  **floating circular `>>` button** at the top of the panel closes it. Both
+  only open/close the same `DrawerLayout`; **neither may touch mic, streaming,
+  keyboard-inset, or `restoreUIState()` logic** (same as the rule below).
+- **Chat-row long-press → "Rename" / "Export" / "Delete" menu** is the per-row
+  action set. Rename goes through the existing rename path — remember a rename
+  **changes the chat id** and must carry every per-chat preference across
+  (CLAUDE.md auto-naming copy-block invariant). Export reuses the existing
+  chat-export action (the relocated `btn_export`). Delete shows a Material
+  confirm dialog and scrubs references as today.
 - The **auto-naming** flow renames the chat *in place* (changes the chat id
   without relaunching the activity — relaunching kills readback and the
   hands-free loop). The drawer's chat list must therefore refresh its data
@@ -346,6 +400,173 @@ Ship A, then B, then C — never as one PR.
   Android 16; `DrawerLayout` 1.2.0 handles it, but verify the
   `OnBackPressedDispatcher` interplay if ChatActivity has custom back
   logic — grep for `onBackPressed`/`OnBackPressedCallback` first).
+
+### 5.4 Chat folders (owner-requested 2026-06-24)
+
+**Status: planned; lands AFTER the flat drawer ships — Phase 3.5 in §8.**
+Folders sit on top of the drawer's chat list; they are **not** part of the
+first drawer PR (building them together makes the drawer diff huge and risky).
+Pinning already exists end-to-end (the `"pinned"` flag, swipe-to-pin, and
+pinned-first sort in `ChatsListFragment` — verified) and the drawer inherits it
+for free; folders are the genuinely new concept.
+
+**Top-level drawer order (top to bottom):**
+
+1. A **collapsible "Folders" row** — the section header for folders. Default
+   **collapsed**, shown as **"Folders ⌄"**. Tapping it expands the folder list
+   inline (the end icon flips to **⌃** to show it can be collapsed); tapping
+   again collapses it. This lets the user keep folders always-visible or tucked
+   away. **The expanded/collapsed state is remembered across app close** (store
+   a boolean in `GlobalPreferences`). When expanded, each folder listed here can
+   be opened — see drill-in below. **Long-pressing the "Folders" row lets the
+   user rename that label** (e.g. to "Worlds") — a small personalisation; store
+   the custom label in `GlobalPreferences` (default "Folders"). A *quick* tap
+   still only expands/collapses.
+2. **Pinned chats** *(resolved: pinned **chats**, not folders)*.
+3. **All other chats** (existing timestamp sort).
+
+The bottom action row (search · gear · new-chat, §5.1) stays pinned below all of
+this. **When zero folders exist the "Folders" row is hidden entirely** — no
+sense taking up vertical space for an empty section. The header add-folder icon
+is always present, so folders stay discoverable; the row appears once the first
+folder is created.
+
+**Opening a folder = drill-in that replaces the drawer's content** (not a
+second sliding panel): the chat list is swapped for that folder's chats. The
+folder view's own header is **`<<` left-aligned, then the folder's title
+immediately after it**; pressing `<<` returns to the top-level drawer (folders
++ chats). Note `<<` is **contextual**: in the chat top bar it opens the drawer
+(§5.2); inside a folder it backs out to the top-level drawer.
+
+**Folder long-press → "Rename" / "Delete"** (mirrors the chat-row menu).
+Rename changes only the folder's display name (see id note below). Delete shows
+a Material confirm dialog; **on delete the folder's chats fall back to the top
+level** (the conversations are kept — only the folder grouping is removed; clear
+each member chat's `folder` field).
+
+**Creating folders & assigning chats (owner-specified 2026-06-24):**
+
+- **Creating a folder** — the **add-folder icon in the drawer header**
+  (right-aligned, §5.1) prompts for a name and creates the folder.
+- **Putting a chat into a folder** — the **"Add to Folder"** item in the chat
+  long-press menu (between Pin/Unpin and Delete, §5.1) opens a folder picker
+  (include a "None / top level" choice to pull a chat back out). **A chat lives
+  in exactly one folder** (the single `folder` field) — confirmed, no
+  multi-folder membership.
+- Inside a folder view, **search filters that folder's chats** and **new-chat
+  creates the chat already inside that folder** (proposed; confirm).
+
+**Data model (fits the existing JSON-in-prefs pattern — no SQLite needed):**
+
+- Add a **`folders`** key to the existing `chat_list` SharedPreferences: a JSON
+  array of `{ id, name, timestamp }`.
+- Give each chat map a new **`folder`** field (the folder id it belongs to;
+  empty = top level).
+- **The folder id MUST be a stable generated id (timestamp/UUID), NOT a hash of
+  the name.** Chats use `Hash.hash(name)`, so renaming a chat re-keys its
+  storage; a *folder* is referenced by many chats, so a name-hash id would force
+  rewriting every member chat's `folder` field on every rename. A stable id
+  makes folder rename a one-field edit. (Same trap as persona-rename in
+  CLAUDE.md — avoid it here by design.)
+- All additive: absent keys default to "no folders / top level", so existing
+  installs and a fresh install both just work — **no migration step**.
+- Keep every folder read/write in `ChatPreferences` (no raw
+  `getSharedPreferences` in feature code — CLAUDE.md rule).
+
+**Voice-pipeline safety:** folders are pure drawer navigation. Opening a
+folder, moving a chat, or renaming a folder must never touch mic/streaming/inset
+state. Switching INTO a chat from a folder follows §5.3 — `finish()` + start a
+new ChatActivity, never an in-place swap.
+
+### 5.5 Chat export & "Export All Chats" (owner-requested 2026-06-24)
+
+**What already exists (verified `ChatActivity.kt:1882`):** the current top-bar
+export **already** uses Android's Storage Access Framework
+(`ACTION_CREATE_DOCUMENT`) — i.e. it already **asks where to save** via the
+system file picker, writes the chat as JSON (`Gson` of the message list), and
+names the file `<chatId>.json`. Its initial location is hard-coded to
+`/SpeakGPT/`, it does **not** remember the last-used folder, and the filename is
+the raw hashed chat id.
+
+**The delta the owner wants:**
+
+1. **Per-chat Export** moves into the drawer chat-row long-press menu (§5.1) —
+   same SAF "ask where to save" flow, kept.
+2. **"Export All Chats"** — a button at the **bottom of the main Settings page**
+   that exports every chat at once.
+3. **Always ask where to put the file(s)**, defaulting to the **Download**
+   folder, then to the **last-used** location on later exports.
+
+**Implementation notes:**
+
+- **Default + last-used location:** persist the last-used export location URI in
+  `GlobalPreferences`; set the picker's `EXTRA_INITIAL_URI` to it when present,
+  else to the system **Downloads** tree. Replace the hard-coded `/SpeakGPT/`
+  initial URI. (SAF partly remembers the last place already; persisting it
+  ourselves makes "Download first, then last-used" deterministic.)
+- **Friendlier filenames:** export under the chat's display name (sanitised),
+  not the raw hash id.
+- **Export All shape** *[OPEN — confirm]*: either **(a)** pick a **folder** via
+  `ACTION_OPEN_DOCUMENT_TREE` and write one `<chatname>.json` per chat into it
+  (most useful, and exactly what a Drive/Dropbox folder sync wants), or **(b)**
+  write a **single combined file** of all chats. Recommend **(a)**; persist the
+  chosen tree as the last-used location.
+- This is also the groundwork for the earlier **"store my chats in Dropbox/
+  Drive"** wish — the SAF picker exposes those cloud providers as destinations,
+  so a folder export already reaches them.
+
+**Where it lands:** Phase 3.6 (§8). Per-chat export rides with the drawer
+(Phase 3) since the menu item is there; the location-picker upgrade and the
+Settings "Export All" button are the new behavioural work, grouped as Phase 3.6
+so the drawer PR stays purely structural.
+
+### 5.6 Bulk chat selection & delete in the drawer (owner-requested 2026-06-24)
+
+Goal: select **all** chats, or several chats, in the drawer and delete them in
+one action. This is the **chat list**, and is **distinct** from the existing
+in-*chat* bulk message select (selecting messages inside one conversation —
+`bulk_container` etc. in §9.1 — which already exists and stays as-is).
+
+**Proposed interaction (mirrors the in-chat bulk bar for consistency):**
+
+- **Enter selection mode** from a **"Select"** item added to the chat-row
+  long-press menu (→ Rename / Export / Pin·Unpin / Add to Folder / **Select** /
+  Delete). *[Open: or expose it as a select/edit icon in the drawer header
+  instead of/in addition to the menu item — confirm which.]*
+- In selection mode, rows show **checkboxes**; the drawer header becomes a
+  contextual bar with **Select all**, a **selected count**, **Delete**, and
+  (once folders exist) **Add selected to folder**. The panel's `>>`/back exits
+  selection mode.
+- **Delete** shows a Material confirm dialog ("Delete N chats?") and removes
+  each selected chat via the existing `ChatPreferences.deleteChatById`
+  teardown (same per-chat cleanup a single delete does today). Pinned chats are
+  deletable too.
+- **Scope:** selection operates within the **current view** — the top-level
+  list, or inside one folder when drilled in — not across folders in one
+  selection (keeps the model simple).
+
+**Reuse:** the in-chat message bulk bar (`btn_select_all`, `btn_deselect_all`,
+`btn_delete_selected`, `text_selected_count`, §9.1) is the visual/interaction
+template — match it so both bulk modes feel the same. But the drawer's is a
+**separate** implementation over the chat list; do **not** wire it to
+`ChatAdapter` (that adapter is for messages inside a chat).
+
+**Where it lands:** Phase 3 (drawer) for the core multi-select + delete; the
+"Add selected to folder" extension rides with Phase 3.5 (folders).
+
+### 5.7 Quick Settings is the per-chat hub (owner-clarified 2026-06-24)
+
+Because the drawer deliberately holds *only* chats/folders (§5.1), the per-chat
+**Quick Settings** sheet is now the home for everything that used to be drawer
+"Characters/Playground" navigation. It already carries the per-chat **model,
+endpoint, persona, activation prompt, lorebook checklist, and sampling params**
+(CLAUDE.md). To fully replace the removed drawer nav, Quick Settings should also
+provide a way to **open the Characters hub** (`CharactersActivity` — manage
+personas / activation prompts / system message / lorebooks) so the *library*
+side stays reachable; Quick Settings selects *which* persona/lorebook this chat
+uses, the hub *manages* them. Restyle is Phase 7 (§7.1); this clarifies its
+**contents**, not a new screen. *(The chat top-bar gear opens Quick Settings;
+the drawer bottom gear opens global Settings — §5.1 note.)*
 
 ---
 
@@ -381,6 +602,17 @@ Ship A, then B, then C — never as one PR.
   rather than introducing `AppBarLayout`/`MaterialToolbar` into ChatActivity,
   where scroll-behavior side effects could disturb the RecyclerView/keyboard
   inset choreography. New/simple screens *may* use `MaterialToolbar`.
+- **Screens replace the window — they don't float (owner 2026-06-24).** Going
+  into Settings or any sub-screen changes the **whole window** to that screen: a
+  full-screen menu, **not** a rounded card floating over a dimmed background.
+  Settings/sub-screens currently use `Theme.Transparent` +
+  `expandable_window_background*`, which reads as a floating sheet — drop that
+  look for these screens and let them fill the window (with correct insets,
+  §6.6). *(ChatActivity keeps `Theme.Transparent` for its chat-open
+  shared-element transition — §9.5.12; this is for Settings and its sub-screens,
+  not the chat.)* Back is a **top-left `<<` chevron** (the same left
+  double-chevron glyph used elsewhere); on a sub-screen it finishes the screen
+  and returns to the previous one.
 - Settings tiles (`TileFragment`) → restyled as M3 list rows or filled
   cards with leading icons; keep the `TileFragment` API so `SettingsActivity`
   / `CharactersActivity` logic is untouched.
@@ -406,6 +638,354 @@ Ship A, then B, then C — never as one PR.
   the existing one if needed.
 - Scrollable content uses `clipToPadding=false` + bottom padding so the last
   item clears the nav bar.
+
+### 6.7 Message action buttons & text selection (owner-confirmed 2026-06-24)
+
+Per the adapter contract (§9.2) every message layout keeps **all** button ids
+(`btn_copy`, `btn_edit`, `btn_retry`, `btn_report`, `btn_share`, `btn_speak`) —
+the adapter binds them with no null checks, so a button that shouldn't appear on
+a given message type is hidden with `visibility="gone"`, **never deleted**. The
+visible sets:
+
+- **AI / assistant message:** **Listen** (`btn_speak`) sits at the **top of the
+  message** — so you don't have to scroll a long answer to start playback (owner
+  pain point). Below the text: **info** (`btn_info` — repurposed from the old
+  Report button, §6.10), **share** (`btn_share`), **regenerate** (`btn_retry`),
+  **copy** (`btn_copy`), **edit** (`btn_edit`). **The Report action is gone** (no
+  moderation backend — the sheet only links to external Discords / exports text,
+  verified in `ReportAIContentBottomSheet`); rather than delete the button,
+  **reuse its slot as an Info button** (§6.10) — swap the "!" for an info "i"
+  icon, replace the report handler with the model/time popup, and drop the
+  `ReportAIContentBottomSheet` wiring. Keep the id, renamed `btn_info`.
+- **User message — two:** **copy** (`btn_copy`) and **edit** (`btn_edit`, the
+  pencil), so the user's own text can be copied or changed. The other buttons
+  (`btn_speak`/`btn_share`/`btn_retry`) are `gone`. *(This already matches the
+  adapter, which shows share only when `isBot == true` — `ChatAdapter.kt:348`;
+  the restyle must preserve that gating.)*
+
+The palette-designer **mockup currently draws the wrong message icons** and will
+be corrected to exactly these two sets.
+
+**Partial text selection must be preserved.** The message `TextView`s are
+selectable today (`setTextIsSelectable(true)`, `ChatAdapter.kt:535`): a user can
+long-press to select part of a message and copy it via the normal Android
+text-selection toolbar. The restyle must keep this — do not disable selection on
+the message text or let a tap/long-press handler swallow the gesture. This is
+**independent** of the per-message copy button (which copies the whole message).
+
+### 6.8 Reasoning ("thinking") display (owner-requested 2026-06-24)
+
+Some endpoints/models the owner uses are **reasoning models** that emit a
+separate "thinking" stream. Today the app discards it; the owner wants to
+optionally see it.
+
+**Cost facts (so the design is grounded):** the model generates the thinking
+tokens whether or not they're shown — they're billed as output either way, so
+**displaying them costs nothing extra**. Standard practice is to **not** send a
+prior turn's thinking back as history (only final answers go back), so showing
+it does **not** compound token cost on later turns. "Show thinking" is therefore
+almost entirely a parse-and-render feature, not a cost trade-off.
+
+**How it arrives:** OpenAI-compatible reasoning APIs return the thinking in a
+**separate field** (commonly `reasoning_content`; some use `reasoning`), not in
+the normal `content`. The streaming path must read that field. *(Confirm GLM's
+exact field/param when building — some providers also need a request param to
+enable or return reasoning.)*
+
+**UI:** when thinking is present, render it as a **collapsible section at the top
+of that AI message** (collapsed by default; tap to expand), visually distinct
+from the answer (dimmer / italic). It is not fed back into chat history. Add the
+thinking view to the three message layouts per the §9.2 "hide via `gone`" rule
+(absent when there's no reasoning, or when the toggle is off).
+
+**Toggle (recommend a toggle, not forced-on):** a global "Show model thinking"
+setting (Settings → Appearance/Behavior). Recommend **on, collapsed** — present
+but not noisy — rather than forcing it expanded every turn. When off, the
+reasoning field is dropped (or not requested) and no section shows. *[Owner:
+confirm toggle vs always-on.]*
+
+**Scope/where:** new behavior in the single `generateResponse` →
+`regularGPTResponse` funnel plus `ChatAdapter` rendering — rides with **Phase
+4.5** (after the Phase 4 chat restyle that already reworks message rows). Keep
+it in the one funnel; do not add a second path.
+
+### 6.9 Persona avatars & the default star (owner-requested 2026-06-24 — its own phase)
+
+A **feature**, not a restyle; the owner wants it as a **separate step** (Phase
+9). The good news: the **custom-avatar plumbing already exists** and is reused,
+not rebuilt.
+
+**What already exists (verified):**
+
+- `StaticAvatarParser.parse(avatarId)` maps preset ids → drawables; the
+  **default/fallback is `R.drawable.assistant`** — the big-star/little-star icon
+  the owner wants as the default everywhere (it's already the `else` branch).
+- A **custom image** avatar already works: `CustomizeAssistantDialog` copies a
+  picked image into app storage at
+  `getExternalFilesDir("images")/avatar_<avatarId>.png`
+  (`CustomizeAssistantDialog.kt:292`), and `ChatAdapter` renders it rounded into
+  the message `icon`, falling back to the preset drawable
+  (`ChatAdapter.kt:417-428`). So **chats already have the avatar "spot" and a
+  copy-to-storage mechanism** — exactly what the owner described.
+
+**The change:**
+
+1. **Default avatar = the star (`R.drawable.assistant`) for all chats and
+   personas** (mostly already the fallback; make it explicit and retire the
+   other preset AI logos as the default set).
+2. **Remove the "Customize assistant" feature** — its Settings tile, the
+   `CustomizeAssistantDialog`, and the avatar bits in `AddChatDialogFragment`.
+   Per-chat assistant avatars are replaced by per-**persona** avatars.
+3. **Per-persona photo:** add an **avatar field to `PersonaObject`** (it has none
+   today — only label/prompt/activation/lorebook fields), persist it in
+   `PersonaPreferences` flat keys, and **pass it through
+   `EditPersonaDialogFragment`** — the rename=delete+recreate invariant means
+   every field must be carried or the avatar is lost on edit (CLAUDE.md). Add an
+   **image picker at the bottom of the persona editor**; on pick, **copy the
+   image into app storage** (reuse the `CustomizeAssistantDialog` copy code,
+   writing into `getExternalFilesDir("images")`), so deleting the gallery
+   original doesn't lose it. Keep it **basic first** — drop it in the circle, no
+   max-size pipeline (a downscale-on-import can come later).
+4. **Chats render their persona's avatar**, replacing the stars, via the
+   existing `icon` path: resolve a chat's avatar from its persona (custom image →
+   show it; else → default star). Reuse the same `avatar_*.png` file + rounded
+   render already in `ChatAdapter`.
+5. **Cleanup:** replacing a persona's image overwrites/deletes the old file;
+   **deleting the persona deletes its avatar file** (extend the
+   `PersonaPreferences` delete path — same discipline as
+   `removeLoreBookFromAllPersonas`).
+
+**Gotcha — handled by Phase 2.6.** Persona id *used to* change on rename
+(`id = Hash.hash(label)`), which would orphan an avatar file keyed by id. The
+**Stable persona IDs** refactor (§11, Phase 2.6 — sequenced *before* this) gives
+each persona a permanent id, so `avatar_<personaId>.png` is safe and never needs
+moving. Build persona avatars on top of that stable id; if for any reason Phase
+2.6 hasn't landed first, key the avatar by a stable token instead.
+
+**User profiles (future — own later phase).** The owner wants, eventually,
+**user profiles** that work like personas but describe **the user** to the AI
+(role-play as an elf one session, a fairy another), each with its own image. The
+app has **no user-image mechanism today**, so this builds directly on the
+persona-avatar infrastructure above (same storage, copy, cleanup, render). Park
+as **Phase 10**; persona avatars (Phase 9) lay the foundation first.
+
+### 6.10 Per-message info: model used + time received (owner-requested 2026-06-24)
+
+The owner wants to know **which model produced each AI answer** (useful for their
+own projects, and the honest way to handle mixed-model chats), **when it was
+received**, and **how many tokens** it used. Delivered as an **Info ("i")
+button**: on AI messages it reuses the slot the Report "!" is vacating; tapping it
+shows a small popup —
+
+- **AI message:** **Model:** ⟨model⟩ · **Received:** ⟨date & time⟩ · **Tokens:**
+  ⟨this response⟩.
+- **User message:** a matching Info button showing **Tokens:** ⟨this message⟩.
+  (The owner only wants model/time on the AI side, but token counts are useful on
+  both — and they answer "how many tokens did I send / did it use".)
+
+(This also resolves the §7.5 model-name question — no always-on label, no
+chat-list model column, the drawer stays clean. Token info lives behind the tap,
+so casual users never see numbers they don't want; API/cost-conscious users get
+them on demand.)
+
+**Storing it is easy and additive — no DB, no migration.** A chat message is a
+`HashMap<String, Any>` serialized to JSON by `ChatPreferences` (keys today:
+`message`, `isBot`, optional `image`/`imageType`). Add keys:
+
+- `model` (AI only) — the exact model string the request used. Capture it in the
+  `generateResponse` → `regularGPTResponse` funnel at generation time; a chat can
+  switch models mid-conversation, so **per-message** capture is what makes this
+  correct.
+- `ts` (AI only) — `System.currentTimeMillis()` at **completion** ("received");
+  set when the response finalizes.
+- `tokens` (AI **and** user) — token count for that message. **Prefer the
+  provider's real `usage`** (an AI turn returns `completion_tokens`, plus
+  `prompt_tokens` for the turn) captured from the response in the funnel. The app
+  currently **ignores the API `usage` field** and only estimates locally
+  (CL100K via ktoken, `ChatActivity.kt:449`), which is approximate for non-OpenAI
+  models — so capturing real `usage` is the accuracy upgrade. Fall back to the
+  local estimate (mark it "~") when the provider doesn't return usage. For a
+  **user** message, store the local token count of that message's text.
+
+Wire these through `putMessage` (`ChatActivity.kt:3071`) — extend it to accept
+`model`/`ts`/`tokens` and write them into the map. The keys are JSON, so they
+persist automatically; **old messages simply lack them** → the popup shows
+"not recorded".
+
+**The chat-total token/cost display already exists — keep it.** Quick Settings
+already shows the chat's total in/out **tokens and estimated cost**
+(`textUsage`/`textCost`, `usageCost`, fed by `calculateCost`/`tokenizeArray` in
+ChatActivity, with per-model price parsing and a graceful "not enough data" for
+unknown endpoints — `QuickSettingsBottomSheetDialogFragment.kt`). It's a working,
+genuinely useful feature, currently the same local CL100K estimate. Keep it
+(restyled in Phase 7); the same "prefer API `usage`" accuracy upgrade applies.
+
+**UI:** the AI-message info icon reuses the former `btn_report` slot (now
+`btn_info`). User messages get a small info icon too (user layout
+`view_assistant_user_message.xml`). Tap → a small Material dialog/sheet: model +
+formatted **local** date-time + tokens on the AI side, tokens on the user side.
+Message text selection and the other buttons are unchanged.
+
+**Where it lands:** the **storage** half (writing `model`/`ts`/`tokens` in
+`putMessage` + capturing API `usage` in the funnel) is small and can land early or
+with **Phase 4**; the **Info buttons** ride the Phase 4 chat-message restyle (they
+edit the same message-action rows). Single generation funnel only — no second
+path.
+
+### 6.11 Images, vision & file attachments (owner-directed 2026-06-24)
+
+The owner wants three distinct media capabilities to work across *any* endpoint
+(GLM today; OpenRouter / NanoGPT / others later; and for other users): **generate
+images**, **show the model an image**, and **give the model a file to read**.
+These are three separate features with different requirements — keep them
+separate. Owner reversed the earlier "cut image gen" lean: **keep `/imagine`**,
+and make image features provider-agnostic.
+
+#### 6.11.1 Image generation (`/imagine`) — keep it; make the generator configurable
+
+What it does today (verified): `/imagine <prompt>` (gated by `imagine_command`,
+`ChatActivity.kt:2860`) calls an OpenAI-style image endpoint —
+`openAIAI.imageURL(ImageCreation(prompt, model = getImageModel(),
+size = ImageSize(getResolution())))` (`:4315`) — and renders the result. **The
+catch:** that call uses the **same endpoint + key as chat** (`openAIAI` is the
+chat client). So on an endpoint that can't make images (e.g. GLM), `/imagine`
+fails.
+
+**The owner's instinct is the correct design** — image generation should route to
+a **different provider than chat**, since the chat model and image model are often
+different services. Plan:
+
+- Add a **dedicated "Image generation" provider setting**: its own endpoint
+  (base URL), API key, model, and size — reuse the existing multi-endpoint
+  profile system (`ApiEndpointPreferences`) so the user just picks an endpoint +
+  model for images. **Default:** fall back to the chat endpoint when unset
+  (back-compat for chat models that *do* generate images).
+- **`/imagine` (and the function-calling `generateImage` tool) route to that
+  image provider**, independent of the current chat model.
+- **The UI clearly names the active image generator** — e.g. "Images: ⟨provider⟩ ·
+  ⟨model⟩" near `/imagine` / in Quick Settings — and shows a friendly message when
+  it's unset ("No image generator configured — set one in Settings") instead of a
+  raw error.
+
+Modern standard this matches: OpenAI-compatible `images/generations` (DALL·E-3,
+`gpt-image-1`); OpenRouter and others expose image models the same way. Keep the
+existing `images()` call; point it at the configured image endpoint and surface
+which one it is.
+
+**Where you choose the generator — per-chat override + profile default (owner
+2026-06-24).** Expose the image-generator choice as a **dropdown in two places**,
+with the per-chat one taking priority:
+
+- In **Quick Settings** (per chat) — **the priority**. If set here, it decides.
+- In the **API endpoint profile** — the **default** for chats using that profile,
+  applied when Quick Settings is left on "use profile default".
+
+Dropdown options (**two**, owner-confirmed 2026-06-24):
+
+- **Default** — the one dedicated **"Default image generator"** you set up in its
+  own menu (endpoint + key + model + size). There is a **single** such generator,
+  not several.
+- **Model** — let the **current chat model** generate the image itself (for
+  multimodal models that can), with no separate provider.
+
+In **Quick Settings** the choice may also be left on **"Use profile default"**, in
+which case the endpoint profile's setting applies.
+
+**Resolution order:** Quick Settings choice → API-profile default → the Default
+image generator. Rationale (owner): on a multi-model provider like OpenRouter you
+might switch from a chat model that can't make images to one that can, so the
+per-chat dropdown lets you grab the right generator on the spot, while the profile
+holds a sensible default for when you don't think about it.
+
+`/imagine` typed in a chat is **always kept** as the manual, explicit path (owner:
+someone may want to use it mid-chat) regardless of the dropdown.
+
+Implementation notes: a global **"Default image generator"** config area — its own
+`ApiEndpointPreferences`-style profile (endpoint/key/model/size); a per-chat
+**`imageGenChoice`** pref in `Preferences` (**add it to the auto-naming copy
+block** — CLAUDE.md, or it vanishes on rename); and an equivalent default field on
+the endpoint profile. `/imagine` and the `generateImage` tool resolve the source
+through the precedence above.
+
+#### 6.11.2 Vision (show the model an image) — wired correctly, but a real bug breaks it off-OpenAI
+
+The attach-image path is implemented the modern way: a picked photo is resized,
+base64-encoded into a data URL (`baseImageString = "data:image/…;base64,…"`,
+`ChatActivity.kt:795`) and sent as multimodal **content parts** —
+`TextPart(prompt)` + `ImagePart(dataUrl)` (`:3167`). That is exactly the
+OpenAI-compatible `image_url` vision format, so the structure is right.
+
+**But there is a concrete bug, and it almost certainly *is* the owner's error:**
+the image-attach request **hard-codes `model = ModelId("gpt-4o")`**
+(`ChatActivity.kt:3171`) instead of using the chat's selected model. So attaching
+an image sends a request for **"gpt-4o"** to whatever endpoint you're on — and on
+GLM / OpenRouter / NanoGPT there is no `gpt-4o`, so it **errors**. This is **bad
+code, not a missing capability**. Plan:
+
+- **Fix:** use the chat's configured model (`preferences.getModel()`) for the
+  vision request, exactly like the normal text path — not a hard-coded `gpt-4o`.
+- **Keep the base64 data-URL approach** (no image hosting; works offline).
+- **Soften failures:** if the chosen model genuinely isn't vision-capable, show a
+  clear message ("This model may not support images — try a vision-capable
+  model/endpoint") instead of a raw stack trace. Optional per-endpoint
+  "supports vision" hint so the attach button can warn up front.
+
+This is a small, high-value fix — it likely turns vision from "broken" to
+"works" for the owner immediately.
+
+#### 6.11.3 Files to read (documents) — new feature
+
+**Not supported today** — attachment is image-only (no document path). The
+universal, model-agnostic approach (works with *any* text model, no special API):
+
+- Let the user attach a **text-ish file** (txt, md, code, CSV, PDF); the app
+  **extracts the text on-device** and injects it as context for that turn
+  (clearly marked: "Attached file ⟨name⟩:" + contents). PDFs need a text-extract
+  step; scanned/image PDFs fall back to vision.
+- Avoids depending on any provider "files API" (inconsistent across
+  OpenAI-compatible endpoints) — works everywhere.
+- Bigger lift → its **own phase**. Cap large files (size / token budget) with a
+  clear message.
+
+#### 6.11.4 Attach UX (intuitive, modern)
+
+One **`+` attach button** (already in the chat mockup) opens a small sheet:
+**Photo** (vision), **File** (document), **Camera**. Keep it obvious which actions
+need which capability; show the configured image generator where `/imagine` lives.
+Attachment and image-gen are first-class — don't bury them.
+
+#### 6.11.5 Letting the AI itself request an image (opt-in, off by default)
+
+The owner asked: if the chat model can't draw, can we let the model **trigger**
+image generation (routing to the Default generator)? Yes — two ways, neither hard:
+
+- **Proper tools / function calling:** declare a `generate_image(prompt)` tool;
+  when the model decides to use it, it returns a structured call, the app runs the
+  configured generator and inserts the image. The app **already has this**
+  (`generateImage`, §7.6) — it just needs an endpoint that supports tool-calling.
+- **Prompt convention (any model):** instruct the model (system prompt) to emit
+  `/imagine <prompt>` on its own line when an image is wanted; the app already
+  detects `/imagine` in input and can detect it in the model's *output* too, then
+  generate. Works without tool-calling support, but is looser.
+
+**The "models go insane" risk is real, and is exactly why this must be opt-in.**
+The owner's beta experience (models drawing unprompted, or *claiming* they made an
+image they didn't) is inherent to handing an LLM a tool. Mitigations baked in:
+
+- **Off by default; a per-chat (and/or per-persona) toggle** "Let the AI create
+  images." Most chats never get the capability, so they can't misfire.
+- **Only a real generation shows an image.** If the model merely *says* "here's
+  your image" without invoking the tool/command, **no image appears** — its text
+  is just text. A clear "Generating image…" state shows when a real one happens.
+- **A tight tool description** ("only when the user explicitly asks for an image")
+  curbs unprompted drawing; quality varies by model — which is the reason the user
+  holds the switch.
+- Manual **`/imagine`** typed by the user (always on, always safe) stays the
+  primary path; AI-triggered generation is the optional extra.
+
+**Where:** rides **Phase 11** as an *optional sub-step* — manual `/imagine` + the
+configurable generator land first; the AI-triggered toggle is added on top once
+that's solid.
 
 ---
 
@@ -525,6 +1105,194 @@ gaps worth checking during Phase 4:
    work, unless one of those is unavoidably the root cause (if so, stop and
    ask the owner before widening scope — per CLAUDE.md and Section 0 rule 3).
 
+### 7.5 Settings & Appearance cleanup (owner-directed 2026-06-24)
+
+Done as part of the **Phase 5** Settings restyle (the chat-layout toggle removal
+is a **Phase 4** item since it changes message rendering). Each item is a
+deliberate removal — scrub the pref **and** the dead code, don't just hide a tile.
+
+**Privacy section — remove entirely.** The Privacy tiles (Send diagnostic data,
+Assign new installation ID, Revoke authorization, plus the Installation/Android
+ID display) drive a TeslaSoft telemetry system that **no longer has a backend**:
+`DeviceInfoProvider` has **no network code** (verified) — nothing is uploaded,
+"delete data from their servers" refers to servers that don't exist, and the copy
+misleads users into thinking data is collected. Worse, the consent/installation-id
+flag historically gated **local** logging, which CLAUDE.md already forbids. Remove
+all the tiles and the ID display; scrub the dead `consent`/installation-id code
+**without** re-coupling the local `Logger` to it. **Keep one honest static line**,
+folded into **About** (which already has a Privacy Policy link): *"Everything is
+stored on your device, encrypted. Your messages go directly to the API endpoint
+you configure — review that provider's privacy policy. This app has no servers and
+collects nothing."*
+
+**Appearance toggles:**
+
+- **"Classic chat layout" — remove (Phase 4).** `getLayout()` switches
+  `ChatAdapter` between a flat "ChatGPT-website" layout (`classic`, the default)
+  and the bubble layout (`bubbles`) — verified `ChatAdapter.kt:113/333`. The
+  redesign **commits to the bubble layout** (the mockup), so the toggle is dead:
+  drop it and the `layout` pref and make the adapter always render the redesigned
+  bubble row. (This is why toggling "does nothing obvious" today — the two paths
+  look similar and only affect re-bound rows.)
+- **"Monochrome background for chat list" — remove.** A niche per-list-background
+  toggle (`getMonochromeBackgroundForChatList`) made redundant by the palette
+  system (light/dark + themes cover it). Drop the tile and the pref.
+- **AMOLED mode — keep, but reframe.** It works (pitch-black dark). Move it out of
+  "experimental" and present it as a **dark-theme option** in the new
+  Appearance/Themes area. Backend: it's already slated to become a `ThemeOverlay`
+  applied *after* the palette overlay (§4.4, Phase 2.5), forcing surfaces to pure
+  black — so "AMOLED" becomes "dark theme, pure-black variant", not a separate
+  experimental switch. Keep `getAmoledPitchBlack()` working throughout.
+
+**Model-name display — decision needed.** Today a **"Hide model names"** toggle
+(`getHideModelNames`) controls whether the **chat list** shows each chat's current
+model under its name. It is a *per-chat* label, so it does **not** handle a chat
+that used several models — it just shows the chat's latest one (the confusion the
+owner noticed). **Resolved (owner 2026-06-24):** drop the chat-list "Hide model
+names" toggle and its label entirely (the redesigned drawer omits model labels,
+§5.1). Model visibility is instead delivered **per AI message via the Info
+button** — model + received time on tap (§6.10) — which handles mixed-model chats
+correctly, since each answer carries its own model.
+
+### 7.6 Experimental features audit (owner-directed 2026-06-24)
+
+Findings on the three "Experimental" toggles, for the Phase 5 settings pass:
+
+**Autosave chats — remove (dead no-op).** The `chats_autosave` pref
+(`Preferences.kt:780`, default off) is **read in exactly one place — the settings
+tile that shows its own state** (`SettingsActivity.kt:690`) — and **consumed by
+nothing else** (verified: no other reader anywhere). Chats save unconditionally
+through `ChatPreferences` regardless, so the toggle does **literally nothing**.
+Remove the tile and the pref.
+
+**Desktop mode — keep, but rename and de-experimentalize.** Despite the name it's
+**not** a desktop UI/layout; it's a **hardware-keyboard** convenience
+(`getDesktopMode`, `Preferences.kt:402`): auto-focus the input when a chat opens,
+**Enter** to send, **Shift+Enter** for a newline, **Shift+Esc** to close — all
+gated on an actual physical keyboard (`isHardKB`, `ChatActivity.kt:1846`). It
+works, and it's genuinely useful for tablet / keyboard / DeX users (the wider
+audience the owner wants to support). **Keep it**, but **rename to something
+accurate** ("Hardware keyboard: Enter to send", or similar) and move it out of
+"experimental" — the current label misleads (the string even warns "not
+recommended on phones").
+
+**Slash commands = just `/imagine` — keep it, make image gen configurable.** The
+"slash commands" toggle is the `imagine_command` pref; the **only** command is
+**`/imagine <prompt>`**, which fires image generation (`ChatActivity.kt:2860`).
+The owner wants to **keep** it. The fix isn't to delete it but to **decouple image
+generation into its own configurable provider** so it works regardless of the
+chat model — see **§6.11.1**. Relabel it plainly ("/imagine command"), not
+"experimental".
+
+**Function calling — trim, don't delete.** The `function_calling` pref exposes two
+tools (`ChatActivity.kt:3699`):
+- `generateImage` — **keep**, routed to the configurable image provider (§6.11.1).
+- `searchAtInternet` — **remove**: it only opens `https://www.google.com/search?q=…`
+  in the **browser** (`ChatActivity.kt:3137`) and feeds **nothing** back to the
+  model. Not real retrieval.
+Keep the function-calling toggle (now just `generateImage`), noting it needs an
+endpoint that supports tool calls.
+
+**Image features overall — keep and make provider-agnostic (not cut).** Full plan
+in **§6.11**: configurable image-generation provider (6.11.1), the vision
+hard-coded-`gpt-4o` bug fix (6.11.2), and on-device file reading (6.11.3). This
+supersedes the earlier "audit to decide keep-or-cut" — the direction is set:
+**keep, fix, and decouple from the chat provider.**
+
+### 7.7 Quick Settings & control-style cleanup (owner-directed 2026-06-24)
+
+For the Quick Settings restyle (Phase 7) and the general settings restyle
+(Phase 5).
+
+**Token counting must be accurate, not a local guess.** Confirmed in §6.10/§6.11:
+the app currently only estimates tokens with the OpenAI CL100K tokenizer
+(`tokenizeArray`), which is wrong for non-OpenAI models and **ignores the real
+`usage` the API returns**. The fix (everywhere counts/cost appear — per-message
+Info popups *and* the Quick Settings total): **prefer the provider's actual
+`usage`**, fall back to the local estimate only when a provider doesn't return it
+(marked "~"). This is a deliberate correctness fix, not optional polish.
+
+**Strip the wall of text in Quick Settings:**
+
+- **Remove the top "you are editing global settings…" tip** (`global_settings_tip`)
+  and the big bottom blob (`note_qs_autosave`: "Usually you don't need to alter
+  temperature, top_p, …"). Users touching these already have an idea; long-press
+  and paragraph explainers aren't needed.
+- **Keep only "Changes are saved automatically"**, moved up as a **small subtitle
+  under the Quick Settings title** — not a paragraph at the bottom.
+- Under **each sampling slider**, a **single short static helper line** (not
+  hidden behind long-press, not animated). The owner's own wording is the basis;
+  final text is the owner's to set. Starting from the owner's examples:
+  - **Temperature** — "Higher means more creative word choices."
+  - **Frequency penalty** — "Reduces likelihood of repeated phrases."
+  - **Presence penalty** — (owner to word) e.g. "Encourages the model to bring up
+    new topics."
+  - **Top P** — (owner to word) e.g. "Another way to control randomness. Change
+    this or temperature, not both."
+  - **Seed** — (owner to word) e.g. "The same seed with the same input gives more
+    repeatable results."
+
+**No top_k confusion.** These params are already the **standard OpenAI names** —
+temperature, top_p, frequency_penalty, presence_penalty, seed — **none renamed**,
+and there is **no top_k** in the app (top_p ≠ top_k; the app exposes top_p, the
+official param). Keep the standard names.
+
+**No moving/expanding descriptions anywhere in settings — labels only.** Drop the
+per-tile description text (`TileFragment` `functionDesc`) that expands/animates;
+show clean labels (plus, where genuinely helpful, one short static sub-line like
+the sampling helpers above). People can learn; clutter and motion are the enemy.
+
+**Control types — "everything is a slider" isn't quite right.** Sliders are
+modern *for numeric ranges* (temperature, penalties). Use the **right** M3
+control per setting: **slider** for a number range, **switch** for on/off,
+**dropdown / segmented buttons** for pick-one (e.g. the image-generator choice,
+auth mode), **row/button** for navigation or an action. The redesign replaces
+tiles with clean M3 rows/cards carrying the appropriate control — not a slider for
+everything.
+
+### 7.8 Onboarding & legal text (owner-directed 2026-06-24)
+
+The first-run flow is currently **multiple long, scary, and frankly
+unprofessional disclaimer pages**. Verified low-lights:
+
+- `before_you_begin` is snarky and defensive — "all your questions about free
+  usage will be rejected with no answer", a "free cheese… mousetrap" lecture, and
+  a P.S. about users who complained. This reads badly; **rewrite entirely.**
+- `terms_desc3` still describes **"Teslasoft ID sync" saving chat history "on our
+  servers"** — dead (Teslasoft removed). The `ds_*` data-safety strings describe
+  analytics/marketing collection that no longer happens. **Remove.**
+
+**Legal reality (not legal advice — owner is not running a service):** disclaimers
+don't gain protection by volume. For a free, open-source, bring-your-own-API app,
+the genuinely useful points are few: (1) **no warranty / provided as-is** — already
+covered by the bundled **Apache-2.0** license; (2) **you supply your own API key
+and the provider may charge you — this app is not an AI provider**; (3) **AI output
+can be wrong.** A clear license plus a few honest sentences is more professional —
+and more effective — than walls of scary text.
+
+**Plan:**
+
+- **Collapse the disclaimer pages into ONE friendly first page.** Keep the
+  existing Welcome → (API key setup) flow, but the legal/disclaimer content
+  becomes a single, warm, plain page. Suggested tone/content:
+  > **Welcome to Phosphor Shines.** A calm, private home for your AI chats.
+  > A few honest things first:
+  > • **This app doesn't include an AI.** You connect your own — an API key from a
+  >   provider you pick (OpenAI, OpenRouter, z.ai/GLM, Groq, and more). Those
+  >   providers may charge you for usage; that's between you and them.
+  > • **Everything stays on your device.** No account, no servers, nothing
+  >   collected.
+  > • **AI can be wrong** — please don't rely on it for anything important.
+  > • **Free & open-source** (Apache-2.0), provided as-is with no warranty.
+- **Move the full Terms + the Apache-2.0 license text into About** (a "Terms &
+  License" entry) — looks professional and keeps the first run light.
+- **Shrink the cost disclaimer** (`cost_explanation`) to a one-line "estimate"
+  note next to the usage card, not a paragraph. (Even with real API `usage`,
+  per-model *prices* can be unknown, so "estimate" stays honest.)
+- Keep the **one** legitimately useful safety line ("AI may produce incorrect or
+  offensive output", from `terms_desc2`) — condensed — and the third-party-build
+  warning, trimmed.
+
 ---
 
 ## 8. Phase plan (each box = one or more small PRs)
@@ -539,18 +1307,71 @@ gaps worth checking during Phase 4:
   sets), the `ui_palette` preference, the Appearance picker UI with swatches,
   `recreate()` flow. Verify AMOLED still correct on every screen family.
 - **Phase 2.5 (optional) — AMOLED-as-overlay cleanup**, screen-by-screen.
+- **Phase 2.6 — Stable persona IDs** (§11): give each persona a permanent id
+  decoupled from its name (the name becomes editable data); migrate by freezing
+  each existing persona's current id (no data rewrite, no orphaned chats); fix
+  every `id == Hash.hash(label)` call site. Logic-only, no UI — unblocks Phases
+  9–10 and kills a latent rename bug. **Do early.**
 - **Phase 3 — Drawer**: Step A (drawer in ChatActivity), then Step B
-  (launch into last chat), then Step C (retire bottom nav) — three PRs.
+  (launch into the chat screen), then Step C (retire bottom nav) — three PRs.
+  Ships the **flat** chat list (folders come later); pinning is inherited free.
+  Bulk chat select + delete (§5.6) lands here (its "add selected to folder"
+  extension waits for Phase 3.5).
+- **Phase 3.5 — Chat folders** (§5.4): `folders` index + per-chat `folder`
+  field in `ChatPreferences`; top-level drawer ordering (folders → pinned →
+  rest); folder drill-in view (`<<` + title); folder create / rename / delete;
+  "Move to folder" on chats. Ships only after the flat drawer (Phase 3) is
+  merged. **Resolve the §5.4 OPEN items with the owner before coding.**
+- **Phase 3.6 — Chat export & Export All** (§5.5): relocate per-chat export into
+  the drawer long-press menu; add the Settings "Export All Chats" button; add
+  the Download-default / last-used location picker; friendlier filenames.
+  **Resolve the §5.5 Export-All-shape OPEN item with the owner first.**
 - **Phase 4 — Chat restyle**: input pill, bubbles, top bar (preserving the
   `btn_debug_log` shortcut). Single UI now — no `AssistantFragment` to mirror.
   **Must also resolve the standing intermittent top-bar/header-vanishing bug —
   see Section 7.4 (it is a Phase 4 acceptance criterion, not a separate PR).**
-- **Phase 5 — Settings & Characters restyle** (tiles → rows/cards).
+  Also moves **Listen to the top** of AI messages, **turns the Report button
+  into an Info button** (model + received-time popup, §6.10 — incl. writing
+  `model`/`ts` per AI message in `putMessage`), and **removes the
+  Classic/bubbles layout toggle**, committing to the bubble layout (§7.5).
+- **Phase 4.5 — Reasoning ("thinking") display** (§6.8): read the reasoning
+  field in the generation funnel; collapsible thinking section at the top of AI
+  messages; global show/hide toggle. Confirm GLM's field/param and the
+  toggle-vs-always-on decision first.
+- **Phase 5 — Settings & Characters restyle** (tiles → rows/cards). Also the
+  **Settings/Appearance cleanup** (§7.5): remove the Privacy section (keep one
+  honest note in About), remove the monochrome-background toggle, and reframe
+  AMOLED as a dark-theme option rather than an "experimental" switch. Also the
+  **Experimental-features audit** (§7.6): remove the dead Autosave toggle; decide
+  `/imagine` + function calling alongside the image audit.
 - **Phase 6 — List screens & item layouts.**
-- **Phase 7 — Dialogs & bottom sheets.**
+- **Phase 7 — Dialogs & bottom sheets.** Includes the **Quick Settings cleanup**
+  (§7.7): strip the intro/advice walls of text, "changes saved automatically" as a
+  subtitle, one short static helper under each sampling slider, accurate tokens,
+  right control per setting.
 - **Phase 8 — Onboarding, About, misc + cleanup** (dead RemoveAds remnants
   with owner approval; motion polish; this doc + CLAUDE.md updated to final
-  state).
+  state). Includes the **onboarding & legal rewrite** (§7.8): collapse the scary
+  multi-page disclaimers into one friendly first page, move full Terms + Apache-2.0
+  license into About, drop the dead Teslasoft/telemetry text.
+- **Phase 9 — Persona avatars** (§6.9): default star everywhere; remove the
+  Customize-assistant feature; per-persona image picker + copy-to-storage +
+  cleanup; chats render their persona's avatar. Largely independent (it extends
+  the existing avatar plumbing) but touches the persona editor and Settings —
+  best done **after** those screens' restyles (Phases 5–7) to avoid editing them
+  twice, unless deliberately pulled earlier.
+- **Phase 10 — User profiles (future)** (§6.9): persona-like profiles describing
+  the *user*, each with its own image; reuses the Phase 9 avatar infrastructure.
+  Spec further with the owner when reached.
+- **Phase 11 — Image generation as a configurable provider** (§6.11.1): a
+  dedicated image endpoint/model/key (separate from chat), `/imagine` +
+  `generateImage` route to it, UI names the active generator, friendly errors.
+  Keeps `/imagine`. Removes the useless `searchAtInternet` tool (§7.6).
+- **Phase 12 — File attachments** (§6.11.3): attach text-ish files (txt/md/code/
+  CSV/PDF), extract text on-device, inject as context; attach sheet gains "File".
+  (The **vision `gpt-4o` hard-code bug fix** + graceful errors, §6.11.2, is small
+  and rides Phase 4 — or can be a standalone quick fix sooner, since it likely
+  makes image-attach work immediately.)
 
 ---
 
@@ -579,6 +1400,12 @@ shortcut; see note below), `keyboard_frame` (ConstraintLayout), `root`
 `expandable_window_root` (CoordinatorLayout, keeps
 `transitionName="chat_expand"`), `attach_bg` (BlurView).
 
+**`btn_export` relocation (2026-06-24):** the owner's revised chat top bar
+(§5.2 Step A) is `<<` · title · bug · gear and **does not include the export
+icon**. `btn_export` is still in this contract because Kotlin casts it; do not
+delete the id or its handler until its function has a confirmed new home
+(open item — ask the owner). Hide the *view* if needed, keep the *binding*.
+
 **`btn_debug_log` is a real feature, not decoration — do not drop it when
 restyling the top bar.** It is a bug-icon `ImageButton` in the chat action bar
 that jumps straight to the Event log (`LogsActivity`, `type=event`). It is
@@ -604,6 +1431,15 @@ each contain: `ui` (ConstraintLayout), `icon` (ImageView), `message`
 The adapter does **no null checks** on the rest — a missing id crashes on
 first bind. If the redesign hides a button, hide it via
 `visibility="gone"`, never by deleting the view.
+
+**Phase 4 change — `btn_report` becomes `btn_info`** (owner decision 2026-06-24,
+§6.7 / §6.10): the report action has no backend, so **repurpose its slot** as an
+**Info** button (info "i" icon, AI-only, shows a model + received-time popup)
+rather than deleting it. Rename `btn_report` → `btn_info` across all three
+layouts, swap the icon, replace the report handler (drop the
+`ReportAIContentBottomSheet` wiring) with the info popup, and keep the `isBot`
+gating. Also `btn_speak` (Listen) moves to the **top** of the assistant layout —
+same id, repositioned.
 
 ### 9.3 ~~AssistantFragment contract~~ — REMOVED (June 2026)
 
@@ -677,7 +1513,13 @@ errors here are silent or crash at the worst moment (mid-conversation).
 12. **`Theme.Transparent` is load-bearing** for ChatActivity/SettingsActivity
     (translucent window + shared-element transitions + the
     `expandable_window_background_24` rounded sheet look). Restyle the
-    drawable; keep the theme's translucency flags.
+    drawable; keep the theme's translucency flags. **Owner update (2026-06-24):
+    Settings and its sub-screens must NOT float as a rounded card — they become
+    full-screen menus (§6.4). That means dropping the
+    `expandable_window_background*` floating look (and likely `Theme.Transparent`)
+    *for Settings*, while KEEPING it for ChatActivity, where the chat-open
+    shared-element transition needs it. Handle the two cases separately; do not
+    strip ChatActivity's translucency.**
 13. **Voice diagnostics**: if a UI change adds/removes a voice-loop exit
     path or mic affordance, log it via `ChatActivity.logVoiceEvent` (CLAUDE.md).
 14. **Exported activities**: the onboarding chain (`WelcomeActivity` →
@@ -714,3 +1556,79 @@ errors here are silent or crash at the worst moment (mid-conversation).
    the redesigned screen.
 7. No dependency changes other than those named in this plan.
 8. This document's phase list updated if a phase completed.
+
+---
+
+## 11. Foundational fix — stable persona IDs (owner-approved 2026-06-24, do early)
+
+A small data-model refactor that removes a latent bug and unblocks the persona
+features. It is **logic-only** (no UI) and should be its own PR — never folded
+into a UI restyle (Section 0 rule 3). Scheduled as **Phase 2.6**.
+
+### 11.1 The problem (verified in code)
+
+A persona's identity is **derived from its name**:
+`PersonaPreferences.setPersona` computes `id = Hash.hash(persona.label)`
+(`PersonaPreferences.kt:67`) and stores its fields under `<id>_<field>` flat
+keys; `editPersona` is literally `deletePersona(hash(oldLabel)) +
+setPersona(...)` (`:130`). So **renaming a persona produces a brand-new id**.
+Chats reference a persona by `persona_id` (`Preferences.kt:1303`), which is that
+same hash. Consequences:
+
+- Renaming a persona **orphans every chat already linked to it** — the chat's
+  stored `persona_id` no longer resolves. This is a **latent bug today**, not
+  just a future-avatar concern.
+- Any new per-persona artifact keyed by id (the Phase 9 avatar file) would
+  orphan on rename too.
+
+The fragile "edit dialog must pass every field through" rule (CLAUDE.md) and the
+chat "auto-naming copy block" both exist only to paper over this name-as-key
+design. `PersonaObject` has **no `id` field** — the id is implicit in the prefs
+key and assumed `== Hash.hash(label)` everywhere.
+
+### 11.2 The fix: stable id, name becomes a plain field
+
+Decouple identity from name. A persona gets a **permanent id** assigned once; the
+name is just editable data. Then a rename touches **one field** and every
+reference (chats, avatar, lorebook links) keeps working unchanged.
+
+- Add an **`id` field to `PersonaObject`**.
+- `getPersona(id)` populates `persona.id = id` (the key prefix it read from).
+- `setPersona` keys by **`persona.id`**, not `Hash.hash(label)`.
+- **New persona:** assign `id = a fresh random token` (e.g. UUID), not a hash of
+  the name. (This also makes duplicate display names harmless — different ids.)
+- **Edit/rename:** update **in place** under the same id — no delete+recreate.
+  `editPersona` becomes "overwrite the same id's fields".
+- Fix **every call site that assumes `id == Hash.hash(label)`**: grep `Hash.hash`
+  near persona code, `getPersona(Hash.hash(...))`, `editPersona`, and check
+  `PersonasListActivity`, `EditPersonaDialogFragment`, `ChatActivity`'s persona
+  application, and the Quick Settings persona selector. Use the stored id.
+
+### 11.3 The migration is nearly free (why it's low-risk now)
+
+**Existing personas keep their current id as the frozen id.** Their prefs keys
+are already prefixed with `Hash.hash(currentLabel)`, and existing chats'
+`persona_id` already equals that same value. So at migration we simply **stop
+recomputing the id** and **freeze whatever prefix a persona already has**:
+
+- `getPersonasList`/`getPersona` already read the id from the key prefix — keep
+  doing that; just surface it on `PersonaObject.id`.
+- **No data rewrite, no re-pointing of existing chats, no orphaning at upgrade.**
+  Existing links stay intact; only *future* renames become safe.
+- New personas created after this change get UUID ids.
+
+Owner context: currently the only user, with essentially one persona, so even a
+worst case (an old chat falling back to "no persona → default star") would be
+harmless — but the freeze approach means even that won't happen.
+
+When this lands, **update CLAUDE.md**: the "renaming a persona changes its id /
+edit = delete + recreate" invariant is replaced by "personas have a stable id;
+rename edits the name field in place."
+
+### 11.4 Scope boundary — chats have the same flaw, but later
+
+`chatId = Hash.hash(chatName)` is the identical design, with a **much larger
+blast radius** (per-chat prefs files `settings_<chatId>`, message store
+`chat_<chatId>`, the auto-naming copy block). **Out of scope for Phase 2.6** —
+note it as a separate, bigger future decision. Do personas first; revisit chats
+once the persona fix has proven the pattern.
