@@ -20,6 +20,7 @@ import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
+import android.view.View
 import android.view.WindowInsets
 import android.widget.ImageButton
 import android.widget.ScrollView
@@ -28,11 +29,9 @@ import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
 import androidx.fragment.app.FragmentActivity
-import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.textfield.TextInputEditText
-import com.google.android.material.textfield.TextInputLayout
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.SystemPromptsPreferences
@@ -52,11 +51,11 @@ class SystemPromptEditorActivity : FragmentActivity() {
     private var actionBar: ConstraintLayout? = null
     private var btnBack: ImageButton? = null
     private var activityTitle: TextView? = null
-    private var titleInputLayout: TextInputLayout? = null
+    private var titleFieldError: TextView? = null
     private var titleInput: TextInputEditText? = null
     private var bodyInput: TextInputEditText? = null
-    private var btnSave: MaterialButton? = null
-    private var btnDelete: MaterialButton? = null
+    private var btnSave: ImageButton? = null
+    private var btnDelete: ImageButton? = null
 
     private var systemPromptsPreferences: SystemPromptsPreferences? = null
     private var preferences: Preferences? = null
@@ -72,7 +71,7 @@ class SystemPromptEditorActivity : FragmentActivity() {
         actionBar = findViewById(R.id.action_bar)
         btnBack = findViewById(R.id.btn_back)
         activityTitle = findViewById(R.id.activity_title)
-        titleInputLayout = findViewById(R.id.title_input_layout)
+        titleFieldError = findViewById(R.id.text_field_title_error)
         titleInput = findViewById(R.id.title_input)
         bodyInput = findViewById(R.id.body_input)
         btnSave = findViewById(R.id.btn_save)
@@ -90,10 +89,10 @@ class SystemPromptEditorActivity : FragmentActivity() {
             activityTitle?.text = getString(R.string.title_edit_system_prompt)
             titleInput?.setText(existing.title)
             bodyInput?.setText(existing.body)
-            btnDelete?.visibility = android.view.View.VISIBLE
+            btnDelete?.visibility = View.VISIBLE
         } else {
             activityTitle?.text = getString(R.string.title_new_system_prompt)
-            btnDelete?.visibility = android.view.View.GONE
+            btnDelete?.visibility = View.GONE
             // A stale id (its prompt was deleted elsewhere) falls back to "add".
             promptId = ""
         }
@@ -102,7 +101,7 @@ class SystemPromptEditorActivity : FragmentActivity() {
         btnSave?.setOnClickListener { save() }
         btnDelete?.setOnClickListener { confirmDelete() }
 
-        titleInput?.setOnFocusChangeListener { _, _ -> titleInputLayout?.error = null }
+        titleInput?.setOnFocusChangeListener { _, _ -> titleFieldError?.visibility = View.GONE }
     }
 
     private fun save() {
@@ -111,7 +110,8 @@ class SystemPromptEditorActivity : FragmentActivity() {
 
         if (title.isEmpty()) {
             // Persistent, inline field error — never a toast (owner rule).
-            titleInputLayout?.error = getString(R.string.system_prompt_needs_title)
+            titleFieldError?.text = getString(R.string.system_prompt_needs_title)
+            titleFieldError?.visibility = View.VISIBLE
             return
         }
 
@@ -152,7 +152,10 @@ class SystemPromptEditorActivity : FragmentActivity() {
                 window.statusBarColor = ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme)
             }
             actionBar?.setBackgroundColor(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
-            btnBack?.backgroundTintList = ColorStateList.valueOf(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
+            val amoledTint = ColorStateList.valueOf(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
+            btnBack?.backgroundTintList = amoledTint
+            btnSave?.backgroundTintList = amoledTint
+            btnDelete?.backgroundTintList = amoledTint
         } else {
             window.setBackgroundDrawable(SurfaceColors.SURFACE_0.getColor(this).toDrawable())
             if (Build.VERSION.SDK_INT <= 34) {
@@ -160,7 +163,10 @@ class SystemPromptEditorActivity : FragmentActivity() {
                 window.statusBarColor = SurfaceColors.SURFACE_4.getColor(this)
             }
             actionBar?.setBackgroundColor(SurfaceColors.SURFACE_4.getColor(this))
-            btnBack?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(this))
+            val barTint = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(this))
+            btnBack?.backgroundTintList = barTint
+            btnSave?.backgroundTintList = barTint
+            btnDelete?.backgroundTintList = barTint
         }
     }
 
