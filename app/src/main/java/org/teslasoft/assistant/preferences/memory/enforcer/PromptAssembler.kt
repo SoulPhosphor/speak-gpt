@@ -42,39 +42,14 @@ object PromptAssembler {
         "(told = they said it; observed = seen over time; guessed = tentative — hold guesses lightly, let them go gracefully if wrong)"
 
     /**
-     * Budget rule: when over budget, cut retrieved memories from the
-     * lowest-scored up — never protection handling. Lore notes are
-     * user-authored and win, so their size is charged against the budget
-     * FIRST and memories absorb the entire squeeze.
-     * Returns (kept, cut) preserving score-descending order.
+     * The atomic budget cost of one memory: title + content + protection
+     * handling + never-assume lines. A memory that does not fit the budget
+     * is skipped WHOLE by the enforcer's backfill walk — handling is never
+     * sheared off a protected memory, and no memory is ever truncated.
      */
-    fun applyBudget(
-        memories: List<AssembledMemory>,
-        loreChars: Int,
-        charBudget: Int
-    ): Pair<List<AssembledMemory>, List<AssembledMemory>> {
-        val available = (charBudget - loreChars).coerceAtLeast(0)
-        val kept = ArrayList<AssembledMemory>()
-        val cut = ArrayList<AssembledMemory>()
-        var used = 0
-        // Walk from the highest-scored down; once the budget is exhausted,
-        // everything after it is cut (the lowest-scored go first overall).
-        for (m in memories.sortedByDescending { it.score }) {
-            val cost = m.title.length + m.content.length +
-                m.handling.sumOf { it.length } + m.neverAssume.sumOf { it.length }
-            if (kept.isNotEmpty() && used + cost > available) {
-                cut.add(m)
-            } else if (kept.isEmpty() && cost > available) {
-                // Even the best memory doesn't fit — inject nothing rather
-                // than a truncated memory (handling must never be sheared off).
-                cut.add(m)
-            } else {
-                kept.add(m)
-                used += cost
-            }
-        }
-        return kept to cut
-    }
+    fun memoryCost(m: AssembledMemory): Int =
+        m.title.length + m.content.length +
+            m.handling.sumOf { it.length } + m.neverAssume.sumOf { it.length }
 
     /** The single memory-line renderer. There is deliberately no other place
      *  that turns an [AssembledMemory] into prompt text: a protected memory

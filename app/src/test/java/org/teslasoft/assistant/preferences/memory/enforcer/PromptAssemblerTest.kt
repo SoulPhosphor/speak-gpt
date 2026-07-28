@@ -191,26 +191,43 @@ class PromptAssemblerTest {
     }
 
     @Test
-    fun budgetCutsLowestScoredFirstAndLoreChargesFirst() {
-        val big = "x".repeat(100)
-        val memories = listOf(
-            mem("low", score = 0.1f, content = big),
-            mem("high", score = 0.9f, content = big),
-            mem("mid", score = 0.5f, content = big)
+    fun memoryCostIsAtomicIncludingProtectionHandling() {
+        // The budget cost carries the handling and never-assume lines with
+        // the memory, so the enforcer's walk can only ever cut a protected
+        // memory WHOLE — handling can never be sheared off separately.
+        val protected1 = mem("p", score = 0.9f, handling = listOf("h".repeat(300)))
+        assertTrue(PromptAssembler.memoryCost(protected1) >= 300)
+        val plain = mem("q", score = 0.9f)
+        assertEquals(
+            plain.title.length + plain.content.length,
+            PromptAssembler.memoryCost(plain)
         )
-        // Budget fits two memories after lore's share.
-        val (kept, cut) = PromptAssembler.applyBudget(memories, loreChars = 50, charBudget = 270)
-        assertEquals(listOf("high", "mid"), kept.map { it.memoryId })
-        assertEquals(listOf("low"), cut.map { it.memoryId })
     }
 
     @Test
-    fun budgetNeverShearsHandlingOffAProtectedMemory() {
-        val protected1 = mem("p", score = 0.9f, handling = listOf("h".repeat(300)))
-        // The memory + its handling exceed the budget together: the whole
-        // memory is cut, never the handling alone.
-        val (kept, cut) = PromptAssembler.applyBudget(listOf(protected1), loreChars = 0, charBudget = 100)
-        assertTrue(kept.isEmpty())
-        assertEquals(listOf("p"), cut.map { it.memoryId })
+    fun budgetWalkSkipsOversizedMemoriesAndBackfillsSmallerOnes() {
+        // The production budget admission: ranked walk, atomic cost, an
+        // oversized memory is skipped whole and its slot backfills from
+        // lower-ranked candidates (counterplan §10 A.2).
+        val available = 120
+        var used = 0
+        val ranked = listOf(
+            mem("big-high", score = 0.9f, content = "x".repeat(200)),
+            mem("fits-mid", score = 0.5f, content = "y".repeat(80)),
+            mem("fits-low", score = 0.3f, content = "z".repeat(20))
+        )
+        val cut = ArrayList<String>()
+        val selection = RetrievalBackfill.select(ranked, topK = 2) { m ->
+            val cost = PromptAssembler.memoryCost(m)
+            if (used + cost > available) {
+                cut.add(m.memoryId)
+                false
+            } else {
+                used += cost
+                true
+            }
+        }
+        assertEquals(listOf("fits-mid", "fits-low"), selection.kept.map { it.memoryId })
+        assertEquals(listOf("big-high"), cut)
     }
 }

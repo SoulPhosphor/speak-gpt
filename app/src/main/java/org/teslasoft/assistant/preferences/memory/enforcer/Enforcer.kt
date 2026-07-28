@@ -204,8 +204,9 @@ class Enforcer private constructor(private val appContext: Context) {
         // store query. The per-memory always-load flag is retired
         // (owner_approved_rules §10): nothing is force-injected every turn.
         // Over-fetch (counterplan §10 A.2): a ranked candidate POOL, not a
-        // final list — the cooldown/lore-overlap removals below backfill from
-        // it, so a filtered candidate does not silently shrink the prompt.
+        // final list — the cooldown, lore-overlap, and character-budget
+        // removals below backfill from it, so a filtered candidate does not
+        // silently shrink the prompt.
         val query = listOf(input.userMessage, input.recentContext)
             .filter { it.isNotBlank() }.joinToString("\n")
         if (!librarian.hasUsableModel()) notes.add("no embedding model — keyword retrieval")
@@ -278,32 +279,8 @@ class Enforcer private constructor(private val appContext: Context) {
             }?.first
         }
 
-        // Consume the ranked pool until top-K survive, relevance is
-        // exhausted, or the scan cap is reached. Cooldown is checked first
-        // (cheap map lookup), then the lore near-duplicate check (may embed).
-        val suppressed = ArrayList<Pair<AssembledMemory, LoreNote>>()
-        val cooled = ArrayList<Pair<AssembledMemory, Long>>()
-        val turnNow = turn
-        val selection = RetrievalBackfill.select(pool, policy.topK, scanCap) { mem ->
-            val last = lastTurns[mem.memoryId]
-            if (turnNow != null && last != null && turnNow - last < COOLDOWN_TURNS) {
-                cooled.add(mem to (turnNow - last))
-                false
-            } else {
-                val dup = loreDupOf(mem)
-                if (dup != null) {
-                    suppressed.add(mem to dup)
-                    false
-                } else true
-            }
-        }
-        val retrieved = selection.kept
-        if (selection.scanCapReached) {
-            notes.add(
-                "candidate scan cap ($scanCap) reached before ${policy.topK} memories survived filtering"
-            )
-        }
-        if (suppressed.isNotEmpty()) flagContradictions(store, suppressed)
+        // The memory selection walk itself runs AFTER the direct card budget
+        // below, because the character budget participates in it.
 
         // The active cards this turn (3.6d): the resolved world, campaign,
         // user character, and the campaign's linked party members. Fetched
@@ -404,14 +381,57 @@ class Enforcer private constructor(private val appContext: Context) {
             }
         }
 
-        val (kept, cut) = PromptAssembler.applyBudget(retrieved, loreChars + directChars, policy.charBudget)
-
-        val keptMemoryChars = kept.sumOf {
-            it.title.length + it.content.length +
-                it.handling.sumOf { h -> h.length } + it.neverAssume.sumOf { n -> n.length }
+        // Memory selection with backfill (counterplan §10 A.2): consume the
+        // ranked pool until top-K memories survive cooldown, lore overlap,
+        // AND the character budget — a removal of ANY of the three kinds
+        // frees its slot for the next ranked candidate — or relevance is
+        // exhausted, or the scan cap is reached. Filter order per candidate:
+        // cooldown first (cheap map lookup), then the lore near-duplicate
+        // check (may embed), then the budget fit, so an oversized memory is
+        // skipped in favour of smaller lower-ranked ones instead of ending
+        // the list (never truncated — atomic or absent).
+        val suppressed = ArrayList<Pair<AssembledMemory, LoreNote>>()
+        val cooled = ArrayList<Pair<AssembledMemory, Long>>()
+        val budgetCut = ArrayList<AssembledMemory>()
+        val memoryAvailable = (policy.charBudget - loreChars - directChars).coerceAtLeast(0)
+        var memoryChars = 0
+        val turnNow = turn
+        val selection = if (memoryAvailable == 0 && pool.isNotEmpty()) {
+            notes.add("no character budget remains for memories after lore and card entries")
+            RetrievalBackfill.Selection(emptyList<AssembledMemory>(), 0, false)
+        } else {
+            RetrievalBackfill.select(pool, policy.topK, scanCap) { mem ->
+                val last = lastTurns[mem.memoryId]
+                if (turnNow != null && last != null && turnNow - last < COOLDOWN_TURNS) {
+                    cooled.add(mem to (turnNow - last))
+                    false
+                } else {
+                    val dup = loreDupOf(mem)
+                    if (dup != null) {
+                        suppressed.add(mem to dup)
+                        false
+                    } else {
+                        val cost = PromptAssembler.memoryCost(mem)
+                        if (memoryChars + cost > memoryAvailable) {
+                            budgetCut.add(mem)
+                            false
+                        } else {
+                            memoryChars += cost
+                            true
+                        }
+                    }
+                }
+            }
         }
-        var pullRemaining =
-            (policy.charBudget - loreChars - directChars - keptMemoryChars).coerceAtLeast(0)
+        val kept = selection.kept
+        if (selection.scanCapReached) {
+            notes.add(
+                "candidate scan cap ($scanCap) reached before ${policy.topK} memories survived filtering"
+            )
+        }
+        if (suppressed.isNotEmpty()) flagContradictions(store, suppressed)
+
+        var pullRemaining = (memoryAvailable - memoryChars).coerceAtLeast(0)
         val pullKept = ArrayList<Pair<AssembledCardEntry, String>>()
         for (f in cardPull) {
             val a = assembleCard(f)
@@ -501,7 +521,7 @@ class Enforcer private constructor(private val appContext: Context) {
                 } + cardsFinal.map { (a, reason) ->
                     AssemblyLog.Line("card: ${a.name}", "§${a.sectionLabel} — fired by $reason")
                 },
-                cut = cut.map { AssemblyLog.Line(it.title, "over budget (score %.3f)".format(it.score)) } +
+                cut = budgetCut.map { AssemblyLog.Line(it.title, "over budget (score %.3f)".format(it.score)) } +
                     suppressed.map { (m, l) -> AssemblyLog.Line(m.title, "near-duplicate of lore \"${l.label}\" — flagged") } +
                     cooled.map { (m, ago) ->
                         AssemblyLog.Line(m.title, "cooldown — injected $ago turn(s) ago, refreshes after $COOLDOWN_TURNS")

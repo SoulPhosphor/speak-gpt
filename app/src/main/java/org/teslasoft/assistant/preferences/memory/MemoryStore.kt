@@ -4595,13 +4595,23 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         db.beginTransaction()
         try {
             val prior = getMemory(m.memoryId)
-            val updated = m.copy(updatedAt = nowIso())
+            // §5.5: the condensed embedding_text is derived, model/import-
+            // provided data — no editor exposes it as a user field. When any
+            // source text field changes it is stale by definition and is
+            // cleared, so a corrected memory can never stay discoverable by
+            // its old condensed wording.
+            val sourceTextChanged = prior == null ||
+                prior.title != m.title || prior.content != m.content ||
+                prior.tagsJson != m.tagsJson
+            val updated = m.copy(
+                updatedAt = nowIso(),
+                embeddingText = if (sourceTextChanged) null else m.embeddingText
+            )
             db.update("memories", memoryValues(updated), "memory_id = ?", arrayOf(m.memoryId))
             writeMemoryLinks(db, updated)
             logChange(db, m.memoryId, "user", "edited", note, prior?.let { snapshotMemoryJson(it) })
-            val textChanged = prior == null ||
-                prior.content != m.content || prior.title != m.title ||
-                (prior.embeddingText ?: "") != (m.embeddingText ?: "")
+            val textChanged = sourceTextChanged ||
+                (prior?.embeddingText ?: "") != (updated.embeddingText ?: "")
             if (textChanged) db.delete("embeddings", "memory_id = ?", arrayOf(m.memoryId))
             // §10: an edit resets the freshness clock — the corrected version
             // re-injects on its next relevance instead of waiting out the old

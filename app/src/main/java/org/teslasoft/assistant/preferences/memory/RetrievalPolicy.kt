@@ -35,9 +35,13 @@ object RetrievalPolicy {
 
     const val DEFAULT_TOP_K = 8
     const val MIN_TOP_K = 1
-    // Above 64 a top-K cannot change what reaches the prompt: the default
-    // 6,000-character budget saturates far earlier (64 entries would need
-    // <95 chars each), so larger stored values are treated as data errors.
+    // A data-sanity rail, not a tuning claim: the app has never written a
+    // top_k other than the default 8 and no UI edits it, so a stored value
+    // beyond 64 is corrupt or hand-imported data. The cap also bounds
+    // per-turn filter work (the enforcer examines at most top-K + 64
+    // candidates). Under the default 6,000-character budget the budget
+    // saturates before 64 entries anyway; under a raised budget this cap
+    // itself becomes the limiter, which is the intended rail.
     const val MAX_TOP_K = 64
 
     // Below ~500 chars not even one typical memory plus the provenance
