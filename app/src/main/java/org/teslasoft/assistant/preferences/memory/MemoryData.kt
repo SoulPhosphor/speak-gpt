@@ -629,7 +629,10 @@ data class RetrievableMemory(
     // Stage 3: the Type drives the render (Instruction memories become handling
     // rules) and the tags feed soft ranking hints (§6 — never gatekeepers).
     val kind: String = "fact",
-    val tagsJson: String = "[]"
+    val tagsJson: String = "[]",
+    // Phase A (counterplan §5.5): freshness ranks by the last edit, not only
+    // creation — a corrected memory must outrank its obsolete peers.
+    val updatedAt: String? = null
 ) {
     fun textToEmbed(): String = embeddingText?.takeIf { it.isNotBlank() } ?: content
 }

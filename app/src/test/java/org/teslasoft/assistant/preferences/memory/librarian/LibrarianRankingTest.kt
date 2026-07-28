@@ -29,11 +29,22 @@ import org.teslasoft.assistant.preferences.memory.RetrievableMemory
  */
 class LibrarianRankingTest {
 
-    private fun mem(id: String, importance: Int = 3, confidence: String? = "certain", scope: String = "global") =
+    private fun mem(
+        id: String,
+        importance: Int = 3,
+        confidence: String? = "certain",
+        scope: String = "global",
+        title: String = id,
+        content: String = id,
+        embeddingText: String? = null,
+        createdAt: String = "2026-07-01T00:00:00Z",
+        updatedAt: String? = null
+    ) =
         RetrievableMemory(
-            memoryId = id, scope = scope, title = id, content = id,
-            embeddingText = null, importance = importance,
-            createdAt = "2026-07-01T00:00:00Z", worldId = null, provenanceConfidence = confidence
+            memoryId = id, scope = scope, title = title, content = content,
+            embeddingText = embeddingText, importance = importance,
+            createdAt = createdAt, worldId = null, provenanceConfidence = confidence,
+            updatedAt = updatedAt
         )
 
     private fun cand(
@@ -165,6 +176,127 @@ class LibrarianRankingTest {
         val inProject = Librarian.retrievalBoost("project", true, emptyList(), "")
         val notInProject = Librarian.retrievalBoost("project", false, emptyList(), "")
         assertTrue(inProject > notInProject)
+    }
+
+    /* -------- Phase A (counterplan §5.5): floor before top-K -------- */
+
+    @Test
+    fun relevanceFloorRunsBeforeTopK() {
+        // An irrelevant-but-important memory must not consume a top-K slot
+        // while relevant candidates wait below it. Old take-then-filter
+        // behavior returned only one result here; floor-first returns both
+        // relevant ones.
+        val query = floatArrayOf(1f, 0f, 0f)
+        val ranked = Librarian.rank(
+            query,
+            listOf(
+                // cosine ≈ 0.25 — below the 0.3 floor, but importance 5 and
+                // full recency give it the highest blended score.
+                cand(mem("irrelevant-important", importance = 5), floatArrayOf(0.25f, 0.968f, 0f), recency = 1.0),
+                cand(mem("relevant-strong", importance = 1), floatArrayOf(0.9f, 0.436f, 0f), recency = 0.0),
+                cand(mem("relevant-weak", importance = 1), floatArrayOf(0.35f, 0.937f, 0f), recency = 0.0)
+            ),
+            weights, topK = 2, minSimilarity = 0.3f
+        )
+        assertEquals(listOf("relevant-strong", "relevant-weak"), ranked.map { it.memory.memoryId })
+    }
+
+    /* -------- Phase A: memory-doc-v2 lexical ranking -------- */
+
+    private fun lex(
+        memory: RetrievableMemory,
+        tags: List<String> = emptyList(),
+        recency: Double = 0.5,
+        boost: Double = 0.0
+    ) = Librarian.LexicalCandidate(memory, tags, recency, boost)
+
+    @Test
+    fun lexicalFindsTagOnlyMemory() {
+        val hit = mem("tagged", content = "favorite flowers need daily water")
+        val ranked = Librarian.rankLexical(
+            "tell me about the garden",
+            listOf(lex(hit, tags = listOf("garden"))),
+            weights, topK = 5
+        )
+        assertEquals(listOf("tagged"), ranked.map { it.memory.memoryId })
+    }
+
+    @Test
+    fun lexicalMatchesWholeTokensOnly() {
+        val ranked = Librarian.rankLexical(
+            "the cat ran off",
+            listOf(lex(mem("catalog", content = "catalog of items stored inside"))),
+            weights, topK = 5
+        )
+        assertTrue(ranked.isEmpty())
+    }
+
+    @Test
+    fun lexicalSearchesCondensedTextToo() {
+        val ranked = Librarian.rankLexical(
+            "what about the lighthouse",
+            listOf(lex(mem("condensed", content = "a long story", embeddingText = "the old lighthouse trip"))),
+            weights, topK = 5
+        )
+        assertEquals(1, ranked.size)
+    }
+
+    @Test
+    fun lexicalTitleHitOutranksEqualBodyHit() {
+        val titled = mem("titled", title = "garden", content = "many plants grow here")
+        val body = mem("body", title = "plot notes", content = "the garden layout")
+        val ranked = Librarian.rankLexical(
+            "garden plans", listOf(lex(body), lex(titled)), weights, topK = 5
+        )
+        assertEquals("titled", ranked.first().memory.memoryId)
+        assertTrue(ranked[0].score > ranked[1].score)
+    }
+
+    @Test
+    fun lexicalAppliesTheSameRankingContract() {
+        // Equal relevance: tentative is dampened, a scope boost orders the
+        // more specific entry first — the fallback must not bypass the
+        // approved ranking contract (§5.5).
+        val q = "remember the harvest festival"
+        val certain = mem("certain", content = "the harvest festival")
+        val tentative = mem("tentative", content = "the harvest festival", confidence = "tentative")
+        val dampened = Librarian.rankLexical(q, listOf(lex(tentative), lex(certain)), weights, topK = 5)
+        assertEquals("certain", dampened.first().memory.memoryId)
+
+        val global = mem("global", content = "the harvest festival")
+        val campaign = mem("campaign", scope = "campaign", content = "the harvest festival")
+        val boosted = Librarian.rankLexical(
+            q,
+            listOf(
+                lex(global, boost = Librarian.retrievalBoost("global", false, emptyList(), q)),
+                lex(campaign, boost = Librarian.retrievalBoost("campaign", false, emptyList(), q))
+            ),
+            weights, topK = 5
+        )
+        assertEquals("campaign", boosted.first().memory.memoryId)
+    }
+
+    @Test
+    fun lexicalBoostNeverInjectsAnUnrelatedMemory() {
+        // Relevance is the gate: a candidate with zero token hits stays out
+        // no matter how large its context boost is.
+        val ranked = Librarian.rankLexical(
+            "about the harvest festival",
+            listOf(lex(mem("unrelated", content = "tax paperwork deadline"), boost = 1.0)),
+            weights, topK = 5
+        )
+        assertTrue(ranked.isEmpty())
+    }
+
+    /* -------- Phase A: updated freshness -------- */
+
+    @Test
+    fun freshnessRanksByUpdatedAtOverCreatedAt() {
+        val editedOld = mem("edited-old", createdAt = "2026-01-01T00:00:00Z", updatedAt = "2026-07-10T00:00:00Z")
+        val newerNeverEdited = mem("newer", createdAt = "2026-06-01T00:00:00Z")
+        val fresh = Librarian.freshness(listOf(editedOld, newerNeverEdited))
+        assertEquals(1.0, fresh["edited-old"]!!, 1e-9)
+        assertEquals(0.0, fresh["newer"]!!, 1e-9)
     }
 
     @Test

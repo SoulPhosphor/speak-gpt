@@ -59,6 +59,21 @@ class Librarian private constructor(private val appContext: Context) {
         // on-device if real queries show it cutting good matches.
         private const val MIN_SIMILARITY = 0.30f
 
+        // memory-doc-v2 lexical matching (counterplan §10 A.2): whole Unicode
+        // word tokens only — no substring hit for "cat" in "catalog". Query
+        // terms shorter than this are noise and skipped.
+        private val TOKEN_BOUNDARY = Regex("[^\\p{L}\\p{Nd}]+")
+        private const val MIN_TERM_LENGTH = 3
+
+        /** Bounded bonus when a query term hits the title — the user's own
+         *  name for the fact — applied after dampening like the context
+         *  boost, so it breaks ties without overwhelming relevance. */
+        private const val TITLE_HIT_BONUS = 0.05
+
+        /** Whole word tokens of [text], lowercased. Pure. */
+        fun lexicalTokens(text: String): Set<String> =
+            text.lowercase().split(TOKEN_BOUNDARY).filter { it.isNotEmpty() }.toSet()
+
         // Priority ladder (Stage 3.2, rules §12): scope specificity as a
         // bounded additive boost blended with relevance — a strong preference
         // among comparably relevant entries, never a hard sort tier. With
@@ -116,15 +131,21 @@ class Librarian private constructor(private val appContext: Context) {
          * boost; tentative-confidence memories are dampened (before the boost,
          * so context can't launder a guess into a certainty). No Android/ORT —
          * unit tested (LibrarianRankingTest).
+         *
+         * The relevance floor is applied BEFORE top-K (counterplan §5.5):
+         * importance/recency must not let an irrelevant hit consume a slot
+         * while relevant candidates wait below it.
          */
         fun rank(
             queryVector: FloatArray,
             candidates: List<Candidate>,
             weights: Weights,
-            topK: Int
+            topK: Int,
+            minSimilarity: Float = 0f
         ): List<ScoredMemory> {
-            val scored = candidates.map { c ->
+            val scored = candidates.mapNotNull { c ->
                 val sim = VectorMath.cosine(queryVector, c.vector)
+                if (sim < minSimilarity) return@mapNotNull null
                 var s = weights.similarity * sim +
                     weights.importance * (c.memory.importance / 5.0) +
                     weights.recency * c.recency
@@ -133,6 +154,61 @@ class Librarian private constructor(private val appContext: Context) {
                 ScoredMemory(c.memory, sim, s.toFloat())
             }
             return scored.sortedByDescending { it.score }.take(topK)
+        }
+
+        /**
+         * Pure lexical ranking over the COMPLETE eligible set — the fallback
+         * whenever the vector index cannot be trusted (no model, load failure,
+         * partial or stale index). Same ranking contract as [rank]
+         * (counterplan §5.5 — the fallback must not bypass it): whole-token
+         * overlap across the memory-doc-v2 lexical document (title + current
+         * content + optional condensed text + tags) is the relevance gate,
+         * then bounded importance/recency/context boosts order the relevant
+         * candidates. A candidate with no token hit is ineligible, so a scope
+         * boost can never inject an unrelated memory.
+         */
+        fun rankLexical(
+            query: String,
+            candidates: List<LexicalCandidate>,
+            weights: Weights,
+            topK: Int
+        ): List<ScoredMemory> {
+            val terms = lexicalTokens(query).filter { it.length >= MIN_TERM_LENGTH }
+            if (terms.isEmpty()) return emptyList()
+            val scored = candidates.mapNotNull { c ->
+                val mem = c.memory
+                val titleTokens = lexicalTokens(mem.title)
+                val docTokens = HashSet(titleTokens)
+                docTokens.addAll(lexicalTokens(mem.content))
+                mem.embeddingText?.takeIf { it.isNotBlank() }?.let { docTokens.addAll(lexicalTokens(it)) }
+                for (tag in c.tags) docTokens.addAll(lexicalTokens(tag))
+                val hits = terms.count { it in docTokens }
+                if (hits == 0) return@mapNotNull null
+                val relevance = hits.toFloat() / terms.size
+                var s = weights.similarity * relevance +
+                    weights.importance * (mem.importance / 5.0) +
+                    weights.recency * c.recency
+                if (mem.provenanceConfidence.equals("tentative", ignoreCase = true)) s *= TENTATIVE_DAMPEN
+                s += c.boost
+                if (terms.any { it in titleTokens }) s += TITLE_HIT_BONUS
+                ScoredMemory(mem, relevance, s.toFloat())
+            }
+            return scored.sortedByDescending { it.score }.take(topK)
+        }
+
+        /**
+         * Freshness in 0..1 among the candidates (1 = freshest), ordered by
+         * updated-at-or-created-at so a corrected memory ranks fresher than
+         * its obsolete peers (counterplan §5.5). ISO-8601 strings sort
+         * correctly; unparseable ones fall to the bottom. Pure.
+         */
+        fun freshness(memories: List<RetrievableMemory>): Map<String, Double> {
+            if (memories.isEmpty()) return emptyMap()
+            val sorted = memories.sortedBy { m -> m.updatedAt?.takeIf { it.isNotBlank() } ?: m.createdAt }
+            val n = sorted.size
+            val out = HashMap<String, Double>()
+            sorted.forEachIndexed { i, m -> out[m.memoryId] = if (n == 1) 1.0 else i.toDouble() / (n - 1) }
+            return out
         }
     }
 
@@ -143,6 +219,16 @@ class Librarian private constructor(private val appContext: Context) {
     data class Candidate(
         val memory: RetrievableMemory,
         val vector: FloatArray,
+        val recency: Double,
+        val boost: Double = 0.0
+    )
+
+    /** One lexical candidate: the memory, its parsed tags, a 0..1 recency
+     *  (1 = freshest), and the precomputed context boost ([retrievalBoost]).
+     *  Tags arrive parsed — org.json is an Android stub on the JVM. */
+    data class LexicalCandidate(
+        val memory: RetrievableMemory,
+        val tags: List<String>,
         val recency: Double,
         val boost: Double = 0.0
     )
@@ -245,9 +331,15 @@ class Librarian private constructor(private val appContext: Context) {
     }
 
     /**
-     * Semantic search within a conversation's scope (Stage 3.1/3.2). Falls
-     * back to keyword matching when there's no usable model or no vectors yet.
-     * Returns up to [topK] scored memories, best first.
+     * Semantic search within a conversation's scope (Stage 3.1/3.2). Returns
+     * up to [topK] scored memories, best first.
+     *
+     * Complete-set rule (counterplan §10 A.2): semantic ranking runs only
+     * when EVERY eligible candidate has a current vector. A partial index
+     * must never shrink the candidate universe — a newly imported or edited
+     * memory without a vector would silently disappear from retrieval. While
+     * the index is incomplete (or there is no usable model), lexical ranking
+     * covers the complete eligible set instead.
      *
      * [scope] carries the seven-category eligibility context; the gates live
      * in the store query (active status, scope categories, the fiction wall,
@@ -267,38 +359,48 @@ class Librarian private constructor(private val appContext: Context) {
         if (candidates.isEmpty()) return emptyList()
 
         // Context boosts (§12 ladder + selected project + tag hints) are
-        // precomputed here so [rank] stays pure and JSON-free.
+        // precomputed here so the ranking functions stay pure and JSON-free.
         val projectMemoryIds: Set<String> =
             selectedProjectId?.takeIf { it.isNotBlank() && !scope.isRoleplay }?.let {
                 try { store.memoryIdsForProject(it) } catch (_: Exception) { emptySet() }
             } ?: emptySet()
         val queryLower = query.lowercase()
+        val tagsById = candidates.associate { it.memoryId to parseTags(it.tagsJson) }
         fun boostOf(mem: RetrievableMemory): Double = retrievalBoost(
-            mem.scope, projectMemoryIds.contains(mem.memoryId), parseTags(mem.tagsJson), queryLower
+            mem.scope, projectMemoryIds.contains(mem.memoryId), tagsById[mem.memoryId].orEmpty(), queryLower
         )
+        val recency = freshness(candidates)
 
         val m = ensureModel()
         if (m != null) {
             try {
-                val tag = m.tag
-                val vectors = store.activeEmbeddings(tag)
-                val withVectors = candidates.mapNotNull { mem ->
-                    vectors[mem.memoryId]?.let { blob -> mem to VectorMath.fromBlob(blob) }
-                }
-                if (withVectors.isNotEmpty()) {
+                val vectors = store.activeEmbeddings(m.tag)
+                val missing = candidates.count { !vectors.containsKey(it.memoryId) }
+                if (missing == 0) {
                     val queryVec = m.embed(query, isQuery = true)
-                    val recency = recencyMap(withVectors.map { it.first })
-                    val ranked = withVectors.map { (mem, vec) ->
-                        Candidate(mem, vec, recency[mem.memoryId] ?: 0.0, boostOf(mem))
+                    val ranked = candidates.map { mem ->
+                        Candidate(
+                            mem, VectorMath.fromBlob(vectors.getValue(mem.memoryId)),
+                            recency[mem.memoryId] ?: 0.0, boostOf(mem)
+                        )
                     }
-                    return rank(queryVec, ranked, weights(store), topK)
-                        .filter { it.similarity >= MIN_SIMILARITY }
+                    return rank(queryVec, ranked, weights(store), topK, MIN_SIMILARITY)
                 }
+                MemoryLog.log(
+                    appContext, "Librarian", "info",
+                    "Vector index incomplete — $missing of ${candidates.size} eligible memories lack a ${m.tag} vector; lexical retrieval over the complete set this turn"
+                )
             } catch (t: Throwable) {
-                MemoryLog.log(appContext, "Librarian", "error", "Vector search failed, using keyword fallback: ${t.message}")
+                MemoryLog.log(appContext, "Librarian", "error", "Vector search failed, using lexical fallback: ${t.message}")
             }
         }
-        return keywordFallback(candidates, query, topK)
+        return rankLexical(
+            query,
+            candidates.map {
+                LexicalCandidate(it, tagsById[it.memoryId].orEmpty(), recency[it.memoryId] ?: 0.0, boostOf(it))
+            },
+            weights(store), topK
+        )
     }
 
     /** tags_json -> list; a garbled column degrades to "no tags", never an error. */
@@ -306,33 +408,6 @@ class Librarian private constructor(private val appContext: Context) {
         val arr = org.json.JSONArray(tagsJson)
         (0 until arr.length()).mapNotNull { arr.optString(it).takeIf { s -> s.isNotBlank() } }
     } catch (_: Exception) { emptyList() }
-
-    /** Recency in 0..1 by created_at order among the candidates (newest = 1).
-     *  ISO-8601 strings sort correctly; unparseable ones fall to the bottom. */
-    private fun recencyMap(memories: List<RetrievableMemory>): Map<String, Double> {
-        if (memories.isEmpty()) return emptyMap()
-        val sorted = memories.sortedBy { it.createdAt }
-        val n = sorted.size
-        val out = HashMap<String, Double>()
-        sorted.forEachIndexed { i, m -> out[m.memoryId] = if (n == 1) 1.0 else i.toDouble() / (n - 1) }
-        return out
-    }
-
-    /** Whole-word, case-insensitive keyword overlap; importance breaks ties.
-     *  Deliberately simple — it only has to keep the companion working when the
-     *  embedding model is unavailable. */
-    private fun keywordFallback(candidates: List<RetrievableMemory>, query: String, topK: Int): List<ScoredMemory> {
-        val terms = query.lowercase().split(Regex("\\W+")).filter { it.length > 2 }.toSet()
-        if (terms.isEmpty()) return emptyList()
-        return candidates.mapNotNull { mem ->
-            val hay = (mem.title + " " + mem.textToEmbed()).lowercase()
-            val hits = terms.count { hay.contains(it) }
-            if (hits == 0) null else {
-                val s = hits.toFloat() + mem.importance / 100f
-                ScoredMemory(mem, hits.toFloat() / terms.size, s)
-            }
-        }.sortedByDescending { it.score }.take(topK)
-    }
 
     /**
      * (Re)embed every active memory with the current model, replacing vectors

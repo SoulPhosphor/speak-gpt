@@ -2803,7 +2803,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         }
 
         val sql = "SELECT m.memory_id, m.scope, m.title, m.content, m.embedding_text, " +
-            "m.importance, m.created_at, m.world_id, m.provenance_confidence, " +
+            "m.importance, m.created_at, m.updated_at, m.world_id, m.provenance_confidence, " +
             "m.protection_json, m.provenance_source, m.kind, m.tags_json " +
             "FROM memories m WHERE m.status = 'active' AND (" +
             branches.joinToString(" OR ") + ")"
@@ -2975,7 +2975,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         readableDatabase.query(
             "memories",
             arrayOf("memory_id", "scope", "title", "content", "embedding_text",
-                "importance", "created_at", "world_id", "provenance_confidence",
+                "importance", "created_at", "updated_at", "world_id", "provenance_confidence",
                 "protection_json", "provenance_source", "kind", "tags_json"),
             "status = 'active'", null, null, null, "created_at ASC"
         ).use {
@@ -2997,7 +2997,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         protectionJson = c.getStringOrNull("protection_json"),
         provenanceSource = c.getStringOrNull("provenance_source"),
         kind = c.getStringOrNull("kind") ?: "fact",
-        tagsJson = c.getStringOrNull("tags_json") ?: "[]"
+        tagsJson = c.getStringOrNull("tags_json") ?: "[]",
+        updatedAt = c.getStringOrNull("updated_at")
     )
 
     /** Stored vectors for [embeddingModel] over the active memories, keyed by
