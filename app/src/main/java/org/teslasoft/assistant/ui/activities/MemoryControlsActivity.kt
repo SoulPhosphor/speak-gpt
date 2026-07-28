@@ -16,20 +16,16 @@
 
 package org.teslasoft.assistant.ui.activities
 
-import android.content.Intent
 import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
-import android.text.Editable
-import android.text.TextWatcher
 import android.view.View
 import android.view.WindowInsets
 import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
-import android.widget.Toast
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
@@ -37,12 +33,8 @@ import androidx.fragment.app.FragmentActivity
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.materialswitch.MaterialSwitch
-import com.google.android.material.textfield.TextInputEditText
-import com.google.android.material.textfield.TextInputLayout
 import org.teslasoft.assistant.R
-import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.Preferences
-import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.preferences.memory.MemoryCompanionSync
 import org.teslasoft.assistant.preferences.memory.librarian.EmbeddingModelStorage
 import org.teslasoft.assistant.theme.ThemeManager
@@ -65,7 +57,6 @@ import org.teslasoft.assistant.theme.ThemeManager
 class MemoryControlsActivity : FragmentActivity() {
 
     private var preferences: Preferences? = null
-    private var apiEndpointPreferences: ApiEndpointPreferences? = null
     private var chatId = ""
 
     private var actionBar: ConstraintLayout? = null
@@ -75,22 +66,10 @@ class MemoryControlsActivity : FragmentActivity() {
     private var switchCompanionInRoleplay: MaterialSwitch? = null
     private var switchChatListMemoryStatus: MaterialSwitch? = null
 
-    private var rowMemoryAssistant: LinearLayout? = null
     private var switchCardSuggestions: MaterialSwitch? = null
-    private var switchMaxSuggestions: MaterialSwitch? = null
-    private var layoutMaxSuggestions: TextInputLayout? = null
-    private var fieldMaxSuggestions: TextInputEditText? = null
-    private var rowAssistantAdvanced: LinearLayout? = null
 
     private var rowMemoryEngine: LinearLayout? = null
     private var textMemoryEngineValue: TextView? = null
-    private var rowArchivistEndpoint: LinearLayout? = null
-    private var textArchivistEndpointValue: TextView? = null
-    private var rowArchivistModel: LinearLayout? = null
-    private var textArchivistModelValue: TextView? = null
-
-    /** Guards the suggestion field's TextWatcher while we set text programmatically. */
-    private var suppressSuggestionWatcher = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -99,7 +78,6 @@ class MemoryControlsActivity : FragmentActivity() {
 
         chatId = intent.extras?.getString("chatId", "") ?: ""
         preferences = Preferences.getPreferences(this, chatId)
-        apiEndpointPreferences = ApiEndpointPreferences.getApiEndpointPreferences(this)
 
         bindViews()
         applyTheme()
@@ -109,7 +87,6 @@ class MemoryControlsActivity : FragmentActivity() {
     override fun onResume() {
         super.onResume()
         refreshEngineRow()
-        refreshArchivistRows()
     }
 
     private fun bindViews() {
@@ -118,18 +95,9 @@ class MemoryControlsActivity : FragmentActivity() {
         switchDefaultMemory = findViewById(R.id.switch_default_memory)
         switchCompanionInRoleplay = findViewById(R.id.switch_companion_in_roleplay)
         switchChatListMemoryStatus = findViewById(R.id.switch_chat_list_memory_status)
-        rowMemoryAssistant = findViewById(R.id.row_memory_assistant)
         switchCardSuggestions = findViewById(R.id.switch_card_suggestions)
-        switchMaxSuggestions = findViewById(R.id.switch_max_suggestions)
-        layoutMaxSuggestions = findViewById(R.id.layout_max_suggestions)
-        fieldMaxSuggestions = findViewById(R.id.field_max_suggestions)
-        rowAssistantAdvanced = findViewById(R.id.row_assistant_advanced)
         rowMemoryEngine = findViewById(R.id.row_memory_engine)
         textMemoryEngineValue = findViewById(R.id.text_memory_engine_value)
-        rowArchivistEndpoint = findViewById(R.id.row_archivist_endpoint)
-        textArchivistEndpointValue = findViewById(R.id.text_archivist_endpoint_value)
-        rowArchivistModel = findViewById(R.id.row_archivist_model)
-        textArchivistModelValue = findViewById(R.id.text_archivist_model_value)
     }
 
     @Suppress("DEPRECATION")
@@ -182,77 +150,14 @@ class MemoryControlsActivity : FragmentActivity() {
         }
 
         /* ---- Memory Assistant ---- */
-        rowMemoryAssistant?.setOnClickListener {
-            startActivity(Intent(this, MemoryAssistantActivity::class.java).putExtra("chatId", chatId))
-        }
-        rowAssistantAdvanced?.setOnClickListener {
-            startActivity(Intent(this, MemoryAssistantAdvancedSettingsActivity::class.java).putExtra("chatId", chatId))
-        }
-        // Card-suggestions "danger switch" (placement ruling 6; owner wording in
-        // phase6_card_suggestions_and_icons_design.md §2). ON by default; the
-        // pref already defaults true. Manual card assignment stays available
-        // regardless.
         switchCardSuggestions?.isChecked = preferences?.getArchivistCardSuggestions() ?: true
         switchCardSuggestions?.setOnCheckedChangeListener { _, checked ->
             preferences?.setArchivistCardSuggestions(checked)
         }
-        setupMaxSuggestions()
 
         /* ---- Memory Engine ---- */
         refreshEngineRow()
         rowMemoryEngine?.setOnClickListener { showMemoryEnginePicker() }
-
-        /* ---- Memory Assistant Model ---- */
-        refreshArchivistRows()
-        rowArchivistEndpoint?.setOnClickListener { showArchivistEndpointPicker() }
-        rowArchivistModel?.setOnClickListener { showArchivistModelDialog() }
-
-        // Backups + Reset moved to MemoryBackupRestoreActivity (owner request,
-        // July 18 2026).
-    }
-
-    /* ------------------------------ Maximum Suggestions Per Conversation ------------------------------ */
-
-    // Off (switch off) == no cap (pref 0). Turning the switch ON defaults the
-    // field to 10 (placement ruling 4). The cap itself is enforced in the
-    // Archivist runner, not only in the extraction prompt.
-    private fun setupMaxSuggestions() {
-        val current = preferences?.getArchivistMaxSuggestions() ?: 0
-        val on = current > 0
-        switchMaxSuggestions?.isChecked = on
-        layoutMaxSuggestions?.visibility = if (on) View.VISIBLE else View.GONE
-        if (on) setSuggestionFieldText(current.toString())
-
-        switchMaxSuggestions?.setOnCheckedChangeListener { _, checked ->
-            if (checked) {
-                val value = (preferences?.getArchivistMaxSuggestions() ?: 0).let { if (it > 0) it else DEFAULT_MAX_SUGGESTIONS }
-                preferences?.setArchivistMaxSuggestions(value)
-                setSuggestionFieldText(value.toString())
-                layoutMaxSuggestions?.visibility = View.VISIBLE
-            } else {
-                preferences?.setArchivistMaxSuggestions(0)
-                layoutMaxSuggestions?.visibility = View.GONE
-            }
-        }
-
-        fieldMaxSuggestions?.addTextChangedListener(object : TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
-            override fun afterTextChanged(s: Editable?) {
-                if (suppressSuggestionWatcher || switchMaxSuggestions?.isChecked != true) return
-                val parsed = s?.toString()?.trim()?.toIntOrNull()
-                // Blank/zero is left alone while typing; the switch is the way
-                // to reach "no cap", so a live cap is always at least 1.
-                if (parsed != null && parsed >= 1) preferences?.setArchivistMaxSuggestions(parsed)
-            }
-        })
-    }
-
-    private fun setSuggestionFieldText(text: String) {
-        suppressSuggestionWatcher = true
-        fieldMaxSuggestions?.setText(text)
-        fieldMaxSuggestions?.setSelection(text.length)
-        suppressSuggestionWatcher = false
     }
 
     /* ------------------------------ memory engine ------------------------------ */
@@ -321,68 +226,6 @@ class MemoryControlsActivity : FragmentActivity() {
             .show()
     }
 
-    /* ------------------------------ Memory Assistant model ------------------------------ */
-
-    private fun refreshArchivistRows() {
-        val endpointId = preferences?.getArchivistEndpointId().orEmpty()
-        textArchivistEndpointValue?.text = if (endpointId.isEmpty()) {
-            getString(R.string.label_endpoint_none)
-        } else {
-            val endpoints = apiEndpointPreferences?.getApiEndpointsList(this) ?: arrayListOf()
-            val label = endpoints.firstOrNull { it.id == endpointId }?.label
-            if (!label.isNullOrEmpty()) label else getString(R.string.label_endpoint_none)
-        }
-
-        val model = preferences?.getArchivistModel().orEmpty()
-        textArchivistModelValue?.text = model.ifEmpty { getString(R.string.label_archivist_model_none) }
-    }
-
-    private fun showArchivistEndpointPicker() {
-        val endpoints = apiEndpointPreferences?.getApiEndpointsList(this) ?: arrayListOf()
-        if (endpoints.isEmpty()) {
-            Toast.makeText(this, R.string.memory_archivist_endpoint_none_toast, Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        val currentId = preferences?.getArchivistEndpointId().orEmpty()
-        val labels = endpoints.map { it.label }.toTypedArray()
-        val current = endpoints.indexOfFirst { it.id == currentId }.coerceAtLeast(0)
-
-        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.memory_archivist_endpoint_picker_title)
-            .setSingleChoiceItems(labels, current) { dialog, which ->
-                val picked: ApiEndpointObject = endpoints[which]
-                preferences?.setArchivistEndpointId(picked.id)
-                refreshArchivistRows()
-                dialog.dismiss()
-            }
-            .setNegativeButton(android.R.string.cancel) { _, _ -> }
-            .show()
-    }
-
-    private fun showArchivistModelDialog() {
-        val field = android.widget.EditText(this)
-        field.setText(preferences?.getArchivistModel().orEmpty())
-        field.hint = getString(R.string.memory_archivist_model_hint)
-
-        val density = resources.displayMetrics.density
-        val pad = (20 * density).toInt()
-        val container = LinearLayout(this)
-        container.orientation = LinearLayout.VERTICAL
-        container.setPadding(pad, pad, pad, 0)
-        container.addView(field)
-
-        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.memory_controls_row_assistant_model)
-            .setView(container)
-            .setPositiveButton(android.R.string.ok) { _, _ ->
-                preferences?.setArchivistModel(field.text?.toString()?.trim().orEmpty())
-                refreshArchivistRows()
-            }
-            .setNegativeButton(android.R.string.cancel) { _, _ -> }
-            .show()
-    }
-
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         adjustPaddings()
@@ -419,8 +262,4 @@ class MemoryControlsActivity : FragmentActivity() {
         }
     }
 
-    companion object {
-        /** Placement ruling 4: switching the cap ON defaults the field to 10. */
-        private const val DEFAULT_MAX_SUGGESTIONS = 10
-    }
 }

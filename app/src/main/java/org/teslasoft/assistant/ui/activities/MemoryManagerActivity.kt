@@ -66,6 +66,7 @@ class MemoryManagerActivity : FragmentActivity() {
     private var rowMemoryAssistant: LinearLayout? = null
     private var rowLorebooks: LinearLayout? = null
     private var rowMemorySettings: LinearLayout? = null
+    private var rowAssistantAdvancedSettings: LinearLayout? = null
     private var rowAdvancedMemory: LinearLayout? = null
     private var rowMemoryBackupRestore: LinearLayout? = null
 
@@ -89,6 +90,7 @@ class MemoryManagerActivity : FragmentActivity() {
         rowMemoryAssistant = findViewById(R.id.row_memory_assistant)
         rowLorebooks = findViewById(R.id.row_lorebooks)
         rowMemorySettings = findViewById(R.id.row_memory_settings)
+        rowAssistantAdvancedSettings = findViewById(R.id.row_assistant_advanced_settings)
         rowAdvancedMemory = findViewById(R.id.row_advanced_memory)
         rowMemoryBackupRestore = findViewById(R.id.row_memory_backup_restore)
     }
@@ -125,6 +127,10 @@ class MemoryManagerActivity : FragmentActivity() {
 
         rowMemoryAssistant?.setOnClickListener {
             startActivity(Intent(this, MemoryAssistantActivity::class.java).putExtra("chatId", chatId))
+        }
+
+        rowAssistantAdvancedSettings?.setOnClickListener {
+            startActivity(Intent(this, MemoryAssistantAdvancedSettingsActivity::class.java).putExtra("chatId", chatId))
         }
 
         rowLorebooks?.setOnClickListener {

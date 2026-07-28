@@ -123,6 +123,30 @@
                     android:contentDescription="@string/row_memory_assistant_title" />
             </LinearLayout>
 
+            <!-- Advanced Memory Assistant Settings: extraction tuning,
+                 suggestion cap, and Memory Assistant model/endpoint. Moved from
+                 the Memory Controls screen. -->
+            <LinearLayout
+                android:id="@+id/row_assistant_advanced_settings"
+                style="@style/Widget.App.Row.WithSubtitle">
+
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/memory_controls_row_advanced_assistant" />
+
+                    <TextView
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:maxLines="3"
+                        android:text="@string/memory_controls_row_advanced_assistant_subtitle" />
+                </LinearLayout>
+
+                <ImageView
+                    style="@style/Widget.App.Row.Chevron"
+                    android:contentDescription="@string/memory_controls_row_advanced_assistant" />
+            </LinearLayout>
+
             <!-- Lorebooks: moved here out of the Characters hub (owner ruling,
                  July 8 2026). The lorebook screens themselves are unchanged;
                  only the access point moved. -->

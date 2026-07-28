@@ -20,9 +20,13 @@ import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
+import android.text.Editable
+import android.text.TextWatcher
+import android.view.View
 import android.view.WindowInsets
 import android.widget.ImageButton
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.constraintlayout.widget.ConstraintLayout
@@ -32,21 +36,26 @@ import androidx.fragment.app.FragmentActivity
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.elevation.SurfaceColors
+import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.slider.Slider
 import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.textfield.TextInputLayout
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.Preferences
+import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.preferences.memory.archivist.ArchivistPrompt
 import org.teslasoft.assistant.theme.ThemeManager
 import java.util.Locale
 
 /**
- * "Memory Assistant Advanced Settings" — AI extraction tuning
- * (`Memory System/memory_settings_reorg_spec.md` §2, July 9 2026). Three
- * controls and a Save button, nothing else: analysis Temperature (0.0–2.0,
- * recommended 0.3), the Minimum Importance a draft must reach, and the
- * Extraction Prompt (blank == the built-in `ArchivistPrompt.SYSTEM`). Reached
- * from the Memory Assistant section of Memory Controls.
+ * "Advanced Memory Assistant Settings" — suggestion cap, endpoint/model
+ * selection, and AI extraction tuning. Reached from the Memory Manager hub.
+ *
+ * Temperature, Minimum Importance, and Extraction Prompt are persisted only
+ * on Save (spec §2). Maximum Suggestions, endpoint, and model save
+ * immediately on change (consistent with their prior behavior in Memory
+ * Controls).
  *
  * User-facing name is "Memory Assistant"; the `Preferences.getArchivist*`
  * accessors keep the internal code name.
@@ -54,10 +63,20 @@ import java.util.Locale
 class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
 
     private var preferences: Preferences? = null
+    private var apiEndpointPreferences: ApiEndpointPreferences? = null
     private var chatId = ""
 
     private var actionBar: ConstraintLayout? = null
     private var btnBack: ImageButton? = null
+
+    private var switchMaxSuggestions: MaterialSwitch? = null
+    private var layoutMaxSuggestions: TextInputLayout? = null
+    private var fieldMaxSuggestions: TextInputEditText? = null
+
+    private var rowArchivistEndpoint: LinearLayout? = null
+    private var textArchivistEndpointValue: TextView? = null
+    private var rowArchivistModel: LinearLayout? = null
+    private var textArchivistModelValue: TextView? = null
 
     private var sliderTemperature: Slider? = null
     private var textTemperatureValue: TextView? = null
@@ -67,6 +86,9 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
     private var fieldExtractionPrompt: TextInputEditText? = null
     private var btnResetPrompt: MaterialButton? = null
     private var btnSave: MaterialButton? = null
+
+    /** Guards the suggestion field's TextWatcher while we set text programmatically. */
+    private var suppressSuggestionWatcher = false
 
     /** Held until Save (spec §2 has an explicit Save button). */
     private var selectedImportance = 1
@@ -78,15 +100,28 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
 
         chatId = intent.extras?.getString("chatId", "") ?: ""
         preferences = Preferences.getPreferences(this, chatId)
+        apiEndpointPreferences = ApiEndpointPreferences.getApiEndpointPreferences(this)
 
         bindViews()
         applyTheme()
         initLogic()
     }
 
+    override fun onResume() {
+        super.onResume()
+        refreshArchivistRows()
+    }
+
     private fun bindViews() {
         actionBar = findViewById(R.id.action_bar)
         btnBack = findViewById(R.id.btn_back)
+        switchMaxSuggestions = findViewById(R.id.switch_max_suggestions)
+        layoutMaxSuggestions = findViewById(R.id.layout_max_suggestions)
+        fieldMaxSuggestions = findViewById(R.id.field_max_suggestions)
+        rowArchivistEndpoint = findViewById(R.id.row_archivist_endpoint)
+        textArchivistEndpointValue = findViewById(R.id.text_archivist_endpoint_value)
+        rowArchivistModel = findViewById(R.id.row_archivist_model)
+        textArchivistModelValue = findViewById(R.id.text_archivist_model_value)
         sliderTemperature = findViewById(R.id.slider_temperature)
         textTemperatureValue = findViewById(R.id.text_temperature_value)
         btnResetTemperature = findViewById(R.id.btn_reset_temperature)
@@ -123,7 +158,15 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
     private fun initLogic() {
         btnBack?.setOnClickListener { finish() }
 
-        // Temperature (0.0–2.0, recommended 0.3). Persisted on Save.
+        /* ---- Maximum Suggestions Per Conversation ---- */
+        setupMaxSuggestions()
+
+        /* ---- Memory Assistant Endpoint & Model ---- */
+        refreshArchivistRows()
+        rowArchivistEndpoint?.setOnClickListener { showArchivistEndpointPicker() }
+        rowArchivistModel?.setOnClickListener { showArchivistModelDialog() }
+
+        /* ---- Temperature ---- */
         val temperature = (preferences?.getArchivistTemperature() ?: RECOMMENDED_TEMPERATURE)
             .coerceIn(0.0f, 2.0f)
         sliderTemperature?.value = roundToStep(temperature)
@@ -134,14 +177,12 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
             updateTemperatureLabel(RECOMMENDED_TEMPERATURE)
         }
 
-        // Minimum Importance (1–5 on the existing importance scale). Persisted on Save.
+        /* ---- Minimum Importance ---- */
         selectedImportance = (preferences?.getArchivistMinImportance() ?: 1).coerceIn(1, 5)
         updateImportanceLabel()
         rowMinImportance?.setOnClickListener { showImportancePicker() }
 
-        // Extraction Prompt. Blank pref == the built-in default, so an unset
-        // prompt shows the built-in text (editable). Save stores "" again when
-        // the field still equals the built-in default (so Reset survives Save).
+        /* ---- Extraction Prompt ---- */
         val stored = preferences?.getArchivistCustomPrompt().orEmpty()
         fieldExtractionPrompt?.setText(stored.ifEmpty { ArchivistPrompt.SYSTEM })
         btnResetPrompt?.setOnClickListener { showResetPromptDialog() }
@@ -149,12 +190,116 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
         btnSave?.setOnClickListener { save() }
     }
 
+    /* ------------------------------ Maximum Suggestions ------------------------------ */
+
+    private fun setupMaxSuggestions() {
+        val current = preferences?.getArchivistMaxSuggestions() ?: 0
+        val on = current > 0
+        switchMaxSuggestions?.isChecked = on
+        layoutMaxSuggestions?.visibility = if (on) View.VISIBLE else View.GONE
+        if (on) setSuggestionFieldText(current.toString())
+
+        switchMaxSuggestions?.setOnCheckedChangeListener { _, checked ->
+            if (checked) {
+                val value = (preferences?.getArchivistMaxSuggestions() ?: 0).let { if (it > 0) it else DEFAULT_MAX_SUGGESTIONS }
+                preferences?.setArchivistMaxSuggestions(value)
+                setSuggestionFieldText(value.toString())
+                layoutMaxSuggestions?.visibility = View.VISIBLE
+            } else {
+                preferences?.setArchivistMaxSuggestions(0)
+                layoutMaxSuggestions?.visibility = View.GONE
+            }
+        }
+
+        fieldMaxSuggestions?.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                if (suppressSuggestionWatcher || switchMaxSuggestions?.isChecked != true) return
+                val parsed = s?.toString()?.trim()?.toIntOrNull()
+                if (parsed != null && parsed >= 1) preferences?.setArchivistMaxSuggestions(parsed)
+            }
+        })
+    }
+
+    private fun setSuggestionFieldText(text: String) {
+        suppressSuggestionWatcher = true
+        fieldMaxSuggestions?.setText(text)
+        fieldMaxSuggestions?.setSelection(text.length)
+        suppressSuggestionWatcher = false
+    }
+
+    /* ------------------------------ Memory Assistant Endpoint & Model ------------------------------ */
+
+    private fun refreshArchivistRows() {
+        val endpointId = preferences?.getArchivistEndpointId().orEmpty()
+        textArchivistEndpointValue?.text = if (endpointId.isEmpty()) {
+            getString(R.string.label_endpoint_none)
+        } else {
+            val endpoints = apiEndpointPreferences?.getApiEndpointsList(this) ?: arrayListOf()
+            val label = endpoints.firstOrNull { it.id == endpointId }?.label
+            if (!label.isNullOrEmpty()) label else getString(R.string.label_endpoint_none)
+        }
+
+        val model = preferences?.getArchivistModel().orEmpty()
+        textArchivistModelValue?.text = model.ifEmpty { getString(R.string.label_archivist_model_none) }
+    }
+
+    private fun showArchivistEndpointPicker() {
+        val endpoints = apiEndpointPreferences?.getApiEndpointsList(this) ?: arrayListOf()
+        if (endpoints.isEmpty()) {
+            Toast.makeText(this, R.string.memory_archivist_endpoint_none_toast, Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val currentId = preferences?.getArchivistEndpointId().orEmpty()
+        val labels = endpoints.map { it.label }.toTypedArray()
+        val current = endpoints.indexOfFirst { it.id == currentId }.coerceAtLeast(0)
+
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.memory_archivist_endpoint_picker_title)
+            .setSingleChoiceItems(labels, current) { dialog, which ->
+                val picked: ApiEndpointObject = endpoints[which]
+                preferences?.setArchivistEndpointId(picked.id)
+                refreshArchivistRows()
+                dialog.dismiss()
+            }
+            .setNegativeButton(android.R.string.cancel) { _, _ -> }
+            .show()
+    }
+
+    private fun showArchivistModelDialog() {
+        val field = android.widget.EditText(this)
+        field.setText(preferences?.getArchivistModel().orEmpty())
+        field.hint = getString(R.string.memory_archivist_model_hint)
+
+        val density = resources.displayMetrics.density
+        val pad = (20 * density).toInt()
+        val container = LinearLayout(this)
+        container.orientation = LinearLayout.VERTICAL
+        container.setPadding(pad, pad, pad, 0)
+        container.addView(field)
+
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.memory_controls_row_assistant_model)
+            .setView(container)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                preferences?.setArchivistModel(field.text?.toString()?.trim().orEmpty())
+                refreshArchivistRows()
+            }
+            .setNegativeButton(android.R.string.cancel) { _, _ -> }
+            .show()
+    }
+
+    /* ------------------------------ Temperature ------------------------------ */
+
     private fun updateTemperatureLabel(value: Float) {
         textTemperatureValue?.text = String.format(Locale.getDefault(), "%.1f", value)
     }
 
-    /** Snap a stored value onto the slider's 0.1 grid so it can be displayed. */
     private fun roundToStep(value: Float): Float = (Math.round(value * 10f) / 10f).coerceIn(0.0f, 2.0f)
+
+    /* ------------------------------ Minimum Importance ------------------------------ */
 
     private fun importanceLabel(level: Int): String = when (level) {
         2 -> getString(R.string.mem_importance_2)
@@ -187,12 +332,12 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
             .show()
     }
 
+    /* ------------------------------ Extraction Prompt ------------------------------ */
+
     private fun showResetPromptDialog() {
         MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
             .setTitle(R.string.memory_assistant_adv_reset_prompt_confirm)
             .setPositiveButton(R.string.memory_assistant_adv_reset_prompt) { _, _ ->
-                // Clear the pref back to "" (use built-in) and re-show the
-                // built-in text so the field reflects what will run.
                 preferences?.setArchivistCustomPrompt("")
                 fieldExtractionPrompt?.setText(ArchivistPrompt.SYSTEM)
             }
@@ -200,13 +345,12 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
             .show()
     }
 
+    /* ------------------------------ Save ------------------------------ */
+
     private fun save() {
         preferences?.setArchivistTemperature(sliderTemperature?.value ?: RECOMMENDED_TEMPERATURE)
         preferences?.setArchivistMinImportance(selectedImportance)
 
-        // "" means "use the built-in prompt". Storing the built-in text
-        // verbatim is the same intent, so collapse it back to "" — that keeps a
-        // prior Reset intact across a Save with no edits.
         val text = fieldExtractionPrompt?.text?.toString()?.trim().orEmpty()
         preferences?.setArchivistCustomPrompt(if (text.isEmpty() || text == ArchivistPrompt.SYSTEM.trim()) "" else text)
 
@@ -227,7 +371,7 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
                 0,
                 0
             )
-            val scroll = findViewById<android.widget.ScrollView>(R.id.scroll)
+            val scroll = findViewById<ScrollView>(R.id.scroll)
             scroll?.setPadding(
                 0,
                 0,
@@ -251,5 +395,6 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
 
     companion object {
         private const val RECOMMENDED_TEMPERATURE = 0.3f
+        private const val DEFAULT_MAX_SUGGESTIONS = 10
     }
 }
