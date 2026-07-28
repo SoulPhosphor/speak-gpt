@@ -20,11 +20,16 @@ import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
+import android.view.View
 import android.view.WindowInsets
+import android.widget.ArrayAdapter
 import android.widget.ImageButton
+import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.activity.OnBackPressedCallback
+import androidx.appcompat.widget.ListPopupWindow
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
@@ -41,6 +46,8 @@ import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
+import org.teslasoft.assistant.preferences.includes.ImageCapability
+import org.teslasoft.assistant.preferences.includes.ImageCapabilityStore
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.fragments.dialogs.AdvancedModelSelectorDialogFragment
 import org.teslasoft.assistant.ui.util.DiscardChangesDialog
@@ -127,6 +134,15 @@ class ApiEndpointEditorActivity : FragmentActivity() {
     /** True while the field shows the star mask rather than a real/edited value. */
     private var apiKeyMasked: Boolean = false
 
+    private var imageCapabilityHeader: LinearLayout? = null
+    private var imageCapabilityChevron: ImageView? = null
+    private var imageCapabilityBody: LinearLayout? = null
+    private var imageCapabilityEmpty: TextView? = null
+    private var imageCapabilityRows: LinearLayout? = null
+    private var btnClearImageCapability: MaterialButton? = null
+    private var imageCapabilityExpanded: Boolean = false
+    private var currentCapabilityJson: String = ""
+
     /** Snapshot of the initial field values, for the discard-changes check. */
     private var initialSnapshot: String = ""
 
@@ -178,6 +194,12 @@ class ApiEndpointEditorActivity : FragmentActivity() {
         sliderTopP = findViewById(R.id.slider_top_p)
         sliderFrequencyPenalty = findViewById(R.id.slider_frequency_penalty)
         sliderPresencePenalty = findViewById(R.id.slider_presence_penalty)
+        imageCapabilityHeader = findViewById(R.id.image_capability_header)
+        imageCapabilityChevron = findViewById(R.id.image_capability_chevron)
+        imageCapabilityBody = findViewById(R.id.image_capability_body)
+        imageCapabilityEmpty = findViewById(R.id.image_capability_empty)
+        imageCapabilityRows = findViewById(R.id.image_capability_rows)
+        btnClearImageCapability = findViewById(R.id.btn_clear_image_capability)
     }
 
     @Suppress("DEPRECATION")
@@ -276,6 +298,9 @@ class ApiEndpointEditorActivity : FragmentActivity() {
             apiKeyMasked = false
         }
 
+        currentCapabilityJson = endpoint.imageCapabilityByModel
+        populateCapabilitySection()
+
         // A brand-new profile has nothing to delete yet.
         btnDelete?.visibility = if (position == -1) ImageButton.GONE else ImageButton.VISIBLE
 
@@ -295,6 +320,9 @@ class ApiEndpointEditorActivity : FragmentActivity() {
 
         fieldModel?.setOnClickListener { showModelChooser() }
         findViewById<TextInputLayout>(R.id.textInputLayoutModel)?.setOnClickListener { showModelChooser() }
+
+        imageCapabilityHeader?.setOnClickListener { toggleCapabilitySection() }
+        btnClearImageCapability?.setOnClickListener { confirmClearCapability() }
 
         // Tap the key field: drop the star mask so the user gets a blank cursor.
         // If they then leave it blank, re-mask so the stored key is still shown.
@@ -390,7 +418,8 @@ class ApiEndpointEditorActivity : FragmentActivity() {
                 ""
             } else {
                 selectedModel
-            }
+            },
+            imageCapabilityByModel = currentCapabilityJson
         )
     }
 
@@ -601,7 +630,8 @@ class ApiEndpointEditorActivity : FragmentActivity() {
             fieldResponseTime?.text.toString(),
             fieldEndSeparator?.text.toString(),
             fieldPrefix?.text.toString(),
-            if (keyChanged) "key_changed" else "key_same"
+            if (keyChanged) "key_changed" else "key_same",
+            currentCapabilityJson
         ).joinToString("")
     }
 
@@ -642,5 +672,111 @@ class ApiEndpointEditorActivity : FragmentActivity() {
             Configuration.UI_MODE_NIGHT_UNDEFINED -> false
             else -> false
         }
+    }
+
+    /* ---------- Image capability section ---------- */
+
+    private fun toggleCapabilitySection() {
+        imageCapabilityExpanded = !imageCapabilityExpanded
+        imageCapabilityChevron?.rotation = if (imageCapabilityExpanded) 180f else 0f
+        imageCapabilityBody?.visibility = if (imageCapabilityExpanded) View.VISIBLE else View.GONE
+    }
+
+    private fun populateCapabilitySection() {
+        val entries = ImageCapabilityStore.entries(currentCapabilityJson)
+        imageCapabilityRows?.removeAllViews()
+        if (entries.isEmpty()) {
+            imageCapabilityEmpty?.visibility = View.VISIBLE
+            imageCapabilityRows?.visibility = View.GONE
+            btnClearImageCapability?.visibility = View.GONE
+        } else {
+            imageCapabilityEmpty?.visibility = View.GONE
+            imageCapabilityRows?.visibility = View.VISIBLE
+            btnClearImageCapability?.visibility = View.VISIBLE
+            for ((modelId, capability) in entries) {
+                addCapabilityRow(modelId, capability)
+            }
+        }
+    }
+
+    private fun addCapabilityRow(modelId: String, capability: ImageCapability) {
+        val dp = resources.displayMetrics.density
+        val row = LinearLayout(this).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = (4 * dp).toInt() }
+            orientation = LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+        }
+        val label = TextView(this, null, 0, R.style.Widget_App_Dropdown_Label).apply {
+            text = modelId
+        }
+        val value = TextView(this, null, 0, R.style.Widget_App_Dropdown_Value).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f
+            ).apply { marginStart = (8 * dp).toInt() }
+            text = capabilityLabel(capability)
+            tag = modelId
+            setOnClickListener { showCapabilityDropdown(this, modelId) }
+        }
+        row.addView(label)
+        row.addView(value)
+        imageCapabilityRows?.addView(row)
+    }
+
+    private fun capabilityLabel(capability: ImageCapability): String = when (capability) {
+        ImageCapability.UNKNOWN -> getString(R.string.image_capability_state_unknown)
+        ImageCapability.SUPPORTED -> getString(R.string.image_capability_state_supported)
+        ImageCapability.UNSUPPORTED -> getString(R.string.image_capability_state_unsupported)
+    }
+
+    private val capabilityOptions = arrayOf(
+        ImageCapability.UNKNOWN,
+        ImageCapability.SUPPORTED,
+        ImageCapability.UNSUPPORTED
+    )
+
+    private fun showCapabilityDropdown(anchor: View, modelId: String) {
+        if (isFinishing) return
+        val labels = capabilityOptions.map { capabilityLabel(it) }
+        val popup = ListPopupWindow(this)
+        popup.anchorView = anchor
+        popup.isModal = true
+        popup.width = anchor.width
+        popup.setAdapter(ArrayAdapter(this, android.R.layout.simple_list_item_1, labels))
+        popup.setOnItemClickListener { _, _, position, _ ->
+            popup.dismiss()
+            val chosen = capabilityOptions[position]
+            currentCapabilityJson = ImageCapabilityStore.set(currentCapabilityJson, modelId, chosen)
+            (anchor as? TextView)?.text = capabilityLabel(chosen)
+        }
+        popup.show()
+    }
+
+    private fun confirmClearCapability() {
+        val actionsView = layoutInflater.inflate(R.layout.dialog_two_actions, null)
+
+        val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.image_capability_clear_confirm_title)
+            .setMessage(R.string.image_capability_clear_confirm_body)
+            .setView(actionsView)
+            .create()
+
+        actionsView.findViewById<MaterialButton>(R.id.btn_dialog_primary_action).apply {
+            setText(R.string.image_capability_clear_confirm_button)
+            setOnClickListener {
+                dialog.dismiss()
+                currentCapabilityJson = ImageCapabilityStore.clear()
+                populateCapabilitySection()
+            }
+        }
+
+        actionsView.findViewById<MaterialButton>(R.id.btn_dialog_destructive_action).apply {
+            setText(R.string.btn_cancel)
+            setOnClickListener { dialog.dismiss() }
+        }
+
+        dialog.show()
     }
 }

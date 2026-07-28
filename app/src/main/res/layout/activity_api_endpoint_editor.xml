@@ -539,6 +539,75 @@
                     android:singleLine="true"
                     android:textColorHint="@color/text_hint" />
             </com.google.android.material.textfield.TextInputLayout>
+
+            <!-- Image capability by model — collapsible section.
+                 Collapsed by default; chevron rotates 0°/180° on toggle. -->
+            <LinearLayout
+                android:id="@+id/image_capability_header"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="24dp"
+                android:layout_marginEnd="24dp"
+                android:background="?attr/selectableItemBackground"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    style="@style/Widget.App.Section.Title"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:text="@string/image_capability_section_title" />
+
+                <ImageView
+                    android:id="@+id/image_capability_chevron"
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:layout_marginStart="8dp"
+                    android:contentDescription="@string/include_expand_desc"
+                    android:rotation="0"
+                    android:src="@drawable/ic_chevron_down"
+                    android:tint="?attr/colorPrimary" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/image_capability_body"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="24dp"
+                android:layout_marginEnd="24dp"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <TextView
+                    style="@style/Widget.App.Section.Hint"
+                    android:text="@string/image_capability_section_desc" />
+
+                <TextView
+                    android:id="@+id/image_capability_empty"
+                    style="@style/Widget.App.Section.Hint"
+                    android:paddingTop="12dp"
+                    android:text="@string/image_capability_empty"
+                    android:visibility="gone" />
+
+                <LinearLayout
+                    android:id="@+id/image_capability_rows"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingTop="8dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_clear_image_capability"
+                    style="@style/AppButton.Destructive"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:layout_marginBottom="8dp"
+                    android:text="@string/image_capability_clear_action"
+                    android:visibility="gone" />
+            </LinearLayout>
         </LinearLayout>
     </ScrollView>
 </androidx.constraintlayout.widget.ConstraintLayout>
