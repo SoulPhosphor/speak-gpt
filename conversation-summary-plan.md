@@ -212,7 +212,28 @@ reduction, more the longer the chat runs.
    > matter. Keep it under {length} words. Reply with only the updated
    > summary.
 
-6. **UI construction rules.** All UI uses the shared style families from
+6. **Five renameable prompt slots (owner idea, July 28 2026).** The
+   summarizer prompt area holds five named slots selected by the app's
+   standard dropdown field. Whichever slot is selected on this screen is
+   the prompt in use — the choice does not appear in Quick Settings.
+   Slots one and two ship filled with two different styles (story-flow
+   and plain-facts, both drafted under the delegated-prompt rules in
+   decision 5). Slots three to five start empty; users copy-paste from a
+   filled slot to experiment without losing a prompt they trust. Users
+   can rename any slot. Per-slot revert restores whatever the slot
+   shipped with. Different styles are prompt text only — the wiring is
+   identical for every slot.
+
+7. **Empty-prompt guard on leaving the screen.** If the user leaves
+   Summarizer settings (header back control or system back gesture)
+   while the selected slot's prompt is empty, a standard dialog blocks
+   the exit: Okay backs out with a known-good prompt selected instead;
+   Cancel stays on the screen so the user can fix it themselves. The
+   owner authored the dialog's message (behavior approved; exact string
+   pending spelling confirmation in chat). The dialog uses the standard
+   dialog theme and two-action pattern.
+
+8. **UI construction rules.** All UI uses the shared style families from
    `ui-style-guide.md` (toggle rows, label-above-box and inline number
    fields, dropdown fields, section titles/hints, action-bar headers,
    shared button roles). No hardcoded colors, typography, or geometry —
@@ -222,20 +243,20 @@ reduction, more the longer the chat runs.
 
 ## 6. Decisions still open
 
-1. Whether to offer a summary style selector (narrative vs. key facts) or
-   ship one built-in style, with the editable prompt as the power-user
-   path. Recommendation: one style for the first version — the style
-   selector only multiplies prompt variants the owner would have to
-   approve, and the editable prompt already covers customization.
-2. Target summary length: fixed default, or a user-set value in
+1. Empty-guard edge case: what "last good prompt" falls back to when the
+   user has emptied the slot that was in use (including all five slots
+   emptied). Recommendation pending owner answer in chat.
+2. Final dialog string for the empty-prompt guard (spelling-corrected
+   version awaiting owner confirmation).
+3. Target summary length: fixed default, or a user-set value in
    Summarizer settings.
-3. Where the summary is injected (system-side preamble vs. a stand-in
+4. Where the summary is injected (system-side preamble vs. a stand-in
    message at the top of the history).
-4. Whether pinning individual messages to stay in context (Qvink's brain
+5. Whether pinning individual messages to stay in context (Qvink's brain
    icon) is in scope now, later, or never.
-5. Failure behavior when a summary call fails (error-honesty rules apply;
+6. Failure behavior when a summary call fails (error-honesty rules apply;
    behavior and wording need approval).
-6. All user-facing wording — settings labels, the summary view, status
+7. All user-facing wording — settings labels, the summary view, status
    and failure text — approved as a batch once behavior is settled.
 
 ---
