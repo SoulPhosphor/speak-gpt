@@ -84,7 +84,9 @@ a **Memory Analysis Type** control with an off-by-default lorebook-only
 mode that proposes keyword-triggered lore book entries instead of saved
 memories; those suggestions are reviewed in the lore book area behind a
 split menu that exists only while suggestions are pending, each with a
-destination drop-down that includes full-page new-book creation. All
+destination drop-down that includes full-page new-book creation. A §15
+owner work-order list (letters A–J) was added so the owner can start any
+implementation step by naming its letter. All
 wording remains provisional. No app code or strings are changed by this
 revision.
 
@@ -3470,3 +3472,69 @@ a RAG system that behaves correctly on the phone, and a practical
 computer-agent route that can search the same knowledge, inspect its
 evidence, propose maintenance, and return work without becoming a second
 authority.
+
+## 15. Owner work orders — say a letter, agent goes
+
+This list exists so the owner can start any step with one sentence, for
+example: *"Implement work order B from
+`Memory System/external_memory_analysis_counterplan.md`."*
+
+**When the owner names a bare letter, it means this list** — not the §10
+phase names and not the §6 copy subsections. Standing rules for every work
+order: work on a feature branch; follow `CLAUDE.md`; the smallest coherent
+change; push and get Android Checks green; use only the wording drafts
+recorded in §6 and return to the owner for wording approval before anything
+visible ships; report code result and on-device expectations separately.
+Do not start a work order whose "Needs" letters are not finished, and do
+not bundle extra work orders into one branch.
+
+Recommended run order is alphabetical, but A–G may be reordered where
+"Needs" allows.
+
+- **A — Source semantics.** The two independent switches (Saved memories /
+  Lore books), archive consent separated from injection, legacy migration,
+  four-mode tests. Defined in §5.3, §5.4, workstream 1 of §5.10.
+  Needs: nothing. Owner's part: approve the two labels/helpers and the
+  archive re-enable dialog near the end.
+- **B — Retrieval correctness.** Memories stop silently disappearing:
+  complete-set fallback, relevance floor before top-K, backfill after
+  filters, policy clamps, updated freshness, proper lexical/embedding
+  documents. Defined in §5.5, §10 Phase A, workstream 2 of §5.10.
+  Needs: nothing. Owner's part: none until wording review.
+- **C — Run integrity and truthful status.** Sealed transcript claims with
+  a durable run record, the Memory Analysis foreground service so runs
+  survive the screen turning off, typed scene-context capture, rename-safe
+  rejected drafts, and honest failure counts. Defined in §4 items (a), (c),
+  (e), (g) and §6 copy A–D. Needs: nothing. Owner's part: approve the four
+  status/dialog texts near the end.
+- **D — Index lifecycle and performance.** Missing-vector repair, scoped
+  vector loads, cached overlap vectors, persistent diagnostics. Defined in
+  workstream 3 of §5.10. Needs: B. Owner's part: none.
+- **E — Provenance and hygiene.** Shared filing/acceptance validation,
+  evidence lineage, truthful source labels, status-aware exact matching,
+  the Possible Match service. Defined in §5.7, workstream 4 of §5.10.
+  Needs: B. Owner's part: Possible Match screen wording when scheduled.
+- **F — Lore query and diagnostics.** Faster lore matching, cross-book
+  duplicate handling, injected-versus-cut logs. Defined in §5.6,
+  workstream 5 of §5.10. Needs: nothing. Owner's part: none.
+- **G — Model-free analysis and lorebook-only mode.** The Memory Browser
+  "can't be used in chats" banner, the Memory Analysis Type control with
+  the off-by-default lorebook-only toggle, the lore book pending area with
+  per-suggestion destination selection. Defined in §5.3 (owner ruling,
+  2026-07-28) and §6 copy E. Needs: C. Owner's part: approve the banner and
+  toggle wording (drafts recorded) and the lore book review copy.
+- **H — Portable memory package (Phase B).** The full `.sgmemory` export a
+  computer AI can read. Defined in §9.4 and §10 Phase B. Needs: A, the
+  release-blocking parts of B, C, and the evidence/shared-filing part of E.
+  Owner's part: approve the plaintext privacy disclosure and default scope
+  (§13 decision 3) before the first export ships.
+- **I — Computer workflow proof (Phase C).** Instructions, specs, and real
+  trials with file-capable agents; no phone mutations yet. Defined in §10
+  Phase C. Needs: H. Owner's part: none required, trying it is welcome.
+- **J — Import and reconciliation (Phase D).** Bringing suggestions back:
+  strict import, conflicts, Pending review, approval/rollback, deltas,
+  optional encryption. Defined in §9.6 and §10 Phase D. Needs: I.
+  Owner's part: approve maintenance action wording and encryption timing
+  (§13 decisions 4–5).
+
+After J, re-run the §8 fresh-agent review before broad use, per §14.
