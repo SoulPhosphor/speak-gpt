@@ -203,16 +203,22 @@ class Enforcer private constructor(private val appContext: Context) {
         // Retrieval: the librarian's search inherits the eligibility gates in the
         // store query. The per-memory always-load flag is retired
         // (owner_approved_rules §10): nothing is force-injected every turn.
+        // Over-fetch (counterplan §10 A.2): a ranked candidate POOL, not a
+        // final list — the cooldown/lore-overlap removals below backfill from
+        // it, so a filtered candidate does not silently shrink the prompt.
         val query = listOf(input.userMessage, input.recentContext)
             .filter { it.isNotBlank() }.joinToString("\n")
         if (!librarian.hasUsableModel()) notes.add("no embedding model — keyword retrieval")
-        val retrievedRaw: List<ScoredMemory> = try {
-            librarian.search(retrievalScope, query, policy.topK, input.projectId?.takeIf { it.isNotBlank() })
+        val poolScored: List<ScoredMemory> = try {
+            librarian.search(
+                retrievalScope, query, RetrievalBackfill.SCAN_CAP,
+                input.projectId?.takeIf { it.isNotBlank() }
+            )
         } catch (e: Exception) {
             notes.add("retrieval failed: ${e.message}")
             emptyList()
         }
-        var retrieved = retrievedRaw.map { toAssembled(it.memory, it.score, it.similarity) }
+        val pool = poolScored.map { toAssembled(it.memory, it.score, it.similarity) }
 
         // Lore notes: the user's hand-written tier, same budget caps as the
         // classic path (core-book-first order is preserved from the caller).
@@ -225,59 +231,74 @@ class Enforcer private constructor(private val appContext: Context) {
             loreNotes.add(LoreNote(match.entry.label, match.entry.content))
         }
 
-        // Near-duplicate suppression (coexistence rule): a retrieved memory
-        // that duplicates an injected lore entry is dropped — user-authored
-        // wins — and the pair is recorded via flagContradictions (silent
-        // disagreement between the tiers is the one thing never allowed). Those
-        // flags are write-only today; see flagContradictions for the details.
-        val suppressed = ArrayList<Pair<AssembledMemory, LoreNote>>()
-        if (loreNotes.isNotEmpty() && retrieved.isNotEmpty()) {
-            val loreVectors = loreNotes.map { note ->
-                note to librarian.embedOrNull("${note.label}: ${note.content}", false)
-            }
-            retrieved = retrieved.filter { mem ->
-                val memText = "${mem.title}: ${mem.content}"
-                val memVec = if (loreVectors.any { it.second != null }) librarian.embedOrNull(memText, false) else null
-                val dupOf = loreVectors.firstOrNull { (note, loreVec) ->
-                    if (memVec != null && loreVec != null) {
-                        VectorMath.cosine(memVec, loreVec) >= NearDuplicate.COSINE_THRESHOLD
-                    } else {
-                        NearDuplicate.isTextNearDup(memText, "${note.label}: ${note.content}")
-                    }
-                }
-                if (dupOf != null) {
-                    suppressed.add(mem to dupOf.first)
-                    false
-                } else true
-            }
-            if (suppressed.isNotEmpty()) flagContradictions(store, suppressed)
-        }
-
-        // Freshness cooldown (§10 / Stage 3.3): entries whose last injection is
-        // still fresh in this chat are suppressed BEFORE the budget, so a
-        // cooling memory never crowds out one that may actually inject. A
-        // clock/store failure skips suppression for the turn (inject rather
-        // than silently starve) and is noted in the log.
+        // Freshness cooldown state (§10 / Stage 3.3): the turn clock and the
+        // pool's last-injection turns, fetched once. A clock/store failure
+        // skips cooldown suppression for the turn (inject rather than
+        // silently starve) and is noted in the log.
         var turn: Long? = null
-        val cooled = ArrayList<Pair<AssembledMemory, Long>>()
+        var lastTurns: Map<String, Long> = emptyMap()
         try {
-            val thisTurn = store.nextTurnNumber(input.chatId)
-            turn = thisTurn
-            if (retrieved.isNotEmpty()) {
-                val lastTurns = store.lastInjectedTurns(
-                    input.chatId, MemoryStore.COOLDOWN_SOURCE_MEMORY, retrieved.map { it.memoryId }
+            turn = store.nextTurnNumber(input.chatId)
+            if (pool.isNotEmpty()) {
+                lastTurns = store.lastInjectedTurns(
+                    input.chatId, MemoryStore.COOLDOWN_SOURCE_MEMORY, pool.map { it.memoryId }
                 )
-                retrieved = retrieved.filter { m ->
-                    val last = lastTurns[m.memoryId]
-                    if (last != null && thisTurn - last < COOLDOWN_TURNS) {
-                        cooled.add(m to (thisTurn - last))
-                        false
-                    } else true
-                }
             }
         } catch (e: Exception) {
             notes.add("cooldown unavailable this turn: ${e.message}")
         }
+
+        // Near-duplicate suppression (coexistence rule): a retrieved memory
+        // that duplicates an injected lore entry is dropped — user-authored
+        // wins — and the pair is recorded via flagContradictions (silent
+        // disagreement between the tiers is the one thing never allowed).
+        // Those flags are write-only today; see flagContradictions for the
+        // details. Lore vectors are prepared once; each examined candidate is
+        // checked lazily below so the embed work stays bounded by the scan
+        // cap rather than the whole pool.
+        val loreVectors: List<Pair<LoreNote, FloatArray?>> =
+            if (loreNotes.isEmpty() || pool.isEmpty()) emptyList()
+            else loreNotes.map { note -> note to librarian.embedOrNull("${note.label}: ${note.content}", false) }
+        val anyLoreVector = loreVectors.any { it.second != null }
+        fun loreDupOf(mem: AssembledMemory): LoreNote? {
+            if (loreVectors.isEmpty()) return null
+            val memText = "${mem.title}: ${mem.content}"
+            val memVec = if (anyLoreVector) librarian.embedOrNull(memText, false) else null
+            return loreVectors.firstOrNull { (note, loreVec) ->
+                if (memVec != null && loreVec != null) {
+                    VectorMath.cosine(memVec, loreVec) >= NearDuplicate.COSINE_THRESHOLD
+                } else {
+                    NearDuplicate.isTextNearDup(memText, "${note.label}: ${note.content}")
+                }
+            }?.first
+        }
+
+        // Consume the ranked pool until top-K survive, relevance is
+        // exhausted, or the scan cap is reached. Cooldown is checked first
+        // (cheap map lookup), then the lore near-duplicate check (may embed).
+        val suppressed = ArrayList<Pair<AssembledMemory, LoreNote>>()
+        val cooled = ArrayList<Pair<AssembledMemory, Long>>()
+        val turnNow = turn
+        val selection = RetrievalBackfill.select(pool, policy.topK) { mem ->
+            val last = lastTurns[mem.memoryId]
+            if (turnNow != null && last != null && turnNow - last < COOLDOWN_TURNS) {
+                cooled.add(mem to (turnNow - last))
+                false
+            } else {
+                val dup = loreDupOf(mem)
+                if (dup != null) {
+                    suppressed.add(mem to dup)
+                    false
+                } else true
+            }
+        }
+        val retrieved = selection.kept
+        if (selection.scanCapReached) {
+            notes.add(
+                "candidate scan cap (${RetrievalBackfill.SCAN_CAP}) reached before ${policy.topK} memories survived filtering"
+            )
+        }
+        if (suppressed.isNotEmpty()) flagContradictions(store, suppressed)
 
         // The active cards this turn (3.6d): the resolved world, campaign,
         // user character, and the campaign's linked party members. Fetched
