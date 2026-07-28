@@ -1530,14 +1530,14 @@ class Preferences private constructor(private var preferences: SharedPreferences
      * engine picker — a chat switched ON injects memory regardless of the
      * engine tier, a chat switched OFF never does. Only an UNSET chat
      * follows the globals, and its default is derived from the engine
-     * picker (memory injects by default only at the "full" tier) combined
-     * with the Memory settings default toggle.
+     * picker (memory injects by default when the engine includes
+     * associative search) combined with the Memory settings default toggle.
      * */
     fun getChatMemoryEnabled() : Boolean {
         return when (getString("memory_enabled", "")) {
             "true" -> true
             "false" -> false
-            else -> getMemoryEngine() == "full" && getDefaultMemoryEnabled()
+            else -> getMemoryEngine() in setOf("associative", "both") && getDefaultMemoryEnabled()
         }
     }
 
@@ -1579,15 +1579,15 @@ class Preferences private constructor(private var preferences: SharedPreferences
      * and the same authority rule as [getChatMemoryEnabled]: Quick Settings
      * is God (owner ruling, July 10 2026) — an explicit per-chat value wins
      * over the global Memory engine picker; an unset chat follows the
-     * engine-derived default (lore books are on unless the engine is
-     * "none"). Independent of the memory switch, so any combination —
+     * engine-derived default (lore books are on when the engine includes
+     * lorebooks). Independent of the memory switch, so any combination —
      * both, either one alone, or neither — works per chat.
      * */
     fun getChatLoreBooksEnabled() : Boolean {
         return when (getString("lorebooks_enabled", "")) {
             "true" -> true
             "false" -> false
-            else -> getMemoryEngine() != "none"
+            else -> getMemoryEngine() in setOf("lorebooks", "both")
         }
     }
 
@@ -1732,15 +1732,16 @@ class Preferences private constructor(private var preferences: SharedPreferences
     }
 
     /**
-     * Memory engine tier (integration plan Phase 4, global): "none" = character
-     * config + activation prompts only; "lorebooks" = the classic trigger-based
-     * lorebook tier (today's behavior, the default); "full" = the complete
-     * companion memory system (enforcer assembly; requires an installed
-     * embedding model to be selectable, though it degrades to keyword retrieval
-     * if the model later breaks — the tier never blocks generation).
+     * Memory engine tier (global): "none" = character config + activation
+     * prompts only; "lorebooks" = trigger-based lorebook tier (the default);
+     * "associative" = associative search retrieval only (requires an
+     * embedding model); "both" = lorebooks and associative search together.
+     * The former "full" value is migrated to "both" on read.
      */
     fun getMemoryEngine() : String {
-        return getGlobalString("memory_engine", "lorebooks")
+        val stored = getGlobalString("memory_engine", "lorebooks")
+        if (stored == "full") return "both"
+        return stored
     }
 
     fun setMemoryEngine(engine: String) {

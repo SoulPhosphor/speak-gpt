@@ -21,6 +21,7 @@ import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
 import android.view.View
+import android.view.ViewGroup
 import android.view.WindowInsets
 import android.widget.ArrayAdapter
 import android.widget.ImageButton
@@ -165,41 +166,50 @@ class MemoryControlsActivity : FragmentActivity() {
 
     private fun engineLabel(engine: String): String = when (engine) {
         "none" -> getString(R.string.memory_controls_engine_none)
-        "full" -> getString(R.string.memory_controls_engine_full)
+        "associative" -> getString(R.string.memory_controls_engine_associative)
+        "both" -> getString(R.string.memory_controls_engine_both)
         else -> getString(R.string.memory_controls_engine_lorebooks)
     }
 
     private fun refreshEngineRow() {
         textMemoryEngineValue?.text = engineLabel(preferences?.getMemoryEngine() ?: "lorebooks")
+        val hasEmbedding = EmbeddingModelStorage.activeModel(this) != null
+        findViewById<TextView>(R.id.text_engine_needs_model)
+            ?.visibility = if (hasEmbedding) View.GONE else View.VISIBLE
     }
 
     private fun showMemoryEnginePicker() {
         val anchor = textMemoryEngineValue ?: return
-        val engines = arrayOf("none", "lorebooks", "full")
-        val labels = listOf(
-            getString(R.string.memory_controls_engine_none_desc),
-            getString(R.string.memory_controls_engine_lorebooks_desc),
-            getString(R.string.memory_controls_engine_full_desc)
+        val engines = arrayOf("none", "lorebooks", "associative", "both")
+        val labels = arrayOf(
+            getString(R.string.memory_controls_engine_none),
+            getString(R.string.memory_controls_engine_lorebooks),
+            getString(R.string.memory_controls_engine_associative),
+            getString(R.string.memory_controls_engine_both)
         )
+        val hasEmbedding = EmbeddingModelStorage.activeModel(this) != null
+        val disabled = if (hasEmbedding) emptySet() else setOf(2, 3)
+
+        val adapter = object : ArrayAdapter<String>(this, android.R.layout.simple_list_item_1, labels) {
+            override fun isEnabled(position: Int): Boolean = position !in disabled
+            override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
+                val view = super.getView(position, convertView, parent)
+                view.isEnabled = position !in disabled
+                return view
+            }
+        }
 
         val popup = ListPopupWindow(this)
         popup.anchorView = anchor
         popup.isModal = true
-        popup.width = anchor.width
-        popup.setAdapter(ArrayAdapter(this, android.R.layout.simple_list_item_1, labels))
+        popup.width = ListPopupWindow.WRAP_CONTENT
+        popup.setAdapter(adapter)
         popup.setOnItemClickListener { _, _, position, _ ->
             popup.dismiss()
             val picked = engines[position]
-            if (picked == "full" && EmbeddingModelStorage.activeModel(this) == null) {
-                findViewById<TextView>(R.id.text_engine_needs_model)
-                    ?.visibility = View.VISIBLE
-                return@setOnItemClickListener
-            }
-            findViewById<TextView>(R.id.text_engine_needs_model)
-                ?.visibility = View.GONE
             preferences?.setMemoryEngine(picked)
             refreshEngineRow()
-            if (picked == "full") {
+            if (picked == "associative" || picked == "both") {
                 Thread {
                     try {
                         val created = MemoryCompanionSync.bootstrapFromPersonas(this)

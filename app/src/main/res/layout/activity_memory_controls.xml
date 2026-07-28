@@ -199,7 +199,7 @@
             <TextView
                 android:id="@+id/text_engine_needs_model"
                 style="@style/Widget.App.Section.Hint"
-                android:text="@string/memory_engine_full_needs_model"
+                android:text="@string/memory_engine_needs_embedding"
                 android:textColor="?attr/colorPrimary"
                 android:textSize="14sp"
                 android:textStyle="bold"

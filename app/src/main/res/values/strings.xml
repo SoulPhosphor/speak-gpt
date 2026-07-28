@@ -1101,7 +1101,7 @@
     <string name="memory_engine_picker_title">Choose memory engine</string>
     <!-- Owner wording, July 9 2026 — shown inline (persistent) under the
          Memory Engine control, never a toast. -->
-    <string name="memory_engine_full_needs_model">Install an embedding model in Advanced Memory Settings before switching to the full memory system.</string>
+    <string name="memory_engine_needs_embedding">Install the embedding model in Advanced Memory Settings to enable Associative Search.</string>
     <string name="memory_archivist_endpoint_picker_title">Choose an endpoint</string>
     <string name="memory_archivist_endpoint_none_toast">No saved API endpoints yet — add one in API Endpoints first.</string>
     <string name="memory_archivist_model_hint">e.g. gpt-4o-mini</string>
@@ -1356,11 +1356,9 @@
     <string name="memory_controls_row_engine">Memory Engine</string>
     <string name="memory_controls_row_engine_hint">Choose how much memory support the app uses.</string>
     <string name="memory_controls_engine_none">None</string>
-    <string name="memory_controls_engine_lorebooks">Lore Books</string>
-    <string name="memory_controls_engine_full">Full</string>
-    <string name="memory_controls_engine_none_desc">None: Memory stays off.</string>
-    <string name="memory_controls_engine_lorebooks_desc">Lore Books: Uses trigger-based lore notes.</string>
-    <string name="memory_controls_engine_full_desc">Full: Uses the full memory system.</string>
+    <string name="memory_controls_engine_lorebooks">Lorebooks Only</string>
+    <string name="memory_controls_engine_associative">Associative Search Only</string>
+    <string name="memory_controls_engine_both">Both Memory Systems</string>
     <string name="memory_controls_section_assistant_model">Memory Assistant Model</string>
     <string name="memory_controls_row_assistant_endpoint">Memory Assistant Endpoint</string>
     <string name="memory_controls_row_assistant_endpoint_hint">Choose which saved AI endpoint analyzes history and drafts memory items.</string>
