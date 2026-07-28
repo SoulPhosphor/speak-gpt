@@ -41,7 +41,6 @@ import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.slider.Slider
 import com.google.android.material.textfield.TextInputEditText
-import com.google.android.material.textfield.TextInputLayout
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.Preferences
@@ -72,7 +71,6 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
     private var btnBack: ImageButton? = null
 
     private var switchMaxSuggestions: MaterialSwitch? = null
-    private var layoutMaxSuggestions: TextInputLayout? = null
     private var fieldMaxSuggestions: TextInputEditText? = null
 
     private var rowArchivistEndpoint: LinearLayout? = null
@@ -118,7 +116,6 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
         actionBar = findViewById(R.id.action_bar)
         btnBack = findViewById(R.id.btn_back)
         switchMaxSuggestions = findViewById(R.id.switch_max_suggestions)
-        layoutMaxSuggestions = findViewById(R.id.layout_max_suggestions)
         fieldMaxSuggestions = findViewById(R.id.field_max_suggestions)
         rowArchivistEndpoint = findViewById(R.id.row_archivist_endpoint)
         textArchivistEndpointValue = findViewById(R.id.text_archivist_endpoint_value)
@@ -198,7 +195,7 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
         val current = preferences?.getArchivistMaxSuggestions() ?: 0
         val on = current > 0
         switchMaxSuggestions?.isChecked = on
-        layoutMaxSuggestions?.visibility = if (on) View.VISIBLE else View.GONE
+        fieldMaxSuggestions?.visibility = if (on) View.VISIBLE else View.GONE
         if (on) setSuggestionFieldText(current.toString())
 
         switchMaxSuggestions?.setOnCheckedChangeListener { _, checked ->
@@ -206,10 +203,10 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
                 val value = (preferences?.getArchivistMaxSuggestions() ?: 0).let { if (it > 0) it else DEFAULT_MAX_SUGGESTIONS }
                 preferences?.setArchivistMaxSuggestions(value)
                 setSuggestionFieldText(value.toString())
-                layoutMaxSuggestions?.visibility = View.VISIBLE
+                fieldMaxSuggestions?.visibility = View.VISIBLE
             } else {
                 preferences?.setArchivistMaxSuggestions(0)
-                layoutMaxSuggestions?.visibility = View.GONE
+                fieldMaxSuggestions?.visibility = View.GONE
             }
         }
 
