@@ -182,6 +182,7 @@ import org.teslasoft.assistant.preferences.includes.IncludeAuxiliaryRequestPolic
 import org.teslasoft.assistant.preferences.includes.IncludeForm
 import org.teslasoft.assistant.preferences.includes.IncludeKind
 import org.teslasoft.assistant.preferences.includes.IncludeMessageProjection
+import org.teslasoft.assistant.preferences.includes.ProjectedUserMessage
 import org.teslasoft.assistant.preferences.includes.IncludeNotice
 import org.teslasoft.assistant.preferences.includes.IncludeTextPolicy
 import org.teslasoft.assistant.ui.util.IncludeEditDialog
@@ -5343,7 +5344,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         )
         endpoint.imageCapabilityByModel = updated
         val prefs = ApiEndpointPreferences.getApiEndpointPreferences(this)
-        prefs.setApiEndpoint(this, endpoint, preferences?.getApiEndpointId() ?: return)
+        prefs.setApiEndpoint(this, endpoint)
     }
 
     /**
