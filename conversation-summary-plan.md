@@ -218,22 +218,40 @@ reduction, more the longer the chat runs.
    the prompt in use — the choice does not appear in Quick Settings.
    Slots one and two ship filled with two different styles (story-flow
    and plain-facts, both drafted under the delegated-prompt rules in
-   decision 5). Slots three to five start empty; users copy-paste from a
-   filled slot to experiment without losing a prompt they trust. Users
-   can rename any slot. Per-slot revert restores whatever the slot
-   shipped with. Different styles are prompt text only — the wiring is
-   identical for every slot.
+   decision 5). Slots three to five start empty; users experiment by
+   copying text with ordinary text selection — no dedicated copy/paste
+   buttons (owner ruling, July 28 2026). Users can rename any slot.
+   Revert buttons exist only under the two shipped slots and restore
+   their shipped prompts; the empty slots have no revert. Different
+   styles are prompt text only — the wiring is identical for every slot.
 
 7. **Empty-prompt guard on leaving the screen.** If the user leaves
    Summarizer settings (header back control or system back gesture)
    while the selected slot's prompt is empty, a standard dialog blocks
-   the exit: Okay backs out with a known-good prompt selected instead;
-   Cancel stays on the screen so the user can fix it themselves. The
-   owner authored the dialog's message (behavior approved; exact string
-   pending spelling confirmation in chat). The dialog uses the standard
-   dialog theme and two-action pattern.
+   the exit. Approved wording (owner-authored, typos corrected with
+   approval): "Model summary prompts can't be empty. Last good prompt
+   has been selected." Okay backs out with the fallback applied; Cancel
+   stays on the screen so the user can fix it themselves. Fallback rule
+   (owner-approved): select the most recently used slot that still has
+   text; if none exists, restore slot one's shipped prompt and select
+   it, so summarizing can never run on empty instructions. The dialog
+   uses the standard dialog theme and two-action pattern.
 
-8. **UI construction rules.** All UI uses the shared style families from
+8. **No-model state.** The Quick Settings toggle is not shown until a
+   summarizer endpoint/model is set up — without a model the toggle is
+   pointless, and hiding it means the feature can never be switched on
+   in a broken state, so no exit-blocking popup is needed on the
+   Summarizer settings screen. Instead the screen opens with an
+   explanatory paragraph at the top. Approved wording (owner-authored,
+   typos corrected with approval): "The summarizer sends the specified
+   number of messages to the model each turn. Anything beyond that
+   amount is summarized using the AI model selected in these settings.
+   At any time, the summarizer can be turned off in Quick settings,
+   which will allow all messages to be sent to the AI again." The
+   paragraph uses the shared intro/section-hint style per the style
+   guide.
+
+9. **UI construction rules.** All UI uses the shared style families from
    `ui-style-guide.md` (toggle rows, label-above-box and inline number
    fields, dropdown fields, section titles/hints, action-bar headers,
    shared button roles). No hardcoded colors, typography, or geometry —
@@ -243,20 +261,20 @@ reduction, more the longer the chat runs.
 
 ## 6. Decisions still open
 
-1. Empty-guard edge case: what "last good prompt" falls back to when the
-   user has emptied the slot that was in use (including all five slots
-   emptied). Recommendation pending owner answer in chat.
-2. Final dialog string for the empty-prompt guard (spelling-corrected
-   version awaiting owner confirmation).
-3. Target summary length: fixed default, or a user-set value in
+1. Pause/resume catch-up behavior: recommended design (summary and its
+   fold-in bookmark are kept when the per-chat toggle turns off; turning
+   it back on catches up from the bookmark in batched background calls —
+   nothing is ever re-summarized). Explained to the owner in chat;
+   awaiting confirmation.
+2. Target summary length: fixed default, or a user-set value in
    Summarizer settings.
-4. Where the summary is injected (system-side preamble vs. a stand-in
+3. Where the summary is injected (system-side preamble vs. a stand-in
    message at the top of the history).
-5. Whether pinning individual messages to stay in context (Qvink's brain
+4. Whether pinning individual messages to stay in context (Qvink's brain
    icon) is in scope now, later, or never.
-6. Failure behavior when a summary call fails (error-honesty rules apply;
+5. Failure behavior when a summary call fails (error-honesty rules apply;
    behavior and wording need approval).
-7. All user-facing wording — settings labels, the summary view, status
+6. Remaining user-facing wording — settings labels, the summary view, status
    and failure text — approved as a batch once behavior is settled.
 
 ---
