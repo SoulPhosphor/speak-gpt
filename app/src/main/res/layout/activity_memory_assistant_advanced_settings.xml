@@ -39,9 +39,21 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
 
+        <!-- This screen's title text is longer than any other simple header's,
+             long enough to run under the back button when centered edge-to-edge
+             like the shared style normally does. Reserves a margin on both
+             sides matching the back button's own footprint (56dp) so the text
+             never draws under it, and truncates instead of overlapping in the
+             worst case. -->
         <TextView
             android:id="@+id/activity_title"
             style="@style/Widget.App.ActionBar.Title"
+            android:layout_width="0dp"
+            android:layout_marginStart="64dp"
+            android:layout_marginEnd="64dp"
+            android:gravity="center"
+            android:maxLines="1"
+            android:ellipsize="end"
             android:text="@string/title_memory_assistant_advanced"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
