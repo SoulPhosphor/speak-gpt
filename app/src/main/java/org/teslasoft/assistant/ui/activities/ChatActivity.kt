@@ -6120,11 +6120,24 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     .put("max_tokens", preferences?.getMaxTokens())
                     .toString()
             } catch (_: Exception) { null }
+            // Typed scene context (counterplan §4(e)): the chat's current
+            // selections, stamped on the transcript row at capture — scene
+            // identity is not muddled into the sampling-settings JSON.
+            val turnWorldId = preferences?.getChatWorldId()?.takeIf { it.isNotBlank() }
+            val turnCampaignId = preferences?.getChatCampaignId()?.takeIf { it.isNotBlank() }
+            val turnRpCharacterId = preferences?.getChatRoleplayCharacterId()?.takeIf { it.isNotBlank() }
+            val turnUserPersonaId = preferences?.getChatUserPersonaId()?.takeIf { it.isNotBlank() }
+            val turnProjectId = preferences?.getChatProjectId()?.takeIf { it.isNotBlank() }
 
             Thread {
                 TranscriptRecorder.recordTurn(
                     appContext, turnChatId, turnPersonaId, request, reply,
-                    turnModel, quickSettings, excluded, replyComplete
+                    turnModel, quickSettings, excluded, replyComplete,
+                    worldId = turnWorldId,
+                    campaignId = turnCampaignId,
+                    roleplayCharacterId = turnRpCharacterId,
+                    userPersonaId = turnUserPersonaId,
+                    projectId = turnProjectId
                 )
             }.start()
         } catch (e: Exception) {

@@ -25,6 +25,7 @@ import org.teslasoft.assistant.preferences.backup.BackupType
 import org.teslasoft.assistant.preferences.backup.CorruptionErrorHandlers
 import org.teslasoft.assistant.preferences.backup.DatabaseDegradedException
 import org.teslasoft.assistant.preferences.backup.DatabaseHealthState
+import org.teslasoft.assistant.util.Hash
 import java.time.Instant
 import java.util.UUID
 
@@ -60,7 +61,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
 
     companion object {
         const val DATABASE_NAME = "companion_memory.db"
-        private const val DATABASE_VERSION = 16
+        private const val DATABASE_VERSION = 17
 
         // Freshness-cooldown source types (rules §10 / Stage 3.3): the
         // composite key (chat_id, source_type, entry_id) keeps ids from
@@ -376,7 +377,11 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 // never block a card delete); never exported.
                 "suggested_card_type TEXT, " +
                 "suggested_card_id TEXT, " +
-                "suggested_section TEXT)"
+                // Source chat id for learned-from-chat records (DB v17,
+                // counterplan §4(c)): the rename-safe rejected-draft anchor,
+                // carried across renames by repointChat. Device-local.
+                "suggested_section TEXT, " +
+                "source_chat_id TEXT)"
         )
 
         db.execSQL(
@@ -486,6 +491,10 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 "resolved_at TEXT)"
         )
 
+        // campaign_id/project_id complete the typed scene context (DB v17,
+        // counterplan §4(e)); claim_run_id is the analysis claim seal (DB
+        // v17, §4(a)) — deliberately FK-less like the ids stamped at capture:
+        // a deleted card or finished run must never block transcript writes.
         db.execSQL(
             "CREATE TABLE transcripts (" +
                 "transcript_id TEXT PRIMARY KEY, " +
@@ -494,6 +503,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 "world_id TEXT REFERENCES worlds(world_id), " +
                 "roleplay_character_id TEXT REFERENCES roleplay_characters(roleplay_character_id), " +
                 "user_persona_id TEXT REFERENCES user_personas(persona_id), " +
+                "campaign_id TEXT, " +
+                "project_id TEXT, " +
                 "source TEXT NOT NULL DEFAULT 'live' CHECK (source IN ('live','imported')), " +
                 "started_at TEXT, " +
                 "ended_at TEXT, " +
@@ -501,14 +512,17 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 "model_tag TEXT, " +
                 "quick_settings_json TEXT, " +
                 "review_status TEXT NOT NULL DEFAULT 'pending' CHECK (review_status IN ('pending','processed','excluded')), " +
-                "processed_at TEXT)"
+                "processed_at TEXT, " +
+                "claim_run_id TEXT)"
         )
 
-        // Rejected drafts (Phase 6, DB v14): deleting a Memory Assistant
-        // draft rejects it — a rerun of the same conversation must not
-        // refile the exact same draft. Specific by design: exact
-        // title+content hash + the source conversation; never broad
-        // similarity suppression. Device-local, never exported.
+        // Rejected drafts (Phase 6, DB v14; rekeyed DB v17): deleting a
+        // Memory Assistant draft rejects it — a rerun of the same
+        // conversation must not refile the exact same draft. Specific by
+        // design: exact title+content hash + the source conversation; never
+        // broad similarity suppression. chat_key holds the source CHAT ID
+        // (counterplan §4(c)) — rename-safe because `repointChat` carries
+        // these rows across a rename. Device-local, never exported.
         db.execSQL(
             "CREATE TABLE rejected_drafts (" +
                 "content_hash TEXT NOT NULL, " +
@@ -520,13 +534,18 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         // Archivist run history (Phase 6, DB v11): powers the Memory
         // Assistant's "Recent Memory Analysis" list and its Rerun action.
         // Device-local operational data — never exported (like embeddings),
-        // no tombstones.
+        // no tombstones. Since DB v17 a 'running' row IS the durable
+        // active-run record (counterplan §4(a)): written when a run starts,
+        // finalized on completion, reconciled to failed/interrupted at the
+        // next startup or run if the process died mid-run. transport is
+        // 'api' today; reserved for the future computer review package,
+        // whose claims the reconcile must NOT auto-release.
         db.execSQL(
             "CREATE TABLE archivist_runs (" +
                 "run_id TEXT PRIMARY KEY, " +
                 "started_at TEXT NOT NULL, " +
                 "finished_at TEXT, " +
-                "status TEXT NOT NULL CHECK (status IN ('complete','failed')), " +
+                "status TEXT NOT NULL CHECK (status IN ('running','complete','failed')), " +
                 "chat_ids_json TEXT NOT NULL DEFAULT '[]', " +
                 "transcript_ids_json TEXT NOT NULL DEFAULT '[]', " +
                 "memory_ids_json TEXT NOT NULL DEFAULT '[]', " +
@@ -535,7 +554,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 "failed_chat_ids_json TEXT NOT NULL DEFAULT '[]', " +
                 "error TEXT, " +
                 "outcome TEXT, " +
-                "failure_reason TEXT)"
+                "failure_reason TEXT, " +
+                "transport TEXT NOT NULL DEFAULT 'api')"
         )
 
         db.execSQL(
@@ -1229,6 +1249,81 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             db.execSQL(
                 "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                 arrayOf(META_DB_MIGRATION, "16")
+            )
+        }
+
+        if (oldVersion < 17) {
+            // v17 (July 2026, external-memory counterplan Step 1.3): run
+            // integrity and rename-safe rejection identity.
+            //
+            // transcripts: campaign_id/project_id complete the typed scene
+            // context stamped at capture (§4(e)); existing rows stay NULL —
+            // scene identity is never inferred after the fact. claim_run_id
+            // is the analysis claim seal (§4(a)); NULL = unclaimed.
+            db.execSQL("ALTER TABLE transcripts ADD COLUMN campaign_id TEXT")
+            db.execSQL("ALTER TABLE transcripts ADD COLUMN project_id TEXT")
+            db.execSQL("ALTER TABLE transcripts ADD COLUMN claim_run_id TEXT")
+            // memories: the source chat id of learned-from-chat records —
+            // the rename-safe rejected-draft anchor (§4(c)). Legacy rows
+            // stay NULL; deletion falls back to hashing the filing-time
+            // chat name in provenance_context (exactly as reliable as the
+            // old behavior, no worse).
+            db.execSQL("ALTER TABLE memories ADD COLUMN source_chat_id TEXT")
+            // archivist_runs: allow status 'running' (the durable active-run
+            // record) and add the claim transport. SQLite cannot loosen a
+            // CHECK with ALTER, so the table is rebuilt (same pattern as v4/
+            // v7; FKs are off during migration via onConfigure).
+            db.execSQL(
+                "CREATE TABLE archivist_runs_v17 (" +
+                    "run_id TEXT PRIMARY KEY, " +
+                    "started_at TEXT NOT NULL, " +
+                    "finished_at TEXT, " +
+                    "status TEXT NOT NULL CHECK (status IN ('running','complete','failed')), " +
+                    "chat_ids_json TEXT NOT NULL DEFAULT '[]', " +
+                    "transcript_ids_json TEXT NOT NULL DEFAULT '[]', " +
+                    "memory_ids_json TEXT NOT NULL DEFAULT '[]', " +
+                    "rule_ids_json TEXT NOT NULL DEFAULT '[]', " +
+                    "found_count INTEGER NOT NULL DEFAULT 0, " +
+                    "failed_chat_ids_json TEXT NOT NULL DEFAULT '[]', " +
+                    "error TEXT, " +
+                    "outcome TEXT, " +
+                    "failure_reason TEXT, " +
+                    "transport TEXT NOT NULL DEFAULT 'api')"
+            )
+            db.execSQL(
+                "INSERT INTO archivist_runs_v17 (run_id, started_at, finished_at, status, " +
+                    "chat_ids_json, transcript_ids_json, memory_ids_json, rule_ids_json, " +
+                    "found_count, failed_chat_ids_json, error, outcome, failure_reason) " +
+                    "SELECT run_id, started_at, finished_at, status, chat_ids_json, " +
+                    "transcript_ids_json, memory_ids_json, rule_ids_json, found_count, " +
+                    "failed_chat_ids_json, error, outcome, failure_reason FROM archivist_runs"
+            )
+            db.execSQL("DROP TABLE archivist_runs")
+            db.execSQL("ALTER TABLE archivist_runs_v17 RENAME TO archivist_runs")
+            // rejected_drafts: rekey from the mutable chat NAME to the chat
+            // id (§4(c)). Chat ids are the SHA-256 of the name, so existing
+            // rows convert exactly; a rename before this migration already
+            // defeated the old key, so nothing is lost that was not already
+            // lost. OR REPLACE guards the (content_hash, chat_key) PK.
+            val rekey = ArrayList<Pair<String, String>>()
+            db.rawQuery(
+                "SELECT DISTINCT chat_key FROM rejected_drafts WHERE chat_key != ''",
+                emptyArray<String>()
+            ).use {
+                while (it.moveToNext()) {
+                    val old = it.getString(0) ?: continue
+                    rekey.add(old to Hash.hash(old))
+                }
+            }
+            for ((old, new) in rekey) {
+                db.execSQL(
+                    "UPDATE OR REPLACE rejected_drafts SET chat_key = ? WHERE chat_key = ?",
+                    arrayOf(new, old)
+                )
+            }
+            db.execSQL(
+                "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                arrayOf(META_DB_MIGRATION, "17")
             )
         }
     }
@@ -2097,6 +2192,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                         worldId = it.getStringOrNull("world_id"),
                         roleplayCharacterId = it.getStringOrNull("roleplay_character_id"),
                         userPersonaId = it.getStringOrNull("user_persona_id"),
+                        campaignId = it.getStringOrNull("campaign_id"),
+                        projectId = it.getStringOrNull("project_id"),
                         source = it.getString(it.getColumnIndexOrThrow("source")),
                         startedAt = it.getStringOrNull("started_at"),
                         endedAt = it.getStringOrNull("ended_at"),
@@ -2197,9 +2294,15 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
     /**
      * Appends one completed turn to the chat's open transcript row (creating
      * one when needed). "Open" = the chat's newest unprocessed row, still
-     * served by the same model and companion and under the size cap — a change
-     * of model or companion, or an oversized row, starts a new row so each
-     * transcript's model_tag/companion_id stay truthful for the Archivist.
+     * served by the same model, companion, and scene, unclaimed, and under
+     * the size cap — a change of model, companion, or scene context, an
+     * oversized row, or an analysis claim on the row starts a new row so
+     * each transcript's model_tag/companion_id/scene columns stay truthful
+     * for the Archivist. A CLAIMED row is sealed (counterplan §4(a)): a turn
+     * arriving mid-analysis can never slip into a row a run has selected and
+     * be marked processed without ever being read — it starts a fresh
+     * pending row instead. Scene context (§4(e)) is stamped in the typed
+     * columns at capture time, never inferred later.
      * [markExcluded] implements the memory kill switch: content is still
      * captured (so exclusion is reversible and the experiment can be
      * recovered) but the row is marked do-not-review.
@@ -2214,7 +2317,12 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         modelTag: String,
         quickSettingsJson: String?,
         markExcluded: Boolean,
-        assistantComplete: Boolean = true
+        assistantComplete: Boolean = true,
+        worldId: String? = null,
+        campaignId: String? = null,
+        roleplayCharacterId: String? = null,
+        userPersonaId: String? = null,
+        projectId: String? = null
     ): String {
         val now = nowIso()
         val db = writableDatabase
@@ -2223,15 +2331,32 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             var rowId: String? = null
             var content = "[]"
             db.query(
-                "transcripts", arrayOf("transcript_id", "content", "model_tag", "companion_id", "review_status"),
+                "transcripts",
+                arrayOf(
+                    "transcript_id", "content", "model_tag", "companion_id", "review_status",
+                    "claim_run_id", "world_id", "campaign_id", "roleplay_character_id",
+                    "user_persona_id", "project_id"
+                ),
                 "chat_id = ? AND processed_at IS NULL", arrayOf(chatId),
                 null, null, "started_at DESC", "1"
             ).use {
                 if (it.moveToFirst()) {
                     val sameModel = it.getStringOrNull("model_tag") == modelTag
                     val sameCompanion = it.getStringOrNull("companion_id") == companionId
+                    // Sealed: the newest unprocessed row is claimed by a run
+                    // (or a future review package) — never append into it.
+                    val unclaimed = it.getStringOrNull("claim_run_id") == null
+                    // Scene identity is part of the row's truth: a scene
+                    // change closes the row like a model change does.
+                    val sameScene = it.getStringOrNull("world_id") == worldId &&
+                        it.getStringOrNull("campaign_id") == campaignId &&
+                        it.getStringOrNull("roleplay_character_id") == roleplayCharacterId &&
+                        it.getStringOrNull("user_persona_id") == userPersonaId &&
+                        it.getStringOrNull("project_id") == projectId
                     val existing = it.getString(it.getColumnIndexOrThrow("content"))
-                    if (sameModel && sameCompanion && existing.length < MAX_TRANSCRIPT_CHARS) {
+                    if (sameModel && sameCompanion && unclaimed && sameScene &&
+                        existing.length < MAX_TRANSCRIPT_CHARS
+                    ) {
                         rowId = it.getString(0)
                         content = existing
                     }
@@ -2259,6 +2384,11 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                     put("transcript_id", newRowId)
                     put("chat_id", chatId)
                     put("companion_id", companionId)
+                    put("world_id", worldId)
+                    put("campaign_id", campaignId)
+                    put("roleplay_character_id", roleplayCharacterId)
+                    put("user_persona_id", userPersonaId)
+                    put("project_id", projectId)
                     put("source", "live")
                     put("started_at", now)
                     put("ended_at", now)
@@ -2322,6 +2452,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         worldId = it.getStringOrNull("world_id"),
         roleplayCharacterId = it.getStringOrNull("roleplay_character_id"),
         userPersonaId = it.getStringOrNull("user_persona_id"),
+        campaignId = it.getStringOrNull("campaign_id"),
+        projectId = it.getStringOrNull("project_id"),
         source = it.getString(it.getColumnIndexOrThrow("source")),
         startedAt = it.getStringOrNull("started_at"),
         endedAt = it.getStringOrNull("ended_at"),
@@ -2329,17 +2461,21 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         modelTag = it.getStringOrNull("model_tag"),
         quickSettingsJson = it.getStringOrNull("quick_settings_json"),
         reviewStatus = it.getString(it.getColumnIndexOrThrow("review_status")),
-        processedAt = it.getStringOrNull("processed_at")
+        processedAt = it.getStringOrNull("processed_at"),
+        claimRunId = it.getStringOrNull("claim_run_id")
     )
 
     /** Everything a run would analyze, chronological: pending, never
-     *  processed, tied to a chat. The caller filters against the live chat
-     *  list (deleted conversations don't count — owner rule). */
+     *  processed, unclaimed, tied to a chat. Rows claimed by a live run (or
+     *  a future review package) are frozen and simply not eligible until
+     *  their claim resolves. The caller filters against the live chat list
+     *  (deleted conversations don't count — owner rule). */
     fun pendingUnprocessedTranscripts(): List<TranscriptRecord> {
         val out = ArrayList<TranscriptRecord>()
         readableDatabase.query(
             "transcripts", null,
-            "review_status = 'pending' AND processed_at IS NULL AND chat_id IS NOT NULL",
+            "review_status = 'pending' AND processed_at IS NULL AND chat_id IS NOT NULL " +
+                "AND claim_run_id IS NULL",
             null, null, null, "started_at ASC, transcript_id ASC"
         ).use { while (it.moveToNext()) out.add(readTranscript(it)) }
         return out
@@ -2361,8 +2497,14 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         return out
     }
 
-    /** Advance the watermark after a conversation is analyzed. */
-    fun markTranscriptsProcessed(ids: List<String>) {
+    /**
+     * Advance the watermark after a conversation is analyzed. Only rows
+     * still carrying [runId]'s claim stamp advance (counterplan §4(a)) — a
+     * run can never mark text it did not read: a row that was reclaimed,
+     * released, or never claimed is left untouched, and the claim is
+     * cleared as the row is processed.
+     */
+    fun markTranscriptsProcessed(ids: List<String>, runId: String) {
         if (ids.isEmpty()) return
         val now = nowIso()
         val db = writableDatabase
@@ -2372,12 +2514,105 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 db.update("transcripts", ContentValues().apply {
                     put("review_status", "processed")
                     put("processed_at", now)
-                }, "transcript_id = ?", arrayOf(id))
+                    putNull("claim_run_id")
+                }, "transcript_id = ? AND claim_run_id = ?", arrayOf(id, runId))
             }
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
         }
+    }
+
+    /**
+     * Open a durable analysis run (counterplan §4(a)): writes the 'running'
+     * run row — the active-run record — and stamps the claim seal on the
+     * selected transcript rows in the SAME transaction. Only rows that are
+     * still pending, unprocessed, and unclaimed take the stamp; the returned
+     * set is what the run may analyze. Everything else (claimed meanwhile,
+     * excluded, processed) is simply not in the run.
+     */
+    fun beginAnalysisRun(run: ArchivistRunRecord, transcriptIds: List<String>): Set<String> {
+        val db = writableDatabase
+        val claimed = HashSet<String>()
+        db.beginTransaction()
+        try {
+            db.insertWithOnConflict(
+                "archivist_runs", null, archivistRunValues(run), SQLiteDatabase.CONFLICT_REPLACE
+            )
+            for (id in transcriptIds) {
+                val n = db.update(
+                    "transcripts",
+                    ContentValues().apply { put("claim_run_id", run.runId) },
+                    "transcript_id = ? AND claim_run_id IS NULL " +
+                        "AND review_status = 'pending' AND processed_at IS NULL",
+                    arrayOf(id)
+                )
+                if (n == 1) claimed.add(id)
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+        return claimed
+    }
+
+    /** Release every claim a run still holds (terminal cleanup: completion,
+     *  failure, or interruption). Processed rows already dropped theirs. */
+    fun releaseAnalysisClaims(runId: String) {
+        writableDatabase.execSQL(
+            "UPDATE transcripts SET claim_run_id = NULL WHERE claim_run_id = ?",
+            arrayOf(runId)
+        )
+    }
+
+    /**
+     * Startup/next-run recovery (counterplan §4(a), the RenameJournal
+     * pattern): a killed process runs no cleanup code, so any 'running' API
+     * run found here is dead. Its unfinished claims are released (the rows
+     * stay pending and are picked up by the next run — unseen text is never
+     * marked processed) and the run row is finalized as interrupted, with
+     * whatever per-conversation progress was durably recorded before death.
+     * Deliberately scoped to transport='api': a future computer review
+     * package's claims wait for import, cancel, or replacement — they are
+     * the one kind never auto-released. Returns how many dead runs were
+     * recovered.
+     */
+    fun reconcileInterruptedAnalysisRuns(): Int {
+        val db = writableDatabase
+        val deadRunIds = ArrayList<String>()
+        db.beginTransaction()
+        try {
+            db.query(
+                "archivist_runs", arrayOf("run_id"),
+                "status = 'running' AND transport = 'api'", null, null, null, null
+            ).use { while (it.moveToNext()) deadRunIds.add(it.getString(0)) }
+            val now = nowIso()
+            for (runId in deadRunIds) {
+                db.execSQL(
+                    "UPDATE transcripts SET claim_run_id = NULL WHERE claim_run_id = ?",
+                    arrayOf(runId)
+                )
+                db.update("archivist_runs", ContentValues().apply {
+                    put("status", "failed")
+                    put("outcome", "interrupted")
+                    put("failure_reason", "interrupted")
+                    put("finished_at", now)
+                    put("error", "process ended before the run finished")
+                }, "run_id = ?", arrayOf(runId))
+            }
+            // Belt: an API claim whose run row is gone entirely (e.g. the
+            // record write itself died) is unrecoverable operational state —
+            // release it so the rows return to the queue. Scoped to the API
+            // run id prefix so future non-API claims are never touched.
+            db.execSQL(
+                "UPDATE transcripts SET claim_run_id = NULL WHERE claim_run_id LIKE 'run-%' " +
+                    "AND claim_run_id NOT IN (SELECT run_id FROM archivist_runs)"
+            )
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+        return deadRunIds.size
     }
 
     /**
@@ -2449,29 +2684,38 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         ).use { return it.moveToNext() }
     }
 
-    fun insertArchivistRun(run: ArchivistRunRecord) {
-        writableDatabase.insertWithOnConflict("archivist_runs", null, ContentValues().apply {
-            put("run_id", run.runId)
-            put("started_at", run.startedAt)
-            put("finished_at", run.finishedAt)
-            put("status", run.status)
-            put("chat_ids_json", run.chatIdsJson)
-            put("transcript_ids_json", run.transcriptIdsJson)
-            put("memory_ids_json", run.memoryIdsJson)
-            put("rule_ids_json", run.ruleIdsJson)
-            put("found_count", run.foundCount)
-            put("failed_chat_ids_json", run.failedChatIdsJson)
-            put("error", run.error)
-            put("outcome", run.outcome)
-            put("failure_reason", run.failureReason)
-        }, SQLiteDatabase.CONFLICT_REPLACE)
+    private fun archivistRunValues(run: ArchivistRunRecord) = ContentValues().apply {
+        put("run_id", run.runId)
+        put("started_at", run.startedAt)
+        put("finished_at", run.finishedAt)
+        put("status", run.status)
+        put("chat_ids_json", run.chatIdsJson)
+        put("transcript_ids_json", run.transcriptIdsJson)
+        put("memory_ids_json", run.memoryIdsJson)
+        put("rule_ids_json", run.ruleIdsJson)
+        put("found_count", run.foundCount)
+        put("failed_chat_ids_json", run.failedChatIdsJson)
+        put("error", run.error)
+        put("outcome", run.outcome)
+        put("failure_reason", run.failureReason)
+        put("transport", run.transport)
     }
 
-    /** Newest first, for the "Recent Memory Analysis" list. */
+    /** Insert-or-replace one run row. Since v17 this is also the incremental
+     *  progress write for a live 'running' row, so a process death loses at
+     *  most the conversation in flight — never the whole run's bookkeeping. */
+    fun insertArchivistRun(run: ArchivistRunRecord) {
+        writableDatabase.insertWithOnConflict(
+            "archivist_runs", null, archivistRunValues(run), SQLiteDatabase.CONFLICT_REPLACE
+        )
+    }
+
+    /** Newest first, for the "Recent Memory Analysis" list. A live 'running'
+     *  row is the durable active-run record, not history — excluded. */
     fun getArchivistRuns(limit: Int): List<ArchivistRunRecord> {
         val out = ArrayList<ArchivistRunRecord>()
         readableDatabase.query(
-            "archivist_runs", null, null, null, null, null,
+            "archivist_runs", null, "status != 'running'", null, null, null,
             "started_at DESC, run_id DESC", limit.toString()
         ).use {
             while (it.moveToNext()) {
@@ -2489,7 +2733,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                         failedChatIdsJson = it.getStringOrNull("failed_chat_ids_json") ?: "[]",
                         error = it.getStringOrNull("error"),
                         outcome = it.getStringOrNull("outcome"),
-                        failureReason = it.getStringOrNull("failure_reason")
+                        failureReason = it.getStringOrNull("failure_reason"),
+                        transport = it.getStringOrNull("transport") ?: "api"
                     )
                 )
             }
@@ -3143,6 +3388,19 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             )
             db.execSQL(
                 "UPDATE OR REPLACE chat_turn_counters SET chat_id = ? WHERE chat_id = ?",
+                arrayOf(newChatId, oldChatId)
+            )
+            // Rejected-draft identity is keyed by chat id too (DB v17,
+            // counterplan §4(c)) — chat ids are name-derived hashes that
+            // change on rename, so both the registered rejections and the
+            // source-chat anchor on learned-from-chat memories must ride
+            // along or a rename would defeat the owner's narrow suppression.
+            db.execSQL(
+                "UPDATE OR REPLACE rejected_drafts SET chat_key = ? WHERE chat_key = ?",
+                arrayOf(newChatId, oldChatId)
+            )
+            db.execSQL(
+                "UPDATE memories SET source_chat_id = ? WHERE source_chat_id = ?",
                 arrayOf(newChatId, oldChatId)
             )
             db.setTransactionSuccessful()
@@ -4508,7 +4766,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             origin = it.getStringOrNull("origin") ?: "user",
             suggestedCardType = it.getStringOrNull("suggested_card_type"),
             suggestedCardId = it.getStringOrNull("suggested_card_id"),
-            suggestedSection = it.getStringOrNull("suggested_section")
+            suggestedSection = it.getStringOrNull("suggested_section"),
+            sourceChatId = it.getStringOrNull("source_chat_id")
         )
     }
 
@@ -4543,6 +4802,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         put("suggested_card_type", m.suggestedCardType)
         put("suggested_card_id", m.suggestedCardId)
         put("suggested_section", m.suggestedSection)
+        put("source_chat_id", m.sourceChatId)
     }
 
     private fun writeMemoryLinks(db: SQLiteDatabase, m: MemoryRecord) {
@@ -4683,14 +4943,20 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             // Deleting a Memory Assistant DRAFT is a rejection (owner
             // preference, July 9 2026): remember it so a rerun of the same
             // conversation doesn't refile the exact same draft. Scoped to
-            // the draft's source conversation (its provenance context) and
-            // exact text — never broad suppression. User-authored memories
-            // and non-draft deletions register nothing.
+            // the draft's source conversation and exact text — never broad
+            // suppression. Keyed by the rename-safe source chat id (DB v17,
+            // counterplan §4(c)); a legacy draft without one falls back to
+            // hashing its filing-time chat name, which equals the chat id
+            // unless the chat was renamed since filing (the old behavior's
+            // exact limit — no worse). User-authored memories and non-draft
+            // deletions register nothing.
             val prior = getMemory(memoryId)
             if (prior != null && prior.status == "draft" && prior.origin == "archivist") {
+                val chatKey = prior.sourceChatId
+                    ?: prior.provenanceContext?.let { Hash.hash(it) } ?: ""
                 db.execSQL(
                     "INSERT OR REPLACE INTO rejected_drafts (content_hash, chat_key, deleted_at) VALUES (?, ?, ?)",
-                    arrayOf(draftContentHash(prior.title, prior.content), prior.provenanceContext ?: "", nowIso())
+                    arrayOf(draftContentHash(prior.title, prior.content), chatKey, nowIso())
                 )
             }
             db.delete("memories", "memory_id = ?", arrayOf(memoryId))
@@ -4703,7 +4969,9 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
     }
 
     /** Whether an identical draft (exact title+content) from this source
-     *  conversation was deleted before — the runner skips refiling it. */
+     *  conversation was deleted before — the runner skips refiling it.
+     *  [chatKey] is the source CHAT ID (rename-safe since DB v17: renames
+     *  re-point the stored rows, so the current id always matches). */
     fun isDraftRejected(title: String, content: String, chatKey: String): Boolean {
         readableDatabase.query(
             "rejected_drafts", arrayOf("content_hash"),

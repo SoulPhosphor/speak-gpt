@@ -67,7 +67,15 @@ object TranscriptRecorder {
         modelTag: String,
         quickSettingsJson: String?,
         excludedByUser: Boolean,
-        assistantComplete: Boolean = true
+        assistantComplete: Boolean = true,
+        // Typed scene context stamped at capture (counterplan §4(e), Step
+        // 1.3): the chat's selected world/campaign/character/persona/project
+        // ids, null when nothing is selected. Never inferred here.
+        worldId: String? = null,
+        campaignId: String? = null,
+        roleplayCharacterId: String? = null,
+        userPersonaId: String? = null,
+        projectId: String? = null
     ) {
         try {
             // Diagnostic breadcrumbs: capture is otherwise invisible, so each
@@ -113,7 +121,12 @@ object TranscriptRecorder {
                 modelTag = modelTag,
                 quickSettingsJson = quickSettingsJson,
                 markExcluded = markExcluded,
-                assistantComplete = assistantComplete
+                assistantComplete = assistantComplete,
+                worldId = worldId,
+                campaignId = campaignId,
+                roleplayCharacterId = roleplayCharacterId,
+                userPersonaId = userPersonaId,
+                projectId = projectId
             )
             MemoryLog.log(context, "Transcript", "info",
                 "captured chat=$chatId companion=${companionId ?: "none"} complete=$assistantComplete -> $outcome")

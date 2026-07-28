@@ -404,6 +404,14 @@ class MemoryAssistantActivity : FragmentActivity() {
                 btnAnalyze?.setText(R.string.memory_assistant_btn_idle)
                 // The above-button block + disabled button carry this state.
             }
+            "already_running" -> {
+                // Safety belt (counterplan §4(a)): another live run won the
+                // durable one-run gate; nothing was claimed or written for
+                // this attempt. The winner's own instance shows its
+                // progress; this one just returns to idle. Presenting this
+                // state properly belongs to the foreground-service redesign.
+                btnAnalyze?.setText(R.string.memory_assistant_btn_idle)
+            }
         }
     }
 

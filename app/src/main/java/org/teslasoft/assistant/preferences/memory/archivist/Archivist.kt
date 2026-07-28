@@ -84,7 +84,8 @@ object Archivist {
         val failedChatIds: List<String>,
         /** Display outcome per archivist_status_wording_spec.md: completed |
          *  full_failed | partial_failed | nothing | no_new | interrupted |
-         *  not_configured. */
+         *  not_configured — plus already_running (DB v17): a start that lost
+         *  the one-live-run gate; nothing was claimed, written, or recorded. */
         val outcome: String,
         /** Dominant failure category when (partially) failed — picks the
          *  on-screen reason sentence and the action button. */
@@ -140,15 +141,43 @@ object Archivist {
      *  would analyze next), NOT anything keyed to backups. */
     fun eligibleConversationCount(context: Context): Int = eligibleConversations(context).size
 
+    /** In-process half of the one-live-run rule (counterplan §4(a)): the
+     *  durable 'running' row guards across process death; this guards
+     *  concurrent starts inside one process (two screen instances, a rerun
+     *  racing an analyze). A losing start returns outcome "already_running"
+     *  and touches nothing — claims make an overlap structurally harmless,
+     *  but two live runs would still fight over progress bookkeeping. */
+    private val liveRun = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    /**
+     * Startup recovery entry point (counterplan §4(a)): reconcile dead runs
+     * behind the same in-process gate the runs use, so a reconcile can never
+     * mistake a just-started live run's durable record for a stale one. If a
+     * run is already live, recovery already happened at its start — skip.
+     * Returns how many dead runs were recovered (0 when skipped).
+     */
+    fun reconcileAtStartup(context: Context): Int {
+        if (!MemoryStore.isProvisioned(context)) return 0
+        if (!liveRun.compareAndSet(false, true)) return 0
+        return try {
+            MemoryStore.getInstance(context).reconcileInterruptedAnalysisRuns()
+        } finally {
+            liveRun.set(false)
+        }
+    }
+
     /** Analyze every currently-eligible conversation (the user may queue any
-     *  number — owner answer 4; size batching happens inside). */
+     *  number — owner answer 4; size batching happens inside). Eligibility is
+     *  re-derived and atomically claimed inside the run, after stale-run
+     *  reconciliation, so the run analyzes exactly what it sealed. */
     suspend fun analyze(context: Context, onProgress: (Progress) -> Unit): RunOutcome =
-        run(context, eligibleConversations(context), markProcessed = true, onProgress = onProgress)
+        run(context, { eligibleConversations(context) }, markProcessed = true, onProgress = onProgress)
 
     /** Re-analyze a past run's conversations (the Rerun row action): re-feeds
      *  exactly the transcript rows that run stored, for chats that still
      *  exist. Files any NEW findings as drafts (existing identical drafts are
-     *  deduplicated); records a fresh run row. */
+     *  deduplicated); records a fresh run row. Rerun rows are already
+     *  processed, so nothing is claimed or re-marked. */
     suspend fun rerun(context: Context, runId: String, onProgress: (Progress) -> Unit): RunOutcome {
         val store = MemoryStore.getInstance(context)
         val past = store.getArchivistRun(runId)
@@ -158,17 +187,18 @@ object Archivist {
                 error = "run not found"
             )
         val ids = jsonToList(past.transcriptIdsJson)
-        val liveChats = liveChatNamesById(context)
-        val conversations = store.transcriptsByIds(ids)
-            .filter { it.chatId != null && liveChats.containsKey(it.chatId) }
-            .groupBy { it.chatId!! }
-            .map { (chatId, rows) -> Conversation(chatId, liveChats[chatId] ?: chatId, rows) }
-        return run(context, conversations, markProcessed = false, onProgress = onProgress)
+        return run(context, {
+            val liveChats = liveChatNamesById(context)
+            store.transcriptsByIds(ids)
+                .filter { it.chatId != null && liveChats.containsKey(it.chatId) }
+                .groupBy { it.chatId!! }
+                .map { (chatId, rows) -> Conversation(chatId, liveChats[chatId] ?: chatId, rows) }
+        }, markProcessed = false, onProgress = onProgress)
     }
 
     private suspend fun run(
         context: Context,
-        conversations: List<Conversation>,
+        selectConversations: () -> List<Conversation>,
         markProcessed: Boolean,
         onProgress: (Progress) -> Unit
     ): RunOutcome {
@@ -190,8 +220,79 @@ object Archivist {
             return RunOutcome(null, 0, 0, 0, 0, emptyList(), outcome = "not_configured")
         }
 
+        // One live run at a time (§4(a)). The in-process gate must be held
+        // BEFORE reconciliation: reconciling while another run is live would
+        // read its durable 'running' row as stale and release its claims.
+        if (!liveRun.compareAndSet(false, true)) {
+            MemoryLog.logAlways(context, "Archivist", "warn",
+                "duplicate start ignored — an analysis run is already in progress")
+            return RunOutcome(null, 0, 0, 0, 0, emptyList(), outcome = "already_running")
+        }
+        try {
+            return runLocked(context, selectConversations, markProcessed, onProgress, prefs, endpoint, model)
+        } finally {
+            liveRun.set(false)
+        }
+    }
+
+    private suspend fun runLocked(
+        context: Context,
+        selectConversations: () -> List<Conversation>,
+        markProcessed: Boolean,
+        onProgress: (Progress) -> Unit,
+        prefs: Preferences,
+        endpoint: ApiEndpointObject,
+        model: String
+    ): RunOutcome {
         val store = MemoryStore.getInstance(context)
+
+        // Recover-at-startup, applied at next-run too (§4(a)): any 'running'
+        // API run found now is dead — the gate above proves nothing else is
+        // live in this process, and a run never survives its process. Its
+        // claims are released so this run can pick those rows up.
+        val recovered = store.reconcileInterruptedAnalysisRuns()
+        if (recovered > 0) {
+            MemoryLog.logAlways(context, "Archivist", "warn",
+                "recovered $recovered interrupted run(s) — unfinished conversations were released back to the review queue; nothing unseen was marked processed")
+        }
+
         val startedAt = Instant.now().toString()
+        val runId = MemoryStore.newId("run-")
+
+        // Selection + claim seal (§4(a)): the durable 'running' row (the
+        // active-run record) and the claim stamps are written in ONE store
+        // transaction; the run then analyzes exactly the rows it sealed. A
+        // row someone else claimed in the gap simply drops out. Rerun feeds
+        // already-processed rows, so it registers the run but claims nothing.
+        var conversations = selectConversations()
+        val runningRow = ArchivistRunRecord(
+            runId = runId,
+            startedAt = startedAt,
+            finishedAt = null,
+            status = "running",
+            chatIdsJson = "[]",
+            transcriptIdsJson = "[]",
+            memoryIdsJson = "[]",
+            ruleIdsJson = "[]",
+            foundCount = 0,
+            failedChatIdsJson = "[]",
+            error = null,
+            outcome = null,
+            failureReason = null,
+            transport = "api"
+        )
+        if (markProcessed) {
+            val claimed = store.beginAnalysisRun(
+                runningRow, conversations.flatMap { c -> c.transcripts.map { it.transcriptId } }
+            )
+            conversations = conversations.mapNotNull { c ->
+                val rows = c.transcripts.filter { it.transcriptId in claimed }
+                if (rows.isEmpty()) null else c.copy(transcripts = rows)
+            }
+        } else {
+            store.insertArchivistRun(runningRow)
+        }
+
         val ai = buildClient(endpoint)
 
         // Memory Assistant tuning (owner spec, July 9 2026): the cap and the
@@ -300,10 +401,32 @@ object Archivist {
                             fileRuleDrafts(context, store, conversation, parsed.rules, ruleIds)
                         }
                         if (markProcessed) {
-                            store.markTranscriptsProcessed(conversation.transcripts.map { it.transcriptId })
+                            // Only rows still carrying THIS run's claim stamp
+                            // advance — a turn appended mid-run started a new
+                            // unclaimed row and stays pending (§4(a)).
+                            store.markTranscriptsProcessed(
+                                conversation.transcripts.map { it.transcriptId }, runId
+                            )
                         }
                         analyzedChatIds.add(conversation.chatId)
                         fedTranscriptIds.addAll(conversation.transcripts.map { it.transcriptId })
+                        // Durable per-conversation progress on the 'running'
+                        // row: a process death now loses at most the
+                        // conversation in flight, and the reconciled
+                        // interrupted record reports real counts, not zeros.
+                        try {
+                            store.insertArchivistRun(runningRow.copy(
+                                chatIdsJson = listToJson(analyzedChatIds),
+                                transcriptIdsJson = listToJson(fedTranscriptIds),
+                                memoryIdsJson = listToJson(memoryIds),
+                                ruleIdsJson = listToJson(ruleIds),
+                                foundCount = memoryIds.size,
+                                failedChatIdsJson = listToJson(failedChats)
+                            ))
+                        } catch (e: Exception) {
+                            MemoryLog.log(context, "Archivist", "error",
+                                "run progress write failed: ${e.message}")
+                        }
                     } catch (ce: kotlinx.coroutines.CancellationException) {
                         // Interruption is a RUN-level state, not a conversation
                         // failure — handled by the outer catch.
@@ -357,10 +480,14 @@ object Archivist {
         // Memory Debug Log (owner rule — recovery information, not optional
         // debug noise).
         when (outcome) {
+            // §4(g): the counts are the stored run record's counts — never a
+            // hardcoded zero. Drafts filed before the failure are kept, and
+            // this line must not deny they exist.
             "full_failed" -> MemoryLog.logAlways(context, "Archivist", "error",
-                "Run Fully Failed — Memory extraction failed. No memories were created from this run. " +
+                "Run Fully Failed — Memory extraction failed. " +
+                    (if (memoryIds.isEmpty()) "No memories were created from this run. " else "") +
                     "reason=${dominantReason?.key} error=${runError ?: "per-conversation failures"} " +
-                    "selected=$selected processed=${analyzedChatIds.size} memories=0")
+                    "selected=$selected processed=${analyzedChatIds.size} memories=${memoryIds.size}")
             "partial_failed" -> MemoryLog.logAlways(context, "Archivist", "warn",
                 "Run Partially Failed — Memory extraction finished with some skipped conversations. " +
                     "reasons=${failedReasons.map { it.key }.distinct()} selected=$selected " +
@@ -372,12 +499,17 @@ object Archivist {
                     "processed=${analyzedChatIds.size} memories=${memoryIds.size}")
         }
 
-        val runId = MemoryStore.newId("run-")
+        // Terminal cleanup (§4(a)): release any claim this run still holds —
+        // rows it never finished return to the pending queue — then finalize
+        // the durable 'running' row into ordinary run history.
+        try {
+            store.releaseAnalysisClaims(runId)
+        } catch (e: Exception) {
+            MemoryLog.logAlways(context, "Archivist", "error", "claim release failed: ${e.message}")
+        }
         try {
             store.insertArchivistRun(
-                ArchivistRunRecord(
-                    runId = runId,
-                    startedAt = startedAt,
+                runningRow.copy(
                     finishedAt = Instant.now().toString(),
                     status = if (outcome == "full_failed" || outcome == "interrupted") "failed" else "complete",
                     chatIdsJson = listToJson(analyzedChatIds),
@@ -446,8 +578,10 @@ object Archivist {
             // A draft the user deleted is a rejection (owner preference,
             // July 9 2026): the exact same draft from the same conversation
             // is not refiled on rerun. Deliberately narrow — different
-            // wording or a different conversation files normally.
-            if (store.isDraftRejected(d.title, d.content, conversation.chatName)) {
+            // wording or a different conversation files normally. Keyed by
+            // chat ID since DB v17 (counterplan §4(c)) so a rename cannot
+            // defeat it.
+            if (store.isDraftRejected(d.title, d.content, conversation.chatId)) {
                 MemoryLog.log(context, "Archivist", "info",
                     "chat=${conversation.chatId}: previously rejected draft not refiled (\"${d.title}\")")
                 continue
@@ -489,6 +623,10 @@ object Archivist {
                 provenanceNotedOn = now,
                 // §14: the editor shows which chat a draft came from and when.
                 provenanceContext = conversation.chatName,
+                // Rename-safe source anchor (§4(c)): repointChat keeps this
+                // current, so a rejection registered at deletion time always
+                // matches the chat id a rerun looks up.
+                sourceChatId = conversation.chatId,
                 createdAt = now,
                 updatedAt = null,
                 status = "draft",
