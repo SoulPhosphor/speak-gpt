@@ -101,95 +101,62 @@
                 android:textSize="18sp"
                 android:textStyle="bold" />
 
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:gravity="center_vertical"
-                android:orientation="horizontal"
-                android:paddingTop="16dp">
+            <LinearLayout style="@style/Widget.App.Row.Toggle">
 
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/memory_controls_use_in_new_chats"
-                    android:textColor="@color/text"
-                    android:textSize="16sp" />
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
 
-                <com.google.android.material.materialswitch.MaterialSwitch
-                    android:id="@+id/switch_default_memory"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="12dp" />
-            </LinearLayout>
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/memory_controls_use_in_new_chats" />
 
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="8dp"
-                android:text="@string/memory_controls_use_in_new_chats_hint"
-                android:textColor="@color/text_subtitle"
-                android:textSize="13sp" />
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:gravity="center_vertical"
-                android:orientation="horizontal"
-                android:paddingTop="16dp">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/memory_controls_companion_roleplay"
-                    android:textColor="@color/text"
-                    android:textSize="16sp" />
+                    <TextView
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:maxLines="10"
+                        android:text="@string/memory_controls_use_in_new_chats_hint" />
+                </LinearLayout>
 
                 <com.google.android.material.materialswitch.MaterialSwitch
-                    android:id="@+id/switch_companion_in_roleplay"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="12dp" />
+                    style="@style/Widget.App.Row.Switch"
+                    android:id="@+id/switch_default_memory" />
             </LinearLayout>
 
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="8dp"
-                android:text="@string/memory_controls_companion_roleplay_hint"
-                android:textColor="@color/text_subtitle"
-                android:textSize="13sp" />
+            <LinearLayout style="@style/Widget.App.Row.Toggle">
 
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:gravity="center_vertical"
-                android:orientation="horizontal"
-                android:paddingTop="16dp">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
 
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/memory_controls_chat_list_status"
-                    android:textColor="@color/text"
-                    android:textSize="16sp" />
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/memory_controls_companion_roleplay" />
+
+                    <TextView
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:maxLines="10"
+                        android:text="@string/memory_controls_companion_roleplay_hint" />
+                </LinearLayout>
 
                 <com.google.android.material.materialswitch.MaterialSwitch
-                    android:id="@+id/switch_chat_list_memory_status"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="12dp" />
+                    style="@style/Widget.App.Row.Switch"
+                    android:id="@+id/switch_companion_in_roleplay" />
             </LinearLayout>
 
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="8dp"
-                android:text="@string/memory_controls_chat_list_status_hint"
-                android:textColor="@color/text_subtitle"
-                android:textSize="13sp" />
+            <LinearLayout style="@style/Widget.App.Row.Toggle">
+
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/memory_controls_chat_list_status" />
+
+                    <TextView
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:maxLines="10"
+                        android:text="@string/memory_controls_chat_list_status_hint" />
+                </LinearLayout>
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    style="@style/Widget.App.Row.Switch"
+                    android:id="@+id/switch_chat_list_memory_status" />
+            </LinearLayout>
 
             <!-- ============ Memory Assistant ============ -->
             <TextView
