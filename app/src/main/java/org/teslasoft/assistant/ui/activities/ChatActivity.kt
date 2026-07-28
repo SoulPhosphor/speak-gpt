@@ -3511,16 +3511,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     selectedModel = reduceModel,
                     configuredMaxTokens = outputLimit
                 )
+                val file = ImageImporter.imageFile(this@ChatActivity, chatId, include)
+                if (file == null || !file.exists()) {
+                    error("Image file missing for include ${include.id}")
+                }
                 val parts = ArrayList<ContentPart>()
                 parts.add(TextPart(spec.prompt))
-
-                val file = ImageImporter.imageFile(this@ChatActivity, chatId, include)
-                if (file != null && file.exists()) {
-                    val bytes = file.readBytes()
-                    val mime = include.imageMimeType ?: "image/jpeg"
-                    val encoded = Base64.encodeToString(bytes, Base64.NO_WRAP)
-                    parts.add(ImagePart("data:$mime;base64,$encoded"))
-                }
+                val bytes = file.readBytes()
+                val mime = include.imageMimeType ?: "image/jpeg"
+                val encoded = Base64.encodeToString(bytes, Base64.NO_WRAP)
+                parts.add(ImagePart("data:$mime;base64,$encoded"))
 
                 val request = ChatCompletionRequest(
                     model = ModelId(spec.model),

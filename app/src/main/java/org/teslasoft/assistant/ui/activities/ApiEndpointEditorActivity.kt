@@ -749,7 +749,7 @@ class ApiEndpointEditorActivity : FragmentActivity() {
             popup.dismiss()
             val chosen = capabilityOptions[position]
             currentCapabilityJson = ImageCapabilityStore.set(currentCapabilityJson, modelId, chosen)
-            (anchor as? TextView)?.text = capabilityLabel(chosen)
+            populateCapabilitySection()
         }
         popup.show()
     }
