@@ -1,8 +1,8 @@
 # Conversation Summary & Context Control — Research and Proposal
 
-**Status: RESEARCH PROPOSAL — nothing here is approved. No code has been
-changed. Every product decision below requires owner approval before any
-implementation.**
+**Status: PARTIALLY APPROVED PLAN — the overall shape and the UI decisions
+in §5 were approved by the owner on July 28 2026. Decisions listed in §6
+remain open. No code has been changed.**
 
 Date: July 28 2026. Branch: `claude/conversation-summary-research-89akp5`.
 
@@ -122,7 +122,7 @@ Memory System. Could be revisited later as a supplement.
 
 ---
 
-## 4. Recommended shape (for discussion, not approved)
+## 4. Approved overall shape (owner, July 28 2026)
 
 A hybrid of 3a's user-facing transparency and 3c's progressive mechanics,
 with 3b's pinning as a possible later phase:
@@ -171,30 +171,76 @@ reduction, more the longer the chat runs.
 
 ---
 
-## 5. Decisions the owner must make before any design or code
+## 5. Approved decisions (owner, July 28 2026)
 
-Listed here for the record; to be asked in chat one at a time, not as a
-wall.
+1. **Overall shape approved**: user-set recent window of messages sent
+   verbatim + a progressive rolling summary for everything older, visible,
+   editable, and pausable. Stored messages are never altered. Off by
+   default for existing behavior safety.
 
-1. **Approve or redirect the overall shape** (§4: recent window +
-   progressive editable rolling summary), or prefer a different research
-   direction (e.g. Qvink-style per-message summaries from the start).
-2. Window unit: count of messages, token budget, or both.
-3. Which summary styles/kinds to offer, and default length.
-4. Where the summary is injected (system-side preamble vs. a stand-in
+2. **Summarizer settings screen.** A dedicated screen reached from the
+   regular settings page. It holds:
+   - the API endpoint and model picker for summary calls, modeled on the
+     Memory Assistant's endpoint picker (same interaction shape, and
+     wording of roughly the same kind — final strings still go through
+     wording approval);
+   - the default recent-window message count (the value new chats start
+     with, so the user doesn't retype it);
+   - a toggle for whether the summarizer is on by default for new chats;
+   - at the bottom, the summarizer prompt, revealed for editing, with a
+     revert button that restores the app's default prompt.
+
+3. **Quick Settings (per chat).** A toggle turns the summarizer on or off
+   for the current chat. When on, it reveals a number box for how many
+   recent messages are always handed to the model in full. The box is
+   prefilled from the Summarizer settings default; the user can change it
+   for this chat but never has to.
+
+4. **Window unit is a message count** (not tokens).
+
+5. **Default summarizer prompt is delegated** to implementation by the
+   owner (they don't want to be asked to author it). Owner's style rules
+   for it: use contractions where possible ("don't", not "do not"), and
+   keep it as short as reasonable while keeping the same meaning. Current
+   working draft (refined during implementation under those rules):
+
+   > You keep a running summary of an ongoing conversation. Below are the
+   > current summary and the oldest messages that are leaving the recent
+   > window. Fold those messages into the summary: keep decisions, facts,
+   > names, feelings, plans, and anything either side would need later.
+   > Be accurate — don't invent anything and don't drop things that still
+   > matter. Keep it under {length} words. Reply with only the updated
+   > summary.
+
+6. **UI construction rules.** All UI uses the shared style families from
+   `ui-style-guide.md` (toggle rows, label-above-box and inline number
+   fields, dropdown fields, section titles/hints, action-bar headers,
+   shared button roles). No hardcoded colors, typography, or geometry —
+   everything must stay compatible with the app-wide theme work. Titles
+   and labels follow the app's sentence-case convention ("Summarizer
+   settings", not "Summarizer Settings").
+
+## 6. Decisions still open
+
+1. Whether to offer a summary style selector (narrative vs. key facts) or
+   ship one built-in style, with the editable prompt as the power-user
+   path. Recommendation: one style for the first version — the style
+   selector only multiplies prompt variants the owner would have to
+   approve, and the editable prompt already covers customization.
+2. Target summary length: fixed default, or a user-set value in
+   Summarizer settings.
+3. Where the summary is injected (system-side preamble vs. a stand-in
    message at the top of the history).
-5. Whether pinning individual messages to stay in context (Qvink's brain
+4. Whether pinning individual messages to stay in context (Qvink's brain
    icon) is in scope now, later, or never.
-6. Summarizer model selection UI and default.
-7. Per-chat vs. global settings precedence.
-8. All user-facing wording (settings labels, the summary view, status and
-   failure text) — after the behavior above is decided.
-9. Failure behavior when a summary call fails (this app's error-honesty
-   rules apply; the specific behavior and wording need approval).
+5. Failure behavior when a summary call fails (error-honesty rules apply;
+   behavior and wording need approval).
+6. All user-facing wording — settings labels, the summary view, status
+   and failure text — approved as a batch once behavior is settled.
 
 ---
 
-## 6. Sources
+## 7. Sources
 
 - SillyTavern Summarize docs: https://docs.sillytavern.app/extensions/summarize/
   (also `SillyTavern/SillyTavern-Docs`, `extensions/Summarize.md`)
