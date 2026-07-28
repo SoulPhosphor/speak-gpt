@@ -99,6 +99,10 @@ class ApiEndpointPreferences private constructor(
             ?: ApiEndpointObject.DEFAULT_PRESENCE_PENALTY
         val maxTokens = getString(id + "_max_tokens", ApiEndpointObject.DEFAULT_MAX_TOKENS.toString()).toIntOrNull()
             ?: ApiEndpointObject.DEFAULT_MAX_TOKENS
+        val storedContextModel = getString(id + "_context_window_model", "")
+        val contextWindowTokens = getString(id + "_context_window_tokens", "")
+            .toIntOrNull()
+            ?.takeIf { it > 0 && storedContextModel == model }
         val endSeparator = getString(id + "_end_separator", "")
         val prefix = getString(id + "_prefix", "")
         val provider = getString(id + "_provider", "")
@@ -110,12 +114,15 @@ class ApiEndpointPreferences private constructor(
             getString(id + "_response_timeout", ApiEndpointObject.DEFAULT_RESPONSE_TIMEOUT_SECONDS.toString()).toIntOrNull()
                 ?: ApiEndpointObject.DEFAULT_RESPONSE_TIMEOUT_SECONDS
         )
+        val imageCapabilityByModel = getString(id + "_image_capability_by_model", "")
 
         return ApiEndpointObject(
             label, host, apiKey, chatEndpoint, authType,
             model, temperature, topP, frequencyPenalty, presencePenalty,
             maxTokens, endSeparator, prefix, provider,
-            connectTimeoutSeconds, responseTimeoutSeconds, id
+            connectTimeoutSeconds, responseTimeoutSeconds, id,
+            contextWindowTokens, storedContextModel,
+            imageCapabilityByModel
         )
     }
 
@@ -132,11 +139,14 @@ class ApiEndpointPreferences private constructor(
         preferences.edit { remove(id + "_frequency_penalty") }
         preferences.edit { remove(id + "_presence_penalty") }
         preferences.edit { remove(id + "_max_tokens") }
+        preferences.edit { remove(id + "_context_window_tokens") }
+        preferences.edit { remove(id + "_context_window_model") }
         preferences.edit { remove(id + "_end_separator") }
         preferences.edit { remove(id + "_prefix") }
         preferences.edit { remove(id + "_provider") }
         preferences.edit { remove(id + "_timeout") }
         preferences.edit { remove(id + "_response_timeout") }
+        preferences.edit { remove(id + "_image_capability_by_model") }
         secrets.set(id + "_api_key", "null")
 
         for (listener in listeners) {
@@ -167,11 +177,32 @@ class ApiEndpointPreferences private constructor(
         putString(id + "_frequency_penalty", endpoint.frequencyPenalty.toString())
         putString(id + "_presence_penalty", endpoint.presencePenalty.toString())
         putString(id + "_max_tokens", endpoint.maxTokens.toString())
+        val contextWindow = endpoint.contextWindowTokens?.takeIf { it > 0 }
+        if (contextWindow != null &&
+            endpoint.contextWindowModelId == endpoint.model &&
+            endpoint.model.isNotBlank()
+        ) {
+            putString(id + "_context_window_tokens", contextWindow.toString())
+            putString(id + "_context_window_model", endpoint.model)
+        } else {
+            preferences.edit {
+                remove(id + "_context_window_tokens")
+                remove(id + "_context_window_model")
+            }
+        }
         putString(id + "_end_separator", endpoint.endSeparator)
         putString(id + "_prefix", endpoint.prefix)
         putString(id + "_provider", endpoint.provider)
         putString(id + "_timeout", ApiEndpointObject.coerceConnectTimeoutSeconds(endpoint.connectTimeoutSeconds).toString())
         putString(id + "_response_timeout", ApiEndpointObject.coerceResponseTimeoutSeconds(endpoint.responseTimeoutSeconds).toString())
+        val capabilityJson = endpoint.imageCapabilityByModel
+        if (capabilityJson.isBlank() ||
+            capabilityJson == org.teslasoft.assistant.preferences.includes.ImageCapabilityStore.EMPTY
+        ) {
+            preferences.edit { remove(id + "_image_capability_by_model") }
+        } else {
+            putString(id + "_image_capability_by_model", capabilityJson)
+        }
         secrets.set(id + "_api_key", endpoint.apiKey)
 
         for (listener in listeners) {
@@ -219,6 +250,32 @@ class ApiEndpointPreferences private constructor(
         }
 
         return list
+    }
+
+    /**
+     * Read the raw image-capability-by-model JSON for [id], or the empty
+     * marker if nothing is recorded. Callers pass this to [ImageCapabilityStore]
+     * to read individual model entries.
+     */
+    fun getImageCapabilityByModel(id: String): String =
+        getString(id + "_image_capability_by_model", "")
+
+    /**
+     * Persist an updated image-capability-by-model JSON for [id]. Empty
+     * strings and [ImageCapabilityStore.EMPTY] both remove the stored value
+     * so a cleared record does not linger as an "{}" placeholder.
+     */
+    fun setImageCapabilityByModel(id: String, capabilityJson: String) {
+        if (capabilityJson.isBlank() ||
+            capabilityJson == org.teslasoft.assistant.preferences.includes.ImageCapabilityStore.EMPTY
+        ) {
+            preferences.edit { remove(id + "_image_capability_by_model") }
+        } else {
+            putString(id + "_image_capability_by_model", capabilityJson)
+        }
+        for (listener in listeners) {
+            listener.onApiEndpointChange()
+        }
     }
 
     fun getApiEndpointByUrlOrNull(context: Context, url: String): ApiEndpointObject? {

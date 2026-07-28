@@ -160,6 +160,14 @@ class ChatPreferences private constructor() {
         val settings2: SharedPreferences = SecurePrefs.get(context, "chat_${Hash.hash(chatName)}")
         settings2.edit { clear() }
 
+        // Locally stored attachment images belong to this chat only; a delete
+        // takes them with it (owner ruling). The user's ORIGINAL files are
+        // never touched — only the app's private extracted copies.
+        try {
+            org.teslasoft.assistant.preferences.includes.ImageImporter
+                .deleteChatImages(context, Hash.hash(chatName))
+        } catch (_: Exception) { /* best-effort; reconciliation is the backstop */ }
+
         // A user-confirmed delete settles this chat's unreadable-value state
         // (the preserved ciphertext copy under files/storage_recovery/ is
         // never touched); without this the journal row would keep reporting
@@ -414,7 +422,8 @@ class ChatPreferences private constructor() {
     fun saveChatHistory(
         context: Context,
         chatId: String,
-        messages: List<HashMap<String, Any>>
+        messages: List<HashMap<String, Any>>,
+        synchronous: Boolean = false
     ): ChatStorageHealth.WriteOutcome {
         val name = "chat_$chatId"
         SecurePrefs.get(context, name)
@@ -427,8 +436,19 @@ class ChatPreferences private constructor() {
             return ChatStorageHealth.WriteOutcome.BLOCKED_CORRUPT
         }
         return try {
-            SecurePrefs.get(context, name).edit { putString("chat", Gson().toJson(messages)) }
-            ChatStorageHealth.WriteOutcome.OK
+            val editor = SecurePrefs.get(context, name)
+                .edit()
+                .putString("chat", Gson().toJson(messages))
+            if (synchronous) {
+                if (editor.commit()) {
+                    ChatStorageHealth.WriteOutcome.OK
+                } else {
+                    ChatStorageHealth.WriteOutcome.FAILED
+                }
+            } else {
+                editor.apply()
+                ChatStorageHealth.WriteOutcome.OK
+            }
         } catch (_: Exception) {
             ChatStorageHealth.WriteOutcome.FAILED
         }
@@ -736,6 +756,22 @@ class ChatPreferences private constructor() {
             Logger.log(context, "crash", "ChatPreferences", "warning", "Chat rename: $warning")
         }
 
+        // Attachment image bytes live in a directory keyed by chat id. The
+        // rename copied the include records (with their image hashes) to the
+        // new id above; move the files so those hashes resolve again. Done
+        // after the pointer flip so a failure here is a recoverable orphan,
+        // never a half-renamed chat.
+        try {
+            org.teslasoft.assistant.preferences.includes.ImageImporter
+                .moveChatImages(context, oldId, newId)
+        } catch (e: Exception) {
+            Logger.log(
+                context, "crash", "ChatPreferences", "warning",
+                "Chat rename: image files could not be moved (${e.message}); " +
+                    "they will be reconciled on next open."
+            )
+        }
+
         // The rename is now authoritative (chat list names the new id). Complete
         // the cross-store re-point of the memory rows. repointChat is one atomic
         // DB transaction and idempotent; on success the journal entry is dropped.
@@ -818,6 +854,13 @@ class ChatPreferences private constructor() {
 
         val settings2: SharedPreferences = SecurePrefs.get(context, "chat_$chatId")
         settings2.edit { clear() }
+
+        // Locally stored attachment images go with the chat (owner ruling);
+        // the user's original files are untouched.
+        try {
+            org.teslasoft.assistant.preferences.includes.ImageImporter
+                .deleteChatImages(context, chatId)
+        } catch (_: Exception) { /* best-effort; reconciliation is the backstop */ }
 
         // Same journal settlement as deleteChat — see the comment there.
         ChatStorageHealth.clearReadFailure(context, "chat_$chatId")

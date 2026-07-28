@@ -373,6 +373,14 @@
     <string name="auth_mode_api_key">API key header (api-key)</string>
     <string name="api_endpoint_model">Model</string>
     <string name="api_endpoint_model_help">Tap to choose from models available on this endpoint.</string>
+    <string name="sampling_label_temperature">Temperature</string>
+    <string name="sampling_hint_temperature">Temperature controls model creativity. Low settings will create more conservative, predictable responses. High temperatures may be more creative. If settings are too high responses may become less coherent.</string>
+    <string name="sampling_label_top_p">Top P</string>
+    <string name="sampling_hint_top_p">Top-p controls how wide a pool of likely next words the model may choose from. A low value makes it stick to the safest, most predictable wording, which can become repetitive or dull; a high value admits more unusual choices, which can make writing lively but also more rambling, inconsistent, or strange.</string>
+    <string name="sampling_label_frequency_penalty">Frequency Penalty</string>
+    <string name="sampling_hint_frequency_penalty">Frequency penalty discourages the model from repeating words or phrases it has already used. A low value allows natural repetition but can become redundant; a high value pushes it toward fresher wording, but if set too high it may avoid necessary terms, sound unnatural, or wander just to keep finding different words.</string>
+    <string name="sampling_label_presence_penalty">Presence Penalty</string>
+    <string name="sampling_hint_presence_penalty">Presence penalty discourages the model from returning to topics or ideas it has already mentioned. A low value lets it stay focused and develop the same ideas; a high value pushes it toward new territory, but if set too high it can become scattered, change subjects too quickly, or introduce unnecessary ideas.</string>
     <string name="api_endpoint_provider">Provider</string>
     <string name="api_endpoint_connection_timeout">Connection Timeout (In Seconds)</string>
     <string name="api_endpoint_response_time">Response Time (In Seconds)</string>
@@ -380,10 +388,18 @@
     <string name="api_endpoint_timeout_too_high">Timeouts cannot be more than 300 seconds</string>
     <string name="api_endpoint_response_time_too_low">Timeouts cannot be less than 45 seconds</string>
     <string name="title_api_endpoint_profiles">API Chat Endpoint Profiles</string>
+    <string name="title_api_endpoint_new">New API Endpoint</string>
+    <string name="title_api_endpoint_named">%1$s API Endpoint</string>
+    <string name="api_endpoint_delete_title">Delete this API endpoint profile?</string>
+    <string name="api_endpoint_delete_message">This cannot be undone.</string>
     <string name="message_delete_profile">Delete profile? This can\'t be undone.</string>
     <string name="discard_changes_q">Discard changes?</string>
     <string name="okay">Okay</string>
-    <string name="label_max_tokens">Max tokens</string>
+    <string name="label_max_tokens">Maximum response tokens</string>
+    <string name="label_context_window">Context window</string>
+    <string name="title_context_window">Context Window</string>
+    <string name="hint_context_window">The context window is the maximum number of tokens the model can process in one request. It is used to calculate whether the instructions, conversation, attachments, message, and response will fit before sending. Setting it too low may incorrectly block valid documents; setting it too high may allow requests the provider later rejects. Leave it blank if you are unsure.</string>
+    <string name="unit_tokens">tokens</string>
     <string name="label_end_separator">End separator</string>
     <string name="label_prefix">Prefix</string>
     <string name="btn_save_to_profile">Save to profile</string>
@@ -715,6 +731,12 @@
     <string name="gen_error_s2">The server returned a response the app could not read as a stream. Check whether this endpoint and model support streaming.</string>
     <string name="gen_error_s3">The request was rejected as inappropriate content and could not be processed.</string>
     <string name="gen_error_u0">An unexpected error occurred. The technical details were saved to the Error Log.</string>
+    <string name="provider_context_overflow">The provider rejected the complete request because it exceeded the selected model’s context limit. Nothing was shortened or retried. Remove content or attachments, start a new chat, or choose a model with a larger context window.</string>
+    <string name="provider_input_limit">The provider rejected the request because the complete input exceeded the selected model’s input limit. Nothing was shortened or retried. Remove content or attachments, start a new chat, or choose another model.</string>
+    <string name="provider_request_body_limit">The server rejected the request because the request body was larger than it accepts. This is a server request-size limit, not necessarily the model’s context limit. Nothing was shortened or retried.</string>
+    <string name="provider_rate_limit">The provider rejected the request because it exceeded the account’s current rate or token-throughput limit. This is not a document or context-size limit. Nothing was shortened or retried. Try again later or send a smaller request.</string>
+    <string name="provider_quota_limit">The provider rejected the request because the account’s quota or spending limit has been reached. This is not a document-size limit. Nothing was shortened or retried. Check the provider account’s usage and billing limits.</string>
+    <string name="provider_unknown_limit">The server rejected the request but did not provide enough information to identify which limit was exceeded. Nothing was shortened or retried. Technical details were saved to the Error Log.</string>
     <string name="label_debug">Debug</string>
     <string name="label_permission_denied">Permission denied</string>
     <string name="label_use_camera">Use camera</string>
@@ -1360,7 +1382,8 @@
     <!-- Database Health & Backups, Build Phase 2 (owner-approved wording, July 21 2026).
          Title Case for section headings, buttons, toggle labels and short field
          labels; sentence case for complete helper sentences and warnings. -->
-    <!-- 1. Database Health -->
+    <!-- 2. Database Health (on-screen order since July 24 2026 — Backup
+         Status now leads; see MemoryBackupRestoreActivity's class doc) -->
     <string name="backup_db_health_section">Database Health</string>
     <string name="backup_check_integrity">Check Database Integrity</string>
     <string name="backup_check_integrity_hint">Checks the memory, lorebook, and user image databases for problems. Chats are not included.</string>
@@ -1370,7 +1393,7 @@
     <string name="backup_check_result_ok">%1$s: No Problems Found</string>
     <string name="backup_check_result_problem">%1$s: Problem Found</string>
     <string name="backup_check_result_unavailable">%1$s: Could Not Be Checked</string>
-    <!-- 2. Backup Status -->
+    <!-- 1. Backup Status -->
     <string name="backup_status_section">Backup Status</string>
     <string name="backup_type_memory">Memory</string>
     <string name="backup_type_lorebooks">Lorebooks</string>
@@ -1525,7 +1548,7 @@
          Honest about deferral (Android may delay background work) and about the
          two safety limits: nothing is ever deleted, and it only backs up —
          never restores. -->
-    <string name="backup_auto_hint">Automatic backups run in the background on the schedule you choose, saving a verified backup to your chosen folder. Android may delay a run to save battery, so the timing is not exact. Old backups are never deleted, and automatic backups only save — they never restore or replace your data.</string>
+    <string name="backup_auto_hint">Automatic backups run in the background on the schedule you choose, saving a verified backup to your chosen folder. Android may delay a run to save battery, so the timing is not exact. Automatic backups can restore this app installation. To recover after reinstalling the app or moving to another device, create a Recovery Backup.</string>
     <!-- Title Case labels (owner correction, July 23 2026 — were sentence
          case, inconsistent with every other "Label: value" status line on
          this screen). File size sits between last-backup and next-due, same
@@ -1611,10 +1634,44 @@
     <!-- A1 — repaired automatically (approved) -->
     <string name="health_repaired_title">Database Repaired</string>
     <string name="health_repaired_body">A problem was found in your %1$s database and repaired automatically. Everything should be working normally.</string>
-    <!-- Buttons (approved: Repair / Revert to Last Good Database / Restore /
-         Open File Location; Cancel comes from btn_cancel) -->
-    <string name="health_btn_repair">Repair</string>
+    <!-- Buttons (owner correction, July 23 2026: "Repair" renamed "Attempt
+         Repair" everywhere it appears — repair outcome is never guaranteed,
+         the label must not imply it is. Revert to Last Good Database /
+         Restore / Open File Location unaffected; Cancel comes from
+         btn_cancel) -->
+    <string name="health_btn_repair">Attempt Repair</string>
     <string name="health_btn_revert">Revert to Last Good Database</string>
+    <string name="restore_database">Restore Database</string>
+    <string name="restore_dialog_body">Restore the newest usable backup, or choose another backup.</string>
+    <string name="restore_choose_another">Choose Another Backup</string>
+    <string name="restore_choose_file">Choose Backup File</string>
+    <string name="restore_choose_folder">Choose Backup Folder</string>
+    <string name="restore_choose_source_title">Choose Another Backup</string>
+    <string name="restore_type_label">Type of Database to Restore:</string>
+    <string name="restore_type_memory">Memory Database</string>
+    <string name="restore_type_lorebook">Lorebook Database</string>
+    <string name="restore_type_user_image">User Image Database</string>
+    <string name="restore_finding_backup">Finding a Usable Backup…</string>
+    <string name="restore_checking_backup">Checking Backup…</string>
+    <string name="restore_replacing_database">Restoring Database…</string>
+    <string name="restore_database_success">Database Restored Successfully!</string>
+    <string name="restore_database_failed">Database Restore Failed.</string>
+    <string name="restore_repair_running">Attempting to Repair…</string>
+    <string name="restore_repair_success">Repair Successful!</string>
+    <string name="restore_repair_failed">Repair Failed.</string>
+    <string name="restore_no_current_backup">No usable backup was found in the current automatic backup location.</string>
+    <string name="restore_no_appropriate_database">Database import failed. No appropriate database found.</string>
+    <string name="restore_no_valid_file">No valid databases found in file.</string>
+    <string name="restore_no_valid_folder">No valid databases found in folder.</string>
+    <string name="restore_automatic_key_or_damage">This automatic backup cannot be opened with this app installation’s database key, or the file is damaged. Choose a Recovery Backup if this file came from another installation.</string>
+    <string name="restore_source_unavailable">The selected backup could not be opened.</string>
+    <string name="restore_mismatch">You selected the %1$s, but this backup contains a %2$s.</string>
+    <string name="restore_proceed">Proceed</string>
+    <string name="restore_confirm_title">Restore from Backup?</string>
+    <string name="restore_confirm_body">This replaces your %1$s with the backup from %2$s. Changes made after that date will be lost. Your current database will be kept aside, not deleted.</string>
+    <string name="restore_recovery_code_title">Enter Recovery Code</string>
+    <string name="restore_recovery_code_hint">Recovery Code</string>
+    <string name="restore_recovery_code_body">Enter the Recovery Code for this protected Recovery Backup.</string>
     <string name="health_btn_restore">Restore</string>
     <string name="health_btn_open_location">Open File Location</string>
     <!-- DRAFT buttons (B8 result routing — plan-suggested labels) -->
@@ -1624,12 +1681,22 @@
     <string name="health_btn_change_folder">Change Backup Folder</string>
     <string name="health_btn_retry">Retry</string>
     <string name="health_btn_open_backup_folder">Open Backup Folder</string>
-    <!-- A2 — degraded-mode banner (memory + lorebook approved; the combined and
-         user-image variants are DRAFT, patterned on the approved sentences) -->
-    <string name="health_banner_memory">Memory is currently turned off because of a database problem. Tap Repair to fix it.</string>
-    <string name="health_banner_lorebook">Lorebooks are currently turned off because of a database problem. Tap Repair to fix it.</string>
-    <string name="health_banner_both">Memory and lorebooks are currently turned off because of a database problem. Tap Repair to fix it.</string>
-    <string name="health_banner_user_image">There is a problem with the user image database. Tap Repair to fix it.</string>
+    <!-- A2 — degraded-mode banner. "both" wording is owner-approved verbatim
+         (chat, July 23 2026); memory/lorebook/user-image variants follow the
+         same sentence pattern by direct extrapolation — flagged for owner
+         review, not yet independently confirmed. No variant instructs the
+         user to tap a button (owner ruling, July 23 2026: the buttons are
+         self-explanatory, never say "tap X to fix it"). -->
+    <string name="health_banner_memory">Memory is currently unavailable due to a database issue. You may continue chatting. However, it will not be available until the database is repaired.</string>
+    <string name="health_banner_lorebook">Lorebooks are currently unavailable due to a database issue. You may continue chatting. However, they will not be available until the database is repaired.</string>
+    <string name="health_banner_both">Lorebooks and memory are currently unavailable due to database issues. You may continue chatting. However, these will not be available until the database is repaired.</string>
+    <string name="health_banner_user_image">The user image database is currently unavailable due to a database issue. You may continue chatting. However, it will not be available until the database is repaired.</string>
+    <!-- Banner's "Okay" is its own string, distinct from the shared btn_ok
+         used app-wide. Its "Attempt Repair" button now reuses the shared
+         health_btn_repair directly (owner correction, July 23 2026: "Repair"
+         is "Attempt Repair" everywhere, so a separate banner copy of the
+         same text was redundant and has been removed). -->
+    <string name="health_banner_btn_ok">Okay</string>
     <!-- A3 — blocked Analyze Conversations note (approved verbatim) -->
     <string name="health_archivist_blocked">Unable to analyze conversations due to current memory database corruption. You may try to repair it again or revert to last known good database. Caution reverting may cause recent memories to be lost.</string>
     <!-- A5 — restore confirmation (approved; the date is the backup\'s real
@@ -2126,6 +2193,7 @@
     <string name="tile_roleplay_title">Roleplay</string>
     <string name="tile_roleplay_desc">Worlds, campaigns and the characters you play.</string>
     <string name="title_roleplay">Roleplay</string>
+    <string name="roleplay_hub_memory_notice">The roleplay feature is only available when memory is turned on, as appropriate information is dynamically chosen from conversation context.</string>
 
     <!-- ============ Round 4: locked chat storage (owner-approved copy, July 12 2026 —
          do not reword without explicit approval in chat) ============ -->
@@ -2311,4 +2379,147 @@
     <string name="shape_flower">Flower</string>
     <string name="shape_circle">Circle</string>
     <string name="shape_square">Square</string>
+
+    <!-- ================= Document & image includes =================
+         See document-includes-plan.md for the current wording and behavior. -->
+
+    <!-- Strip row label. "Includes condensed" is the same row after the user
+         has condensed the document, so the form being sent is always visible. -->
+    <string name="include_label">Includes</string>
+    <string name="include_label_condensed">Includes condensed</string>
+
+    <!-- Row menu actions. "Condense" (documents) and "Reduce to Text Only"
+         (images) are deliberately DIFFERENT words: condensing shrinks the same
+         kind of thing, while reducing an image keeps only words. -->
+    <string name="include_action_remove">Remove</string>
+    <string name="include_action_condense">Condense</string>
+    <string name="include_action_reduce">Reduce to Text Only</string>
+    <string name="include_action_edit">Edit</string>
+    <string name="include_document_pending_hint">File will be sent to AI every turn. Condensing produces a summary of the document and reduces token count.</string>
+    <string name="include_image_pending_hint">Images will be sent every turn to the AI. Reducing it will produce a small text summary to save tokens.</string>
+
+    <string name="include_condense_title">Condense Document</string>
+    <string name="include_condense_hint">Condense creates a shortened summary of the document to send to your AI each turn so it can remember the contents without costing as many tokens.\n\nWhen complete, you can view and edit the summary from the icon next to your name. Removing the document creates an even shorter summary so the AI can remember what was sent.\n\nThis can’t be undone.</string>
+    <string name="include_condense_never_show">Never show this hint again.</string>
+    <string name="include_condense_working">Document is being condensed.</string>
+    <string name="include_condense_complete">Complete</string>
+    <string name="include_condense_failed">Document could not be condensed. The full document is still included.</string>
+    <string name="include_condense_not_shorter">The AI did not return a shorter summary. The full document is still included.</string>
+    <string name="include_edit_empty">Summary cannot be empty.</string>
+
+    <!-- Reduce (image) first-use hint. Parallel to the Condense hint; the
+         separate "never show" preference is deliberate so hiding one does not
+         silently hide the other. -->
+    <string name="include_reduce_title">Reduce Image to Text</string>
+    <string name="include_reduce_hint">Reducing creates a text description of the image to send to your AI each turn so it can remember what was in the image without costing as many tokens.\n\nWhen complete, you can view and edit the description from the icon next to your name. Removing the image creates an even shorter summary so the AI can remember what was sent.\n\nThis can\'t be undone.</string>
+    <string name="include_reduce_never_show">Never show this hint again.</string>
+    <string name="include_reduce_working">Image is being reduced.</string>
+    <string name="include_reduce_failed">Image could not be reduced. The image is still included.</string>
+    <string name="include_reduce_not_shorter">The AI did not return a shorter description. The image is still included.</string>
+
+    <!-- Collapse line shown once four or more items are attached. The noun
+         reflects what is actually attached and follows the app's Title Case
+         rule: Documents, Images, or Files for a mixed set. -->
+    <string name="include_collapsed_count">Includes %1$d Documents</string>
+    <string name="include_collapsed_count_images">Includes %1$d Images</string>
+    <string name="include_collapsed_count_files">Includes %1$d Files</string>
+
+    <!-- Weight readout on every row. Always shows the tilde because model
+         tokenizers differ. -->
+    <string name="include_weight">~%1$s tokens</string>
+
+    <!-- Size notices. Persistent inline text under the row, never a toast. -->
+    <string name="include_notice_truncated">This file is too large to send in full. The beginning was included, up to about ~%1$s tokens.</string>
+    <string name="include_notice_csv">Large spreadsheet — sent the column names and first %1$s rows of %2$s.</string>
+    <string name="include_notice_workbook">Large workbook — %1$s worksheets; sent the column names and first %2$s rows of %3$s.</string>
+
+    <!-- Attach failures. Each maps to a detectable-condition row in
+         document-includes-plan.md. -->
+    <string name="include_error_unsupported">This file type is not supported.</string>
+    <string name="include_error_permission_denied">File is unable to be read. Permission has expired or been revoked, and the file is no longer available.</string>
+    <string name="include_error_source_unavailable">File is unable to be read. The source app is not responding.</string>
+    <string name="include_error_file_gone">File is unable to be read. File is no longer available. It may have been moved or deleted.</string>
+    <string name="include_error_interrupted_read">File could not be read completely. The storage or connection may have been interrupted.</string>
+    <string name="include_error_password_protected">File is unable to be read. Content is password protected and unreadable. Please try again with a non-protected file.</string>
+    <string name="include_error_content_mismatch">File is unable to be read. Content does not match file type.</string>
+    <string name="include_error_corrupted">File is unable to be read. File is corrupted.</string>
+    <string name="include_error_empty">File contains no data.</string>
+    <string name="include_error_export_unavailable">File is unable to be read. The app that owns this file did not offer a format this app can read.</string>
+    <string name="include_error_export_failed">File is unable to be read. The file could not be exported. Check that you are online and signed in to the app that owns it, then try again.</string>
+    <string name="include_error_unknown">File could not be attached due to an unknown error.</string>
+    <string name="include_error_duplicate">Document already attached.</string>
+    <string name="include_error_duplicate_image">Image already attached.</string>
+    <string name="document_attach_failed_title">Document could not be attached</string>
+    <string name="document_attach_memory_body">SpeakGPT could not process the complete document within this device’s safe memory limit. No part of the document was attached. Try attaching a smaller copy.</string>
+    <string name="document_attach_expansion_body">This document expands into more data than SpeakGPT can safely process. No part of the document was attached. Try saving a smaller copy and attaching that instead.</string>
+    <string name="document_storage_failed_title">Not enough storage</string>
+    <string name="document_attach_storage_body">SpeakGPT does not have enough free device storage to finish and safely save this document. No part of the document was attached. Free some storage and try again.</string>
+    <string name="document_attach_interrupted_body">The document could not be read completely because the file connection was interrupted. No part of the document was attached. Try again.</string>
+    <string name="document_export_failed_title">Document could not be exported</string>
+    <string name="document_export_incomplete_body">The source app did not finish exporting the complete document. No part of the document was attached. Check that you are online and signed in to the source app, then try again.</string>
+    <string name="request_prepare_failed_title">Request could not be prepared</string>
+    <string name="request_prepare_failed_body">The complete request is too large for this device to assemble safely with the current conversation and attachments. Nothing was sent or shortened. Remove some content or attachments, or start a new chat.</string>
+    <string name="response_limit_too_high_title">Response limit is too high</string>
+    <string name="response_limit_too_high_body">This chat is configured to request up to %1$s response tokens, but the selected model supports a maximum of %2$s. Nothing was sent. Lower the response-token setting or choose another model.</string>
+    <string name="request_context_exceeded_title">Request exceeds this model’s context limit</string>
+    <string name="request_context_exceeded_body">The complete request requires at least %1$s tokens after including the conversation, instructions, memory, attachments, and space for the reply. The selected model supports %2$s. Nothing was sent or shortened. Remove content or attachments, start a new chat, or choose a model with a larger context window.</string>
+    <string name="request_context_warning_title">This request may exceed the model’s context limit</string>
+    <string name="request_context_range_warning_body">Sending this request is not recommended because SpeakGPT cannot confirm that it fits. The complete request is estimated at %1$s to %2$s tokens after including the conversation, instructions, memory, attachments, and space for the reply. The selected model supports %3$s. The provider may reject it, and nothing will be shortened automatically.</string>
+    <string name="request_context_approximate_warning_body">Sending this request is not recommended because SpeakGPT cannot confirm that it fits. The complete request is approximately %1$s tokens after including the conversation, instructions, memory, attachments, and space for the reply. The selected model supports %2$s. The provider may reject it, and nothing will be shortened automatically.</string>
+    <string name="send_anyway">Send anyway</string>
+
+    <!-- Accessibility labels. -->
+    <string name="include_menu_desc">Options for %1$s</string>
+    <string name="include_remove_desc">Remove %1$s</string>
+    <!-- Screen-reader show/hide labels, kind-aware and Title Case to match the
+         collapse line above. -->
+    <string name="include_expand_desc">Show Attached Documents</string>
+    <string name="include_collapse_desc">Hide Attached Documents</string>
+    <string name="include_expand_desc_images">Show Attached Images</string>
+    <string name="include_collapse_desc_images">Hide Attached Images</string>
+    <string name="include_expand_desc_files">Show Attached Files</string>
+    <string name="include_collapse_desc_files">Hide Attached Files</string>
+    <string name="include_condensed_bookmark_desc">Edit condensed documents</string>
+    <string name="include_artifact_bookmark_desc">Edit removed document bookmarks</string>
+    <string name="include_icon_desc">Attached file</string>
+    <string name="btn_attach_document">Document</string>
+    <string name="attach_option_image">Image</string>
+
+    <!-- Save/Cancel pair on the Edit dialog, right-aligned in that order. -->
+    <string name="include_edit_save">Save</string>
+    <string name="include_edit_cancel">Cancel</string>
+
+    <!-- ============ Image attach dialogs ============
+         Wording is generic on purpose: the app name may change and must not
+         appear in user-facing messages. The two "type" errors are kept
+         distinct so the user can tell "this file isn't the right kind of
+         picture" from "the model attached to this chat can't see pictures". -->
+    <string name="image_attach_unsupported_title">Unsupported image type</string>
+    <string name="image_attach_unsupported_body">Choose a JPEG, PNG, or HEIC image.</string>
+    <string name="image_attach_conversion_failed_title">Couldn\'t prepare image</string>
+    <string name="image_attach_conversion_failed_body">The app couldn\'t convert this HEIC image. Try another image or convert it to JPEG or PNG.</string>
+    <string name="image_attach_read_failed_title">Couldn\'t read image</string>
+    <string name="image_attach_read_failed_body">The image could not be read. The source may have been moved or its permission revoked.</string>
+    <string name="image_attach_too_large_title">Couldn\'t prepare image</string>
+    <string name="image_attach_too_large_body">This image is too large to process safely on this device. Try a smaller copy.</string>
+
+    <!-- Capability warning shown at Send when the model attached to this chat
+         is text-only or unknown for images. Wording never names the app. -->
+    <string name="image_model_unsupported_title">This model can\'t view images</string>
+    <string name="image_model_unsupported_body">The selected model does not accept image input, so the image was not sent. Choose another model or change its image support setting.</string>
+    <string name="image_model_unknown_title">This model may not view images</string>
+    <string name="image_model_unknown_body">The app can\'t confirm whether the selected model accepts images. The provider may reject the request.</string>
+
+    <!-- Endpoint editor: manual override for image capability. Collapsed by
+         default; expands to show only models with a recorded value. -->
+    <string name="image_capability_section_title">Image capability by model</string>
+    <string name="image_capability_section_desc">Recorded automatically from image responses. Change or clear the recorded value here if a model behaves differently at this endpoint.</string>
+    <string name="image_capability_empty">No image capabilities have been recorded for this endpoint yet.</string>
+    <string name="image_capability_state_unknown">Unknown</string>
+    <string name="image_capability_state_supported">Supported</string>
+    <string name="image_capability_state_unsupported">Unsupported</string>
+    <string name="image_capability_clear_action">Clear image capability history</string>
+    <string name="image_capability_clear_confirm_title">Clear image capability history?</string>
+    <string name="image_capability_clear_confirm_body">The recorded image support for every model at this endpoint will be forgotten. The app will need to learn each one again on the next image request.</string>
+    <string name="image_capability_clear_confirm_button">Clear</string>
 </resources>

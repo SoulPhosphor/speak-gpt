@@ -55,8 +55,41 @@
                 android:textSize="18sp"
                 android:textStyle="bold"
                 android:visibility="gone"
-                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintEnd_toStartOf="@+id/include_bookmarks"
                 app:layout_constraintTop_toTopOf="parent" />
+
+            <LinearLayout
+                android:id="@+id/include_bookmarks"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="4dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                app:layout_constraintBottom_toBottomOf="@+id/username"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="@+id/username">
+
+                <ImageView
+                    android:id="@+id/condensed_bookmark"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/include_condensed_bookmark_desc"
+                    android:src="@drawable/ic_bookmark_add"
+                    android:tint="?attr/colorPrimary"
+                    android:visibility="gone" />
+
+                <ImageView
+                    android:id="@+id/artifact_bookmark"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_marginStart="4dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/include_artifact_bookmark_desc"
+                    android:src="@drawable/ic_bookmark"
+                    android:tint="?attr/colorPrimary"
+                    android:visibility="gone" />
+            </LinearLayout>
 
             <ImageView
                 android:id="@+id/icon"
@@ -68,6 +101,21 @@
                 app:layout_constraintTop_toTopOf="parent"
                 app:srcCompat="@drawable/ic_launcher_foreground" />
 
+<!-- Record of what was attached to this message (document-includes-plan.md).
+                 Sits directly under the user label, above the message text. While
+                 nothing is attached it is GONE and collapses to a zero-height point
+                 at the top of the bubble, so the message text keeps exactly its old
+                 position. -->
+<!-- No android:id here on purpose: an id on an <include> REPLACES the
+                 included layout's root id, so the root keeps its own
+                 @id/include_summary that ChatAdapter looks up. -->
+            <include
+                layout="@layout/view_include_summary"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/username" />
+
             <TextView
                 android:id="@+id/message"
                 android:layout_width="wrap_content"
@@ -77,7 +125,7 @@
                 android:textColor="?attr/colorSurface"
                 android:textSize="16sp"
                 app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintTop_toTopOf="parent" />
+                app:layout_constraintTop_toBottomOf="@+id/include_summary" />
 
             <LinearLayout
                 android:id="@+id/image_frame"

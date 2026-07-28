@@ -75,6 +75,7 @@ import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import android.window.OnBackInvokedDispatcher
@@ -82,6 +83,7 @@ import androidx.activity.OnBackPressedCallback
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.coordinatorlayout.widget.CoordinatorLayout
@@ -132,6 +134,8 @@ import com.aallam.openai.client.OpenAIConfig
 import com.aallam.openai.client.OpenAIHost
 import com.aallam.openai.client.RetryStrategy
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.button.MaterialButton
+import com.google.android.material.checkbox.MaterialCheckBox
 import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.progressindicator.CircularProgressIndicator
 import com.google.gson.Gson
@@ -151,6 +155,7 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 // import kotlinx.io.files.Path
 // import kotlinx.io.files.SystemFileSystem
@@ -168,6 +173,20 @@ import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.ChatStorageHealth
 import org.teslasoft.assistant.preferences.MessageCompletionState
 import org.teslasoft.assistant.preferences.GlobalPreferences
+import org.teslasoft.assistant.preferences.includes.ChatInclude
+import org.teslasoft.assistant.preferences.includes.DocumentImporter
+import org.teslasoft.assistant.preferences.includes.ImageCapability
+import org.teslasoft.assistant.preferences.includes.ImageCapabilityStore
+import org.teslasoft.assistant.preferences.includes.ImageImporter
+import org.teslasoft.assistant.preferences.includes.IncludeAuxiliaryRequestPolicy
+import org.teslasoft.assistant.preferences.includes.IncludeForm
+import org.teslasoft.assistant.preferences.includes.IncludeKind
+import org.teslasoft.assistant.preferences.includes.IncludeMessageProjection
+import org.teslasoft.assistant.preferences.includes.ProjectedUserMessage
+import org.teslasoft.assistant.preferences.includes.IncludeNotice
+import org.teslasoft.assistant.preferences.includes.IncludeTextPolicy
+import org.teslasoft.assistant.ui.util.IncludeEditDialog
+import org.teslasoft.assistant.ui.util.IncludeStripController
 import org.teslasoft.assistant.util.AvatarRefreshCoordinator
 import org.teslasoft.assistant.util.ProfileImageResolver
 import org.teslasoft.assistant.preferences.LogitBiasPreferences
@@ -193,10 +212,17 @@ import org.teslasoft.assistant.ui.permission.CameraPermissionActivity
 import org.teslasoft.assistant.ui.permission.MicrophonePermissionActivity
 import org.teslasoft.assistant.util.Hash
 import org.teslasoft.assistant.util.GenErrorResult
+import org.teslasoft.assistant.util.FrozenChatPayload
+import org.teslasoft.assistant.util.FrozenPayloadMessage
 import org.teslasoft.assistant.util.GenerationErrorClassifier
 import org.teslasoft.assistant.util.LocaleParser
+import org.teslasoft.assistant.util.ModelContextCapacity
+import org.teslasoft.assistant.util.ModelContextDecision
+import org.teslasoft.assistant.util.RequestCapacity
+import org.teslasoft.assistant.util.RequestHeapState
 import org.teslasoft.assistant.util.WindowInsetsUtil
 import org.teslasoft.assistant.util.chatMessage
+import org.teslasoft.assistant.util.providerLimitMessage
 import java.io.BufferedReader
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -208,7 +234,9 @@ import java.io.InputStreamReader
 import java.net.URL
 import java.util.EnumSet
 import java.util.Locale
+import java.text.NumberFormat
 import java.util.Optional
+import kotlin.coroutines.resume
 import kotlin.time.Duration.Companion.seconds
 import androidx.core.content.edit
 import kotlinx.coroutines.flow.flowOn
@@ -229,6 +257,21 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         // toast the same degraded session again. compareAndSet keeps it correct
         // if the notice ever fires off more than one thread.
         private val memoryDegradedNotified = java.util.concurrent.atomic.AtomicBoolean(false)
+
+        /**
+         * Key under which a user message stores the attachments it carried,
+         * as the JSON produced by `ChatInclude.listToJson`. Absent = none, so
+         * every message written by an older build reads correctly.
+         *
+         * It lives in the SAME map as the message text, which means
+         * saveSettings() persists text and attachments together — there is no
+         * window where one is written and the other is not.
+         */
+        const val INCLUDES_KEY = "includes"
+
+        /** How much of a document the bookmark-writing request sees. Enough
+         *  to say what the file IS, without paying to send it all again. */
+        private const val ARTIFACT_EXCERPT_CHARS = 2000
     }
 
     // Init UI
@@ -263,12 +306,30 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     private var root: ConstraintLayout? = null
     private var threadLoader: LinearLayout? = null
     private var btnAttachFile: ImageButton? = null
-    private var attachedImage: LinearLayout? = null
-    private var selectedImage: ImageView? = null
-    private var btnRemoveImage: ImageButton? = null
     private var visionActions: LinearLayout? = null
-    private var btnVisionActionCamera: ImageButton? = null
-    private var btnVisionActionGallery: ImageButton? = null
+    // Each paperclip-menu action is a labeled row, not an icon-only button.
+    private var btnVisionActionCamera: View? = null
+    private var btnVisionActionGallery: View? = null
+    private var btnVisionActionDocument: View? = null
+
+    // ---- Document includes (document-includes-plan.md) --------------------
+    // Attachments the user has picked but not yet sent. Once a message goes
+    // out these move into that message's own record (INCLUDES_KEY), so the
+    // document text is saved atomically with the text it belongs to.
+    private var includeStrip: LinearLayout? = null
+    private var includeStripController: IncludeStripController? = null
+    private var pendingIncludes: ArrayList<ChatInclude> = arrayListOf()
+    private val pendingDocumentImports: MutableSet<String> = HashSet()
+    private val pendingImageImports: MutableSet<String> = HashSet()
+    // Import coroutines are scoped here so they can be cancelled when the
+    // screen goes away; a job that finished decoding but never persisted its
+    // include is a source of orphaned image files otherwise.
+    private val imageImportScopes: MutableList<CoroutineScope> = mutableListOf()
+    private var condenseJob: Job? = null
+    private var condenseDialog: AlertDialog? = null
+    private var reduceJob: Job? = null
+    private var reduceDialog: AlertDialog? = null
+    private val artifactJobs: MutableMap<String, Job> = HashMap()
     private var bulkContainer: ConstraintLayout? = null
     private var btnSelectAll: ImageButton? = null
     private var btnDeselectAll: ImageButton? = null
@@ -291,6 +352,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     private var messagesUsageProjection: ArrayList<HashMap<String, Any>> = arrayListOf()
     private var adapter: ChatAdapter? = null
     private var chatMessages: ArrayList<ChatMessage> = arrayListOf()
+    private var chatMessageIncludes: ArrayList<String?> = arrayListOf()
 
     // Avatar refresh coordinators, one per side (Profile Images refresh fix,
     // July 21 2026). They keep a refresh requested before the adapter exists
@@ -322,7 +384,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     private var autoLangDetect = false
     private var cancelState = false
     private var disableAutoScroll = false
-    private var imageIsSelected = false
     private var inCost: Float = 0.0f
     private var outCost: Float = 0.0f
     private var usageIn: Int = 0
@@ -357,6 +418,25 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     private data class ChatStartupResult(
         val storageLocked: Boolean,
         val preparedChat: PreparedChatStartup? = null
+    )
+
+    /** One normal chat request, frozen before the visible turn is committed. */
+    private data class PreparedRegularTurn(
+        val rawMessage: String,
+        val storedMessage: String,
+        val modelFacingMessage: String,
+        val pendingIncludes: List<ChatInclude>,
+        val historyBeforeSend: List<ChatMessage>,
+        val selectedModel: String,
+        val selectedEndpointId: String,
+        val request: ChatCompletionRequest,
+        val payload: FrozenChatPayload,
+        val contextDecision: ModelContextDecision
+    )
+
+    private data class FrozenRegularRequest(
+        val request: ChatCompletionRequest,
+        val payload: FrozenChatPayload
     )
 
     // Init DALL-e
@@ -499,6 +579,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     // killAllProcesses()/cancelAllAiActivity() can cancel it like every other
     // generation path.
     private var parseMessageScope: CoroutineScope? = null
+    private var requestPreparationInProgress = false
     private var generateGptImageJob: Job? = null
 
     private fun killAllProcesses() {
@@ -510,6 +591,17 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         imageRequestScope?.coroutineContext?.cancel(CancellationException("Killed"))
         speakScope?.coroutineContext?.cancel(CancellationException("Killed"))
         parseMessageScope?.coroutineContext?.cancel(CancellationException("Killed"))
+        condenseJob?.cancel(CancellationException("Killed"))
+        condenseJob = null
+        condenseDialog?.dismiss()
+        condenseDialog = null
+        reduceJob?.cancel(CancellationException("Killed"))
+        reduceJob = null
+        reduceDialog?.dismiss()
+        reduceDialog = null
+        artifactJobs.values.toList().forEach { it.cancel(CancellationException("Killed")) }
+        artifactJobs.clear()
+        requestPreparationInProgress = false
         generateGptImageJob?.cancel(CancellationException("Killed"))
         generateGptImageJob = null
         handsFreeStopped = true
@@ -1179,67 +1271,20 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         }
     }
 
-    fun resizeBitmapToMaxHeight(bitmap: Bitmap, maxHeight: Int = 100): Bitmap {
-        val originalHeight = bitmap.height
-        val originalWidth = bitmap.width
-
-        if (originalHeight <= maxHeight) {
-            // Return a copy of the original bitmap if already smaller than or equal to maxHeight
-            return bitmap.copy(bitmap.config ?: return bitmap, true)
-        }
-
-        // Calculate the new dimensions while keeping the aspect ratio
-        val aspectRatio = originalWidth.toFloat() / originalHeight.toFloat()
-        val newWidth = (maxHeight * aspectRatio).toInt()
-
-        // Create the scaled bitmap
-        return bitmap.scale(newWidth, maxHeight)
-    }
-
-
+    /**
+     * Camera capture landing point. The system camera has written the JPEG
+     * bytes into a fixed tmp.jpg under the app's own pictures dir; the flow
+     * now hands that URI to [ImageImporter] on an IO thread so the image is
+     * decoded, orientation-corrected, downsampled to the 2048-longest-edge
+     * cap and copied into the chat's own images directory before it appears
+     * as a pending include in the Includes strip. The tmp.jpg is overwritten
+     * on the next capture; nothing here keeps it around.
+     */
     private var cameraIntentLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode == RESULT_OK) {
-            val imageFile = File(getExternalFilesDir(Environment.DIRECTORY_PICTURES), "tmp.jpg")
-            val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", imageFile)
-
-            bitmap = readFile(uri)
-
-            if (bitmap != null) {
-                attachedImage?.visibility = View.VISIBLE
-
-                val bitmapResizedForPreview = resizeBitmapToMaxHeight(bitmap!!, 100)
-
-                selectedImage?.setImageBitmap(roundCorners(bitmapResizedForPreview))
-                imageIsSelected = true
-
-                val mimeType = contentResolver.getType(uri)
-                val format = when {
-                    mimeType.equals("image/png", ignoreCase = true) -> {
-                        selectedImageType = "png"
-                        Bitmap.CompressFormat.PNG
-                    }
-                    else -> {
-                        selectedImageType = "jpg"
-                        Bitmap.CompressFormat.JPEG
-                    }
-                }
-
-                // Step 3: Convert the Bitmap to a Base64-encoded string
-                val outputStream = ByteArrayOutputStream()
-                bitmap!!.compress(format, 100, outputStream) // Note: Adjust the quality as necessary
-                val base64Image = Base64.encodeToString(outputStream.toByteArray(), Base64.DEFAULT)
-
-                // Step 4: Generate the data URL
-                val imageType = when(format) {
-                    Bitmap.CompressFormat.JPEG -> "jpeg"
-                    Bitmap.CompressFormat.PNG -> "png"
-                    // Add more mappings as necessary
-                    else -> ""
-                }
-
-                baseImageString = "data:image/$imageType;base64,$base64Image"
-            }
-        }
+        if (result.resultCode != RESULT_OK) return@registerForActivityResult
+        val imageFile = File(getExternalFilesDir(Environment.DIRECTORY_PICTURES), "tmp.jpg")
+        val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", imageFile)
+        importPendingImage(uri, displayNameOverride = cameraCaptureDisplayName())
     }
 
     private val permissionResultLauncherCamera = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -1876,6 +1921,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 preferences?.setPersonaId(personaId)
                 preferences?.setLastUsedPersonaId(personaId)
                 preferences?.setPersonaActivationSeeded(true)
+                // onResume painted before this result assigned the new
+                // Companion, so resolve its picture now instead of leaving
+                // the default avatar visible until another resume.
+                refreshCompanionAvatar()
             }
         }
     }
@@ -1989,7 +2038,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             onBackInvokedDispatcher.registerOnBackInvokedCallback(
                 OnBackInvokedDispatcher.PRIORITY_DEFAULT
             ) {
-                if (bulkSelectionMode) {
+                if (includeStripController?.collapseIfExpanded() == true) {
+                    // The expanded Includes overlay consumes Back first.
+                } else if (bulkSelectionMode) {
                     deselectAll()
                 } else {
                     finishActivity()
@@ -1998,7 +2049,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         } else {
             onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
                 override fun handleOnBackPressed() {
-                    if (bulkSelectionMode) {
+                    if (includeStripController?.collapseIfExpanded() == true) {
+                        // The expanded Includes overlay consumes Back first.
+                    } else if (bulkSelectionMode) {
                         deselectAll()
                     } else {
                         finishActivity()
@@ -2048,6 +2101,36 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         chatStartupComplete = true
     }
 
+    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        if (event.action == MotionEvent.ACTION_DOWN) {
+            if (includeStripController?.isExpanded() == true) {
+                val bounds = Rect()
+                val touchedInsideStrip =
+                    includeStrip?.getGlobalVisibleRect(bounds) == true &&
+                        bounds.contains(event.rawX.toInt(), event.rawY.toInt())
+                if (!touchedInsideStrip) includeStripController?.collapseIfExpanded()
+            }
+
+            if (visionActions?.visibility == View.VISIBLE) {
+                val bounds = Rect()
+                val touchedInsideMenu =
+                    visionActions?.getGlobalVisibleRect(bounds) == true &&
+                        bounds.contains(event.rawX.toInt(), event.rawY.toInt())
+                val touchedPaperclip =
+                    btnAttachFile?.getGlobalVisibleRect(bounds) == true &&
+                        bounds.contains(event.rawX.toInt(), event.rawY.toInt())
+
+                // Leave paperclip taps for its click listener so it can still
+                // toggle the menu closed. Every other outside tap dismisses
+                // the menu before the tapped control handles its own action.
+                if (!touchedInsideMenu && !touchedPaperclip) {
+                    visionActions?.visibility = View.GONE
+                }
+            }
+        }
+        return super.dispatchTouchEvent(event)
+    }
+
     public override fun onDestroy() {
         // Tombstone for the event log: when the OS (or a navigation flow)
         // destroys this screen while a voice conversation is live, everything
@@ -2095,6 +2178,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         try { recognizer?.destroy() } catch (_: Exception) { /* ignore */ }
         recognizer = null
         try { LocalWhisperEngine.get().cancel() } catch (_: Exception) { /* ignore */ }
+
+        // Cancel any in-flight image import. Its own completion handler sees
+        // isDestroyed and deletes freshly written bytes that never became a
+        // persisted include, so cancelling here just stops the work promptly.
+        for (scope in imageImportScopes.toList()) {
+            try { scope.cancel() } catch (_: Exception) { /* ignore */ }
+        }
+        imageImportScopes.clear()
 
         super.onDestroy()
     }
@@ -2174,24 +2265,25 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             if (reconciledStreaming) saveSettings()
 
             for (message: HashMap<String, Any> in messages) {
-                if (!message["message"].toString().contains("data:image")) {
-                    if (message["isBot"] == true) {
-                        chatMessages.add(
-                            ChatMessage(
-                                role = ChatRole.Assistant,
-                                content = modelFacingContent(message)
-                            )
+                if (message["isBot"] == true) {
+                    chatMessages.add(
+                        ChatMessage(
+                            role = ChatRole.Assistant,
+                            content = modelFacingContent(message)
                         )
-                    } else {
-                        chatMessages.add(
-                            ChatMessage(
-                                role = ChatRole.User,
-                                content = message["message"].toString()
-                            )
+                    )
+                } else {
+                    chatMessages.add(
+                        ChatMessage(
+                            role = ChatRole.User,
+                            content = modelFacingContent(message)
                         )
-                    }
+                    )
                 }
             }
+
+            loadPendingIncludes()
+            reconcileChatImages()
 
             updateMessagesSelectionProjection()
 
@@ -2225,12 +2317,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         keyboardFrame = findViewById(R.id.keyboard_frame)
         root = findViewById(R.id.root)
         btnAttachFile = findViewById(R.id.btn_attach)
-        attachedImage = findViewById(R.id.attachedImage)
-        selectedImage = findViewById(R.id.selectedImage)
-        btnRemoveImage = findViewById(R.id.btnRemoveImage)
         visionActions = findViewById(R.id.vision_action_selector)
         btnVisionActionCamera = findViewById(R.id.action_camera)
         btnVisionActionGallery = findViewById(R.id.action_gallery)
+        btnVisionActionDocument = findViewById(R.id.action_document)
+        includeStrip = findViewById(R.id.include_strip)
+        initIncludeStrip()
         bulkContainer = findViewById(R.id.bulk_container)
         btnSelectAll = findViewById(R.id.btn_select_all)
         btnDeselectAll = findViewById(R.id.btn_deselect_all)
@@ -2285,8 +2377,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         chat?.itemAnimator = null
 
         visionActions?.visibility = View.GONE
-
-        attachedImage?.visibility = View.GONE
 
         btnExport?.setImageResource(R.drawable.ic_upload)
         btnBack?.setImageResource(R.drawable.ic_back)
@@ -2530,102 +2620,947 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         return ResourcesCompat.getColor(context.resources, R.color.amoled_accent_200, null)
     }
 
-    private var bitmap: Bitmap? = null
-    private var baseImageString: String? = null
-    private var selectedImageType: String? = null
-
-    private fun roundCorners(bitmap: Bitmap): Bitmap {
-        // Create a bitmap with the same size as the original.
-        val output = createBitmap(bitmap.width, bitmap.height)
-
-        // Prepare a canvas with the new bitmap.
-        val canvas = Canvas(output)
-
-        // The paint used to draw the original bitmap onto the new one.
-        val paint = Paint().apply {
-            isAntiAlias = true
-            color = -0xbdbdbe
-        }
-
-        // The rectangle bounds for the original bitmap.
-        val rect = Rect(0, 0, bitmap.width, bitmap.height)
-        val rectF = RectF(rect)
-
-        // Draw rounded rectangle as background.
-        canvas.drawRoundRect(rectF, 16f, 16f, paint)
-
-        // Change the paint mode to draw the original bitmap on top.
-        paint.xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_IN)
-
-        // Draw the original bitmap.
-        canvas.drawBitmap(bitmap, rect, rect, paint)
-
-        return output
+    /**
+     * Gallery image picker landing point. Hands the URI off to
+     * [ImageImporter] which handles JPEG/PNG/HEIC conversion, EXIF
+     * orientation, downsampling to the 2048 longest-edge cap and the copy
+     * into this chat's own images directory. Failure surfaces through the
+     * approved image-attach dialogs, never as a preview above the chat.
+     */
+    private val imageIntentLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode != RESULT_OK) return@registerForActivityResult
+        val uri = result.data?.data ?: return@registerForActivityResult
+        importPendingImage(uri, displayNameOverride = null)
     }
 
-    private val fileIntentLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        run {
-            if (result.resultCode == RESULT_OK) {
-                result.data?.data?.also { uri ->
-                    bitmap = readFile(uri)
+    // ==== Image includes ====================================================
+    // Camera and Image both flow through here so the pending Includes strip
+    // is the ONE surface that ever holds an attached picture. The image bytes
+    // live under the chat's private images dir; the ChatInclude carries just
+    // the hash reference plus dimensions and mime for the model estimate.
 
-                    if (bitmap != null) {
-                        attachedImage?.visibility = View.VISIBLE
+    /** Turns a picked-or-captured image URI into a pending image include, or
+     *  raises the approved failure dialog when the file cannot be prepared.
+     *  The old preview above the chat is gone; a failure never shows a
+     *  half-attached row.
+     *
+     *  Duplicate-source protection mirrors documents: the same picked source
+     *  cannot be attached twice to one pending message, and a second tap while
+     *  the first import is still running is ignored. The import scope is
+     *  tracked so that if the screen goes away between the file write and the
+     *  include being persisted, the freshly written bytes are deleted instead
+     *  of orphaned. */
+    private fun importPendingImage(uri: Uri, displayNameOverride: String?) {
+        val fingerprint = ImageImporter.sourceFingerprint(uri.toString())
+        if (pendingIncludes.any { it.sourceFingerprint == fingerprint } ||
+            !pendingImageImports.add(fingerprint)
+        ) {
+            showImageAlreadyAttached()
+            return
+        }
 
-                        val resizedBitmap = resizeBitmapToMaxHeight(bitmap!!, 100)
-
-                        selectedImage?.setImageBitmap(roundCorners(resizedBitmap))
-                        imageIsSelected = true
-
-                        val mimeType = contentResolver.getType(uri)
-                        val format = when {
-                            mimeType.equals("image/png", ignoreCase = true) -> {
-                                selectedImageType = "png"
-                                Bitmap.CompressFormat.PNG
-                            }
-                            else -> {
-                                selectedImageType = "jpg"
-                                Bitmap.CompressFormat.JPEG
-                            }
-                        }
-
-                        // Step 3: Convert the Bitmap to a Base64-encoded string
-                        val outputStream = ByteArrayOutputStream()
-                        bitmap!!.compress(format, 100, outputStream) // Note: Adjust the quality as necessary
-                        val base64Image = Base64.encodeToString(outputStream.toByteArray(), Base64.DEFAULT)
-
-                        // Step 4: Generate the data URL
-                        val imageType = when(format) {
-                            Bitmap.CompressFormat.JPEG -> "jpeg"
-                            Bitmap.CompressFormat.PNG -> "png"
-                            // Add more mappings as necessary
-                            else -> ""
-                        }
-
-                        baseImageString = "data:image/$imageType;base64,$base64Image"
-                    }
+        val scope = CoroutineScope(Dispatchers.Main)
+        imageImportScopes.add(scope)
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                try {
+                    ImageImporter.import(
+                        this@ChatActivity, uri, chatId, displayNameOverride
+                    )
+                } catch (_: Exception) {
+                    ImageImporter.Result.Unknown(displayNameOverride ?: "image")
                 }
             }
-        }
-    }
+            pendingImageImports.remove(fingerprint)
+            imageImportScopes.remove(scope)
+            if (isFinishing || isDestroyed) {
+                // The screen is gone before the include could be persisted:
+                // drop the bytes we just wrote so they never orphan.
+                if (result is ImageImporter.Result.Success) {
+                    withContext(Dispatchers.IO) {
+                        ImageImporter.deleteOrphanFile(result.onDiskFile)
+                    }
+                }
+                return@launch
+            }
 
-    private fun readFile(uri: Uri) : Bitmap? {
-        return contentResolver.openInputStream(uri)?.use { inputStream ->
-            BufferedReader(InputStreamReader(inputStream)).use { _ ->
-                BitmapFactory.decodeStream(inputStream)
+            when (result) {
+                is ImageImporter.Result.Success -> {
+                    pendingIncludes.add(result.include)
+                    savePendingIncludes()
+                    refreshIncludeStrip()
+                }
+                is ImageImporter.Result.Unsupported ->
+                    showImageAttachDialog(
+                        R.string.image_attach_unsupported_title,
+                        R.string.image_attach_unsupported_body
+                    )
+                is ImageImporter.Result.HeicConversionFailed ->
+                    showImageAttachDialog(
+                        R.string.image_attach_conversion_failed_title,
+                        R.string.image_attach_conversion_failed_body
+                    )
+                is ImageImporter.Result.ReadFailed ->
+                    showImageAttachDialog(
+                        R.string.image_attach_read_failed_title,
+                        R.string.image_attach_read_failed_body
+                    )
+                is ImageImporter.Result.TooLarge ->
+                    showImageAttachDialog(
+                        R.string.image_attach_too_large_title,
+                        R.string.image_attach_too_large_body
+                    )
+                is ImageImporter.Result.Unknown ->
+                    showImageAttachDialog(
+                        R.string.image_attach_read_failed_title,
+                        R.string.image_attach_read_failed_body
+                    )
             }
         }
     }
 
-    private fun openFile(pickerInitialUri: Uri) {
-        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-            addCategory(Intent.CATEGORY_OPENABLE)
-            type = "image/*"
+    private fun showImageAttachDialog(titleRes: Int, bodyRes: Int) {
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(titleRes)
+            .setMessage(bodyRes)
+            .setPositiveButton(R.string.okay, null)
+            .show()
+    }
 
-            putExtra(DocumentsContract.EXTRA_INITIAL_URI, pickerInitialUri)
+    /** Camera captures name themselves after the chat plus a timestamp so a
+     *  transcript's summary rows stay readable ("Trip planning 07-27-26
+     *  14-32.jpg") instead of showing the always-`tmp.jpg` placeholder. */
+    private fun cameraCaptureDisplayName(): String {
+        val safeName = (chatName.ifBlank { "Untitled" })
+            .replace(Regex("[/\\\\:*?\"<>|]"), " ")
+            .trim()
+            .ifBlank { "Untitled" }
+        val stamp = java.text.SimpleDateFormat(
+            "MM-dd-yy HH-mm", java.util.Locale.getDefault()
+        ).format(java.util.Date())
+        return "$safeName $stamp.jpg"
+    }
+
+    // ==== Document includes ================================================
+    // See document-includes-plan.md for the current design. The short
+    // version: an attached document is extracted to text on THIS device and
+    // rides inside the user message it was attached to, so it works
+    // identically on every OpenAI-compatible endpoint (GLM, DeepSeek,
+    // OpenRouter) with no provider-specific upload anywhere, and it sits at a
+    // fixed point in history that the provider's prefix cache can cover on
+    // every later turn.
+
+    private fun initIncludeStrip() {
+        val strip = includeStrip ?: return
+        val collapsed = findViewById<View>(R.id.include_collapsed_row) ?: return
+        val scroll = findViewById<ScrollView>(R.id.include_list_scroll) ?: return
+        val list = findViewById<LinearLayout>(R.id.include_list) ?: return
+
+        includeStripController = IncludeStripController(
+            this, strip, collapsed, scroll, list,
+            object : IncludeStripController.Callbacks {
+                override fun onRemoveInclude(include: ChatInclude) = removeInclude(include)
+            }
+        )
+        refreshIncludeStrip()
+    }
+
+    private fun refreshIncludeStrip() {
+        // Sent documents belong to the transcript row under the user name.
+        // The composer only shows attachments waiting for the next Send.
+        includeStripController?.bind(pendingIncludes)
+    }
+
+    private fun includesOf(message: HashMap<String, Any>): List<ChatInclude> =
+        ChatInclude.listFromJson(message[INCLUDES_KEY]?.toString())
+
+    private fun savePendingIncludes(synchronous: Boolean = false) {
+        preferences?.setPendingIncludes(
+            if (pendingIncludes.isEmpty()) "" else ChatInclude.listToJson(pendingIncludes),
+            synchronous = synchronous
+        )
+    }
+
+    private fun loadPendingIncludes() {
+        val loaded = ChatInclude.listFromJson(preferences?.getPendingIncludes())
+        val sentIds = messages
+            .flatMap(::includesOf)
+            .mapTo(HashSet()) { it.id }
+        pendingIncludes = ArrayList(
+            loaded.filter { it.form != IncludeForm.ARTIFACT && it.id !in sentIds }
+        )
+        if (pendingIncludes.size != loaded.size) {
+            // Recover safely if a process stopped after the chat-history side
+            // of a pending-to-sent transfer was committed.
+            savePendingIncludes(synchronous = true)
+        }
+    }
+
+    /**
+     * Replaces one include wherever it lives — still pending, or already
+     * carried by a sent message — and re-renders everything that depends on
+     * it. Changing an include changes what the model sees for that turn, so
+     * the model projection is rebuilt too; leaving the old projection in place
+     * would keep sending a document the user just removed.
+     */
+    private fun updateInclude(updated: ChatInclude) {
+        var changed = false
+
+        val pendingIndex = pendingIncludes.indexOfFirst { it.id == updated.id }
+        if (pendingIndex >= 0) {
+            pendingIncludes[pendingIndex] = updated
+            savePendingIncludes(synchronous = true)
+            changed = true
         }
 
-        fileIntentLauncher.launch(intent)
+        for (message in messages) {
+            val existing = includesOf(message)
+            if (existing.none { it.id == updated.id }) continue
+            val merged = existing.map { if (it.id == updated.id) updated else it }
+            message[INCLUDES_KEY] = ChatInclude.listToJson(merged)
+            changed = true
+        }
+
+        if (!changed) return
+        saveSettings()
+        rebuildModelProjection()
+        refreshIncludeStrip()
+        adapter?.notifyDataSetChanged()
+    }
+
+    /**
+     * Rebuilds the model-facing projection of the whole conversation from the
+     * stored messages. Cheap (no encryption, no tokenizer) and the only way to
+     * guarantee the projection and the stored includes cannot drift apart.
+     */
+    private fun rebuildModelProjection() {
+        chatMessages = arrayListOf()
+        chatMessageIncludes = arrayListOf()
+        for (message in messages) {
+            val content = modelFacingContent(message)
+            if (content.isBlank()) continue
+            chatMessages.add(
+                ChatMessage(
+                    role = if (message["isBot"] == true) {
+                        ChatRole.Assistant
+                    } else {
+                        ChatRole.User
+                    },
+                    content = content
+                )
+            )
+            chatMessageIncludes.add(
+                if (message["isBot"] != true) message[INCLUDES_KEY]?.toString() else null
+            )
+        }
+    }
+
+    private fun openDocumentPicker() {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            // CATEGORY_OPENABLE is deliberately NOT set. It restricts the
+            // picker to files that can be opened byte-for-byte, which hides
+            // Google Docs and Sheets entirely — those have no bytes of their
+            // own and are converted on request instead. Anything that turns
+            // up as a result and cannot be converted is refused by the
+            // importer with a specific reason.
+            //
+            // "*/*" with an EXTRA_MIME_TYPES filter, because some providers
+            // hand back documents typed as octet-stream and a strict type
+            // filter would make real .md/.csv files unpickable.
+            type = "*/*"
+            putExtra(Intent.EXTRA_MIME_TYPES, DocumentImporter.PICKER_MIME_TYPES)
+        }
+        documentIntentLauncher.launch(intent)
+    }
+
+    private val documentIntentLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode != RESULT_OK) return@registerForActivityResult
+        val uri = result.data?.data ?: return@registerForActivityResult
+        val fingerprint = DocumentImporter.sourceFingerprint(uri.toString())
+        if (pendingIncludes.any { it.sourceFingerprint == fingerprint } ||
+            !pendingDocumentImports.add(fingerprint)
+        ) {
+            showDocumentAlreadyAttached()
+            return@registerForActivityResult
+        }
+        importDocument(uri, fingerprint)
+    }
+
+    /**
+     * Reads the picked file off the main thread (a large document is real I/O)
+     * and either attaches it or explains why it could not be. A failure is
+     * always stated — never a silently ignored tap.
+     */
+    private fun importDocument(uri: Uri, sourceFingerprint: String) {
+        val scope = CoroutineScope(Dispatchers.Main)
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                try {
+                    DocumentImporter.import(this@ChatActivity, uri)
+                } catch (_: Exception) {
+                    DocumentImporter.Result.Unknown("document")
+                }
+            }
+            pendingDocumentImports.remove(sourceFingerprint)
+            if (isFinishing || isDestroyed) return@launch
+
+            when (result) {
+                is DocumentImporter.Result.Success -> {
+                    pendingIncludes.add(result.include)
+                    savePendingIncludes()
+                    refreshIncludeStrip()
+                }
+                is DocumentImporter.Result.Unsupported ->
+                    showIncludeProblem(R.string.include_error_unsupported, result.fileName)
+                is DocumentImporter.Result.PermissionDenied ->
+                    showIncludeProblem(R.string.include_error_permission_denied, result.fileName)
+                is DocumentImporter.Result.SourceUnavailable ->
+                    showIncludeProblem(R.string.include_error_source_unavailable, result.fileName)
+                is DocumentImporter.Result.FileGone ->
+                    showIncludeProblem(R.string.include_error_file_gone, result.fileName)
+                is DocumentImporter.Result.InterruptedRead ->
+                    showIncludeCapacityProblem(
+                        R.string.document_attach_failed_title,
+                        R.string.document_attach_interrupted_body
+                    )
+                is DocumentImporter.Result.PasswordProtected ->
+                    showIncludeProblem(R.string.include_error_password_protected, result.fileName)
+                is DocumentImporter.Result.ContentMismatch ->
+                    showIncludeProblem(R.string.include_error_content_mismatch, result.fileName)
+                is DocumentImporter.Result.Corrupted ->
+                    showIncludeProblem(R.string.include_error_corrupted, result.fileName)
+                is DocumentImporter.Result.Empty ->
+                    showIncludeProblem(R.string.include_error_empty, result.fileName)
+                is DocumentImporter.Result.ExportUnavailable ->
+                    showIncludeProblem(R.string.include_error_export_unavailable, result.fileName)
+                is DocumentImporter.Result.ExportFailed ->
+                    showIncludeCapacityProblem(
+                        R.string.document_export_failed_title,
+                        R.string.document_export_incomplete_body
+                    )
+                is DocumentImporter.Result.DeviceMemoryLimit ->
+                    showIncludeCapacityProblem(
+                        R.string.document_attach_failed_title,
+                        R.string.document_attach_memory_body
+                    )
+                is DocumentImporter.Result.ArchiveExpansionLimit ->
+                    showIncludeCapacityProblem(
+                        R.string.document_attach_failed_title,
+                        R.string.document_attach_expansion_body
+                    )
+                is DocumentImporter.Result.StorageLimit ->
+                    showIncludeCapacityProblem(
+                        R.string.document_storage_failed_title,
+                        R.string.document_attach_storage_body
+                    )
+                is DocumentImporter.Result.Unknown ->
+                    showIncludeProblem(R.string.include_error_unknown, result.fileName)
+            }
+        }
+    }
+
+    /** A dialog, never a toast (house rule) — the user must be able to read
+     *  why their file did not attach at their own pace. */
+    private fun showIncludeProblem(messageRes: Int, fileName: String) {
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(fileName)
+            .setMessage(messageRes)
+            .setPositiveButton(R.string.btn_close, null)
+            .show()
+    }
+
+    private fun showIncludeCapacityProblem(titleRes: Int, messageRes: Int) {
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(titleRes)
+            .setMessage(messageRes)
+            .setPositiveButton(R.string.okay, null)
+            .show()
+    }
+
+    private fun showDocumentAlreadyAttached() {
+        showAlreadyAttached(R.string.include_error_duplicate)
+    }
+
+    private fun showImageAlreadyAttached() {
+        showAlreadyAttached(R.string.include_error_duplicate_image)
+    }
+
+    private fun showAlreadyAttached(titleRes: Int) {
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(titleRes)
+            .setPositiveButton(R.string.okay, null)
+            .show()
+    }
+
+    /**
+     * Remove drops an include to its ARTIFACT form — a tiny bookmark —
+     * rather than erasing it. Deleting outright would leave the conversation
+     * full of replies about something the model can no longer see, which is
+     * how a model starts inventing what the document said.
+     *
+     * The bookmark is written by the chat's own model; if that cannot be
+     * reached the file-name fallback stands in immediately. Removal must never
+     * block or fail on a network problem, and the line stays editable either
+     * way.
+     */
+    private fun removeInclude(include: ChatInclude) {
+        val pendingIndex = pendingIncludes.indexOfFirst { it.id == include.id }
+        if (pendingIndex >= 0) {
+            // It was never sent, so detaching it must leave no model-facing
+            // history or artifact claiming that the user shared it.
+            val removed = pendingIncludes.removeAt(pendingIndex)
+            // Persist the removal BEFORE touching bytes, so a crash mid-delete
+            // never leaves a saved include pointing at bytes that are gone.
+            savePendingIncludes(synchronous = true)
+            refreshIncludeStrip()
+            if (removed.kind.isImage()) maybeDeleteImageBytes(removed)
+            return
+        }
+
+        val fallback = IncludeTextPolicy.fallbackArtifactLine(include.fileName)
+
+        if (include.kind.isImage()) {
+            updateInclude(
+                include.copy(
+                    form = IncludeForm.ARTIFACT,
+                    artifactLine = fallback,
+                    notice = IncludeNotice.None
+                ).withoutImageBytes()
+            )
+            artifactJobs.remove(include.id)?.cancel()
+            val imageInclude = include
+            val job = CoroutineScope(Dispatchers.Main).launch {
+                val written = requestImageArtifactLine(imageInclude)
+                maybeDeleteImageBytes(imageInclude)
+                if (isFinishing || isDestroyed || written == null) return@launch
+                val latest = findIncludeById(imageInclude.id) ?: return@launch
+                if (latest.form == IncludeForm.ARTIFACT && latest.artifactLine == fallback) {
+                    updateInclude(latest.copy(artifactLine = written))
+                }
+            }
+            artifactJobs[include.id] = job
+            job.invokeOnCompletion {
+                if (artifactJobs[include.id] === job) artifactJobs.remove(include.id)
+            }
+            return
+        }
+
+        // Show the cheap form at once so the transcript responds to the tap;
+        // the model-written reminder replaces the fallback when/if it arrives.
+        updateInclude(
+            include.copy(
+                form = IncludeForm.ARTIFACT,
+                artifactLine = fallback,
+                notice = IncludeNotice.None
+            )
+        )
+
+        artifactJobs.remove(include.id)?.cancel()
+        val job = CoroutineScope(Dispatchers.Main).launch {
+            val written = requestArtifactLine(include)
+            if (isFinishing || isDestroyed || written == null) return@launch
+            val latest = findIncludeById(include.id) ?: return@launch
+            // Only replace the placeholder — never overwrite text the user
+            // has since edited by hand.
+            if (latest.form == IncludeForm.ARTIFACT && latest.artifactLine == fallback) {
+                updateInclude(latest.copy(artifactLine = written))
+            }
+        }
+        artifactJobs[include.id] = job
+        job.invokeOnCompletion {
+            if (artifactJobs[include.id] === job) artifactJobs.remove(include.id)
+        }
+    }
+
+    /**
+     * Deletes an image include's on-disk bytes, but only when no OTHER live
+     * FULL image include (pending or in any saved message) still points at the
+     * same content hash. Images dedupe by hash, so the same file can back more
+     * than one include; deleting it out from under a surviving include would
+     * break that include's send. The reference check runs on the main thread
+     * (reads in-memory lists), the delete on IO.
+     */
+    private fun maybeDeleteImageBytes(include: ChatInclude) {
+        val hash = include.imageFileHash?.takeIf { it.isNotEmpty() } ?: return
+        val referenced = imageBytesStillReferenced(hash, excludingId = include.id)
+        val chat = chatId
+        CoroutineScope(Dispatchers.IO).launch {
+            ImageImporter.deleteImageFileIfUnreferenced(
+                this@ChatActivity, chat, include, referenced
+            )
+        }
+    }
+
+    private fun imageBytesStillReferenced(hash: String, excludingId: String): Boolean {
+        if (pendingIncludes.any {
+                it.id != excludingId && it.imageFileHash == hash && it.hasLiveImageBytes()
+            }
+        ) return true
+        for (message in messages) {
+            if (includesOf(message).any {
+                    it.id != excludingId && it.imageFileHash == hash && it.hasLiveImageBytes()
+                }
+            ) return true
+        }
+        return false
+    }
+
+    /**
+     * One-shot sweep on chat load: delete any file in this chat's image
+     * directory that no live FULL image include references. Covers an import
+     * that wrote its file but never persisted its include (the screen died in
+     * the gap) and any bytes a prior rename move could not carry over.
+     */
+    private fun reconcileChatImages() {
+        val referenced = HashSet<String>()
+        for (include in pendingIncludes) {
+            if (include.hasLiveImageBytes()) include.imageFileHash?.let(referenced::add)
+        }
+        for (message in messages) {
+            for (include in includesOf(message)) {
+                if (include.hasLiveImageBytes()) include.imageFileHash?.let(referenced::add)
+            }
+        }
+        val chat = chatId
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                ImageImporter.reconcileChatImages(this@ChatActivity, chat, referenced)
+            } catch (_: Exception) { /* best-effort cleanup */ }
+        }
+    }
+
+    private fun findIncludeById(id: String): ChatInclude? {
+        pendingIncludes.firstOrNull { it.id == id }?.let { return it }
+        for (message in messages) {
+            includesOf(message).firstOrNull { it.id == id }?.let { return it }
+        }
+        return null
+    }
+
+    /**
+     * Asks the selected endpoint/model for the short bookmark that stands in
+     * for a removed attachment. The caller has already applied a usable
+     * filename fallback, so a failed request remains silent.
+     */
+    private suspend fun requestArtifactLine(include: ChatInclude): String? {
+        val client = ai ?: return null
+        val lineModel = model.ifBlank { preferences?.getModel() ?: "" }
+        if (lineModel.isBlank()) return null
+
+        return try {
+            val raw = withContext(Dispatchers.IO) {
+                val spec = IncludeAuxiliaryRequestPolicy.artifact(
+                    include = include,
+                    selectedModel = lineModel,
+                    excerptCharacters = ARTIFACT_EXCERPT_CHARS
+                )
+                val request = ChatCompletionRequest(
+                    model = ModelId(spec.model),
+                    maxTokens = spec.maxTokens,
+                    messages = listOf(
+                        ChatMessage(
+                            role = ChatRole.User,
+                            content = spec.prompt
+                        )
+                    )
+                )
+                client.chatCompletion(request).choices.firstOrNull()?.message?.content
+            }
+            IncludeTextPolicy.sanitizeArtifactLine(raw, include.fileName)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private suspend fun requestImageArtifactLine(include: ChatInclude): String? {
+        val client = ai ?: return null
+        val lineModel = model.ifBlank { preferences?.getModel() ?: "" }
+        if (lineModel.isBlank()) return null
+
+        return try {
+            withContext(Dispatchers.IO) {
+                val file = ImageImporter.imageFile(this@ChatActivity, chatId, include)
+                if (file == null || !file.exists()) return@withContext null
+
+                val bytes = file.readBytes()
+                val mime = include.imageMimeType ?: "image/jpeg"
+                val encoded = Base64.encodeToString(bytes, Base64.NO_WRAP)
+
+                val parts = ArrayList<ContentPart>()
+                parts.add(TextPart(
+                    "Create a very short reminder of this image for future AI requests " +
+                    "after the image is removed. State what the image showed and its " +
+                    "general subject or purpose. Include at most one or two especially " +
+                    "important details. Use no more than three short sentences. " +
+                    "Reply with the reminder only.\n\nFile name: ${include.fileName}"
+                ))
+                parts.add(ImagePart("data:$mime;base64,$encoded"))
+
+                val request = ChatCompletionRequest(
+                    model = ModelId(lineModel),
+                    maxTokens = IncludeAuxiliaryRequestPolicy.ARTIFACT_MAX_TOKENS,
+                    messages = listOf(
+                        ChatMessage(role = ChatRole.User, content = parts)
+                    )
+                )
+                val raw = client.chatCompletion(request)
+                    .choices.firstOrNull()?.message?.content
+                IncludeTextPolicy.sanitizeArtifactLine(raw, include.fileName)
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun editInclude(include: ChatInclude) {
+        val text = when (include.form) {
+            IncludeForm.ARTIFACT -> include.modelText()
+            IncludeForm.CONDENSED -> include.condensedText ?: include.fullText
+            IncludeForm.FULL -> include.fullText
+        }
+        IncludeEditDialog.show(this, include.fileName, text) { edited ->
+            val latest = findIncludeById(include.id) ?: return@show
+            updateInclude(
+                when (latest.form) {
+                    IncludeForm.ARTIFACT -> latest.copy(artifactLine = edited)
+                    else -> latest.withCondensedText(edited)
+                }
+            )
+        }
+    }
+
+    private fun ChatInclude.withCondensedText(text: String): ChatInclude {
+        return copy(
+            form = IncludeForm.CONDENSED,
+            condensedText = text
+        )
+    }
+
+    /** Condense automatically replaces the model-facing full text with Cliff Notes. */
+    private fun condenseInclude(include: ChatInclude) {
+        val latest = findIncludeById(include.id) ?: return
+        if (latest.form != IncludeForm.FULL) return
+        if (latest.kind.isImage()) {
+            reduceInclude(latest)
+            return
+        }
+        if (condenseJob?.isActive == true) return
+
+        if (preferences?.getNeverShowCondenseHint() == true) {
+            startCondensing(latest)
+        } else {
+            showCondenseHint(latest)
+        }
+    }
+
+    private fun showCondenseHint(include: ChatInclude) {
+        val view = layoutInflater.inflate(R.layout.dialog_include_condense_hint, null)
+        val condense = view.findViewById<MaterialButton>(R.id.btn_dialog_primary_action)
+        val cancel = view.findViewById<MaterialButton>(R.id.btn_dialog_destructive_action)
+        val neverShow = view.findViewById<MaterialCheckBox>(R.id.include_condense_never_show)
+        condense?.setText(R.string.include_action_condense)
+        cancel?.setText(R.string.include_edit_cancel)
+
+        val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.include_condense_title)
+            .setView(view)
+            .setCancelable(true)
+            .create()
+
+        neverShow?.setOnCheckedChangeListener { _, checked ->
+            preferences?.setNeverShowCondenseHint(checked)
+        }
+        cancel?.setOnClickListener { dialog.dismiss() }
+        condense?.setOnClickListener {
+            dialog.dismiss()
+            val latest = findIncludeById(include.id) ?: return@setOnClickListener
+            if (latest.form == IncludeForm.FULL) startCondensing(latest)
+        }
+        dialog.show()
+    }
+
+    private fun startCondensing(include: ChatInclude) {
+        if (condenseJob?.isActive == true) return
+
+        val view = layoutInflater.inflate(R.layout.dialog_include_condense_progress, null)
+        val spinner = view.findViewById<CircularProgressIndicator>(R.id.include_condense_progress)
+        val status = view.findViewById<TextView>(R.id.include_condense_status)
+        val okay = view.findViewById<MaterialButton>(R.id.btn_dialog_action)
+        okay?.setText(R.string.okay)
+        okay?.visibility = View.GONE
+
+        val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(include.fileName)
+            .setView(view)
+            .setCancelable(false)
+            .create()
+        condenseDialog = dialog
+        okay?.setOnClickListener {
+            dialog.dismiss()
+            if (condenseDialog === dialog) condenseDialog = null
+        }
+        dialog.show()
+
+        val sourceText = include.fullText
+        condenseJob = CoroutineScope(Dispatchers.Main).launch {
+            val result = requestCondensedText(include)
+            if (isFinishing || isDestroyed || condenseDialog !== dialog) return@launch
+
+            val condensed = result.getOrNull()?.trim().orEmpty()
+            val sourceTokens = IncludeTextPolicy.estimateTokens(sourceText)
+            val condensedTokens = IncludeTextPolicy.estimateTokens(condensed)
+            val latest = findIncludeById(include.id)
+            val stillCurrent = latest?.form == IncludeForm.FULL &&
+                    latest.fullText == sourceText
+
+            val completionMessage = when {
+                result.isFailure -> {
+                    result.exceptionOrNull()?.let { error ->
+                        val classified = GenerationErrorClassifier.classify(error)
+                        logGenerationError(classified, error, "document condense")
+                    }
+                    getString(R.string.include_condense_failed)
+                }
+                condensed.isBlank() || condensedTokens >= sourceTokens ->
+                    getString(R.string.include_condense_not_shorter)
+                !stillCurrent ->
+                    getString(R.string.include_condense_failed)
+                else -> {
+                    updateInclude(latest!!.withCondensedText(condensed))
+                    getString(R.string.include_condense_complete)
+                }
+            }
+
+            spinner?.visibility = View.GONE
+            status?.text = completionMessage
+            okay?.visibility = View.VISIBLE
+            condenseJob = null
+        }
+    }
+
+    /**
+     * Asks the selected endpoint/model to make the Cliff Notes. The request
+     * includes the configured output ceiling but does not invent a percentage
+     * target based on the source length.
+     */
+    private suspend fun requestCondensedText(include: ChatInclude): Result<String> {
+        val client = ai
+            ?: return Result.failure(IllegalStateException("No selected AI endpoint"))
+        val condenseModel = model.ifBlank { preferences?.getModel() ?: "" }
+        if (condenseModel.isBlank()) {
+            return Result.failure(IllegalStateException("No selected model"))
+        }
+        val outputLimit = preferences?.getMaxTokens() ?: 1500
+
+        return try {
+            val text = withContext(Dispatchers.IO) {
+                val spec = IncludeAuxiliaryRequestPolicy.condense(
+                    include = include,
+                    selectedModel = condenseModel,
+                    configuredMaxTokens = outputLimit
+                )
+                val request = ChatCompletionRequest(
+                    model = ModelId(spec.model),
+                    maxTokens = spec.maxTokens,
+                    messages = listOf(
+                        ChatMessage(
+                            role = ChatRole.User,
+                            content = spec.prompt
+                        )
+                    )
+                )
+                client.chatCompletion(request).choices.firstOrNull()?.message?.content?.trim()
+            }
+            if (text.isNullOrBlank()) {
+                Result.failure(IllegalStateException("Condense returned no text"))
+            } else {
+                Result.success(text)
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    private fun reduceInclude(include: ChatInclude) {
+        if (reduceJob?.isActive == true) return
+
+        if (preferences?.getNeverShowReduceHint() == true) {
+            startReducing(include)
+        } else {
+            showReduceHint(include)
+        }
+    }
+
+    private fun showReduceHint(include: ChatInclude) {
+        val view = layoutInflater.inflate(R.layout.dialog_include_reduce_hint, null)
+        val reduce = view.findViewById<MaterialButton>(R.id.btn_dialog_primary_action)
+        val cancel = view.findViewById<MaterialButton>(R.id.btn_dialog_destructive_action)
+        val neverShow = view.findViewById<MaterialCheckBox>(R.id.include_reduce_never_show)
+        reduce?.setText(R.string.include_action_reduce)
+        cancel?.setText(R.string.include_edit_cancel)
+
+        val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.include_reduce_title)
+            .setView(view)
+            .setCancelable(true)
+            .create()
+
+        neverShow?.setOnCheckedChangeListener { _, checked ->
+            preferences?.setNeverShowReduceHint(checked)
+        }
+        cancel?.setOnClickListener { dialog.dismiss() }
+        reduce?.setOnClickListener {
+            dialog.dismiss()
+            val latest = findIncludeById(include.id) ?: return@setOnClickListener
+            if (latest.form == IncludeForm.FULL && latest.kind.isImage()) startReducing(latest)
+        }
+        dialog.show()
+    }
+
+    private fun startReducing(include: ChatInclude) {
+        if (reduceJob?.isActive == true) return
+
+        val view = layoutInflater.inflate(R.layout.dialog_include_condense_progress, null)
+        val spinner = view.findViewById<CircularProgressIndicator>(R.id.include_condense_progress)
+        val status = view.findViewById<TextView>(R.id.include_condense_status)
+        val okay = view.findViewById<MaterialButton>(R.id.btn_dialog_action)
+        okay?.setText(R.string.okay)
+        okay?.visibility = View.GONE
+
+        val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(include.fileName)
+            .setView(view)
+            .setCancelable(false)
+            .create()
+        reduceDialog = dialog
+        okay?.setOnClickListener {
+            dialog.dismiss()
+            if (reduceDialog === dialog) reduceDialog = null
+        }
+        status?.setText(R.string.include_reduce_working)
+        dialog.show()
+
+        reduceJob = CoroutineScope(Dispatchers.Main).launch {
+            val result = requestReducedText(include)
+            if (isFinishing || isDestroyed || reduceDialog !== dialog) return@launch
+
+            val reduced = result.getOrNull()?.trim().orEmpty()
+            val latest = findIncludeById(include.id)
+            val stillCurrent = latest?.form == IncludeForm.FULL &&
+                    latest.kind.isImage() && latest.imageFileHash == include.imageFileHash
+
+            val completionMessage = when {
+                result.isFailure -> {
+                    result.exceptionOrNull()?.let { error ->
+                        val classified = GenerationErrorClassifier.classify(error)
+                        logGenerationError(classified, error, "image reduce")
+                    }
+                    getString(R.string.include_reduce_failed)
+                }
+                reduced.isBlank() ->
+                    getString(R.string.include_reduce_failed)
+                !stillCurrent ->
+                    getString(R.string.include_reduce_failed)
+                else -> {
+                    updateInclude(
+                        latest!!.withCondensedText(reduced).withoutImageBytes()
+                    )
+                    maybeDeleteImageBytes(include)
+                    getString(R.string.include_condense_complete)
+                }
+            }
+
+            spinner?.visibility = View.GONE
+            status?.text = completionMessage
+            okay?.visibility = View.VISIBLE
+            reduceJob = null
+        }
+    }
+
+    private fun accompanyingUserMessage(includeId: String): String {
+        for (message in messages) {
+            if (message["isBot"] == true) continue
+            val includes = includesOf(message)
+            if (includes.any { it.id == includeId }) {
+                return message["message"]?.toString().orEmpty()
+            }
+        }
+        return ""
+    }
+
+    private suspend fun requestReducedText(include: ChatInclude): Result<String> {
+        val client = ai
+            ?: return Result.failure(IllegalStateException("No selected AI endpoint"))
+        val reduceModel = model.ifBlank { preferences?.getModel() ?: "" }
+        if (reduceModel.isBlank()) {
+            return Result.failure(IllegalStateException("No selected model"))
+        }
+        val outputLimit = preferences?.getMaxTokens() ?: 1500
+        val userText = accompanyingUserMessage(include.id)
+
+        return try {
+            val text = withContext(Dispatchers.IO) {
+                val spec = IncludeAuxiliaryRequestPolicy.reduceImage(
+                    include = include,
+                    accompanyingUserMessage = userText,
+                    selectedModel = reduceModel,
+                    configuredMaxTokens = outputLimit
+                )
+                val file = ImageImporter.imageFile(this@ChatActivity, chatId, include)
+                if (file == null || !file.exists()) {
+                    error("Image file missing for include ${include.id}")
+                }
+                val parts = ArrayList<ContentPart>()
+                parts.add(TextPart(spec.prompt))
+                val bytes = file.readBytes()
+                val mime = include.imageMimeType ?: "image/jpeg"
+                val encoded = Base64.encodeToString(bytes, Base64.NO_WRAP)
+                parts.add(ImagePart("data:$mime;base64,$encoded"))
+
+                val request = ChatCompletionRequest(
+                    model = ModelId(spec.model),
+                    maxTokens = spec.maxTokens,
+                    messages = listOf(
+                        ChatMessage(role = ChatRole.User, content = parts)
+                    )
+                )
+                client.chatCompletion(request).choices.firstOrNull()?.message?.content?.trim()
+            }
+            if (text.isNullOrBlank()) {
+                Result.failure(IllegalStateException("Reduce returned no text"))
+            } else {
+                Result.success(text)
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    private fun consumePendingIncludesForSend(): List<ChatInclude> {
+        if (pendingIncludes.isEmpty()) return emptyList()
+        val sent = pendingIncludes.map { it.forSentMessage() }
+        pendingIncludes = arrayListOf()
+        return sent
+    }
+
+    /** Opens the system image picker, filtered to JPEG, PNG and HEIC. HEIC
+     *  is converted to JPEG at import time. Any other file the user
+     *  navigates to is refused by [ImageImporter] with the approved dialog. */
+    private fun openImagePicker() {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "*/*"
+            putExtra(Intent.EXTRA_MIME_TYPES, ImageImporter.PICKER_MIME_TYPES)
+        }
+        imageIntentLauncher.launch(intent)
     }
 
     private fun initLogic() {
@@ -2660,8 +3595,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 false
             }
         }
-
-        attachedImage?.setOnClickListener { /* ignored */ }
 
         // (No long-press listener on btnMicro: View.performLongClick is gated
         // on isEnabled, which is exactly false during generation — the only
@@ -2713,7 +3646,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
         btnVisionActionGallery?.setOnClickListener {
             visionActions?.visibility = View.GONE
-            openFile("/storage/emulated/0/image.png".toUri())
+            openImagePicker()
         }
 
         btnVisionActionCamera?.setOnClickListener {
@@ -2722,10 +3655,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             permissionResultLauncherCamera.launch(intent)
         }
 
-        btnRemoveImage?.setOnClickListener {
-            attachedImage?.visibility = View.GONE
-            imageIsSelected = false
-            bitmap = null
+        btnVisionActionDocument?.setOnClickListener {
+            visionActions?.visibility = View.GONE
+            openDocumentPicker()
         }
 
         messageInput?.setOnKeyListener { v, keyCode, event -> run {
@@ -2737,7 +3669,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     }
 
                     if (keyCode == KeyEvent.KEYCODE_ENTER && isHardKB() && preferences!!.getDesktopMode()) {
-                        parseMessage((v as EditText).text.toString())
+                        prepareTypedTurn((v as EditText).text.toString())
                         return@run true
                     }
 
@@ -3655,7 +4587,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 headers = extraHeaders,
                 host = OpenAIHost(composeChatHost(apiEndpointObject?.host, apiEndpointObject?.chatEndpoint)),
                 proxy = null,
-                retry = RetryStrategy()
+                retry = RetryStrategy(maxRetries = 0)
             )
 
             ai = OpenAI(config)
@@ -3670,7 +4602,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 headers = extraHeaders,
                 host = OpenAIHost(apiEndpointObject?.host!!),
                 proxy = null,
-                retry = RetryStrategy()
+                retry = RetryStrategy(maxRetries = 0)
             )
             openAIAI = OpenAI(configOpenAI)
             loadModel()
@@ -3724,6 +4656,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         }
 
         preferences?.setPersonaActivationSeeded(true)
+
+        // initUI performs the first avatar paint before initAI reaches this
+        // new-chat seeding step. Re-resolve after assigning the Companion;
+        // AvatarRefreshCoordinator drops the earlier fallback result if its
+        // storage lookup finishes later.
+        refreshCompanionAvatar()
 
         if (preferences?.getActivationPromptId().isNullOrEmpty()) {
             val lastActivation = preferences?.getLastUsedActivationPromptId().orEmpty()
@@ -3849,14 +4787,21 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
     /** SYSTEM INITIALIZATION END **/
 
-    private fun saveSettings() {
+    private fun saveSettings(
+        synchronous: Boolean = false
+    ): ChatStorageHealth.WriteOutcome {
         // Guarded save (Round 4): ChatPreferences refuses the write when the
         // chat's storage is locked or its stored value is preserved-corrupt —
         // this screen's in-memory list came from that unreadable read, and
         // persisting it would overwrite the only copy. The refusal is logged
         // by the guard; the "Chat unavailable" state already blocks the UI.
-        if (chatStorageUnavailable) return
-        ChatPreferences.getChatPreferences().saveChatHistory(this, chatId, messages)
+        if (chatStorageUnavailable) return ChatStorageHealth.WriteOutcome.BLOCKED_CORRUPT
+        return ChatPreferences.getChatPreferences().saveChatHistory(
+            this,
+            chatId,
+            messages,
+            synchronous = synchronous
+        )
     }
 
     /**
@@ -3881,10 +4826,26 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         logVoiceEvent("manual turn restored the hands-free loop and restarted its keep-alive service after a prior error/hang-up")
     }
 
-    private fun parseMessage(message: String, shouldAdd: Boolean = true) {
+    private fun parseMessage(
+        message: String,
+        shouldAdd: Boolean = true,
+        preparedTurn: PreparedRegularTurn? = null
+    ) {
         // No sends into a chat whose stored history is locked or preserved-
         // corrupt (Round 4) — the blocking dialog owns this screen.
         if (chatStorageUnavailable) return
+        if (preparedTurn != null) {
+            val stillExact = message == preparedTurn.rawMessage &&
+                messageInput?.text?.toString() == preparedTurn.rawMessage &&
+                pendingIncludes.toList() == preparedTurn.pendingIncludes &&
+                chatMessages.toList() == preparedTurn.historyBeforeSend &&
+                model == preparedTurn.selectedModel &&
+                preferences?.getApiEndpointId().orEmpty() == preparedTurn.selectedEndpointId
+            if (!stillExact) {
+                restoreUIState()
+                return
+            }
+        }
         // Put timestamp to chat to sort chats by last message
         ChatPreferences.getChatPreferences().putTimestampToChatById(this, chatId)
         try {
@@ -3904,27 +4865,39 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             // mic re-arms once the reply finishes reading back.
             resumeHandsFreeForManualTurn()
 
-            val m = prefix + message + endSeparator
+            val m = preparedTurn?.storedMessage ?: (prefix + message + endSeparator)
 
-            if (imageIsSelected) {
-                val bytes = Base64.decode(baseImageString!!.split(",")[1], Base64.DEFAULT)
-                writeImageToCache(bytes, selectedImageType!!)
+            if (shouldAdd) putMessage(m, false)
 
-                val encoded = java.util.Base64.getEncoder().encodeToString(bytes)
-
-                val file = Hash.hash(encoded)
-
-                if (shouldAdd) {
-                    putMessage(m, false, file, selectedImageType!!)
+            // Attachments waiting in the strip belong to THIS message: they
+            // move into its record so the document text is saved atomically
+            // with the text it accompanies, and so it holds a fixed position
+            // in history that the provider's prefix cache can cover on every
+            // later turn. Only on shouldAdd — a retry re-sends an existing
+            // message that already carries its own attachments.
+            var transferredPendingIncludes = false
+            if (shouldAdd) {
+                val attached = if (preparedTurn != null) {
+                    pendingIncludes = arrayListOf()
+                    preparedTurn.pendingIncludes.map { it.forSentMessage() }
                 } else {
-                    messages[messages.size - 1]["image"] = file
-                    messages[messages.size - 1]["imageType"] = selectedImageType!!
-                    messages[messages.size - 1]["message"] = m
+                    consumePendingIncludesForSend()
                 }
-            } else {
-                if (shouldAdd) putMessage(m, false)
+                if (attached.isNotEmpty() && messages.isNotEmpty()) {
+                    messages[messages.size - 1][INCLUDES_KEY] = ChatInclude.listToJson(attached)
+                    transferredPendingIncludes = true
+                }
+                refreshIncludeStrip()
             }
-            saveSettings()
+            val saveOutcome = saveSettings(synchronous = transferredPendingIncludes)
+            if (transferredPendingIncludes &&
+                saveOutcome == ChatStorageHealth.WriteOutcome.OK
+            ) {
+                // Commit the chat side first. If the process stops between
+                // these writes, loadPendingIncludes de-duplicates by include
+                // id; the document is never lost.
+                savePendingIncludes(synchronous = true)
+            }
 
             btnMicro?.isEnabled = false
             btnSend?.isEnabled = false
@@ -3953,7 +4926,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     chatMessages.add(
                         ChatMessage(
                             role = ChatRole.User,
-                            content = m
+                            // Not plain `m`: if this turn carried attachments
+                            // they are part of what the model receives.
+                            content = preparedTurn?.modelFacingMessage
+                                ?: messages.lastOrNull()?.let { modelFacingContent(it) }
+                                ?: m
                         )
                     )
                     syncChatProjection()
@@ -3970,7 +4947,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     }
 
                     try {
-                        generateResponse(m, false)
+                        generateResponse(m, false, preparedTurn)
                     } catch (_: CancellationException) {
                         restoreUIState()
                     }
@@ -4105,6 +5082,272 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     }
 
     /**
+     * Prepares a normal typed turn without touching the composer, attachment
+     * strip, or persisted history. Only [commitPreparedTurn] crosses that
+     * boundary, after every capacity decision has completed.
+     */
+    private fun prepareTypedTurn(rawMessage: String) {
+        if (chatStorageUnavailable || rawMessage.isEmpty() ||
+            requestPreparationInProgress
+        ) {
+            return
+        }
+
+        // Preserve the existing non-chat command and multimodal/tool pipelines.
+        // They do not use the normal chat-completions request built below.
+        val imagineCommand = rawMessage.lowercase().contains("/imagine") &&
+            preferences?.getImagineCommand() == true
+        if (imagineCommand ||
+            model.contains(":ft") || model.contains("ft:") ||
+            preferences?.getFunctionCalling() == true
+        ) {
+            parseMessage(rawMessage)
+            return
+        }
+
+        requestPreparationInProgress = true
+        val pendingSnapshot = pendingIncludes.toList()
+        val historySnapshot = chatMessages.toList()
+        val historyIncludesSnapshot = chatMessageIncludes.toList()
+        val selectedModel = model
+        val endpointId = preferences?.getApiEndpointId().orEmpty()
+        val maximumResponseTokens = preferences?.getMaxTokens() ?: 0
+        val storedMessage = prefix + rawMessage + endSeparator
+        val sentIncludes = pendingSnapshot.map { it.forSentMessage() }
+        val sentIncludesJson = ChatInclude.listToJson(sentIncludes)
+        val modelFacingMessage = IncludeMessageProjection.userContent(
+            storedMessage,
+            sentIncludesJson
+        )
+        val requestMessages = ArrayList(historySnapshot)
+        requestMessages.add(
+            ChatMessage(role = ChatRole.User, content = modelFacingMessage)
+        )
+        val requestIncludes = ArrayList(historyIncludesSnapshot)
+        requestIncludes.add(sentIncludesJson)
+
+        btnMicro?.isEnabled = false
+        btnSend?.isEnabled = false
+        progress?.visibility = View.VISIBLE
+
+        parseMessageScope = CoroutineScope(Dispatchers.Main)
+        parseMessageScope?.launch {
+            try {
+                val frozen = buildFrozenRegularRequest(
+                    requestMessages = requestMessages,
+                    requestIncludes = requestIncludes,
+                    loreQuery = storedMessage,
+                    selectedModel = selectedModel,
+                    maximumResponseTokens = maximumResponseTokens
+                )
+                val measurement = RequestCapacity.measure(frozen.payload)
+                if (!RequestCapacity.canAssemble(
+                        measurement,
+                        RequestHeapState.current()
+                    )
+                ) {
+                    requestPreparationInProgress = false
+                    restoreUIState()
+                    showRequestHardBlock(
+                        R.string.request_prepare_failed_title,
+                        getString(R.string.request_prepare_failed_body)
+                    )
+                    return@launch
+                }
+
+                val contextWindow = apiEndpointObject
+                    ?.takeIf {
+                        it.contextWindowModelId == selectedModel &&
+                            preferences?.getApiEndpointId().orEmpty() == endpointId
+                    }
+                    ?.contextWindowTokens
+                val decision = ModelContextCapacity.decide(
+                    contextWindow,
+                    RequestCapacity.approximateInputTokens(frozen.payload),
+                    maximumResponseTokens
+                )
+                val prepared = PreparedRegularTurn(
+                    rawMessage = rawMessage,
+                    storedMessage = storedMessage,
+                    modelFacingMessage = modelFacingMessage,
+                    pendingIncludes = pendingSnapshot,
+                    historyBeforeSend = historySnapshot,
+                    selectedModel = selectedModel,
+                    selectedEndpointId = endpointId,
+                    request = frozen.request,
+                    payload = frozen.payload,
+                    contextDecision = decision
+                )
+                val hasFullImages = conversationHasFullImages(requestIncludes)
+
+                when (decision) {
+                    ModelContextDecision.Send -> visionCheckAndCommit(prepared, hasFullImages)
+                    is ModelContextDecision.Block -> {
+                        requestPreparationInProgress = false
+                        restoreUIState()
+                        showRequestHardBlock(
+                            R.string.request_context_exceeded_title,
+                            getString(
+                                R.string.request_context_exceeded_body,
+                                formatTokenCount(decision.requiredAtLeast),
+                                formatTokenCount(decision.contextWindow)
+                            )
+                        )
+                    }
+                    is ModelContextDecision.WarnRange -> {
+                        requestPreparationInProgress = false
+                        restoreUIState()
+                        showRequestWarning(
+                            getString(
+                                R.string.request_context_range_warning_body,
+                                formatTokenCount(decision.minimumRequired),
+                                formatTokenCount(decision.maximumRequired),
+                                formatTokenCount(decision.contextWindow)
+                            ),
+                            prepared,
+                            hasFullImages
+                        )
+                    }
+                    is ModelContextDecision.WarnApproximate -> {
+                        requestPreparationInProgress = false
+                        restoreUIState()
+                        showRequestWarning(
+                            getString(
+                                R.string.request_context_approximate_warning_body,
+                                formatTokenCount(decision.approximateRequired),
+                                formatTokenCount(decision.contextWindow)
+                            ),
+                            prepared,
+                            hasFullImages
+                        )
+                    }
+                }
+            } catch (_: OutOfMemoryError) {
+                requestPreparationInProgress = false
+                restoreUIState()
+                showRequestHardBlock(
+                    R.string.request_prepare_failed_title,
+                    getString(R.string.request_prepare_failed_body)
+                )
+            } catch (e: CancellationException) {
+                requestPreparationInProgress = false
+                restoreUIState()
+                throw e
+            } catch (e: Exception) {
+                requestPreparationInProgress = false
+                restoreUIState()
+                val genError = GenerationErrorClassifier.classify(e)
+                logGenerationError(genError, e, "request preparation")
+                MaterialAlertDialogBuilder(
+                    this@ChatActivity,
+                    R.style.App_MaterialAlertDialog
+                )
+                    .setTitle(R.string.label_error)
+                    .setMessage(genError.chatMessage(this@ChatActivity))
+                    .setPositiveButton(R.string.okay, null)
+                    .show()
+            }
+        }
+    }
+
+    private fun commitPreparedTurn(prepared: PreparedRegularTurn) {
+        requestPreparationInProgress = false
+        parseMessage(prepared.rawMessage, preparedTurn = prepared)
+    }
+
+    private fun formatTokenCount(value: Int): String =
+        NumberFormat.getIntegerInstance().format(value)
+
+    private fun showRequestHardBlock(titleRes: Int, body: String) {
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(titleRes)
+            .setMessage(body)
+            .setPositiveButton(R.string.okay, null)
+            .show()
+    }
+
+    private fun showRequestWarning(
+        body: String,
+        prepared: PreparedRegularTurn,
+        hasFullImages: Boolean = false
+    ) {
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.request_context_warning_title)
+            .setMessage(body)
+            .setPositiveButton(R.string.send_anyway) { _, _ ->
+                visionCheckAndCommit(prepared, hasFullImages)
+            }
+            .setNegativeButton(R.string.btn_cancel, null)
+            .show()
+    }
+
+    private fun visionCheckAndCommit(
+        prepared: PreparedRegularTurn,
+        hasFullImages: Boolean
+    ) {
+        if (!hasFullImages) {
+            commitPreparedTurn(prepared)
+            return
+        }
+        val capJson = apiEndpointObject?.imageCapabilityByModel.orEmpty()
+        when (ImageCapabilityStore.get(capJson, prepared.selectedModel)) {
+            ImageCapability.SUPPORTED -> commitPreparedTurn(prepared)
+            ImageCapability.UNSUPPORTED -> showRequestHardBlock(
+                R.string.image_model_unsupported_title,
+                getString(R.string.image_model_unsupported_body)
+            )
+            ImageCapability.UNKNOWN -> {
+                MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+                    .setTitle(R.string.image_model_unknown_title)
+                    .setMessage(R.string.image_model_unknown_body)
+                    .setPositiveButton(R.string.send_anyway) { _, _ ->
+                        commitPreparedTurn(prepared)
+                    }
+                    .setNegativeButton(R.string.btn_cancel, null)
+                    .show()
+            }
+        }
+    }
+
+    private suspend fun awaitVisionCapabilityCheck(): Boolean {
+        if (!conversationHasFullImages(chatMessageIncludes)) return true
+        val capJson = apiEndpointObject?.imageCapabilityByModel.orEmpty()
+        return when (ImageCapabilityStore.get(capJson, model)) {
+            ImageCapability.SUPPORTED -> true
+            ImageCapability.UNSUPPORTED -> {
+                withContext(Dispatchers.Main) {
+                    showRequestHardBlock(
+                        R.string.image_model_unsupported_title,
+                        getString(R.string.image_model_unsupported_body)
+                    )
+                }
+                false
+            }
+            ImageCapability.UNKNOWN -> suspendCancellableCoroutine { cont ->
+                MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+                    .setTitle(R.string.image_model_unknown_title)
+                    .setMessage(R.string.image_model_unknown_body)
+                    .setPositiveButton(R.string.send_anyway) { _, _ -> cont.resume(true) }
+                    .setNegativeButton(R.string.btn_cancel) { _, _ -> cont.resume(false) }
+                    .setOnCancelListener { cont.resume(false) }
+                    .show()
+            }
+        }
+    }
+
+    private fun recordVisionCapability(capability: ImageCapability) {
+        val endpoint = apiEndpointObject ?: return
+        val currentModel = model.ifBlank { preferences?.getModel() ?: "" }
+        if (currentModel.isBlank()) return
+        val updated = ImageCapabilityStore.set(
+            endpoint.imageCapabilityByModel, currentModel, capability
+        )
+        endpoint.imageCapabilityByModel = updated
+        val prefs = ApiEndpointPreferences.getApiEndpointPreferences(this)
+        prefs.setApiEndpoint(this, endpoint)
+    }
+
+    /**
      * The conversation/send button (btnSend) was tapped. One button, three roles
      * decided by state:
      *   - a hands-free conversation is live  → STOP it (tap again ends it),
@@ -4117,7 +5360,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     private fun onConversationButtonTapped() {
         when {
             isHandsFreeEngaged() -> stopHandsFreeByUser()
-            !messageInput?.text.isNullOrEmpty() -> parseMessage(messageInput?.text.toString())
+            !messageInput?.text.isNullOrEmpty() ->
+                prepareTypedTurn(messageInput?.text.toString())
             isAiCurrentlyBusy() -> cancelAllAiActivity("conversation button tap on this screen")
             else -> startHandsFreeByUser()
         }
@@ -4345,16 +5589,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         } catch (_: Exception) { /* ignore */ }
     }
 
-    private fun putMessage(message: String, isBot: Boolean, image: String = "", imageType: String = "") {
+    private fun putMessage(message: String, isBot: Boolean) {
         val map: HashMap<String, Any> = HashMap()
 
         map["message"] = message
         map["isBot"] = isBot
-
-        if (image != "") {
-            map["image"] = image
-            map["imageType"] = imageType
-        }
 
         messages.add(map)
         adapter?.notifyItemInserted(messages.size - 1)
@@ -4404,17 +5643,83 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         saveSettings()
     }
 
-    /** Content of an assistant message as the MODEL should see it. An
-     *  unfinished reply gets an internal note appended so the model cannot
-     *  mistake it for an intentionally completed reply — never shown to the
-     *  user (this shapes the model projection only, not the visible text). */
+    /** Content of a message as the MODEL should see it, which is not always
+     *  what the user sees.
+     *
+     *  An unfinished assistant reply gets an internal note appended so the
+     *  model cannot mistake it for an intentionally completed reply. A user
+     *  message carrying attachments gets those attachments rendered into it,
+     *  in whatever form they are in right now — full text, a condensed
+     *  version, or a tiny bookmark once removed. Neither is ever shown in
+     *  the chat; this shapes the model projection only. */
     private fun modelFacingContent(message: HashMap<String, Any>): String {
         val content = message["message"].toString()
-        if (message["isBot"] == true && content.isNotBlank() &&
-            MessageCompletionState.isIncomplete(message[MessageCompletionState.KEY_STATE]?.toString())) {
-            return content + "\n\n" + getString(R.string.message_incomplete_model_note)
+        if (message["isBot"] == true) {
+            if (content.isNotBlank() && MessageCompletionState.isIncomplete(
+                    message[MessageCompletionState.KEY_STATE]?.toString())) {
+                return content + "\n\n" + getString(R.string.message_incomplete_model_note)
+            }
+            return content
         }
-        return content
+        return IncludeMessageProjection.userContent(
+            typedText = content,
+            includesJson = message[INCLUDES_KEY]?.toString()
+        )
+    }
+
+    private suspend fun resolveImagePartsForSend(
+        textMessages: List<ChatMessage>,
+        includesList: List<String?>
+    ): List<ChatMessage> = withContext(Dispatchers.IO) {
+        val cid = chatId
+        textMessages.mapIndexed { i, msg ->
+            if (msg.role != ChatRole.User) return@mapIndexed msg
+            val json = includesList.getOrNull(i) ?: return@mapIndexed msg
+            val projection = IncludeMessageProjection.userMessageParts(
+                msg.content?.toString().orEmpty(), json
+            )
+            if (projection.isTextOnly()) msg
+            else buildMultiPartUserMessage(projection, cid)
+        }
+    }
+
+    private fun buildMultiPartUserMessage(
+        projection: ProjectedUserMessage,
+        cid: String
+    ): ChatMessage {
+        val parts = ArrayList<ContentPart>()
+        if (projection.text.isNotBlank()) {
+            parts.add(TextPart(projection.text))
+        }
+        for (ref in projection.imageParts) {
+            val include = ChatInclude(
+                id = ref.includeId,
+                fileName = ref.fileName,
+                kind = if (ref.imageMimeType == "image/png") IncludeKind.PNG else IncludeKind.JPEG,
+                form = IncludeForm.FULL,
+                fullText = "",
+                imageFileHash = ref.imageFileHash,
+                imageMimeType = ref.imageMimeType
+            )
+            val file = ImageImporter.imageFile(this, cid, include) ?: continue
+            if (!file.exists()) continue
+            val bytes = try { file.readBytes() } catch (_: Exception) { continue }
+            val encoded = Base64.encodeToString(bytes, Base64.NO_WRAP)
+            parts.add(ImagePart("data:${ref.imageMimeType};base64,$encoded"))
+        }
+        return if (parts.isEmpty()) {
+            ChatMessage(role = ChatRole.User, content = "")
+        } else if (parts.size == 1 && parts[0] is TextPart) {
+            ChatMessage(role = ChatRole.User, content = projection.text)
+        } else {
+            ChatMessage(role = ChatRole.User, content = parts)
+        }
+    }
+
+    private fun conversationHasFullImages(
+        includesList: List<String?>
+    ): Boolean = includesList.any { json ->
+        json != null && ChatInclude.listFromJson(json).any { it.hasLiveImageBytes() }
     }
 
     private fun scroll(mode: Boolean) {
@@ -4469,13 +5774,22 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     }
 
     @Suppress("deprecation")
-    private suspend fun generateResponse(request: String, shouldPronounce: Boolean) {
+    private suspend fun generateResponse(
+        request: String,
+        shouldPronounce: Boolean,
+        preparedTurn: PreparedRegularTurn? = null
+    ) {
         // The single generation funnel is also the single guard point: no
         // generation into a chat whose stored history is locked or
         // preserved-corrupt (Round 4) — typed, voice and retry paths all
         // flow through here, and a reply that can't be saved must not be
         // produced over the blocking "Chat unavailable" state.
         if (chatStorageUnavailable) return
+
+        if (preparedTurn == null && !awaitVisionCapabilityCheck()) {
+            restoreUIState()
+            return
+        }
 
         disableAutoScroll = false
 
@@ -4493,107 +5807,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         try {
             var response = ""
 
-            if (imageIsSelected) {
-                imageIsSelected = false
-
-                attachedImage?.visibility = View.GONE
-
-                putMessage("", true)
-                markLastAssistantStreaming()
-
-                val reqList: ArrayList<ContentPart> = arrayListOf()
-                reqList.add(TextPart(request))
-                reqList.add(ImagePart(baseImageString!!))
-                val chatCompletionRequest = if (preferences?.getLogitBiasesConfigId() == null || preferences?.getLogitBiasesConfigId() == "null" || preferences?.getLogitBiasesConfigId() == "") {
-                    ChatCompletionRequest(
-                        model = ModelId("gpt-4o"),
-                        temperature = if (preferences!!.getTemperature().toDouble() == 0.7) null else preferences!!.getTemperature().toDouble(),
-                        topP = if (preferences!!.getTopP().toDouble() == 1.0) null else preferences!!.getTopP().toDouble(),
-                        frequencyPenalty = if (preferences!!.getFrequencyPenalty().toDouble() == 0.0) null else preferences!!.getFrequencyPenalty().toDouble(),
-                        presencePenalty = if (preferences!!.getPresencePenalty().toDouble() == 0.0) null else preferences!!.getPresencePenalty().toDouble(),
-                        logitBias = logitBiasPreferences?.getLogitBiasesMap(),
-                        seed = if (preferences!!.getSeed() != "") preferences!!.getSeed().toInt() else null,
-                        messages = listOf(
-                            ChatMessage(
-                                role = ChatRole.System,
-                                content = "You are a helpful assistant!"
-                            ),
-                            ChatMessage(
-                                role = ChatRole.User,
-                                content = reqList
-                            )
-                        )
-                    )
-                } else {
-                    ChatCompletionRequest(
-                        model = ModelId("gpt-4o"),
-                        temperature = if (preferences!!.getTemperature().toDouble() == 0.7) null else preferences!!.getTemperature().toDouble(),
-                        topP = if (preferences!!.getTopP().toDouble() == 1.0) null else preferences!!.getTopP().toDouble(),
-                        frequencyPenalty = if (preferences!!.getFrequencyPenalty().toDouble() == 0.0) null else preferences!!.getFrequencyPenalty().toDouble(),
-                        presencePenalty = if (preferences!!.getPresencePenalty().toDouble() == 0.0) null else preferences!!.getPresencePenalty().toDouble(),
-                        seed = if (preferences!!.getSeed() != "") preferences!!.getSeed().toInt() else null,
-                        messages = listOf(
-                            ChatMessage(
-                                role = ChatRole.System,
-                                content = "You are a helpful assistant!"
-                            ),
-                            ChatMessage(
-                                role = ChatRole.User,
-                                content = reqList
-                            )
-                        )
-                    )
-                }
-
-                val completions: Flow<ChatCompletionChunk> = ai!!.chatCompletions(chatCompletionRequest)
-
-                scroll(true)
-
-                completions.flowOn(Dispatchers.IO).collect { v ->
-                    run {
-                        if (!currentCoroutineContext().isActive) throw CancellationException()
-                        else if (v.choices[0].delta != null && v.choices[0].delta?.content != null && v.choices[0].delta?.content.toString() != "null") {
-                            response += v.choices[0].delta?.content
-                            if (response != "null") {
-                                messages[messages.size - 1]["message"] = response
-                                if (messages.size > 2) {
-                                    adapter?.notifyItemRangeChanged(messages.size - 3, messages.size - 1)
-                                } else {
-                                    adapter?.notifyItemChanged(messages.size - 1)
-                                }
-                                scroll(false)
-                                saveSettings()
-                            }
-                        }
-                    }
-                }
-
-                messages[messages.size - 1]["message"] = "${response}\n"
-                markLastAssistantDone()
-
-                if (messages.size > 2) {
-                    adapter?.notifyItemRangeChanged(messages.size - 3, messages.size - 1)
-                } else {
-                    adapter?.notifyItemChanged(messages.size - 1)
-                }
-
-                syncChatProjection()
-
-                pronounce(shouldPronounce, response)
-
-                saveSettings()
-                calculateCost()
-
-                btnMicro?.isEnabled = true
-                btnSend?.isEnabled = true
-                progress?.visibility = View.GONE
-                messageInput?.requestFocus()
-            } else if (model.contains(":ft") || model.contains("ft:")) {
+            if (model.contains(":ft") || model.contains("ft:")) {
                 putMessage("", true)
                 markLastAssistantStreaming()
                 val completionRequest = if (preferences?.getLogitBiasesConfigId() == null || preferences?.getLogitBiasesConfigId() == "null" || preferences?.getLogitBiasesConfigId() == "") {
                     CompletionRequest(
                         model = ModelId(model),
+                        maxTokens = preferences!!.getMaxTokens(),
                         temperature = if (model.contains("gpt-5") || model.contains("o1") || model.contains("o3")) 1.0 else if (preferences!!.getTemperature().toDouble() == 0.7) null else preferences!!.getTemperature().toDouble(),
                         topP = if (preferences!!.getTopP().toDouble() == 1.0) null else preferences!!.getTopP().toDouble(),
                         frequencyPenalty = if (preferences!!.getFrequencyPenalty().toDouble() == 0.0) null else preferences!!.getFrequencyPenalty().toDouble(),
@@ -4605,6 +5825,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 } else {
                     CompletionRequest(
                         model = ModelId(model),
+                        maxTokens = preferences!!.getMaxTokens(),
                         temperature = if (model.contains("gpt-5") || model.contains("o1") || model.contains("o3")) 1.0 else if (preferences!!.getTemperature().toDouble() == 0.7) null else preferences!!.getTemperature().toDouble(),
                         topP = if (preferences!!.getTopP().toDouble() == 1.0) null else preferences!!.getTopP().toDouble(),
                         frequencyPenalty = if (preferences!!.getFrequencyPenalty().toDouble() == 0.0) null else preferences!!.getFrequencyPenalty().toDouble(),
@@ -4711,7 +5932,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                         val toolsCalls = message.toolCalls!!
 
                         if (toolsCalls.isEmpty()) {
-                            regularGPTResponse(shouldPronounce)
+                            regularGPTResponse(shouldPronounce, preparedTurn)
                         } else {
                             for (toolCall in toolsCalls) {
                                 require(toolCall is ToolCall.Function) { "Tool call is not a function" }
@@ -4722,7 +5943,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                             ChatPreferences.getChatPreferences().putTimestampToChatById(this, chatId)
                         }
                     } else {
-                        regularGPTResponse(shouldPronounce)
+                        regularGPTResponse(shouldPronounce, preparedTurn)
                     }
                 } else if (functionCallingEnabled) {
                     putMessage("Function calling requires OpenAI endpoint which is missing on your device. Please go to the settings and add OpenAI endpoint or disable Function Calling. OpenAI base url (host) is: https://api.openai.com/v1/ (don't forget to add slash at the end otherwise you will receive an error).", true)
@@ -4737,7 +5958,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                         .setNegativeButton("Cancel") { _, _ -> }
                         .show()
                 } else {
-                    regularGPTResponse(shouldPronounce)
+                    regularGPTResponse(shouldPronounce, preparedTurn)
                 }
             }
         } catch (_: CancellationException) {
@@ -4768,7 +5989,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             // ERROR_CODES.md.
             val genError = GenerationErrorClassifier.classify(e)
             logGenerationError(genError, e, "message")
-            val response = genError.chatMessage(this)
+
+            if (genError.isVisionRejection && conversationHasFullImages(chatMessageIncludes)) {
+                recordVisionCapability(ImageCapability.UNSUPPORTED)
+            }
+
+            val response = genError.providerLimitMessage(this)
+                ?: genError.chatMessage(this)
 
             if (messages.isEmpty() || messages[messages.size - 1]["isBot"] == false) {
                 putMessage("", true)
@@ -4846,9 +6073,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
      *  spec: the message plus a summary of the last few turns, so
      *  mid-conversation topics keep retrieving — not just the latest line).
      *  The current user message is already the list's tail, so it's dropped. */
-    private fun recentTurnsContext(): String {
+    private fun recentTurnsContext(
+        requestMessages: List<ChatMessage> = chatMessages
+    ): String {
         return try {
-            chatMessages.dropLast(1)
+            requestMessages.dropLast(1)
                 .takeLast(org.teslasoft.assistant.preferences.memory.enforcer.Enforcer.RECENT_CONTEXT_TURNS)
                 .joinToString("\n") {
                     (it.content ?: "").take(
@@ -4934,7 +6163,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         val voiceLive = isVoiceLive()
         try {
             val sb = StringBuilder()
-            sb.append(result.chatMessage(this)).append('\n')
+            sb.append(result.providerLimitMessage(this) ?: result.chatMessage(this)).append('\n')
             sb.append("Profile: ${apiEndpointObject?.label ?: "unknown"}\n")
             sb.append("Base URL: ${apiEndpointObject?.host ?: "unknown"}\n")
             sb.append("Model: ${model.ifBlank { "unknown" }}\n")
@@ -5337,14 +6566,229 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         }
     }
 
-    private suspend fun regularGPTResponse(shouldPronounce: Boolean) {
+    /**
+     * Builds the provider request once. The returned Aallam request and the
+     * provider-neutral measurement payload are made from the same immutable
+     * snapshots; callers must send [FrozenRegularRequest.request] directly.
+     */
+    private suspend fun buildFrozenRegularRequest(
+        requestMessages: List<ChatMessage>,
+        requestIncludes: List<String?>,
+        loreQuery: String,
+        selectedModel: String,
+        maximumResponseTokens: Int
+    ): FrozenRegularRequest {
+        val msgs = ArrayList<ChatMessage>()
+
+        // Stable base prompt: companion persona first, then the chat's system
+        // instructions, exactly as before.
+        val systemMessage = preferences!!.getSystemMessage()
+        val personaId = preferences!!.getPersonaId()
+        val personaPrompt = if (personaId != "") {
+            PersonaPreferences.getPersonaPreferences(this).getPersona(personaId).prompt
+        } else {
+            ""
+        }
+        val effectiveSystemMessage = listOf(personaPrompt, systemMessage)
+            .filter { it.isNotBlank() }
+            .joinToString("\n\n")
+        if (effectiveSystemMessage.isNotEmpty()) {
+            msgs.add(ChatMessage(role = ChatRole.System, content = effectiveSystemMessage))
+        }
+
+        // Selected-model rules are a separate prompt layer after the stable
+        // companion/system content.
+        if (preferences!!.getChatApplyModelRules() && MemoryStore.isProvisioned(this)) {
+            val modelRulesBlock: String? = try {
+                withContext(Dispatchers.IO) {
+                    val rules = MemoryStore.getInstance(this@ChatActivity)
+                        .getActiveModelRulesForModel(selectedModel)
+                    if (rules.isEmpty()) null
+                    else rules.joinToString(
+                        separator = "\n",
+                        prefix = getString(R.string.model_rules_injection_header) + "\n"
+                    ) { "- " + it.text }
+                }
+            } catch (e: Exception) {
+                org.teslasoft.assistant.preferences.memory.MemoryLog.log(
+                    this,
+                    "ModelRules",
+                    "error",
+                    "Model rules unavailable this turn: ${e.message}"
+                )
+                null
+            }
+            modelRulesBlock?.let {
+                msgs.add(ChatMessage(role = ChatRole.System, content = it))
+            }
+        }
+
+        val loreBooksEnabled = preferences?.getChatLoreBooksEnabled() == true
+        val allLoreMatches = ArrayList<LoreBookMatch>()
+        var activeLoreBookCount = -1
+        if (loreBooksEnabled) {
+            try {
+                val loreStore = LoreBookStore.getInstance(this)
+                val activeBookIds = LinkedHashSet<String>()
+                val checkedIds = preferences?.getActiveLoreBookIds() ?: arrayListOf()
+                if (personaId != "") {
+                    val loreBookPersona =
+                        PersonaPreferences.getPersonaPreferences(this).getPersona(personaId)
+                    if (loreBookPersona.coreLoreBookId != "") {
+                        activeBookIds.add(loreBookPersona.coreLoreBookId)
+                    }
+                    val linked = loreBookPersona.additionalLoreBookIdList()
+                    activeBookIds.addAll(checkedIds.filter { linked.contains(it) })
+                } else {
+                    activeBookIds.addAll(checkedIds)
+                }
+                for (bookId in activeBookIds) {
+                    allLoreMatches.addAll(loreStore.findMatches(loreQuery, bookId))
+                }
+                activeLoreBookCount = activeBookIds.size
+            } catch (e: Exception) {
+                org.teslasoft.assistant.preferences.memory.MemoryLog.log(
+                    this,
+                    "LoreBook",
+                    "error",
+                    "Lorebook unavailable this turn: ${e.message}"
+                )
+            }
+            LoreBookInjectionLog.record(loreQuery, allLoreMatches, activeLoreBookCount)
+        }
+
+        var memoryAssembly: String? = null
+        if (preferences?.getChatMemoryEnabled() == true && MemoryStore.isProvisioned(this)) {
+            memoryAssembly = try {
+                withContext(Dispatchers.IO) {
+                    org.teslasoft.assistant.preferences.memory.enforcer.Enforcer
+                        .getInstance(this@ChatActivity)
+                        .assembleTurn(
+                            org.teslasoft.assistant.preferences.memory.enforcer.Enforcer.TurnInput(
+                                chatId = chatId,
+                                personaId = personaId,
+                                userMessage = loreQuery,
+                                recentContext = recentTurnsContext(requestMessages),
+                                modelTag = selectedModel,
+                                // Lore is frozen as its own complete request
+                                // layer immediately after memory below. Passing
+                                // it into Enforcer would apply its legacy
+                                // injection cap before request-capacity checks.
+                                loreMatches = emptyList(),
+                                worldId = preferences?.getChatWorldId(),
+                                campaignId = preferences?.getChatCampaignId(),
+                                roleplayCharacterId =
+                                    preferences?.getChatRoleplayCharacterId(),
+                                userPersonaId = preferences?.getChatUserPersonaId(),
+                                projectId = preferences?.getChatProjectId()
+                            )
+                        )
+                }
+            } catch (e: Exception) {
+                org.teslasoft.assistant.preferences.memory.MemoryLog.log(
+                    this,
+                    "Enforcer",
+                    "error",
+                    "Assembly failed, lore-books-only this turn: ${e.message}"
+                )
+                notifyMemoryDegradedOnce()
+                null
+            }
+        }
+
+        if (memoryAssembly != null) {
+            msgs.add(ChatMessage(role = ChatRole.System, content = memoryAssembly))
+        }
+
+        if (allLoreMatches.isNotEmpty()) {
+            val loreText = StringBuilder(getString(R.string.lorebook_injection_header))
+            for (match in allLoreMatches) {
+                loreText.append("\n- ").append(match.entry.content)
+            }
+            msgs.add(ChatMessage(role = ChatRole.System, content = loreText.toString()))
+        }
+
+        // Conversation history, all active attachments embedded in their user
+        // turns, and the current input have already been frozen in this list.
+        // Image bytes are loaded from disk and base64-encoded here (IO thread)
+        // so they are never held in memory between turns.
+        msgs.addAll(resolveImagePartsForSend(requestMessages, requestIncludes))
+
+        val usesRestrictedSampling = selectedModel.contains("gpt-5") ||
+            selectedModel.contains("o1") || selectedModel.contains("o3")
+        val temperature = if (usesRestrictedSampling) {
+            1.0
+        } else {
+            preferences!!.getTemperature().toDouble().takeUnless { it == 0.7 }
+        }
+        val topP = preferences!!.getTopP().toDouble().takeUnless { it == 1.0 }
+        val frequencyPenalty =
+            preferences!!.getFrequencyPenalty().toDouble().takeUnless { it == 0.0 }
+        val presencePenalty =
+            preferences!!.getPresencePenalty().toDouble().takeUnless { it == 0.0 }
+        val seed = preferences!!.getSeed().takeIf { it.isNotEmpty() }?.toInt()
+        val hasNoBiasConfig = preferences?.getLogitBiasesConfigId().isNullOrEmpty() ||
+            preferences?.getLogitBiasesConfigId() == "null"
+        val logitBias = if (hasNoBiasConfig && !usesRestrictedSampling) {
+            logitBiasPreferences?.getLogitBiasesMap()?.toMap()
+        } else {
+            null
+        }
+
+        val request = ChatCompletionRequest(
+            model = ModelId(selectedModel),
+            maxTokens = maximumResponseTokens,
+            temperature = temperature,
+            topP = topP,
+            frequencyPenalty = frequencyPenalty,
+            presencePenalty = presencePenalty,
+            seed = seed,
+            logitBias = logitBias,
+            messages = msgs.toList()
+        )
+        val payloadMessages = msgs.map { message ->
+            val role = when (message.role) {
+                ChatRole.System -> "system"
+                ChatRole.User -> "user"
+                ChatRole.Assistant -> "assistant"
+                ChatRole.Tool -> "tool"
+                else -> message.role.toString().lowercase(Locale.ROOT)
+            }
+            FrozenPayloadMessage(role, message.content?.toString().orEmpty())
+        }
+        val payload = FrozenChatPayload(
+            model = selectedModel,
+            messages = payloadMessages,
+            maximumResponseTokens = maximumResponseTokens,
+            temperature = temperature,
+            topP = topP,
+            frequencyPenalty = frequencyPenalty,
+            presencePenalty = presencePenalty,
+            seed = seed,
+            logitBias = logitBias
+        )
+        return FrozenRegularRequest(request, payload)
+    }
+
+    private suspend fun regularGPTResponse(
+        shouldPronounce: Boolean,
+        preparedTurn: PreparedRegularTurn? = null
+    ) {
         disableAutoScroll = false
 
         var response = ""
         putMessage("", true)
         markLastAssistantStreaming()
 
-        val msgs: ArrayList<ChatMessage> = arrayListOf()
+        val msgs: ArrayList<ChatMessage>
+        val chatCompletionRequest: ChatCompletionRequest
+        if (preparedTurn != null) {
+            // This is the object that was measured before the composer was
+            // committed. Do not rebuild any part of it here.
+            chatCompletionRequest = preparedTurn.request
+            msgs = ArrayList(preparedTurn.request.messages)
+        } else {
+            msgs = arrayListOf()
 
         // Merge the selected persona prompt (first) with the always-on system message
         // into a single, stable System message. Keeping it identical and first on every
@@ -5531,11 +6975,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             )
         }
 
-        msgs.addAll(chatMessages)
+        msgs.addAll(resolveImagePartsForSend(chatMessages, chatMessageIncludes))
 
-        val chatCompletionRequest = if (preferences?.getLogitBiasesConfigId() == null || preferences?.getLogitBiasesConfigId() == "null" || preferences?.getLogitBiasesConfigId() == "") {
+        chatCompletionRequest = if (preferences?.getLogitBiasesConfigId() == null || preferences?.getLogitBiasesConfigId() == "null" || preferences?.getLogitBiasesConfigId() == "") {
             ChatCompletionRequest(
                 model = ModelId(model),
+                maxTokens = preferences!!.getMaxTokens(),
                 temperature = if (model.contains("gpt-5") || model.contains("o1") || model.contains("o3")) 1.0 else if (preferences!!.getTemperature().toDouble() == 0.7) null else preferences!!.getTemperature().toDouble(),
                 topP = if (preferences!!.getTopP().toDouble() == 1.0) null else preferences!!.getTopP().toDouble(),
                 frequencyPenalty = if (preferences!!.getFrequencyPenalty().toDouble() == 0.0) null else preferences!!.getFrequencyPenalty().toDouble(),
@@ -5547,6 +6992,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         } else {
             ChatCompletionRequest(
                 model = ModelId(model),
+                maxTokens = preferences!!.getMaxTokens(),
                 temperature = if (model.contains("gpt-5") || model.contains("o1") || model.contains("o3")) 1.0 else if (preferences!!.getTemperature().toDouble() == 0.7) null else preferences!!.getTemperature().toDouble(),
                 topP = if (preferences!!.getTopP().toDouble() == 1.0) null else preferences!!.getTopP().toDouble(),
                 frequencyPenalty = if (preferences!!.getFrequencyPenalty().toDouble() == 0.0) null else preferences!!.getFrequencyPenalty().toDouble(),
@@ -5554,6 +7000,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 seed = if (preferences!!.getSeed() != "") preferences!!.getSeed().toInt() else null,
                 messages = msgs
             )
+        }
         }
 
         val completions: Flow<ChatCompletionChunk> =
@@ -5591,6 +7038,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
         messages[messages.size - 1]["message"] = "$response\n"
         markLastAssistantDone()
+
+        if (conversationHasFullImages(chatMessageIncludes)) {
+            recordVisionCapability(ImageCapability.SUPPORTED)
+        }
+
         if (messages.size > 2) {
             adapter?.notifyItemRangeChanged(messages.size - 3, messages.size - 1)
         } else {
@@ -6204,7 +7656,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             val genError = GenerationErrorClassifier.classify(e)
             logGenerationError(genError, e, "image-generation")
             if (preferences?.showChatErrors() == true) {
-                putMessage(genError.chatMessage(this), true)
+                putMessage(genError.providerLimitMessage(this) ?: genError.chatMessage(this), true)
             }
 
             saveSettings()
@@ -6295,88 +7747,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         saveSettings()
 
         val message = findLastUserMessage()
-
-        if (message["image"] != null) {
-            btnMicro?.isEnabled = false
-            btnSend?.isEnabled = false
-            progress?.visibility = View.VISIBLE
-
-            val uri = Uri.fromFile(File(getExternalFilesDir("images")?.absolutePath + "/" + message["image"] + "." + message["imageType"]))
-            imageIsSelected = true
-            bitmap = readFile(uri)
-
-            if (bitmap != null) {
-                imageIsSelected = true
-
-                val mimeType = contentResolver.getType(uri)
-                val format = when {
-                    mimeType.equals("image/png", ignoreCase = true) -> {
-                        selectedImageType = "png"
-                        Bitmap.CompressFormat.PNG
-                    }
-                    else -> {
-                        selectedImageType = "jpg"
-                        Bitmap.CompressFormat.JPEG
-                    }
-                }
-
-                // Step 3: Convert the Bitmap to a Base64-encoded string
-                val outputStream = ByteArrayOutputStream()
-                bitmap!!.compress(format, 100, outputStream) // Note: Adjust the quality as necessary
-                val base64Image = Base64.encodeToString(outputStream.toByteArray(), Base64.DEFAULT)
-
-                // Step 4: Generate the data URL
-                val imageType = when(format) {
-                    Bitmap.CompressFormat.JPEG -> "jpeg"
-                    Bitmap.CompressFormat.PNG -> "png"
-                    // Add more mappings as necessary
-                    else -> ""
-                }
-
-                baseImageString = "data:image/$imageType;base64,$base64Image"
-            }
-        }
-
+        // Image attachments now ride as structured includes on the user
+        // message record; a retry re-sends the same message and includes
+        // via the normal send path — no legacy [image]/[imageType] fields
+        // to unpack here.
         parseMessage(message["message"].toString(), false)
     }
 
     private fun syncChatProjection() {
-        if (chatMessages == null) chatMessages = arrayListOf()
-
-        if (chatMessages.isNotEmpty()) chatMessages.clear()
-
-        if (chatMessages == null) chatMessages = arrayListOf()
-
-        for (message: HashMap<String, Any> in messages) {
-            val content = message["message"].toString()
-            // Skip blank-content turns. An empty user/assistant message (e.g. an
-            // error placeholder, or a turn the user blanked out while editing)
-            // makes OpenAI-compatible servers reject the whole request with HTTP
-            // 400. With streaming on (Accept: text/event-stream) the Ktor client
-            // then can't parse the non-SSE error body and throws the opaque
-            // NoTransformationFoundException instead of a real error.
-            if (!content.contains("data:image") && content.isNotBlank()) {
-                if (message["isBot"] == true) {
-                    chatMessages.add(
-                        ChatMessage(
-                            role = ChatRole.Assistant,
-                            // An unfinished reply carries an internal, model-only
-                            // note so the model treats it as truncated (not shown
-                            // to the user; see modelFacingContent).
-                            content = modelFacingContent(message)
-                        )
-                    )
-                } else {
-                    chatMessages.add(
-                        ChatMessage(
-                            role = ChatRole.User,
-                            content = content
-                        )
-                    )
-                }
-            }
-        }
-
+        rebuildModelProjection()
         updateMessagesSelectionProjection()
         calculateCost()
     }
@@ -6387,6 +7766,18 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
     override fun onMessageDeleted() {
         syncChatProjection()
+    }
+
+    override fun onIncludeEdit(includeId: String) {
+        findIncludeById(includeId)?.let(::editInclude)
+    }
+
+    override fun onIncludeRemove(includeId: String) {
+        findIncludeById(includeId)?.let(::removeInclude)
+    }
+
+    override fun onIncludeCondense(includeId: String) {
+        findIncludeById(includeId)?.let(::condenseInclude)
     }
 
     @SuppressLint("SetTextI18n")
@@ -6432,42 +7823,18 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
-        if (imageIsSelected) {
-            outState.putString("image", baseImageString)
-            outState.putString("imageType", selectedImageType)
-        }
+        // Pending image attachments survive a config change through the
+        // per-chat pending_includes preference (loadPendingIncludes), not
+        // through the instance-state bundle, so there is nothing image-side
+        // to write here anymore.
         super.onSaveInstanceState(outState)
     }
 
-    private fun base64ToBitmap(base64Str: String): Bitmap? {
-        return try {
-            // Decode Base64 string to bytes
-            val decodedBytes = Base64.decode(base64Str, Base64.DEFAULT)
-            // Decode byte array to Bitmap
-            BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.size)
-        } catch (_: IllegalArgumentException) {
-            // Handle the case where the Base64 string was not correctly formatted
-            null
-        }
-    }
-
     private fun onRestoredState(savedInstanceState: Bundle?) {
-        val image = savedInstanceState?.getString("image")
-
-        if (image != null) {
-            baseImageString = image
-            imageIsSelected = true
-            selectedImageType = savedInstanceState.getString("imageType")
-
-            bitmap = base64ToBitmap(baseImageString!!.split(",")[1])
-
-            if (bitmap != null) {
-                attachedImage?.visibility = View.VISIBLE
-
-                val resizedBitmap = resizeBitmapToMaxHeight(bitmap!!, 100)
-                selectedImage?.setImageBitmap(roundCorners(resizedBitmap))
-            }
-        }
+        // Left as a no-op after the vision path was retired; pending image
+        // includes rehydrate from preferences on load, not from the instance
+        // state bundle. Kept as a hook in case a future piece of state needs
+        // the same lifecycle place.
     }
 
     private fun requestAddApiEndpoint(feature: String, prompt: String) {
@@ -6501,7 +7868,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     headers = emptyMap(),
                     host = OpenAIHost(apiEndpoint.host),
                     proxy = null,
-                    retry = RetryStrategy()
+                    retry = RetryStrategy(maxRetries = 0)
                 )
                 openAIAI = OpenAI(configOpenAI)
                 onOpenAIAction(feature, prompt)
@@ -6558,8 +7925,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     mapOf(
                         "message" to m["message"],
                         "isBot" to m["isBot"],
-                        "image" to m["image"],
-                        "imageType" to m["imageType"],
                         "selected" to false
                     )
                 )

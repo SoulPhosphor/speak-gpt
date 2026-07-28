@@ -295,6 +295,27 @@ class Preferences private constructor(private var preferences: SharedPreferences
         putString("max_tokens", tokens.toString())
     }
 
+    /** Whether the user permanently dismissed the destructive Condense hint. */
+    fun getNeverShowCondenseHint(): Boolean {
+        return getGlobalBoolean("never_show_condense_hint", false)
+    }
+
+    fun setNeverShowCondenseHint(value: Boolean) {
+        putGlobalBoolean("never_show_condense_hint", value)
+    }
+
+    /** Whether the user permanently dismissed the Reduce (image) hint. Kept
+     *  separate from the Condense hint on purpose: reducing an image is a
+     *  different action from condensing a document, and hiding one must not
+     *  silently hide the other. */
+    fun getNeverShowReduceHint(): Boolean {
+        return getGlobalBoolean("never_show_reduce_hint", false)
+    }
+
+    fun setNeverShowReduceHint(value: Boolean) {
+        putGlobalBoolean("never_show_reduce_hint", value)
+    }
+
     /**
      * Retrieves the image model name from the shared preferences.
      *
@@ -1842,6 +1863,32 @@ class Preferences private constructor(private var preferences: SharedPreferences
 
     fun setChatProjectId(id: String) {
         putString("memory_project_id", id)
+    }
+
+    /**
+     * Documents the user has attached but not yet sent (the Includes strip
+     * above the message box), as the JSON produced by
+     * `ChatInclude.listToJson`. Empty = nothing attached.
+     *
+     * Only PENDING attachments live here. Once a message is sent its
+     * attachments move into that message's own record inside the chat history
+     * blob, so they are saved atomically with the text they belong to and are
+     * carried by a rename with the rest of the history. This key exists purely
+     * so an attachment picked before the app was closed is still waiting when
+     * it reopens.
+     */
+    fun getPendingIncludes() : String {
+        return getString("pending_includes", "")
+    }
+
+    fun setPendingIncludes(json: String, synchronous: Boolean = false) {
+        if (synchronous) {
+            preferences.edit(commit = true) {
+                putString("pending_includes", json)
+            }
+        } else {
+            putString("pending_includes", json)
+        }
     }
 
     /**

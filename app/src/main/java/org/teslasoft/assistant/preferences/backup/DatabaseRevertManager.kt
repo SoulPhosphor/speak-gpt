@@ -92,16 +92,11 @@ object DatabaseRevertManager {
     }
 
     /**
-     * Execute the restore the user confirmed in A5. Sequence: quarantine the
-     * damaged database (preserve-the-original — abort if that fails) →
-     * invalidate handles → delete the damaged file → clear the degraded flag
-     * (the damaged store no longer exists) → fresh store → import the backup
-     * → integrity-verify. Runs off the main thread only.
-     *
-     * A failure AFTER the damaged file was replaced leaves a fresh store with
-     * whatever imported (never silently: the health line says so, the caller
-     * reports it) — the quarantined original and every older backup are
-     * untouched, so nothing is lost that was not already lost.
+     * Execute the restore the user confirmed in A5. This entry also supports
+     * the general Restore Database button, so the current database may be
+     * healthy. Cached handles are closed before its pre-restore safety copy is
+     * made. Any failure after replacement puts that copy back automatically;
+     * the preserved copy and every older backup remain untouched.
      */
     fun restoreMemory(context: Context, verified: Verified): DatabaseRepairManager.Outcome {
         val appContext = context.applicationContext
@@ -115,15 +110,21 @@ object DatabaseRevertManager {
         } catch (e: Exception) {
             return DatabaseRepairManager.Outcome(false, null, "backup unreadable: ${e.javaClass.simpleName}")
         }
-        val quarantinePath = DatabaseRepairManager.quarantine(appContext, type)
+        val wasDegraded = DatabaseHealthState.isDegraded(appContext, type)
+        DatabaseRepairManager.invalidateStore(appContext, type)
+        val quarantinePath = DatabaseRepairManager.quarantine(
+            appContext, type, forRestore = true
+        )
         // A missing database file is legal here (the store may already have
         // been replaced by a failed earlier attempt); a COPY failure is not.
         if (quarantinePath == null && appContext.getDatabasePath(MemoryStore.DATABASE_NAME).exists()) {
             return DatabaseRepairManager.Outcome(false, null, "quarantine failed — restore refused")
         }
+        var liveFilesTouched = false
         return try {
             DatabaseRepairManager.invalidateStore(appContext, type)
             val db = appContext.getDatabasePath(MemoryStore.DATABASE_NAME)
+            liveFilesTouched = true
             try { if (db.exists()) db.delete() } catch (_: Exception) { }
             for (suffix in listOf("-wal", "-shm", "-journal")) {
                 try {
@@ -136,19 +137,40 @@ object DatabaseRevertManager {
             store.importData(data, overwriteSingletons = true)
             val problem = store.integrityCheck()
             if (problem != null) {
-                DatabaseHealthState.logHealth(appContext, "error",
-                    "Restored memory database failed its integrity check ($problem).")
-                DatabaseRepairManager.Outcome(false, quarantinePath, problem)
-            } else {
-                DatabaseHealthState.logHealth(appContext, "info",
-                    "Memory database restored from backup ${verified.candidate.file.name}. " +
-                        "Damaged original preserved" + (quarantinePath?.let { " at $it" } ?: "") + ".")
-                DatabaseRepairManager.Outcome(true, quarantinePath, null)
+                throw IllegalStateException("restored database failed integrity check: $problem")
             }
+            DatabaseHealthState.logHealth(appContext, "info",
+                "Memory database restored from backup ${verified.candidate.file.name}. " +
+                    "Previous database preserved" + (quarantinePath?.let { " at $it" } ?: "") + ".")
+            DatabaseRepairManager.Outcome(true, quarantinePath, null)
         } catch (e: Exception) {
+            DatabaseRepairManager.invalidateStore(appContext, type)
+            val rolledBack = if (!liveFilesTouched) {
+                true
+            } else if (quarantinePath != null) {
+                DatabaseRepairManager.restoreQuarantinedFiles(
+                    appContext, type, quarantinePath
+                )
+            } else {
+                val db = appContext.getDatabasePath(MemoryStore.DATABASE_NAME)
+                runCatching { db.delete() }
+                for (suffix in listOf("-wal", "-shm", "-journal")) {
+                    runCatching { File(db.parentFile, db.name + suffix).delete() }
+                }
+                true
+            }
+            if (wasDegraded) {
+                DatabaseHealthState.markDegraded(
+                    appContext, type, "restore failed; previous database restored"
+                )
+            }
             DatabaseHealthState.logHealth(appContext, "error",
                 "Restore of the memory database failed (${e.javaClass.simpleName}). " +
-                    "The damaged original and all older backups are untouched.")
+                    (if (rolledBack) {
+                        "The previous database was put back; all backups are untouched."
+                    } else {
+                        "The previous database is preserved but could not be put back automatically."
+                    }))
             DatabaseRepairManager.Outcome(false, quarantinePath, e.javaClass.simpleName)
         }
     }

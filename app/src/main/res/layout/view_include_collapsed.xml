@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The collapsed Includes line, shown instead of the individual rows once FOUR
+  or more items are attached so the strip cannot eat the screen above the
+  keyboard.
+
+  Reads "Includes N Documents" with a DOWNWARD-facing chevron at the end. The
+  chevron points down even though tapping opens the list upward over the chat.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/include_collapsed_row"
+    style="@style/Widget.App.Include.Row"
+    android:background="?attr/selectableItemBackground">
+
+    <TextView
+        android:id="@+id/include_collapsed_text"
+        style="@style/Widget.App.Include.Name"
+        android:textColor="?attr/colorPrimary"
+        android:textStyle="bold"
+        android:text="@string/include_label" />
+
+    <ImageView
+        android:id="@+id/include_collapsed_chevron"
+        style="@style/Widget.App.Include.Icon"
+        android:layout_marginEnd="12dp"
+        android:contentDescription="@string/include_expand_desc"
+        android:tint="?attr/colorPrimary"
+        android:src="@drawable/ic_chevron_down" />
+</LinearLayout>

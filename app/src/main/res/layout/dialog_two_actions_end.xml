@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Reusable content view for a dialog whose two actions sit RIGHT-ALIGNED as a
+  pair, Cancel first then Save (owner ruling, July 24 2026, for the include
+  Edit dialog).
+
+  Deliberately NOT dialog_two_actions.xml: that layout is the approved shape
+  for a primary+destructive confirmation, spread across the dialog with the
+  primary on the START side. This one is a different approved shape — the two
+  are not interchangeable, and neither should be edited to look like the
+  other.
+
+  Each button carries its own wrap_content width from
+  AppButton.Destructive.Inline / AppButton.Primary.Inline, so the pair is only
+  as wide as its labels. The LinearLayout supplies the gap between them, the
+  same way the inline button pair on Backup & Restore does.
+
+  Horizontal/bottom padding matches dialog_two_actions.xml (24dp/16dp) so the
+  dialog window's own corner curve cannot clip the buttons' corners.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="end"
+    android:paddingHorizontal="24dp"
+    android:paddingTop="8dp"
+    android:paddingBottom="16dp">
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btn_dialog_end_cancel"
+        style="@style/AppButton.Destructive.Inline"
+        android:layout_marginEnd="12dp" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btn_dialog_end_save"
+        style="@style/AppButton.Primary.Inline" />
+</LinearLayout>

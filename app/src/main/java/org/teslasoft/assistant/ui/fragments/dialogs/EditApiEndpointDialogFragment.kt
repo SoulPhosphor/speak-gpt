@@ -49,7 +49,9 @@ class EditApiEndpointDialogFragment : DialogFragment() {
             maxTokens: Int,
             endSeparator: String,
             prefix: String,
-            position: Int
+            position: Int,
+            contextWindowTokens: Int? = null,
+            contextWindowModelId: String = ""
         ): EditApiEndpointDialogFragment {
             val editApiEndpointDialogFragment = EditApiEndpointDialogFragment()
 
@@ -66,6 +68,10 @@ class EditApiEndpointDialogFragment : DialogFragment() {
             args.putFloat("frequencyPenalty", frequencyPenalty)
             args.putFloat("presencePenalty", presencePenalty)
             args.putInt("maxTokens", maxTokens)
+            if (contextWindowTokens != null) {
+                args.putInt("contextWindowTokens", contextWindowTokens)
+            }
+            args.putString("contextWindowModelId", contextWindowModelId)
             args.putString("endSeparator", endSeparator)
             args.putString("prefix", prefix)
             args.putInt("position", position)
@@ -95,6 +101,7 @@ class EditApiEndpointDialogFragment : DialogFragment() {
     private var sliderFrequencyPenalty: Slider? = null
     private var sliderPresencePenalty: Slider? = null
     private var fieldMaxTokens: TextInputEditText? = null
+    private var fieldContextWindow: TextInputEditText? = null
     private var fieldEndSeparator: TextInputEditText? = null
     private var fieldPrefix: TextInputEditText? = null
     private var apiNote: TextView? = null
@@ -135,6 +142,7 @@ class EditApiEndpointDialogFragment : DialogFragment() {
         sliderFrequencyPenalty = view.findViewById(R.id.slider_frequency_penalty)
         sliderPresencePenalty = view.findViewById(R.id.slider_presence_penalty)
         fieldMaxTokens = view.findViewById(R.id.field_max_tokens)
+        fieldContextWindow = view.findViewById(R.id.field_context_window)
         fieldEndSeparator = view.findViewById(R.id.field_end_separator)
         fieldPrefix = view.findViewById(R.id.field_prefix)
         apiNote = view.findViewById(R.id.api_note)
@@ -174,6 +182,16 @@ class EditApiEndpointDialogFragment : DialogFragment() {
         sliderPresencePenalty?.setLabelFormatter { "${it / 10.0}" }
 
         fieldMaxTokens?.setText(requireArguments().getInt("maxTokens", ApiEndpointObject.DEFAULT_MAX_TOKENS).toString())
+        val contextModel = requireArguments().getString("contextWindowModelId").orEmpty()
+        fieldContextWindow?.setText(
+            if (requireArguments().containsKey("contextWindowTokens") &&
+                contextModel == selectedModel
+            ) {
+                requireArguments().getInt("contextWindowTokens").toString()
+            } else {
+                ""
+            }
+        )
         fieldEndSeparator?.setText(requireArguments().getString("endSeparator", ""))
         fieldPrefix?.setText(requireArguments().getString("prefix", ""))
 
@@ -231,6 +249,7 @@ class EditApiEndpointDialogFragment : DialogFragment() {
     private fun showModelChooser() {
         val modelDialog = AdvancedModelSelectorDialogFragment.newInstance(selectedModel, "")
         modelDialog.setModelSelectedListener { model ->
+            if (model != selectedModel) fieldContextWindow?.setText("")
             selectedModel = model
             fieldModel?.setText(model)
         }
@@ -257,7 +276,16 @@ class EditApiEndpointDialogFragment : DialogFragment() {
             maxTokens = fieldMaxTokens?.text.toString().toIntOrNull() ?: ApiEndpointObject.DEFAULT_MAX_TOKENS,
             endSeparator = fieldEndSeparator?.text.toString(),
             prefix = fieldPrefix?.text.toString(),
-            id = requireArguments().getString("id") ?: ""
+            id = requireArguments().getString("id") ?: "",
+            contextWindowTokens = fieldContextWindow?.text.toString()
+                .trim()
+                .toIntOrNull()
+                ?.takeIf { it > 0 },
+            contextWindowModelId = if (fieldContextWindow?.text.toString().isBlank()) {
+                ""
+            } else {
+                selectedModel
+            }
         )
     }
 

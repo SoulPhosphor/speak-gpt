@@ -81,6 +81,11 @@
             android:orientation="vertical"
             android:paddingHorizontal="20dp">
 
+            <TextView
+                style="@style/Widget.App.Screen.Intro"
+                android:layout_marginTop="16dp"
+                android:text="@string/roleplay_hub_memory_notice" />
+
             <!-- Roleplay Characters -->
             <LinearLayout
                 android:id="@+id/row_rp_characters"

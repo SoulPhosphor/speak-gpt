@@ -91,6 +91,24 @@ class ApiEndpointStableIdTest {
         assertEquals("glm-4-plus", store.getApiEndpoint(id).model)
     }
 
+    @Test fun contextWindowBelongsToTheExactStoredModelId() {
+        val endpoint = sample("z.ai").apply {
+            model = "glm-4-plus"
+            contextWindowTokens = 128_000
+            contextWindowModelId = "glm-4-plus"
+        }
+        val id = store.setApiEndpoint(endpoint)
+        assertEquals(128_000, store.getApiEndpoint(id).contextWindowTokens)
+
+        // A model change cannot inherit the old model's capacity.
+        val changed = store.getApiEndpoint(id).apply {
+            model = "glm-5"
+        }
+        store.setApiEndpoint(changed)
+        assertEquals(null, store.getApiEndpoint(id).contextWindowTokens)
+        assertEquals("", store.getApiEndpoint(id).contextWindowModelId)
+    }
+
     @Test fun renamingCreatesNoDuplicateAndKeepsFavoriteAndSelectionRefsValid() {
         val id = store.setApiEndpoint(sample("z.ai"))
         // A favorite / per-chat selection stored this id.
@@ -117,6 +135,74 @@ class ApiEndpointStableIdTest {
         val id = store.setApiEndpoint(ep)
         assertEquals("Default keeps the reserved id so the default reference resolves",
             ApiEndpointObject.DEFAULT_ENDPOINT_ID, id)
+    }
+
+    @Test fun imageCapabilityRoundTripsWithTheEndpoint() {
+        val ep = sample("z.ai").apply {
+            imageCapabilityByModel = org.teslasoft.assistant.preferences.includes.ImageCapabilityStore.set(
+                org.teslasoft.assistant.preferences.includes.ImageCapabilityStore.EMPTY,
+                "glm-4v",
+                org.teslasoft.assistant.preferences.includes.ImageCapability.SUPPORTED
+            )
+        }
+        val id = store.setApiEndpoint(ep)
+        assertEquals(
+            org.teslasoft.assistant.preferences.includes.ImageCapability.SUPPORTED,
+            org.teslasoft.assistant.preferences.includes.ImageCapabilityStore.get(
+                store.getApiEndpoint(id).imageCapabilityByModel, "glm-4v"
+            )
+        )
+    }
+
+    @Test fun clearingImageCapabilityDropsTheStoredValue() {
+        val ep = sample("z.ai").apply {
+            imageCapabilityByModel = org.teslasoft.assistant.preferences.includes.ImageCapabilityStore.set(
+                org.teslasoft.assistant.preferences.includes.ImageCapabilityStore.EMPTY,
+                "glm-4v",
+                org.teslasoft.assistant.preferences.includes.ImageCapability.SUPPORTED
+            )
+        }
+        val id = store.setApiEndpoint(ep)
+        assertTrue(prefs.contains(id + "_image_capability_by_model"))
+
+        store.setImageCapabilityByModel(
+            id,
+            org.teslasoft.assistant.preferences.includes.ImageCapabilityStore.clear()
+        )
+        assertTrue("cleared history removes the stored value entirely",
+            !prefs.contains(id + "_image_capability_by_model"))
+    }
+
+    @Test fun capabilityHelperReadsAndWritesWithoutAFullEndpointRoundTrip() {
+        val id = store.setApiEndpoint(sample("z.ai"))
+        assertEquals("", store.getImageCapabilityByModel(id))
+        store.setImageCapabilityByModel(
+            id,
+            org.teslasoft.assistant.preferences.includes.ImageCapabilityStore.set(
+                org.teslasoft.assistant.preferences.includes.ImageCapabilityStore.EMPTY,
+                "gpt-4o",
+                org.teslasoft.assistant.preferences.includes.ImageCapability.SUPPORTED
+            )
+        )
+        assertEquals(
+            org.teslasoft.assistant.preferences.includes.ImageCapability.SUPPORTED,
+            org.teslasoft.assistant.preferences.includes.ImageCapabilityStore.get(
+                store.getImageCapabilityByModel(id), "gpt-4o"
+            )
+        )
+    }
+
+    @Test fun deletingAnEndpointRemovesTheImageCapabilityRow() {
+        val ep = sample("z.ai").apply {
+            imageCapabilityByModel = org.teslasoft.assistant.preferences.includes.ImageCapabilityStore.set(
+                org.teslasoft.assistant.preferences.includes.ImageCapabilityStore.EMPTY,
+                "gpt-4o",
+                org.teslasoft.assistant.preferences.includes.ImageCapability.SUPPORTED
+            )
+        }
+        val id = store.setApiEndpoint(ep)
+        store.deleteApiEndpoint(id)
+        assertTrue(!prefs.contains(id + "_image_capability_by_model"))
     }
 
     @Test fun legacyEndpointKeepsItsHashedIdAfterLoadAndSave() {

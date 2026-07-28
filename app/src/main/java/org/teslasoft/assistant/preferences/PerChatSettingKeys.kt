@@ -93,6 +93,9 @@ object PerChatSettingKeys {
         "memory_roleplay_character_id",
         "memory_user_persona_id",
         "memory_project_id",
+
+        // Attachments (documents/images awaiting send)
+        "pending_includes",
         "apply_model_rules",
 
         // Legacy (deprecated plaintext API key slot; secureApiKey migrates it out)

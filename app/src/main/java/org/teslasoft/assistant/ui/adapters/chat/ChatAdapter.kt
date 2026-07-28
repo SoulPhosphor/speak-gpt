@@ -45,6 +45,8 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageButton
 import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.PopupMenu
 import android.widget.TextView
 import android.widget.Toast
 import androidx.constraintlayout.widget.ConstraintLayout
@@ -66,7 +68,12 @@ import io.noties.markwon.ext.tables.TablePlugin
 import io.noties.markwon.ext.tasklist.TaskListPlugin
 import io.noties.markwon.html.HtmlPlugin
 import io.noties.markwon.inlineparser.MarkwonInlineParserPlugin
+import java.text.NumberFormat
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.preferences.includes.ChatInclude
+import org.teslasoft.assistant.preferences.includes.IncludeHistoryPresentation
+import org.teslasoft.assistant.preferences.includes.IncludeKind
+import org.teslasoft.assistant.ui.activities.ChatActivity
 import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.MessageCompletionState
 import org.teslasoft.assistant.preferences.Preferences
@@ -81,6 +88,7 @@ import java.io.FileInputStream
 import java.io.InputStreamReader
 import java.util.Base64
 import java.util.Collections
+import java.util.Locale
 import androidx.core.graphics.createBitmap
 import androidx.core.net.toUri
 import androidx.core.content.edit
@@ -91,7 +99,6 @@ import org.teslasoft.assistant.util.ShareUtil.Companion.sharePlainText
 class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, private val selectorProjection: ArrayList<HashMap<String, Any>>, private val context: FragmentActivity, private val preferences: Preferences, private val isAssistant: Boolean, private var chatId: String) : RecyclerView.Adapter<ChatAdapter.ViewHolder>(), EditMessageDialogFragment.StateChangesListener {
 
     private var dalleImageStringList = ArrayList<String>(Collections.nCopies(itemCount + 1, ""))
-    private var imageStringList = ArrayList<String>(Collections.nCopies(itemCount + 1, ""))
     private var listener: OnUpdateListener? = null
     private var bulkActionMode = false
 
@@ -139,11 +146,22 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         private const val TYPE_USER = 0
         private const val TYPE_BOT = 1
         private const val TYPE_CLASSIC = 2
+        private const val MENU_INCLUDE_REMOVE = 101
+        private const val MENU_INCLUDE_CONDENSE = 102
+        private const val MENU_INCLUDE_EDIT = 103
     }
 
     fun setChatId(chatId: String) {
         this.chatId = chatId
     }
+
+    /**
+     * Which messages currently have their "Includes" record opened. Held on
+     * the adapter rather than the row, because rows are recycled — keeping it
+     * on the view would make an unrelated message inherit an open accordion
+     * as soon as it scrolled into that recycled slot.
+     */
+    private val expandedIncludeRows: MutableSet<String> = mutableSetOf()
 
     override fun getItemViewType(position: Int): Int {
         return if (preferences.getLayout() == "bubbles" || isAssistant) {
@@ -279,10 +297,20 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         // completion marker); nullable so the shared ViewHolder is safe on every
         // layout it inflates.
         private val statusMarker: TextView? = itemView.findViewById(R.id.status_marker)
+        // The "Includes" record of what this message carried. Absent from the
+        // assistant bubble (attachments are user-side only), so nullable.
+        private val includeSummary: LinearLayout? = itemView.findViewById(R.id.include_summary)
+        private val includeSummaryHeader: LinearLayout? = itemView.findViewById(R.id.include_summary_header)
+        private val includeSummaryLabel: TextView? = itemView.findViewById(R.id.include_summary_label)
+        private val includeSummaryChevron: ImageView? = itemView.findViewById(R.id.include_summary_chevron)
+        private val includeSummaryList: LinearLayout? = itemView.findViewById(R.id.include_summary_list)
+        private val condensedBookmark: ImageView? = itemView.findViewById(R.id.condensed_bookmark)
+        private val artifactBookmark: ImageView? = itemView.findViewById(R.id.artifact_bookmark)
 
         @SuppressLint("SetTextI18n", "SetJavaScriptEnabled")
         open fun bind(chatMessage: HashMap<String, Any>, position: Int) {
 
+            updateIncludeSummary(chatMessage, position)
             updateUI(chatMessage)
             updateRetryButton(chatMessage, position)
             updateReportButton(chatMessage)
@@ -337,18 +365,11 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 Toast.makeText(context, context.getString(R.string.label_copy), Toast.LENGTH_SHORT).show()
             }
 
-            if (chatMessage["message"].toString().contains("data:image")) {
-                dalleImage.visibility = View.VISIBLE
-                message.visibility = View.GONE
-                btnCopy.visibility = View.GONE
-
-                loadImage(chatMessage["message"].toString())
-                updateImageClickListener(chatMessage["message"].toString())
-            } else if (chatMessage["message"].toString().contains("~file:")) {
+            if (chatMessage["message"].toString().contains("~file:")) {
                 if (chatMessage["isBot"] == true) {
                     message.visibility = View.GONE
                 }
-                processFile(chatMessage, position, "png", dalleImageStringList, true)
+                processDalleFile(chatMessage, position)
             } else {
                 (debugContext as FragmentActivity).runOnUiThread {
                     applyMarkdown(chatMessage)
@@ -360,16 +381,14 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                     }
                 }, 100)
 
-                if (chatMessage["isBot"] == false && chatMessage["image"] !== null) {
-                    dalleImage.visibility = View.VISIBLE
+                // User-attached images now belong to the Includes system
+                // (renderer + summary row), never inline as a big preview in
+                // the message bubble. The dalleImage slot is reserved for
+                // DALL-E replies via the ~file: branch above.
+                dalleImage.visibility = View.GONE
 
-                    processFile(chatMessage, position, chatMessage["imageType"].toString(), imageStringList, false)
-                } else {
-                    dalleImage.visibility = View.GONE
-
-                    btnShare.setOnClickListener {
-                        sharePlainText(context, chatMessage["message"].toString())
-                    }
+                btnShare.setOnClickListener {
+                    sharePlainText(context, chatMessage["message"].toString())
                 }
 
                 message.visibility = View.VISIBLE
@@ -386,6 +405,254 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
          * the model's own words (it lives in a different field). No toast,
          * dialog, notification, or sound — just this line.
          */
+        /**
+         * Renders sent documents directly under the user's name. One to three
+         * rows remain visible; only four or more collapse behind the count.
+         *
+         * Every branch sets visibility explicitly: these rows are recycled, so
+         * an early return would let one message's open accordion reappear on
+         * an unrelated message further down the conversation.
+         */
+        private fun updateIncludeSummary(chatMessage: HashMap<String, Any>, position: Int) {
+            val summary = includeSummary ?: return
+            val includes = ChatInclude.listFromJson(
+                chatMessage[ChatActivity.INCLUDES_KEY]?.toString()
+            )
+
+            if (chatMessage["isBot"] == true || includes.isEmpty()) {
+                summary.visibility = View.GONE
+                condensedBookmark?.visibility = View.GONE
+                artifactBookmark?.visibility = View.GONE
+                includeSummaryList?.removeAllViews()
+                return
+            }
+
+            val groups = IncludeHistoryPresentation.group(includes)
+            updateIncludeBookmarks(groups)
+            val fullIncludes = groups.fullRecords
+            if (fullIncludes.isEmpty()) {
+                summary.visibility = View.GONE
+                includeSummaryList?.removeAllViews()
+                return
+            }
+
+            summary.visibility = View.VISIBLE
+            val collapsible = IncludeHistoryPresentation.shouldCollapse(fullIncludes.size)
+            val composition = IncludeHistoryPresentation.compositionOf(fullIncludes)
+            val summaryKey = fullIncludes.joinToString(separator = "\u001F") { it.id }
+            val expanded = !collapsible || expandedIncludeRows.contains(summaryKey)
+
+            includeSummaryHeader?.visibility = if (collapsible) View.VISIBLE else View.GONE
+            includeSummaryList?.visibility = if (expanded) View.VISIBLE else View.GONE
+            includeSummaryLabel?.text = if (collapsible) {
+                context.getString(collapsedCountRes(composition), fullIncludes.size)
+            } else {
+                context.getString(R.string.include_label)
+            }
+            includeSummaryChevron?.rotation = if (expanded) 180f else 0f
+            includeSummaryChevron?.contentDescription =
+                context.getString(toggleDescRes(composition, expanded))
+
+            if (expanded) {
+                buildIncludeSummaryRows(fullIncludes)
+            } else {
+                includeSummaryList?.removeAllViews()
+            }
+
+            includeSummaryHeader?.setOnClickListener(
+                if (collapsible) {
+                    View.OnClickListener {
+                        if (expandedIncludeRows.contains(summaryKey)) {
+                            expandedIncludeRows.remove(summaryKey)
+                        } else {
+                            expandedIncludeRows.add(summaryKey)
+                        }
+                        notifyItemChanged(position)
+                    }
+                } else {
+                    null
+                }
+            )
+        }
+
+        /**
+         * Full documents keep their metadata row. Condensed documents use the
+         * bookmark-with-plus; removed sent documents use the empty bookmark.
+         * The plus bookmark offers Edit or Remove. The empty bookmark opens
+         * its already-removed reminder for optional editing.
+         */
+        private fun updateIncludeBookmarks(groups: IncludeHistoryPresentation.Groups) {
+            updateBookmark(
+                marker = condensedBookmark,
+                items = groups.condensedBookmarks,
+                canRemove = true
+            )
+            updateBookmark(
+                marker = artifactBookmark,
+                items = groups.artifactBookmarks,
+                canRemove = false
+            )
+        }
+
+        private fun updateBookmark(
+            marker: ImageView?,
+            items: List<ChatInclude>,
+            canRemove: Boolean
+        ) {
+            marker ?: return
+            if (items.isEmpty()) {
+                marker.visibility = View.GONE
+                marker.setOnClickListener(null)
+                return
+            }
+
+            marker.visibility = View.VISIBLE
+            marker.setOnClickListener { anchor ->
+                if (items.size == 1) {
+                    if (canRemove) {
+                        showCondensedBookmarkMenu(anchor, items.first())
+                    } else {
+                        listener?.onIncludeEdit(items.first().id)
+                    }
+                    return@setOnClickListener
+                }
+
+                val popup = PopupMenu(context, anchor)
+                for ((index, include) in items.withIndex()) {
+                    popup.menu.add(
+                        0,
+                        index,
+                        index,
+                        "${include.fileName} (${include.kind.key.uppercase(Locale.ROOT)})"
+                    )
+                }
+                popup.setOnMenuItemClickListener { item ->
+                    val include = items.getOrNull(item.itemId)
+                        ?: return@setOnMenuItemClickListener false
+                    if (canRemove) {
+                        // Let the file picker close before opening its action
+                        // menu on the same anchor.
+                        anchor.post { showCondensedBookmarkMenu(anchor, include) }
+                    } else {
+                        listener?.onIncludeEdit(include.id)
+                    }
+                    true
+                }
+                popup.show()
+            }
+        }
+
+        private fun showCondensedBookmarkMenu(anchor: View, include: ChatInclude) {
+            val popup = PopupMenu(context, anchor)
+            popup.menu.add(
+                0,
+                MENU_INCLUDE_EDIT,
+                0,
+                R.string.include_action_edit
+            )
+            popup.menu.add(
+                0,
+                MENU_INCLUDE_REMOVE,
+                1,
+                R.string.include_action_remove
+            )
+            popup.setOnMenuItemClickListener { item ->
+                when (item.itemId) {
+                    MENU_INCLUDE_EDIT -> {
+                        listener?.onIncludeEdit(include.id)
+                        true
+                    }
+                    MENU_INCLUDE_REMOVE -> {
+                        listener?.onIncludeRemove(include.id)
+                        true
+                    }
+                    else -> false
+                }
+            }
+            popup.show()
+        }
+
+        private fun buildIncludeSummaryRows(includes: List<ChatInclude>) {
+            val list = includeSummaryList ?: return
+            list.removeAllViews()
+            val inflater = LayoutInflater.from(context)
+            for (include in includes) {
+                val row = inflater.inflate(R.layout.view_include_summary_item, list, false)
+                row.findViewById<ImageView>(R.id.summary_item_icon)
+                    ?.setImageResource(includeIcon(include.kind))
+                row.findViewById<TextView>(R.id.summary_item_name)?.text = include.fileName
+                row.findViewById<TextView>(R.id.summary_item_format)?.text =
+                    include.kind.key.uppercase(Locale.ROOT)
+                row.findViewById<TextView>(R.id.summary_item_weight)?.text = context.getString(
+                    R.string.include_weight,
+                    NumberFormat.getIntegerInstance().format(include.currentTokens())
+                )
+                row.findViewById<ImageButton>(R.id.summary_item_action)?.let { action ->
+                    action.contentDescription =
+                        context.getString(R.string.include_menu_desc, include.fileName)
+                    action.setOnClickListener { showIncludeRowMenu(it, include) }
+                }
+                list.addView(row)
+            }
+        }
+
+        private fun showIncludeRowMenu(anchor: View, include: ChatInclude) {
+            val popup = PopupMenu(context, anchor)
+            popup.menu.add(
+                0,
+                MENU_INCLUDE_REMOVE,
+                0,
+                R.string.include_action_remove
+            )
+            popup.menu.add(
+                0,
+                MENU_INCLUDE_CONDENSE,
+                1,
+                if (include.kind.isImage()) {
+                    R.string.include_action_reduce
+                } else {
+                    R.string.include_action_condense
+                }
+            )
+            popup.setOnMenuItemClickListener { item ->
+                when (item.itemId) {
+                    MENU_INCLUDE_REMOVE -> {
+                        listener?.onIncludeRemove(include.id)
+                        true
+                    }
+                    MENU_INCLUDE_CONDENSE -> {
+                        listener?.onIncludeCondense(include.id)
+                        true
+                    }
+                    else -> false
+                }
+            }
+            popup.show()
+        }
+
+        private fun includeIcon(kind: IncludeKind): Int =
+            if (kind.isImage()) R.drawable.ic_image else R.drawable.ic_file
+
+        private fun collapsedCountRes(
+            composition: IncludeHistoryPresentation.Composition
+        ): Int = when (composition) {
+            IncludeHistoryPresentation.Composition.DOCUMENTS -> R.string.include_collapsed_count
+            IncludeHistoryPresentation.Composition.IMAGES -> R.string.include_collapsed_count_images
+            IncludeHistoryPresentation.Composition.MIXED -> R.string.include_collapsed_count_files
+        }
+
+        private fun toggleDescRes(
+            composition: IncludeHistoryPresentation.Composition,
+            expanded: Boolean
+        ): Int = when (composition) {
+            IncludeHistoryPresentation.Composition.DOCUMENTS ->
+                if (expanded) R.string.include_collapse_desc else R.string.include_expand_desc
+            IncludeHistoryPresentation.Composition.IMAGES ->
+                if (expanded) R.string.include_collapse_desc_images else R.string.include_expand_desc_images
+            IncludeHistoryPresentation.Composition.MIXED ->
+                if (expanded) R.string.include_collapse_desc_files else R.string.include_expand_desc_files
+        }
+
         private fun updateStatusMarker(chatMessage: HashMap<String, Any>) {
             val marker = statusMarker ?: return
             val state = chatMessage[MessageCompletionState.KEY_STATE]?.toString()
@@ -436,11 +703,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         }
 
         private fun updateReportButton(chatMessage: HashMap<String, Any>) {
-            if (chatMessage["isBot"] == true) {
-                btnReport.visibility = View.VISIBLE
-            } else {
-                btnReport.visibility = View.GONE
-            }
+            btnReport.visibility = View.GONE
         }
 
         private fun updateShareButton(chatMessage: HashMap<String, Any>) {
@@ -452,11 +715,11 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         }
 
         private fun updateSpeakButton(chatMessage: HashMap<String, Any>, position: Int) {
-            // Re-read only makes sense for assistant text replies. Hide it for
-            // user messages and for image/file messages (nothing to speak).
+            // Re-read only makes sense for assistant text replies. DALL-E
+            // outputs land as `~file:` markers and are not speakable.
             val msg = chatMessage["message"].toString()
             val speakable = chatMessage["isBot"] == true &&
-                    !msg.contains("data:image") && !msg.contains("~file:")
+                    !msg.contains("~file:")
             if (speakable) {
                 btnSpeak.visibility = View.VISIBLE
                 if (position == speakingPosition) {
@@ -744,48 +1007,45 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             return sb.toString()
         }
 
+        /** Loads a DALL-E-generated image bubble from its `~file:<hash>` slot
+         *  in the shared images cache. User-attached images no longer flow
+         *  through this path — they render as Includes summary rows under
+         *  the user's own message. */
         @SuppressLint("SetTextI18n")
-        private fun processFile(chatMessage: HashMap<String, Any>, position: Int, imageType: String, searchArray: ArrayList<String>, u: Boolean) {
-            val mimeType = if (u || imageType == "png") "image/png" else "image/jpeg"
-
-            val path = if(u) {
-                chatMessage["message"].toString().replace("~file:", "")
-            } else {
-                chatMessage["image"]
-            }
+        private fun processDalleFile(chatMessage: HashMap<String, Any>, position: Int) {
+            val mimeType = "image/png"
+            val path = chatMessage["message"].toString().replace("~file:", "")
 
             try {
-                val fullPath = context.getExternalFilesDir("images")?.absolutePath + "/" + path + "." + imageType
+                val fullPath = context.getExternalFilesDir("images")?.absolutePath +
+                    "/" + path + ".png"
 
-                while (searchArray.size < itemCount + 1) {
-                    searchArray.add("")
+                while (dalleImageStringList.size < itemCount + 1) {
+                    dalleImageStringList.add("")
                 }
 
-                if (searchArray[position] == "") {
+                if (dalleImageStringList[position] == "") {
                     context.contentResolver?.openFileDescriptor(
-                        Uri.fromFile(
-                            File(fullPath)
-                        ), "r"
+                        Uri.fromFile(File(fullPath)), "r"
                     )?.use { file ->
                         FileInputStream(file.fileDescriptor).use { stream ->
-                            run {
-                                val c: ByteArray = stream.readBytes()
-                                searchArray[position] = "data:$mimeType;base64," + Base64.getEncoder().encodeToString(c)
-                                loadImage(searchArray[position])
-                                updateImageClickListener(searchArray[position])
-                            }
+                            val c: ByteArray = stream.readBytes()
+                            dalleImageStringList[position] =
+                                "data:$mimeType;base64," + Base64.getEncoder().encodeToString(c)
+                            loadImage(dalleImageStringList[position])
+                            updateImageClickListener(dalleImageStringList[position])
                         }
                     }
                 } else {
-                    loadImage(searchArray[position])
-                    updateImageClickListener(searchArray[position])
+                    loadImage(dalleImageStringList[position])
+                    updateImageClickListener(dalleImageStringList[position])
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
                 dalleImage.visibility = View.GONE
                 message.visibility = View.VISIBLE
                 btnCopy.visibility = View.VISIBLE
-                message.text = "${message.text}\n<IMAGE NOT FOUND: $path.$mimeType>\nStacktrace: ${e.stackTraceToString()}"
+                message.text = "${message.text}\n<IMAGE NOT FOUND: $path.png>\nStacktrace: ${e.stackTraceToString()}"
             }
         }
 
@@ -903,6 +1163,9 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         fun onRetryClick()
         fun onMessageEdited()
         fun onMessageDeleted()
+        fun onIncludeEdit(includeId: String)
+        fun onIncludeRemove(includeId: String)
+        fun onIncludeCondense(includeId: String)
         fun onBulkSelectionChanged(position: Int, selected: Boolean)
         fun onChangeBulkActionMode(mode: Boolean)
         fun onSpeakClick(message: String, position: Int)

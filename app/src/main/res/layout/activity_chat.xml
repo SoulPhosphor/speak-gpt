@@ -385,18 +385,18 @@
                 android:orientation="horizontal">
 
                 <com.google.android.material.button.MaterialButton
+                    android:id="@+id/health_banner_ok"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/health_banner_btn_ok" />
+
+                <com.google.android.material.button.MaterialButton
                     android:id="@+id/health_banner_repair"
                     style="@style/Widget.Material3.Button.TextButton"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="@string/health_btn_repair" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/health_banner_ok"
-                    style="@style/Widget.Material3.Button.TextButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/btn_ok" />
             </LinearLayout>
         </LinearLayout>
 
@@ -421,6 +421,70 @@
             app:layout_constraintTop_toBottomOf="@+id/health_banner"
             tools:listitem="@layout/view_message" />
 
+<!-- Pending Includes strip: one row per unsent document, directly above the
+             message box. Sent attachments leave this surface and appear in
+             the transcript under the user name.
+
+             Rows are inflated into include_list from view_include_row.xml; at
+             four or more items include_collapsed takes over instead and the
+             list becomes a tap-to-expand overlay (see IncludeStripController).
+             It floats over the chat like the attachment preview beside it —
+             the RecyclerView is bottom-anchored to the parent with padding, so
+             nothing here shifts the conversation around. -->
+        <LinearLayout
+            android:id="@+id/include_strip"
+            style="@style/Widget.App.Include.Container"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:layout_marginEnd="12dp"
+            android:layout_marginBottom="8dp"
+            android:elevation="10dp"
+            android:orientation="vertical"
+            android:visibility="gone"
+            app:layout_constraintBottom_toTopOf="@+id/keyboard_input"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            tools:visibility="visible">
+
+            <TextView
+                android:id="@+id/include_document_hint"
+                style="@style/Widget.App.Include.Notice"
+                android:paddingStart="12dp"
+                android:paddingTop="8dp"
+                android:paddingBottom="2dp"
+                android:text="@string/include_document_pending_hint"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/include_image_hint"
+                style="@style/Widget.App.Include.Notice"
+                android:paddingStart="12dp"
+                android:paddingTop="8dp"
+                android:paddingBottom="2dp"
+                android:text="@string/include_image_pending_hint"
+                android:visibility="gone" />
+
+<!-- No android:id here on purpose: an id on an <include> REPLACES the
+                 included layout's own root id, which would make
+                 findViewById(R.id.include_collapsed_row) return null. -->
+            <include layout="@layout/view_include_collapsed" />
+
+            <ScrollView
+                android:id="@+id/include_list_scroll"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:fillViewport="false"
+                android:scrollbars="vertical">
+
+                <LinearLayout
+                    android:id="@+id/include_list"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+            </ScrollView>
+        </LinearLayout>
+
         <LinearLayout
             android:id="@+id/vision_action_selector"
             android:layout_width="wrap_content"
@@ -430,136 +494,126 @@
             android:elevation="12dp"
             android:orientation="vertical"
             android:visibility="gone"
-            app:layout_constraintBottom_toTopOf="@+id/keyboard_input"
+            app:layout_constraintBottom_toTopOf="@+id/include_strip"
             app:layout_constraintStart_toStartOf="parent"
             tools:visibility="visible">
 
+            <!-- Paperclip popup: a vertical stack of labeled actions. -->
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 app:cardBackgroundColor="@color/transparent"
-                app:cardCornerRadius="48dp"
+                app:cardCornerRadius="24dp"
                 app:strokeWidth="0dp">
 
                 <eightbitlab.com.blurview.BlurView
                     android:id="@+id/attach_bg"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    app:blurOverlayColor="@color/blur_background"
-                    app:layout_constraintBottom_toBottomOf="parent"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toTopOf="parent">
+                    app:blurOverlayColor="@color/blur_background">
 
-                    <androidx.constraintlayout.widget.ConstraintLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent">
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:paddingVertical="6dp">
 
-                        <ImageButton
+                        <LinearLayout
                             android:id="@+id/action_camera"
-                            android:layout_width="48dp"
-                            android:layout_height="48dp"
-                            android:layout_marginStart="12dp"
-                            android:layout_marginTop="12dp"
-                            android:layout_marginBottom="12dp"
-                            android:background="@drawable/btn_accent_50_v2"
-                            android:contentDescription="@string/btn_camera"
-                            android:src="@drawable/ic_camera"
-                            android:tooltipText="@string/btn_camera"
-                            app:layout_constraintBottom_toBottomOf="parent"
-                            app:layout_constraintStart_toStartOf="parent"
-                            app:layout_constraintTop_toTopOf="parent"
-                            app:srcCompat="@drawable/ic_camera" />
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:background="?attr/selectableItemBackground"
+                            android:gravity="center_vertical"
+                            android:minHeight="48dp"
+                            android:orientation="horizontal"
+                            android:paddingHorizontal="16dp">
 
-                        <ImageButton
+                            <ImageView
+                                android:layout_width="24dp"
+                                android:layout_height="24dp"
+                                android:layout_marginEnd="12dp"
+                                android:importantForAccessibility="no"
+                                android:src="@drawable/ic_camera"
+                                android:tint="?attr/colorPrimary" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:paddingEnd="8dp"
+                                android:text="@string/btn_camera"
+                                android:textColor="@color/text"
+                                android:textSize="16sp" />
+                        </LinearLayout>
+
+                        <LinearLayout
                             android:id="@+id/action_gallery"
-                            android:layout_width="48dp"
-                            android:layout_height="48dp"
-                            android:layout_marginStart="12dp"
-                            android:layout_marginTop="12dp"
-                            android:layout_marginEnd="12dp"
-                            android:layout_marginBottom="12dp"
-                            android:background="@drawable/btn_accent_50_v2"
-                            android:contentDescription="@string/label_select_from_gallery"
-                            android:src="@drawable/ic_photo"
-                            android:tooltipText="@string/label_select_from_gallery"
-                            app:layout_constraintBottom_toBottomOf="parent"
-                            app:layout_constraintEnd_toEndOf="parent"
-                            app:layout_constraintStart_toEndOf="@+id/action_camera"
-                            app:layout_constraintTop_toTopOf="parent"
-                            app:srcCompat="@drawable/ic_photo" />
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:background="?attr/selectableItemBackground"
+                            android:gravity="center_vertical"
+                            android:minHeight="48dp"
+                            android:orientation="horizontal"
+                            android:paddingHorizontal="16dp">
 
+                            <ImageView
+                                android:layout_width="24dp"
+                                android:layout_height="24dp"
+                                android:layout_marginEnd="12dp"
+                                android:importantForAccessibility="no"
+                                android:src="@drawable/ic_image"
+                                android:tint="?attr/colorPrimary" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:paddingEnd="8dp"
+                                android:text="@string/attach_option_image"
+                                android:textColor="@color/text"
+                                android:textSize="16sp" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:id="@+id/action_document"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:background="?attr/selectableItemBackground"
+                            android:gravity="center_vertical"
+                            android:minHeight="48dp"
+                            android:orientation="horizontal"
+                            android:paddingHorizontal="16dp">
+
+                            <ImageView
+                                android:layout_width="24dp"
+                                android:layout_height="24dp"
+                                android:layout_marginEnd="12dp"
+                                android:importantForAccessibility="no"
+                                android:src="@drawable/ic_file"
+                                android:tint="?attr/colorPrimary" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:paddingEnd="8dp"
+                                android:text="@string/btn_attach_document"
+                                android:textColor="@color/text"
+                                android:textSize="16sp" />
+                        </LinearLayout>
+
+                        <!-- Pre-existing hidden legacy action. -->
                         <ImageButton
                             android:id="@+id/action_sources"
                             android:layout_width="48dp"
                             android:layout_height="48dp"
-                            android:layout_marginStart="12dp"
-                            android:layout_marginTop="12dp"
-                            android:layout_marginEnd="12dp"
-                            android:layout_marginBottom="12dp"
                             android:background="@drawable/btn_accent_50_v2"
                             android:contentDescription="@string/label_select_from_gallery"
                             android:src="@drawable/ic_book"
                             android:tooltipText="Data Sources"
                             android:visibility="gone"
-                            app:layout_constraintBottom_toBottomOf="parent"
-                            app:layout_constraintEnd_toEndOf="parent"
-                            app:layout_constraintStart_toEndOf="@+id/action_gallery"
-                            app:layout_constraintTop_toTopOf="parent"
                             app:srcCompat="@drawable/ic_book" />
-
-                    </androidx.constraintlayout.widget.ConstraintLayout>
+                    </LinearLayout>
                 </eightbitlab.com.blurview.BlurView>
             </com.google.android.material.card.MaterialCardView>
         </LinearLayout>
 
-        <LinearLayout
-            android:id="@+id/attachedImage"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="12dp"
-            android:layout_marginBottom="12dp"
-            android:background="@drawable/btn_accent_tonal_selector"
-            android:elevation="12dp"
-            android:orientation="vertical"
-            android:visibility="gone"
-            app:layout_constraintBottom_toTopOf="@+id/keyboard_input"
-            app:layout_constraintStart_toStartOf="parent">
-
-            <androidx.constraintlayout.widget.ConstraintLayout
-                android:layout_width="match_parent"
-                android:layout_height="match_parent">
-
-                <ImageView
-                    android:id="@+id/selectedImage"
-                    android:layout_width="120dp"
-                    android:layout_height="120dp"
-                    android:layout_marginStart="12dp"
-                    android:layout_marginTop="12dp"
-                    android:layout_marginEnd="12dp"
-                    android:layout_marginBottom="12dp"
-                    android:contentDescription="@string/label_selected_image"
-                    app:layout_constraintBottom_toBottomOf="parent"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toTopOf="parent"
-                    app:srcCompat="@drawable/assistant" />
-
-                <ImageButton
-                    android:id="@+id/btnRemoveImage"
-                    android:layout_width="32dp"
-                    android:layout_height="32dp"
-                    android:layout_marginTop="-12dp"
-                    android:layout_marginEnd="-12dp"
-                    android:background="@drawable/btn_accent_selector_v2"
-                    android:contentDescription="@string/btn_discard_image"
-                    android:elevation="15dp"
-                    android:src="@drawable/ic_close"
-                    app:layout_constraintEnd_toEndOf="@+id/selectedImage"
-                    app:layout_constraintTop_toTopOf="@+id/selectedImage"
-                    app:srcCompat="@drawable/ic_close" />
-
-            </androidx.constraintlayout.widget.ConstraintLayout>
-        </LinearLayout>
     </androidx.constraintlayout.widget.ConstraintLayout>
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

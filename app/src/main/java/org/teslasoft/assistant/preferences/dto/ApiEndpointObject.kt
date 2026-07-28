@@ -64,12 +64,28 @@ class ApiEndpointObject(
      * preference key). The built-in "Default" profile uses the reserved
      * [DEFAULT_ENDPOINT_ID] so the default per-chat reference keeps resolving.
      * Kept at the END of the constructor so existing positional callers stay valid. */
-    var id: String = ""
+    var id: String = "",
+    /**
+     * Optional total context capacity for this exact endpoint profile and
+     * [contextWindowModelId]. Null means unknown and never blocks Send.
+     */
+    var contextWindowTokens: Int? = null,
+    /** Exact model id the optional context value belongs to. */
+    var contextWindowModelId: String = "",
+    /**
+     * Compact JSON map of `model-id -> capability key` recording which of this
+     * endpoint's models are known to accept (or refuse) image input. Only
+     * proven or user-overridden classifications persist; models not in the map
+     * read as [ImageCapability.UNKNOWN] at the check site. See
+     * [ImageCapabilityStore] for the format. Kept at the END of the
+     * constructor so existing positional callers stay valid.
+     */
+    var imageCapabilityByModel: String = ""
 ) {
     companion object {
         /* Reserved, fixed id for the built-in "Default" endpoint. It is NOT a
-         * name-derived identity in the mutable sense: the "Default" profile can
-         * never be renamed (the editor forbids it) and it is the value every
+         * name-derived identity in the mutable sense: the profile keeps this id
+         * even if the user renames its label, and it is the value every
          * install's default per-chat reference already points at
          * (Preferences.getApiEndpointId defaults to it), so it is preserved
          * verbatim as this record's permanent, constant id. */
