@@ -23,7 +23,6 @@ import android.text.TextWatcher
 import android.view.View
 import android.widget.ListView
 import android.widget.TextView
-import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.DialogFragment
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -39,12 +38,17 @@ import org.teslasoft.assistant.ui.adapters.FavoriteModelListAdapter
 
 class AdvancedFavoriteModelSelectorDialogFragment : DialogFragment() {
     companion object {
-        fun newInstance(name: String, chatId: String) : AdvancedFavoriteModelSelectorDialogFragment {
+        /** [endpointId], when non-blank, browses/fetches for that specific saved
+         *  endpoint instead of the chat's own active endpoint (Preferences'
+         *  apiEndpointId) — used by callers assigning a model to a feature that
+         *  has its own independently-chosen endpoint (e.g. Memory Assistant). */
+        fun newInstance(name: String, chatId: String, endpointId: String = "") : AdvancedFavoriteModelSelectorDialogFragment {
             val advancedModelSelectorDialogFragment = AdvancedFavoriteModelSelectorDialogFragment()
 
             val args = Bundle()
             args.putString("name", name)
             args.putString("chatId", chatId)
+            args.putString("endpointId", endpointId)
 
             advancedModelSelectorDialogFragment.arguments = args
 
@@ -69,16 +73,21 @@ class AdvancedFavoriteModelSelectorDialogFragment : DialogFragment() {
     private var preferences: Preferences? = null
     private var favoriteModelsPreferences: FavoriteModelsPreferences? = null
 
+    /** The endpoint the "All models" fallback browses — the caller's override
+     *  if given, else the chat's own active endpoint (old behavior). */
+    private var resolvedEndpointId: String = ""
+
     private var modelSelectedListener: AdvancedModelSelectorDialogFragment.OnModelSelectedListener = AdvancedModelSelectorDialogFragment.OnModelSelectedListener { model ->
-        listener?.onModelSelected(model)
+        listener?.onModelSelected(model, resolvedEndpointId)
         dismiss()
     }
 
     private var modelClickListener = object : FavoriteModelListAdapter.OnItemClickListener {
         override fun onItemClick(model: String, endpointId: String) {
-            listener?.onModelSelected(model)
-            preferences?.setApiEndpointId(endpointId)
-            Toast.makeText(requireActivity(), getString(R.string.msg_api_compatibility_change), Toast.LENGTH_SHORT).show()
+            // Which preference this belongs to (the chat's own endpoint, or a
+            // feature's independently-chosen one) is the caller's call, not
+            // this dialog's — it just reports what was picked.
+            listener?.onModelSelected(model, endpointId)
             dismiss()
         }
 
@@ -124,7 +133,9 @@ class AdvancedFavoriteModelSelectorDialogFragment : DialogFragment() {
 
         preferences = Preferences.getPreferences(requireActivity(), requireArguments().getString("chatId").toString())
         apiEndpointPreferences = ApiEndpointPreferences.getApiEndpointPreferences(requireActivity())
-        apiEndpointObject = apiEndpointPreferences?.getApiEndpoint(requireActivity(), preferences?.getApiEndpointId()!!)
+        val endpointIdOverride = requireArguments().getString("endpointId").orEmpty()
+        resolvedEndpointId = endpointIdOverride.ifEmpty { preferences?.getApiEndpointId() ?: "" }
+        apiEndpointObject = apiEndpointPreferences?.getApiEndpoint(requireActivity(), resolvedEndpointId)
         favoriteModelsPreferences = FavoriteModelsPreferences.getPreferences(requireActivity())
 
         reloadList()
@@ -132,7 +143,7 @@ class AdvancedFavoriteModelSelectorDialogFragment : DialogFragment() {
         builder!!.setView(view)
             .setCancelable(false)
             .setNeutralButton(R.string.btn_all_models) {_, _ -> run{
-                val dialog = AdvancedModelSelectorDialogFragment.newInstance(model!!, chatId!!)
+                val dialog = AdvancedModelSelectorDialogFragment.newInstance(model!!, chatId!!, endpointIdOverride)
                 dialog.setModelSelectedListener(modelSelectedListener)
                 dialog.show(parentFragmentManager, "AdvancedModelSelectorDialogFragment")
             }}
@@ -157,7 +168,10 @@ class AdvancedFavoriteModelSelectorDialogFragment : DialogFragment() {
     }
 
     fun interface OnModelSelectedListener {
-        fun onModelSelected(model: String)
+        /** [endpointId] is which saved endpoint the picked model belongs to —
+         *  the caller decides what that means (switch the chat's active
+         *  endpoint, or a feature's own independently-chosen one). */
+        fun onModelSelected(model: String, endpointId: String)
     }
 
     fun setModelSelectedListener(listener: OnModelSelectedListener) {

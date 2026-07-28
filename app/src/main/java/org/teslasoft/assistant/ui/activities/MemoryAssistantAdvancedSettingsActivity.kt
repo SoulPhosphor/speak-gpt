@@ -45,10 +45,12 @@ import com.google.android.material.slider.Slider
 import com.google.android.material.textfield.TextInputEditText
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
+import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.preferences.memory.archivist.ArchivistPrompt
 import org.teslasoft.assistant.theme.ThemeManager
+import org.teslasoft.assistant.ui.fragments.dialogs.AdvancedFavoriteModelSelectorDialogFragment
 import org.teslasoft.assistant.ui.fragments.dialogs.AdvancedModelSelectorDialogFragment
 import java.util.Locale
 
@@ -68,6 +70,7 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
 
     private var preferences: Preferences? = null
     private var apiEndpointPreferences: ApiEndpointPreferences? = null
+    private var favoriteModelsPreferences: FavoriteModelsPreferences? = null
     private var chatId = ""
 
     private var actionBar: ConstraintLayout? = null
@@ -115,6 +118,7 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
         chatId = intent.extras?.getString("chatId", "") ?: ""
         preferences = Preferences.getPreferences(this, chatId)
         apiEndpointPreferences = ApiEndpointPreferences.getApiEndpointPreferences(this)
+        favoriteModelsPreferences = FavoriteModelsPreferences.getPreferences(this)
 
         bindViews()
         applyTheme()
@@ -264,10 +268,12 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
         archivistEndpointLauncher.launch(Intent(this, ApiEndpointsListActivity::class.java))
     }
 
-    /** Opens the live model list fetched from the Memory Assistant's own
-     *  endpoint (same picker the main chat and the endpoint editor use).
-     *  If no endpoint has been chosen yet, there's nothing to fetch models
-     *  from — send the user to pick one first instead. */
+    /** Opens the same model picker the main chat's Quick Settings uses: your
+     *  favorited models first (with a "All models" fallback to search), or
+     *  straight to the live searchable list if you have no favorites yet.
+     *  Either way it fetches from the Memory Assistant's own endpoint. If no
+     *  endpoint has been chosen yet, there's nothing to fetch models from —
+     *  send the user to pick one first instead. */
     private fun openArchivistModelChooser() {
         val endpointId = preferences?.getArchivistEndpointId().orEmpty()
         if (endpointId.isEmpty()) {
@@ -276,12 +282,24 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
         }
 
         val current = preferences?.getArchivistModel().orEmpty()
-        val dialog = AdvancedModelSelectorDialogFragment.newInstance(current, chatId, endpointId)
-        dialog.setModelSelectedListener { model ->
-            preferences?.setArchivistModel(model)
-            refreshArchivistRows()
+        val favorites = favoriteModelsPreferences?.getFavoriteModels() ?: arrayListOf()
+
+        if (favorites.isEmpty()) {
+            val dialog = AdvancedModelSelectorDialogFragment.newInstance(current, chatId, endpointId)
+            dialog.setModelSelectedListener { model ->
+                preferences?.setArchivistModel(model)
+                refreshArchivistRows()
+            }
+            dialog.show(supportFragmentManager, "ArchivistModelSelector")
+        } else {
+            val dialog = AdvancedFavoriteModelSelectorDialogFragment.newInstance(current, chatId, endpointId)
+            dialog.setModelSelectedListener { model, pickedEndpointId ->
+                preferences?.setArchivistEndpointId(pickedEndpointId)
+                preferences?.setArchivistModel(model)
+                refreshArchivistRows()
+            }
+            dialog.show(supportFragmentManager, "ArchivistFavoriteModelSelector")
         }
-        dialog.show(supportFragmentManager, "ArchivistModelSelector")
     }
 
     /* ------------------------------ Temperature ------------------------------ */
