@@ -322,6 +322,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     private val imageImportScopes: MutableList<CoroutineScope> = mutableListOf()
     private var condenseJob: Job? = null
     private var condenseDialog: AlertDialog? = null
+    private var reduceJob: Job? = null
+    private var reduceDialog: AlertDialog? = null
     private val artifactJobs: MutableMap<String, Job> = HashMap()
     private var bulkContainer: ConstraintLayout? = null
     private var btnSelectAll: ImageButton? = null
@@ -588,6 +590,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         condenseJob = null
         condenseDialog?.dismiss()
         condenseDialog = null
+        reduceJob?.cancel(CancellationException("Killed"))
+        reduceJob = null
+        reduceDialog?.dismiss()
+        reduceDialog = null
         artifactJobs.values.toList().forEach { it.cancel(CancellationException("Killed")) }
         artifactJobs.clear()
         requestPreparationInProgress = false
@@ -3013,11 +3019,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         val fallback = IncludeTextPolicy.fallbackArtifactLine(include.fileName)
 
         if (include.kind.isImage()) {
-            // A removed image keeps only its bookmark; its bytes are no longer
-            // sent, so drop the on-disk reference and delete the file once no
-            // other live include shares its hash. The proper vision-written
-            // reminder is part of the Reduce/Remove-image flow (not yet wired);
-            // the filename fallback is the honest interim.
             updateInclude(
                 include.copy(
                     form = IncludeForm.ARTIFACT,
@@ -3025,7 +3026,21 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     notice = IncludeNotice.None
                 ).withoutImageBytes()
             )
-            maybeDeleteImageBytes(include)
+            artifactJobs.remove(include.id)?.cancel()
+            val imageInclude = include
+            val job = CoroutineScope(Dispatchers.Main).launch {
+                val written = requestImageArtifactLine(imageInclude)
+                maybeDeleteImageBytes(imageInclude)
+                if (isFinishing || isDestroyed || written == null) return@launch
+                val latest = findIncludeById(imageInclude.id) ?: return@launch
+                if (latest.form == IncludeForm.ARTIFACT && latest.artifactLine == fallback) {
+                    updateInclude(latest.copy(artifactLine = written))
+                }
+            }
+            artifactJobs[include.id] = job
+            job.invokeOnCompletion {
+                if (artifactJobs[include.id] === job) artifactJobs.remove(include.id)
+            }
             return
         }
 
@@ -3156,6 +3171,46 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         }
     }
 
+    private suspend fun requestImageArtifactLine(include: ChatInclude): String? {
+        val client = ai ?: return null
+        val lineModel = model.ifBlank { preferences?.getModel() ?: "" }
+        if (lineModel.isBlank()) return null
+
+        return try {
+            withContext(Dispatchers.IO) {
+                val file = ImageImporter.imageFile(this@ChatActivity, chatId, include)
+                if (file == null || !file.exists()) return@withContext null
+
+                val bytes = file.readBytes()
+                val mime = include.imageMimeType ?: "image/jpeg"
+                val encoded = Base64.encodeToString(bytes, Base64.NO_WRAP)
+
+                val parts = ArrayList<ContentPart>()
+                parts.add(TextPart(
+                    "Create a very short reminder of this image for future AI requests " +
+                    "after the image is removed. State what the image showed and its " +
+                    "general subject or purpose. Include at most one or two especially " +
+                    "important details. Use no more than three short sentences. " +
+                    "Reply with the reminder only.\n\nFile name: ${include.fileName}"
+                ))
+                parts.add(ImagePart("data:$mime;base64,$encoded"))
+
+                val request = ChatCompletionRequest(
+                    model = ModelId(lineModel),
+                    maxTokens = IncludeAuxiliaryRequestPolicy.ARTIFACT_MAX_TOKENS,
+                    messages = listOf(
+                        ChatMessage(role = ChatRole.User, content = parts)
+                    )
+                )
+                val raw = client.chatCompletion(request)
+                    .choices.firstOrNull()?.message?.content
+                IncludeTextPolicy.sanitizeArtifactLine(raw, include.fileName)
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     private fun editInclude(include: ChatInclude) {
         val text = when (include.form) {
             IncludeForm.ARTIFACT -> include.modelText()
@@ -3183,7 +3238,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     /** Condense automatically replaces the model-facing full text with Cliff Notes. */
     private fun condenseInclude(include: ChatInclude) {
         val latest = findIncludeById(include.id) ?: return
-        if (latest.form != IncludeForm.FULL || condenseJob?.isActive == true) return
+        if (latest.form != IncludeForm.FULL) return
+        if (latest.kind.isImage()) {
+            reduceInclude(latest)
+            return
+        }
+        if (condenseJob?.isActive == true) return
 
         if (preferences?.getNeverShowCondenseHint() == true) {
             startCondensing(latest)
@@ -3312,6 +3372,163 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             }
             if (text.isNullOrBlank()) {
                 Result.failure(IllegalStateException("Condense returned no text"))
+            } else {
+                Result.success(text)
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    private fun reduceInclude(include: ChatInclude) {
+        if (reduceJob?.isActive == true) return
+
+        if (preferences?.getNeverShowReduceHint() == true) {
+            startReducing(include)
+        } else {
+            showReduceHint(include)
+        }
+    }
+
+    private fun showReduceHint(include: ChatInclude) {
+        val view = layoutInflater.inflate(R.layout.dialog_include_reduce_hint, null)
+        val reduce = view.findViewById<MaterialButton>(R.id.btn_dialog_primary_action)
+        val cancel = view.findViewById<MaterialButton>(R.id.btn_dialog_destructive_action)
+        val neverShow = view.findViewById<MaterialCheckBox>(R.id.include_reduce_never_show)
+        reduce?.setText(R.string.include_action_reduce)
+        cancel?.setText(R.string.include_edit_cancel)
+
+        val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.include_reduce_title)
+            .setView(view)
+            .setCancelable(true)
+            .create()
+
+        neverShow?.setOnCheckedChangeListener { _, checked ->
+            preferences?.setNeverShowReduceHint(checked)
+        }
+        cancel?.setOnClickListener { dialog.dismiss() }
+        reduce?.setOnClickListener {
+            dialog.dismiss()
+            val latest = findIncludeById(include.id) ?: return@setOnClickListener
+            if (latest.form == IncludeForm.FULL && latest.kind.isImage()) startReducing(latest)
+        }
+        dialog.show()
+    }
+
+    private fun startReducing(include: ChatInclude) {
+        if (reduceJob?.isActive == true) return
+
+        val view = layoutInflater.inflate(R.layout.dialog_include_condense_progress, null)
+        val spinner = view.findViewById<CircularProgressIndicator>(R.id.include_condense_progress)
+        val status = view.findViewById<TextView>(R.id.include_condense_status)
+        val okay = view.findViewById<MaterialButton>(R.id.btn_dialog_action)
+        okay?.setText(R.string.okay)
+        okay?.visibility = View.GONE
+
+        val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(include.fileName)
+            .setView(view)
+            .setCancelable(false)
+            .create()
+        reduceDialog = dialog
+        okay?.setOnClickListener {
+            dialog.dismiss()
+            if (reduceDialog === dialog) reduceDialog = null
+        }
+        status?.setText(R.string.include_reduce_working)
+        dialog.show()
+
+        reduceJob = CoroutineScope(Dispatchers.Main).launch {
+            val result = requestReducedText(include)
+            if (isFinishing || isDestroyed || reduceDialog !== dialog) return@launch
+
+            val reduced = result.getOrNull()?.trim().orEmpty()
+            val latest = findIncludeById(include.id)
+            val stillCurrent = latest?.form == IncludeForm.FULL &&
+                    latest.kind.isImage() && latest.imageFileHash == include.imageFileHash
+
+            val completionMessage = when {
+                result.isFailure -> {
+                    result.exceptionOrNull()?.let { error ->
+                        val classified = GenerationErrorClassifier.classify(error)
+                        logGenerationError(classified, error, "image reduce")
+                    }
+                    getString(R.string.include_reduce_failed)
+                }
+                reduced.isBlank() ->
+                    getString(R.string.include_reduce_failed)
+                !stillCurrent ->
+                    getString(R.string.include_reduce_failed)
+                else -> {
+                    updateInclude(
+                        latest!!.withCondensedText(reduced).withoutImageBytes()
+                    )
+                    maybeDeleteImageBytes(include)
+                    getString(R.string.include_condense_complete)
+                }
+            }
+
+            spinner?.visibility = View.GONE
+            status?.text = completionMessage
+            okay?.visibility = View.VISIBLE
+            reduceJob = null
+        }
+    }
+
+    private fun accompanyingUserMessage(includeId: String): String {
+        for (message in messages) {
+            if (message["isBot"] == true) continue
+            val includes = includesOf(message)
+            if (includes.any { it.id == includeId }) {
+                return message["message"]?.toString().orEmpty()
+            }
+        }
+        return ""
+    }
+
+    private suspend fun requestReducedText(include: ChatInclude): Result<String> {
+        val client = ai
+            ?: return Result.failure(IllegalStateException("No selected AI endpoint"))
+        val reduceModel = model.ifBlank { preferences?.getModel() ?: "" }
+        if (reduceModel.isBlank()) {
+            return Result.failure(IllegalStateException("No selected model"))
+        }
+        val outputLimit = preferences?.getMaxTokens() ?: 1500
+        val userText = accompanyingUserMessage(include.id)
+
+        return try {
+            val text = withContext(Dispatchers.IO) {
+                val spec = IncludeAuxiliaryRequestPolicy.reduceImage(
+                    include = include,
+                    accompanyingUserMessage = userText,
+                    selectedModel = reduceModel,
+                    configuredMaxTokens = outputLimit
+                )
+                val parts = ArrayList<ContentPart>()
+                parts.add(TextPart(spec.prompt))
+
+                val file = ImageImporter.imageFile(this@ChatActivity, chatId, include)
+                if (file != null && file.exists()) {
+                    val bytes = file.readBytes()
+                    val mime = include.imageMimeType ?: "image/jpeg"
+                    val encoded = Base64.encodeToString(bytes, Base64.NO_WRAP)
+                    parts.add(ImagePart("data:$mime;base64,$encoded"))
+                }
+
+                val request = ChatCompletionRequest(
+                    model = ModelId(spec.model),
+                    maxTokens = spec.maxTokens,
+                    messages = listOf(
+                        ChatMessage(role = ChatRole.User, content = parts)
+                    )
+                )
+                client.chatCompletion(request).choices.firstOrNull()?.message?.content?.trim()
+            }
+            if (text.isNullOrBlank()) {
+                Result.failure(IllegalStateException("Reduce returned no text"))
             } else {
                 Result.success(text)
             }
