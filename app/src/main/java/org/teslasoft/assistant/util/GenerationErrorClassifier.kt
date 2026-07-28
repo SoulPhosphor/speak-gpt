@@ -57,7 +57,8 @@ enum class ProviderLimitKind {
 data class GenErrorResult(
     val code: GenErrorCode,
     val httpStatus: Int?,
-    val providerLimit: ProviderLimitKind? = null
+    val providerLimit: ProviderLimitKind? = null,
+    val isVisionRejection: Boolean = false
 )
 
 /**
@@ -163,7 +164,8 @@ object GenerationErrorClassifier {
             return GenErrorResult(GenErrorCode.S2, status)
         }
         if (lower.contains("your request was rejected")) {
-            return GenErrorResult(GenErrorCode.S3, status)
+            return GenErrorResult(GenErrorCode.S3, status,
+                isVisionRejection = looksLikeVisionRejection(lower))
         }
         if ((status == 400 || status == 422) &&
             containsAny(
@@ -177,8 +179,23 @@ object GenerationErrorClassifier {
             return providerLimitResult(ProviderLimitKind.UNIDENTIFIED, status)
         }
         // 7. Unknown catch-all.
-        return GenErrorResult(GenErrorCode.U0, status)
+        return GenErrorResult(GenErrorCode.U0, status,
+            isVisionRejection = looksLikeVisionRejection(lower))
     }
+
+    private fun looksLikeVisionRejection(lower: String): Boolean =
+        containsAny(lower,
+            "does not support image",
+            "does not support vision",
+            "image_not_supported",
+            "vision is not supported",
+            "not support multimodal",
+            "does not accept image",
+            "image input is not supported",
+            "does not support multi-modal",
+            "image_input_not_supported",
+            "content type is not supported"
+        )
 
     private fun containsAny(text: String, vararg values: String): Boolean =
         values.any(text::contains)

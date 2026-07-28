@@ -155,6 +155,7 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 // import kotlinx.io.files.Path
 // import kotlinx.io.files.SystemFileSystem
@@ -174,6 +175,8 @@ import org.teslasoft.assistant.preferences.MessageCompletionState
 import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.includes.ChatInclude
 import org.teslasoft.assistant.preferences.includes.DocumentImporter
+import org.teslasoft.assistant.preferences.includes.ImageCapability
+import org.teslasoft.assistant.preferences.includes.ImageCapabilityStore
 import org.teslasoft.assistant.preferences.includes.ImageImporter
 import org.teslasoft.assistant.preferences.includes.IncludeAuxiliaryRequestPolicy
 import org.teslasoft.assistant.preferences.includes.IncludeForm
@@ -232,6 +235,7 @@ import java.util.EnumSet
 import java.util.Locale
 import java.text.NumberFormat
 import java.util.Optional
+import kotlin.coroutines.resume
 import kotlin.time.Duration.Companion.seconds
 import androidx.core.content.edit
 import kotlinx.coroutines.flow.flowOn
@@ -5173,9 +5177,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     payload = frozen.payload,
                     contextDecision = decision
                 )
+                val hasFullImages = conversationHasFullImages(requestIncludes)
 
                 when (decision) {
-                    ModelContextDecision.Send -> commitPreparedTurn(prepared)
+                    ModelContextDecision.Send -> visionCheckAndCommit(prepared, hasFullImages)
                     is ModelContextDecision.Block -> {
                         requestPreparationInProgress = false
                         restoreUIState()
@@ -5198,7 +5203,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                                 formatTokenCount(decision.maximumRequired),
                                 formatTokenCount(decision.contextWindow)
                             ),
-                            prepared
+                            prepared,
+                            hasFullImages
                         )
                     }
                     is ModelContextDecision.WarnApproximate -> {
@@ -5210,7 +5216,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                                 formatTokenCount(decision.approximateRequired),
                                 formatTokenCount(decision.contextWindow)
                             ),
-                            prepared
+                            prepared,
+                            hasFullImages
                         )
                     }
                 }
@@ -5258,15 +5265,85 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             .show()
     }
 
-    private fun showRequestWarning(body: String, prepared: PreparedRegularTurn) {
+    private fun showRequestWarning(
+        body: String,
+        prepared: PreparedRegularTurn,
+        hasFullImages: Boolean = false
+    ) {
         MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
             .setTitle(R.string.request_context_warning_title)
             .setMessage(body)
             .setPositiveButton(R.string.send_anyway) { _, _ ->
-                commitPreparedTurn(prepared)
+                visionCheckAndCommit(prepared, hasFullImages)
             }
             .setNegativeButton(R.string.btn_cancel, null)
             .show()
+    }
+
+    private fun visionCheckAndCommit(
+        prepared: PreparedRegularTurn,
+        hasFullImages: Boolean
+    ) {
+        if (!hasFullImages) {
+            commitPreparedTurn(prepared)
+            return
+        }
+        val capJson = apiEndpointObject?.imageCapabilityByModel.orEmpty()
+        when (ImageCapabilityStore.get(capJson, prepared.selectedModel)) {
+            ImageCapability.SUPPORTED -> commitPreparedTurn(prepared)
+            ImageCapability.UNSUPPORTED -> showRequestHardBlock(
+                R.string.image_model_unsupported_title,
+                getString(R.string.image_model_unsupported_body)
+            )
+            ImageCapability.UNKNOWN -> {
+                MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+                    .setTitle(R.string.image_model_unknown_title)
+                    .setMessage(R.string.image_model_unknown_body)
+                    .setPositiveButton(R.string.send_anyway) { _, _ ->
+                        commitPreparedTurn(prepared)
+                    }
+                    .setNegativeButton(R.string.btn_cancel, null)
+                    .show()
+            }
+        }
+    }
+
+    private suspend fun awaitVisionCapabilityCheck(): Boolean {
+        if (!conversationHasFullImages(chatMessageIncludes)) return true
+        val capJson = apiEndpointObject?.imageCapabilityByModel.orEmpty()
+        return when (ImageCapabilityStore.get(capJson, model)) {
+            ImageCapability.SUPPORTED -> true
+            ImageCapability.UNSUPPORTED -> {
+                withContext(Dispatchers.Main) {
+                    showRequestHardBlock(
+                        R.string.image_model_unsupported_title,
+                        getString(R.string.image_model_unsupported_body)
+                    )
+                }
+                false
+            }
+            ImageCapability.UNKNOWN -> suspendCancellableCoroutine { cont ->
+                MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+                    .setTitle(R.string.image_model_unknown_title)
+                    .setMessage(R.string.image_model_unknown_body)
+                    .setPositiveButton(R.string.send_anyway) { _, _ -> cont.resume(true) }
+                    .setNegativeButton(R.string.btn_cancel) { _, _ -> cont.resume(false) }
+                    .setOnCancelListener { cont.resume(false) }
+                    .show()
+            }
+        }
+    }
+
+    private fun recordVisionCapability(capability: ImageCapability) {
+        val endpoint = apiEndpointObject ?: return
+        val currentModel = model.ifBlank { preferences?.getModel() ?: "" }
+        if (currentModel.isBlank()) return
+        val updated = ImageCapabilityStore.set(
+            endpoint.imageCapabilityByModel, currentModel, capability
+        )
+        endpoint.imageCapabilityByModel = updated
+        val prefs = ApiEndpointPreferences.getApiEndpointPreferences(this)
+        prefs.setApiEndpoint(this, endpoint, preferences?.getApiEndpointId() ?: return)
     }
 
     /**
@@ -5708,6 +5785,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         // produced over the blocking "Chat unavailable" state.
         if (chatStorageUnavailable) return
 
+        if (preparedTurn == null && !awaitVisionCapabilityCheck()) {
+            restoreUIState()
+            return
+        }
+
         disableAutoScroll = false
 
         // Capture the user's message here, the single point every input method flows
@@ -5906,6 +5988,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             // ERROR_CODES.md.
             val genError = GenerationErrorClassifier.classify(e)
             logGenerationError(genError, e, "message")
+
+            if (genError.isVisionRejection && conversationHasFullImages(chatMessageIncludes)) {
+                recordVisionCapability(ImageCapability.UNSUPPORTED)
+            }
+
             val response = genError.providerLimitMessage(this)
                 ?: genError.chatMessage(this)
 
@@ -6950,6 +7037,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
         messages[messages.size - 1]["message"] = "$response\n"
         markLastAssistantDone()
+
+        if (conversationHasFullImages(chatMessageIncludes)) {
+            recordVisionCapability(ImageCapability.SUPPORTED)
+        }
+
         if (messages.size > 2) {
             adapter?.notifyItemRangeChanged(messages.size - 3, messages.size - 1)
         } else {
