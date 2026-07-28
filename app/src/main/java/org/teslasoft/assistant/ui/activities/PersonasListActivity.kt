@@ -112,10 +112,9 @@ class PersonasListActivity : FragmentActivity() {
     private var onSelectListener: PersonaListItemAdapter.OnSelectListener = object : PersonaListItemAdapter.OnSelectListener {
         // Manager mode: the row is pure browse/edit (matching the System Prompts
         // row) - tapping opens the editor. Pick mode (opened from Quick
-        // Settings): tapping the non-chevron area SWITCHES the chat to that
-        // Companion instantly (owner ruling, July 21 2026). Saving in the editor
-        // also finishes with that Companion active (finishWithActive), so the
-        // chevron -> edit -> Save path selects too.
+        // Settings): tapping the row SWITCHES the chat to that Companion
+        // instantly (owner ruling, July 21 2026). Saving in the editor also
+        // finishes with that Companion active (finishWithActive).
         override fun onClick(position: Int) {
             if (pickMode) {
                 val id = list[position]["id"] ?: return
@@ -123,12 +122,6 @@ class PersonasListActivity : FragmentActivity() {
             } else {
                 openEditor(position)
             }
-        }
-
-        // Pick mode only (chevron tap): edit without switching the active
-        // Companion.
-        override fun onEditClick(position: Int) {
-            openEditor(position)
         }
     }
 
@@ -206,7 +199,7 @@ class PersonasListActivity : FragmentActivity() {
         if (list == null) list = arrayListOf()
 
         runOnUiThread {
-            adapter = PersonaListItemAdapter(list, this, pickMode)
+            adapter = PersonaListItemAdapter(list, this)
             adapter!!.setOnSelectListener(onSelectListener)
             listView!!.adapter = adapter
             adapter!!.notifyDataSetChanged()

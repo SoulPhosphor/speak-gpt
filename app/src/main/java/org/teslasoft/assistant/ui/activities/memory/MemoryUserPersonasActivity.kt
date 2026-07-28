@@ -84,7 +84,7 @@ class MemoryUserPersonasActivity : MemoryScreenActivity() {
     override fun buildListAdapter(rows: List<MemoryRow>): android.widget.ListAdapter {
         val adapter = ProfileImageRowAdapter(
             rows, this, R.layout.view_user_persona_row,
-            chevronOpensMenu = false, pickMode = pickMode
+            chevronOpensMenu = false
         )
         adapter.setOnRowListener(this)
         return adapter

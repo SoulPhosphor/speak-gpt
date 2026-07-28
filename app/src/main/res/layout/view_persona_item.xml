@@ -55,21 +55,10 @@
             android:text="Persona" />
     </LinearLayout>
 
-    <!-- Chevron wrapped in a 48dp touch target so the pick-mode edit affordance
-         is comfortably tappable. Not clickable by default (manager mode) - the
-         adapter turns clickability + the borderless ripple on only in pick
-         mode; while not clickable it consumes nothing and taps fall through to
-         the whole-row editor. -->
-    <FrameLayout
+    <!-- Purely decorative - the whole row above is the tap target (ui's own
+         click listener); this never intercepts a tap of its own. -->
+    <ImageView
         android:id="@+id/persona_edit_target"
-        android:layout_width="48dp"
-        android:layout_height="48dp"
-        android:background="?attr/selectableItemBackgroundBorderless">
-
-        <ImageView
-            style="@style/Widget.App.Row.Chevron"
-            android:layout_gravity="center"
-            android:layout_marginStart="0dp"
-            android:contentDescription="@string/btn_edit_persona" />
-    </FrameLayout>
+        style="@style/Widget.App.Row.Chevron"
+        android:contentDescription="@string/btn_edit_persona" />
 </LinearLayout>

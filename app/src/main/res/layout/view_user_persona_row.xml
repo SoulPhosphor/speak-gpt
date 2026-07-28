@@ -54,24 +54,10 @@
             android:maxLines="3" />
     </LinearLayout>
 
-    <!-- Chevron wrapped in a 48dp touch target (same shape as the Companion
-         row's edit target). Not clickable by default (manager mode) - the
-         adapter turns clickability + the borderless ripple on only in pick
-         mode, where it's the "edit this persona" affordance; while inert, taps
-         fall through to the whole-row editor. -->
-    <FrameLayout
+    <!-- Purely decorative - the whole row above is the tap target (ui's own
+         click listener); this never intercepts a tap of its own. -->
+    <ImageView
         android:id="@+id/persona_menu"
-        android:layout_width="48dp"
-        android:layout_height="48dp"
-        android:layout_marginStart="8dp"
-        android:background="?attr/selectableItemBackgroundBorderless"
-        android:contentDescription="@string/btn_edit_persona">
-
-        <ImageView
-            android:layout_width="24dp"
-            android:layout_height="24dp"
-            android:layout_gravity="center"
-            android:src="@drawable/ic_chevron_right"
-            android:tint="?attr/appRowSubtitleColor" />
-    </FrameLayout>
+        style="@style/Widget.App.Row.Chevron"
+        android:contentDescription="@string/btn_edit_persona" />
 </LinearLayout>
