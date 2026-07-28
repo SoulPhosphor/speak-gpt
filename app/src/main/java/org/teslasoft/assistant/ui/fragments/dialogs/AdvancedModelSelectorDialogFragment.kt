@@ -55,12 +55,17 @@ import kotlin.time.Duration.Companion.seconds
 
 class AdvancedModelSelectorDialogFragment : DialogFragment() {
     companion object {
-        fun newInstance(name: String, chatId: String) : AdvancedModelSelectorDialogFragment {
+        /** [endpointId], when non-blank, fetches models for that specific saved
+         *  endpoint instead of the chat's own active endpoint (Preferences'
+         *  apiEndpointId) — used by callers assigning a model to a feature that
+         *  has its own independently-chosen endpoint (e.g. Memory Assistant). */
+        fun newInstance(name: String, chatId: String, endpointId: String = "") : AdvancedModelSelectorDialogFragment {
             val advancedModelSelectorDialogFragment = AdvancedModelSelectorDialogFragment()
 
             val args = Bundle()
             args.putString("name", name)
             args.putString("chatId", chatId)
+            args.putString("endpointId", endpointId)
 
             advancedModelSelectorDialogFragment.arguments = args
 
@@ -205,7 +210,9 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
 
         preferences = Preferences.getPreferences(mContext ?: return builder!!.create(), requireArguments().getString("chatId").toString())
         apiEndpointPreferences = ApiEndpointPreferences.getApiEndpointPreferences(mContext ?: return builder!!.create())
-        apiEndpointObject = apiEndpointPreferences?.getApiEndpoint(mContext ?: return builder!!.create(), preferences?.getApiEndpointId()!!)
+        val endpointIdOverride = requireArguments().getString("endpointId").orEmpty()
+        val resolvedEndpointId = endpointIdOverride.ifEmpty { preferences?.getApiEndpointId() ?: "" }
+        apiEndpointObject = apiEndpointPreferences?.getApiEndpoint(mContext ?: return builder!!.create(), resolvedEndpointId)
         favoriteModelsPreferences = FavoriteModelsPreferences.getPreferences(mContext ?: return builder!!.create())
 
         val extraHeaders: Map<String, String> = when (apiEndpointObject?.authType) {
