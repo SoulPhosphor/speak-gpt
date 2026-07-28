@@ -20,8 +20,11 @@ dedup, rename-safe rejected-draft identity, populating the EXISTING typed
 transcript context columns — Revision 1 wrongly said they didn't exist —
 overlapping exclusion flags, toggle semantics decided before the file phase,
 stable IDs in the target catalog, and "Possible match" wording). This
-document is the canonical roadmap; the audit plan remains the detailed
-package/UI/test reference, read with the `plot_ledger` correction in §2.
+document is the canonical roadmap; at this revision the audit plan is
+superseded as an implementation reference — §9 now specifies the package/
+test detail in full and §6 now carries the complete UI copy — and remains
+useful only as historical record, read with the `plot_ledger` correction
+in §2.
 Revision 4 supersedes the overlapping-flags proposal with the simpler
 storage/injection separation in §4(f) and §5.4.
 **Revision 3 (2026-07-24, same day):** the separate UI-copy proposal has
@@ -86,7 +89,11 @@ memories; those suggestions are reviewed in the lore book area behind a
 split menu that exists only while suggestions are pending, each with a
 destination drop-down that includes full-page new-book creation. A §15
 owner work-order list (letters A–J) was added so the owner can start any
-implementation step by naming its letter. All
+implementation step by naming its letter. Three stale pointers back to the
+audit plan (the top summary note, §4's package-design paragraph, and §6's
+UI-sketch note) were corrected: §9.4 and §6 have fully superseded them since
+Revisions 3 and 5, and this revision says so explicitly, so no future reader
+needs to open the audit plan to implement anything in this document. All
 wording remains provisional. No app code or strings are changed by this
 revision.
 
@@ -284,14 +291,16 @@ ships, and (a)–(c) are hard prerequisites for it.
 
 ### Phases B–D precursor — The file package and safe return loop
 
-The interface the owner actually asked for. Adopt the audit plan's package
-design (§11: ZIP with README, prompt, schema, per-conversation JSON,
-`targets.json`, `existing_memories.jsonl`, read-only lore/card references,
-result template) and its import rules (strict parse, reject-don't-coerce,
-proposals only, per-conversation atomic commit, replay = no-op) — those sections
-are good and this plan incorporates them by reference rather than restating
-them. The package is a searchable reference corpus, not a copy of the app
-database or vector index.
+The interface the owner actually asked for. This plan originally adopted the
+audit plan's package design (its §11: ZIP with README, prompt, schema,
+per-conversation JSON, `targets.json`, `existing_memories.jsonl`, read-only
+lore/card references, result template) and its import rules (strict parse,
+reject-don't-coerce, proposals only, per-conversation atomic commit, replay
+= no-op) by reference. **§9.4 now fully specifies the actual package** —
+under its own `.sgmemory` format, not the audit plan's — superseding this
+paragraph; an implementer needs §9 only, never the audit plan. The package
+is a searchable reference corpus, not a copy of the app database or vector
+index.
 
 What v1 keeps from the audit plan's machinery:
 
@@ -377,9 +386,10 @@ working package.
 UI for v1 is intentionally minimal and 100% owner-designed before build:
 one entry row on the Memory Assistant, one screen with
 create-package / outstanding-package / import-result, a confirmation dialog
-with the privacy disclosure, and a persistent result summary. The audit
-plan's §14 is a reasonable starting sketch for that conversation — every
-string in it is unapproved until the owner says otherwise.
+with the privacy disclosure, and a persistent result summary. §6 now carries
+the complete copy for this flow, superseding the audit plan's §14 sketch
+that this paragraph originally pointed to; every string in §6 remains
+unapproved until the owner says otherwise.
 
 **Privacy, stated plainly (the audit-plan warning plus transfer-channel risk):**
 the package is the user's conversations and memory list in readable
