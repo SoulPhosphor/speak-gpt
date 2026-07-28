@@ -1250,11 +1250,25 @@ preserving the owner's structure:
 The lore book suggestion review copy (split menu, destination drop-down,
 approval cards) returns for owner review when that feature is scheduled.
 
-**Owner review required near the end of Phase 1:** the two source labels/helpers in
-§5.3, the archive re-enable default, and the five short status/dialog/control
-groups above (A–E, including the banner and Memory Analysis Type wording).
+**Owner review status (recorded 2026-07-28 — read this before asking the
+owner anything):**
+
+- **Copy A shipped.** The analysis notification (title, N-of-M text,
+  channel name/description) went to `main` in the Step 1.3 merge the owner
+  directed. It is the standing wording. Do not re-ask about it; change it
+  only if the owner asks.
+- **Copy B, C, D and the §5.3 per-chat labels are DORMANT, not pending.**
+  They are unapproved drafts for surfaces that are not built. No agent
+  opens a conversation by asking about them, lists them as "waiting on
+  you," or builds them. They wake only when the owner starts the work or
+  raises the wording herself.
+- **Standing owner rulings this section must obey:** the app's name never
+  appears in wording (`CLAUDE.md` §9); never present a wall of wording
+  questions — when a step genuinely needs a word, ship the invisible parts
+  and stop at the boundary silently.
+
 No owner wording review is needed for internal database, retrieval,
-index, and run-integrity changes.
+index, and run-integrity changes — ever.
 
 ### Phases 2–4 copy — reserve now, approve when the file workflow begins
 
@@ -3559,13 +3573,18 @@ where "Needs" allows.
   lexical/embedding documents (`memory-doc-v2`, `RetrievalDocument.kt`,
   `Librarian.searchCore`). Defined in §5.5 and §10 Phase 1.
   Owner's part: none until wording review.
-- **Step 1.3 — Run integrity and truthful status.** Sealed transcript
-  claims with a durable run record, the Memory Analysis foreground service
-  so runs survive the screen turning off, typed scene-context capture,
-  rename-safe rejected drafts, and honest failure counts. Defined in §4
-  items (a), (c), (e), (g) and §6 copy A–D.
-  Needs: nothing. Owner's part: approve the four status/dialog texts near
-  the end.
+- **Step 1.3 — Run integrity and truthful status.** **Shipped** (merged to
+  `main` at the owner's direction, 2026-07-28; Android Checks run 1040
+  green): sealed transcript claims with a durable run record and startup
+  reconcile (DB v17), the Memory Analysis foreground service so runs
+  survive the screen turning off, typed scene-context capture, rename-safe
+  rejected drafts, and honest failure counts in the debug log. Defined in
+  §4 items (a), (c), (e), (g).
+  The analysis notification shipped with the §6 copy A draft wording as
+  part of that owner-directed merge; it stands unless the owner asks to
+  change it — **do not re-ask**. The §6 copy B/C/D screen texts are NOT
+  approved and NOT built; they are dormant (see the §6 note), and no agent
+  raises them unless the owner does.
 - **Step 1.4 — Index lifecycle and performance.** Missing-vector repair,
   scoped vector loads, cached overlap vectors, persistent diagnostics.
   Needs: Step 1.2. Owner's part: none.
