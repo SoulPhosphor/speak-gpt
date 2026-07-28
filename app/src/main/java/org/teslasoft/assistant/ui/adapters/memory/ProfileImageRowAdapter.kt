@@ -50,21 +50,14 @@ import org.teslasoft.assistant.util.ProfileImageResolver
  *   `persona_subtitle`.
  * @param chevronOpensMenu true (the default, Roleplay Characters) - the
  *   trailing chevron opens the row's action menu via [onAction]. false (My
- *   Personas, owner ruling July 21 2026) - there is no popup menu: the whole
- *   row taps through to [onClick], and the chevron is an EDIT affordance that
- *   is live only in [pickMode].
- * @param pickMode only meaningful when [chevronOpensMenu] is false. When true
- *   (the list opened from Quick Settings to choose the chat's persona) the
- *   chevron becomes a tappable edit target ([onEditClick]) while a whole-row
- *   tap selects; when false (managing from Characters) the chevron is inert and
- *   the whole-row tap edits. Mirrors the Companion list's pick-mode split.
+ *   Personas) - there is no popup menu and no separate edit target: the
+ *   chevron is purely decorative and the whole row taps through to [onClick].
  */
 class ProfileImageRowAdapter(
     private val rows: List<MemoryRow>,
     private val context: Context,
     private val rowLayoutRes: Int,
-    private val chevronOpensMenu: Boolean = true,
-    private val pickMode: Boolean = false
+    private val chevronOpensMenu: Boolean = true
 ) : BaseAdapter() {
 
     private var listener: MemoryRowAdapter.OnRowListener? = null
@@ -139,17 +132,12 @@ class ProfileImageRowAdapter(
                 if (row.hasAction) { listener?.onAction(row, it); true } else false
             }
         } else {
-            // My Personas: no popup menu ever. The chevron is an edit affordance
-            // that is live only in pick mode (tap it to edit without selecting);
-            // in manager mode it is inert and the whole-row tap edits.
+            // My Personas: no popup menu, no separate edit target - the chevron
+            // is purely decorative and the whole-row tap always edits (or, in
+            // pick mode, selects).
             menu.visibility = View.VISIBLE
-            if (pickMode) {
-                menu.isClickable = true
-                menu.setOnClickListener { listener?.onEditClick(row) }
-            } else {
-                menu.isClickable = false
-                menu.setOnClickListener(null)
-            }
+            menu.isClickable = false
+            menu.setOnClickListener(null)
             ui.setOnLongClickListener(null)
         }
 

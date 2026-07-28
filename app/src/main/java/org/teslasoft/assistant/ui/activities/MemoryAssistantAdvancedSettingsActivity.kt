@@ -16,6 +16,7 @@
 
 package org.teslasoft.assistant.ui.activities
 
+import android.content.Intent
 import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.os.Build
@@ -30,6 +31,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.widget.ListPopupWindow
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
@@ -41,13 +43,15 @@ import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.slider.Slider
 import com.google.android.material.textfield.TextInputEditText
-import com.google.android.material.textfield.TextInputLayout
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
+import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.preferences.memory.archivist.ArchivistPrompt
 import org.teslasoft.assistant.theme.ThemeManager
+import org.teslasoft.assistant.ui.fragments.dialogs.AdvancedFavoriteModelSelectorDialogFragment
+import org.teslasoft.assistant.ui.fragments.dialogs.AdvancedModelSelectorDialogFragment
 import java.util.Locale
 
 /**
@@ -66,13 +70,13 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
 
     private var preferences: Preferences? = null
     private var apiEndpointPreferences: ApiEndpointPreferences? = null
+    private var favoriteModelsPreferences: FavoriteModelsPreferences? = null
     private var chatId = ""
 
     private var actionBar: ConstraintLayout? = null
     private var btnBack: ImageButton? = null
 
     private var switchMaxSuggestions: MaterialSwitch? = null
-    private var layoutMaxSuggestions: TextInputLayout? = null
     private var fieldMaxSuggestions: TextInputEditText? = null
 
     private var rowArchivistEndpoint: LinearLayout? = null
@@ -95,6 +99,17 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
     /** Held until Save (spec §2 has an explicit Save button). */
     private var selectedImportance = 1
 
+    // Opens the full endpoint list (same screen the main chat uses to pick its
+    // own endpoint); picking a profile there makes it the Memory Assistant's
+    // endpoint.
+    private val archivistEndpointLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == RESULT_OK) {
+            val id = result.data?.getStringExtra("apiEndpointId")
+            if (id != null) preferences?.setArchivistEndpointId(id)
+        }
+        refreshArchivistRows()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         ThemeManager.getThemeManager().applyPalette(this)
@@ -103,6 +118,7 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
         chatId = intent.extras?.getString("chatId", "") ?: ""
         preferences = Preferences.getPreferences(this, chatId)
         apiEndpointPreferences = ApiEndpointPreferences.getApiEndpointPreferences(this)
+        favoriteModelsPreferences = FavoriteModelsPreferences.getPreferences(this)
 
         bindViews()
         applyTheme()
@@ -118,7 +134,6 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
         actionBar = findViewById(R.id.action_bar)
         btnBack = findViewById(R.id.btn_back)
         switchMaxSuggestions = findViewById(R.id.switch_max_suggestions)
-        layoutMaxSuggestions = findViewById(R.id.layout_max_suggestions)
         fieldMaxSuggestions = findViewById(R.id.field_max_suggestions)
         rowArchivistEndpoint = findViewById(R.id.row_archivist_endpoint)
         textArchivistEndpointValue = findViewById(R.id.text_archivist_endpoint_value)
@@ -165,8 +180,8 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
 
         /* ---- Memory Assistant Endpoint & Model ---- */
         refreshArchivistRows()
-        rowArchivistEndpoint?.setOnClickListener { showArchivistEndpointPicker() }
-        rowArchivistModel?.setOnClickListener { showArchivistModelDialog() }
+        rowArchivistEndpoint?.setOnClickListener { openArchivistEndpointPicker() }
+        rowArchivistModel?.setOnClickListener { openArchivistModelChooser() }
 
         /* ---- Temperature ---- */
         val temperature = (preferences?.getArchivistTemperature() ?: RECOMMENDED_TEMPERATURE)
@@ -198,7 +213,7 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
         val current = preferences?.getArchivistMaxSuggestions() ?: 0
         val on = current > 0
         switchMaxSuggestions?.isChecked = on
-        layoutMaxSuggestions?.visibility = if (on) View.VISIBLE else View.GONE
+        fieldMaxSuggestions?.visibility = if (on) View.VISIBLE else View.GONE
         if (on) setSuggestionFieldText(current.toString())
 
         switchMaxSuggestions?.setOnCheckedChangeListener { _, checked ->
@@ -206,10 +221,10 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
                 val value = (preferences?.getArchivistMaxSuggestions() ?: 0).let { if (it > 0) it else DEFAULT_MAX_SUGGESTIONS }
                 preferences?.setArchivistMaxSuggestions(value)
                 setSuggestionFieldText(value.toString())
-                layoutMaxSuggestions?.visibility = View.VISIBLE
+                fieldMaxSuggestions?.visibility = View.VISIBLE
             } else {
                 preferences?.setArchivistMaxSuggestions(0)
-                layoutMaxSuggestions?.visibility = View.GONE
+                fieldMaxSuggestions?.visibility = View.GONE
             }
         }
 
@@ -247,49 +262,44 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
         textArchivistModelValue?.text = model.ifEmpty { getString(R.string.label_archivist_model_none) }
     }
 
-    private fun showArchivistEndpointPicker() {
-        val anchor = textArchivistEndpointValue ?: return
-        val endpoints = apiEndpointPreferences?.getApiEndpointsList(this) ?: arrayListOf()
-        if (endpoints.isEmpty()) {
-            Toast.makeText(this, R.string.memory_archivist_endpoint_none_toast, Toast.LENGTH_SHORT).show()
+    /** Opens the same full endpoint list the main chat uses to pick its own
+     *  endpoint. Picking a profile there makes it the Memory Assistant's. */
+    private fun openArchivistEndpointPicker() {
+        archivistEndpointLauncher.launch(Intent(this, ApiEndpointsListActivity::class.java))
+    }
+
+    /** Opens the same model picker the main chat's Quick Settings uses: your
+     *  favorited models first (with a "All models" fallback to search), or
+     *  straight to the live searchable list if you have no favorites yet.
+     *  Either way it fetches from the Memory Assistant's own endpoint. If no
+     *  endpoint has been chosen yet, there's nothing to fetch models from —
+     *  send the user to pick one first instead. */
+    private fun openArchivistModelChooser() {
+        val endpointId = preferences?.getArchivistEndpointId().orEmpty()
+        if (endpointId.isEmpty()) {
+            openArchivistEndpointPicker()
             return
         }
 
-        val labels = endpoints.map { it.label }
-        val popup = ListPopupWindow(this)
-        popup.anchorView = anchor
-        popup.isModal = true
-        popup.width = anchor.width
-        popup.setAdapter(ArrayAdapter(this, android.R.layout.simple_list_item_1, labels))
-        popup.setOnItemClickListener { _, _, position, _ ->
-            popup.dismiss()
-            preferences?.setArchivistEndpointId(endpoints[position].id)
-            refreshArchivistRows()
-        }
-        popup.show()
-    }
+        val current = preferences?.getArchivistModel().orEmpty()
+        val favorites = favoriteModelsPreferences?.getFavoriteModels() ?: arrayListOf()
 
-    private fun showArchivistModelDialog() {
-        val field = android.widget.EditText(this)
-        field.setText(preferences?.getArchivistModel().orEmpty())
-        field.hint = getString(R.string.memory_archivist_model_hint)
-
-        val density = resources.displayMetrics.density
-        val pad = (20 * density).toInt()
-        val container = LinearLayout(this)
-        container.orientation = LinearLayout.VERTICAL
-        container.setPadding(pad, pad, pad, 0)
-        container.addView(field)
-
-        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.memory_controls_row_assistant_model)
-            .setView(container)
-            .setPositiveButton(android.R.string.ok) { _, _ ->
-                preferences?.setArchivistModel(field.text?.toString()?.trim().orEmpty())
+        if (favorites.isEmpty()) {
+            val dialog = AdvancedModelSelectorDialogFragment.newInstance(current, chatId, endpointId)
+            dialog.setModelSelectedListener { model ->
+                preferences?.setArchivistModel(model)
                 refreshArchivistRows()
             }
-            .setNegativeButton(android.R.string.cancel) { _, _ -> }
-            .show()
+            dialog.show(supportFragmentManager, "ArchivistModelSelector")
+        } else {
+            val dialog = AdvancedFavoriteModelSelectorDialogFragment.newInstance(current, chatId, endpointId)
+            dialog.setModelSelectedListener { model, pickedEndpointId ->
+                preferences?.setArchivistEndpointId(pickedEndpointId)
+                preferences?.setArchivistModel(model)
+                refreshArchivistRows()
+            }
+            dialog.show(supportFragmentManager, "ArchivistFavoriteModelSelector")
+        }
     }
 
     /* ------------------------------ Temperature ------------------------------ */

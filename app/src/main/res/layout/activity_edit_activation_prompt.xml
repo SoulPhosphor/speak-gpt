@@ -17,10 +17,10 @@
 **************************************************************************/
 -->
 <!--
-  Full-screen System Prompt editor, same shell as the Activation Prompt/
-  Companion editors: shared house header with a chained Delete/Save icon
-  pair (Save and Delete moved here from the old bottom buttons), fields
-  built from Widget.App.Field.Label/.Box. No hint text under either box.
+  Full-screen Activation Prompt editor, same shell as the Edit Companion
+  screen (activity_edit_persona.xml): shared house header with a chained
+  Delete/Save icon pair, fields built from Widget.App.Field.Label/.Box. No
+  hint text under either box (owner ruling, July 28 2026).
 -->
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -39,13 +39,13 @@
         <TextView
             android:id="@+id/activity_title"
             style="@style/Widget.App.ActionBar.Title.NearBack"
-            android:text="@string/title_new_system_prompt"
+            android:text="@string/label_edit_activation_prompt"
             app:layout_constraintEnd_toStartOf="@+id/btn_delete" />
 
-        <!-- Same chained-icon shape as the Activation Prompt/Companion editor
-             headers (no shared style yet covers a second trailing icon - see
-             SecondaryButton's doc comment in values/themes.xml). Hidden for a
-             brand-new system prompt (nothing to delete yet). -->
+        <!-- Same chained-icon shape as Edit Companion's header (no shared
+             style yet covers a second trailing icon - see SecondaryButton's
+             doc comment in values/themes.xml). Hidden for a brand-new
+             activation prompt (nothing to delete yet). -->
         <ImageButton
             android:id="@+id/btn_delete"
             android:layout_width="48dp"
@@ -77,6 +77,7 @@
         android:layout_width="0dp"
         android:layout_height="0dp"
         android:clipToPadding="false"
+        android:fillViewport="true"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
@@ -93,19 +94,18 @@
                 android:layout_marginStart="24dp"
                 android:layout_marginTop="24dp"
                 android:layout_marginEnd="24dp"
-                android:text="@string/hint_system_prompt_title"
+                android:text="@string/activation_prompt_friendly_name"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent" />
 
             <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/title_input"
+                android:id="@+id/field_title"
                 style="@style/Widget.App.Field.Box"
                 android:layout_width="0dp"
                 android:layout_marginStart="24dp"
                 android:layout_marginEnd="24dp"
-                android:inputType="text|textCapSentences"
-                android:maxLines="1"
+                android:singleLine="true"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toBottomOf="@+id/label_field_title" />
@@ -122,33 +122,33 @@
                 android:visibility="gone"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toBottomOf="@+id/title_input" />
+                app:layout_constraintTop_toBottomOf="@+id/field_title" />
 
             <TextView
-                android:id="@+id/label_field_body"
+                android:id="@+id/label_field_prompt"
                 style="@style/Widget.App.Field.Label"
                 android:layout_width="0dp"
                 android:layout_marginStart="24dp"
                 android:layout_marginTop="18dp"
                 android:layout_marginEnd="24dp"
-                android:text="@string/hint_system_prompt_body"
+                android:text="@string/activation_prompt_hint"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toBottomOf="@+id/text_field_title_error" />
 
             <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/body_input"
+                android:id="@+id/field_prompt"
                 style="@style/Widget.App.Field.Box"
                 android:layout_width="0dp"
                 android:layout_marginStart="24dp"
                 android:layout_marginEnd="24dp"
                 android:layout_marginBottom="24dp"
                 android:gravity="top|start"
-                android:inputType="text|textCapSentences|textMultiLine"
-                android:minLines="8"
+                android:inputType="textMultiLine|textCapSentences"
+                android:minLines="5"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toBottomOf="@+id/label_field_body" />
+                app:layout_constraintTop_toBottomOf="@+id/label_field_prompt" />
 
         </androidx.constraintlayout.widget.ConstraintLayout>
     </ScrollView>

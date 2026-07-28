@@ -39,9 +39,21 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
 
+        <!-- This screen's title text is longer than any other simple header's,
+             long enough to run under the back button when centered edge-to-edge
+             like the shared style normally does. Reserves a margin on both
+             sides matching the back button's own footprint (56dp) so the text
+             never draws under it, and truncates instead of overlapping in the
+             worst case. -->
         <TextView
             android:id="@+id/activity_title"
             style="@style/Widget.App.ActionBar.Title"
+            android:layout_width="0dp"
+            android:layout_marginStart="64dp"
+            android:layout_marginEnd="64dp"
+            android:gravity="center"
+            android:maxLines="1"
+            android:ellipsize="end"
             android:text="@string/title_memory_assistant_advanced"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
@@ -91,21 +103,14 @@
                     android:id="@+id/switch_max_suggestions" />
             </LinearLayout>
 
-            <com.google.android.material.textfield.TextInputLayout
-                android:id="@+id/layout_max_suggestions"
-                style="?attr/textInputOutlinedDenseStyle"
-                android:layout_width="120dp"
-                android:layout_height="wrap_content"
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/field_max_suggestions"
+                style="@style/Widget.App.Field.NumberBlank"
                 android:layout_marginTop="8dp"
-                android:visibility="gone">
-
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/field_max_suggestions"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:inputType="number"
-                    android:singleLine="true" />
-            </com.google.android.material.textfield.TextInputLayout>
+                android:ems="4"
+                android:maxLength="4"
+                android:singleLine="true"
+                android:visibility="gone" />
 
             <!-- ============ Memory Assistant Model ============ -->
             <TextView

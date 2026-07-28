@@ -25,7 +25,7 @@ import android.view.WindowInsets
 import android.widget.ImageButton
 import android.widget.ListView
 import android.widget.TextView
-import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
@@ -40,7 +40,6 @@ import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.dto.ActivationPromptObject
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.adapters.ActivationPromptListItemAdapter
-import org.teslasoft.assistant.ui.fragments.dialogs.EditActivationPromptDialogFragment
 
 class ActivationPromptsListActivity : FragmentActivity() {
 
@@ -61,26 +60,43 @@ class ActivationPromptsListActivity : FragmentActivity() {
     private var pickMode: Boolean = false
     private var currentActivationId: String = ""
 
-    private fun newEditDialog(activationPrompt: ActivationPromptObject, position: Int): EditActivationPromptDialogFragment {
-        return EditActivationPromptDialogFragment.newInstance(
-            activationPrompt.id,
-            activationPrompt.label,
-            activationPrompt.prompt,
-            position
-        )
-    }
-
     private fun newEmptyActivationPrompt(): ActivationPromptObject {
         return ActivationPromptObject("", "")
     }
 
-    private fun openEditDialog(position: Int) {
+    // Applies the full-screen editor's result exactly as the old dialog
+    // listener did: a save adds or renames the prompt then reloads the list;
+    // a delete removes it and reloads the list.
+    private val editActivationPromptLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode != RESULT_OK) return@registerForActivityResult
+        val data = result.data ?: return@registerForActivityResult
+        when (data.getStringExtra(EditActivationPromptActivity.EXTRA_RESULT_ACTION)) {
+            EditActivationPromptActivity.ACTION_SAVE -> {
+                // The prompt carries its stable id (blank for a new one, which
+                // setActivationPrompt mints in place). One save path for add AND
+                // rename — a rename updates the record under the same id.
+                val activationPrompt = EditActivationPromptActivity.readResultActivationPrompt(data)
+                activationPromptPreferences!!.setActivationPrompt(activationPrompt)
+                reloadList()
+            }
+            EditActivationPromptActivity.ACTION_DELETE -> {
+                val id = data.getStringExtra(EditActivationPromptActivity.EXTRA_RESULT_ID)
+                if (id != null) {
+                    activationPromptPreferences!!.deleteActivationPrompt(id)
+                    reloadList()
+                }
+            }
+        }
+    }
+
+    private fun openEditor(position: Int) {
         val id = list[position]["id"] ?: return
         val activationPrompt = activationPromptPreferences!!.getActivationPrompt(id)
-        val dialog = newEditDialog(activationPrompt, position)
-        dialog.setListener(editDialogListener)
-        dialog.setCancelable(false)
-        dialog.show(supportFragmentManager, "EditActivationPromptDialogFragment")
+        editActivationPromptLauncher.launch(EditActivationPromptActivity.createIntent(this, activationPrompt, position))
+    }
+
+    private fun openCreate() {
+        editActivationPromptLauncher.launch(EditActivationPromptActivity.createIntent(this, newEmptyActivationPrompt(), -1))
     }
 
     private fun finishWithActive(id: String) {
@@ -96,45 +112,16 @@ class ActivationPromptsListActivity : FragmentActivity() {
                 val id = list[position]["id"] ?: return
                 finishWithActive(id)
             } else {
-                openEditDialog(position)
+                openEditor(position)
             }
         }
 
         override fun onLongClick(position: Int) {
-            openEditDialog(position)
+            openEditor(position)
         }
 
         override fun onSettingsClick(position: Int) {
-            openEditDialog(position)
-        }
-    }
-
-    private var editDialogListener: EditActivationPromptDialogFragment.StateChangesListener = object : EditActivationPromptDialogFragment.StateChangesListener {
-        // One save path for add AND rename: the object carries its stable id
-        // (blank for a new prompt, minted in place by setActivationPrompt), so a
-        // rename updates the record under the same id instead of recreating it.
-        override fun onSave(activationPrompt: ActivationPromptObject) {
-            activationPromptPreferences!!.setActivationPrompt(activationPrompt)
-            reloadList()
-        }
-
-        override fun onDelete(position: Int, id: String) {
-            activationPromptPreferences!!.deleteActivationPrompt(id)
-            reloadList()
-        }
-
-        override fun onError(message: String, position: Int) {
-            Toast.makeText(this@ActivationPromptsListActivity, message, Toast.LENGTH_SHORT).show()
-            val activationPrompt = if (position == -1) {
-                newEmptyActivationPrompt()
-            } else {
-                val id = list[position]["id"] ?: return
-                activationPromptPreferences!!.getActivationPrompt(id)
-            }
-            val dialog = newEditDialog(activationPrompt, position)
-            dialog.setListener(this)
-            dialog.setCancelable(false)
-            dialog.show(supportFragmentManager, "EditActivationPromptDialogFragment")
+            openEditor(position)
         }
     }
 
@@ -228,10 +215,7 @@ class ActivationPromptsListActivity : FragmentActivity() {
         }
 
         btnAdd!!.setOnClickListener {
-            val dialog = newEditDialog(newEmptyActivationPrompt(), -1)
-            dialog.setListener(editDialogListener)
-            dialog.setCancelable(false)
-            dialog.show(supportFragmentManager, "EditActivationPromptDialogFragment")
+            openCreate()
         }
     }
 

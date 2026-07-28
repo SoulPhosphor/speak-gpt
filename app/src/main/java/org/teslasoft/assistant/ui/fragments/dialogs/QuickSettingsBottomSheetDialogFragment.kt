@@ -570,7 +570,9 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         textModel?.text = model
     }
 
-    private var modelSelectedListenerV2: AdvancedFavoriteModelSelectorDialogFragment.OnModelSelectedListener = AdvancedFavoriteModelSelectorDialogFragment.OnModelSelectedListener { model ->
+    private var modelSelectedListenerV2: AdvancedFavoriteModelSelectorDialogFragment.OnModelSelectedListener = AdvancedFavoriteModelSelectorDialogFragment.OnModelSelectedListener { model, endpointId ->
+        preferences?.setApiEndpointId(endpointId)
+        android.widget.Toast.makeText(requireContext(), R.string.msg_api_compatibility_change, android.widget.Toast.LENGTH_SHORT).show()
         preferences?.setModel(model)
         updateListener?.onUpdate()
         shouldForceUpdate = true
