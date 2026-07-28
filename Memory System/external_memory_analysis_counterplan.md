@@ -538,10 +538,27 @@ default, and **Full** conceals which two independent sources it enables.
 
 ### 5.3 Correct source-control UX
 
-Replace the global tier picker and its redundant default-memory toggle with
-two independent switches.
+**Global picker — RESOLVED (owner ruling, 2026-07-28).** The two-switch
+global design below is superseded. The owner approved a single **Memory
+Engine** dropdown on Settings → Memory Controls with four options —
+**None**, **Lorebooks Only**, **Associative Search Only**, **Both Memory
+Systems** — covering the same four source combinations this section
+describes. "Saved memories"/RAG is user-facing as **Associative Search**.
+Options requiring the embedding model are grayed out when none is
+installed, with a persistent inline hint below the row (never a toast).
+Implemented in `MemoryControlsActivity.kt` /
+`activity_memory_controls.xml`; no global two-switch UI is being built.
+The **Chat → Quick Settings** per-chat two-switch design later in this
+section is unaffected and remains open — the owner deferred that redesign
+("not tonight," 2026-07-28).
 
-**Settings → Memory Controls**
+Replace the global tier picker and its redundant default-memory toggle with
+two independent switches. *(Superseded at the global level — see the
+ruling above. Retained here because the per-chat combination logic and
+helper wording still apply to Quick Settings.)*
+
+**Settings → Memory Controls** *(superseded — see ruling above; the
+shipped control is the Memory Engine dropdown)*
 
 Section title:
 
@@ -1477,11 +1494,14 @@ file loop is boringly reliable.
 
 ### What the owner genuinely needs to review
 
-1. **Source-control presentation:** approve or revise **Saved memories** and
-   **Lore books**, their helper text, and the two-switch global/per-chat
-   placement in §5.3, including the archive helper and aggregate active-scene
-   line. The four combinations themselves are the recommended behavior and
-   are already supported per chat.
+1. **Source-control presentation — global part RESOLVED (owner ruling,
+   2026-07-28):** the global picker is the four-option **Memory Engine**
+   dropdown (None / Lorebooks Only / Associative Search Only / Both Memory
+   Systems) on Settings → Memory Controls, not the two-switch design in
+   §5.3; shipped. Still open: the **Chat → Quick Settings** per-chat
+   two-switch presentation, its helper text, the archive helper, and the
+   aggregate active-scene line in §5.3. The four combinations themselves
+   remain the recommended behavior and are already supported per chat.
 2. **Archive history copy/default:** when **Archive this chat** is re-enabled,
    confirm **Include Earlier Messages** as the recommended default versus
    New Messages Only. Source switches never alter this queue.
@@ -3440,11 +3460,12 @@ These are residual risks, not excuses for silent behavior.
 
 Keep these narrow. The repository provides enough evidence for the rest.
 
-1. **Phase 1 visible source-control copy:** approve the final labels/helper
-   text for Saved memories, Lore books, Archive this chat, and Include Earlier
-   Messages near the end of the phase. The owner has deferred wording review;
-   the four-mode behavior and independence are technically recommended, not
-   an open architecture question.
+1. **Phase 1 visible source-control copy:** the global Memory Engine
+   dropdown wording shipped (owner ruling, 2026-07-28) — see §5.3. Still to
+   approve near the end of the phase: final labels/helper text for the
+   Chat → Quick Settings per-chat controls, Archive this chat, and Include
+   Earlier Messages. The four-mode behavior and independence are technically
+   recommended, not an open architecture question.
 2. **Saved-memories first-enable requirement — RESOLVED (owner ruling,
    2026-07-28):** the embedding-model requirement for enabling chat
    retrieval stands; keyword-only retrieval enablement is declined. Memory
@@ -3516,10 +3537,13 @@ where "Needs" allows.
 
 ### Phase 1 — Phone Memory Reliability
 
-- **Step 1.1 — Source semantics.** The two independent switches (Saved
-  memories / Lore books), archive consent separated from injection, legacy
-  migration, four-mode tests. Defined in §5.3, §5.4.
-  Needs: nothing. Owner's part: approve the two labels/helpers and the
+- **Step 1.1 — Source semantics.** Global part **shipped** (owner ruling,
+  2026-07-28): the four-option Memory Engine dropdown, migration from the
+  old "full" value, archive consent separated from injection. Still open:
+  the Chat → Quick Settings per-chat two-switch presentation (Saved
+  memories / Lore books) and the archive re-enable dialog. Defined in
+  §5.3, §5.4.
+  Needs: nothing. Owner's part: approve the per-chat labels/helpers and the
   archive re-enable dialog near the end.
 - **Step 1.2 — Retrieval correctness.** Memories stop silently
   disappearing: complete-set fallback, relevance floor before top-K,
