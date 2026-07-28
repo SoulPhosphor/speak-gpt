@@ -438,20 +438,20 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
 
             summary.visibility = View.VISIBLE
             val collapsible = IncludeHistoryPresentation.shouldCollapse(fullIncludes.size)
+            val composition = IncludeHistoryPresentation.compositionOf(fullIncludes)
             val summaryKey = fullIncludes.joinToString(separator = "\u001F") { it.id }
             val expanded = !collapsible || expandedIncludeRows.contains(summaryKey)
 
             includeSummaryHeader?.visibility = if (collapsible) View.VISIBLE else View.GONE
             includeSummaryList?.visibility = if (expanded) View.VISIBLE else View.GONE
             includeSummaryLabel?.text = if (collapsible) {
-                context.getString(R.string.include_collapsed_count, fullIncludes.size)
+                context.getString(collapsedCountRes(composition), fullIncludes.size)
             } else {
                 context.getString(R.string.include_label)
             }
             includeSummaryChevron?.rotation = if (expanded) 180f else 0f
-            includeSummaryChevron?.contentDescription = context.getString(
-                if (expanded) R.string.include_collapse_desc else R.string.include_expand_desc
-            )
+            includeSummaryChevron?.contentDescription =
+                context.getString(toggleDescRes(composition, expanded))
 
             if (expanded) {
                 buildIncludeSummaryRows(fullIncludes)
@@ -632,6 +632,26 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
 
         private fun includeIcon(kind: IncludeKind): Int =
             if (kind.isImage()) R.drawable.ic_image else R.drawable.ic_file
+
+        private fun collapsedCountRes(
+            composition: IncludeHistoryPresentation.Composition
+        ): Int = when (composition) {
+            IncludeHistoryPresentation.Composition.DOCUMENTS -> R.string.include_collapsed_count
+            IncludeHistoryPresentation.Composition.IMAGES -> R.string.include_collapsed_count_images
+            IncludeHistoryPresentation.Composition.MIXED -> R.string.include_collapsed_count_files
+        }
+
+        private fun toggleDescRes(
+            composition: IncludeHistoryPresentation.Composition,
+            expanded: Boolean
+        ): Int = when (composition) {
+            IncludeHistoryPresentation.Composition.DOCUMENTS ->
+                if (expanded) R.string.include_collapse_desc else R.string.include_expand_desc
+            IncludeHistoryPresentation.Composition.IMAGES ->
+                if (expanded) R.string.include_collapse_desc_images else R.string.include_expand_desc_images
+            IncludeHistoryPresentation.Composition.MIXED ->
+                if (expanded) R.string.include_collapse_desc_files else R.string.include_expand_desc_files
+        }
 
         private fun updateStatusMarker(chatMessage: HashMap<String, Any>) {
             val marker = statusMarker ?: return

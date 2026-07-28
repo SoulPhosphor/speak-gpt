@@ -16,6 +16,8 @@
 
 package org.teslasoft.assistant.preferences.includes
 
+import org.teslasoft.assistant.preferences.includes.IncludeHistoryPresentation.Composition
+
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -68,5 +70,38 @@ class IncludeHistoryPresentationTest {
         assertFalse(IncludeHistoryPresentation.shouldCollapse(3))
         assertTrue(IncludeHistoryPresentation.shouldCollapse(4))
         assertTrue(IncludeHistoryPresentation.shouldCollapse(8))
+    }
+
+    private fun image(id: String) = ChatInclude(
+        id = id,
+        fileName = "$id.jpg",
+        kind = IncludeKind.JPEG,
+        form = IncludeForm.FULL,
+        fullText = "",
+        imageFileHash = id,
+        imageMimeType = "image/jpeg",
+        imageWidth = 800,
+        imageHeight = 600
+    )
+
+    @Test fun compositionNamesTheCollapsedNounCorrectly() {
+        // Drives whether the collapse line reads Documents, Images, or Files —
+        // so an image set can never be labelled "Documents".
+        assertEquals(
+            Composition.DOCUMENTS,
+            IncludeHistoryPresentation.compositionOf(
+                listOf(include("a", IncludeForm.FULL), include("b", IncludeForm.FULL))
+            )
+        )
+        assertEquals(
+            Composition.IMAGES,
+            IncludeHistoryPresentation.compositionOf(listOf(image("a"), image("b")))
+        )
+        assertEquals(
+            Composition.MIXED,
+            IncludeHistoryPresentation.compositionOf(
+                listOf(include("doc", IncludeForm.FULL), image("pic"))
+            )
+        )
     }
 }

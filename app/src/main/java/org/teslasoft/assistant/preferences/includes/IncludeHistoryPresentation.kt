@@ -22,6 +22,24 @@ object IncludeHistoryPresentation {
     /** Full attachment rows remain visible until a fourth row is present. */
     const val COLLAPSE_AT = 4
 
+    /**
+     * Which nouns a collapsed strip should use: all documents, all images, or
+     * a mix. Drives the "Includes N Documents/Images/Files" line and the
+     * matching Show/Hide screen-reader labels so neither ever calls an image
+     * a document.
+     */
+    enum class Composition { DOCUMENTS, IMAGES, MIXED }
+
+    fun compositionOf(includes: List<ChatInclude>): Composition {
+        val anyImage = includes.any { it.kind.isImage() }
+        val anyDocument = includes.any { !it.kind.isImage() }
+        return when {
+            anyImage && anyDocument -> Composition.MIXED
+            anyImage -> Composition.IMAGES
+            else -> Composition.DOCUMENTS
+        }
+    }
+
     data class Groups(
         val fullRecords: List<ChatInclude>,
         val condensedBookmarks: List<ChatInclude>,

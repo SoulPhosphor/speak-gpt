@@ -2645,7 +2645,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         if (pendingIncludes.any { it.sourceFingerprint == fingerprint } ||
             !pendingImageImports.add(fingerprint)
         ) {
-            showDocumentAlreadyAttached()
+            showImageAlreadyAttached()
             return
         }
 
@@ -2966,8 +2966,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     }
 
     private fun showDocumentAlreadyAttached() {
+        showAlreadyAttached(R.string.include_error_duplicate)
+    }
+
+    private fun showImageAlreadyAttached() {
+        showAlreadyAttached(R.string.include_error_duplicate_image)
+    }
+
+    private fun showAlreadyAttached(titleRes: Int) {
         MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.include_error_duplicate)
+            .setTitle(titleRes)
             .setPositiveButton(R.string.okay, null)
             .show()
     }

@@ -2417,9 +2417,12 @@
     <string name="include_reduce_failed">Image could not be reduced. The image is still included.</string>
     <string name="include_reduce_not_shorter">The AI did not return a shorter description. The image is still included.</string>
 
-    <!-- Collapse line shown once four or more items are attached. "Documents"
-         is capitalised per the app's Title Case rule. -->
+    <!-- Collapse line shown once four or more items are attached. The noun
+         reflects what is actually attached and follows the app's Title Case
+         rule: Documents, Images, or Files for a mixed set. -->
     <string name="include_collapsed_count">Includes %1$d Documents</string>
+    <string name="include_collapsed_count_images">Includes %1$d Images</string>
+    <string name="include_collapsed_count_files">Includes %1$d Files</string>
 
     <!-- Weight readout on every row. Always shows the tilde because model
          tokenizers differ. -->
@@ -2445,6 +2448,7 @@
     <string name="include_error_export_failed">File is unable to be read. The file could not be exported. Check that you are online and signed in to the app that owns it, then try again.</string>
     <string name="include_error_unknown">File could not be attached due to an unknown error.</string>
     <string name="include_error_duplicate">Document already attached.</string>
+    <string name="include_error_duplicate_image">Image already attached.</string>
     <string name="document_attach_failed_title">Document could not be attached</string>
     <string name="document_attach_memory_body">SpeakGPT could not process the complete document within this device’s safe memory limit. No part of the document was attached. Try attaching a smaller copy.</string>
     <string name="document_attach_expansion_body">This document expands into more data than SpeakGPT can safely process. No part of the document was attached. Try saving a smaller copy and attaching that instead.</string>
@@ -2467,8 +2471,14 @@
     <!-- Accessibility labels. -->
     <string name="include_menu_desc">Options for %1$s</string>
     <string name="include_remove_desc">Remove %1$s</string>
-    <string name="include_expand_desc">Show attached documents</string>
-    <string name="include_collapse_desc">Hide attached documents</string>
+    <!-- Screen-reader show/hide labels, kind-aware and Title Case to match the
+         collapse line above. -->
+    <string name="include_expand_desc">Show Attached Documents</string>
+    <string name="include_collapse_desc">Hide Attached Documents</string>
+    <string name="include_expand_desc_images">Show Attached Images</string>
+    <string name="include_collapse_desc_images">Hide Attached Images</string>
+    <string name="include_expand_desc_files">Show Attached Files</string>
+    <string name="include_collapse_desc_files">Hide Attached Files</string>
     <string name="include_condensed_bookmark_desc">Edit condensed documents</string>
     <string name="include_artifact_bookmark_desc">Edit removed document bookmarks</string>
     <string name="include_icon_desc">Attached file</string>

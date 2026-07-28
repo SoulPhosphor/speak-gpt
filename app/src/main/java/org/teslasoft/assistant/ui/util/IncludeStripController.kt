@@ -28,6 +28,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.includes.ChatInclude
+import org.teslasoft.assistant.preferences.includes.IncludeHistoryPresentation
 import org.teslasoft.assistant.preferences.includes.IncludeKind
 import org.teslasoft.assistant.preferences.includes.IncludeNotice
 import java.text.NumberFormat
@@ -125,12 +126,11 @@ class IncludeStripController(
         listScroll.visibility = if (showList) View.VISIBLE else View.GONE
 
         if (collapsible) {
+            val composition = IncludeHistoryPresentation.compositionOf(current)
             collapsedRow.findViewById<TextView>(R.id.include_collapsed_text)?.text =
-                context.getString(R.string.include_collapsed_count, current.size)
+                context.getString(collapsedCountRes(composition), current.size)
             collapsedRow.findViewById<ImageView>(R.id.include_collapsed_chevron)?.contentDescription =
-                context.getString(
-                    if (expanded) R.string.include_collapse_desc else R.string.include_expand_desc
-                )
+                context.getString(toggleDescRes(composition, expanded))
         }
 
         if (showList) buildRows() else list.removeAllViews()
@@ -204,6 +204,26 @@ class IncludeStripController(
             grouped(notice.sentRows),
             grouped(notice.totalRows)
         )
+    }
+
+    private fun collapsedCountRes(
+        composition: IncludeHistoryPresentation.Composition
+    ): Int = when (composition) {
+        IncludeHistoryPresentation.Composition.DOCUMENTS -> R.string.include_collapsed_count
+        IncludeHistoryPresentation.Composition.IMAGES -> R.string.include_collapsed_count_images
+        IncludeHistoryPresentation.Composition.MIXED -> R.string.include_collapsed_count_files
+    }
+
+    private fun toggleDescRes(
+        composition: IncludeHistoryPresentation.Composition,
+        expanded: Boolean
+    ): Int = when (composition) {
+        IncludeHistoryPresentation.Composition.DOCUMENTS ->
+            if (expanded) R.string.include_collapse_desc else R.string.include_expand_desc
+        IncludeHistoryPresentation.Composition.IMAGES ->
+            if (expanded) R.string.include_collapse_desc_images else R.string.include_expand_desc_images
+        IncludeHistoryPresentation.Composition.MIXED ->
+            if (expanded) R.string.include_collapse_desc_files else R.string.include_expand_desc_files
     }
 
     private fun grouped(value: Int): String = NumberFormat.getIntegerInstance().format(value)
