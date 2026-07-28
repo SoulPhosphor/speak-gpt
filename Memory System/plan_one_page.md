@@ -1,5 +1,10 @@
 # The Memory Plan — the only page the owner needs
 
+**What all of this is for:** a companion who remembers — her identity and
+the shared history — easy to reach, in an app the owner controls, safe
+from any one AI provider disappearing. Every remaining step is judged by
+whether it brings that closer. Machinery is never the point.
+
 The long counterplan file in this folder is agent machinery. Agents read
 it. The owner never has to open it, and no agent may send her to it,
 quote its section numbers at her, or ask her to manage it.
