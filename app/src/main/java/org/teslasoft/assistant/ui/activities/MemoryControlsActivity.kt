@@ -22,15 +22,16 @@ import android.os.Build
 import android.os.Bundle
 import android.view.View
 import android.view.WindowInsets
+import android.widget.ArrayAdapter
 import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import androidx.appcompat.widget.ListPopupWindow
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
 import androidx.fragment.app.FragmentActivity
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.materialswitch.MaterialSwitch
 import org.teslasoft.assistant.R
@@ -173,57 +174,48 @@ class MemoryControlsActivity : FragmentActivity() {
     }
 
     private fun showMemoryEnginePicker() {
+        val anchor = textMemoryEngineValue ?: return
         val engines = arrayOf("none", "lorebooks", "full")
-        val labels = arrayOf(
+        val labels = listOf(
             getString(R.string.memory_controls_engine_none_desc),
             getString(R.string.memory_controls_engine_lorebooks_desc),
             getString(R.string.memory_controls_engine_full_desc)
         )
-        val current = engines.indexOf(preferences?.getMemoryEngine() ?: "lorebooks").coerceAtLeast(0)
 
-        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.memory_engine_picker_title)
-            .setSingleChoiceItems(labels, current) { dialog, which ->
-                val picked = engines[which]
-                if (picked == "full" && EmbeddingModelStorage.activeModel(this) == null) {
-                    // The full engine needs semantic retrieval to be usable — refuse
-                    // the switch rather than silently degrading to keyword-only.
-                    // Setup guidance shows INLINE under the engine control and
-                    // stays visible (owner rule: never a toast — the app is
-                    // used mostly hands-free; vanishing messages are useless).
-                    findViewById<android.widget.TextView>(R.id.text_engine_needs_model)
-                        ?.visibility = android.view.View.VISIBLE
-                    dialog.dismiss()
-                    return@setSingleChoiceItems
-                }
-                // A successful pick clears any earlier setup guidance.
-                findViewById<android.widget.TextView>(R.id.text_engine_needs_model)
-                    ?.visibility = android.view.View.GONE
-                preferences?.setMemoryEngine(picked)
-                refreshEngineRow()
-                if (picked == "full") {
-                    // Enabling the full engine is the tier-2 opt-in that
-                    // provisions the store and links a companion record to every
-                    // existing persona (idempotent). Without it, chats capture
-                    // as companion=none.
-                    Thread {
-                        try {
-                            val created = MemoryCompanionSync.bootstrapFromPersonas(this)
-                            org.teslasoft.assistant.preferences.memory.MemoryLog.log(
-                                this, "MemorySync", "info",
-                                "Tier-2 enable: bootstrap linked $created new companion(s)"
-                            )
-                        } catch (e: Exception) {
-                            org.teslasoft.assistant.preferences.memory.MemoryLog.log(
-                                this, "MemorySync", "error", "Tier-2 bootstrap failed: ${e.message}"
-                            )
-                        }
-                    }.start()
-                }
-                dialog.dismiss()
+        val popup = ListPopupWindow(this)
+        popup.anchorView = anchor
+        popup.isModal = true
+        popup.width = anchor.width
+        popup.setAdapter(ArrayAdapter(this, android.R.layout.simple_list_item_1, labels))
+        popup.setOnItemClickListener { _, _, position, _ ->
+            popup.dismiss()
+            val picked = engines[position]
+            if (picked == "full" && EmbeddingModelStorage.activeModel(this) == null) {
+                findViewById<TextView>(R.id.text_engine_needs_model)
+                    ?.visibility = View.VISIBLE
+                return@setOnItemClickListener
             }
-            .setNegativeButton(android.R.string.cancel) { _, _ -> }
-            .show()
+            findViewById<TextView>(R.id.text_engine_needs_model)
+                ?.visibility = View.GONE
+            preferences?.setMemoryEngine(picked)
+            refreshEngineRow()
+            if (picked == "full") {
+                Thread {
+                    try {
+                        val created = MemoryCompanionSync.bootstrapFromPersonas(this)
+                        org.teslasoft.assistant.preferences.memory.MemoryLog.log(
+                            this, "MemorySync", "info",
+                            "Tier-2 enable: bootstrap linked $created new companion(s)"
+                        )
+                    } catch (e: Exception) {
+                        org.teslasoft.assistant.preferences.memory.MemoryLog.log(
+                            this, "MemorySync", "error", "Tier-2 bootstrap failed: ${e.message}"
+                        )
+                    }
+                }.start()
+            }
+        }
+        popup.show()
     }
 
     override fun onAttachedToWindow() {

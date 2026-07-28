@@ -24,11 +24,13 @@ import android.text.Editable
 import android.text.TextWatcher
 import android.view.View
 import android.view.WindowInsets
+import android.widget.ArrayAdapter
 import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.widget.ListPopupWindow
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
@@ -246,26 +248,25 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
     }
 
     private fun showArchivistEndpointPicker() {
+        val anchor = textArchivistEndpointValue ?: return
         val endpoints = apiEndpointPreferences?.getApiEndpointsList(this) ?: arrayListOf()
         if (endpoints.isEmpty()) {
             Toast.makeText(this, R.string.memory_archivist_endpoint_none_toast, Toast.LENGTH_SHORT).show()
             return
         }
 
-        val currentId = preferences?.getArchivistEndpointId().orEmpty()
-        val labels = endpoints.map { it.label }.toTypedArray()
-        val current = endpoints.indexOfFirst { it.id == currentId }.coerceAtLeast(0)
-
-        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.memory_archivist_endpoint_picker_title)
-            .setSingleChoiceItems(labels, current) { dialog, which ->
-                val picked: ApiEndpointObject = endpoints[which]
-                preferences?.setArchivistEndpointId(picked.id)
-                refreshArchivistRows()
-                dialog.dismiss()
-            }
-            .setNegativeButton(android.R.string.cancel) { _, _ -> }
-            .show()
+        val labels = endpoints.map { it.label }
+        val popup = ListPopupWindow(this)
+        popup.anchorView = anchor
+        popup.isModal = true
+        popup.width = anchor.width
+        popup.setAdapter(ArrayAdapter(this, android.R.layout.simple_list_item_1, labels))
+        popup.setOnItemClickListener { _, _, position, _ ->
+            popup.dismiss()
+            preferences?.setArchivistEndpointId(endpoints[position].id)
+            refreshArchivistRows()
+        }
+        popup.show()
     }
 
     private fun showArchivistModelDialog() {
@@ -314,22 +315,26 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
     }
 
     private fun showImportancePicker() {
-        val labels = arrayOf(
+        val anchor = textMinImportanceValue ?: return
+        val labels = listOf(
             getString(R.string.mem_importance_1),
             getString(R.string.mem_importance_2),
             getString(R.string.mem_importance_3),
             getString(R.string.mem_importance_4),
             getString(R.string.mem_importance_5)
         )
-        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.memory_assistant_adv_min_importance)
-            .setSingleChoiceItems(labels, selectedImportance - 1) { dialog, which ->
-                selectedImportance = (which + 1).coerceIn(1, 5)
-                updateImportanceLabel()
-                dialog.dismiss()
-            }
-            .setNegativeButton(android.R.string.cancel) { _, _ -> }
-            .show()
+
+        val popup = ListPopupWindow(this)
+        popup.anchorView = anchor
+        popup.isModal = true
+        popup.width = anchor.width
+        popup.setAdapter(ArrayAdapter(this, android.R.layout.simple_list_item_1, labels))
+        popup.setOnItemClickListener { _, _, position, _ ->
+            popup.dismiss()
+            selectedImportance = (position + 1).coerceIn(1, 5)
+            updateImportanceLabel()
+        }
+        popup.show()
     }
 
     /* ------------------------------ Extraction Prompt ------------------------------ */
