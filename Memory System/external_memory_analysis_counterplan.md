@@ -1,4 +1,4 @@
-# External Memory Analysis + RAG Compatibility — Counter Plan (Revision 6, independently reviewed)
+# External Memory Analysis + RAG Compatibility — Counter Plan (Revision 7, model-free analysis rulings)
 
 **Document type:** Planning/architecture only — no code, database, prompt, UI,
 or string changes were made with this document.
@@ -71,6 +71,21 @@ working user term for an internal `retire` proposal is consistently
 privacy warning; and API/computer-run coexistence is explicit. All visible
 copy remains provisional and the owner has deferred wording approval until
 the architecture is complete. No app code or strings are changed by this
+revision.
+**Revision 7 (2026-07-28):** the owner ruled on the open embedding-model
+question and extended the plan with a model-free analysis path. Recorded in
+§5.3, §6, §9.3.1, and §13: memory analysis/archiving works without the
+embedding model, but saved memories still cannot enter chats until the
+model is installed (the retrieval first-enable ruling stands; keyword-only
+retrieval enablement was considered and declined). The Memory Browser gains
+a persistent inline banner — the owner chose the verb **"can't"**, not
+"won't" — shown only while that condition holds. The Memory Assistant gains
+a **Memory Analysis Type** control with an off-by-default lorebook-only
+mode that proposes keyword-triggered lore book entries instead of saved
+memories; those suggestions are reviewed in the lore book area behind a
+split menu that exists only while suggestions are pending, each with a
+destination drop-down that includes full-page new-book creation. All
+wording remains provisional. No app code or strings are changed by this
 revision.
 
 > **Approval note:** nothing in this document is approved wording or an
@@ -578,15 +593,24 @@ underlying retrieval mechanics.
 
 **First-enable and unavailable states**
 
-- The current owner ruling remains authoritative unless deliberately changed:
-  first enabling the full Saved memories engine requires an installed
-  embedding model, with persistent inline setup guidance if the user declines
-  or no compatible model is available. Phase A must not silently reverse that
-  product rule.
-- A keyword-only supported mode is a technically sound alternative for
-  low-resource devices, but enabling it would reverse the standing ruling.
-  It is therefore a narrow owner decision, recorded in §§8 and 13, rather
-  than a technical default hidden in this plan.
+- **Resolved (owner ruling, 2026-07-28).** First enabling the full Saved
+  memories engine still requires an installed embedding model; keyword-only
+  retrieval enablement was considered and declined. Memory **analysis and
+  archiving are permitted without the model**: Memory Assistant runs,
+  drafts, Pending review, and approval all work, and approved memories are
+  stored normally. What the missing model blocks is chat retrieval, and the
+  app must say so where the memories live (the Memory Browser banner below)
+  rather than hiding the limitation or blocking collection.
+- **Memory Browser banner.** While the user has saved memories and no
+  embedding model is installed, the Memory Browser shows a persistent
+  inline banner at the top — never a snackbar or toast, and not
+  dismissible, because the user must not be able to forget the condition.
+  The owner chose the verb **"can't"** deliberately over "won't": the
+  memories remain viewable and editable; entering chats is what is
+  impossible. Draft: *"These memories can't be used in chats until you
+  install the embedding model in Advanced Memory Settings."* Tapping the
+  banner opens Advanced Memory Settings; the banner disappears on its own
+  once a model is installed.
 - Regardless of that first-enable policy, a previously enabled engine must
   degrade safely when a model later fails, is removed, is rebuilding, or has
   only a partial index: use deterministic lexical matching over the complete
@@ -599,6 +623,42 @@ underlying retrieval mechanics.
 - **Neither** means neither memory source enters the prompt. It does not
   disable persona instructions, activation prompts, model rules, or ordinary
   chat history.
+
+**Lorebook-only analysis (owner ruling, 2026-07-28)**
+
+The Memory Assistant screen gains a **Memory Analysis Type** control above
+Analyze Conversations, available to every user — someone with the embedding
+model installed may still prefer feeding a lore book, even though standard
+analysis is expected to remain the usual choice:
+
+- **Standard analysis** (default): suggestions become saved-memory drafts
+  exactly as today. Running it does not require the embedding model; the
+  Memory Browser banner above covers the can't-be-used-in-chats state.
+- **Lorebook-only analysis** (toggle, off by default): the AI proposes
+  keyword-triggered lore book entries instead of saved memories. Each
+  suggestion carries proposed trigger keywords, editable at approval like
+  any other field. The analysis instructions must state explicitly that
+  output is lore book entries with triggers, not memories, so the model
+  formats and scopes its suggestions for that destination.
+
+Review surface: lore book suggestions are reviewed in the lore book area,
+not the Memory Browser. While suggestions are pending, the lore book screen
+shows a split menu at the top (the same pattern as the Memory Browser's
+existing split menu) with the pending list behind it; the split menu does
+not exist when nothing is pending. Each pending suggestion has a
+destination drop-down where the user selects the target lore book or
+chooses to create a new one, which opens the normal full-page lore book
+creation flow. Nothing is written to any book until the user approves the
+individual suggestion. This mode only ever adds new entries through user
+approval; it never edits or deletes existing books or entries.
+
+Route scope: this mode ships on the In-App (API) route first. The computer
+package reserves a matching lorebook-entry proposal capability for a later
+phase; until then the exchange contract remains memory-proposals-only and
+lore books stay fully read-only on that route (§9.3.1). The Memory
+Assistant results summary must count pending lore book suggestions and
+link to the lore book area, so the user is never left hunting for where
+suggestions went.
 
 **Migration from the legacy global preference**
 
@@ -1004,6 +1064,7 @@ Use these terms consistently in new UI:
 | Review destination | **Pending** |
 | Near-duplicate signal | **Possible Match** |
 | Internal `retire` proposal | **Archive Suggestion** |
+| Proposed lore book entry | **Lore Book Suggestion** |
 | Existing API route | **In App** when a route label is necessary |
 | File-based route | **On Computer** when a route label is necessary |
 
@@ -1094,9 +1155,53 @@ Re-enabling **Use saved memories in this chat** does not need a dialog and
 does not change archived/reviewable history. It changes prompt injection
 only. The same is true of **Use lore books in this chat**.
 
+#### E. Memory Browser banner and Memory Analysis Type
+
+Banner (persistent inline, shown only while saved memories exist and no
+embedding model is installed; §5.3 defines the behavior):
+
+> These memories can't be used in chats until you install the embedding
+> model in Advanced Memory Settings.
+
+The owner has ruled the verb is **can't**, never "won't".
+
+Memory Analysis Type control — the owner's draft, recorded verbatim
+(final wording is approved with the rest of the Phase A copy):
+
+> **Memory Analysis Type**
+>
+> Selecting standard search is recommended for a better experience but
+> requires you to install the free embedding model to your phone in the
+> Advanced Memory Settings.
+>
+> You can still have an AI search for memories to go into your lorebook
+> that will be triggered by keyword only.
+>
+> **Lorebook only memory analysis:** toggle, off by default.
+
+Clarity note for that copy review (a note, not a decision): under the
+resolved ruling, standard analysis itself runs without the model — using
+the resulting memories in chats is what needs it. A candidate revision
+preserving the owner's structure:
+
+> **Memory Analysis Type**
+>
+> Standard analysis saves suggestions to your memories. Memories can't be
+> used in chats until you install the free embedding model in Advanced
+> Memory Settings.
+>
+> Lorebook analysis instead creates lore book entries triggered by
+> keywords, which work without the embedding model.
+>
+> **Lorebook-only analysis:** toggle, off by default.
+
+The lore book suggestion review copy (split menu, destination drop-down,
+approval cards) returns for owner review when that feature is scheduled.
+
 **Owner review required near the end of Phase A:** the two source labels/helpers in
-§5.3, the archive re-enable default, and the four short status/dialog groups
-above. No owner wording review is needed for internal database, retrieval,
+§5.3, the archive re-enable default, and the five short status/dialog/control
+groups above (A–E, including the banner and Memory Analysis Type wording).
+No owner wording review is needed for internal database, retrieval,
 index, and run-integrity changes.
 
 ### Phases B–D copy — reserve now, approve when the file workflow begins
@@ -1353,13 +1458,15 @@ file loop is boringly reliable.
 2. **Archive history copy/default:** when **Archive this chat** is re-enabled,
    confirm **Include Earlier Messages** as the recommended default versus
    New Messages Only. Source switches never alter this queue.
-3. **Saved-memories model prerequisite:** preserve the standing rule that an
-   embedding model is required to enable the full engine (the default until
-   explicitly changed), or deliberately support a keyword-only enabled mode
-   for low-resource devices. Complete lexical fallback after model/index
-   failure is required either way and is not part of this choice. This does
-   not block internal correctness repairs; it must be settled before the new
-   first-enable UI ships.
+3. **Saved-memories model prerequisite — RESOLVED (owner ruling,
+   2026-07-28):** the embedding-model requirement for enabling chat
+   retrieval stands; keyword-only retrieval enablement is declined.
+   Analysis/archiving runs without the model, the Memory Browser shows the
+   persistent "can't be used in chats" banner while the model is missing,
+   and the off-by-default lorebook-only analysis mode gives model-less
+   users a working keyword-triggered path (§5.3). Complete lexical fallback
+   after a model/index failure remains required. Only final wording remains
+   open, inside the Phase A copy review.
 4. **Phase B plaintext disclosure/default scope:** approve the exact privacy
    warning and selected-chat-review default before the first exchange export.
 5. **Phase D maintenance wording:** approve the visible Edit/Merge/Archive
@@ -1369,8 +1476,7 @@ file loop is boringly reliable.
    broader release.
 
 Final wording review is intentionally deferred until its phase approaches
-UI implementation. Until decision 3 is made, implementation preserves the
-existing first-enable requirement. Plain-http LAN endpoints are unrelated to
+UI implementation. Plain-http LAN endpoints are unrelated to
 the file workflow and remain an optional future security decision.
 
 ### Technical gates that do not require routine owner input
@@ -1556,7 +1662,12 @@ questions.
 - Lorebooks, roleplay cards, companion definitions, user personas, and model
   rules are read-only references for the first computer workflow. The agent
   may flag overlap or recommend that the user inspect one, but it cannot
-  submit a lore/card/persona mutation.
+  submit a lore/card/persona mutation. The lorebook-only analysis ruling
+  (§5.3) adds one narrow exception on the In-App route and reserves an
+  equivalent later capability here: proposing **new** lore book entries
+  that the user approves individually into a book of their choosing.
+  Editing or deleting existing books, entries, cards, personas, or model
+  rules remains impossible on every route.
 - A suggested deletion is represented as `retire`, not a tombstone. The phone
   creates a real tombstone only after a user performs an actual hard delete.
 - Merges default to keeping a survivor and marking source memories
@@ -3307,13 +3418,15 @@ Keep these narrow. The repository provides enough evidence for the rest.
    Messages near the end of the phase. The owner has deferred wording review;
    the four-mode behavior and independence are technically recommended, not
    an open architecture question.
-2. **Saved-memories first-enable requirement:** keep the existing ruling that
-   the full engine requires an installed embedding model (the default unless
-   deliberately changed), or permit keyword-only enablement on low-resource
-   devices. Complete lexical fallback for a model/index failure after enable
-   remains required either way. This decision can wait until the source-
-   control/first-enable UI is implemented; it does not block the internal
-   Phase A repairs.
+2. **Saved-memories first-enable requirement — RESOLVED (owner ruling,
+   2026-07-28):** the embedding-model requirement for enabling chat
+   retrieval stands; keyword-only retrieval enablement is declined. Memory
+   analysis/archiving runs without the model, the Memory Browser shows the
+   persistent "can't be used in chats" banner while the model is missing,
+   and the off-by-default lorebook-only analysis mode gives model-less
+   users a working keyword-triggered path (§5.3). Complete lexical fallback
+   after a model/index failure remains required. Only the final wording
+   remains open, inside decisions 1 and 4's copy reviews.
 3. **Phase B plaintext disclosure/default scope:** approve the exact warning
    and whether the first screen defaults to selected chat review (recommended)
    or full library maintenance. Both remain explicit choices; no background
