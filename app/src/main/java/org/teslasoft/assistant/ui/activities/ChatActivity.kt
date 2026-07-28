@@ -6107,7 +6107,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             val turnChatId = chatId
             val turnPersonaId = preferences?.getPersonaId().orEmpty()
             val turnModel = model
-            val memoryEnabled = preferences?.getChatMemoryEnabled() ?: true
+            // Capture consent is "Archive this chat" alone (counterplan §4(f),
+            // Step 1.1) — the memory injection switch is not read here.
             val excluded = preferences?.isChatExcludedFromMemory() ?: false
             val quickSettings = try {
                 org.json.JSONObject()
@@ -6123,7 +6124,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             Thread {
                 TranscriptRecorder.recordTurn(
                     appContext, turnChatId, turnPersonaId, request, reply,
-                    turnModel, quickSettings, memoryEnabled, excluded, replyComplete
+                    turnModel, quickSettings, excluded, replyComplete
                 )
             }.start()
         } catch (e: Exception) {

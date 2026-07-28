@@ -1514,11 +1514,13 @@ class Preferences private constructor(private var preferences: SharedPreferences
     }
 
     /**
-     * Memory kill switch (companion memory system, integration plan D5/Phase 2):
-     * with memory OFF for a chat, nothing from the memory store is injected
-     * (enforcer phase) and the chat's transcript is auto-marked excluded —
-     * though its content is still captured, so flipping exclusion back to
-     * pending later can recover an experiment that turned out to matter.
+     * Memory kill switch (companion memory system): with memory OFF for a
+     * chat, nothing from the memory store is injected (enforcer phase).
+     * INJECTION ONLY — since Step 1.1 of the external-memory counterplan
+     * (§4(f), storage/injection independence) this switch no longer affects
+     * transcript capture or review eligibility; "Archive this chat" (the
+     * exclusion pref) is the only capture consent. Rows excluded under the
+     * old coupling keep their stored state.
      * Per-chat value; a chat that has never set it follows the global default.
      * Stored as a string tri-state ("" = follow global) so the auto-naming
      * copy block can move an unset value without pinning it.

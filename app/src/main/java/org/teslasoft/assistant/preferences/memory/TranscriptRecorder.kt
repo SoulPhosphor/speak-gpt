@@ -31,17 +31,32 @@ import org.teslasoft.assistant.util.Hash
  * whether and how that turn is captured:
  *
  *  - Store not provisioned -> no-op (capture never creates the encrypted DB).
- *  - Chat excluded by the user -> no capture at all, from this point forward.
- *  - Memory kill switch off for the chat -> captured but marked excluded
- *    (reversible: flip the exclusion back and the content is already there).
+ *  - Chat excluded by the user ("Archive this chat" off) -> no capture at
+ *    all, from this point forward.
  *  - Companion memory_participation 'none' -> captured but marked excluded
  *    (the spec: such transcripts "arrive pre-excluded"). 'global_only' is a
  *    Archivist-side rule and captures normally.
+ *
+ * The per-chat memory (injection) switch is deliberately NOT an input to
+ * live capture (external-memory counterplan §4(f), Step 1.1): storage and
+ * injection are independent, so turning "Use memory in this chat" off must
+ * not mark new turns excluded from review. Archive consent is the only
+ * user capture control. Rows excluded under the old coupling keep their
+ * stored state until the user explicitly re-includes them.
  *
  * Always best-effort and always on the caller's worker thread: a capture
  * failure must never disturb the conversation.
  */
 object TranscriptRecorder {
+
+    /**
+     * Capture-exclusion policy for a live turn: only a companion whose
+     * memory_participation is 'none' pre-excludes its captured turns. This
+     * function deliberately has no injection-switch parameter — capture
+     * eligibility cannot depend on a value it never receives.
+     */
+    fun liveCaptureMarkedExcluded(companionParticipation: String): Boolean =
+        companionParticipation == "none"
 
     fun recordTurn(
         context: Context,
@@ -51,7 +66,6 @@ object TranscriptRecorder {
         assistantMessage: String,
         modelTag: String,
         quickSettingsJson: String?,
-        memoryEnabled: Boolean,
         excludedByUser: Boolean,
         assistantComplete: Boolean = true
     ) {
@@ -90,7 +104,7 @@ object TranscriptRecorder {
                 }
             }
 
-            val markExcluded = !memoryEnabled || participation == "none"
+            val markExcluded = liveCaptureMarkedExcluded(participation)
             val outcome = store.appendTranscriptTurn(
                 chatId = chatId,
                 companionId = companionId,
@@ -102,7 +116,7 @@ object TranscriptRecorder {
                 assistantComplete = assistantComplete
             )
             MemoryLog.log(context, "Transcript", "info",
-                "captured chat=$chatId companion=${companionId ?: "none"} memOn=$memoryEnabled complete=$assistantComplete -> $outcome")
+                "captured chat=$chatId companion=${companionId ?: "none"} complete=$assistantComplete -> $outcome")
         } catch (e: Exception) {
             MemoryLog.log(context, "Transcript", "error", "Turn capture failed: ${e.message}")
         }
@@ -186,8 +200,12 @@ object TranscriptRecorder {
                 val companionId = if (personaId.isNotBlank())
                     store.findCompanionByAppCharacterId(personaId)?.companionId else null
 
-                // "Archive this chat" off => capture but mark excluded, same as
-                // the live path; the row still exists so it can be re-included.
+                // Backfill imports PRE-EXISTING history, so it deliberately
+                // keeps the legacy coupling that live capture dropped in
+                // Step 1.1 (counterplan §5.4): a chat whose memory switch is
+                // off backfills excluded rather than silently becoming
+                // review-eligible. Earlier history joins the review queue
+                // only through an explicit user choice, never a migration.
                 val markExcluded = prefs.isChatExcludedFromMemory() || !prefs.getChatMemoryEnabled()
                 if (store.insertBackfillTranscript(chatId, companionId, turns.toString(), prefs.getModel(), markExcluded)) {
                     created++
