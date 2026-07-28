@@ -605,6 +605,12 @@
     <string name="generation_notification_text">Tap to return to the chat</string>
     <string name="voice_reading_notification_title">Reading reply aloud…</string>
     <string name="notification_hang_up">Hang up</string>
+    <!-- Memory analysis keep-alive (counterplan Step 1.3, §6 copy A drafts —
+         provisional wording, owner approval pending before release). -->
+    <string name="memory_analysis_channel_name">Memory analysis</string>
+    <string name="memory_analysis_channel_desc">Shown while Memory Assistant reviews conversations so analysis survives the screen turning off or switching to another app.</string>
+    <string name="memory_analysis_notification_title">Analyzing Conversations</string>
+    <string name="memory_analysis_notification_text">Memory Assistant is reviewing %1$d of %2$d conversations.</string>
     <string name="tile_text_model_title">Text generation model</string>
     <string name="tile_text_generation_model_desc">This feature allows you to set text generation model as well as model\'s params.</string>
     <string name="tile_activation_prompt_title">Activation prompt</string>

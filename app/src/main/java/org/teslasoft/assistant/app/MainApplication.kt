@@ -172,6 +172,21 @@ class MainApplication : Application() {
                 if (MemoryStore.isProvisioned(this) &&
                     !DatabaseHealthState.isDegraded(this, BackupType.MEMORY)) {
                     val store = MemoryStore.getInstance(this)
+                    // Analysis-run recovery (counterplan §4(a), the same
+                    // recover-at-startup pattern as RenameJournal): a process
+                    // killed mid-analysis left a durable 'running' record and
+                    // claim stamps. Release the unfinished claims — those
+                    // conversations return to the review queue; nothing
+                    // unseen is marked processed — and finalize the record
+                    // as interrupted so the run history stays truthful.
+                    val recoveredRuns =
+                        org.teslasoft.assistant.preferences.memory.archivist.Archivist
+                            .reconcileAtStartup(this)
+                    if (recoveredRuns > 0) {
+                        MemoryLog.logAlways(this, "Archivist", "warn",
+                            "recovered $recoveredRuns interrupted analysis run(s) at startup — " +
+                                "unfinished conversations remain available to analyze again")
+                    }
                     // One-time backfill: pre-existing chats become eligible
                     // for memory review too. The completion flag is set ONLY
                     // when the pass actually completed — a failed or partial

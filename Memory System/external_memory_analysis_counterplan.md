@@ -1,4 +1,4 @@
-# External Memory Analysis + RAG Compatibility — Counter Plan (Revision 8, numbered phases)
+# External Memory Analysis + RAG Compatibility — Counter Plan (Revision 9, numbered phases)
 
 **Document type:** Planning/architecture only — no code, database, prompt, UI,
 or string changes were made with this document.
@@ -75,6 +75,14 @@ privacy warning; and API/computer-run coexistence is explicit. All visible
 copy remains provisional and the owner has deferred wording approval until
 the architecture is complete. No app code or strings are changed by this
 revision.
+**Revision 9 (2026-07-28):** documentation-only wording correction per the
+owner's ruling recorded in `CLAUDE.md` §9: the app's name never appears in
+user-facing wording, and this app is never called "Speak GPT" (the upstream
+fork's name). The seven §6 copy drafts that contained that name were
+rewritten to name the feature or drop the actor; no meaning, behavior, or
+approval status changed — every draft remains provisional until the owner
+approves it. The one remaining occurrence of the phrase is the quoted title
+of the ChatGPT-written audit document, which is that file's actual name.
 **Revision 8 (2026-07-28):** documentation-only naming correction. Replaced
 the duplicate letter-based naming system (Phases A–D plus Work Orders A–J)
 with a single numbered system: Phases 1–4, with Phase 1 subdivided into
@@ -1143,8 +1151,8 @@ lifetime the run lifetime.
 
 > **Previous Analysis Interrupted**
 >
-> Speak GPT recovered the unfinished review. No unfinished conversations
-> were marked as reviewed.
+> The unfinished review was recovered. No unfinished conversations were
+> marked as reviewed.
 
 If some conversations committed before interruption, the detailed view may
 also show:
@@ -1177,9 +1185,9 @@ messages still exist:
 
 > **Include Earlier Messages?**
 >
-> This chat was not being archived. Speak GPT can include messages already
-> in this chat the next time Memory Assistant runs, or begin with new
-> messages only.
+> This chat was not being archived. Memory Assistant can include messages
+> already in this chat the next time it runs, or begin with new messages
+> only.
 
 Actions:
 
@@ -1191,7 +1199,7 @@ If earlier messages are no longer available:
 
 > **Earlier Messages Unavailable**
 >
-> Speak GPT will begin archiving new messages from this point.
+> Archiving will begin with new messages from this point.
 
 Action: **Okay**
 
@@ -1299,13 +1307,12 @@ Privacy notice:
    > Move the ZIP to your computer and open it with an AI that can work
    > with files. A cable or trusted local transfer is the most private
    > option. Ask the AI to follow `README.md`. It will create a suggestions
-   > file for Speak GPT.
+   > file to bring back to your phone.
 
 4. **Import Suggestions**
 
-   > Bring the suggestions file back to this device. Speak GPT will check
-   > its evidence and compare it with the current phone before anything is
-   > added to Pending.
+   > Bring the suggestions file back to this device. Its evidence will be
+   > checked against the current phone before anything is added to Pending.
 
    Primary action: **Import Suggestions**
 
@@ -1365,8 +1372,8 @@ Before committing anything, show:
 
 > **Review Import**
 >
-> Speak GPT checked the suggestions file against the current phone.
-> Suggestions you continue with will be added to Pending for your review.
+> The suggestions file was checked against the current phone. Suggestions
+> you continue with will be added to Pending for your review.
 
 Use only categories that describe a deterministic app result:
 
@@ -1397,7 +1404,7 @@ Valid import with nothing new:
 
 > **No New Suggestions**
 >
-> Speak GPT checked the file, but there was nothing new to add to Pending.
+> The file was checked, but there was nothing new to add to Pending.
 > Details show items that were unchanged, already pending, no longer
 > eligible, or could not be used.
 
@@ -3545,11 +3552,13 @@ where "Needs" allows.
   §5.3, §5.4.
   Needs: nothing. Owner's part: approve the per-chat labels/helpers and the
   archive re-enable dialog near the end.
-- **Step 1.2 — Retrieval correctness.** Memories stop silently
-  disappearing: complete-set fallback, relevance floor before top-K,
-  backfill after filters, policy clamps, updated freshness, proper
-  lexical/embedding documents. Defined in §5.5 and §10 Phase 1.
-  Needs: nothing. Owner's part: none until wording review.
+- **Step 1.2 — Retrieval correctness.** **Shipped** (verified in code and
+  on `main`, 2026-07-28 — landed as "Work Order B" under the pre-Revision-8
+  naming): complete-set fallback, relevance floor before top-K, backfill
+  after filters, policy clamps, updated freshness, proper
+  lexical/embedding documents (`memory-doc-v2`, `RetrievalDocument.kt`,
+  `Librarian.searchCore`). Defined in §5.5 and §10 Phase 1.
+  Owner's part: none until wording review.
 - **Step 1.3 — Run integrity and truthful status.** Sealed transcript
   claims with a durable run record, the Memory Analysis foreground service
   so runs survive the screen turning off, typed scene-context capture,

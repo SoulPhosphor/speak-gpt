@@ -276,6 +276,17 @@ Never let the owner repeat a diagnostic collection process that cannot produce u
 
 ## 9. UI consistency and theme readiness
 
+### The app's name never appears in wording (owner ruling, July 28 2026)
+
+Do not write the app's name into user-facing text — dialogs, banners,
+notifications, helper text, status messages — or into wording drafts and
+proposals shown to the owner. Name the feature (for example, Memory
+Assistant) or phrase the sentence without an actor.
+
+This app is never called "Speak GPT." That is the upstream fork's name.
+Older planning documents that use it are stale on this point and do not
+authorize it.
+
 ### AMOLED / theme work is paused
 
 The owner has paused AMOLED and palette/theme work (ruling, July 26 2026) until they reinstate it. Do not add, extend, fix, or polish AMOLED-specific styling anywhere — new screens or existing ones — until the owner says otherwise. Do not delete or break the AMOLED code already in place; just stop spending further effort on it.

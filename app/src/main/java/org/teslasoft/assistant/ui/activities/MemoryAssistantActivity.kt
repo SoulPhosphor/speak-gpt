@@ -48,6 +48,8 @@ import org.teslasoft.assistant.preferences.memory.ArchivistRunRecord
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.memory.archivist.Archivist
 import org.teslasoft.assistant.preferences.memory.archivist.ArchivistFailure
+import org.teslasoft.assistant.service.MemoryAnalysisForegroundService
+import org.teslasoft.assistant.service.MemoryAnalysisState
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.DatabaseRecoveryFlows
 import org.teslasoft.assistant.ui.activities.memory.MemoryBrowserActivity
@@ -143,6 +145,14 @@ class MemoryAssistantActivity : FragmentActivity() {
         btnDegradedRevert?.setOnClickListener {
             DatabaseRecoveryFlows.runRevert(this, BackupType.MEMORY) { refreshFactsAndRuns() }
         }
+
+        // A terminal outcome left by a run that finished while no screen was
+        // watching is history, not news: the Recent Memory Analysis list
+        // carries it. Only a LIVE run is picked up on a fresh visit.
+        if (MemoryAnalysisForegroundService.state.value is MemoryAnalysisState.Finished) {
+            MemoryAnalysisForegroundService.state.value = null
+        }
+        observeServiceState()
     }
 
     override fun onResume() {
@@ -287,6 +297,15 @@ class MemoryAssistantActivity : FragmentActivity() {
 
     /* ---------------- the run ---------------- */
 
+    /**
+     * Launch the run in the Memory Analysis foreground service (counterplan
+     * §4(a), Step 1.3). This screen no longer owns the analysis coroutine —
+     * the run survives leaving this screen, app switching, and screen-off;
+     * [observeServiceState] renders whatever the durable run is doing. If
+     * the service cannot start, nothing ran and nothing was claimed: show
+     * the persistent failure state and leave retry available (never fall
+     * back to an Activity-owned run).
+     */
     private fun startRun(rerunOfRunId: String?) {
         // Belt for the A3 hard block: the Analyze/Rerun surfaces are disabled
         // while any database problem exists, but the rule is "the Archivist
@@ -303,26 +322,43 @@ class MemoryAssistantActivity : FragmentActivity() {
         textRunStatus?.visibility = View.VISIBLE
         textRunStatus?.text = ""
 
-        lifecycleScope.launch(Dispatchers.IO) {
-            val onProgress: (Archivist.Progress) -> Unit = { p ->
-                runOnUiThread { showProgress(p) }
-            }
-            val outcome = try {
-                if (rerunOfRunId == null) Archivist.analyze(this@MemoryAssistantActivity, onProgress)
-                else Archivist.rerun(this@MemoryAssistantActivity, rerunOfRunId, onProgress)
-            } catch (e: Exception) {
+        if (!MemoryAnalysisForegroundService.start(this, rerunOfRunId)) {
+            running = false
+            btnAnalyze?.isEnabled = true
+            showOutcome(
                 Archivist.RunOutcome(
                     null, 0, 0, 0, 0, emptyList(),
                     outcome = "full_failed",
-                    failureReason = ArchivistFailure.classify(e),
-                    error = e.message
+                    failureReason = ArchivistFailure.UNKNOWN,
+                    error = "analysis service could not start"
                 )
-            }
-            withContext(Dispatchers.Main) {
-                running = false
-                btnAnalyze?.isEnabled = true
-                showOutcome(outcome)
-                refreshFactsAndRuns()
+            )
+            refreshFactsAndRuns()
+        }
+    }
+
+    /** Render the service-owned run: progress while it lives, the outcome
+     *  once, then consume it so a fresh visit never replays it (owner rule:
+     *  Complete! is not sticky across visits). */
+    private fun observeServiceState() {
+        lifecycleScope.launch {
+            MemoryAnalysisForegroundService.state.collect { s ->
+                when (s) {
+                    is MemoryAnalysisState.Running -> {
+                        running = true
+                        btnAnalyze?.setText(R.string.memory_assistant_btn_running)
+                        btnAnalyze?.isEnabled = false
+                        s.progress?.let { showProgress(it) }
+                    }
+                    is MemoryAnalysisState.Finished -> {
+                        running = false
+                        btnAnalyze?.isEnabled = true
+                        showOutcome(s.outcome)
+                        refreshFactsAndRuns()
+                        MemoryAnalysisForegroundService.state.value = null
+                    }
+                    null -> { /* idle */ }
+                }
             }
         }
     }
@@ -403,6 +439,14 @@ class MemoryAssistantActivity : FragmentActivity() {
             "not_configured" -> {
                 btnAnalyze?.setText(R.string.memory_assistant_btn_idle)
                 // The above-button block + disabled button carry this state.
+            }
+            "already_running" -> {
+                // Safety belt (counterplan §4(a)): another live run won the
+                // durable one-run gate; nothing was claimed or written for
+                // this attempt. The winner's own instance shows its
+                // progress; this one just returns to idle. Presenting this
+                // state properly belongs to the foreground-service redesign.
+                btnAnalyze?.setText(R.string.memory_assistant_btn_idle)
             }
         }
     }

@@ -444,7 +444,13 @@ data class MemoryRecord(
      *  the draft is accepted without the card. */
     val suggestedCardType: String? = null,
     val suggestedCardId: String? = null,
-    val suggestedSection: String? = null
+    val suggestedSection: String? = null,
+    /** Source chat id for learned-from-chat drafts (DB v17, counterplan
+     *  §4(c)): the rename-safe anchor for rejected-draft identity —
+     *  provenance_context keeps the display name captured at filing, this
+     *  keeps the id, and `repointChat` carries it across renames. Null for
+     *  user-authored memories and legacy drafts. Device-local, not exported. */
+    val sourceChatId: String? = null
 )
 
 data class ModeRecord(
@@ -501,7 +507,12 @@ data class ArchivistRunRecord(
     val runId: String,
     val startedAt: String,
     val finishedAt: String?,
-    val status: String,                   // complete | failed
+    /** running | complete | failed. 'running' (DB v17) IS the durable
+     *  active-run record (counterplan §4(a)): it is written when a run
+     *  starts, marks the one API run allowed to be live, and is what the
+     *  startup/next-run reconcile finalizes as interrupted when the process
+     *  died mid-run. Never shown in the Recent Memory Analysis list. */
+    val status: String,
     val chatIdsJson: String,              // JSON array: chat ids analyzed
     val transcriptIdsJson: String,        // JSON array: transcript rows fed
     val memoryIdsJson: String,            // JSON array: draft memory ids created
@@ -516,7 +527,13 @@ data class ArchivistRunRecord(
     val outcome: String? = null,
     /** Dominant [ArchivistFailure] key when the run (fully or partially)
      *  failed; picks the on-screen reason sentence. */
-    val failureReason: String? = null
+    val failureReason: String? = null,
+    /** Which transport owns the run (DB v17): 'api' today. Reserved so a
+     *  future computer review package can claim rows under its own record —
+     *  the startup reconcile auto-releases only dead 'api' claims
+     *  (counterplan §4(a)); an exported package's claims wait for import,
+     *  cancel, or replacement. */
+    val transport: String = "api"
 )
 
 /**
@@ -535,6 +552,12 @@ data class TranscriptRecord(
     val worldId: String?,
     val roleplayCharacterId: String?,
     val userPersonaId: String?,
+    /** Typed scene context completed in DB v17 (counterplan §4(e)): campaign
+     *  and project stamped at capture beside the existing world/character/
+     *  persona columns. Null on rows captured before v17 and on backfilled
+     *  history — never inferred after the fact. */
+    val campaignId: String? = null,
+    val projectId: String? = null,
     val source: String,                   // live | imported
     val startedAt: String?,
     val endedAt: String?,
@@ -542,7 +565,12 @@ data class TranscriptRecord(
     val modelTag: String?,
     val quickSettingsJson: String?,
     val reviewStatus: String,             // pending | processed | excluded
-    val processedAt: String?
+    val processedAt: String?,
+    /** Claim seal (DB v17, counterplan §4(a)): the run id that selected this
+     *  row for analysis. A claimed row is frozen — new turns start a new row
+     *  — and only the claiming run may mark it processed. Null = unclaimed.
+     *  Device-local operational state, never exported. */
+    val claimRunId: String? = null
 )
 
 data class MemoryStoreData(
