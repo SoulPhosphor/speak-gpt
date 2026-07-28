@@ -3001,6 +3001,49 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         updatedAt = c.getStringOrNull("updated_at")
     )
 
+    /** Stable target display names for every active memory — its linked
+     *  worlds, campaigns, roleplay characters, companions, and projects —
+     *  keyed by memory id. The memory-doc-v2 lexical document includes them
+     *  so a memory is findable by the name of the thing it is about
+     *  (counterplan §10 A.2). Five fixed queries, no per-memory N+1. */
+    fun activeMemoryTargetNames(): Map<String, List<String>> {
+        val out = HashMap<String, ArrayList<String>>()
+        fun scan(sql: String) {
+            readableDatabase.rawQuery(sql, emptyArray()).use {
+                while (it.moveToNext()) {
+                    val name = it.getString(1) ?: continue
+                    if (name.isNotBlank()) out.getOrPut(it.getString(0)) { ArrayList() }.add(name)
+                }
+            }
+        }
+        scan(
+            "SELECT mw.memory_id, w.name FROM memory_worlds mw " +
+                "JOIN worlds w ON w.world_id = mw.world_id " +
+                "JOIN memories m ON m.memory_id = mw.memory_id WHERE m.status = 'active'"
+        )
+        scan(
+            "SELECT mc.memory_id, c.name FROM memory_campaigns mc " +
+                "JOIN campaigns c ON c.campaign_id = mc.campaign_id " +
+                "JOIN memories m ON m.memory_id = mc.memory_id WHERE m.status = 'active'"
+        )
+        scan(
+            "SELECT mrc.memory_id, rc.name FROM memory_roleplay_characters mrc " +
+                "JOIN roleplay_characters rc ON rc.roleplay_character_id = mrc.roleplay_character_id " +
+                "JOIN memories m ON m.memory_id = mrc.memory_id WHERE m.status = 'active'"
+        )
+        scan(
+            "SELECT mco.memory_id, co.current_name FROM memory_companions mco " +
+                "JOIN companions co ON co.companion_id = mco.companion_id " +
+                "JOIN memories m ON m.memory_id = mco.memory_id WHERE m.status = 'active'"
+        )
+        scan(
+            "SELECT mp.memory_id, p.name FROM memory_projects mp " +
+                "JOIN projects p ON p.project_id = mp.project_id " +
+                "JOIN memories m ON m.memory_id = mp.memory_id WHERE m.status = 'active'"
+        )
+        return out
+    }
+
     /** Stored vectors for [embeddingModel] over the active memories, keyed by
      *  memory id — the working set brute-force cosine search reads each turn. */
     fun activeEmbeddings(embeddingModel: String): HashMap<String, ByteArray> {

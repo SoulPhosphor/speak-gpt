@@ -27,11 +27,23 @@ package org.teslasoft.assistant.preferences.memory.enforcer
  */
 object RetrievalBackfill {
 
-    /** The documented scan cap: how many ranked candidates one turn may
-     *  examine. Bounds the per-candidate filter work (the lore
-     *  near-duplicate check may embed text) on large libraries; reaching it
-     *  is recorded in the assembly notes. */
-    const val SCAN_CAP = 64
+    /**
+     * Examination margin beyond the requested top-K. The scan cap for a turn
+     * is top-K + this margin, so backfill headroom exists even at the maximum
+     * policy top-K (a fixed cap equal to the maximum top-K would leave no
+     * room to backfill). The margin bounds the expensive per-candidate work —
+     * the lore near-duplicate check may embed each examined candidate — so
+     * the worst case per turn is top-K + 64 embeds, which is already
+     * generous for an on-device model. This is an internal work bound, not a
+     * retrieval limit: it changes what is retrieved only in the extreme case
+     * where more than this many ranked-relevant candidates in a row are all
+     * removed by cooldown or lore overlap, and reaching it is recorded in
+     * the assembly notes so that case is never silent.
+     */
+    const val SCAN_MARGIN = 64
+
+    /** The documented scan cap for one turn's candidate walk. */
+    fun scanCap(topK: Int): Int = topK + SCAN_MARGIN
 
     data class Selection<T>(
         val kept: List<T>,
@@ -47,7 +59,7 @@ object RetrievalBackfill {
     fun <T> select(
         candidates: List<T>,
         topK: Int,
-        scanCap: Int = SCAN_CAP,
+        scanCap: Int = scanCap(topK),
         survives: (T) -> Boolean
     ): Selection<T> {
         if (topK <= 0) return Selection(emptyList(), 0, false)

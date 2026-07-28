@@ -71,6 +71,13 @@ class RetrievalBackfillTest {
     }
 
     @Test
+    fun scanCapScalesWithRequestedTopK() {
+        assertEquals(8 + RetrievalBackfill.SCAN_MARGIN, RetrievalBackfill.scanCap(8))
+        // Headroom to backfill exists even at the maximum policy top-K.
+        assertTrue(RetrievalBackfill.scanCap(64) > 64)
+    }
+
+    @Test
     fun nonPositiveTopKExaminesNothing() {
         var calls = 0
         val selection = RetrievalBackfill.select(listOf("a", "b"), topK = 0) { calls++; true }

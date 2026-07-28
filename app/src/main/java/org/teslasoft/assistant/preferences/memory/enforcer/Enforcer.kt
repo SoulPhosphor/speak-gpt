@@ -209,9 +209,14 @@ class Enforcer private constructor(private val appContext: Context) {
         val query = listOf(input.userMessage, input.recentContext)
             .filter { it.isNotBlank() }.joinToString("\n")
         if (!librarian.hasUsableModel()) notes.add("no embedding model — keyword retrieval")
+        // Fetch one candidate MORE than the walk below may examine: the walk
+        // never looks past its scan cap, and the extra row is what lets the
+        // selection tell "relevance exhausted" apart from "cap reached with
+        // relevant candidates still waiting".
+        val scanCap = RetrievalBackfill.scanCap(policy.topK)
         val poolScored: List<ScoredMemory> = try {
             librarian.search(
-                retrievalScope, query, RetrievalBackfill.SCAN_CAP,
+                retrievalScope, query, scanCap + 1,
                 input.projectId?.takeIf { it.isNotBlank() }
             )
         } catch (e: Exception) {
@@ -279,7 +284,7 @@ class Enforcer private constructor(private val appContext: Context) {
         val suppressed = ArrayList<Pair<AssembledMemory, LoreNote>>()
         val cooled = ArrayList<Pair<AssembledMemory, Long>>()
         val turnNow = turn
-        val selection = RetrievalBackfill.select(pool, policy.topK) { mem ->
+        val selection = RetrievalBackfill.select(pool, policy.topK, scanCap) { mem ->
             val last = lastTurns[mem.memoryId]
             if (turnNow != null && last != null && turnNow - last < COOLDOWN_TURNS) {
                 cooled.add(mem to (turnNow - last))
@@ -295,7 +300,7 @@ class Enforcer private constructor(private val appContext: Context) {
         val retrieved = selection.kept
         if (selection.scanCapReached) {
             notes.add(
-                "candidate scan cap (${RetrievalBackfill.SCAN_CAP}) reached before ${policy.topK} memories survived filtering"
+                "candidate scan cap ($scanCap) reached before ${policy.topK} memories survived filtering"
             )
         }
         if (suppressed.isNotEmpty()) flagContradictions(store, suppressed)

@@ -607,8 +607,8 @@ data class RetrievalScope(
 /**
  * A memory as the librarian sees it: enough to embed, score, and render a
  * retrieval result, without loading joins/change-log the way [MemoryRecord]
- * does. `embeddingText` is the condensed text to embed when present, else the
- * content.
+ * does. `embeddingText` is an optional condensed hint that rides along in the
+ * memory-doc-v2 retrieval documents; it never replaces the current content.
  */
 data class RetrievableMemory(
     val memoryId: String,
@@ -633,9 +633,7 @@ data class RetrievableMemory(
     // Phase A (counterplan §5.5): freshness ranks by the last edit, not only
     // creation — a corrected memory must outrank its obsolete peers.
     val updatedAt: String? = null
-) {
-    fun textToEmbed(): String = embeddingText?.takeIf { it.isNotBlank() } ?: content
-}
+)
 
 /** A scored retrieval hit for the debug view and (later) the enforcer packet. */
 data class ScoredMemory(

@@ -28,12 +28,23 @@ import org.teslasoft.assistant.preferences.memory.enforcer.PromptAssembler
  */
 object RetrievalPolicy {
 
+    // All bounds below are internal safety rails against corrupt or
+    // imported policy data, not retrieval tuning: no UI writes these values
+    // and the defaults are unchanged. A user can only notice them if a
+    // stored policy row is malformed, and then the substitution is logged.
+
     const val DEFAULT_TOP_K = 8
     const val MIN_TOP_K = 1
+    // Above 64 a top-K cannot change what reaches the prompt: the default
+    // 6,000-character budget saturates far earlier (64 entries would need
+    // <95 chars each), so larger stored values are treated as data errors.
     const val MAX_TOP_K = 64
 
-    // A budget below this cannot fit one useful memory; above the cap it
-    // would dwarf any realistic context window.
+    // Below ~500 chars not even one typical memory plus the provenance
+    // legend fits, so a smaller stored budget cannot express a working
+    // configuration. The cap is 10× the default; beyond it the dynamic
+    // memory message would dominate any realistic model context, and
+    // whole-request overflow is a separate guard's job.
     const val MIN_CHAR_BUDGET = 500
     const val MAX_CHAR_BUDGET = 60_000
 
@@ -41,6 +52,8 @@ object RetrievalPolicy {
     const val DEFAULT_W_SIM = 0.6
     const val DEFAULT_W_IMP = 0.3
     const val DEFAULT_W_REC = 0.1
+    // Weights are blend coefficients with defaults ≤ 0.6; a stored value
+    // orders of magnitude larger is corrupt data, not a preference.
     private const val MAX_WEIGHT = 100.0
 
     /** A bounded value plus the reason a default/cap was substituted, or null

@@ -179,6 +179,7 @@ class Librarian private constructor(private val appContext: Context) {
                 docTokens.addAll(lexicalTokens(mem.content))
                 mem.embeddingText?.takeIf { it.isNotBlank() }?.let { docTokens.addAll(lexicalTokens(it)) }
                 for (tag in c.tags) docTokens.addAll(lexicalTokens(tag))
+                for (alias in c.aliases) docTokens.addAll(lexicalTokens(alias))
                 val hits = terms.count { it in docTokens }
                 if (hits == 0) return@mapNotNull null
                 val relevance = hits.toFloat() / terms.size
@@ -191,6 +192,40 @@ class Librarian private constructor(private val appContext: Context) {
                 ScoredMemory(mem, relevance, s.toFloat())
             }
             return scored.sortedByDescending { it.score }.take(topK)
+        }
+
+        /**
+         * The pure search pipeline (counterplan §10 A.2, unit tested in
+         * LibrarianSearchCoreTest): semantic ranking runs only when EVERY
+         * corpus row carries a current-document vector and the query embeds;
+         * any missing vector — no model, an interrupted rebuild, a stale
+         * document version — routes the whole turn to lexical ranking over
+         * the complete corpus. [embedQuery] is invoked only when the index
+         * is complete, so an incomplete index costs no model work.
+         */
+        fun searchCore(
+            query: String,
+            embedQuery: () -> FloatArray?,
+            corpus: List<CorpusMemory>,
+            weights: Weights,
+            topK: Int
+        ): List<ScoredMemory> {
+            if (corpus.isEmpty()) return emptyList()
+            if (corpus.all { it.vector != null }) {
+                val queryVec = embedQuery()
+                if (queryVec != null) {
+                    return rank(
+                        queryVec,
+                        corpus.map { Candidate(it.memory, it.vector!!, it.recency, it.boost) },
+                        weights, topK, MIN_SIMILARITY
+                    )
+                }
+            }
+            return rankLexical(
+                query,
+                corpus.map { LexicalCandidate(it.memory, it.tags, it.recency, it.boost, it.aliases) },
+                weights, topK
+            )
         }
 
         /**
@@ -221,13 +256,28 @@ class Librarian private constructor(private val appContext: Context) {
     )
 
     /** One lexical candidate: the memory, its parsed tags, a 0..1 recency
-     *  (1 = freshest), and the precomputed context boost ([retrievalBoost]).
-     *  Tags arrive parsed — org.json is an Android stub on the JVM. */
+     *  (1 = freshest), the precomputed context boost ([retrievalBoost]), and
+     *  the stable target display names (world/campaign/character/companion/
+     *  project) so a memory is findable by the name of the thing it is
+     *  about. Tags arrive parsed — org.json is an Android stub on the JVM. */
     data class LexicalCandidate(
         val memory: RetrievableMemory,
         val tags: List<String>,
         val recency: Double,
-        val boost: Double = 0.0
+        val boost: Double = 0.0,
+        val aliases: List<String> = emptyList()
+    )
+
+    /** One corpus row for [searchCore]: the memory, its current-document
+     *  vector when one exists (null = missing/stale), parsed tags, target
+     *  display names, freshness, and context boost. */
+    data class CorpusMemory(
+        val memory: RetrievableMemory,
+        val vector: FloatArray?,
+        val tags: List<String>,
+        val aliases: List<String>,
+        val recency: Double,
+        val boost: Double
     )
 
     @Volatile private var model: EmbeddingModel? = null
@@ -302,8 +352,11 @@ class Librarian private constructor(private val appContext: Context) {
         val store = MemoryStore.getInstance(appContext)
         val mem = store.getMemory(memoryId)?.takeIf { it.status == "active" } ?: return
         try {
-            val vec = m.embed(mem.embeddingText?.takeIf { it.isNotBlank() } ?: mem.content, isQuery = false)
-            store.upsertEmbedding(memoryId, m.tag, VectorMath.toBlob(vec))
+            val doc = RetrievalDocument.semanticDocument(
+                mem.title, mem.content, mem.embeddingText, parseTags(mem.tagsJson)
+            )
+            val vec = m.embed(doc, isQuery = false)
+            store.upsertEmbedding(memoryId, RetrievalDocument.effectiveKey(m.tag), VectorMath.toBlob(vec))
         } catch (t: Throwable) {
             MemoryLog.log(appContext, "Librarian", "error", "Reindex of $memoryId failed: ${t.message}")
         }
@@ -363,41 +416,51 @@ class Librarian private constructor(private val appContext: Context) {
             } ?: emptySet()
         val queryLower = query.lowercase()
         val tagsById = candidates.associate { it.memoryId to parseTags(it.tagsJson) }
-        fun boostOf(mem: RetrievableMemory): Double = retrievalBoost(
-            mem.scope, projectMemoryIds.contains(mem.memoryId), tagsById[mem.memoryId].orEmpty(), queryLower
-        )
+        val aliasesById: Map<String, List<String>> = try {
+            store.activeMemoryTargetNames()
+        } catch (_: Exception) { emptyMap() }
         val recency = freshness(candidates)
 
         val m = ensureModel()
+        var vectors: Map<String, ByteArray> = emptyMap()
         if (m != null) {
             try {
-                val vectors = store.activeEmbeddings(m.tag)
+                vectors = store.activeEmbeddings(RetrievalDocument.effectiveKey(m.tag))
                 val missing = candidates.count { !vectors.containsKey(it.memoryId) }
-                if (missing == 0) {
-                    val queryVec = m.embed(query, isQuery = true)
-                    val ranked = candidates.map { mem ->
-                        Candidate(
-                            mem, VectorMath.fromBlob(vectors.getValue(mem.memoryId)),
-                            recency[mem.memoryId] ?: 0.0, boostOf(mem)
-                        )
-                    }
-                    return rank(queryVec, ranked, weights(store), topK, MIN_SIMILARITY)
+                if (missing > 0) {
+                    MemoryLog.log(
+                        appContext, "Librarian", "info",
+                        "Vector index incomplete — $missing of ${candidates.size} eligible memories lack a current ${RetrievalDocument.effectiveKey(m.tag)} vector; lexical retrieval over the complete set this turn"
+                    )
                 }
-                MemoryLog.log(
-                    appContext, "Librarian", "info",
-                    "Vector index incomplete — $missing of ${candidates.size} eligible memories lack a ${m.tag} vector; lexical retrieval over the complete set this turn"
-                )
             } catch (t: Throwable) {
-                MemoryLog.log(appContext, "Librarian", "error", "Vector search failed, using lexical fallback: ${t.message}")
+                vectors = emptyMap()
+                MemoryLog.log(appContext, "Librarian", "error", "Vector load failed, using lexical fallback: ${t.message}")
             }
         }
-        return rankLexical(
-            query,
-            candidates.map {
-                LexicalCandidate(it, tagsById[it.memoryId].orEmpty(), recency[it.memoryId] ?: 0.0, boostOf(it))
-            },
-            weights(store), topK
-        )
+        val corpus = candidates.map { mem ->
+            CorpusMemory(
+                memory = mem,
+                vector = vectors[mem.memoryId]?.let { VectorMath.fromBlob(it) },
+                tags = tagsById[mem.memoryId].orEmpty(),
+                aliases = aliasesById[mem.memoryId].orEmpty(),
+                recency = recency[mem.memoryId] ?: 0.0,
+                boost = retrievalBoost(
+                    mem.scope, projectMemoryIds.contains(mem.memoryId),
+                    tagsById[mem.memoryId].orEmpty(), queryLower
+                )
+            )
+        }
+        val embedQuery: () -> FloatArray? = embed@{
+            val model = m ?: return@embed null
+            try {
+                model.embed(query, isQuery = true)
+            } catch (t: Throwable) {
+                MemoryLog.log(appContext, "Librarian", "error", "Query embed failed, using lexical fallback: ${t.message}")
+                null
+            }
+        }
+        return searchCore(query, embedQuery, corpus, weights(store), topK)
     }
 
     /** tags_json -> list; a garbled column degrades to "no tags", never an error. */
@@ -414,31 +477,39 @@ class Librarian private constructor(private val appContext: Context) {
     fun rebuildIndex(progress: (Int, Int) -> Unit): Int {
         if (!MemoryStore.isProvisioned(appContext)) return 0
         val m = ensureModel() ?: return -1
+        val key = RetrievalDocument.effectiveKey(m.tag)
         val store = MemoryStore.getInstance(appContext)
-        store.deleteEmbeddingsNotModel(m.tag)
+        // Drops vectors from other models AND from older document versions —
+        // both are stale derived data under the versioned key.
+        store.deleteEmbeddingsNotModel(key)
         val memories = store.allActiveMemories()
         var done = 0
         for (mem in memories) {
             try {
-                val vec = m.embed(mem.textToEmbed(), isQuery = false)
-                store.upsertEmbedding(mem.memoryId, m.tag, VectorMath.toBlob(vec))
+                val doc = RetrievalDocument.semanticDocument(
+                    mem.title, mem.content, mem.embeddingText, parseTags(mem.tagsJson)
+                )
+                val vec = m.embed(doc, isQuery = false)
+                store.upsertEmbedding(mem.memoryId, key, VectorMath.toBlob(vec))
             } catch (t: Throwable) {
                 MemoryLog.log(appContext, "Librarian", "error", "Embed failed for ${mem.memoryId}: ${t.message}")
             }
             done++
             progress(done, memories.size)
         }
-        store.setMeta(MemoryStore.META_INDEX_MODEL_TAG, m.tag)
+        store.setMeta(MemoryStore.META_INDEX_MODEL_TAG, key)
         return done
     }
 
-    /** True when the installed model's tag differs from what the index was last
-     *  built with, or memories lack vectors — the "rebuild needed" signal. */
+    /** True when the installed model's tag or the retrieval document version
+     *  differs from what the index was last built with, or memories lack
+     *  vectors — the "rebuild needed" signal. */
     fun indexNeedsRebuild(): Boolean {
         if (!MemoryStore.isProvisioned(appContext)) return false
         val tag = activeTag() ?: return false
+        val key = RetrievalDocument.effectiveKey(tag)
         val store = MemoryStore.getInstance(appContext)
-        if (store.getMeta(MemoryStore.META_INDEX_MODEL_TAG) != tag) return true
-        return store.countMissingEmbeddings(tag) > 0
+        if (store.getMeta(MemoryStore.META_INDEX_MODEL_TAG) != key) return true
+        return store.countMissingEmbeddings(key) > 0
     }
 }
