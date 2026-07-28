@@ -2710,36 +2710,52 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         )
     }
 
+    private fun readArchivistRun(it: Cursor): ArchivistRunRecord = ArchivistRunRecord(
+        runId = it.getString(it.getColumnIndexOrThrow("run_id")),
+        startedAt = it.getString(it.getColumnIndexOrThrow("started_at")),
+        finishedAt = it.getStringOrNull("finished_at"),
+        status = it.getString(it.getColumnIndexOrThrow("status")),
+        chatIdsJson = it.getStringOrNull("chat_ids_json") ?: "[]",
+        transcriptIdsJson = it.getStringOrNull("transcript_ids_json") ?: "[]",
+        memoryIdsJson = it.getStringOrNull("memory_ids_json") ?: "[]",
+        ruleIdsJson = it.getStringOrNull("rule_ids_json") ?: "[]",
+        foundCount = it.getInt(it.getColumnIndexOrThrow("found_count")),
+        failedChatIdsJson = it.getStringOrNull("failed_chat_ids_json") ?: "[]",
+        error = it.getStringOrNull("error"),
+        outcome = it.getStringOrNull("outcome"),
+        failureReason = it.getStringOrNull("failure_reason"),
+        transport = it.getStringOrNull("transport") ?: "api"
+    )
+
     /** Newest first, for the "Recent Memory Analysis" list. A live 'running'
-     *  row is the durable active-run record, not history — excluded. */
+     *  row is the durable active-run record, not history — excluded — and
+     *  computer review packages have their own surface, so only API runs
+     *  appear here. */
     fun getArchivistRuns(limit: Int): List<ArchivistRunRecord> {
         val out = ArrayList<ArchivistRunRecord>()
         readableDatabase.query(
-            "archivist_runs", null, "status != 'running'", null, null, null,
+            "archivist_runs", null, "status != 'running' AND transport = 'api'", null, null, null,
             "started_at DESC, run_id DESC", limit.toString()
-        ).use {
-            while (it.moveToNext()) {
-                out.add(
-                    ArchivistRunRecord(
-                        runId = it.getString(it.getColumnIndexOrThrow("run_id")),
-                        startedAt = it.getString(it.getColumnIndexOrThrow("started_at")),
-                        finishedAt = it.getStringOrNull("finished_at"),
-                        status = it.getString(it.getColumnIndexOrThrow("status")),
-                        chatIdsJson = it.getStringOrNull("chat_ids_json") ?: "[]",
-                        transcriptIdsJson = it.getStringOrNull("transcript_ids_json") ?: "[]",
-                        memoryIdsJson = it.getStringOrNull("memory_ids_json") ?: "[]",
-                        ruleIdsJson = it.getStringOrNull("rule_ids_json") ?: "[]",
-                        foundCount = it.getInt(it.getColumnIndexOrThrow("found_count")),
-                        failedChatIdsJson = it.getStringOrNull("failed_chat_ids_json") ?: "[]",
-                        error = it.getStringOrNull("error"),
-                        outcome = it.getStringOrNull("outcome"),
-                        failureReason = it.getStringOrNull("failure_reason"),
-                        transport = it.getStringOrNull("transport") ?: "api"
-                    )
-                )
-            }
-        }
+        ).use { while (it.moveToNext()) out.add(readArchivistRun(it)) }
         return out
+    }
+
+    /** Remove a run/package record entirely (a cancelled or never-written
+     *  computer package is not history — it simply un-happens; its released
+     *  rows return to the queue). API run history is never deleted. */
+    fun deleteArchivistRun(runId: String) {
+        writableDatabase.delete("archivist_runs", "run_id = ?", arrayOf(runId))
+    }
+
+    /** The one outstanding computer review package (counterplan §4: at most
+     *  one at a time), or null. A 'running' computer row IS the outstanding-
+     *  package record: its claims freeze the exported rows until import,
+     *  cancel, or replacement — never auto-released by the reconcile. */
+    fun getOutstandingComputerPackage(): ArchivistRunRecord? {
+        readableDatabase.query(
+            "archivist_runs", null, "status = 'running' AND transport = 'computer'",
+            null, null, null, "started_at DESC", "1"
+        ).use { return if (it.moveToNext()) readArchivistRun(it) else null }
     }
 
     fun getArchivistRun(runId: String): ArchivistRunRecord? =

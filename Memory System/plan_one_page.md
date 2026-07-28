@@ -43,6 +43,14 @@ already works without it.)
   the suggestions back into Pending. Needs the duplicate-screen
   foundations first; nothing else.
 
+## The owner's standing ruling on all remaining work (2026-07-28)
+
+Build the wiring and the basics. This is a personal app, not a store
+release: minimal states only — a line saying what's happening, success,
+partial failure. No stacked warnings or privacy ceremony in the first
+working version. The fuller designs stay recorded for later; they are
+not built first and not asked about.
+
 ## How to start anything
 
 One line in chat, in your words: *"do the duplicate screen"*, *"do the

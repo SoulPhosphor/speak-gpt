@@ -1271,6 +1271,13 @@ owner anything):**
   appears in wording (`CLAUDE.md` §9); never present a wall of wording
   questions — when a step genuinely needs a word, ship the invisible parts
   and stop at the boundary silently.
+- **Barebones ruling (owner, 2026-07-28).** Build the wiring and basics
+  first. This is a personal build, not a store release: minimal states
+  only — a progress line saying what's happening, success, partial
+  failure. Do not front-load the §6/§9 multi-dialog copy, stacked
+  warnings, or privacy ceremony; they stay recorded here for later and
+  are not asked about. This ruling narrows the v1 scope of Phases 2–4
+  UI to those minimal states.
 
 No owner wording review is needed for internal database, retrieval,
 index, and run-integrity changes — ever.

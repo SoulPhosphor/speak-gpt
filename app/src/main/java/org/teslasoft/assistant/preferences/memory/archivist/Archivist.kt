@@ -35,10 +35,7 @@ import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.preferences.memory.ArchivistRunRecord
-import org.teslasoft.assistant.preferences.memory.CardSections
-import org.teslasoft.assistant.preferences.memory.CardType
 import org.teslasoft.assistant.preferences.memory.MemoryLog
-import org.teslasoft.assistant.preferences.memory.MemoryRecord
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.memory.ModelRuleRecord
 import org.teslasoft.assistant.preferences.memory.TranscriptRecord
@@ -403,8 +400,17 @@ object Archivist {
                                     "chat=${conversation.chatId}: $belowFloor draft(s) below minimum importance $minImportance skipped")
                             }
                             val before = memoryIds.size
-                            duplicatesSkipped += fileMemoryDrafts(
-                                context, store, conversation, candidates, memoryIds, cardSuggestionsOn
+                            // The shared filing boundary (DraftFiling): the
+                            // same checks the computer-import route will use.
+                            duplicatesSkipped += DraftFiling.fileMemoryDrafts(
+                                context, store,
+                                DraftFiling.Source(
+                                    chatId = conversation.chatId,
+                                    chatName = conversation.chatName,
+                                    companionId = conversation.transcripts
+                                        .firstNotNullOfOrNull { it.companionId }
+                                ),
+                                candidates, memoryIds, cardSuggestionsOn
                             )
                             filedThisConversation += memoryIds.size - before
                             fileRuleDrafts(context, store, conversation, parsed.rules, ruleIds)
@@ -550,133 +556,6 @@ object Archivist {
         )
     }
 
-    /** Returns how many candidates were skipped as duplicates of memories
-     *  that already exist ("Archivist found only memories that already
-     *  exist" needs the distinction). A store insert failure aborts the
-     *  conversation as reason E (save failed). */
-    private fun fileMemoryDrafts(
-        context: Context,
-        store: MemoryStore,
-        conversation: Conversation,
-        drafts: List<ArchivistResponseParser.DraftMemory>,
-        collectedIds: MutableList<String>,
-        cardSuggestionsOn: Boolean
-    ): Int {
-        if (drafts.isEmpty()) return 0
-        var duplicates = 0
-        val now = Instant.now().toString()
-        val companionId = conversation.transcripts.firstNotNullOfOrNull { it.companionId }
-        // Live cards for placement-suggestion resolution: name → (type, id).
-        // Loaded once per conversation; exact case-insensitive name match
-        // against EXISTING cards only — an unknown card name just drops the
-        // suggestion, never the memory, and nothing is ever created.
-        val liveCards: List<Triple<String, String, String>> = if (cardSuggestionsOn) {
-            buildList {
-                store.getAllWorlds().filter { it.status == "active" }
-                    .forEach { add(Triple(CardType.WORLD, it.worldId, it.name)) }
-                store.getActiveCampaigns()
-                    .forEach { add(Triple(CardType.CAMPAIGN, it.campaignId, it.name)) }
-                store.getAllRoleplayCharacters().filter { it.status == "active" }
-                    .forEach { add(Triple(CardType.RP_CHARACTER, it.roleplayCharacterId, it.name)) }
-                store.getPartyMembers(includeArchived = false)
-                    .forEach { add(Triple(CardType.PARTY_MEMBER, it.partyMemberId, it.name)) }
-            }
-        } else emptyList()
-        for (d in drafts) {
-            if (store.memoryExistsWithText(d.title, d.content)) { duplicates++; continue }
-            // A draft the user deleted is a rejection (owner preference,
-            // July 9 2026): the exact same draft from the same conversation
-            // is not refiled on rerun. Deliberately narrow — different
-            // wording or a different conversation files normally. Keyed by
-            // chat ID since DB v17 (counterplan §4(c)) so a rename cannot
-            // defeat it.
-            if (store.isDraftRejected(d.title, d.content, conversation.chatId)) {
-                MemoryLog.log(context, "Archivist", "info",
-                    "chat=${conversation.chatId}: previously rejected draft not refiled (\"${d.title}\")")
-                continue
-            }
-            // Resolve a proposed placement (roleplay scopes only): the section
-            // must be a real key for the matched card's type.
-            var sugType: String? = null
-            var sugId: String? = null
-            var sugSection: String? = null
-            if (cardSuggestionsOn && d.cardName != null && d.cardSection != null &&
-                d.scope in setOf("world", "campaign", "rp_character")
-            ) {
-                val match = liveCards.firstOrNull { it.third.equals(d.cardName, ignoreCase = true) }
-                if (match != null && d.cardSection in CardSections.sectionsFor(match.first)) {
-                    sugType = match.first
-                    sugId = match.second
-                    sugSection = d.cardSection
-                }
-            }
-            val record = MemoryRecord(
-                memoryId = MemoryStore.newId("m-"),
-                scope = d.scope,
-                kind = d.kind,
-                title = d.title,
-                content = d.content,
-                embeddingText = null,
-                tagsJson = listToJson(d.tags),
-                importance = d.importance,
-                worldIds = resolveTarget(d, "world") { store.getAllWorlds().map { it.worldId to it.name } },
-                roleplayCharacterIds = resolveTarget(d, "rp_character") {
-                    store.getAllRoleplayCharacters().map { it.roleplayCharacterId to it.name }
-                },
-                campaignIds = resolveTarget(d, "campaign") { store.getCampaigns().map { it.campaignId to it.name } },
-                projectIds = resolveTarget(d, "project") { store.getProjects().map { it.projectId to it.name } },
-                protectionJson = null,
-                modeHintsJson = "[]",
-                provenanceSource = if (d.stated) "user_stated" else "inferred",
-                provenanceConfidence = if (d.stated) "certain" else "tentative",
-                provenanceNotedOn = now,
-                // §14: the editor shows which chat a draft came from and when.
-                provenanceContext = conversation.chatName,
-                // Rename-safe source anchor (§4(c)): repointChat keeps this
-                // current, so a rejection registered at deletion time always
-                // matches the chat id a rerun looks up.
-                sourceChatId = conversation.chatId,
-                createdAt = now,
-                updatedAt = null,
-                status = "draft",
-                supersedes = null,
-                companionIds = if (d.scope == "companion" && companionId != null) listOf(companionId) else emptyList(),
-                entityRefs = emptyList(),
-                changeLog = emptyList(),
-                origin = "archivist",
-                suggestedCardType = sugType,
-                suggestedCardId = sugId,
-                suggestedSection = sugSection
-            )
-            try {
-                store.insertArchivistDraftMemory(record)
-                collectedIds.add(record.memoryId)
-            } catch (e: Exception) {
-                MemoryLog.logAlways(context, "Archivist", "error", "draft insert failed: ${e.message}")
-                throw TaggedArchivistException(ArchivistFailure.SAVE_FAILED, e)
-            }
-        }
-        return duplicates
-    }
-
-    /** A proposed target NAME only ever links to a record that already exists
-     *  (exact name match, case-insensitive). The Archivist never creates
-     *  worlds/campaigns/characters/projects — emergence stays a Phase 6+
-     *  question for the owner. No match → the draft arrives untargeted and
-     *  the user assigns targets in the editor before accepting. */
-    private fun resolveTarget(
-        d: ArchivistResponseParser.DraftMemory,
-        scope: String,
-        candidates: () -> List<Pair<String, String>>
-    ): List<String> {
-        if (d.scope != scope) return emptyList()
-        val name = d.targetName ?: return emptyList()
-        return candidates()
-            .filter { it.second.equals(name, ignoreCase = true) }
-            .map { it.first }
-            .take(1)
-    }
-
     private fun fileRuleDrafts(
         context: Context,
         store: MemoryStore,
@@ -748,7 +627,9 @@ object Archivist {
         return if (full.endsWith(marker)) full.removeSuffix(marker) else base
     }
 
-    private fun liveChatNamesById(context: Context): Map<String, String> {
+    /** Chat id → display name for every chat that still exists. Shared with
+     *  the computer review package (export scoping + import provenance). */
+    fun liveChatNamesById(context: Context): Map<String, String> {
         val out = HashMap<String, String>()
         for (chat in ChatPreferences.getChatPreferences().getChatList(context)) {
             val name = chat["name"] ?: continue
