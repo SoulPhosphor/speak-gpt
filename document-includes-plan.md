@@ -1,9 +1,10 @@
 # Document & Image Includes — Build Plan
 
-Status: **Step 1 repaired and verified.** The first implementation reached
-`main` with working pieces and material defects; the repair now passes its
-tests and Android Checks. Step 2 code exists but remains outside the Step 1
-acceptance boundary. Step 3 (images) has not been built.
+Status: **Step 3 in progress.** Steps 1 and 2 are complete. Step 3 data
+model, image importer, capability store, kind-aware UI wording, and legacy
+vision-path deletion have landed and are CI-green (all tests pass, debug APK
+builds). Four integration pieces remain before Step 3 is complete (see
+Build order section).
 
 This document records the current implementation baseline and build boundary.
 It does not turn an old discussion, uncertainty, or existing code into user
@@ -76,7 +77,8 @@ changes an include's form.
   optional later editing from the bookmark-with-plus icon.
 - **Step 3 — images** join the same system ("Reduce to Text Only"); the old
   broken image path (hard-coded `gpt-4o`, bypasses history/memory) is
-  **deleted**, not left behind.
+  **deleted**, not left behind. Accepted formats: JPEG, PNG, and HEIC
+  (HEIC is converted to JPEG at import time — no HEIC kind persists).
 
 **Current non-goals:** no PDF (deferred), no legacy `.doc` (only
 `.docx`), no image generation changes, no writing edited documents back to
@@ -107,7 +109,17 @@ All strings live in `res/values/strings.xml` only, per house rule.
 | Duplicate pending source | **Document already attached.** with an **Okay** button |
 | History box label | **Includes** |
 | Artifact default shape | AI-written reminder, no more than 3 short sentences |
-| Collapse line (4+ items) | **Includes N Documents** — "Documents" capitalised per the app's Title Case rule, followed by a **downward-facing chevron** |
+| Collapse line (4+ docs) | **Includes N Documents** — "Documents" capitalised per the app's Title Case rule, followed by a **downward-facing chevron** |
+| Collapse line (4+ images) | **Includes N Images** |
+| Collapse line (4+ mixed) | **Includes N Files** |
+| Show accessibility (docs) | **Show Attached Documents** |
+| Hide accessibility (docs) | **Hide Attached Documents** |
+| Show accessibility (images) | **Show Attached Images** |
+| Hide accessibility (images) | **Hide Attached Images** |
+| Show accessibility (mixed) | **Show Attached Files** |
+| Hide accessibility (mixed) | **Hide Attached Files** |
+| Duplicate image popup | **Image already attached.** with an **Okay** button |
+| Camera display name | **{ChatName} MM-DD-YY HH-mm.jpg** |
 
 ### Upload failure dialogs
 
@@ -126,6 +138,24 @@ descriptor below, and the dialog has a Close action.
 | A DOCX document part is present but unreadable | **File is unable to be read. File is corrupted.** |
 | File contains no data | **File contains no data.** |
 | No more specific condition is proven | **File could not be attached due to an unknown error.** |
+
+### Image import failure dialogs
+
+Each dialog has a title and body. The dialog has a Close action.
+
+| Condition | Title | Body |
+|---|---|---|
+| Unsupported image type (not JPEG/PNG/HEIC) | **Format Not Supported** | **Only JPEG, PNG, and HEIC images can be attached.** |
+| HEIC-to-JPEG conversion failure | **Conversion Failed** | **This HEIC image could not be converted. Try converting it to JPEG or PNG first.** |
+| Read or decode failure | **Image Not Readable** | **This image could not be read. It may be damaged or incomplete.** |
+| Exceeds device processing limits | **Image Too Large** | **This image is too large to process on this device.** |
+
+### Image capability dialogs (at Send time)
+
+| Condition | Title | Body | Actions |
+|---|---|---|---|
+| Model known unsupported | **Images Not Supported** | **{modelName} does not support image input. Remove the images or switch to a model that supports vision.** | **Okay** |
+| Model capability unknown | **Image Support Unknown** | **It is not known whether {modelName} supports image input. The message may fail if the model cannot process images.** | **Cancel**, **Send Anyway** |
 
 ## UI specification, surface by surface, with the styles each uses
 
@@ -167,10 +197,11 @@ dialog containing the approved error descriptor.
   is no redundant "Large file" note. Styled in the hint family
   (13sp, `@color/text_subtitle`).
 - **Collapse at 4+:** with four or more rows the strip becomes a single line
-  reading **Includes N Documents** with a **downward-facing chevron at the
-  end** (this supersedes the earlier upward-facing note; the chevron glyph
-  points down even though the list
-  opens upward). Tapping expands the full list **upward as an overlay
+  with a **downward-facing chevron at the end** (this supersedes the earlier
+  upward-facing note; the chevron glyph points down even though the list
+  opens upward). The noun adapts to content: **Includes N Documents** (all
+  documents), **Includes N Images** (all images), or **Includes N Files**
+  (mixed). Tapping expands the full list **upward as an overlay
   covering the chat** (the conversation must not be shoved around),
   scrollable, collapsed again the same way or by tapping outside. With three
   or fewer rows the strip shows them all, no collapse.
@@ -225,6 +256,34 @@ dialog containing the approved error descriptor.
 - Phase 2 verification covers the exact prompt, selected endpoint/model, and
   output limit used in the request. Condense does not add a chunking system.
 
+#### Reduce to Text Only (images — Step 3)
+
+- Reduce replaces an image with an AI-written text description. The visual
+  data is deleted from on-disk storage once the text takes effect. The
+  original file on the user's device is never touched.
+- Before the first Reduce, show a first-use hint dialog (separate suppress
+  flag from the Condense hint: `neverShowReduceHint`). The hint dialog uses
+  the same structure as the Condense hint: **Reduce**, **Cancel**, and
+  **Never show this hint again.** checkbox.
+- Reduce hint body: **Reducing an image replaces it with a short written
+  description. The image will no longer be sent to the model.**
+- Reduce progress: **Image is being reduced.** On success, the text takes
+  effect automatically. A failed or non-shorter result leaves the full
+  image unchanged.
+- The Reduce request sends the image to the chat's configured endpoint/model
+  as a vision request. The accompanying user message (what the user typed
+  that turn) is included as context so the description can reflect the
+  user's purpose. No separate token cap — uses the chat's configured
+  maxTokens.
+- Reduce prompt (approved): describes the image in detail — what it shows,
+  any text visible in it, layout, colors, important details — so someone
+  who cannot see the image understands its content and purpose. Includes
+  the user's message and file name as context. Instructs: describe only,
+  never invent, keep to a few clear paragraphs.
+- After Reduce, the image uses the `bookmark_add` glyph with **Edit** /
+  **Remove** menu, identical to the condensed-document bridge. Edit opens
+  the reduced text; Remove converts to artifact.
+
 ### 4. Remove
 
 - Before the message is sent, Remove detaches the pending item completely.
@@ -253,8 +312,9 @@ dialog containing the approved error descriptor.
 
 - A full document gets a row directly under the user label containing its
   type icon, name, explicit format, ~N tokens, and three-dot menu. One to three
-  documents/images remain shown. At four or more, **Includes N Documents**
-  becomes the collapsed accordion header.
+  documents/images remain shown. At four or more, the collapsed accordion
+  header adapts to content: **Includes N Documents** (all documents),
+  **Includes N Images** (all images), or **Includes N Files** (mixed).
 - Sent-item menus are anchored to those row three-dots: a full document has
   **Remove** and **Condense**; a full image (Step 3) has **Remove** and
   **Reduce to Text Only**.
@@ -338,8 +398,117 @@ dialog containing the approved error descriptor.
   `PerChatSettingKeys` (test-enforced). Rename safety goes through the
   existing wholesale-copy rename transaction — no hand-maintained copy
   blocks.
-- Attached source files are not retained beyond extraction; what persists is
-  the extracted text (chat content storage is already encrypted at rest).
+- Attached source files (documents) are not retained beyond extraction; what
+  persists is the extracted text (chat content storage is already encrypted
+  at rest).
+- Image bytes persist on disk (per-chat content-hash files) as long as the
+  image is in FULL form. Reducing or removing the image deletes the on-disk
+  bytes; only the AI-written text description or artifact line survives.
+  The user's original image file is never modified or deleted.
+
+## Image-specific decisions (Step 3)
+
+### Accepted formats and conversion
+
+JPEG and PNG are accepted directly as stored `IncludeKind.JPEG` and
+`IncludeKind.PNG`. HEIC is accepted at import but converted to JPEG — no
+HEIC kind persists in the data model. Multiple images can be attached to a
+single message.
+
+### Downsample policy
+
+Images are downsampled to a longest edge of **2048 px**, preserving aspect
+ratio. This is an app-level policy to keep payloads manageable, not a
+provider limit. Images already within the cap are sent at original
+resolution (never upscaled). `ImageDecoder` (API 28+) handles decoding and
+applies EXIF orientation natively — no manual orientation step.
+
+### Token estimate
+
+Images use a dimension-based estimate:
+`max(85, ceil(pixels / 750))` on the transmitted (post-downsample) dimensions.
+Always displayed with tilde (**~N tokens**). This is a warning-only
+estimate, never a hard send block. The floor of 85 covers the provider
+overhead for any image regardless of size.
+
+### On-disk storage
+
+Image bytes are stored per chat under
+`getExternalFilesDir("chat_includes")/<sanitized-chatId>/`. File names are
+content hashes (SHA-256 prefix), so the same image bytes always produce the
+same file. This means:
+
+- **Deduplication**: identical images in the same chat share one file.
+- **Deletion safety**: a file is only deleted when no other FULL include in
+  that chat (pending or saved) still references the same hash. The check
+  (`imageBytesStillReferenced`) scans both pending and history includes.
+- **Chat rename**: `ImageImporter.moveChatImages()` is called after the
+  rename transaction's pointer flip. It tries `renameTo` first, falls back
+  to copy, and merges if the destination directory already exists.
+- **Chat delete**: `ImageImporter.deleteChatImages()` removes the entire
+  per-chat directory.
+
+### Orphan cleanup
+
+Three layers prevent leaked files:
+
+1. **Lifecycle-scoped imports**: each import runs in a coroutine scoped to
+   the Activity. If the Activity dies mid-import, the scope is cancelled.
+2. **Immediate cleanup on Activity death**: `onDestroy()` cancels pending
+   import scopes and deletes any files that were written but never attached
+   to a ChatInclude.
+3. **Load-time reconciliation**: `reconcileChatImages()` runs when a chat is
+   loaded, deleting any files on disk that are not referenced by any saved
+   include's `imageFileHash`.
+
+### Duplicate detection
+
+At import time, a source fingerprint (URI + size + lastModified) is checked
+against `pendingImageImports`. If a duplicate is detected, the
+**Image already attached.** dialog appears and import is skipped.
+
+### Image capability (three-state per endpoint × model)
+
+Each endpoint stores a per-model image capability as one of three states:
+
+- **UNKNOWN** — no data. Default for any model not yet tried.
+- **SUPPORTED** — the model has successfully processed a vision request.
+- **UNSUPPORTED** — the model has clearly rejected a vision request.
+
+Storage is a JSON map in `ApiEndpointPreferences` under the key
+`_image_capability_by_model`. Setting UNKNOWN removes the entry (empty maps
+are not stored).
+
+**Auto-learning**: when a vision request succeeds, the store records
+SUPPORTED for that endpoint/model pair. When a provider returns a clear
+rejection (not a transient error), it records UNSUPPORTED.
+
+**Manual override**: a collapsed section in the endpoint editor shows all
+recorded models with their current state. Each model's state can be cycled
+manually. A "Clear image capability history" action with confirmation
+dialog resets the store for that endpoint.
+
+### Sending mechanics for images
+
+- Full images produce NO text-side content — `IncludeRenderer` skips them
+  in the text wrapper. They contribute `RenderedImagePart` objects instead.
+- `IncludeMessageProjection.userMessageParts()` returns a
+  `ProjectedUserMessage` with `text` (user words + document/reduced wrappers
+  + bookmarks) and `imageParts` (list of `RenderedImagePart`).
+- Multi-part user messages order text content first, image content parts
+  last (for prefix caching). An image-only message (no typed text, no
+  document includes) must not emit an empty text part.
+- Reduced images render as `<image name="..." form="reduced">...</image>`
+  (distinct from `<document>` wrappers). Removed images use `<bookmark>`
+  like documents.
+- Image bytes are loaded from disk as base64 on an IO thread at send time,
+  not held in memory between turns.
+
+### Camera naming
+
+Camera captures use the display name format:
+**{ChatName} MM-DD-YY HH-mm.jpg** — the chat's human name, date, and
+time, with `.jpg` extension (camera always produces JPEG).
 
 ## Build order and done-ness
 
@@ -356,11 +525,29 @@ dialog containing the approved error descriptor.
 - **Step 2:** Automatic Condense + optional bookmark editing, first-use hint,
   progress/completion dialog, distinct Condense and Remove prompts, selected
   endpoint/model and output-limit verification, and safe failure/race handling.
-- **Step 3:** images join (image icon rows, the approved pending-image helper,
-  Reduce to Text Only, the Phase 2 bookmark Edit/Remove bridge, ~token
-  estimate from dimensions, image-last ordering), and the old vision path —
-  the hard-coded `gpt-4o` branch and everything only it used — is deleted.
-  No orphaned layouts, strings, or drawables are left behind.
+- **Step 3 — IN PROGRESS.** Images join the same system. Landed and
+  CI-green: image data model (`ChatInclude` with JPEG/PNG kinds, image
+  fields, `isImage()` helpers), `ImageImporter` (pick/capture, HEIC→JPEG,
+  downsample to 2048 px, content-hash per-chat storage, orphan cleanup),
+  `ImageCapabilityStore` (three-state per endpoint×model, auto-learn ready),
+  `IncludeRenderer` and `IncludeMessageProjection` multi-part output,
+  `IncludeAuxiliaryRequestPolicy.reduceImage()`, kind-aware collapse lines
+  and accessibility labels, reduce hint layout and strings, all image
+  error dialogs, camera display naming, legacy vision-path deletion
+  (hard-coded `gpt-4o` branch, `attachedImage` view, old gallery picker,
+  old `chatMessage["image"]/["imageType"]` fields — all removed).
+  **Remaining before Step 3 is complete:**
+  1. Wire the multi-part sending path — text + image content parts,
+     images-last ordering, base64 loaded from disk on IO thread, no empty
+     text part for image-only messages.
+  2. Wire the Reduce flow — first-use hint dialog, vision request with
+     approved prompt + image part, delete on-disk bytes on Reduce/Remove.
+  3. Wire capability validation at Send — block on UNSUPPORTED, warn on
+     UNKNOWN (Cancel/Send Anyway), proceed on SUPPORTED, auto-learn on
+     success/clear-rejection.
+  4. Add manual override section to endpoint editor — collapsed "Image
+     capability by model" section, three-state control per recorded model,
+     "Clear image capability history" with confirmation dialog.
 
 Each step: static verification per the `CLAUDE.md` checklist, push, and watch
 Android Checks to green. A step is not complete until its own acceptance
