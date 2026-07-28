@@ -1,4 +1,4 @@
-# External Memory Analysis + RAG Compatibility — Counter Plan (Revision 7, model-free analysis rulings)
+# External Memory Analysis + RAG Compatibility — Counter Plan (Revision 8, numbered phases)
 
 **Document type:** Planning/architecture only — no code, database, prompt, UI,
 or string changes were made with this document.
@@ -52,7 +52,7 @@ record/revision/tombstone/evidence contracts, a shared retrieval
 specification, a disposable desktop file workspace, proposal operations for
 add/revise/merge/retire, stale-package and conflict behavior, incremental
 full/delta exchange, encryption and lost-key behavior, crash-safe import,
-compatibility rules, UI states, and a Phase A–D implementation path. It also
+compatibility rules, UI states, and a Phase 1–4 implementation path. It also
 records two repository constraints that earlier revisions did not resolve:
 the current portable JSON does not export `deleted_ids` and imports existing
 IDs as add-or-skip rather than reconcile; and the separate `LoreBookStore`
@@ -66,7 +66,7 @@ nine document-level corrections that are incorporated here: analysis no
 longer claims chats are unavailable or asks the user to keep a screen open;
 the API run moves under a dedicated foreground-service pattern; the existing
 embedding-model prerequisite is preserved pending an explicit owner decision;
-the duplicate Phase A numbering is replaced with named workstreams; retired
+the duplicate Phase 1 numbering is replaced with named steps; retired
 Protected/handling machinery is removed from the live design; exchange
 journals remain dormant until a computer workspace is first created; the
 working user term for an internal `retire` proposal is consistently
@@ -75,6 +75,14 @@ privacy warning; and API/computer-run coexistence is explicit. All visible
 copy remains provisional and the owner has deferred wording approval until
 the architecture is complete. No app code or strings are changed by this
 revision.
+**Revision 8 (2026-07-28):** documentation-only naming correction. Replaced
+the duplicate letter-based naming system (Phases A–D plus Work Orders A–J)
+with a single numbered system: Phases 1–4, with Phase 1 subdivided into
+Steps 1.1–1.7. This is a labeling change only; no product requirements,
+code, behavior, scope, or approved decisions changed. §5.10 workstreams
+became numbered steps; §10 phase and subsection headings use the new numbers;
+§15 was rewritten from a letter-based work-order list to a numbered step
+list; all cross-references throughout the document were updated.
 **Revision 7 (2026-07-28):** the owner ruled on the open embedding-model
 question and extended the plan with a model-free analysis path. Recorded in
 §5.3, §6, §9.3.1, and §13: memory analysis/archiving works without the
@@ -88,8 +96,8 @@ mode that proposes keyword-triggered lore book entries instead of saved
 memories; those suggestions are reviewed in the lore book area behind a
 split menu that exists only while suggestions are pending, each with a
 destination drop-down that includes full-page new-book creation. A §15
-owner work-order list (letters A–J) was added so the owner can start any
-implementation step by naming its letter. Three stale pointers back to the
+implementation step list was added so the owner can start any step by
+naming its number. Three stale pointers back to the
 audit plan (the top summary note, §4's package-design paragraph, and §6's
 UI-sketch note) were corrected: §9.4 and §6 have fully superseded them since
 Revisions 3 and 5, and this revision says so explicitly, so no future reader
@@ -186,7 +194,7 @@ Pending review, origin tracking) — and write our own small implementation.
 
 ---
 
-## 4. The external-workflow intent (mapped to the authoritative A–D plan in §§9–10)
+## 4. The external-workflow intent (mapped to the authoritative Phase 1–4 plan in §§9–10)
 
 The audit plan's Stage 0–11 program front-loads a generalized run
 coordinator, an item state machine, claim leases, an exclusion-reason table,
@@ -196,11 +204,11 @@ the only compile gate and regressions land on one user's daily driver, that
 much rebuilt machinery is itself the biggest risk. This plan cuts to what
 the file feature actually requires. Revision 5 keeps these product
 constraints but replaces this section's compressed delivery outline with
-the complete architecture and Phase A–D path in §§9–10. In particular, the computer may
+the complete architecture and Phase 1–4 path in §§9–10. In particular, the computer may
 propose maintenance operations as well as additions, but it still has
 **proposal authority only**.
 
-### Phase A precursor — Make the existing engine truthful (small, independent fixes)
+### Phase 1 precursor — Make the existing engine truthful (small, independent fixes)
 
 Each item below is a small, separately shippable change to the CURRENT API
 Archivist. They fix real defects whether or not the external feature ever
@@ -284,7 +292,7 @@ ships, and (a)–(c) are hard prerequisites for it.
   re-queue them. When the user re-enables **Archive this chat**, use the
   explicit Include Earlier Messages / New Messages Only choice in §6. That
   is simpler and more truthful than overlapping exclusion machinery, and it
-  must land before Phase B ships because export eligibility depends on it.
+  must land before Phase 2 ships because export eligibility depends on it.
 - **(g) Truthful failure wording** — the full-failure path reports the real
   draft count instead of a hardcoded zero. (Status wording is owner-approved
   text — any visible change goes through the owner.)
@@ -316,7 +324,7 @@ What v1 keeps from the audit plan's machinery:
   duplicate suppression, and the remaining item stays retryable. (This is
   the audit plan's `analysis_items` idea minus the state-machine ceremony —
   no leases, no candidate-event ledger, no coordinator framework.)
-- **claimed rows stay frozen** (Phase A's claim stamp) while a package is
+- **claimed rows stay frozen** (Phase 1's claim stamp) while a package is
   outstanding; new turns accumulate in new rows and are simply not in the
   package;
 - **one outstanding computer archive-review package at a time**. This does
@@ -380,7 +388,7 @@ defined here, per-message database IDs, canonical-JSON hashing per RFC 8785,
 general phone-to-phone sync, and multiple outstanding computer review
 packages. A
 separate optional encryption wrapper and incremental computer-workspace
-updates are now part of Phase D (§§9–10), not vague prerequisites for the first
+updates are now part of Phase 4 (§§9–10), not vague prerequisites for the first
 working package.
 
 UI for v1 is intentionally minimal and 100% owner-designed before build:
@@ -401,7 +409,7 @@ no database, no embeddings). A plaintext email attachment or cloud-drive
 upload also exposes the package to that transfer/storage service before an
 AI reads it; recommend USB or a trusted local transfer where practical.
 
-### After Phase D — Only if wanted: the same contract through other transports
+### After Phase 4 — Only if wanted: the same contract through other transports
 
 Once the package exists, other consumers come nearly free and need no new
 app code paths: a local LLM harness that can read files, a home-server
@@ -445,7 +453,7 @@ deterministic text overlap, the same safe degradation principle the
 Librarian uses. That reliability fallback does not decide the separate
 owner question of whether Saved memories may be first-enabled without a
 model. The **exact** duplicate/status check and acceptance-time revalidation
-are Phase A correctness work. The broader semantic comparison screen can
+are Phase 1 correctness work. The broader semantic comparison screen can
 follow the file loop, but it should land before large backfills or a broad
 release make memory hygiene expensive. Its screens and wording are an
 owner-approval conversation of their own.
@@ -987,36 +995,43 @@ superseded/stale retrieval rate, and lexical-fallback parity. Evaluate
 retrieval selection before judging final model prose, so generation variance
 does not hide a read-path defect.
 
-### 5.10 Named workstreams and gates
+### 5.10 Implementation steps and gates
 
 Keep the implementation small and independently reversible:
 
-1. **Phase A / Source semantics:** two global defaults, matching
+1. **Step 1.1 — Source semantics:** two global defaults, matching
    per-chat controls, Saved-memories-led store provisioning,
    injection/archive separation, legacy migration, and four-mode tests.
-2. **Phase A / Retrieval correctness:** complete-set fallback, relevance-before-
-   top-K, post-filter backfill, policy clamps, updated freshness, title/tag
-   lexical and embedding documents.
-3. **Phase A / Index lifecycle and performance:** derived missing-vector repair
-   (using the narrow approved portion of the existing health design), scoped
-   vector loads, cached/reused overlap vectors, persistent diagnostics.
-4. **Phase A / Provenance and hygiene:** shared filing/acceptance validation,
-   evidence lineage, truthful source labels, status-aware exact matching,
-   Possible Match service.
-5. **Phase A / Lore query and diagnostics:** joined/cached trigger retrieval,
-   exact cross-book content dedup, injected-versus-cut logs.
-6. **Phase B — full portable package:** ship only after **Source semantics**,
-   the release-blocking parts of **Retrieval correctness**, and the
-   evidence/shared-filing foundation from **Provenance and hygiene** are
-   complete.
-7. **Phase C — computer workflow proof:** validate the shared retrieval/result
-   contract with real file-capable agents before app mutation code.
-8. **Phase D — reconciliation and deltas:** strict import, conflicts, Pending,
-   approval/rollback, incremental workspace updates, then optional encryption.
+2. **Step 1.2 — Retrieval correctness:** complete-set fallback,
+   relevance-before-top-K, post-filter backfill, policy clamps, updated
+   freshness, title/tag lexical and embedding documents.
+3. **Step 1.3 — Run integrity and truthful status:** sealed transcript
+   claims, durable run record, foreground service, scene-context capture,
+   rename-safe rejected drafts, honest failure counts.
+4. **Step 1.4 — Index lifecycle and performance:** derived missing-vector
+   repair (using the narrow approved portion of the existing health design),
+   scoped vector loads, cached/reused overlap vectors, persistent
+   diagnostics.
+5. **Step 1.5 — Provenance and hygiene:** shared filing/acceptance
+   validation, evidence lineage, truthful source labels, status-aware exact
+   matching, Possible Match service.
+6. **Step 1.6 — Lore query and diagnostics:** joined/cached trigger
+   retrieval, exact cross-book content dedup, injected-versus-cut logs.
+7. **Step 1.7 — Model-free analysis and lorebook-only mode:** Memory
+   Browser banner, Memory Analysis Type control, lore book pending area.
+8. **Phase 2 — Portable memory package:** ship only after **Step 1.1**,
+   the release-blocking parts of **Step 1.2**, **Step 1.3**, and the
+   evidence/shared-filing foundation from **Step 1.5** are complete.
+9. **Phase 3 — Computer workflow proof:** validate the shared
+   retrieval/result contract with real file-capable agents before app
+   mutation code.
+10. **Phase 4 — Import and reconciliation:** strict import, conflicts,
+    Pending, approval/rollback, incremental workspace updates, then optional
+    encryption.
 
 Index-lifecycle performance optimizations can move later if measurement
 shows no current latency problem, but the partial-index correctness fallback
-cannot. Semantic Possible Match UI may mature during Phases C/D, but
+cannot. Semantic Possible Match UI may mature during Phases 3/4, but
 acceptance-time exact validation cannot.
 
 ### 5.11 Residual risks that cannot be designed away completely
@@ -1057,7 +1072,7 @@ owner approves visible wording in chat before implementation. Missing cases
 return for copy review; an implementation agent must not improvise new
 user-facing text. The owner has explicitly deferred final user-facing wording
 decisions until the architecture is complete, so every string below remains
-a working placeholder and does not block behind-the-scenes Phase A work.
+a working placeholder and does not block behind-the-scenes Phase 1 work.
 
 ### Shared vocabulary
 
@@ -1086,9 +1101,9 @@ primary UI. Do not display a similarity percentage as if it were a
 probability. `retire` remains the schema/implementation operation name; do
 not expose **Retire** or **Retirement** as a competing user term.
 
-### Phase A copy — the only wording needed before the file workflow
+### Phase 1 copy — the only wording needed before the file workflow
 
-Most of Phase A is invisible correctness work and needs no labels. Only the
+Most of Phase 1 is invisible correctness work and needs no labels. Only the
 following visible situations need owner-approved wording.
 
 #### A. Analysis in progress
@@ -1178,7 +1193,7 @@ embedding model is installed; §5.3 defines the behavior):
 The owner has ruled the verb is **can't**, never "won't".
 
 Memory Analysis Type control — the owner's draft, recorded verbatim
-(final wording is approved with the rest of the Phase A copy):
+(final wording is approved with the rest of the Phase 1 copy):
 
 > **Memory Analysis Type**
 >
@@ -1210,13 +1225,13 @@ preserving the owner's structure:
 The lore book suggestion review copy (split menu, destination drop-down,
 approval cards) returns for owner review when that feature is scheduled.
 
-**Owner review required near the end of Phase A:** the two source labels/helpers in
+**Owner review required near the end of Phase 1:** the two source labels/helpers in
 §5.3, the archive re-enable default, and the five short status/dialog/control
 groups above (A–E, including the banner and Memory Analysis Type wording).
 No owner wording review is needed for internal database, retrieval,
 index, and run-integrity changes.
 
-### Phases B–D copy — reserve now, approve when the file workflow begins
+### Phases 2–4 copy — reserve now, approve when the file workflow begins
 
 The computer route is a subordinate row on the existing Memory Assistant,
 not a replacement for Analyze Conversations.
@@ -1392,9 +1407,9 @@ Each failure says what happened and confirms that nothing unsafe changed:
 Recent-run route labels, when needed, are **In App** and **On Computer**.
 An outstanding computer run uses **Import Suggestions**, not **Run Again**.
 
-**Owner review required for Phases B–D:** approve this screen as one coherent
-flow when Phase B starts. There is no reason to approve every file-workflow
-label during Phase A.
+**Owner review required for Phases 2–4:** approve this screen as one coherent
+flow when Phase 2 starts. There is no reason to approve every file-workflow
+label during Phase 1.
 
 ### Possible Match copy — approve when the feature is scheduled
 
@@ -1440,19 +1455,19 @@ unencrypted-endpoint warning rather than inventing another warning.
 
 Revision 5 uses the explicit sequence in §14:
 
-1. **Phase A — RAG correctness repairs:** source/archive semantics, run
+1. **Phase 1 — Phone Memory Reliability:** source/archive semantics, run
    integrity, complete-set retrieval, filtering/backfill, edit/index
    lifecycle, keyword ranking, context budget, evidence foundation, and
    end-to-end evaluation.
-2. **Phase B — Portable memory package:** stable exchange identities,
+2. **Phase 2 — Portable Memory Package:** stable exchange identities,
    hashes/revisions/tombstones, full searchable export, read-only
    lore/card/chat evidence, and verified package ledgers.
-3. **Phase C — Desktop agent workflow:** shared retrieval spec, materialized
+3. **Phase 3 — Computer Workflow Proof:** shared retrieval spec, materialized
    file workspace, actual search/analysis instructions, strict
    add/revise/merge/retire proposal output, and cross-agent trials.
-4. **Phase D — Safe reconciliation:** import, conflict detection, Pending
-   review, atomic approval/rollback, deltas, optional encryption, and
-   compatibility.
+4. **Phase 4 — Import and Reconciliation:** import, conflict detection,
+   Pending review, atomic approval/rollback, deltas, optional encryption,
+   and compatibility.
 
 Semantic Possible Match is candidate support across these phases, never an
 automatic merge rule. Future CLI/MCP/live transports come only after the
@@ -1478,10 +1493,10 @@ file loop is boringly reliable.
    and the off-by-default lorebook-only analysis mode gives model-less
    users a working keyword-triggered path (§5.3). Complete lexical fallback
    after a model/index failure remains required. Only final wording remains
-   open, inside the Phase A copy review.
-4. **Phase B plaintext disclosure/default scope:** approve the exact privacy
+   open, inside the Phase 1 copy review.
+4. **Phase 2 plaintext disclosure/default scope:** approve the exact privacy
    warning and selected-chat-review default before the first exchange export.
-5. **Phase D maintenance wording:** approve the visible Edit/Merge/Archive
+5. **Phase 4 maintenance wording:** approve the visible Edit/Merge/Archive
    Suggestion labels and stale-conflict choices.
 6. **Optional encryption timing:** accept plaintext-first interoperability
    (recommended) or require the separate encrypted wrapper/helper before
@@ -1493,7 +1508,7 @@ the file workflow and remain an optional future security decision.
 
 ### Technical gates that do not require routine owner input
 
-- Phase A run integrity and shared filing tests pass.
+- Phase 1 run integrity and shared filing tests pass.
 - The partial-index, relevance-floor, and backfill regressions in §5.5 have
   reproducing tests and verified fixes.
 - All four source modes pass final-prompt integration tests and independent
@@ -1504,7 +1519,7 @@ the file workflow and remain an optional future security decision.
 - On-device benchmark results are recorded and no release blocker is hidden
   behind "works in unit tests."
 - Full package → desktop result → Pending → approval → delta passes replay,
-  stale-state, process-death, and lost-workspace tests before Phase D exits.
+  stale-state, process-death, and lost-workspace tests before Phase 4 exits.
 - Reaffirm: `plot_ledger` card-section suggestions stay; no decision or
   change is needed despite the audit plan's contrary instruction.
 
@@ -1535,7 +1550,7 @@ The reviewer should:
    hardening** and **complexity with no demonstrated v1 value**.
 7. Check that every failure leaves deterministic recoverable state and that
    no model output can become an active memory without owner action.
-8. Check that the Phase A wording covers every newly visible state and that
+8. Check that the Phase 1 wording covers every newly visible state and that
    Phases B–D wording matches the planned state machine without exposing
    internal machinery.
 
@@ -1657,7 +1672,7 @@ not hypothetical future problems:
   available subset of vectors, applies its similarity floor after top-K,
   and falls back to a simple substring keyword search. `Enforcer` then
   removes lore-near-duplicates and cooling items without asking for
-  replacements. These are Phase A correctness issues, not desktop-only work.
+  replacements. These are Phase 1 correctness issues, not desktop-only work.
 
 ### 9.3 Architectural decisions that must be made now
 
@@ -2533,7 +2548,7 @@ decrypts it for an agent.
 
 #### 9.7.2 Optional encrypted wrapper
 
-Phase D may add `.sgmemory.enc` for local storage/transfer:
+Phase 4 may add `.sgmemory.enc` for local storage/transfer:
 
 - separate exchange magic/version;
 - fresh random data-encryption key and nonce;
@@ -2703,15 +2718,15 @@ transcripts processed.
 
 ## 10. Phased implementation path
 
-The implementation order is **A → B → C → D**. Each phase is independently
+The implementation order is **1 → 2 → 3 → 4**. Each phase is independently
 testable. Do not begin app import/reconciliation while the current phone RAG
 can still hide eligible memories.
 
-### Phase A — RAG correctness repairs
+### Phase 1 — Phone Memory Reliability
 
-#### A.1 Exact scope
+#### 1a. Exact scope
 
-Phase A fixes the user-visible read path and the capture/approval invariants
+Phase 1 fixes the user-visible read path and the capture/approval invariants
 that both API and computer analysis depend on:
 
 1. four independent source modes and archive consent;
@@ -2732,9 +2747,9 @@ that both API and computer analysis depend on:
 13. rename-safe evidence/rejected-draft identity;
 14. golden end-to-end retrieval tests.
 
-This phase does not add the computer export button.
+Phase 1 does not add the computer export button.
 
-#### A.2 Required retrieval behavior
+#### 1b. Required retrieval behavior
 
 ##### Complete-set vector fallback
 
@@ -2827,7 +2842,7 @@ Character budgeting remains an approximation to tokens; it must be named
 honestly. Model-context overflow handling at the overall request layer is a
 separate guard.
 
-#### A.3 Affected components and likely files
+#### 1c. Affected components and likely files
 
 Primary:
 
@@ -2868,7 +2883,7 @@ Tests:
 - four-source-mode final-prompt tests;
 - golden corpus fixtures.
 
-#### A.4 Data model and migration
+#### 1d. Data model and migration
 
 Minimum additive changes:
 
@@ -2880,7 +2895,7 @@ Minimum additive changes:
   updated-at-or-created-at freshness;
 - effective embedding document version in existing model tag/meta;
 - rename-safe rejected-draft source identity until immutable
-  `conversation_uid` lands in Phase B.
+  `conversation_uid` lands in Phase 2.
 
 No new memory kind, graph, story-time inference, relationship ontology, or
 vector database.
@@ -2895,7 +2910,7 @@ Backfill:
   explicitly chooses Include Earlier Messages;
 - malformed retrieval policy falls back to bounded defaults and is logged.
 
-#### A.5 Failure states and recovery
+#### 1e. Failure states and recovery
 
 - No embedding model / load failure / partial index: complete lexical
   retrieval, repair notice/log, generation continues.
@@ -2917,7 +2932,7 @@ Backfill:
 - Mid-run append: sealed claimed row cannot change; new turn starts a new
   pending row.
 
-#### A.6 Tests and exit gate
+#### 1f. Tests and exit gate
 
 Required tests reproduce and then close:
 
@@ -2945,7 +2960,7 @@ must-include recall to meet an explicitly recorded threshold on the
 shipping model and lexical fallback. Performance is measured on a real
 phone; no guessed millisecond threshold is written into architecture.
 
-#### A.7 Privacy and dependencies
+#### 1g. Privacy and dependencies
 
 No new export occurs. Transcript capture/consent behavior becomes clearer,
 which is itself a privacy repair. The foreground notification shows progress
@@ -2953,7 +2968,7 @@ counts/status, not chat text or proposed-memory content. This phase depends
 only on the existing stores; final source/status wording may be approved near
 the end and does not block internal repairs.
 
-#### A.8 Deliberately out of scope
+#### 1h. Deliberately out of scope
 
 - desktop package/import;
 - semantic auto-dedup or contradiction resolution;
@@ -2962,9 +2977,9 @@ the end and does not block internal repairs.
 - exact score parity with a future desktop model;
 - full phone-to-phone synchronization.
 
-### Phase B — Portable memory package
+### Phase 2 — Portable Memory Package
 
-#### B.1 Exact scope
+#### 2a. Exact scope
 
 Build a complete **full** `.sgmemory` export for `archive_review` and
 `library_maintenance`, with:
@@ -2981,7 +2996,7 @@ Build a complete **full** `.sgmemory` export for `archive_review` and
 This phase makes the package useful to a desktop agent even before the phone
 can reconcile its proposals.
 
-#### B.2 Affected components and likely files
+#### 2b. Affected components and likely files
 
 Do not overload the existing backup codecs. Likely new package:
 
@@ -3010,7 +3025,7 @@ Do not replace:
 - `backup/portable/PortablePackage*` recovery backups;
 - human-readable chat backup.
 
-#### B.3 Data model and migration
+#### 2c. Data model and migration
 
 Add:
 
@@ -3051,7 +3066,7 @@ Backfill limitations stated honestly:
   when it can be tied unambiguously to a transcript; otherwise it remains a
   legacy note, not fabricated proof.
 
-#### B.4 Failure states and recovery
+#### 2d. Failure states and recovery
 
 - Memory store unavailable: block packages requiring memory and preserve any
   prior verified export.
@@ -3070,7 +3085,7 @@ Backfill limitations stated honestly:
 - App death while writing: temp file is ignored/cleaned; ledger reconciles.
 - Package exceeds cap: offer narrower scopes/chats, not silent omission.
 
-#### B.5 Tests and exit gate
+#### 2e. Tests and exit gate
 
 - deterministic semantic hash fixtures across field order/Unicode/target set
   order;
@@ -3096,14 +3111,14 @@ Exit: two independent file-capable agents can open the same fixture package,
 find specified memories/lore/evidence by following the included workflow,
 and produce schema-valid sample results without repository knowledge.
 
-#### B.6 Privacy and dependencies
+#### 2f. Privacy and dependencies
 
-Depends on Phase A's source semantics, stable eligibility, evidence rules,
+Depends on Phase 1's source semantics, stable eligibility, evidence rules,
 and sealed claims. The export confirmation is an owner wording gate.
 Plaintext is permitted only after explicit disclosure and a visible content
 summary.
 
-#### B.7 Deliberately out of scope
+#### 2g. Deliberately out of scope
 
 - applying returned proposals;
 - delta packages;
@@ -3114,11 +3129,11 @@ summary.
 - exported embeddings;
 - external lore/card mutations.
 
-### Phase C — Desktop agent workflow
+### Phase 3 — Computer Workflow Proof
 
-#### C.1 Exact scope
+#### 3a. Exact scope
 
-Make the Phase B package operational with a provider-neutral desktop
+Make the Phase 2 package operational with a provider-neutral desktop
 workflow:
 
 - validated full workspace materialization;
@@ -3131,9 +3146,9 @@ workflow:
 - a repository validator/linter and golden examples.
 
 The phone may validate/display a result preview in this phase, but it does
-not apply it until Phase D.
+not apply it until Phase 4.
 
-#### C.2 Desktop implementation choice
+#### 3b. Desktop implementation choice
 
 First implementation: **shared retrieval spec + file-capable agent**.
 
@@ -3151,11 +3166,11 @@ Recommended next helper after real package trials: a small cross-platform
 - exposes `search`, `show`, `evidence`, and `lint-result`;
 - never edits authoritative records.
 
-The CLI is not required for Phase C exit if mainstream file agents can
+The CLI is not required for Phase 3 exit if mainstream file agents can
 perform the workflow reliably. It becomes justified by measured search,
 schema, or delta-application failures.
 
-#### C.3 Affected components and likely files
+#### 3c. Affected components and likely files
 
 Repository assets:
 
@@ -3172,14 +3187,14 @@ Android preview:
 - workflow activity's **Check result file** state;
 - no `MemoryStore` mutation calls.
 
-#### C.4 Data model and migration
+#### 3d. Data model and migration
 
 No additional authoritative record migration should be necessary beyond
-Phase B. The output contract is file schema. If a validator history is kept,
+Phase 2. The output contract is file schema. If a validator history is kept,
 store only package/result IDs, hashes, validation status, and bounded error
 summaries; do not duplicate full result bodies unnecessarily.
 
-#### C.5 Failure states and recovery
+#### 3e. Failure states and recovery
 
 - Agent skips a review item: item lacks terminal status; result invalid or
   item remains awaiting, never processed.
@@ -3192,7 +3207,7 @@ summaries; do not duplicate full result bodies unnecessarily.
   frozen item/input hash.
 - Local index corrupt: delete `index/` and rebuild; record files remain.
 
-#### C.6 Tests and exit gate
+#### 3f. Tests and exit gate
 
 - golden search questions return required and never forbidden IDs;
 - cross-world and archived/superseded leakage tests;
@@ -3209,13 +3224,13 @@ Exit: a user can export, hand the package to a supported file-capable agent
 with no custom API key, receive a schema-valid result, and see a trustworthy
 phone-side validation summary without any memory changing.
 
-#### C.7 Privacy and dependencies
+#### 3g. Privacy and dependencies
 
-Depends on Phase B. The desktop folder is explicitly private/readable. Agent
+Depends on Phase 2. The desktop folder is explicitly private/readable. Agent
 instructions tell cloud-agent users that read files may leave the computer.
 No credentials or provider-specific authentication are introduced.
 
-#### C.8 Deliberately out of scope
+#### 3h. Deliberately out of scope
 
 - automatic phone mutation;
 - background cloud upload;
@@ -3224,9 +3239,9 @@ No credentials or provider-specific authentication are introduced.
 - agent edits to lorebooks/cards/personas/model rules;
 - multi-agent consensus as a product requirement.
 
-### Phase D — Safe reconciliation and incremental synchronization
+### Phase 4 — Import and Reconciliation
 
-#### D.1 Exact scope
+#### 4a. Exact scope
 
 Complete the round trip:
 
@@ -3243,7 +3258,7 @@ Complete the round trip:
 - optional encrypted wrapper;
 - compatibility/migration support.
 
-#### D.2 Affected components and likely files
+#### 4b. Affected components and likely files
 
 New/expanded:
 
@@ -3267,9 +3282,9 @@ Existing:
 - `MemoryEditorActivity.kt`
 - `MemoryAssistantActivity.kt`
 - Librarian invalidation/repair hooks
-- lore/chat change feeds from Phase B.
+- lore/chat change feeds from Phase 2.
 
-#### D.3 Data model and migration
+#### 4c. Data model and migration
 
 Expand dormant `proposals` or add a narrowly equivalent table with:
 
@@ -3285,7 +3300,7 @@ Expand dormant `proposals` or add a narrowly equivalent table with:
 
 Add:
 
-- import session/item ledgers if not fully present from Phase B;
+- import session/item ledgers if not fully present from Phase 2;
 - `reconciliation_apply_batches`;
 - complete rollback before-images for affected semantic records/joins;
 - per-workspace acknowledged cursor/snapshot chain;
@@ -3305,7 +3320,7 @@ Migration/backfill:
 - old `companion-memory-export-v1` remains backup/import input, not accepted
   as a reconciliation result.
 
-#### D.4 Failure states and recovery
+#### 4d. Failure states and recovery
 
 - malformed/incompatible result: no store changes; actionable persistent
   error.
@@ -3322,7 +3337,7 @@ Migration/backfill:
 - lost exchange key: re-export full; phone data unaffected.
 - pruned change journal before desktop catches up: require full refresh.
 
-#### D.5 Tests and exit gate
+#### 4e. Tests and exit gate
 
 - every classification row in §9.6.2;
 - replay after full and partial import;
@@ -3346,14 +3361,14 @@ Exit: the full export → desktop analysis → import → Pending → approval �
 next delta loop survives replay, app death, stale records, and a lost
 desktop cache without silent data loss or duplicate active memories.
 
-#### D.6 Privacy and dependencies
+#### 4f. Privacy and dependencies
 
-Depends on A, B, and C. Import retains only result/provenance/rollback data
+Depends on Phases 1, 2, and 3. Import retains only result/provenance/rollback data
 needed for review and recovery. Staging files have an expiry/cleanup policy.
 Encryption wording and key-loss behavior need owner approval before that
 option is exposed.
 
-#### D.7 Deliberately out of scope
+#### 4g. Deliberately out of scope
 
 - live continuous sync;
 - automatic conflict merge;
@@ -3371,7 +3386,7 @@ The file contract is deliberately transport-independent.
 
 Recommended evolution:
 
-1. **Files only** (Phases B–D): works with Claude, ChatGPT, local agents, and
+1. **Files only** (Phases 2–4): works with Claude, ChatGPT, local agents, and
    ordinary scripts without accounts or networking.
 2. **Cross-platform CLI**: validate, decrypt, materialize, delta-apply,
    search, show evidence, and lint proposals. This removes repetitive agent
@@ -3425,7 +3440,7 @@ These are residual risks, not excuses for silent behavior.
 
 Keep these narrow. The repository provides enough evidence for the rest.
 
-1. **Phase A visible source-control copy:** approve the final labels/helper
+1. **Phase 1 visible source-control copy:** approve the final labels/helper
    text for Saved memories, Lore books, Archive this chat, and Include Earlier
    Messages near the end of the phase. The owner has deferred wording review;
    the four-mode behavior and independence are technically recommended, not
@@ -3439,11 +3454,11 @@ Keep these narrow. The repository provides enough evidence for the rest.
    users a working keyword-triggered path (§5.3). Complete lexical fallback
    after a model/index failure remains required. Only the final wording
    remains open, inside decisions 1 and 4's copy reviews.
-3. **Phase B plaintext disclosure/default scope:** approve the exact warning
+3. **Phase 2 plaintext disclosure/default scope:** approve the exact warning
    and whether the first screen defaults to selected chat review (recommended)
    or full library maintenance. Both remain explicit choices; no background
    export to a provider.
-4. **Phase D maintenance action wording:** approve user-facing names for
+4. **Phase 4 maintenance action wording:** approve user-facing names for
    Edit, Merge, and Archive Suggestions and the three-way stale conflict
    screen. Internal `revise`/`merge`/`retire` operations remain proposal-only,
    with archive/supersede preferred over delete.
@@ -3465,13 +3480,13 @@ Not owner blockers:
 
 ## 14. Final recommended phase order
 
-1. **Phase A — repair phone RAG correctness first.** This is user value even
+1. **Phase 1 — repair phone RAG correctness first.** This is user value even
    if desktop work stops.
-2. **Phase B — freeze and implement the portable package contract.** A full,
+2. **Phase 2 — freeze and implement the portable package contract.** A full,
    searchable, verifiable package establishes the first desktop baseline.
-3. **Phase C — prove the actual computer-agent workflow.** Test at least two
+3. **Phase 3 — prove the actual computer-agent workflow.** Test at least two
    file agents and lexical/no-model behavior before building mutation logic.
-4. **Phase D — add safe reconciliation and deltas.** Import only after the
+4. **Phase 4 — add safe reconciliation and deltas.** Import only after the
    result contract is proven; then add encryption and helper tooling by
    measured need.
 5. **Fresh independent correctness review.** Re-run the §8 review against
@@ -3483,68 +3498,79 @@ computer-agent route that can search the same knowledge, inspect its
 evidence, propose maintenance, and return work without becoming a second
 authority.
 
-## 15. Owner work orders — say a letter, agent goes
+## 15. Implementation steps — say a number, agent goes
 
 This list exists so the owner can start any step with one sentence, for
-example: *"Implement work order B from
+example: *"Implement Step 1.2 from
 `Memory System/external_memory_analysis_counterplan.md`."*
 
-**When the owner names a bare letter, it means this list** — not the §10
-phase names and not the §6 copy subsections. Standing rules for every work
-order: work on a feature branch; follow `CLAUDE.md`; the smallest coherent
-change; push and get Android Checks green; use only the wording drafts
-recorded in §6 and return to the owner for wording approval before anything
-visible ships; report code result and on-device expectations separately.
-Do not start a work order whose "Needs" letters are not finished, and do
-not bundle extra work orders into one branch.
+Standing rules for every step: work on a feature branch; follow
+`CLAUDE.md`; the smallest coherent change; push and get Android Checks
+green; use only the wording drafts recorded in §6 and return to the owner
+for wording approval before anything visible ships; report code result and
+on-device expectations separately. Do not start a step whose "Needs" are
+not finished, and do not bundle extra steps into one branch.
 
-Recommended run order is alphabetical, but A–G may be reordered where
-"Needs" allows.
+Recommended run order is numeric, but Steps 1.1–1.7 may be reordered
+where "Needs" allows.
 
-- **A — Source semantics.** The two independent switches (Saved memories /
-  Lore books), archive consent separated from injection, legacy migration,
-  four-mode tests. Defined in §5.3, §5.4, workstream 1 of §5.10.
+### Phase 1 — Phone Memory Reliability
+
+- **Step 1.1 — Source semantics.** The two independent switches (Saved
+  memories / Lore books), archive consent separated from injection, legacy
+  migration, four-mode tests. Defined in §5.3, §5.4.
   Needs: nothing. Owner's part: approve the two labels/helpers and the
   archive re-enable dialog near the end.
-- **B — Retrieval correctness.** Memories stop silently disappearing:
-  complete-set fallback, relevance floor before top-K, backfill after
-  filters, policy clamps, updated freshness, proper lexical/embedding
-  documents. Defined in §5.5, §10 Phase A, workstream 2 of §5.10.
+- **Step 1.2 — Retrieval correctness.** Memories stop silently
+  disappearing: complete-set fallback, relevance floor before top-K,
+  backfill after filters, policy clamps, updated freshness, proper
+  lexical/embedding documents. Defined in §5.5 and §10 Phase 1.
   Needs: nothing. Owner's part: none until wording review.
-- **C — Run integrity and truthful status.** Sealed transcript claims with
-  a durable run record, the Memory Analysis foreground service so runs
-  survive the screen turning off, typed scene-context capture, rename-safe
-  rejected drafts, and honest failure counts. Defined in §4 items (a), (c),
-  (e), (g) and §6 copy A–D. Needs: nothing. Owner's part: approve the four
-  status/dialog texts near the end.
-- **D — Index lifecycle and performance.** Missing-vector repair, scoped
-  vector loads, cached overlap vectors, persistent diagnostics. Defined in
-  workstream 3 of §5.10. Needs: B. Owner's part: none.
-- **E — Provenance and hygiene.** Shared filing/acceptance validation,
-  evidence lineage, truthful source labels, status-aware exact matching,
-  the Possible Match service. Defined in §5.7, workstream 4 of §5.10.
-  Needs: B. Owner's part: Possible Match screen wording when scheduled.
-- **F — Lore query and diagnostics.** Faster lore matching, cross-book
-  duplicate handling, injected-versus-cut logs. Defined in §5.6,
-  workstream 5 of §5.10. Needs: nothing. Owner's part: none.
-- **G — Model-free analysis and lorebook-only mode.** The Memory Browser
-  "can't be used in chats" banner, the Memory Analysis Type control with
-  the off-by-default lorebook-only toggle, the lore book pending area with
-  per-suggestion destination selection. Defined in §5.3 (owner ruling,
-  2026-07-28) and §6 copy E. Needs: C. Owner's part: approve the banner and
-  toggle wording (drafts recorded) and the lore book review copy.
-- **H — Portable memory package (Phase B).** The full `.sgmemory` export a
-  computer AI can read. Defined in §9.4 and §10 Phase B. Needs: A, the
-  release-blocking parts of B, C, and the evidence/shared-filing part of E.
-  Owner's part: approve the plaintext privacy disclosure and default scope
-  (§13 decision 3) before the first export ships.
-- **I — Computer workflow proof (Phase C).** Instructions, specs, and real
-  trials with file-capable agents; no phone mutations yet. Defined in §10
-  Phase C. Needs: H. Owner's part: none required, trying it is welcome.
-- **J — Import and reconciliation (Phase D).** Bringing suggestions back:
-  strict import, conflicts, Pending review, approval/rollback, deltas,
-  optional encryption. Defined in §9.6 and §10 Phase D. Needs: I.
-  Owner's part: approve maintenance action wording and encryption timing
-  (§13 decisions 4–5).
+- **Step 1.3 — Run integrity and truthful status.** Sealed transcript
+  claims with a durable run record, the Memory Analysis foreground service
+  so runs survive the screen turning off, typed scene-context capture,
+  rename-safe rejected drafts, and honest failure counts. Defined in §4
+  items (a), (c), (e), (g) and §6 copy A–D.
+  Needs: nothing. Owner's part: approve the four status/dialog texts near
+  the end.
+- **Step 1.4 — Index lifecycle and performance.** Missing-vector repair,
+  scoped vector loads, cached overlap vectors, persistent diagnostics.
+  Needs: Step 1.2. Owner's part: none.
+- **Step 1.5 — Provenance and hygiene.** Shared filing/acceptance
+  validation, evidence lineage, truthful source labels, status-aware exact
+  matching, the Possible Match service. Defined in §5.7.
+  Needs: Step 1.2. Owner's part: Possible Match screen wording when
+  scheduled.
+- **Step 1.6 — Lore query and diagnostics.** Faster lore matching,
+  cross-book duplicate handling, injected-versus-cut logs. Defined in §5.6.
+  Needs: nothing. Owner's part: none.
+- **Step 1.7 — Model-free analysis and lorebook-only mode.** The Memory
+  Browser "can't be used in chats" banner, the Memory Analysis Type control
+  with the off-by-default lorebook-only toggle, the lore book pending area
+  with per-suggestion destination selection. Defined in §5.3 (owner ruling,
+  2026-07-28) and §6 copy E.
+  Needs: Step 1.3. Owner's part: approve the banner and toggle wording
+  (drafts recorded) and the lore book review copy.
 
-After J, re-run the §8 fresh-agent review before broad use, per §14.
+### Phase 2 — Portable Memory Package
+
+The full `.sgmemory` export a computer AI can read. Defined in §9.4 and
+§10 Phase 2. Needs: Steps 1.1, the release-blocking parts of 1.2, 1.3,
+and the evidence/shared-filing part of 1.5. Owner's part: approve the
+plaintext privacy disclosure and default scope (§13 decision 3) before
+the first export ships.
+
+### Phase 3 — Computer Workflow Proof
+
+Instructions, specs, and real trials with file-capable agents; no phone
+mutations yet. Defined in §10 Phase 3. Needs: Phase 2. Owner's part: none
+required, trying it is welcome.
+
+### Phase 4 — Import and Reconciliation
+
+Bringing suggestions back: strict import, conflicts, Pending review,
+approval/rollback, deltas, optional encryption. Defined in §9.6 and §10
+Phase 4. Needs: Phase 3. Owner's part: approve maintenance action wording
+and encryption timing (§13 decisions 4–5).
+
+After Phase 4, re-run the §8 fresh-agent review before broad use, per §14.
