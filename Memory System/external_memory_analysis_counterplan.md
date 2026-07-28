@@ -1,5 +1,10 @@
 # External Memory Analysis + RAG Compatibility — Counter Plan (Revision 9, numbered phases)
 
+> **Agents: this file is not for the owner.** The owner reads
+> `plan_one_page.md` in this folder — nothing else. Never send her here,
+> quote section numbers at her, or ask her to manage this document. Keep
+> the one-page file true; keep the machinery in here.
+
 **Document type:** Planning/architecture only — no code, database, prompt, UI,
 or string changes were made with this document.
 **Baseline:** verified against the current repository and remote branch state
