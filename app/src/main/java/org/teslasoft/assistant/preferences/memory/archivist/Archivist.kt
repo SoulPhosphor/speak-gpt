@@ -116,7 +116,12 @@ object Archivist {
         val batchIndex: Int,            // 1-based
         val batchCount: Int,
         val conversationInBatch: Int,   // 1-based, within the current batch
-        val conversationsInBatch: Int
+        val conversationsInBatch: Int,
+        /** Whole-run position (1-based) and total across all batches — what
+         *  the foreground-service notification shows ("N of M"), independent
+         *  of the screen's batch presentation. 0 on legacy callers. */
+        val overallIndex: Int = 0,
+        val overallCount: Int = 0
     )
 
     /**
@@ -329,7 +334,11 @@ object Archivist {
             for ((batchIndex, range) in batches.withIndex()) {
                 val batch = conversations.slice(range)
                 for ((posInBatch, conversation) in batch.withIndex()) {
-                    onProgress(Progress(batchIndex + 1, batches.size, posInBatch + 1, batch.size))
+                    onProgress(Progress(
+                        batchIndex + 1, batches.size, posInBatch + 1, batch.size,
+                        overallIndex = range.first + posInBatch + 1,
+                        overallCount = conversations.size
+                    ))
                     try {
                         val companionName = conversation.transcripts
                             .firstNotNullOfOrNull { it.companionId }
