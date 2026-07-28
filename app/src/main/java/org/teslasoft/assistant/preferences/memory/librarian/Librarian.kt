@@ -21,6 +21,7 @@ import org.json.JSONObject
 import org.teslasoft.assistant.preferences.memory.MemoryLog
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.memory.RetrievableMemory
+import org.teslasoft.assistant.preferences.memory.RetrievalPolicy
 import org.teslasoft.assistant.preferences.memory.RetrievalScope
 import org.teslasoft.assistant.preferences.memory.ScoredMemory
 
@@ -46,10 +47,6 @@ class Librarian private constructor(private val appContext: Context) {
                 instance ?: Librarian(context.applicationContext).also { instance = it }
             }
 
-        // Scoring defaults (retrieval_policy overrides them when present).
-        private const val DEFAULT_W_SIM = 0.6
-        private const val DEFAULT_W_IMP = 0.3
-        private const val DEFAULT_W_REC = 0.1
         private const val TENTATIVE_DAMPEN = 0.6
 
         // Relevance floor (seed-safety audit requirement 8): top-k alone
@@ -320,14 +317,14 @@ class Librarian private constructor(private val appContext: Context) {
         modelLoadFailed = false
     }
 
+    /** Stored scoring weights, bounded (counterplan §5.5): a non-finite,
+     *  negative, or all-zero stored set degrades to the defaults with a log
+     *  note rather than producing nonsense scores. */
     private fun weights(store: MemoryStore): Weights {
-        return try {
-            val policy = store.getRetrievalWeights()
-            if (policy != null) Weights(policy[0], policy[1], policy[2])
-            else Weights(DEFAULT_W_SIM, DEFAULT_W_IMP, DEFAULT_W_REC)
-        } catch (_: Exception) {
-            Weights(DEFAULT_W_SIM, DEFAULT_W_IMP, DEFAULT_W_REC)
-        }
+        val raw = try { store.getRetrievalWeights() } catch (_: Exception) { null }
+        val bounded = RetrievalPolicy.boundWeights(raw)
+        bounded.substitutionNote?.let { MemoryLog.log(appContext, "Librarian", "info", it) }
+        return Weights(bounded.value[0], bounded.value[1], bounded.value[2])
     }
 
     /**

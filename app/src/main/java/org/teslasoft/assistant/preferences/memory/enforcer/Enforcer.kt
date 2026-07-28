@@ -31,6 +31,7 @@ import org.teslasoft.assistant.preferences.memory.MemoryLog
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.memory.PartyMemberRecord
 import org.teslasoft.assistant.preferences.memory.RetrievableMemory
+import org.teslasoft.assistant.preferences.memory.RetrievalPolicy
 import org.teslasoft.assistant.preferences.memory.RetrievalScope
 import org.teslasoft.assistant.preferences.memory.RoleplayCharacterRecord
 import org.teslasoft.assistant.preferences.memory.ScoredMemory
@@ -136,7 +137,7 @@ class Enforcer private constructor(private val appContext: Context) {
             notes.add("defaults provisioning failed: ${e.message}")
         }
 
-        val policy = parsePolicy(store)
+        val policy = parsePolicy(store, notes)
 
         // Companion resolution — auto-creating the record when the persona has
         // none yet, so a chat with a persona ALWAYS resolves to a companion.
@@ -505,18 +506,27 @@ class Enforcer private constructor(private val appContext: Context) {
 
     private data class Policy(val topK: Int, val charBudget: Int)
 
-    private fun parsePolicy(store: MemoryStore): Policy {
+    /** Bounded/defaulted policy (counterplan §5.5): malformed stored values
+     *  substitute safe defaults and say so in [notes] instead of throwing the
+     *  turn back to lore-only assembly. */
+    private fun parsePolicy(store: MemoryStore, notes: MutableList<String>): Policy {
+        var topKRaw: Any? = null
+        var budgetRaw: Any? = null
         val json = try { store.getRetrievalPolicyJson() } catch (_: Exception) { null }
         if (json != null) {
             try {
                 val obj = JSONObject(json)
-                return Policy(
-                    topK = obj.optInt("top_k", 8),
-                    charBudget = obj.optInt("memory_char_budget", PromptAssembler.DEFAULT_CHAR_BUDGET)
-                )
-            } catch (_: Exception) { /* fall through to defaults */ }
+                topKRaw = obj.opt("top_k")
+                budgetRaw = obj.opt("memory_char_budget")
+            } catch (_: Exception) {
+                notes.add("retrieval policy unreadable — using defaults")
+            }
         }
-        return Policy(8, PromptAssembler.DEFAULT_CHAR_BUDGET)
+        val topK = RetrievalPolicy.boundTopK(topKRaw)
+        val budget = RetrievalPolicy.boundCharBudget(budgetRaw)
+        topK.substitutionNote?.let { notes.add(it) }
+        budget.substitutionNote?.let { notes.add(it) }
+        return Policy(topK.value, budget.value)
     }
 
     /**
