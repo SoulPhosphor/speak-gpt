@@ -3552,11 +3552,13 @@ where "Needs" allows.
   §5.3, §5.4.
   Needs: nothing. Owner's part: approve the per-chat labels/helpers and the
   archive re-enable dialog near the end.
-- **Step 1.2 — Retrieval correctness.** Memories stop silently
-  disappearing: complete-set fallback, relevance floor before top-K,
-  backfill after filters, policy clamps, updated freshness, proper
-  lexical/embedding documents. Defined in §5.5 and §10 Phase 1.
-  Needs: nothing. Owner's part: none until wording review.
+- **Step 1.2 — Retrieval correctness.** **Shipped** (verified in code and
+  on `main`, 2026-07-28 — landed as "Work Order B" under the pre-Revision-8
+  naming): complete-set fallback, relevance floor before top-K, backfill
+  after filters, policy clamps, updated freshness, proper
+  lexical/embedding documents (`memory-doc-v2`, `RetrievalDocument.kt`,
+  `Librarian.searchCore`). Defined in §5.5 and §10 Phase 1.
+  Owner's part: none until wording review.
 - **Step 1.3 — Run integrity and truthful status.** Sealed transcript
   claims with a durable run record, the Memory Analysis foreground service
   so runs survive the screen turning off, typed scene-context capture,
