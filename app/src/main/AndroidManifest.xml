@@ -155,6 +155,11 @@
         </activity>
 
         <activity
+            android:name=".ui.activities.EditActivationPromptActivity"
+            android:exported="false"
+            android:label="@string/label_edit_activation_prompt" />
+
+        <activity
             android:name=".ui.activities.SystemPromptsListActivity"
             android:exported="false"
             android:label="@string/title_system_prompts">
