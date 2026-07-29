@@ -42,11 +42,13 @@ import org.teslasoft.assistant.R
  * (materialAlertDialogTitleTextStyle) - no per-call gravity tweak needed.
  */
 object DiscardChangesDialog {
-    fun show(context: Context, onDiscard: () -> Unit) {
+    // titleRes admits an owner-approved per-screen question (e.g. the
+    // Summarizer prompt editor); every other caller keeps the standard title.
+    fun show(context: Context, titleRes: Int = R.string.discard_changes_q, onDiscard: () -> Unit) {
         val actionsView = LayoutInflater.from(context).inflate(R.layout.dialog_two_actions, null)
 
         val dialog = MaterialAlertDialogBuilder(context, R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.discard_changes_q)
+            .setTitle(titleRes)
             .setView(actionsView)
             .create()
 

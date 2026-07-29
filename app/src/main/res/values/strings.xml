@@ -2542,11 +2542,12 @@
     <string name="summarizer_length_hint">Maximum amount of words the summary can become.</string>
 
     <string name="summarizer_section_prompt">Summary Prompt</string>
-    <string name="summarizer_section_prompt_hint">This prompt gives instructions to the Summarizer Model so it properly helps your AI what\'s important in your conversation.\n\nOnly one prompt can be active at a time. The first two prompts are suggested styles.</string>
+    <string name="summarizer_section_prompt_hint">This prompt gives instructions to the Summarizer Model so it properly helps your AI what\'s important in your conversation.\n\nOnly one prompt can be active at a time. The first two prompts are suggested styles.\n\nPresets one and two can always be reverted back to the original preset. Presets 3 through 5 will revert to the last saved prompt text.</string>
     <string name="summarizer_prompt_dropdown">Prompt</string>
-    <string name="summarizer_slot_default_name">Slot %1$d</string>
+    <string name="summarizer_slot_default_name">Preset %1$d</string>
     <string name="summarizer_rename_slot">Rename</string>
-    <string name="summarizer_rename_slot_title">Rename Slot</string>
+    <string name="summarizer_rename_slot_title">Rename Preset</string>
+    <string name="discard_summarizer_prompt_changes_q">Discard Summarizer Prompt Changes?</string>
     <string name="summarizer_revert_prompt">Revert</string>
     <string name="summarizer_revert_prompt_confirm">Revert to the shipped prompt?</string>
     <string name="summarizer_empty_prompt_guard">Model summary prompts can\'t be empty. Last good prompt has been selected.</string>
