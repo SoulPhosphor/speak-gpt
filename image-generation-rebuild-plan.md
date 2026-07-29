@@ -20,6 +20,11 @@ unsupported-option notice — owner ruling, 2026-07-29.
 (the tool controls shape only), Image Generation Errors log with opt-in
 recording toggle, chat-versus-log error split, and companions always have a
 name (a nameless-companion flow is a defect to fix) — owner rulings,
+2026-07-29.  
+**Revised (same day):** cause-appropriate failure actions (Edit prompt /
+Change settings / Retry / settings link), capability-change log entries with
+the strict tools-not-supported guard, and request diagnostics for failures
+and successes with owner-approved example wording — owner rulings,
 2026-07-29.
 
 ## 1. Goal
@@ -456,6 +461,12 @@ Do not classify a model as unsupported because it chose not to call the tool.
 A clean text response proves that the provider accepted the tool-bearing
 request, not that the model will use the tool every time.
 
+Only mark tools unsupported when the provider error clearly indicates that
+tools are not supported. Timeouts, content refusals, and unrelated errors
+must not change the learned capability (owner ruling, 2026-07-29). Every
+automatic capability change is recorded in the Image Generation Errors log
+when recording is on (section 13).
+
 ## 9. Image-Generator API Layer
 
 Create one provider-neutral image-generation coordinator outside
@@ -653,9 +664,23 @@ Errors must identify which side failed:
 - The image download was too large or invalid.
 - The user cancelled.
 
-Normal users receive a concise message and a retry/configure action where
-appropriate. Detailed stack traces remain limited to the existing debugging or
-error-log surfaces.
+### Actions on failed image requests (owner ruling, 2026-07-29)
+
+A failed request shows an action appropriate to its cause:
+
+- The provider refused the prompt: offer **Edit prompt**, opening the exact
+  prompt that was sent to the generator.
+- A requested shape or quality is unsupported: offer **Change settings**.
+- Failures that may succeed without changing the request — timeouts,
+  temporary provider errors, malformed image responses: offer **Retry**.
+  Retry is used only for these.
+- Configuration and authentication failures: link to the image-generator
+  settings.
+
+Sanitized technical details stay in the log. Detailed stack traces remain
+limited to the existing debugging or error-log surfaces. User-facing labels
+follow the app's established capitalization style; the labels above are the
+owner's approved wording.
 
 If no generator is configured:
 
@@ -670,18 +695,60 @@ The Alerts, Errors & Logs page gains an **Image Generation Errors** log in
 its Logs section, plus a toggle on that same page that turns recording on.
 Recording is off until the user enables it.
 
-When recording is on, the log captures at minimum:
+When recording is on, the log captures:
 
-- a model-initiated request whose option fell back to the provider default
-  because the selected generator could not support it — the silent-fallback
-  case the user cannot otherwise see;
-- conversation-model tool mistakes: invalid JSON arguments, an empty or
-  over-long prompt, unknown fields, extra image attempts beyond the
-  one-per-turn limit, and attempts to set options the tool does not offer.
+**Silent fallbacks** — a model-initiated request whose option fell back to
+the provider default because the selected generator could not support it:
+the case the user cannot otherwise see.
 
-Each entry records the time, the chat, the generator endpoint label, the
-generator model, and a sanitized failure code — never a key, auth header, or
-signed URL. Entries follow the page's existing retention limits.
+**Conversation-model tool mistakes** — invalid JSON arguments, an empty or
+over-long prompt, unknown fields, extra image attempts beyond the
+one-per-turn limit, and attempts to set options the tool does not offer.
+
+**Automatic tool-capability changes** — when the provider rejects tool use
+and the app marks an endpoint/model combination as unable to use tools,
+record:
+
+- the endpoint name;
+- the model identifier;
+- the previous and new capability state, such as Unknown → Unsupported;
+- that the change was learned automatically;
+- the provider's sanitized error code and message;
+- whether the request was retried without tools;
+- whether that retry succeeded or failed.
+
+**Request diagnostics** — for image-generation requests, failures and
+successes alike, so billing disputes and incorrect-but-completed generations
+can also be investigated:
+
+- total request duration, and — when downloading the finished image is a
+  separate step — generation time and download time separately;
+- the provider-issued request ID whenever available, sanitized and
+  length-limited, and kept distinct from the app's internal request ID;
+- provider, endpoint, model, timestamp, HTTP status, and final outcome.
+
+Example entries (owner-approved wording):
+
+> Image request completed  
+> Provider: OpenRouter  
+> Model: example/image-model  
+> Generation time: 18.4 seconds  
+> Download time: 1.2 seconds  
+> HTTP status: 200  
+> Provider request ID: req_abc123  
+> Outcome: Image saved
+
+> Image request failed  
+> Provider: OpenAI  
+> Model: example/image-model  
+> Elapsed time: 31.7 seconds  
+> HTTP status: 500  
+> Provider request ID: req_xyz789  
+> Outcome: Provider error
+
+Never log API keys, authorization headers, signed image URLs, complete
+request bodies, raw image data, complete prompts, or private conversation
+content. Entries follow the page's existing retention limits.
 
 ### Chat message or log entry
 
@@ -836,11 +903,19 @@ The work is complete only when all of the following are true:
 25. An explicitly requested option the selected generator cannot support
     produces the unavailable-option notice with continue and cancel; nothing
     is silently ignored.
-26. With recording on, model-initiated silent fallbacks and rejected tool
-    calls appear in the Image Generation Errors log; with recording off,
-    nothing is recorded; actionable errors appear in chat either way.
+26. With recording on, model-initiated silent fallbacks, rejected tool
+    calls, automatic capability changes, and request diagnostics appear in
+    the Image Generation Errors log; with recording off, nothing is
+    recorded; actionable errors appear in chat either way.
 27. A model-initiated image is generated at the user's saved quality default;
     no tool input can change quality.
+28. Each failed request offers the action matching its cause: Edit prompt for
+    a refused prompt, Change settings for an unsupported option, Retry only
+    for failures that may succeed unchanged, and a settings link for
+    configuration and authentication failures.
+29. The learned tool capability changes only on a clear tools-not-supported
+    provider error — never on a timeout, content refusal, or unrelated
+    error.
 
 ## 18. Required Test Matrix
 
