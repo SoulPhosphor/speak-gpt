@@ -199,13 +199,12 @@ reduction, more the longer the chat runs.
 
 3. **Quick Settings (per chat).** A toggle labeled "Use Summarizer" turns
    the summarizer on or off for the current chat — no subtitle or hint.
-   Below it, a number box labeled "Complete Messages" (no hint) shows
-   how many recent messages are always handed to the model in full. The
-   number box is visible whether the toggle is on or off, so the user
-   can see and adjust the count without enabling first. The box is
-   prefilled from the Summarizer Settings default; the user can change
-   it for this chat but never has to. Turning the toggle off is the
-   pause action — there is no separate pause control elsewhere.
+   When on, it reveals a number box labeled "Complete Messages" (no
+   hint) for how many recent messages are always handed to the model in
+   full. The box is prefilled from the Summarizer Settings default; the
+   user can change it for this chat but never has to. Turning the toggle
+   off hides the number box and is the pause action — there is no
+   separate pause control elsewhere.
 
 4. **Window unit is a message count** (not tokens).
 
