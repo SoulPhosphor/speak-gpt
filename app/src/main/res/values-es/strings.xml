@@ -244,10 +244,6 @@
     <string name="label_frequency_penalty">Penalización por frecuencia</string>
     <string name="label_presence_penalty">Penalización por presencia</string>
     <string name="btn_exit">Salir</string>
-    <string name="label_customize_assistant">Personalizar asistente</string>
-    <string name="hint_assistant_name">Nombre del asistente</string>
-    <string name="label_select_an_avatar">Seleccionar un avatar</string>
-    <string name="label_current_avatar">Avatar actual</string>
     <string name="label_edit_api_endpoint">Editar punto final de API</string>
     <string name="api_endpoint_friendly_name">Nombre amigable</string>
     <string name="api_endpoint_host">Host del punto final de API</string>
@@ -358,8 +354,6 @@
     <string name="tile_documentation_desc">Esta función te permite abrir la documentación de SpeakGPT.</string>
     <string name="tile_amoled_mode_title">Modo AMOLED</string>
     <string name="tile_amoled_mode_desc">Esta función te permite activar el modo AMOLED para pantallas compatibles. Puede ahorrar batería significativamente. El modo AMOLED solo está disponible en el tema oscuro.</string>
-    <string name="tile_assistant_customize_title">Personalizar asistente</string>
-    <string name="tile_assistant_customize_desc">Esta función te permite cambiar el nombre y el avatar del asistente por chat individual o globalmente.</string>
     <string name="tile_crash_log_title">Registro de errores</string>
     <string name="tile_crash_log_desc">Esta función te permite ver el registro de errores.</string>
     <string name="tile_events_log_title">Registro de eventos</string>

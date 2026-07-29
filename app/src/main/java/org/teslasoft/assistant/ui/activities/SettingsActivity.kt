@@ -44,7 +44,6 @@ import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.ui.fragments.TileFragment
-import org.teslasoft.assistant.ui.fragments.dialogs.CustomizeAssistantDialog
 import org.teslasoft.assistant.ui.fragments.dialogs.SelectImageModelFragment
 import org.teslasoft.assistant.ui.fragments.dialogs.SelectResolutionFragment
 import org.teslasoft.assistant.util.WindowInsetsUtil
@@ -72,7 +71,6 @@ class SettingsActivity : FragmentActivity() {
     private var rowAboutApp: LinearLayout? = null
     private var tileDocumentation: TileFragment? = null
     private var tileAmoledMode: TileFragment? = null
-    private var tileCustomize: TileFragment? = null
     private var tileChatsAutoSave: TileFragment? = null
     private var rowAlertDebugMenu: LinearLayout? = null
     private var tileHideModelNames: TileFragment? = null
@@ -118,21 +116,6 @@ class SettingsActivity : FragmentActivity() {
         }
     }
 
-    private var customizeAssistantDialogListener: CustomizeAssistantDialog.CustomizeAssistantDialogListener = object : CustomizeAssistantDialog.CustomizeAssistantDialogListener {
-        override fun onEdit(assistantName: String, avatarType: String, avatarId: String) {
-            preferences?.setAssistantName(assistantName)
-            preferences?.setAvatarType(avatarType)
-            preferences?.setAvatarId(avatarId)
-        }
-
-        override fun onError(assistantName: String, avatarType: String, avatarId: String, error: String, dialog: CustomizeAssistantDialog) {
-            Toast.makeText(this@SettingsActivity, error, Toast.LENGTH_SHORT).show()
-            dialog.show(supportFragmentManager.beginTransaction(), "CustomizeAssistantDialog")
-        }
-
-        override fun onCancel() { /* unused */ }
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         if (Build.VERSION.SDK_INT >= 30) {
             enableEdgeToEdge(
@@ -164,7 +147,6 @@ class SettingsActivity : FragmentActivity() {
         transition.excludeTarget(R.id.constraintLayout13, true)
         transition.excludeTarget(R.id.constraintLayout14, true)
         transition.excludeTarget(R.id.constraintLayout16, true)
-        transition.excludeTarget(R.id.constraintLayout17, true)
         transition.excludeTarget(R.id.activity_new_settings_title, true)
         transition.excludeTarget(R.id.btn_back, true)
         transition.excludeTarget(R.id.tile_characters, true)
@@ -189,7 +171,6 @@ class SettingsActivity : FragmentActivity() {
         transition.excludeTarget(R.id.tile_about_app, true)
         transition.excludeTarget(R.id.tile_documentation, true)
         transition.excludeTarget(R.id.tile_amoled_mode, true)
-        transition.excludeTarget(R.id.tile_customize, true)
         transition.excludeTarget(R.id.tile_chats_autosave, true)
         transition.excludeTarget(R.id.tile_alert_debug_menu, true)
         transition.excludeTarget(R.id.tile_hide_model_names, true)
@@ -216,7 +197,6 @@ class SettingsActivity : FragmentActivity() {
         transition2.excludeTarget(R.id.constraintLayout13, true)
         transition2.excludeTarget(R.id.constraintLayout14, true)
         transition2.excludeTarget(R.id.constraintLayout16, true)
-        transition2.excludeTarget(R.id.constraintLayout17, true)
         transition2.excludeTarget(R.id.tile_characters, true)
         transition2.excludeTarget(R.id.tile_ai_system_settings, true)
         transition2.excludeTarget(R.id.tile_memory_system, true)
@@ -239,7 +219,6 @@ class SettingsActivity : FragmentActivity() {
         transition2.excludeTarget(R.id.tile_about_app, true)
         transition2.excludeTarget(R.id.tile_documentation, true)
         transition2.excludeTarget(R.id.tile_amoled_mode, true)
-        transition2.excludeTarget(R.id.tile_customize, true)
         transition2.excludeTarget(R.id.tile_chats_autosave, true)
         transition2.excludeTarget(R.id.tile_alert_debug_menu, true)
         transition2.excludeTarget(R.id.tile_hide_model_names, true)
@@ -293,7 +272,6 @@ class SettingsActivity : FragmentActivity() {
         }
 
         val t2 = Thread {
-            createFragments6()
             createFragments7()
         }
 
@@ -479,27 +457,6 @@ class SettingsActivity : FragmentActivity() {
         t5.join()
     }
 
-    private fun createFragments6() {
-        val t6 = Thread {
-            tileCustomize = TileFragment.newInstance(
-                checked = false,
-                checkable = false,
-                enabledText = getString(R.string.tile_assistant_customize_title),
-                disabledText = null,
-                enabledDesc = getString(R.string.tile_assistant_customize_title),
-                disabledDesc = null,
-                icon = R.drawable.ic_experiment,
-                disabled = false,
-                chatId = chatId,
-                functionDesc = getString(R.string.tile_assistant_customize_desc),
-                transitionName = "expand_customize"
-            )
-        }
-
-        t6.start()
-        t6.join()
-    }
-
     private fun createFragments7() {
         val t7 = Thread {
             tileChatsAutoSave = TileFragment.newInstance(
@@ -529,7 +486,6 @@ class SettingsActivity : FragmentActivity() {
             .replace(R.id.tile_slash_commands, tileSlashCommands!!)
             .replace(R.id.tile_desktop_mode, tileDesktopMode!!)
             .replace(R.id.tile_amoled_mode, tileAmoledMode!!)
-            .replace(R.id.tile_customize, tileCustomize!!)
             .replace(R.id.tile_chats_autosave, tileChatsAutoSave!!)
             .replace(R.id.tile_documentation, tileDocumentation!!)
             .replace(R.id.tile_hide_model_names, tileHideModelNames!!)
@@ -669,12 +625,6 @@ class SettingsActivity : FragmentActivity() {
 
         tileDocumentation?.setOnTileClickListener {
             startActivity(Intent(this, DocumentationActivity::class.java).putExtra("chatId", chatId))
-        }
-
-        tileCustomize?.setOnTileClickListener { _ ->
-            val customizeAssistantDialogFragment: CustomizeAssistantDialog = CustomizeAssistantDialog.newInstance(chatId, preferences?.getAssistantName() ?: "SpeakGPT", preferences?.getAvatarType() ?: "builtin", preferences?.getAvatarId() ?: "gpt")
-            customizeAssistantDialogFragment.setCustomizeAssistantDialogListener(customizeAssistantDialogListener)
-            customizeAssistantDialogFragment.show(supportFragmentManager.beginTransaction(), "CustomizeAssistantDialog")
         }
     }
 

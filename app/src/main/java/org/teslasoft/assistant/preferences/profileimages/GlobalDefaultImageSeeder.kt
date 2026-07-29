@@ -33,7 +33,7 @@ import org.teslasoft.assistant.preferences.GlobalPreferences
  *
  * 1. The Global Default Image must never require a user to pick or upload
  *    anything ("users shouldn't have to select images") - the out-of-the-box
- *    value is CustomizeAssistantDialog's "gemini" preset (google_bard.xml,
+ *    value is the legacy avatar "gemini" preset (google_bard.xml,
  *    two overlapping sparkle/star shapes - the owner calls this "the double
  *    star"), rendered once into a real 512x512 Profile Image.
  * 2. When the user later changes the Global Default, every existing
@@ -95,8 +95,8 @@ object GlobalDefaultImageSeeder {
 
     /**
      * Rasterizes a built-in vector icon - normally tinted live at draw time
-     * (see CustomizeAssistantDialog, which applies this same accent_900
-     * tint to all four presets) - into a fixed-color bitmap. A permanent
+     * (the legacy avatar fallback applies this same accent_900 tint to all
+     * four presets) - into a fixed-color bitmap. A permanent
      * Profile Image is a plain JPEG; it cannot re-tint itself later the way
      * the live vector does, so the color must be locked in now. Composited
      * over white first (FRAMING OUTPUT: transparent regions never become

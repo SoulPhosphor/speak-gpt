@@ -673,15 +673,6 @@
                         android:layout_marginHorizontal="4dp"
                         android:layout_weight="1" />
 
-                    <androidx.constraintlayout.widget.ConstraintLayout
-                        android:id="@+id/tile_customize"
-                        android:layout_width="0dp"
-                        android:layout_height="match_parent"
-                        android:layout_marginHorizontal="4dp"
-                        android:layout_weight="1">
-
-                    </androidx.constraintlayout.widget.ConstraintLayout>
-
                 </LinearLayout>
 
                 <LinearLayout
