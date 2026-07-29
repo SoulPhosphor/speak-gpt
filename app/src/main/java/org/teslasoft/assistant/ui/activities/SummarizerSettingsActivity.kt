@@ -46,15 +46,19 @@ import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.fragments.dialogs.AdvancedFavoriteModelSelectorDialogFragment
 import org.teslasoft.assistant.ui.fragments.dialogs.AdvancedModelSelectorDialogFragment
+import org.teslasoft.assistant.ui.util.DiscardChangesDialog
 import org.teslasoft.assistant.util.summarizer.SummarizerPrompts
 
 /**
  * Summarizer Settings (conversation-summary-plan.md decision 2): the Summary
  * Model endpoint/model pickers (Memory Assistant interaction shape), the
  * Complete Messages default, the new-chats toggle, Summary Length, and the
- * five renameable prompt slots with the empty-prompt exit guard (decision 7).
- * Values save as they are changed; the prompt text saves as typed into the
- * selected slot.
+ * five renameable prompt presets with the empty-prompt exit guard (decision 7).
+ * Model, toggle, and number values save as they are changed. The prompt box is
+ * a draft: it persists only through the Save button, Revert restores the
+ * shipped prompt on presets one and two and the last saved text on presets
+ * three to five, and leaving or switching presets with unsaved changes asks
+ * before discarding (owner ruling, July 29 2026).
  */
 class SummarizerSettingsActivity : FragmentActivity() {
 
@@ -75,9 +79,13 @@ class SummarizerSettingsActivity : FragmentActivity() {
     private var btnRenameSlot: MaterialButton? = null
     private var fieldPrompt: TextInputEditText? = null
     private var btnRevertPrompt: MaterialButton? = null
+    private var btnSavePrompt: MaterialButton? = null
 
     private var suppressWatchers = false
     private var selectedSlot = 0
+
+    /** The selected preset's last saved text — the draft's dirty baseline. */
+    private var savedPromptText = ""
 
     private val endpointLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -123,6 +131,7 @@ class SummarizerSettingsActivity : FragmentActivity() {
         btnRenameSlot = findViewById(R.id.btn_rename_slot)
         fieldPrompt = findViewById(R.id.field_prompt)
         btnRevertPrompt = findViewById(R.id.btn_revert_prompt)
+        btnSavePrompt = findViewById(R.id.btn_save_prompt)
     }
 
     private fun applyTheme() {
@@ -142,8 +151,12 @@ class SummarizerSettingsActivity : FragmentActivity() {
         btnBack?.setOnClickListener { attemptLeave() }
 
         refreshModelRows()
+        // The Dropdown.Value style makes the value clickable, so it consumes
+        // taps instead of passing them to the row — it needs its own listener.
         rowEndpoint?.setOnClickListener { openEndpointPicker() }
+        textEndpointValue?.setOnClickListener { openEndpointPicker() }
         rowModel?.setOnClickListener { openModelChooser() }
+        textModelValue?.setOnClickListener { openModelChooser() }
 
         suppressWatchers = true
         fieldCompleteMessages?.setText(preferences?.getSummarizerDefaultWindow()?.toString() ?: "20")
@@ -180,16 +193,8 @@ class SummarizerSettingsActivity : FragmentActivity() {
 
         textPromptSlot?.setOnClickListener { showSlotDropdown(it) }
         btnRenameSlot?.setOnClickListener { showRenameDialog() }
-        btnRevertPrompt?.setOnClickListener { showRevertDialog() }
-
-        fieldPrompt?.addTextChangedListener(object : TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
-            override fun afterTextChanged(s: Editable?) {
-                if (suppressWatchers) return
-                preferences?.setSummarizerSlotPrompt(selectedSlot, s?.toString() ?: "")
-            }
-        })
+        btnRevertPrompt?.setOnClickListener { onRevertPressed() }
+        btnSavePrompt?.setOnClickListener { savePrompt() }
     }
 
     /* ------------------------------ Summary Model ------------------------------ */
@@ -260,14 +265,13 @@ class SummarizerSettingsActivity : FragmentActivity() {
             .ifBlank { SummarizerPrompts.shippedPrompt(slot) }
 
     private fun loadSlotIntoEditor() {
-        suppressWatchers = true
         textPromptSlot?.text = slotName(selectedSlot)
-        fieldPrompt?.setText(slotText(selectedSlot))
-        suppressWatchers = false
-        // Revert exists only under Storyteller and Reporter (decision 6).
-        btnRevertPrompt?.visibility =
-            if (selectedSlot <= 1) android.view.View.VISIBLE else android.view.View.GONE
+        savedPromptText = slotText(selectedSlot)
+        fieldPrompt?.setText(savedPromptText)
     }
+
+    private fun isPromptDirty(): Boolean =
+        (fieldPrompt?.text?.toString() ?: "") != savedPromptText
 
     private fun showSlotDropdown(anchor: android.view.View) {
         val labels = (0 until SummarizerPrompts.SLOT_COUNT).map { slotName(it) }
@@ -278,7 +282,13 @@ class SummarizerSettingsActivity : FragmentActivity() {
         popup.setAdapter(ArrayAdapter(this, android.R.layout.simple_list_item_1, labels))
         popup.setOnItemClickListener { _, _, position, _ ->
             popup.dismiss()
-            selectSlot(position)
+            if (position != selectedSlot && isPromptDirty()) {
+                DiscardChangesDialog.show(this, R.string.discard_summarizer_prompt_changes_q) {
+                    selectSlot(position)
+                }
+            } else {
+                selectSlot(position)
+            }
         }
         popup.show()
     }
@@ -324,12 +334,29 @@ class SummarizerSettingsActivity : FragmentActivity() {
             .show()
     }
 
+    /** Saves the draft as the selected preset's prompt. */
+    private fun savePrompt() {
+        val draft = fieldPrompt?.text?.toString() ?: ""
+        preferences?.setSummarizerSlotPrompt(selectedSlot, draft)
+        savedPromptText = draft
+    }
+
+    /** Presets one and two revert to the shipped prompt (confirmed first);
+     *  presets three to five revert the draft to the last saved text. Neither
+     *  writes anything — Save still decides what persists. */
+    private fun onRevertPressed() {
+        if (selectedSlot <= 1) {
+            showRevertDialog()
+        } else {
+            fieldPrompt?.setText(savedPromptText)
+        }
+    }
+
     private fun showRevertDialog() {
         MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
             .setTitle(R.string.summarizer_revert_prompt_confirm)
             .setPositiveButton(R.string.summarizer_revert_prompt) { _, _ ->
-                preferences?.setSummarizerSlotPrompt(selectedSlot, "")
-                loadSlotIntoEditor()
+                fieldPrompt?.setText(SummarizerPrompts.shippedPrompt(selectedSlot))
             }
             .setNegativeButton(android.R.string.cancel) { _, _ -> }
             .show()
@@ -340,10 +367,17 @@ class SummarizerSettingsActivity : FragmentActivity() {
     private fun attemptLeave() {
         // The guard judges what the user sees: an emptied prompt box blocks
         // the exit even on Storyteller/Reporter (their shipped text is only
-        // restored through the dialog's Okay, never silently).
-        val current = fieldPrompt?.text?.toString()?.trim().orEmpty()
+        // restored through the dialog's Okay, never silently). A non-empty
+        // draft with unsaved changes asks before discarding instead.
+        val current = fieldPrompt?.text?.toString().orEmpty()
         if (current.isNotBlank()) {
-            finish()
+            if (isPromptDirty()) {
+                DiscardChangesDialog.show(this, R.string.discard_summarizer_prompt_changes_q) {
+                    finish()
+                }
+            } else {
+                finish()
+            }
             return
         }
 
