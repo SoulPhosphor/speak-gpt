@@ -1,10 +1,11 @@
 # Conversation Summary & Context Control — Research and Proposal
 
-**Status: PARTIALLY APPROVED PLAN — the overall shape and the UI decisions
-in §5 were approved by the owner on July 28 2026. Decisions listed in §6
-remain open. No code has been changed.**
+**Status: APPROVED PLAN, READY FOR IMPLEMENTATION — all product decisions
+in §5 were approved by the owner (July 28–29 2026). §6 lists the only
+remaining items: the end-of-implementation wording batch and two stated
+defaults the owner can veto. No code has been changed on this branch.**
 
-Date: July 28 2026. Branch: `claude/conversation-summary-research-89akp5`.
+Date: July 28–29 2026. Branch: `claude/conversation-summary-research-89akp5`.
 
 ---
 
@@ -269,7 +270,54 @@ reduction, more the longer the chat runs.
     is ever re-summarized from scratch. The same mechanism handles the
     first enable on an already-long chat (one big catch-up).
 
-11. **UI construction rules.** All UI uses the shared style families from
+11. **Summary view (owner, July 29 2026).** The chat screen's top icon
+    row gains the Material Symbols "subject" icon, visible only while
+    the summarizer is on for that chat. Tapping it opens the summary
+    view: the summary text (editable), the pause switch, and the manual
+    update action.
+
+12. **Scope (owner, July 29 2026).** Regular chat requests only. The
+    Playground, image-generation commands, and the function-calling /
+    fine-tuned-model paths are excluded — they keep today's full-history
+    behavior. No pinning of individual messages (not now).
+
+13. **Summary length (owner, July 29 2026).** A words value in
+    Summarizer settings with a recommended default of 300 words
+    (delegated pick). The value feeds the length limit in the
+    summarizer prompt.
+
+14. **Injection position (delegated decision, July 29 2026).** The
+    summary is sent as its own system-role message, labeled as a summary
+    of the earlier conversation, placed after the chat's system prompt
+    and before the oldest full message. The user's stored words are
+    never mixed with generated text.
+
+15. **Lag tolerance (owner, July 29 2026).** Transmission is
+    bookmark-based: each turn sends the summary plus every message after
+    the bookmark, and the bookmark advances only when a fold-in call
+    succeeds. A slow or failing summarizer therefore never blocks,
+    delays, or drops conversation content — requests are just
+    temporarily larger until catch-up succeeds.
+
+16. **Error surfacing (owner, July 29 2026).** Summarizer trouble is
+    shown in app chrome only and is never injected into the conversation
+    or any API request, so the main model never sees it. A dedicated
+    error sound (distinct from other app sounds) plays when a summarizer
+    call fails, so the user notices without looking. The Material
+    Symbols "data_alert" icon appears in the chat's top icon row while
+    the summarizer is failing or behind, and disappears once caught up.
+    Tapping it shows honest detail per the error rules: what failed, why
+    when known, that no messages were lost and unsummarized messages are
+    being sent in full, and what the user can do. Sound plays on the
+    first failure of an episode, not on every retry.
+
+17. **Wording process.** Remaining user-facing strings (labels, summary
+    view, error details) are drafted during implementation following the
+    approved behavior, the owner's style rules (sentence case,
+    contractions, concise), and the no-app-name rule, then presented to
+    the owner as one batch for approval — not one string at a time.
+
+18. **UI construction rules.** All UI uses the shared style families from
    `ui-style-guide.md` (toggle rows, label-above-box and inline number
    fields, dropdown fields, section titles/hints, action-bar headers,
    shared button roles). No hardcoded colors, typography, or geometry —
@@ -277,35 +325,18 @@ reduction, more the longer the chat runs.
    and labels follow the app's sentence-case convention ("Summarizer
    settings", not "Summarizer Settings").
 
-## 6. Decisions still open
+## 6. Remaining items
 
-1. **Where the user views, edits, and pauses the summary.** Approved in
-   principle (visible, editable, pausable, with a manual update action)
-   but its home in the UI is undecided. Recommendation: a row in Quick
-   Settings, revealed with the toggle's other controls, opening a
-   per-chat summary screen that holds the text, the pause switch, and
-   the manual update action.
-2. Target summary length: fixed default, or a user-set value in
-   Summarizer settings.
-3. Where the summary is injected (system-side preamble vs. a stand-in
-   message at the top of the history).
-4. Failure behavior when a summary call fails (error-honesty rules
-   apply; behavior and wording need approval). Includes what the user
-   sees during a large first-enable catch-up on a long chat.
-5. Editing or deleting a message that was already folded into the
-   summary: the summary does not auto-update (fold-once design). Decide
-   whether that's acceptable with hand-editing as the remedy, or needs
-   more.
-6. Whether the summary travels with chat backups/exports alongside the
-   messages it condenses.
-7. Whether pinning individual messages to stay in context (Qvink's brain
-   icon) is in scope now, later, or never.
-8. Implementation-stage scope check: paths that bypass the regular
-   request builder today (function calling, fine-tuned models, image
-   generation commands) and the Playground screen — confirm where the
-   summarizer applies.
-9. Remaining user-facing wording — settings labels, the summary view, status
-   and failure text — approved as a batch once behavior is settled.
+1. **Wording batch approval** happens at the end of implementation per
+   approved decision 17 — the only planned stop.
+2. **Backups**: because the summary is part of the chat's stored data
+   (decision 9), it rides along wherever chat data is backed up or
+   exported. Stated to the owner as the default; flag before
+   implementation if unwanted.
+3. **Edited/deleted folded messages**: fold-once design means the
+   summary doesn't auto-update when an already-folded message is later
+   edited or deleted; hand-editing the summary is the remedy. Stated to
+   the owner as the accepted default; flag if more is wanted.
 
 ---
 
