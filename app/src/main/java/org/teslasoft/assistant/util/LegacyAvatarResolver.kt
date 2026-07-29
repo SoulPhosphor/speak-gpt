@@ -21,9 +21,9 @@ import java.io.File
 /**
  * Resolves the on-disk file for a legacy per-chat assistant avatar.
  *
- * CustomizeAssistantDialog.writeImageToCache() saves the file using the
- * literal extension "png" for a PNG source or "jpg" for anything else
- * (Bitmap.CompressFormat.JPEG sources included) - never "jpeg". Every
+ * The removed CustomizeAssistantDialog (writeImageToCache) saved the file
+ * using the literal extension "png" for a PNG source or "jpg" for anything
+ * else (Bitmap.CompressFormat.JPEG sources included) - never "jpeg". Every
  * existing display site used to hardcode the ".png" suffix only, so an
  * avatar saved from a non-PNG source was never found. This resolver is
  * the single place that knows the deterministic extension order; do not

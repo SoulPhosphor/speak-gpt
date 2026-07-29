@@ -1,9 +1,6 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
     <string name="app_name" translatable="false">Phosphor Shines</string>
     <string name="app_name_lite" translatable="false">Phosphor Shines Lite</string>
-    <string name="avatar_gpt" translatable="false">GPT</string>
-    <string name="avatar_gemini" translatable="false">Gemini</string>
-    <string name="avatar_perplexity_ai" translatable="false">Perplexity AI</string>
 
     <string name="activation_prompt_set_message">Tap to set activation prompt</string>
     <string name="menu_chat">Chat</string>
@@ -354,10 +351,6 @@
     <string name="label_frequency_penalty">Frequency penalty</string>
     <string name="label_presence_penalty">Presence penalty</string>
     <string name="btn_exit">Exit</string>
-    <string name="label_customize_assistant">Customize Assistant</string>
-    <string name="hint_assistant_name">Assistant name</string>
-    <string name="label_select_an_avatar">Select an avatar</string>
-    <string name="label_current_avatar">Current avatar</string>
     <string name="label_edit_api_endpoint">Edit profile</string>
     <string name="api_endpoint_friendly_name">Profile name</string>
     <string name="api_endpoint_host">Base URL</string>
@@ -648,8 +641,6 @@
 
 
     <string name="tile_amoled_mode_desc">This feature allows you to enable AMOLED mode for supported displays. It can significantly save battery. AMOLED mode is only available in dark theme.</string>
-    <string name="tile_assistant_customize_title">Customize Assistant</string>
-    <string name="tile_assistant_customize_desc">This feature allows you change assistant\'s name and avatar for individual chat or globally.</string>
     <string name="tile_crash_log_title">Error Log</string>
     <string name="tile_crash_log_desc">This feature allows you to view crash log.</string>
     <string name="tile_events_log_title">Voice Debug Log</string>
@@ -2370,7 +2361,6 @@
     <!-- Per-chat avatar explanation shown while a Companion picture is in use
          (profile-images-plan.md, INTERACTION WITH EXISTING PER-CHAT AVATAR
          CUSTOMIZATION). %1$s is the Companion's name. -->
-    <string name="profile_image_companion_avatar_in_use_note">This chat is currently using %1$s\'s picture. The avatar below is used when no Companion picture is available.</string>
 
     <string name="shape_flower">Flower</string>
     <string name="shape_circle">Circle</string>
