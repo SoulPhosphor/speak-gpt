@@ -379,9 +379,9 @@ the left. Get there in three separately-shippable steps:
   hamburger icon and opens the drawer instead of finishing.
 - **Step C — retire the bottom tab bar.** Once the drawer covers everything
   (chats, Playground, settings), remove `BottomNavigationView` from
-  `MainActivity` and slim it down to a router + first-run host. Tips/Tools
-  fragments fold into Settings or are dropped (ask owner before deleting
-  features).
+  `MainActivity` and slim it down to a router + first-run host. (The dead
+  Tips/Tools fragments were already removed with owner approval, July 2026 —
+  only Chats and Playground remain to rehome.)
 
 Ship A, then B, then C — never as one PR.
 
@@ -499,7 +499,7 @@ attributes (Phase 1), then visual restyle (its listed phase).
 
 | Screen | Files | Notes |
 |---|---|---|
-| Control Center | `SettingsActivity.kt`, `activity_settings.xml`, `TileFragment` | Tile → M3 row/card restyle; add **Appearance → Theme palette** picker here. Contains legacy `tileRemoveAds` remnants (`activity_remove_ads.xml`, strings) from upstream — ask owner before deleting; hide at minimum. |
+| Control Center | `SettingsActivity.kt`, `activity_settings.xml`, `TileFragment` | Tile → M3 row/card restyle; add **Appearance → Theme palette** picker here. (The legacy RemoveAds remnants were removed with owner approval, July 2026.) |
 | Characters hub | `CharactersActivity.kt`, `activity_characters.xml` | Same tile restyle. |
 | Voice settings | `VoiceSettingsActivity.kt` + `VoiceAdvancedSettingsActivity.kt` | Advanced screen is deliberately plain rows (CLAUDE.md) — modernize gently, keep the row structure and every existing control. Insets were recently fixed; don't regress. |
 | List screens: Personas, API endpoints, Activation prompts, Logit bias (x2), Lorebooks, Lorebook entries, Whisper models (x2) | respective `activity_*.xml` + `view_*_item.xml` + adapters | Restyle item layouts + FABs only; keep adapter view-binding ids; keep delete-confirmation dialogs. Lorebook screens show tag/description under headers — preserve. |
@@ -507,12 +507,13 @@ attributes (Phase 1), then visual restyle (its listed phase).
 
 ### 7.3 Low-risk / cosmetic-only
 
-About, Tips, Documentation, Logs, Translator, Image viewer, AI photo editor,
+About, Documentation, Logs, Translator, Image viewer, AI photo editor,
 photo variations, fine-tune screens (3), onboarding (Welcome → Purpose →
 Activation → Terms — keep the flow and exported intents intact), permission
 activities, crash handler. Restyle freely; same palette/inset rules.
-Leave untouched unless asked: `DebugMaterial`, the Teapots activity,
-`Theme.PWA`, `activity_data_sources*.xml` (orphaned).
+Leave untouched unless asked: `DebugMaterial`. (Tips, the Teapots activity,
+`Theme.PWA`, and the orphaned data-sources layouts were removed with owner
+approval, July 2026.)
 
 ### 7.4 Known chat-screen bug to fix as part of Phase 4 (reported June 17, 2026)
 

@@ -190,13 +190,6 @@
         </activity>
 
         <activity
-            android:name=".ui.activities.TipsActivity"
-            android:exported="false"
-            android:label="@string/menu_tips"
-            android:launchMode="singleTask">
-        </activity>
-
-        <activity
             android:name=".ui.activities.DocumentationActivity"
             android:exported="false"
             android:label="@string/title_documentation"
@@ -466,13 +459,6 @@
         </activity>
 
         <activity
-            android:name=".ui.debug.DebugActivity"
-            android:exported="false"
-            android:enabled="false"
-            android:launchMode="singleTask">
-        </activity>
-
-        <activity
             android:name=".ui.activities.AIPhotoEditorActivity"
             android:exported="false"
             android:launchMode="singleTask">
@@ -529,14 +515,6 @@
             android:exported="false"
             android:theme="@style/UI.Fade"
             android:label="@string/label_generated_image"
-            android:launchMode="singleTask">
-        </activity>
-
-        <activity
-            android:name="org.teslasoft.assistant.ui.activities.InstructionsForDegradedTeapotsWithZeroIQDesignedForGoogleReviewersActivity"
-            android:exported="false"
-            android:theme="@style/UI.Fade"
-            android:label="How to use SpeakGPT?"
             android:launchMode="singleTask">
         </activity>
 

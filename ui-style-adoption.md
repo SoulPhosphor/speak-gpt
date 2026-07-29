@@ -126,7 +126,6 @@ Do not guess its status from appearance or old documentation.
 | Fine-tune (Jobs, New Job, Job Info) | `activity_fine_tune_jobs.xml`, `activity_fine_tune_new_job.xml`, `activity_fine_tune_job_info.xml` | Unconverted | None | Unconverted | — |
 | Profile Image Framing | `activity_profile_image_framing.xml` | Unconverted | None | Unconverted | Its rotation dialog is also unconverted. |
 | Component gallery (developer) | `activity_material.xml` | Custom approved | Developer-only Material component gallery | Custom approved | Redesign plan §7.3: leave untouched. |
-| Reviewer instructions screen | `instructions_for_degraded_teapots_with_zero_iq_designed_for_google_reviewers.xml` | Custom approved | Store-reviewer-only screen | Custom approved | Leave untouched; removal is a pending owner decision (see orphan list below). |
 | Chats List tab | `fragment_chats_list.xml` | N/A | Chat rows (`view_chat_name*.xml`), search, FABs | Unconverted | Row design is reused by the future drawer — convert together with the drawer work. |
 | Playground tab | `fragment_playground.xml` | N/A | Fields | Unconverted | — |
 | Settings tile | `fragment_tile.xml` | N/A | The tile component used by tile grids | Unconverted | The redesign plan replaces tiles with rows/cards in its Phase 5; convert or retire with that decision. |
@@ -142,24 +141,9 @@ Do not guess its status from appearance or old documentation.
 
 All screens or layouts not listed above are **Unaudited** in this map until their current layouts and relevant code are checked. Note on buttons: `MaterialButton`s without an explicit style still inherit the shared semi-square `App.Button` default from the theme; "Unconverted" rows above mean no explicit shared-style adoption, not that buttons render with the old pill shape.
 
-## Orphaned and unreachable candidates — pending owner decision
+## Orphaned and unreachable code
 
-Nothing in this section may be deleted without explicit owner approval. Each entry is verified unreferenced (no code inflates the layout) or unreachable (no launch path) as of this audit.
-
-| Item | What it is | Evidence |
-|---|---|---|
-| `activity_about.xml` | Old About screen layout, superseded by `activity_about_new.xml` | No code references it |
-| `activity_data_sources.xml`, `activity_data_sources_selector.xml` | Upstream "data sources" screens, never wired in | No code references them |
-| `DebugActivity` + `activity_debug.xml` | Hollow debug activity that closes itself immediately on open; still registered in the manifest | Activity body is `finish()` only; layout unreferenced |
-| `activity_remove_ads.xml` + `tileRemoveAds` strings | Upstream paid "Remove Ads" purchase screen; this app has no ads | Layout unreferenced |
-| `activity_thanks.xml` | Upstream thanks/donation screen | No code references it |
-| `fragment_change_api.xml`, `fragment_set_hostname.xml` | Upstream API host/key dialogs, superseded by the API endpoints system | No code references them |
-| `fragment_network_error.xml` | Old network-error dialog layout | No code references it |
-| `dialog_webview.xml` | Web-view dialog layout | No code references it |
-| `Theme.PWA` + `pwa_*` colors | Theme for a removed web-app activity | No activity uses the theme |
-| `TipsActivity` + `activity_tips.xml`, `TipsFragment` + `fragment_tips.xml` | Tips screen and tab | No launch path anywhere in the app |
-| `ToolsFragment` + `fragment_tools.xml` | Tools tab fragment; the bottom bar has only Chats and Playground tabs | Instantiated in `MainActivity` but appears never shown — verify before removal |
-| Reviewer instructions screen (the "Teapots" activity) | Store-reviewer-only instruction screen, exported in the manifest with no in-app launch path | Whether it is still needed is an owner decision |
+The orphaned layouts, dead screens, and unused wiring identified by the audit (old About layout, data-sources screens, hollow debug activity, Remove Ads, thanks/donation screen, legacy API host dialogs, network-error dialog, web-view dialog, the PWA theme and colors, the Tips screen and tab, the Tools tab, the store-reviewer instructions screen, and the unused beta bottom menu) were removed with owner approval. Git history preserves them. No orphaned candidates are currently known; add any newly discovered ones here as a pending owner decision before deleting anything.
 
 ## Current legacy direction
 
