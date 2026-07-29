@@ -28,7 +28,6 @@ import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
-import android.widget.Toast
 import android.window.OnBackInvokedDispatcher
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
@@ -44,8 +43,6 @@ import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.ui.fragments.TileFragment
-import org.teslasoft.assistant.ui.fragments.dialogs.SelectImageModelFragment
-import org.teslasoft.assistant.ui.fragments.dialogs.SelectResolutionFragment
 import org.teslasoft.assistant.util.WindowInsetsUtil
 import java.util.EnumSet
 import kotlin.math.roundToInt
@@ -62,11 +59,8 @@ class SettingsActivity : FragmentActivity() {
     private var rowProfileImageProperties: LinearLayout? = null
     private var rowVoiceSettings: LinearLayout? = null
     private var rowSummarizerSettings: LinearLayout? = null
-    private var tileImageModel: TileFragment? = null
-    private var tileImageResolution: TileFragment? = null
+    private var rowImages: LinearLayout? = null
     private var tileChatLayout: TileFragment? = null
-    private var tileFunctionCalling: TileFragment? = null
-    private var tileSlashCommands: TileFragment? = null
     private var tileDesktopMode: TileFragment? = null
     private var rowAboutApp: LinearLayout? = null
     private var tileDocumentation: TileFragment? = null
@@ -83,38 +77,6 @@ class SettingsActivity : FragmentActivity() {
     private var areFragmentsInitialized = false
     private var chatId = ""
     private var preferences: Preferences? = null
-    private var resolution = ""
-    private var imageModel = ""
-
-    private var resolutionChangedListener: SelectResolutionFragment.StateChangesListener = object : SelectResolutionFragment.StateChangesListener {
-        override fun onSelected(name: String) {
-            preferences?.setResolution(name)
-            resolution = name
-            tileImageResolution?.updateSubtitle(name)
-        }
-
-        override fun onFormError(name: String) {
-            Toast.makeText(this@SettingsActivity, getString(R.string.image_resolution_error_empty), Toast.LENGTH_SHORT).show()
-            val resolutionSelectorDialogFragment: SelectResolutionFragment = SelectResolutionFragment.newInstance(name, chatId)
-            resolutionSelectorDialogFragment.setStateChangedListener(this)
-            resolutionSelectorDialogFragment.show(supportFragmentManager.beginTransaction(), "ResolutionSelectorDialog")
-        }
-    }
-
-    private var imageModelChangedListener: SelectImageModelFragment.StateChangesListener = object : SelectImageModelFragment.StateChangesListener {
-        override fun onSelected(name: String) {
-            preferences?.setImageModel(name)
-            imageModel = name
-            tileImageModel?.updateSubtitle(name)
-        }
-
-        override fun onFormError(name: String) {
-            Toast.makeText(this@SettingsActivity, "Please select an image generating model", Toast.LENGTH_SHORT).show()
-            val imageModelSelectorDialogFragment: SelectImageModelFragment = SelectImageModelFragment.newInstance(name, chatId)
-            imageModelSelectorDialogFragment.setStateChangedListener(this)
-            imageModelSelectorDialogFragment.show(supportFragmentManager.beginTransaction(), "SelectImageModelFragment")
-        }
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         if (Build.VERSION.SDK_INT >= 30) {
@@ -141,7 +103,7 @@ class SettingsActivity : FragmentActivity() {
         transition.excludeTarget(R.id.textView36, true)
         transition.excludeTarget(R.id.textView389, true)
         transition.excludeTarget(R.id.constraintLayout8, true)
-        transition.excludeTarget(R.id.constraintLayout9, true)
+        transition.excludeTarget(R.id.tile_images, true)
         transition.excludeTarget(R.id.tile_voice_settings, true)
         transition.excludeTarget(R.id.constraintLayout12, true)
         transition.excludeTarget(R.id.constraintLayout13, true)
@@ -157,16 +119,12 @@ class SettingsActivity : FragmentActivity() {
         transition.excludeTarget(R.id.tile_autosend, true)
         transition.excludeTarget(R.id.tile_voice, true)
         transition.excludeTarget(R.id.tile_voice_language, true)
-        transition.excludeTarget(R.id.tile_image_model, true)
-        transition.excludeTarget(R.id.tile_image_resolution, true)
         transition.excludeTarget(R.id.tile_tts, true)
         transition.excludeTarget(R.id.tile_stt, true)
         transition.excludeTarget(R.id.tile_silent_mode, true)
         transition.excludeTarget(R.id.tile_always_speak, true)
         transition.excludeTarget(R.id.tile_auto_language_detection, true)
         transition.excludeTarget(R.id.tile_chat_layout, true)
-        transition.excludeTarget(R.id.tile_function_calling, true)
-        transition.excludeTarget(R.id.tile_slash_commands, true)
         transition.excludeTarget(R.id.tile_desktop_mode, true)
         transition.excludeTarget(R.id.tile_about_app, true)
         transition.excludeTarget(R.id.tile_documentation, true)
@@ -191,7 +149,7 @@ class SettingsActivity : FragmentActivity() {
         transition2.excludeTarget(R.id.textView36, true)
         transition2.excludeTarget(R.id.textView389, true)
         transition2.excludeTarget(R.id.constraintLayout8, true)
-        transition2.excludeTarget(R.id.constraintLayout9, true)
+        transition2.excludeTarget(R.id.tile_images, true)
         transition2.excludeTarget(R.id.tile_voice_settings, true)
         transition2.excludeTarget(R.id.constraintLayout12, true)
         transition2.excludeTarget(R.id.constraintLayout13, true)
@@ -205,16 +163,12 @@ class SettingsActivity : FragmentActivity() {
         transition2.excludeTarget(R.id.tile_autosend, true)
         transition2.excludeTarget(R.id.tile_voice, true)
         transition2.excludeTarget(R.id.tile_voice_language, true)
-        transition2.excludeTarget(R.id.tile_image_model, true)
-        transition2.excludeTarget(R.id.tile_image_resolution, true)
         transition2.excludeTarget(R.id.tile_tts, true)
         transition2.excludeTarget(R.id.tile_stt, true)
         transition2.excludeTarget(R.id.tile_silent_mode, true)
         transition2.excludeTarget(R.id.tile_always_speak, true)
         transition2.excludeTarget(R.id.tile_auto_language_detection, true)
         transition2.excludeTarget(R.id.tile_chat_layout, true)
-        transition2.excludeTarget(R.id.tile_function_calling, true)
-        transition2.excludeTarget(R.id.tile_slash_commands, true)
         transition2.excludeTarget(R.id.tile_desktop_mode, true)
         transition2.excludeTarget(R.id.tile_about_app, true)
         transition2.excludeTarget(R.id.tile_documentation, true)
@@ -260,13 +214,9 @@ class SettingsActivity : FragmentActivity() {
 
         preferences = Preferences.getPreferences(this, chatId)
 
-        resolution = preferences?.getResolution() ?: "256x256"
-        imageModel = preferences?.getImageModel() ?: "dall-e-3"
-
         reloadAmoled()
 
         val t1 = Thread {
-            createFragments2()
             createFragments4()
             createFragments5()
         }
@@ -305,40 +255,6 @@ class SettingsActivity : FragmentActivity() {
         }.start()
     }
 
-    private fun createFragments2() {
-        val t2 = Thread {
-            tileImageModel = TileFragment.newInstance(
-                checked = false,
-                checkable = false,
-                enabledText = "Image model",
-                disabledText = null,
-                enabledDesc = preferences?.getImageModel() ?: "dall-e-3",
-                disabledDesc = null,
-                icon = R.drawable.ic_image,
-                disabled = false,
-                chatId = chatId,
-                functionDesc = getString(R.string.tile_dalle_desc)
-            )
-
-            tileImageResolution = TileFragment.newInstance(
-                checked = false,
-                checkable = false,
-                enabledText = getString(R.string.tile_image_resolution_title),
-                disabledText = null,
-                enabledDesc = preferences?.getResolution() ?: "1024x1024",
-                disabledDesc = null,
-                icon = R.drawable.ic_image,
-                disabled = false,
-                chatId = chatId,
-                functionDesc = getString(R.string.tile_image_resolution_desc),
-                transitionName = "expand_resolution"
-            )
-        }
-
-        t2.start()
-        t2.join()
-    }
-
     private fun createFragments4() {
         val t4 = Thread {
             tileChatLayout = TileFragment.newInstance(
@@ -352,32 +268,6 @@ class SettingsActivity : FragmentActivity() {
                 false,
                 chatId,
                 getString(R.string.tile_classic_layout_desc)
-            )
-
-            tileFunctionCalling = TileFragment.newInstance(
-                preferences?.getFunctionCalling() == true,
-                true,
-                "Function calling",
-                null,
-                getString(R.string.on),
-                getString(R.string.off),
-                R.drawable.ic_experiment,
-                false,
-                chatId,
-                "This feature allows you to enable function calling. Please note that this feature is experimental and unstable."
-            )
-
-            tileSlashCommands = TileFragment.newInstance(
-                preferences?.getImagineCommand() == true,
-                true,
-                getString(R.string.tile_sh_title),
-                null,
-                getString(R.string.on),
-                getString(R.string.off),
-                R.drawable.ic_experiment,
-                false,
-                chatId,
-                getString(R.string.tile_sh_desc)
             )
 
             tileDesktopMode = TileFragment.newInstance(
@@ -479,11 +369,7 @@ class SettingsActivity : FragmentActivity() {
 
     private fun placeFragments() : FragmentTransaction {
         val operation = supportFragmentManager.beginTransaction()
-            .replace(R.id.tile_image_model, tileImageModel!!)
-            .replace(R.id.tile_image_resolution, tileImageResolution!!)
             .replace(R.id.tile_chat_layout, tileChatLayout!!)
-            .replace(R.id.tile_function_calling, tileFunctionCalling!!)
-            .replace(R.id.tile_slash_commands, tileSlashCommands!!)
             .replace(R.id.tile_desktop_mode, tileDesktopMode!!)
             .replace(R.id.tile_amoled_mode, tileAmoledMode!!)
             .replace(R.id.tile_chats_autosave, tileChatsAutoSave!!)
@@ -506,6 +392,7 @@ class SettingsActivity : FragmentActivity() {
         rowProfileImageProperties = findViewById(R.id.tile_profile_image_properties)
         rowVoiceSettings = findViewById(R.id.tile_voice_settings)
         rowSummarizerSettings = findViewById(R.id.tile_summarizer_settings)
+        rowImages = findViewById(R.id.tile_images)
         rowAboutApp = findViewById(R.id.tile_about_app)
         rowAlertDebugMenu = findViewById(R.id.tile_alert_debug_menu)
 
@@ -537,6 +424,13 @@ class SettingsActivity : FragmentActivity() {
             startActivity(Intent(this, SummarizerSettingsActivity::class.java))
         }
 
+        // The Images row opens the app-wide Image Generation settings
+        // (image-generation-rebuild-plan.md §5) — it replaced the old
+        // fixed-list Image model and Resolution tiles.
+        rowImages?.setOnClickListener {
+            startActivity(Intent(this, ImageGenerationSettingsActivity::class.java))
+        }
+
         rowAboutApp?.setOnClickListener {
             startActivity(Intent(this, AboutActivity::class.java).putExtra("chatId", chatId))
         }
@@ -545,39 +439,11 @@ class SettingsActivity : FragmentActivity() {
             startActivity(Intent(this, AlertDebugMenuActivity::class.java).putExtra("chatId", chatId))
         }
 
-        tileImageModel?.setOnTileClickListener {
-            val imageModelSelectorDialogFragment: SelectImageModelFragment = SelectImageModelFragment.newInstance(imageModel, chatId)
-            imageModelSelectorDialogFragment.setStateChangedListener(imageModelChangedListener)
-            imageModelSelectorDialogFragment.show(supportFragmentManager.beginTransaction(), "SelectImageModelFragment")
-        }
-
-        tileImageResolution?.setOnTileClickListener {
-            val resolutionSelectorDialogFragment: SelectResolutionFragment = SelectResolutionFragment.newInstance(resolution, chatId)
-            resolutionSelectorDialogFragment.setStateChangedListener(resolutionChangedListener)
-            resolutionSelectorDialogFragment.show(supportFragmentManager.beginTransaction(), "ResolutionSelectorDialog")
-        }
-
         tileChatLayout?.setOnCheckedChangeListener { isChecked -> run {
             if (isChecked) {
                 preferences?.setLayout("classic")
             } else {
                 preferences?.setLayout("bubbles")
-            }
-        }}
-
-        tileFunctionCalling?.setOnCheckedChangeListener { isChecked -> run {
-            if (isChecked) {
-                preferences?.setFunctionCalling(true)
-            } else {
-                preferences?.setFunctionCalling(false)
-            }
-        }}
-
-        tileSlashCommands?.setOnCheckedChangeListener { isChecked -> run {
-            if (isChecked) {
-                preferences?.setImagineCommand(true)
-            } else {
-                preferences?.setImagineCommand(false)
             }
         }}
 

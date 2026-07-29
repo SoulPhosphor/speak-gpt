@@ -165,6 +165,44 @@ class Logger {
         }
 
         /**
+         * Image Generation Errors log (image-generation-rebuild-plan.md §13,
+         * owner ruling 2026-07-29): silent fallbacks, conversation-model tool
+         * mistakes, automatic tool-capability changes, and failure
+         * diagnostics. Fed only while Image Generation Error Recording is on;
+         * follows the page's existing fixed error-log retention (the
+         * zero-means-unlimited rule of the success log never applies here).
+         * */
+        fun getImageGenErrorsLog(context: Context) : String {
+            return EncryptedPreferences.getEncryptedPreference(context, "logs", "image_gen_errors")
+        }
+
+        private fun setImageGenErrorsLog(context: Context, log: String) {
+            EncryptedPreferences.setEncryptedPreference(context, "logs", "image_gen_errors", log)
+        }
+
+        fun clearImageGenErrorsLog(context: Context) {
+            setImageGenErrorsLog(context, "")
+        }
+
+        /**
+         * Image Generation Log (§13): success diagnostics, fed only while
+         * Successful Image Tracking is on. Its Maximum Image Information
+         * Saved / Maximum Days Saved retention lives in Preferences, and ZERO
+         * means unlimited — only for these two fields.
+         * */
+        fun getImageGenLog(context: Context) : String {
+            return EncryptedPreferences.getEncryptedPreference(context, "logs", "image_gen")
+        }
+
+        private fun setImageGenLog(context: Context, log: String) {
+            EncryptedPreferences.setEncryptedPreference(context, "logs", "image_gen", log)
+        }
+
+        fun clearImageGenLog(context: Context) {
+            setImageGenLog(context, "")
+        }
+
+        /**
          * The persistent log channels [log] recognizes. A `type` outside this
          * set is silently dropped (see the unknown-channel `else` in [log]),
          * so a caller passing e.g. "error" instead of "crash" writes nowhere.
@@ -174,7 +212,8 @@ class Logger {
          */
         fun isPersistentType(type: String): Boolean =
             type == "crash" || type == "event" || type == "memory" || type == "performance" ||
-                type == "whisper_perf" || type == "memory_usage"
+                type == "whisper_perf" || type == "memory_usage" ||
+                type == "image_gen_errors" || type == "image_gen"
 
         /**
          * @param type - type of log (crash/event/memory/performance)
@@ -257,6 +296,31 @@ class Logger {
                         p.getMemoryUsageLogMaxEntries(), p.getMemoryUsageLogMaxDays().toLong()
                     )
                     setMemoryUsageLog(context, log)
+                }
+
+                // Image Generation Errors (§13): the page's existing fixed
+                // error-log retention applies, exactly like the Error Log.
+                "image_gen_errors" -> {
+                    val log = trimByEntries(
+                        "${getImageGenErrorsLog(context)}$logString",
+                        ERROR_LOG_MAX_ENTRIES, ERROR_LOG_MAX_AGE_DAYS
+                    )
+                    setImageGenErrorsLog(context, log)
+                }
+
+                // Image Generation Log (§13): its own retention fields, and
+                // ZERO means unlimited on that axis (a century of days stands
+                // in for "no age limit" so the entry parser stays safe).
+                "image_gen" -> {
+                    val p = Preferences.getPreferences(context, "")
+                    val maxEntries = p.getImageGenLogMaxEntries()
+                    val maxDays = p.getImageGenLogMaxDays()
+                    val log = trimByEntries(
+                        "${getImageGenLog(context)}$logString",
+                        if (maxEntries == 0) Int.MAX_VALUE else maxEntries,
+                        if (maxDays == 0) 36500L else maxDays.toLong()
+                    )
+                    setImageGenLog(context, log)
                 }
 
                 // The old shared Performance Log. Nothing writes here anymore

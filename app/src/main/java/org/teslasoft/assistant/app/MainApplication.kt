@@ -25,6 +25,7 @@ import cat.ereza.customactivityoncrash.config.CaocConfig
 import com.google.android.material.color.DynamicColors
 import org.conscrypt.Conscrypt
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.imagegen.ImageGenerationMigration
 import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.Logger
 import org.teslasoft.assistant.preferences.Preferences
@@ -108,6 +109,15 @@ class MainApplication : Application() {
         // automatic backup if one is due. Off the main thread; app start must
         // not wait on SQLCipher.
         Thread {
+            try {
+                // Seed the app-wide image-generation settings from the default
+                // settings profile, once (image-generation-rebuild-plan.md §14).
+                // Idempotent; the marker is stamped only after a complete seed,
+                // so a failure here retries on the next start.
+                ImageGenerationMigration.runIfNeeded(this)
+            } catch (e: Exception) {
+                MemoryLog.log(this, "ImageGeneration", "error", "Image-generation settings seeding at startup failed: ${e.message}")
+            }
             try {
                 // Finish (or discard) a chat recovery restore interrupted by
                 // process death (Build Phase 3 item 5) — BEFORE the outage

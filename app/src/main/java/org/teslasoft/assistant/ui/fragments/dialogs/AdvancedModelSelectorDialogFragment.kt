@@ -58,14 +58,23 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
         /** [endpointId], when non-blank, fetches models for that specific saved
          *  endpoint instead of the chat's own active endpoint (Preferences'
          *  apiEndpointId) — used by callers assigning a model to a feature that
-         *  has its own independently-chosen endpoint (e.g. Memory Assistant). */
-        fun newInstance(name: String, chatId: String, endpointId: String = "") : AdvancedModelSelectorDialogFragment {
+         *  has its own independently-chosen endpoint (e.g. Memory Assistant).
+         *
+         *  [imageModels] selects the image-generator variant of this picker
+         *  (image-generation-rebuild-plan.md §5/§10): the chat variant's
+         *  name-based exclusions do NOT apply (they hide exactly the models
+         *  that picker exists to show), the raw catalog is fetched so
+         *  image-output capability information can narrow the list when the
+         *  provider exposes any, and no model id is rejected merely because
+         *  it is unfamiliar to the app. */
+        fun newInstance(name: String, chatId: String, endpointId: String = "", imageModels: Boolean = false) : AdvancedModelSelectorDialogFragment {
             val advancedModelSelectorDialogFragment = AdvancedModelSelectorDialogFragment()
 
             val args = Bundle()
             args.putString("name", name)
             args.putString("chatId", chatId)
             args.putString("endpointId", endpointId)
+            args.putBoolean("imageModels", imageModels)
 
             advancedModelSelectorDialogFragment.arguments = args
 
@@ -93,6 +102,9 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
     private var modelListAdapter: ModelListAdapter? = null
 
     private var mContext: Context? = null
+
+    /** Image-generator picker variant (see [newInstance]). */
+    private var imageMode = false
 
     override fun onAttach(context: Context) {
         super.onAttach(context)
@@ -133,7 +145,17 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
                 }
 
                 val ids = dataEl.asJsonArray.mapNotNull { el ->
-                    if (el.isJsonObject) el.asJsonObject.get("id")?.takeIf { !it.isJsonNull }?.asString else null
+                    if (!el.isJsonObject) return@mapNotNull null
+                    val obj = el.asJsonObject
+                    val id = obj.get("id")?.takeIf { !it.isJsonNull }?.asString
+                        ?: return@mapNotNull null
+                    // Image variant: capability metadata may narrow the list
+                    // (§10) — an entry is dropped ONLY when its catalog entry
+                    // explicitly says its outputs exclude image. Entries with
+                    // no capability information always stay listed; metadata
+                    // must never become a hard-coded name filter.
+                    if (imageMode && !catalogAllowsImageOutput(obj)) return@mapNotNull null
+                    id
                 }
 
                 if (ids.isEmpty()) {
@@ -158,6 +180,18 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
 
         override fun onErrorResponse(tag: String, message: String) {
             showProviderError(message)
+        }
+    }
+
+    /** True unless the catalog entry carries output-modality information
+     *  that excludes image output (image-generation-rebuild-plan.md §10). */
+    private fun catalogAllowsImageOutput(obj: com.google.gson.JsonObject): Boolean {
+        val architecture = obj.get("architecture")
+            ?.takeIf { it.isJsonObject }?.asJsonObject ?: return true
+        val modalities = architecture.get("output_modalities")
+            ?.takeIf { it.isJsonArray }?.asJsonArray ?: return true
+        return modalities.any { m ->
+            !m.isJsonNull && m.isJsonPrimitive && m.asString.equals("image", ignoreCase = true)
         }
     }
 
@@ -204,7 +238,10 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
             override fun afterTextChanged(s: Editable?) { /* unused */ }
         })
 
-        ttsSelectorTitle?.text = getString(R.string.label_select_ai_model)
+        imageMode = requireArguments().getBoolean("imageModels", false)
+        ttsSelectorTitle?.text = getString(
+            if (imageMode) R.string.label_select_image_model else R.string.label_select_ai_model
+        )
 
         progressBar?.visibility = View.VISIBLE
 
@@ -234,6 +271,14 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
         val ai = OpenAI(config)
 
         CoroutineScope(Dispatchers.Main).launch {
+            if (imageMode) {
+                // The image variant always fetches the raw catalog: only its
+                // JSON carries the provider's output-modality capability
+                // information (§10), and the chat variant's name exclusions
+                // below must not apply to image models (§5).
+                startRawModelsRequest()
+                return@launch
+            }
             try {
                 val models: List<Model> = ai.models()
                 for (model in models) {
@@ -253,21 +298,28 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
                 modelListAdapter?.notifyDataSetChanged()
                 progressBar?.visibility = View.GONE
             } catch (_: Exception) {
-                requestNetwork = RequestNetwork((mContext as Activity?) ?: return@launch)
-                val authHeaders = HashMap<String, Any>()
-                val apiKey = apiEndpointObject?.apiKey ?: ""
-                when (apiEndpointObject?.authType) {
-                    ApiEndpointObject.AUTH_X_API_KEY -> authHeaders["x-api-key"] = apiKey
-                    ApiEndpointObject.AUTH_API_KEY -> authHeaders["api-key"] = apiKey
-                    else -> authHeaders["Authorization"] = "Bearer $apiKey"
-                }
-                requestNetwork?.setHeaders(authHeaders)
-                val base = (apiEndpointObject?.host ?: "").let { if (it.isBlank() || it.endsWith("/")) it else "$it/" }
-                requestNetwork?.startRequestNetwork("GET", base + "models", "A", requestListener)
+                startRawModelsRequest()
             }
         }
 
         return builder!!.create()
+    }
+
+    /** Plain GET {base}models with the endpoint's auth mode; the parsed
+     *  response lands in [requestListener]. Used as the fallback when the
+     *  SDK path fails, and as the primary path in image mode. */
+    private fun startRawModelsRequest() {
+        requestNetwork = RequestNetwork((mContext as Activity?) ?: return)
+        val authHeaders = HashMap<String, Any>()
+        val apiKey = apiEndpointObject?.apiKey ?: ""
+        when (apiEndpointObject?.authType) {
+            ApiEndpointObject.AUTH_X_API_KEY -> authHeaders["x-api-key"] = apiKey
+            ApiEndpointObject.AUTH_API_KEY -> authHeaders["api-key"] = apiKey
+            else -> authHeaders["Authorization"] = "Bearer $apiKey"
+        }
+        requestNetwork?.setHeaders(authHeaders)
+        val base = (apiEndpointObject?.host ?: "").let { if (it.isBlank() || it.endsWith("/")) it else "$it/" }
+        requestNetwork?.startRequestNetwork("GET", base + "models", "A", requestListener)
     }
 
     private fun updateProjection(query: String) {

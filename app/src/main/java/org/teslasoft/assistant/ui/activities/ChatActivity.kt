@@ -113,18 +113,18 @@ import com.aallam.openai.api.chat.ChatCompletionRequest
 import com.aallam.openai.api.chat.ChatMessage
 import com.aallam.openai.api.chat.ChatRole
 import com.aallam.openai.api.chat.ContentPart
+import com.aallam.openai.api.chat.FunctionCall
 import com.aallam.openai.api.chat.ImagePart
 import com.aallam.openai.api.chat.TextPart
 import com.aallam.openai.api.chat.ToolCall
 import com.aallam.openai.api.chat.ToolChoice
+import com.aallam.openai.api.chat.ToolId
 import com.aallam.openai.api.chat.chatCompletionRequest
 import com.aallam.openai.api.completion.CompletionRequest
 import com.aallam.openai.api.completion.TextCompletion
 import com.aallam.openai.api.core.Role
 import com.aallam.openai.api.file.FileSource
 import com.aallam.openai.api.http.Timeout
-import com.aallam.openai.api.image.ImageCreation
-import com.aallam.openai.api.image.ImageSize
 import com.aallam.openai.api.logging.LogLevel
 import com.aallam.openai.api.logging.Logger
 import com.aallam.openai.api.model.ModelId
@@ -141,12 +141,9 @@ import com.google.android.material.progressindicator.CircularProgressIndicator
 import com.google.gson.Gson
 import com.google.mlkit.nl.languageid.LanguageIdentification
 import com.google.mlkit.nl.languageid.LanguageIdentifier
-import com.openai.client.OpenAIClient
-import com.openai.client.okhttp.OpenAIOkHttpClient
-import com.openai.models.images.Image
-import com.openai.models.images.ImageGenerateParams
 import eightbitlab.com.blurview.BlurView
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -215,6 +212,24 @@ import org.teslasoft.assistant.util.GenErrorResult
 import org.teslasoft.assistant.util.FrozenChatPayload
 import org.teslasoft.assistant.util.FrozenPayloadMessage
 import org.teslasoft.assistant.util.GenerationErrorClassifier
+import org.teslasoft.assistant.imagegen.CreateImageTool
+import org.teslasoft.assistant.imagegen.ImageConfirmationSpeech
+import org.teslasoft.assistant.imagegen.ImageErrorCause
+import org.teslasoft.assistant.imagegen.ImageErrorSanitizer
+import org.teslasoft.assistant.imagegen.ImageGenerationEventLog
+import org.teslasoft.assistant.imagegen.ImageFailureAction
+import org.teslasoft.assistant.imagegen.GeneratedImageFiles
+import org.teslasoft.assistant.imagegen.GeneratedImageMetadata
+import org.teslasoft.assistant.imagegen.ImageGenerationJobRegistry
+import org.teslasoft.assistant.imagegen.ImageGenerationRequest
+import org.teslasoft.assistant.imagegen.imageFailureMessageRes
+import org.teslasoft.assistant.imagegen.ImageProviderAdapters
+import org.teslasoft.assistant.imagegen.ImagineCommand
+import org.teslasoft.assistant.imagegen.StreamedToolCallAssembler
+import org.teslasoft.assistant.imagegen.ToolCapability
+import org.teslasoft.assistant.imagegen.ToolCapabilityStore
+import org.teslasoft.assistant.imagegen.ToolSupportClassifier
+import org.teslasoft.assistant.imagegen.failureActionFor
 import org.teslasoft.assistant.util.LocaleParser
 import org.teslasoft.assistant.util.ModelContextCapacity
 import org.teslasoft.assistant.util.ModelContextDecision
@@ -243,7 +258,8 @@ import kotlinx.coroutines.flow.flowOn
 import okio.FileSystem
 import okio.Path.Companion.toPath
 
-class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
+class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
+    ImageGenerationJobRegistry.Listener {
 
     companion object {
         // Broadcast action posted by the keep-alive notifications' "Hang Up"
@@ -581,7 +597,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     private var whisperPreloadScope: CoroutineScope? = null
     private var processRecordingScope: CoroutineScope? = null
     private var setupScope: CoroutineScope? = null
-    private var imageRequestScope: CoroutineScope? = null
     private var speakScope: CoroutineScope? = null
     // Typed-send / regenerate generation (parseMessage). Was an anonymous
     // CoroutineScope, which meant NOTHING could cancel it — the stop control
@@ -590,7 +605,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     // generation path.
     private var parseMessageScope: CoroutineScope? = null
     private var requestPreparationInProgress = false
-    private var generateGptImageJob: Job? = null
 
     private fun killAllProcesses() {
         onSpeechResultsScope?.coroutineContext?.cancel(CancellationException("Killed"))
@@ -598,7 +612,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         whisperPreloadScope?.coroutineContext?.cancel(CancellationException("Killed"))
         processRecordingScope?.coroutineContext?.cancel(CancellationException("Killed"))
         setupScope?.coroutineContext?.cancel(CancellationException("Killed"))
-        imageRequestScope?.coroutineContext?.cancel(CancellationException("Killed"))
         speakScope?.coroutineContext?.cancel(CancellationException("Killed"))
         parseMessageScope?.coroutineContext?.cancel(CancellationException("Killed"))
         condenseJob?.cancel(CancellationException("Killed"))
@@ -612,8 +625,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         artifactJobs.values.toList().forEach { it.cancel(CancellationException("Killed")) }
         artifactJobs.clear()
         requestPreparationInProgress = false
-        generateGptImageJob?.cancel(CancellationException("Killed"))
-        generateGptImageJob = null
         handsFreeStopped = true
         handsFreeReadbackExpected = false
         handsFreeHandler.removeCallbacksAndMessages(null)
@@ -1008,6 +1019,22 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         }
     }
 
+    /** §5 spoken approval, the deny-and-continue case: the utterance waits
+     *  for the declined turn to finish (tool result plus final text), then
+     *  submits as an ordinary message. Gives up silently after ~60s so a
+     *  wedged turn cannot queue ghost messages forever. */
+    private fun submitRecognizedTextWhenIdle(recognizedText: String, attempt: Int = 0) {
+        if (attempt > 120 || isFinishing || isDestroyed) return
+        handsFreeHandler.postDelayed({
+            if (isFinishing || isDestroyed) return@postDelayed
+            if (isAiCurrentlyBusy()) {
+                submitRecognizedTextWhenIdle(recognizedText, attempt + 1)
+            } else {
+                submitRecognizedText(recognizedText)
+            }
+        }, 500)
+    }
+
     private fun scheduleHandsFreeSubmit() {
         handsFreeSubmitRunnable?.let { handsFreeHandler.removeCallbacks(it) }
         val silenceMs = (preferences?.getHandsFreeSilenceSeconds() ?: 5).coerceAtLeast(1) * 1000L
@@ -1059,6 +1086,34 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     }
 
     private fun submitRecognizedText(recognizedText: String) {
+        // §5 spoken approval: while an image confirmation is pending, the
+        // next recognized utterance answers it — "create it" approves,
+        // "cancel" denies, and anything else denies the image and then
+        // continues as a normal message once the declined turn finishes.
+        // The on-screen card keeps working the whole time.
+        if (pendingImageConfirmation != null) {
+            when (ImageConfirmationSpeech.interpret(recognizedText)) {
+                ImageConfirmationSpeech.Answer.APPROVE -> {
+                    playTranscriptionDoneSignal()
+                    pendingImageConfirmation?.complete(true)
+                    return
+                }
+                ImageConfirmationSpeech.Answer.DENY -> {
+                    playTranscriptionDoneSignal()
+                    pendingImageConfirmation?.complete(false)
+                    return
+                }
+                ImageConfirmationSpeech.Answer.DENY_AND_CONTINUE -> {
+                    pendingImageConfirmation?.complete(false)
+                    // The declined turn still returns its tool result and
+                    // final text; these words follow as the next normal
+                    // message the moment the turn is over.
+                    submitRecognizedTextWhenIdle(recognizedText)
+                    return
+                }
+            }
+        }
+
         playTranscriptionDoneSignal()
 
         // Sample the box BEFORE inserting: an already-typed message must never be
@@ -2112,6 +2167,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             onRestoredState(savedInstanceState)
         }
 
+        // §5 recovery: reattach to a generation that is still running for
+        // this chat and re-show its Creating Image row. Skipped while the
+        // blocking storage-unavailable state owns the screen.
+        if (!chatStorageUnavailable && adapter != null) {
+            restoreImageGenerationJobState()
+        }
+
         chatStartupComplete = true
     }
 
@@ -2182,6 +2244,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         // is never a Summarizer Error, and the bookmark only ever advances on
         // a completed save (errors doc §4).
         summarizerController?.cancel()
+
+        // Detach from the image job registry WITHOUT cancelling the job:
+        // the generation deliberately survives leaving the chat and
+        // recreation (§5); with no screen attached its result is written
+        // straight into the stored history.
+        ImageGenerationJobRegistry.detach(chatId, this)
 
         killAllProcesses()
         stopHandsFreeService()
@@ -3817,10 +3885,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     }
 
     /** True when this chat's requests use summarizer transmission at all —
-     *  the excluded paths (decision 12) always send full history. */
+     *  the excluded paths (decision 12) always send full history. The old
+     *  Function Calling exclusion is gone with the feature
+     *  (image-generation-rebuild-plan.md §15): those chats now follow the
+     *  normal summarizer rules like any other chat. */
     private fun summarizerTransmissionActive(): Boolean =
         preferences?.getChatUseSummarizer() == true &&
-            preferences?.getFunctionCalling() != true &&
             !model.contains(":ft") && !model.contains("ft:")
 
     /** The summary's own system message (decision 14), or null when nothing
@@ -5114,10 +5184,24 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         // persisting it would overwrite the only copy. The refusal is logged
         // by the guard; the "Chat unavailable" state already blocks the UI.
         if (chatStorageUnavailable) return ChatStorageHealth.WriteOutcome.BLOCKED_CORRUPT
+        // The inline image-confirmation card and the Creating Image row are
+        // transient UI rows (image-generation-rebuild-plan.md §5) — never
+        // persisted, so no unexplained empty assistant message is saved and
+        // reopening cannot show a stale copy.
+        val isTransientImageRow = { row: HashMap<String, Any> ->
+            row[ChatAdapter.KEY_IMAGE_CONFIRMATION] == true ||
+                row[ChatAdapter.KEY_IMAGE_PROGRESS] == true
+        }
+        val persistableMessages =
+            if (messages.any(isTransientImageRow)) {
+                ArrayList(messages.filterNot(isTransientImageRow))
+            } else {
+                messages
+            }
         return ChatPreferences.getChatPreferences().saveChatHistory(
             this,
             chatId,
-            messages,
+            persistableMessages,
             synchronous = synchronous
         )
     }
@@ -5221,18 +5305,37 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             btnSend?.isEnabled = false
             progress?.visibility = View.VISIBLE
 
-            val imagineCommandEnabled: Boolean = preferences!!.getImagineCommand()
+            // Rebuilt /imagine (image-generation-rebuild-plan.md §2.1): the
+            // RAW typed text is parsed — not the stored prefix+separator
+            // form — so the command triggers only at the start of the
+            // message, and trailing --shape / --quality options override
+            // the saved defaults for this request only (§11). The toggle is
+            // the app-wide Enable /imagine setting (§5); the legacy
+            // per-chat copy stops being read (§14).
+            val imagineParse = if (preferences!!.getImagineCommandGlobal()) {
+                ImagineCommand.parse(message)
+            } else {
+                ImagineCommand.Parse.NotImagine
+            }
 
-            if (m.lowercase().contains("/imagine") && m.length > 9 && imagineCommandEnabled) {
-                val x: String = m.substring(9)
-
-                if (openAIKey == null) {
-                    openAIMissing("dalle", x)
-                } else {
-                    sendImageRequest(x)
-                }
-            } else if (m.lowercase().contains("/imagine") && m.length <= 9 && imagineCommandEnabled) {
+            if (imagineParse is ImagineCommand.Parse.Request) {
+                handleImagineRequest(imagineParse)
+            } else if (imagineParse is ImagineCommand.Parse.EmptyPrompt) {
                 putMessage("Prompt can not be empty. Use /imagine &lt;PROMPT&gt;", true)
+
+                saveSettings()
+
+                btnMicro?.isEnabled = true
+                btnSend?.isEnabled = true
+                progress?.visibility = View.GONE
+            } else if (imagineParse is ImagineCommand.Parse.InvalidOption) {
+                // §11: an unknown or invalid trailing option is a clear
+                // correctable error naming the supported options and
+                // values, and no image is generated.
+                putMessage(
+                    getString(R.string.image_gen_invalid_option, imagineParse.optionText),
+                    true
+                )
 
                 saveSettings()
 
@@ -5274,30 +5377,638 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         }
     }
 
-    @SuppressLint("ClickableViewAccessibility")
-    private fun sendImageRequest(str: String) {
-        imageRequestScope = CoroutineScope(Dispatchers.Main)
-        imageRequestScope?.launch {
-            runOnUiThread {
-                btnMicro?.isEnabled = false
-                btnSend?.isEnabled = false
-                progress?.visibility = View.VISIBLE
-            }
+    /**
+     * The rebuilt `/imagine` pipeline (image-generation-rebuild-plan.md
+     * §2.1/§11/§13): pre-flight configuration check with the persistent
+     * Configure dialog, §11 option resolution against the selected
+     * generator's capabilities with the never-silent unsupported-option
+     * notice, then one request through the shared generator coordinator.
+     */
+    private fun handleImagineRequest(parsed: ImagineCommand.Parse.Request) {
+        val globalPreferences = Preferences.getPreferences(this, "")
+        val endpointId = globalPreferences.getImageGeneratorEndpointId()
+        val generatorModelId = globalPreferences.getImageGeneratorModel()
+        if (endpointId.isBlank() || generatorModelId.isBlank()) {
+            saveSettings()
+            restoreUIState()
+            MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+                .setTitle(R.string.title_image_generation)
+                .setMessage(R.string.image_gen_configure_message)
+                .setPositiveButton(R.string.image_gen_action_configure) { _, _ ->
+                    startActivity(Intent(this, ImageGenerationSettingsActivity::class.java))
+                }
+                .setNegativeButton(R.string.btn_cancel) { _, _ -> }
+                .show()
+            return
+        }
 
-            progress?.setOnClickListener {
-                cancel()
-                restoreUIState()
+        val endpoint = apiEndpointPreferences!!.getApiEndpoint(this, endpointId)
+        val capabilities = ImageProviderAdapters.forEndpoint(endpoint).capabilities
+        val resolved = ImagineCommand.resolveOptions(
+            parsed.shapeOverride,
+            parsed.qualityOverride,
+            globalPreferences.getImageGeneratorShape(),
+            globalPreferences.getImageGeneratorQuality(),
+            capabilities
+        )
+        val request = ImageGenerationRequest(
+            prompt = parsed.prompt,
+            shape = resolved.shape,
+            quality = resolved.quality,
+            endpointId = endpointId,
+            modelId = generatorModelId
+        )
+
+        if (resolved.unsupportedExplicit.isNotEmpty()) {
+            // §11: an explicitly requested option the selected generator
+            // cannot support is never silently ignored.
+            val optionLabels = resolved.unsupportedExplicit.joinToString(", ") { option ->
+                if (option == ImagineCommand.OPTION_SHAPE) {
+                    getString(R.string.image_gen_row_shape)
+                } else {
+                    getString(R.string.image_gen_row_quality)
+                }
+            }
+            saveSettings()
+            restoreUIState()
+            MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+                .setTitle(R.string.title_image_generation)
+                .setMessage(getString(R.string.image_gen_unsupported_option_notice, optionLabels))
+                .setPositiveButton(R.string.image_gen_action_continue) { _, _ ->
+                    sendCoordinatorImageRequest(request)
+                }
+                .setNegativeButton(R.string.btn_cancel) { _, _ -> }
+                .show()
+            return
+        }
+
+        sendCoordinatorImageRequest(request)
+    }
+
+    /** §5 progress experience: the generation runs in the process-level
+     *  job registry — NOT an activity scope — so leaving the chat or
+     *  recreating this screen cannot kill it or double it. This screen
+     *  shows the inline Creating Image row (with its visible Cancel), and
+     *  the busy state; the single terminal state arrives through
+     *  [onImageJobFinished]. */
+    private fun sendCoordinatorImageRequest(request: ImageGenerationRequest) {
+        btnMicro?.isEnabled = false
+        btnSend?.isEnabled = false
+        progress?.visibility = View.VISIBLE
+        progress?.setOnClickListener { ImageGenerationJobRegistry.cancel(chatId) }
+        showImageProgressCard()
+        // Attach (idempotent) before starting: a chat whose id was assigned
+        // after onCreate must still receive the terminal state here.
+        ImageGenerationJobRegistry.attach(chatId, this)
+        ImageGenerationJobRegistry.start(
+            this, chatId, request, ImageGenerationJobRegistry.Origin.IMAGINE
+        )
+    }
+
+    /** The §5 single terminal state — Complete, Failed, or Cancelled —
+     *  delivered exactly once by the job registry while this screen is
+     *  attached. `/imagine` owns its whole turn, so it also restores the
+     *  busy state; a tool-call generation is mid-turn and leaves the turn
+     *  state to the surrounding tool flow. */
+    override fun onImageJobFinished(
+        job: ImageGenerationJobRegistry.ActiveJob,
+        terminal: ImageGenerationJobRegistry.Terminal
+    ) {
+        if (job.chatId != chatId) return
+        removeImageProgressCard()
+        val fromImagine = job.origin == ImageGenerationJobRegistry.Origin.IMAGINE
+        when (terminal) {
+            is ImageGenerationJobRegistry.Terminal.Complete -> {
+                putMessage("~file:" + terminal.marker, true)
+                attachGeneratedImageRecord(terminal.metadata)
+                scroll(true)
+                scroll(false)
                 saveSettings()
-                syncChatProjection()
-                calculateCost()
+                ChatPreferences.getChatPreferences()
+                    .putTimestampToChatById(this, chatId)
+                if (fromImagine) {
+                    btnMicro?.isEnabled = true
+                    btnSend?.isEnabled = true
+                    progress?.visibility = View.GONE
+                    messageInput?.requestFocus()
+                }
             }
-
-            try {
-                generateImageR(str)
-            } catch (_: CancellationException) {
-                restoreUIState()
+            is ImageGenerationJobRegistry.Terminal.Failed -> {
+                if (fromImagine) {
+                    presentImageGenerationFailure(job.request, terminal.cause, terminal.metadata)
+                } else {
+                    // §13: the cause message appears in chat; the tool flow
+                    // returns its own concise tool error to the model.
+                    putMessage(getString(imageFailureMessageRes(terminal.cause)), true)
+                    attachGeneratedImageRecord(terminal.metadata)
+                    saveSettings()
+                }
+            }
+            is ImageGenerationJobRegistry.Terminal.Cancelled -> {
+                putMessage(getString(R.string.image_gen_error_cancelled), true)
+                attachGeneratedImageRecord(terminal.metadata)
+                saveSettings()
+                if (fromImagine) restoreUIState()
             }
         }
+    }
+
+    /** §12: stamp the just-added terminal message with its structured
+     *  record. Rides the same persisted map as the message text, so the
+     *  two can never separate. */
+    private fun attachGeneratedImageRecord(metadata: GeneratedImageMetadata) {
+        val last = messages.lastOrNull() ?: return
+        if (last["isBot"] == true) {
+            last[GeneratedImageMetadata.KEY] = metadata.toJson()
+        }
+    }
+
+    /** The Creating Image row's visible Cancel action (plan §5). */
+    override fun onImageProgressCancel() {
+        ImageGenerationJobRegistry.cancel(chatId)
+    }
+
+    /** Transient §5 Creating Image row — never persisted; restored on
+     *  reopen while the registry still holds the chat's job. */
+    private fun showImageProgressCard() {
+        if (messages.any { it[ChatAdapter.KEY_IMAGE_PROGRESS] == true }) return
+        val card = HashMap<String, Any>()
+        card["isBot"] = true
+        card["message"] = ""
+        card[ChatAdapter.KEY_IMAGE_PROGRESS] = true
+        messages.add(card)
+        adapter?.notifyItemInserted(messages.size - 1)
+        updateMessagesSelectionProjection()
+        scroll(true)
+    }
+
+    private fun removeImageProgressCard() {
+        val index = messages.indexOfLast { it[ChatAdapter.KEY_IMAGE_PROGRESS] == true }
+        if (index >= 0) {
+            messages.removeAt(index)
+            adapter?.notifyItemRemoved(index)
+            updateMessagesSelectionProjection()
+        }
+    }
+
+    /** §5 recovery: reopening (or recreating) the chat while its
+     *  generation is still running re-shows the Creating Image row; an
+     *  `/imagine` turn also re-enters its busy state. Never restarts the
+     *  generation — the registry holds the one running job. */
+    private fun restoreImageGenerationJobState() {
+        if (chatId == "") return
+        ImageGenerationJobRegistry.attach(chatId, this)
+        val activeJob = ImageGenerationJobRegistry.activeJob(chatId) ?: return
+        showImageProgressCard()
+        if (activeJob.origin == ImageGenerationJobRegistry.Origin.IMAGINE) {
+            btnMicro?.isEnabled = false
+            btnSend?.isEnabled = false
+            progress?.visibility = View.VISIBLE
+            progress?.setOnClickListener { ImageGenerationJobRegistry.cancel(chatId) }
+        }
+    }
+
+    /** §13 failure behavior (owner ruling, 2026-07-29): a concise
+     *  cause-specific message in chat, plus the action matching the cause —
+     *  Edit Prompt for a refused prompt, Change Settings for unsupported
+     *  options and configuration or authentication failures, Retry only
+     *  for failures that may succeed unchanged. Sanitized details stay in
+     *  the log surfaces, never in chat. */
+    private fun presentImageGenerationFailure(
+        request: ImageGenerationRequest,
+        errorCause: ImageErrorCause,
+        metadata: GeneratedImageMetadata? = null
+    ) {
+        playErrorSignal()
+        stopHandsFreeOnError()
+
+        val causeText = getString(imageFailureMessageRes(errorCause))
+        putMessage(causeText, true)
+        if (metadata != null) attachGeneratedImageRecord(metadata)
+        saveSettings()
+        btnMicro?.isEnabled = true
+        btnSend?.isEnabled = true
+        progress?.visibility = View.GONE
+        messageInput?.requestFocus()
+
+        val builder = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(causeText)
+            .setNegativeButton(R.string.btn_cancel) { _, _ -> }
+        when (failureActionFor(errorCause)) {
+            ImageFailureAction.EDIT_PROMPT -> {
+                builder.setPositiveButton(R.string.image_gen_action_edit_prompt) { _, _ ->
+                    // The exact prompt that was sent to the generator, back
+                    // in the composer as a runnable command.
+                    messageInput?.setText("/imagine " + request.prompt)
+                    messageInput?.setSelection(messageInput?.text?.length ?: 0)
+                    messageInput?.requestFocus()
+                }
+            }
+            ImageFailureAction.CHANGE_SETTINGS,
+            ImageFailureAction.OPEN_IMAGE_SETTINGS -> {
+                builder.setPositiveButton(R.string.image_gen_action_change_settings) { _, _ ->
+                    startActivity(Intent(this, ImageGenerationSettingsActivity::class.java))
+                }
+            }
+            ImageFailureAction.RETRY -> {
+                builder.setPositiveButton(R.string.btn_msg_retry) { _, _ ->
+                    sendCoordinatorImageRequest(request)
+                }
+            }
+            ImageFailureAction.NONE -> { /* cancellation shows no action */ }
+        }
+        builder.show()
+    }
+
+    /* --------------- Model-initiated image creation (§6/§7/§8) --------------- */
+
+    /** Whether the most recent regular request carried the create_image
+     *  tool — the §8 retry wrapper's evidence that a failure could be a
+     *  tools rejection at all. */
+    private var lastRegularRequestCarriedImageTools = false
+
+    /** §8: UNKNOWN tries the tool, SUPPORTED keeps sending it, UNSUPPORTED
+     *  withholds it until the endpoint editor's reset forgets the record. */
+    private fun chatModelMayReceiveImageTool(selectedModel: String): Boolean {
+        return try {
+            val chatEndpointId = preferences?.getApiEndpointId().orEmpty()
+            if (chatEndpointId.isEmpty()) return true
+            val chatEndpoint =
+                apiEndpointPreferences?.getApiEndpoint(this, chatEndpointId) ?: return true
+            ToolCapabilityStore.get(chatEndpoint.toolCapabilityByModel, selectedModel) !=
+                ToolCapability.UNSUPPORTED
+        } catch (_: Exception) {
+            true
+        }
+    }
+
+    /** Persist a learned tool capability for this chat's exact
+     *  endpoint/model pair — same persistence shape as vision capability.
+     *  Learning must never break a turn. */
+    private fun recordChatToolCapability(capability: ToolCapability) {
+        try {
+            val chatEndpointId = preferences?.getApiEndpointId().orEmpty()
+            if (chatEndpointId.isEmpty() || model.isBlank()) return
+            val prefs = ApiEndpointPreferences.getApiEndpointPreferences(this)
+            val endpoint = prefs.getApiEndpoint(this, chatEndpointId)
+            val updated =
+                ToolCapabilityStore.set(endpoint.toolCapabilityByModel, model, capability)
+            if (updated != endpoint.toolCapabilityByModel) {
+                endpoint.toolCapabilityByModel = updated
+                prefs.setApiEndpoint(this, endpoint)
+            }
+        } catch (_: Exception) { /* capability learning must never break a turn */ }
+    }
+
+    /** The §8 UNSUPPORTED transition: record it, drop the dead streaming
+     *  placeholder so the retry doesn't stack empty bubbles, and show the
+     *  one-time notice — it appears exactly once because the learned state
+     *  prevents any further tool-bearing request to this pair. Returns the
+     *  state the pair had before, for the §13 capability-change entry. */
+    private fun learnToolsUnsupportedAndNotify(): ToolCapability {
+        val previousState = try {
+            val chatEndpointId = preferences?.getApiEndpointId().orEmpty()
+            if (chatEndpointId.isEmpty()) ToolCapability.UNKNOWN
+            else ToolCapabilityStore.get(
+                apiEndpointPreferences?.getApiEndpoint(this, chatEndpointId)?.toolCapabilityByModel,
+                model
+            )
+        } catch (_: Exception) {
+            ToolCapability.UNKNOWN
+        }
+        recordChatToolCapability(ToolCapability.UNSUPPORTED)
+        runOnUiThread {
+            if (messages.isNotEmpty() && messages.last()["isBot"] == true &&
+                messages.last()["message"].toString().isEmpty()
+            ) {
+                messages.removeAt(messages.size - 1)
+                adapter?.notifyItemRemoved(messages.size)
+                updateMessagesSelectionProjection()
+            }
+            putMessage(getString(R.string.image_gen_tools_unsupported_notice), true)
+            saveSettings()
+        }
+        return previousState
+    }
+
+    /** §13 automatic capability-change entry, written once the without-tools
+     *  retry has finished either way. Logging must never break the retry. */
+    private fun recordToolCapabilityChangeEntry(
+        previousState: ToolCapability,
+        rawError: String?,
+        retrySucceeded: Boolean
+    ) {
+        try {
+            val chatEndpointId = preferences?.getApiEndpointId().orEmpty()
+            val endpoint = if (chatEndpointId.isEmpty()) null
+            else apiEndpointPreferences?.getApiEndpoint(this, chatEndpointId)
+            ImageGenerationEventLog.recordCapabilityChange(
+                this,
+                endpointLabel = endpoint?.label.orEmpty(),
+                modelId = model,
+                previousState = toolCapabilityLabel(previousState),
+                newState = toolCapabilityLabel(ToolCapability.UNSUPPORTED),
+                sanitizedError = ImageErrorSanitizer.sanitize(rawError, endpoint?.apiKey),
+                retriedWithoutTools = true,
+                retrySucceeded = retrySucceeded
+            )
+        } catch (_: Exception) { /* logging must never break the retry */ }
+    }
+
+    private fun toolCapabilityLabel(capability: ToolCapability): String = when (capability) {
+        ToolCapability.UNKNOWN -> "Unknown"
+        ToolCapability.SUPPORTED -> "Supported"
+        ToolCapability.UNSUPPORTED -> "Unsupported"
+    }
+
+    /** Resolved by the inline confirmation card's Create/Cancel tap. */
+    private var pendingImageConfirmation: CompletableDeferred<Boolean>? = null
+
+    override fun onImageConfirmationDecision(approved: Boolean) {
+        pendingImageConfirmation?.complete(approved)
+    }
+
+    private fun showImageConfirmationCard(prompt: String) {
+        val card = HashMap<String, Any>()
+        card["isBot"] = true
+        card["message"] = ""
+        card[ChatAdapter.KEY_IMAGE_CONFIRMATION] = true
+        card[ChatAdapter.KEY_IMAGE_CONFIRMATION_PROMPT] = prompt
+        card[ChatAdapter.KEY_IMAGE_CONFIRMATION_COMPANION] =
+            preferences?.getAssistantName().orEmpty()
+        messages.add(card)
+        adapter?.notifyItemInserted(messages.size - 1)
+        updateMessagesSelectionProjection()
+        scroll(true)
+    }
+
+    private fun removeImageConfirmationCard() {
+        val index = messages.indexOfLast { it[ChatAdapter.KEY_IMAGE_CONFIRMATION] == true }
+        if (index >= 0) {
+            messages.removeAt(index)
+            adapter?.notifyItemRemoved(index)
+            updateMessagesSelectionProjection()
+        }
+    }
+
+    /** §5 confirmation: the inline card naming the companion, prompt
+     *  collapsed behind View Prompt, plus the spoken announcement over the
+     *  same read-aloud gate as replies (owner-approved wording) — in a
+     *  hands-free conversation its completed readback is what re-arms the
+     *  mic so the next utterance can answer. Skipped when Ask Before
+     *  Creating is off. Cancelling the turn (the progress tap) cancels the
+     *  await and removes the card. */
+    private suspend fun requestImageConfirmation(
+        prompt: String,
+        globalPreferences: Preferences,
+        shouldPronounce: Boolean
+    ): Boolean {
+        if (!globalPreferences.getAskBeforeAiImages()) return true
+        val decision = CompletableDeferred<Boolean>()
+        pendingImageConfirmation = decision
+        runOnUiThread { showImageConfirmationCard(prompt) }
+        pronounce(
+            shouldPronounce,
+            getString(
+                R.string.image_gen_spoken_announcement,
+                preferences?.getAssistantName().orEmpty()
+            )
+        )
+        try {
+            return decision.await()
+        } finally {
+            pendingImageConfirmation = null
+            runOnUiThread { removeImageConfirmationCard() }
+        }
+    }
+
+    /** §7 image tool flow: close the streamed text bubble (or drop an
+     *  empty placeholder — §5 forbids saving an unexplained empty
+     *  assistant message), execute at most one create_image call per turn
+     *  (§6), return one tool result per call to the SAME conversation
+     *  model, and stream its final text. Unknown tool names are never
+     *  executed. Tools are not re-offered on the follow-up, so the turn
+     *  cannot loop. */
+    private suspend fun handleAssistantToolCalls(
+        calls: List<StreamedToolCallAssembler.AssembledToolCall>,
+        originalRequest: ChatCompletionRequest,
+        streamedText: String,
+        shouldPronounce: Boolean
+    ) {
+        if (streamedText.isEmpty()) {
+            if (messages.isNotEmpty() && messages.last()["isBot"] == true) {
+                messages.removeAt(messages.size - 1)
+                adapter?.notifyItemRemoved(messages.size)
+                updateMessagesSelectionProjection()
+            }
+        } else {
+            markLastAssistantDone()
+        }
+        saveSettings()
+
+        val globalPreferences = Preferences.getPreferences(this, "")
+        var executedImageCall = false
+        val results =
+            ArrayList<kotlin.Pair<StreamedToolCallAssembler.AssembledToolCall, String>>()
+        for (call in calls) {
+            val result = when {
+                call.name != CreateImageTool.NAME -> {
+                    ImageGenerationEventLog.recordToolMistake(
+                        this, "the model called unknown tool \"${call.name}\""
+                    )
+                    CreateImageTool.errorResult(
+                        "unknown tool \"${call.name}\" — it was not executed"
+                    )
+                }
+                executedImageCall -> {
+                    ImageGenerationEventLog.recordToolMistake(
+                        this, "the model attempted more than one image in a single turn"
+                    )
+                    CreateImageTool.errorResult("only one image may be created per user turn")
+                }
+                else -> {
+                    executedImageCall = true
+                    executeCreateImageCall(call, globalPreferences, shouldPronounce)
+                }
+            }
+            results.add(kotlin.Pair(call, result))
+        }
+
+        var assistantCallId = 0
+        val assistantToolCallMessage = ChatMessage(
+            role = ChatRole.Assistant,
+            content = streamedText.ifEmpty { null },
+            toolCalls = calls.map { call ->
+                ToolCall.Function(
+                    id = ToolId(call.id ?: "call_${assistantCallId++}"),
+                    function = FunctionCall(call.name, call.arguments)
+                )
+            }
+        )
+        var resultCallId = 0
+        val toolResultMessages = results.map { pair ->
+            ChatMessage(
+                role = ChatRole.Tool,
+                content = pair.second,
+                toolCallId = ToolId(pair.first.id ?: "call_${resultCallId++}")
+            )
+        }
+        val followUpRequest = rebuildRequestWithoutTools(
+            originalRequest,
+            originalRequest.messages + assistantToolCallMessage + toolResultMessages
+        )
+        streamAssistantTextResponse(followUpRequest, shouldPronounce)
+    }
+
+    /** One §6-validated create_image execution: the user's saved quality
+     *  default always applies (the tool has no quality field), §11 shape
+     *  resolution reports model-side fallbacks in the tool result instead
+     *  of interrupting the user, the §5 confirmation runs when enabled,
+     *  and the shared coordinator generates the image. Failures put the
+     *  §13 cause message in chat and return a clean tool error. */
+    private suspend fun executeCreateImageCall(
+        call: StreamedToolCallAssembler.AssembledToolCall,
+        globalPreferences: Preferences,
+        shouldPronounce: Boolean
+    ): String {
+        val validation = CreateImageTool.validate(call.arguments)
+        if (validation is CreateImageTool.Validation.Invalid) {
+            // §13: model mistakes are log entries, never chat errors.
+            ImageGenerationEventLog.recordToolMistake(this, validation.toolError)
+            return CreateImageTool.errorResult(validation.toolError)
+        }
+        val valid = validation as CreateImageTool.Validation.Valid
+
+        val endpointId = globalPreferences.getImageGeneratorEndpointId()
+        val generatorModelId = globalPreferences.getImageGeneratorModel()
+        if (endpointId.isBlank() || generatorModelId.isBlank()) {
+            return CreateImageTool.errorResult("no image generator is configured")
+        }
+
+        val endpoint = apiEndpointPreferences!!.getApiEndpoint(this, endpointId)
+        val adapter = ImageProviderAdapters.forEndpoint(endpoint)
+        val resolved = ImagineCommand.resolveOptions(
+            valid.shapeOverride,
+            null,
+            globalPreferences.getImageGeneratorShape(),
+            globalPreferences.getImageGeneratorQuality(),
+            adapter.capabilities
+        )
+        if (resolved.unsupportedExplicit.isNotEmpty() || resolved.silentFallbacks.isNotEmpty()) {
+            // §13: a model-initiated option that fell back to the provider
+            // default — the case the user cannot otherwise see.
+            ImageGenerationEventLog.recordSilentFallback(
+                this,
+                (resolved.unsupportedExplicit + resolved.silentFallbacks).joinToString(", "),
+                endpoint.provider.ifBlank { adapter.providerName },
+                generatorModelId
+            )
+        }
+        val request = ImageGenerationRequest(
+            prompt = valid.prompt,
+            shape = resolved.shape,
+            quality = resolved.quality,
+            endpointId = endpointId,
+            modelId = generatorModelId,
+            description = valid.description
+        )
+
+        if (!requestImageConfirmation(valid.prompt, globalPreferences, shouldPronounce)) {
+            return CreateImageTool.cancelledResult()
+        }
+
+        // §5: the generation itself runs in the process-level job registry
+        // so recreating this screen mid-turn cannot kill it or double it.
+        // The attached screen shows the Creating Image row and appends the
+        // single terminal chat message (and the registry records the §13
+        // entries); this flow only builds the tool result.
+        val job = withContext(Dispatchers.Main) {
+            showImageProgressCard()
+            // Attach (idempotent) before starting: a chat whose id was
+            // assigned after onCreate must still receive the terminal state.
+            ImageGenerationJobRegistry.attach(chatId, this@ChatActivity)
+            ImageGenerationJobRegistry.start(
+                this@ChatActivity, chatId, request, ImageGenerationJobRegistry.Origin.TOOL
+            )
+        }
+        return when (val terminal = job.await()) {
+            is ImageGenerationJobRegistry.Terminal.Complete -> {
+                // §11: a model-initiated unsupported option applies the
+                // fallback and reports it in the tool result instead of
+                // interrupting the user.
+                val fallbackNote = if (resolved.unsupportedExplicit.isNotEmpty() ||
+                    resolved.silentFallbacks.isNotEmpty()
+                ) {
+                    "the requested shape is not supported by the image service; " +
+                        "the provider default was used"
+                } else {
+                    null
+                }
+                CreateImageTool.successResult(terminal.marker, valid.description, fallbackNote)
+            }
+            is ImageGenerationJobRegistry.Terminal.Failed ->
+                CreateImageTool.errorResult(
+                    "image generation failed: " + terminal.cause.name.lowercase()
+                )
+            is ImageGenerationJobRegistry.Terminal.Cancelled ->
+                CreateImageTool.cancelledResult()
+        }
+    }
+
+    /** ChatCompletionRequest is not a data class, so the §7 follow-up and
+     *  the §8 without-tools retry rebuild it field-by-field, carrying the
+     *  original sampling values and deliberately no tools. */
+    @OptIn(com.aallam.openai.api.BetaOpenAI::class) // reading seed back is beta-gated
+    private fun rebuildRequestWithoutTools(
+        original: ChatCompletionRequest,
+        requestMessages: List<ChatMessage>
+    ): ChatCompletionRequest = ChatCompletionRequest(
+        model = original.model,
+        messages = requestMessages,
+        maxTokens = original.maxTokens,
+        temperature = original.temperature,
+        topP = original.topP,
+        frequencyPenalty = original.frequencyPenalty,
+        presencePenalty = original.presencePenalty,
+        seed = original.seed,
+        logitBias = original.logitBias
+    )
+
+    /** The follow-up response after tool results (§7.7): plain streamed
+     *  text into a fresh assistant bubble, then the normal turn
+     *  completion. */
+    private suspend fun streamAssistantTextResponse(
+        request: ChatCompletionRequest,
+        shouldPronounce: Boolean
+    ) {
+        var response = ""
+        putMessage("", true)
+        markLastAssistantStreaming()
+        val completions: Flow<ChatCompletionChunk> = ai!!.chatCompletions(request)
+        scroll(true)
+        completions.flowOn(Dispatchers.IO).collect { v ->
+            if (!currentCoroutineContext().isActive) throw CancellationException()
+            val delta = v.choices.firstOrNull()?.delta?.content
+            if (delta != null && delta != "null") {
+                response += delta
+                messages[messages.size - 1]["message"] = response
+                adapter?.notifyItemChanged(messages.size - 1)
+                scroll(false)
+            }
+        }
+        messages[messages.size - 1]["message"] = "$response\n"
+        markLastAssistantDone()
+        adapter?.notifyItemChanged(messages.size - 1)
+        syncChatProjection()
+        pronounce(shouldPronounce, response)
+        saveSettings()
+        calculateCost()
+        summarizerCycle()
+        btnMicro?.isEnabled = true
+        btnSend?.isEnabled = true
+        progress?.visibility = View.GONE
+        messageInput?.requestFocus()
+        ChatPreferences.getChatPreferences().putTimestampToChatById(this, chatId)
     }
 
     private fun startRecognition(freshTurn: Boolean = true) {
@@ -5411,13 +6122,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             return
         }
 
-        // Preserve the existing non-chat command and multimodal/tool pipelines.
+        // Preserve the existing non-chat command and fine-tuned pipelines.
         // They do not use the normal chat-completions request built below.
-        val imagineCommand = rawMessage.lowercase().contains("/imagine") &&
-            preferences?.getImagineCommand() == true
-        if (imagineCommand ||
-            model.contains(":ft") || model.contains("ft:") ||
-            preferences?.getFunctionCalling() == true
+        // The old Function Calling diversion is gone with the feature (§15).
+        val imagineAttempt = preferences?.getImagineCommandGlobal() == true &&
+            ImagineCommand.isImagineAttempt(rawMessage)
+        if (imagineAttempt ||
+            model.contains(":ft") || model.contains("ft:")
         ) {
             parseMessage(rawMessage)
             return
@@ -5769,6 +6480,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     private fun cancelAllAiActivity(source: String) {
         logVoiceEvent("all AI activity cancelled ($source)")
         cancelState = true
+        // Stop is a deliberate user cancel, so it DOES end a running image
+        // generation (unlike leaving the screen, which lets it finish).
+        if (chatId != "") ImageGenerationJobRegistry.cancel(chatId)
         whisperTurnToken++ // invalidate any whisper turn callback still in flight
         handsFreeStopped = true
         handsFreeReadbackExpected = false
@@ -6078,27 +6792,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         }
     }
 
-    private fun generateImages(prompt: String) {
-        sendImageRequest(prompt)
-    }
-
-    private fun searchInternet(prompt: String) {
-        putMessage("Searching at Google...", true)
-
-        saveSettings()
-
-        btnMicro?.isEnabled = true
-        btnSend?.isEnabled = true
-        progress?.visibility = View.GONE
-
-        val q = prompt.replace(" ", "+")
-
-        val intent = Intent()
-        intent.action = Intent.ACTION_VIEW
-        intent.data = "https://www.google.com/search?q=$q".toUri()
-        startActivity(intent)
-    }
-
     @Suppress("deprecation")
     private suspend fun generateResponse(
         request: String,
@@ -6199,92 +6892,43 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 progress?.visibility = View.GONE
                 messageInput?.requestFocus()
             } else {
-                val functionCallingEnabled: Boolean = preferences!!.getFunctionCalling()
-
-                if (functionCallingEnabled && openAIKey != null) {
-                    val cm = mutableListOf(
-                        ChatMessage(
-                            role = ChatRole.User,
-                            content = request
-                        )
-                    )
-
-                    val functionRequest = chatCompletionRequest {
-                        model = ModelId("gpt-4o")
-                        messages = cm
-
-                        tools {
-                            function(
-                                name = "generateImage",
-                                description = "Generate an image based on the entered prompt"
-                            ) {
-                                put("type", "object")
-                                putJsonObject("properties") {
-                                    putJsonObject("prompt") {
-                                        put("type", "string")
-                                        put("description", "The prompt for image generation")
-                                    }
-                                }
-                                putJsonArray("required") {
-                                    add("prompt")
-                                }
-                            }
-
-                            function(
-                                name = "searchAtInternet",
-                                description = "Search the Internet",
-                            ) {
-                                put("type", "object")
-                                putJsonObject("properties") {
-                                    putJsonObject("prompt") {
-                                        put("type", "string")
-                                        put("description", "Search query")
-                                    }
-                                }
-                                putJsonArray("required") {
-                                    add("prompt")
-                                }
-                            }
-                        }
-
-                        toolChoice = ToolChoice.Auto
-                    }
-
-                    val response1 = openAIAI?.chatCompletion(functionRequest)
-
-                    val message = response1?.choices?.first()?.message
-
-                    if (message?.toolCalls != null) {
-                        val toolsCalls = message.toolCalls!!
-
-                        if (toolsCalls.isEmpty()) {
-                            regularGPTResponse(shouldPronounce, preparedTurn)
-                        } else {
-                            for (toolCall in toolsCalls) {
-                                require(toolCall is ToolCall.Function) { "Tool call is not a function" }
-                                toolCall.execute()
-                            }
-
-                            // Put timestamp to chat to sort chats by last message
-                            ChatPreferences.getChatPreferences().putTimestampToChatById(this, chatId)
-                        }
-                    } else {
+                // The old Function Calling router — a hidden gpt-4o request
+                // choosing between its image and web-search functions — is
+                // removed entirely (image-generation-rebuild-plan.md §15).
+                // Every normal chat goes straight to the regular request;
+                // image creation lives in the create_image tool coordinator.
+                run {
+                    try {
                         regularGPTResponse(shouldPronounce, preparedTurn)
+                    } catch (toolsError: Exception) {
+                        // §8: ONLY a clear tools-not-supported rejection of a
+                        // tool-bearing request learns the capability and
+                        // retries once without tools — the user's message is
+                        // neither lost nor duplicated. Anything else (or a
+                        // failing retry) falls through to the normal error
+                        // funnel below.
+                        if (toolsError !is CancellationException &&
+                            lastRegularRequestCarriedImageTools &&
+                            ToolSupportClassifier.isToolsNotSupportedError(toolsError.message)
+                        ) {
+                            val previousState = learnToolsUnsupportedAndNotify()
+                            var retrySucceeded = false
+                            try {
+                                regularGPTResponse(
+                                    shouldPronounce,
+                                    preparedTurn,
+                                    suppressImageTools = true
+                                )
+                                retrySucceeded = true
+                            } finally {
+                                recordToolCapabilityChangeEntry(
+                                    previousState, toolsError.message, retrySucceeded
+                                )
+                            }
+                        } else {
+                            throw toolsError
+                        }
                     }
-                } else if (functionCallingEnabled) {
-                    putMessage("Function calling requires OpenAI endpoint which is missing on your device. Please go to the settings and add OpenAI endpoint or disable Function Calling. OpenAI base url (host) is: https://api.openai.com/v1/ (don't forget to add slash at the end otherwise you will receive an error).", true)
-                    saveSettings()
-                    restoreUIState()
-                    MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-                        .setTitle("Unsupported feature")
-                        .setMessage("Function calling feature is unavailable because it requires OpenAI endpoint. Would you like to disable this feature?")
-                        .setPositiveButton("Disable") { _, _ -> run {
-                            preferences?.setFunctionCalling(false)
-                        }}
-                        .setNegativeButton("Cancel") { _, _ -> }
-                        .show()
-                } else {
-                    regularGPTResponse(shouldPronounce, preparedTurn)
                 }
             }
         } catch (_: CancellationException) {
@@ -6870,42 +7514,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         }.start()
     }
 
-    private val availableFunctions = mapOf("generateImage" to ::generateImage, "searchAtInternet" to ::searchAtInternet)
-
-    private fun ToolCall.Function.execute() {
-        val functionToCall = availableFunctions[function.name] ?: error("Function ${function.name} not found")
-        val functionArgs = function.argumentsAsJson()
-        functionToCall(functionArgs)
-    }
-
-    private fun generateImage(args: JsonObject) {
-        val prompt = args.getValue("prompt").jsonPrimitive.content
-
-        runOnUiThread {
-            btnMicro?.isEnabled = false
-            btnSend?.isEnabled = false
-            progress?.visibility = View.VISIBLE
-        }
-
-        CoroutineScope(Dispatchers.Main).launch {
-            generateImages(prompt)
-        }
-    }
-
-    private fun searchAtInternet(args: JsonObject) {
-        val prompt = args.getValue("prompt").jsonPrimitive.content
-
-        runOnUiThread {
-            btnMicro?.isEnabled = false
-            btnSend?.isEnabled = false
-            progress?.visibility = View.VISIBLE
-        }
-
-        CoroutineScope(Dispatchers.Main).launch {
-            searchInternet(prompt)
-        }
-    }
-
     /**
      * Builds the provider request once. The returned Aallam request and the
      * provider-neutral measurement payload are made from the same immutable
@@ -7082,6 +7690,24 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             null
         }
 
+        // §7: the create_image tool rides the SAME regular request when
+        // offered — never a separate routing request. Both request builders
+        // share this one availability decision, and §8's learned capability
+        // withholds the tool only after a clear tools-not-supported error.
+        val globalImagePreferences = Preferences.getPreferences(this, "")
+        val imageTools = if (
+            CreateImageTool.shouldOfferTool(
+                globalImagePreferences.getAiCreateImagesEnabled(),
+                globalImagePreferences.getImageGeneratorEndpointId(),
+                globalImagePreferences.getImageGeneratorModel()
+            ) &&
+            chatModelMayReceiveImageTool(selectedModel)
+        ) {
+            listOf(CreateImageTool.definition())
+        } else {
+            null
+        }
+
         val request = ChatCompletionRequest(
             model = ModelId(selectedModel),
             maxTokens = maximumResponseTokens,
@@ -7091,7 +7717,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             presencePenalty = presencePenalty,
             seed = seed,
             logitBias = logitBias,
-            messages = msgs.toList()
+            messages = msgs.toList(),
+            tools = imageTools
         )
         val payloadMessages = msgs.map { message ->
             val role = when (message.role) {
@@ -7119,7 +7746,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
     private suspend fun regularGPTResponse(
         shouldPronounce: Boolean,
-        preparedTurn: PreparedRegularTurn? = null
+        preparedTurn: PreparedRegularTurn? = null,
+        suppressImageTools: Boolean = false
     ) {
         disableAutoScroll = false
 
@@ -7131,8 +7759,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         val chatCompletionRequest: ChatCompletionRequest
         if (preparedTurn != null) {
             // This is the object that was measured before the composer was
-            // committed. Do not rebuild any part of it here.
-            chatCompletionRequest = preparedTurn.request
+            // committed. Do not rebuild any part of it here — the §8
+            // tools-rejected retry only strips the tool definition.
+            chatCompletionRequest = if (suppressImageTools) {
+                rebuildRequestWithoutTools(preparedTurn.request, preparedTurn.request.messages)
+            } else {
+                preparedTurn.request
+            }
             msgs = ArrayList(preparedTurn.request.messages)
         } else {
             msgs = arrayListOf()
@@ -7338,6 +7971,23 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             )
         )
 
+        // §7: the same tool-availability decision as the frozen typed-send
+        // builder — neither regular path may silently omit the image tool.
+        val globalImagePreferences = Preferences.getPreferences(this, "")
+        val legacyPathImageTools = if (
+            !suppressImageTools &&
+            CreateImageTool.shouldOfferTool(
+                globalImagePreferences.getAiCreateImagesEnabled(),
+                globalImagePreferences.getImageGeneratorEndpointId(),
+                globalImagePreferences.getImageGeneratorModel()
+            ) &&
+            chatModelMayReceiveImageTool(model)
+        ) {
+            listOf(CreateImageTool.definition())
+        } else {
+            null
+        }
+
         chatCompletionRequest = if (preferences?.getLogitBiasesConfigId() == null || preferences?.getLogitBiasesConfigId() == "null" || preferences?.getLogitBiasesConfigId() == "") {
             ChatCompletionRequest(
                 model = ModelId(model),
@@ -7348,7 +7998,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 presencePenalty = if (preferences!!.getPresencePenalty().toDouble() == 0.0) null else preferences!!.getPresencePenalty().toDouble(),
                 seed = if (preferences!!.getSeed() != "") preferences!!.getSeed().toInt() else null,
                 logitBias = if (model.contains("gpt-5") || model.contains("o1") || model.contains("o3")) null else logitBiasPreferences?.getLogitBiasesMap(),
-                messages = msgs
+                messages = msgs,
+                tools = legacyPathImageTools
             )
         } else {
             ChatCompletionRequest(
@@ -7359,20 +8010,39 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 frequencyPenalty = if (preferences!!.getFrequencyPenalty().toDouble() == 0.0) null else preferences!!.getFrequencyPenalty().toDouble(),
                 presencePenalty = if (preferences!!.getPresencePenalty().toDouble() == 0.0) null else preferences!!.getPresencePenalty().toDouble(),
                 seed = if (preferences!!.getSeed() != "") preferences!!.getSeed().toInt() else null,
-                messages = msgs
+                messages = msgs,
+                tools = legacyPathImageTools
             )
         }
         }
 
+        // §8 retry support: remembered so a failure of THIS request can be
+        // judged as a tools rejection by the wrapper in generateResponse.
+        lastRegularRequestCarriedImageTools = chatCompletionRequest.tools != null
+
         val completions: Flow<ChatCompletionChunk> =
             ai!!.chatCompletions(chatCompletionRequest)
+
+        // §7.1: tool-call fragments accumulate until the name and JSON
+        // arguments are complete. Providers stream them differently — many
+        // fragments or one complete chunk — and a stream that dies mid-call
+        // fails cleanly at validation instead of hanging the turn.
+        val toolCallAssembler = StreamedToolCallAssembler()
 
         scroll(true)
 
         completions.flowOn(Dispatchers.IO).collect { v ->
             run {
                 if (!currentCoroutineContext().isActive) throw CancellationException()
-                else if (v.choices[0].delta != null && v.choices[0].delta?.content != null && v.choices[0].delta?.content.toString() != "null") {
+                v.choices.firstOrNull()?.delta?.toolCalls?.forEach { fragment ->
+                    toolCallAssembler.accept(
+                        fragment.index,
+                        fragment.id?.id,
+                        fragment.function?.nameOrNull,
+                        fragment.function?.argumentsOrNull
+                    )
+                }
+                if (v.choices[0].delta != null && v.choices[0].delta?.content != null && v.choices[0].delta?.content.toString() != "null") {
                     response += v.choices[0].delta?.content
                     messages[messages.size - 1]["message"] = response
                     if (messages.size > 2) {
@@ -7395,6 +8065,27 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     }
                 }
             }
+        }
+
+        // §8: a completed stream of a tool-bearing request proves the
+        // endpoint ACCEPTED tools for this model — whether or not the model
+        // chose to use them. Refusal to call the tool never marks anything.
+        if (chatCompletionRequest.tools != null) {
+            recordChatToolCapability(ToolCapability.SUPPORTED)
+        }
+
+        // §7: an actual tool call is the ONLY thing that triggers a second
+        // conversation-model request. Ordinary text responses fall through
+        // to the normal completion below with exactly one request made.
+        val assembledToolCalls = toolCallAssembler.assembled()
+        if (assembledToolCalls.isNotEmpty()) {
+            handleAssistantToolCalls(
+                assembledToolCalls,
+                chatCompletionRequest,
+                response,
+                shouldPronounce
+            )
+            return
         }
 
         messages[messages.size - 1]["message"] = "$response\n"
@@ -7506,7 +8197,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     // Main after the IO hop). Never touch views/intent from IO,
                     // and never apply the result to a destroyed screen.
                     if (renamed && !isFinishing && !isDestroyed) {
+                        val previousChatId = chatId
                         chatId = Hash.hash(newChatName)
+                        // Re-point any running image generation (and this
+                        // screen's registry listener) at the renamed chat id
+                        // so its terminal state cannot land in the deleted
+                        // placeholder chat.
+                        ImageGenerationJobRegistry.rename(previousChatId, chatId)
 
                         // Adopt the renamed chat in place. This used to relaunch
                         // ChatActivity (startActivity + finish) to pick up the new
@@ -7810,237 +8507,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         return chunks
     }
 
-    private fun writeImageToCache(bytes: ByteArray, imageType: String = "png") {
-        try {
-            contentResolver.openFileDescriptor(Uri.fromFile(File(getExternalFilesDir("images")?.absolutePath + "/" + Hash.hash(java.util.Base64.getEncoder().encodeToString(bytes)) + "." + imageType)), "w")?.use { fileDescriptor ->
-                FileOutputStream(fileDescriptor.fileDescriptor).use {
-                    it.write(
-                        bytes
-                    )
-                }
-            }
-        } catch (e: FileNotFoundException) {
-            e.printStackTrace()
-        } catch (e: IOException) {
-            e.printStackTrace()
-        }
-    }
-
-    fun generateImageAsync(
-        client: OpenAIClient,
-        params: ImageGenerateParams,
-        onSuccess: (String) -> Unit,
-        onError: (Throwable) -> Unit
-    ) : Job {
-        return CoroutineScope(Dispatchers.IO).launch {
-            progress?.setOnClickListener {
-                cancel()
-                restoreUIState()
-            }
-
-            try {
-                var imageId: String
-                val response = client.images().generate(params)
-                val data: Optional<List<Image>> = response.data()
-                val images = data.orElse(emptyList())
-
-                val b64 = images.firstOrNull()?.b64Json()?.get()
-                    ?: throw NullPointerException("Base64 string is null or empty, stopping...")
-
-                val byteArray = Base64.decode(b64, Base64.DEFAULT)
-                writeImageToCache(byteArray)
-                imageId = Hash.hash(b64)
-
-                withContext(Dispatchers.Main) {
-                    onSuccess(imageId)
-                }
-            } catch (_: CancellationException) {
-                withContext(Dispatchers.Main) {
-                    onSuccess("cancelled")
-                }
-            } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
-                    onError(e)
-                }
-            }
-        }
-    }
-
-    @SuppressLint("ClickableViewAccessibility")
-    private suspend fun generateImageR(p: String) {
-        runOnUiThread {
-            btnMicro?.isEnabled = false
-            btnSend?.isEnabled = false
-            progress?.visibility = View.VISIBLE
-        }
-
-        chat?.setOnTouchListener(null)
-        disableAutoScroll = false
-        // chat?.transcriptMode = ListView.TRANSCRIPT_MODE_ALWAYS_SCROLL
-        try {
-            if (preferences!!.getImageModel().contains("gpt-image-")) {
-                val client: OpenAIClient = OpenAIOkHttpClient
-                    .builder()
-                    .baseUrl(apiEndpointPreferences!!.getApiEndpoint(this, preferences!!.getApiEndpointId()).host)
-                    .apiKey(apiEndpointPreferences!!.getApiEndpoint(this, preferences!!.getApiEndpointId()).apiKey)
-                    .build()
-
-                val params = ImageGenerateParams.builder()
-                    .prompt(p)
-                    .model(preferences!!.getImageModel())
-                    .n(1L)
-                    .quality(ImageGenerateParams.Quality.AUTO) // Settings param "quality" does not exists yet.
-                    .size(ImageGenerateParams.Size._1024X1024) // Settings param "resolution" is ignored as this model supports only 1024x1024 resolution
-                    .build()
-
-                generateGptImageJob = generateImageAsync(
-                    client,
-                    params,
-                    onSuccess = { file ->
-                        if (file == "cancelled") {
-                            runOnUiThread {
-                                restoreUIState()
-                            }
-                            return@generateImageAsync
-                        }
-
-                        runOnUiThread {
-                            putMessage("~file:$file", true)
-
-                            chat?.setOnTouchListener { _, event ->
-                                run {
-                                    if (event.action == MotionEvent.ACTION_SCROLL || event.action == MotionEvent.ACTION_UP) {
-                                        // chat?.transcriptMode = ListView.TRANSCRIPT_MODE_DISABLED
-                                        disableAutoScroll = true
-                                    }
-                                    return@setOnTouchListener false
-                                }
-                            }
-
-                            scroll(true)
-                            scroll(false)
-
-                            saveSettings()
-
-                            btnMicro?.isEnabled = true
-                            btnSend?.isEnabled = true
-                            progress?.visibility = View.GONE
-
-                            messageInput?.requestFocus()
-
-                            // Put timestamp to chat to sort chats by last message
-                            ChatPreferences.getChatPreferences().putTimestampToChatById(this@ChatActivity, chatId)
-                            initSettings()
-                        }
-                    },
-                    onError = { error ->
-                        runOnUiThread {
-                            if (preferences?.showChatErrors() == true) {
-                                putMessage(
-                                    when (error) {
-                                        else -> error.stackTraceToString()
-                                    }, true
-                                )
-                            }
-                            btnMicro?.isEnabled = true
-                            btnSend?.isEnabled = true
-                            progress?.visibility = View.GONE
-                            messageInput?.requestFocus()
-                        }
-                    }
-                )
-            } else {
-                val images = openAIAI?.imageURL(
-                    creation = ImageCreation(
-                        prompt = p,
-                        model = ModelId(preferences!!.getImageModel()),
-                        n = 1,
-                        size = ImageSize(resolution)
-                    )
-                )
-
-                val imageUrl = images?.get(0)?.url!!
-
-                val url = URL(imageUrl)
-
-                val `is` = withContext(Dispatchers.IO) {
-                    url.openStream()
-                }
-                var file = ""
-                val th = Thread {
-                    val bytes: ByteArray = org.apache.commons.io.IOUtils.toByteArray(`is`)
-
-                    writeImageToCache(bytes)
-
-                    val encoded = java.util.Base64.getEncoder().encodeToString(bytes)
-
-                    file = Hash.hash(encoded)
-                }
-
-                th.start()
-                withContext(Dispatchers.IO) {
-                    th.join()
-                    runOnUiThread {
-                        putMessage("~file:$file", true)
-
-                        chat?.setOnTouchListener { _, event ->
-                            run {
-                                if (event.action == MotionEvent.ACTION_SCROLL || event.action == MotionEvent.ACTION_UP) {
-                                    // chat?.transcriptMode = ListView.TRANSCRIPT_MODE_DISABLED
-                                    disableAutoScroll = true
-                                }
-                                return@setOnTouchListener false
-                            }
-                        }
-
-                        scroll(true)
-                        scroll(false)
-
-                        saveSettings()
-
-                        btnMicro?.isEnabled = true
-                        btnSend?.isEnabled = true
-                        progress?.visibility = View.GONE
-
-                        messageInput?.requestFocus()
-
-                        // Put timestamp to chat to sort chats by last message
-                        ChatPreferences.getChatPreferences().putTimestampToChatById(this@ChatActivity, chatId)
-                        initSettings()
-                    }
-                }
-            }
-        } catch (_: CancellationException) {
-            runOnUiThread {
-                restoreUIState()
-            }
-        } catch (e: Exception) {
-            playErrorSignal()
-            stopHandsFreeOnError()
-            // Same funnel as the text path: classify, always log, show the coded
-            // message only when the user has chat errors enabled. See ERROR_CODES.md.
-            val genError = GenerationErrorClassifier.classify(e)
-            logGenerationError(genError, e, "image-generation")
-            if (preferences?.showChatErrors() == true) {
-                putMessage(genError.providerLimitMessage(this) ?: genError.chatMessage(this), true)
-            }
-
-            saveSettings()
-
-            btnMicro?.isEnabled = true
-            btnSend?.isEnabled = true
-            progress?.visibility = View.GONE
-
-            messageInput?.requestFocus()
-        } finally {
-            if (!preferences!!.getImageModel().contains("gpt-image-")) {
-                runOnUiThread {
-                    restoreUIState()
-                }
-            }
-        }
-    }
-
     private fun findLastUserMessage(): HashMap<String, Any> {
         var lastUserMessage = hashMapOf<String, Any>()
 
@@ -8252,28 +8718,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     }
 
     private fun onCancelOpenAIAction(feature: String) {
-        if (feature == "dalle") {
-            putMessage("DALL-E image generation is disabled. Please add OpenAI API endpoint to enable this feature.", true)
-            saveSettings()
-        }
+        // The legacy "dalle" feature branch is gone with the old image
+        // pipeline (image-generation-rebuild-plan.md §15); image requests
+        // now run through the generator coordinator and never pass here.
     }
 
     private fun onOpenAIAction(feature: String, prompt: String) {
         when (feature) {
-            "dalle" -> {
-                btnMicro?.isEnabled = false
-                btnSend?.isEnabled = false
-                progress?.visibility = View.VISIBLE
-
-                CoroutineScope(Dispatchers.Main).launch {
-                    progress?.setOnClickListener {
-                        cancel()
-                        restoreUIState()
-                    }
-
-                    generateImageR(prompt)
-                }
-            }
             "tts" -> speak(prompt)
             "whisper" -> handleWhisperSpeechRecognition()
         }
@@ -8333,6 +8784,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             .setMessage("Are you sure you want to delete selected messages?")
             .setPositiveButton("Delete") { _, _ ->
                 val foldedBefore = preferences?.getSummarizerFoldedCount() ?: 0
+                // §12 cleanup: note the generated-image files the selected
+                // messages reference before they are removed.
+                val deletedImageHashes = GeneratedImageFiles.referencedHashes(
+                    messages.filterIndexed { index, _ ->
+                        index < messagesSelectionProjection.size &&
+                            messagesSelectionProjection[index]["selected"].toString() == "true"
+                    }
+                )
                 var removedBeforeBookmark = 0
                 var pos = 0
                 var p = 0
@@ -8354,6 +8813,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
                 syncChatProjection()
                 saveSettings()
+                if (deletedImageHashes.isNotEmpty()) {
+                    GeneratedImageFiles.deleteIfUnreferenced(this, deletedImageHashes)
+                }
                 adapter?.notifyDataSetChanged()
                 updateMessagesSelectionProjection()
                 deselectAll()

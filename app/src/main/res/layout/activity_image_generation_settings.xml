@@ -1,0 +1,216 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+/**************************************************************************
+* Copyright (c) 2023-2026 Dmytro Ostapenko. All rights reserved.
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*  http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+**************************************************************************/
+-->
+<!-- Image Generation settings (image-generation-rebuild-plan.md §5): the
+     app-wide image-generation configuration behind the Images row, in the
+     owner-approved order — Let the AI Create Images, Ask Before Creating,
+     Image Service, Image Model, Default Shape, Default Quality, Enable
+     /imagine. Composed from the shared style families only; interaction
+     pattern follows Summarizer Settings (rows save as changed). -->
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/action_bar"
+        style="@style/Widget.App.ActionBar"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <ImageButton
+            android:id="@+id/btn_back"
+            style="@style/Widget.App.ActionBar.BackButton"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <TextView
+            android:id="@+id/activity_title"
+            style="@style/Widget.App.ActionBar.Title"
+            android:text="@string/title_image_generation"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <ScrollView
+        android:id="@+id/scroll"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:clipToPadding="false"
+        android:paddingBottom="24dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/action_bar">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingHorizontal="20dp">
+
+            <!-- ============ Let the AI Create Images ============ -->
+            <LinearLayout style="@style/Widget.App.Row.Toggle">
+
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/image_gen_let_ai_create" />
+                </LinearLayout>
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_ai_create_images"
+                    style="@style/Widget.App.Row.Switch" />
+            </LinearLayout>
+
+            <!-- ============ Ask Before Creating ============
+                 Visible only while Let the AI Create Images is enabled
+                 (plan §5, row 2). -->
+            <LinearLayout
+                android:id="@+id/row_ask_before_creating"
+                style="@style/Widget.App.Row.Toggle">
+
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/image_gen_ask_before_creating" />
+                </LinearLayout>
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_ask_before_creating"
+                    style="@style/Widget.App.Row.Switch" />
+            </LinearLayout>
+
+            <!-- ============ Image Service ============
+                 Subtitle shows the selected endpoint's friendly label
+                 (plan §5, row 3); tap opens the existing endpoint picker. -->
+            <LinearLayout
+                android:id="@+id/row_image_service"
+                style="@style/Widget.App.Row.WithSubtitle">
+
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/image_gen_row_service" />
+
+                    <TextView
+                        android:id="@+id/text_image_service_value"
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:text="@string/label_endpoint_none" />
+                </LinearLayout>
+
+                <ImageView
+                    style="@style/Widget.App.Row.Chevron"
+                    android:contentDescription="@string/image_gen_row_service" />
+            </LinearLayout>
+
+            <!-- ============ Image Model ============
+                 Subtitle shows the selected model; tap opens the shared
+                 searchable model picker fed by the chosen endpoint, without
+                 the chat picker's name exclusions (plan §5, row 4 / §10). -->
+            <LinearLayout
+                android:id="@+id/row_image_model"
+                style="@style/Widget.App.Row.WithSubtitle">
+
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/image_gen_row_model" />
+
+                    <TextView
+                        android:id="@+id/text_image_model_value"
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:text="@string/label_endpoint_none" />
+                </LinearLayout>
+
+                <ImageView
+                    style="@style/Widget.App.Row.Chevron"
+                    android:contentDescription="@string/image_gen_row_model" />
+            </LinearLayout>
+
+            <!-- ============ Default Shape ============
+                 Hidden when the selected service's API cannot carry the
+                 option at all (plan §5: never expose choices the provider
+                 cannot accept). -->
+            <LinearLayout
+                android:id="@+id/row_default_shape"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    style="@style/Widget.App.Dropdown.Label"
+                    android:text="@string/image_gen_row_shape" />
+
+                <TextView
+                    android:id="@+id/text_default_shape"
+                    style="@style/Widget.App.Dropdown.Value"
+                    android:layout_weight="1"
+                    android:text="@string/image_gen_option_automatic" />
+            </LinearLayout>
+
+            <!-- ============ Default Quality ============ -->
+            <LinearLayout
+                android:id="@+id/row_default_quality"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    style="@style/Widget.App.Dropdown.Label"
+                    android:text="@string/image_gen_row_quality" />
+
+                <TextView
+                    android:id="@+id/text_default_quality"
+                    style="@style/Widget.App.Dropdown.Value"
+                    android:layout_weight="1"
+                    android:text="@string/image_gen_option_automatic" />
+            </LinearLayout>
+
+            <!-- ============ Enable /imagine ============ -->
+            <LinearLayout
+                style="@style/Widget.App.Row.Toggle"
+                android:layout_marginTop="8dp">
+
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/image_gen_enable_imagine" />
+                </LinearLayout>
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_imagine_command"
+                    style="@style/Widget.App.Row.Switch" />
+            </LinearLayout>
+        </LinearLayout>
+    </ScrollView>
+</androidx.constraintlayout.widget.ConstraintLayout>
