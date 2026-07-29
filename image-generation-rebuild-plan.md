@@ -15,8 +15,12 @@ existing shared picker, spoken approval with companion name — all owner
 rulings, 2026-07-29.  
 **Revised (same day):** saved shape and quality defaults with per-request
 `--shape` / `--quality` overrides, precedence, Automatic semantics, and the
-unsupported-option notice — owner ruling, 2026-07-29. Remaining open item:
-the default-assistant-name wording noted in section 5.
+unsupported-option notice — owner ruling, 2026-07-29.  
+**Revised (same day):** model-initiated images use the saved quality default
+(the tool controls shape only), Image Generation Errors log with opt-in
+recording toggle, chat-versus-log error split, and companions always have a
+name (a nameless-companion flow is a defect to fix) — owner rulings,
+2026-07-29.
 
 ## 1. Goal
 
@@ -298,9 +302,12 @@ Actions:
 The prompt remains collapsed initially so an intended surprise is not spoiled.
 `/imagine` bypasses this card because the user already issued a direct command.
 
-Open wording item: a chat still carrying the untouched default assistant name
-would surface the upstream app's name, which never appears in wording. What
-the card and announcement say in that case awaits an owner ruling.
+A companion cannot exist without a name (owner ruling, 2026-07-29), so the
+card and the announcement always have a real name to use. If any flow allows
+a companion to be saved without a name — or lets a chat reach image
+generation showing only the factory-default display name — that flow is
+defective and must be fixed as part of this work, not worked around with
+fallback wording.
 
 ### Spoken approval in voice conversations (owner ruling, 2026-07-29)
 
@@ -359,17 +366,17 @@ Suggested inputs:
 | `prompt` | Yes | Detailed text sent to the image generator |
 | `description` | Yes | Short plain-language description for the image bubble and accessibility |
 | `shape` | No | `automatic`, `square`, `portrait`, or `landscape` |
-| `quality` | No | `automatic`, `low`, `medium`, or `high` — only when the user explicitly asked for that quality |
 
 Rules:
 
 - The generator creates exactly one image per tool call.
 - Allow at most one successful image-generation tool call per user turn.
-- A supplied `shape` or `quality` acts as that request's override in the
-  precedence of section 11; an omitted field falls back to the saved default.
-- The tool description must state that `quality` may be set only when the
-  user explicitly requested that quality. The conversation model must not
-  independently raise quality or choose a more expensive image setting.
+- A supplied `shape` acts as that request's override in the precedence of
+  section 11; an omitted field falls back to the saved default.
+- The tool has no quality field (owner ruling, 2026-07-29). A model-initiated
+  image always uses the user's saved quality default. The conversation model
+  may choose only the shape and must never raise quality or any other
+  cost-affecting setting.
 - The conversation model cannot choose the generator endpoint, generator
   model, number of images, or another cost-affecting provider setting.
 - Those choices remain under user control.
@@ -550,8 +557,9 @@ Image generation uses saved defaults plus optional per-request overrides
 - The app parses and removes the options before the artistic prompt is sent
   to the image generator.
 - Overrides apply to that request only and never change the saved settings.
-- A model-initiated `create_image` call may carry `shape` and `quality`
-  fields (section 6); a supplied field is that request's override.
+- A model-initiated `create_image` call may carry a `shape` field
+  (section 6); a supplied shape is that request's override. Quality always
+  comes from the user's saved default for model-initiated images.
 - A trailing option with an unknown name or an invalid value is a clear
   user-facing error naming the supported options and values, and no image is
   generated, so the command can be corrected (section 8 error standard).
@@ -589,9 +597,9 @@ path may bypass the adapter layer.
 ### Cost control
 
 - Generate one image per request.
-- The conversation model must not independently raise quality or choose a
-  more expensive image setting; the tool permits a `quality` value only when
-  the user explicitly requested it (section 6).
+- The conversation model cannot set quality at all (owner ruling,
+  2026-07-29): model-initiated images use the user's saved quality default,
+  and the model may select only the shape.
 - The conversation model can never choose the generator endpoint, generator
   model, or image count.
 - Preserve the configured image-generator response timeout because image
@@ -655,6 +663,36 @@ If no generator is configured:
 - `/imagine` shows a persistent dialog explaining that an image service and
   model must be selected, with a **Configure** action.
 - The message must not claim that OpenAI is required.
+
+### Image Generation Errors log (owner ruling, 2026-07-29)
+
+The Alerts, Errors & Logs page gains an **Image Generation Errors** log in
+its Logs section, plus a toggle on that same page that turns recording on.
+Recording is off until the user enables it.
+
+When recording is on, the log captures at minimum:
+
+- a model-initiated request whose option fell back to the provider default
+  because the selected generator could not support it — the silent-fallback
+  case the user cannot otherwise see;
+- conversation-model tool mistakes: invalid JSON arguments, an empty or
+  over-long prompt, unknown fields, extra image attempts beyond the
+  one-per-turn limit, and attempts to set options the tool does not offer.
+
+Each entry records the time, the chat, the generator endpoint label, the
+generator model, and a sanitized failure code — never a key, auth header, or
+signed URL. Entries follow the page's existing retention limits.
+
+### Chat message or log entry
+
+Errors the user must act on appear in chat as concise messages regardless of
+the recording toggle — a timeout, an account out of usage or credit, a
+missing generator configuration, a failed authentication, a provider that
+refused the prompt. Those are not debugging information.
+
+Model mistakes and silent fallbacks are not chat errors; they go to the
+Image Generation Errors log when recording is on, so prompts and behavior
+can be tweaked later.
 
 ## 14. Settings Migration
 
@@ -737,11 +775,13 @@ phases.
     retaining legacy rendering.
 12. Add the spoken approval announcement and voice answer handling for voice
     conversations.
-13. Remove the whole Function Calling feature (section 15): the hard-coded
+13. Add the Image Generation Errors log and its recording toggle to the
+    Alerts, Errors & Logs page.
+14. Remove the whole Function Calling feature (section 15): the hard-coded
     `gpt-4o` router, the function map and search stub, the settings tile, and
     the stored preference — plus fixed image-model checks, duplicate image
     clients, and OpenAI-only error wording.
-14. Run the complete acceptance matrix and repair any regressions before
+15. Run the complete acceptance matrix and repair any regressions before
     removing legacy settings.
 
 ## 17. Acceptance Criteria
@@ -796,6 +836,11 @@ The work is complete only when all of the following are true:
 25. An explicitly requested option the selected generator cannot support
     produces the unavailable-option notice with continue and cancel; nothing
     is silently ignored.
+26. With recording on, model-initiated silent fallbacks and rejected tool
+    calls appear in the Image Generation Errors log; with recording off,
+    nothing is recorded; actionable errors appear in chat either way.
+27. A model-initiated image is generated at the user's saved quality default;
+    no tool input can change quality.
 
 ## 18. Required Test Matrix
 
@@ -815,7 +860,8 @@ multiple attempted tool calls, cancellation at each stage, response timeout,
 oversized download, malformed Base64, missing files, chat deletion, backup and
 restore, process recreation, each spoken-approval outcome ("create it",
 "cancel", and unrelated speech), and the `/imagine` options (valid overrides,
-invalid values, unknown options, and the unsupported-option notice).
+invalid values, unknown options, and the unsupported-option notice), and the
+Image Generation Errors log with recording on and off.
 
 ## 19. Explicit Non-Goals
 
