@@ -3943,16 +3943,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         }
         status?.text = statusText
 
-        val density = resources.displayMetrics.density
         for (entry in entries) {
-            val item = TextView(this)
-            item.text = org.teslasoft.assistant.util.summarizer.SummarizerErrorMessages
-                .renderEntry(this, entry)
-            item.setTextColor(ResourcesCompat.getColor(resources, R.color.text, theme))
-            item.textSize = 13f
-            item.setPadding(0, (16 * density).toInt(), 0, 0)
-            item.setTextIsSelectable(true)
-            container?.addView(item)
+            val row = layoutInflater.inflate(R.layout.view_summarizer_error_entry, container, false)
+            row.findViewById<TextView>(R.id.summarizer_error_entry_text).text =
+                org.teslasoft.assistant.util.summarizer.SummarizerErrorMessages.renderEntry(this, entry)
+            container?.addView(row)
         }
 
         val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)

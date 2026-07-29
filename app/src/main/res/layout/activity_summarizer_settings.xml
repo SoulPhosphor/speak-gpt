@@ -123,23 +123,42 @@
                     android:layout_width="wrap_content" />
             </LinearLayout>
 
-            <!-- ============ Complete Messages (default for new chats) ============ -->
-            <TextView
-                style="@style/Widget.App.Field.Label"
+            <!-- ============ Complete Messages (default for new chats) ============
+                 NumberBlank belongs inline with its label (its own style
+                 contract, matched by every other use in the app) — the
+                 label/hint sit in a text column beside it, the same shape as
+                 Widget.App.Row.WithSubtitle's TextColumn but paired with a
+                 NumberBlank instead of a Dropdown.Value. -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
-                android:text="@string/summarizer_complete_messages" />
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
 
-            <TextView
-                style="@style/Widget.App.Field.Hint"
-                android:text="@string/summarizer_complete_messages_hint" />
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:paddingEnd="12dp">
 
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/field_complete_messages"
-                style="@style/Widget.App.Field.NumberBlank"
-                android:layout_marginTop="8dp"
-                android:ems="4"
-                android:maxLength="4"
-                android:singleLine="true" />
+                    <TextView
+                        style="@style/Widget.App.Field.Label"
+                        android:text="@string/summarizer_complete_messages" />
+
+                    <TextView
+                        style="@style/Widget.App.Field.Hint"
+                        android:text="@string/summarizer_complete_messages_hint" />
+                </LinearLayout>
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/field_complete_messages"
+                    style="@style/Widget.App.Field.NumberBlank"
+                    android:ems="4"
+                    android:maxLength="4"
+                    android:singleLine="true" />
+            </LinearLayout>
 
             <!-- ============ Use Summarizer for New Chats ============ -->
             <LinearLayout style="@style/Widget.App.Row.Toggle">
@@ -157,22 +176,36 @@
             </LinearLayout>
 
             <!-- ============ Summary Length ============ -->
-            <TextView
-                style="@style/Widget.App.Field.Label"
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
-                android:text="@string/summarizer_length" />
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
 
-            <TextView
-                style="@style/Widget.App.Field.Hint"
-                android:text="@string/summarizer_length_hint" />
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:paddingEnd="12dp">
 
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/field_summary_length"
-                style="@style/Widget.App.Field.NumberBlank"
-                android:layout_marginTop="8dp"
-                android:ems="5"
-                android:maxLength="5"
-                android:singleLine="true" />
+                    <TextView
+                        style="@style/Widget.App.Field.Label"
+                        android:text="@string/summarizer_length" />
+
+                    <TextView
+                        style="@style/Widget.App.Field.Hint"
+                        android:text="@string/summarizer_length_hint" />
+                </LinearLayout>
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/field_summary_length"
+                    style="@style/Widget.App.Field.NumberBlank"
+                    android:ems="5"
+                    android:maxLength="5"
+                    android:singleLine="true" />
+            </LinearLayout>
 
             <!-- ============ Summary Prompt (five renameable slots) ============ -->
             <TextView
@@ -203,22 +236,15 @@
                 android:layout_height="wrap_content"
                 android:text="@string/summarizer_rename_slot" />
 
-            <com.google.android.material.textfield.TextInputLayout
-                style="?attr/textInputOutlinedDenseStyle"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp">
-
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/field_prompt"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:gravity="top"
-                    android:inputType="textMultiLine|textCapSentences"
-                    android:minLines="8"
-                    android:overScrollMode="always"
-                    android:scrollbars="vertical" />
-            </com.google.android.material.textfield.TextInputLayout>
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/field_prompt"
+                style="@style/Widget.App.Field.Box"
+                android:layout_marginTop="4dp"
+                android:gravity="top"
+                android:inputType="textMultiLine|textCapSentences"
+                android:minLines="8"
+                android:overScrollMode="always"
+                android:scrollbars="vertical" />
 
             <!-- Revert exists only under Storyteller and Reporter (decision 6);
                  the activity hides it for slots three to five. -->

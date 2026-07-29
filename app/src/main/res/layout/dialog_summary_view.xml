@@ -11,24 +11,17 @@
     android:layout_height="wrap_content"
     android:orientation="vertical">
 
-    <com.google.android.material.textfield.TextInputLayout
-        style="?attr/textInputOutlinedDenseStyle"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+    <com.google.android.material.textfield.TextInputEditText
+        android:id="@+id/field_summary_text"
+        style="@style/Widget.App.Field.Box"
         android:layout_marginHorizontal="24dp"
-        android:layout_marginTop="8dp">
-
-        <com.google.android.material.textfield.TextInputEditText
-            android:id="@+id/field_summary_text"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="top"
-            android:inputType="textMultiLine|textCapSentences"
-            android:maxLines="14"
-            android:minLines="6"
-            android:overScrollMode="always"
-            android:scrollbars="vertical" />
-    </com.google.android.material.textfield.TextInputLayout>
+        android:layout_marginTop="8dp"
+        android:gravity="top"
+        android:inputType="textMultiLine|textCapSentences"
+        android:maxLines="14"
+        android:minLines="6"
+        android:overScrollMode="always"
+        android:scrollbars="vertical" />
 
     <include layout="@layout/dialog_single_action" />
 </LinearLayout>
