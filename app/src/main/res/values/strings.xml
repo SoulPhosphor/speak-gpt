@@ -531,6 +531,28 @@
     <string name="image_gen_quality_medium">Medium</string>
     <string name="image_gen_quality_high">High</string>
     <string name="label_select_image_model">Select Image Model</string>
+    <!-- /imagine and image-generation failure surfaces
+         (image-generation-rebuild-plan.md §11/§13). Action labels are the
+         plan's owner-approved names; messages are sentence-case prose
+         derived from the plan's own cause list. -->
+    <string name="image_gen_configure_message">An image service and model must be selected before images can be created.</string>
+    <string name="image_gen_action_configure">Configure</string>
+    <string name="image_gen_action_continue">Continue</string>
+    <string name="image_gen_action_edit_prompt">Edit Prompt</string>
+    <string name="image_gen_action_change_settings">Change Settings</string>
+    <string name="image_gen_invalid_option">Unknown or invalid option: %1$s. Supported options: --shape automatic, square, portrait, landscape; --quality automatic, low, medium, high.</string>
+    <string name="image_gen_unsupported_option_notice">The selected image service does not support: %1$s. The provider default will be used instead.</string>
+    <string name="image_gen_error_not_configured">No image service and model are configured.</string>
+    <string name="image_gen_error_model_rejected">The image model was rejected by the image service.</string>
+    <string name="image_gen_error_unreachable">The image service could not be reached.</string>
+    <string name="image_gen_error_auth">Authentication with the image service failed.</string>
+    <string name="image_gen_error_prompt_refused">The image provider refused the prompt.</string>
+    <string name="image_gen_error_timeout">Image generation timed out.</string>
+    <string name="image_gen_error_no_usable_image">The response did not contain a usable image.</string>
+    <string name="image_gen_error_download_invalid">The image download was too large or invalid.</string>
+    <string name="image_gen_error_unsupported_option">The requested option is not supported by the image service.</string>
+    <string name="image_gen_error_provider">The image provider reported an error.</string>
+    <string name="image_gen_error_cancelled">The image request was cancelled.</string>
     <string name="tile_openai_tts">Use OpenAI TTS</string>
     <string name="tile_google_tts">Google TTS is used</string>
     <string name="tile_tts_desc">This feature allows you to set TTS engine. OpenAI TTS is paid.</string>

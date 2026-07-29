@@ -67,6 +67,8 @@ class ImageGenerationSettingsActivity : FragmentActivity() {
     private var textImageServiceValue: TextView? = null
     private var rowImageModel: LinearLayout? = null
     private var textImageModelValue: TextView? = null
+    private var rowDefaultShape: LinearLayout? = null
+    private var rowDefaultQuality: LinearLayout? = null
     private var textDefaultShape: TextView? = null
     private var textDefaultQuality: TextView? = null
     private var switchImagineCommand: MaterialSwitch? = null
@@ -79,6 +81,7 @@ class ImageGenerationSettingsActivity : FragmentActivity() {
             if (id != null) preferences?.setImageGeneratorEndpointId(id)
         }
         refreshServiceAndModelRows()
+        refreshShapeAndQuality()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -107,6 +110,8 @@ class ImageGenerationSettingsActivity : FragmentActivity() {
         textImageServiceValue = findViewById(R.id.text_image_service_value)
         rowImageModel = findViewById(R.id.row_image_model)
         textImageModelValue = findViewById(R.id.text_image_model_value)
+        rowDefaultShape = findViewById(R.id.row_default_shape)
+        rowDefaultQuality = findViewById(R.id.row_default_quality)
         textDefaultShape = findViewById(R.id.text_default_shape)
         textDefaultQuality = findViewById(R.id.text_default_quality)
         switchImagineCommand = findViewById(R.id.switch_imagine_command)
@@ -222,6 +227,20 @@ class ImageGenerationSettingsActivity : FragmentActivity() {
             shapeLabel(preferences?.getImageGeneratorShape() ?: ImageShape.AUTOMATIC)
         textDefaultQuality?.text =
             qualityLabel(preferences?.getImageGeneratorQuality() ?: ImageQuality.AUTOMATIC)
+
+        // §5: never expose choices the selected service's API cannot carry
+        // at all. With no endpoint chosen the rows stay visible showing the
+        // saved defaults.
+        val endpointId = preferences?.getImageGeneratorEndpointId().orEmpty()
+        val capabilities = if (endpointId.isEmpty()) null else {
+            org.teslasoft.assistant.imagegen.ImageProviderAdapters.forEndpoint(
+                apiEndpointPreferences!!.getApiEndpoint(this, endpointId)
+            ).capabilities
+        }
+        rowDefaultShape?.visibility =
+            if (capabilities?.supportsShape == false) View.GONE else View.VISIBLE
+        rowDefaultQuality?.visibility =
+            if (capabilities?.supportsQuality == false) View.GONE else View.VISIBLE
     }
 
     private fun showShapeDropdown(anchor: View) {

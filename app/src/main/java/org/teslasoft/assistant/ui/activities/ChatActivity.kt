@@ -216,7 +216,13 @@ import org.teslasoft.assistant.util.GenErrorResult
 import org.teslasoft.assistant.util.FrozenChatPayload
 import org.teslasoft.assistant.util.FrozenPayloadMessage
 import org.teslasoft.assistant.util.GenerationErrorClassifier
-import org.teslasoft.assistant.util.LegacyImagineCommand
+import org.teslasoft.assistant.imagegen.ImageErrorCause
+import org.teslasoft.assistant.imagegen.ImageFailureAction
+import org.teslasoft.assistant.imagegen.ImageGenerationRequest
+import org.teslasoft.assistant.imagegen.ImageGeneratorCoordinator
+import org.teslasoft.assistant.imagegen.ImageProviderAdapters
+import org.teslasoft.assistant.imagegen.ImagineCommand
+import org.teslasoft.assistant.imagegen.failureActionFor
 import org.teslasoft.assistant.util.LocaleParser
 import org.teslasoft.assistant.util.ModelContextCapacity
 import org.teslasoft.assistant.util.ModelContextDecision
@@ -5223,18 +5229,37 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             btnSend?.isEnabled = false
             progress?.visibility = View.VISIBLE
 
-            val imagineCommandEnabled: Boolean = preferences!!.getImagineCommand()
+            // Rebuilt /imagine (image-generation-rebuild-plan.md §2.1): the
+            // RAW typed text is parsed — not the stored prefix+separator
+            // form — so the command triggers only at the start of the
+            // message, and trailing --shape / --quality options override
+            // the saved defaults for this request only (§11). The toggle is
+            // the app-wide Enable /imagine setting (§5); the legacy
+            // per-chat copy stops being read (§14).
+            val imagineParse = if (preferences!!.getImagineCommandGlobal()) {
+                ImagineCommand.parse(message)
+            } else {
+                ImagineCommand.Parse.NotImagine
+            }
 
-            if (LegacyImagineCommand.triggersImageGeneration(m, imagineCommandEnabled)) {
-                val x: String = LegacyImagineCommand.extractPrompt(m)
-
-                if (openAIKey == null) {
-                    openAIMissing("dalle", x)
-                } else {
-                    sendImageRequest(x)
-                }
-            } else if (LegacyImagineCommand.showsEmptyPromptError(m, imagineCommandEnabled)) {
+            if (imagineParse is ImagineCommand.Parse.Request) {
+                handleImagineRequest(imagineParse)
+            } else if (imagineParse is ImagineCommand.Parse.EmptyPrompt) {
                 putMessage("Prompt can not be empty. Use /imagine &lt;PROMPT&gt;", true)
+
+                saveSettings()
+
+                btnMicro?.isEnabled = true
+                btnSend?.isEnabled = true
+                progress?.visibility = View.GONE
+            } else if (imagineParse is ImagineCommand.Parse.InvalidOption) {
+                // §11: an unknown or invalid trailing option is a clear
+                // correctable error naming the supported options and
+                // values, and no image is generated.
+                putMessage(
+                    getString(R.string.image_gen_invalid_option, imagineParse.optionText),
+                    true
+                )
 
                 saveSettings()
 
@@ -5300,6 +5325,191 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 restoreUIState()
             }
         }
+    }
+
+    /**
+     * The rebuilt `/imagine` pipeline (image-generation-rebuild-plan.md
+     * §2.1/§11/§13): pre-flight configuration check with the persistent
+     * Configure dialog, §11 option resolution against the selected
+     * generator's capabilities with the never-silent unsupported-option
+     * notice, then one request through the shared generator coordinator.
+     */
+    private fun handleImagineRequest(parsed: ImagineCommand.Parse.Request) {
+        val globalPreferences = Preferences.getPreferences(this, "")
+        val endpointId = globalPreferences.getImageGeneratorEndpointId()
+        val generatorModelId = globalPreferences.getImageGeneratorModel()
+        if (endpointId.isBlank() || generatorModelId.isBlank()) {
+            saveSettings()
+            restoreUIState()
+            MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+                .setTitle(R.string.title_image_generation)
+                .setMessage(R.string.image_gen_configure_message)
+                .setPositiveButton(R.string.image_gen_action_configure) { _, _ ->
+                    startActivity(Intent(this, ImageGenerationSettingsActivity::class.java))
+                }
+                .setNegativeButton(R.string.btn_cancel) { _, _ -> }
+                .show()
+            return
+        }
+
+        val endpoint = apiEndpointPreferences!!.getApiEndpoint(this, endpointId)
+        val capabilities = ImageProviderAdapters.forEndpoint(endpoint).capabilities
+        val resolved = ImagineCommand.resolveOptions(
+            parsed.shapeOverride,
+            parsed.qualityOverride,
+            globalPreferences.getImageGeneratorShape(),
+            globalPreferences.getImageGeneratorQuality(),
+            capabilities
+        )
+        val request = ImageGenerationRequest(
+            prompt = parsed.prompt,
+            shape = resolved.shape,
+            quality = resolved.quality,
+            endpointId = endpointId,
+            modelId = generatorModelId
+        )
+
+        if (resolved.unsupportedExplicit.isNotEmpty()) {
+            // §11: an explicitly requested option the selected generator
+            // cannot support is never silently ignored.
+            val optionLabels = resolved.unsupportedExplicit.joinToString(", ") { option ->
+                if (option == ImagineCommand.OPTION_SHAPE) {
+                    getString(R.string.image_gen_row_shape)
+                } else {
+                    getString(R.string.image_gen_row_quality)
+                }
+            }
+            saveSettings()
+            restoreUIState()
+            MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+                .setTitle(R.string.title_image_generation)
+                .setMessage(getString(R.string.image_gen_unsupported_option_notice, optionLabels))
+                .setPositiveButton(R.string.image_gen_action_continue) { _, _ ->
+                    sendCoordinatorImageRequest(request)
+                }
+                .setNegativeButton(R.string.btn_cancel) { _, _ -> }
+                .show()
+            return
+        }
+
+        sendCoordinatorImageRequest(request)
+    }
+
+    private fun sendCoordinatorImageRequest(request: ImageGenerationRequest) {
+        imageRequestScope = CoroutineScope(Dispatchers.Main)
+        imageRequestScope?.launch {
+            btnMicro?.isEnabled = false
+            btnSend?.isEnabled = false
+            progress?.visibility = View.VISIBLE
+
+            progress?.setOnClickListener {
+                cancel()
+                restoreUIState()
+                saveSettings()
+                syncChatProjection()
+                calculateCost()
+            }
+
+            try {
+                runCoordinatorImageRequest(request)
+            } catch (_: CancellationException) {
+                restoreUIState()
+            }
+        }
+    }
+
+    private suspend fun runCoordinatorImageRequest(request: ImageGenerationRequest) {
+        when (val outcome = ImageGeneratorCoordinator.generate(this, request)) {
+            is ImageGeneratorCoordinator.Outcome.Success -> {
+                // The marker id and the stored file name derive from the
+                // same encoded bytes (GeneratedImageStorage), so the saved
+                // message keeps resolving to its file; the real detected
+                // type decides the extension (§4.5).
+                val marker = withContext(Dispatchers.IO) {
+                    writeImageToCache(outcome.image.bytes, outcome.image.fileExtension)
+                    Hash.hash(java.util.Base64.getEncoder().encodeToString(outcome.image.bytes))
+                }
+                runOnUiThread {
+                    putMessage("~file:$marker", true)
+                    scroll(true)
+                    scroll(false)
+                    saveSettings()
+                    btnMicro?.isEnabled = true
+                    btnSend?.isEnabled = true
+                    progress?.visibility = View.GONE
+                    messageInput?.requestFocus()
+                    ChatPreferences.getChatPreferences()
+                        .putTimestampToChatById(this@ChatActivity, chatId)
+                }
+            }
+            is ImageGeneratorCoordinator.Outcome.Failure -> {
+                runOnUiThread { presentImageGenerationFailure(request, outcome) }
+            }
+        }
+    }
+
+    /** §13 failure behavior (owner ruling, 2026-07-29): a concise
+     *  cause-specific message in chat, plus the action matching the cause —
+     *  Edit Prompt for a refused prompt, Change Settings for unsupported
+     *  options and configuration or authentication failures, Retry only
+     *  for failures that may succeed unchanged. Sanitized details stay in
+     *  the log surfaces, never in chat. */
+    private fun presentImageGenerationFailure(
+        request: ImageGenerationRequest,
+        failure: ImageGeneratorCoordinator.Outcome.Failure
+    ) {
+        playErrorSignal()
+        stopHandsFreeOnError()
+
+        val causeText = getString(imageFailureMessageRes(failure.errorCause))
+        putMessage(causeText, true)
+        saveSettings()
+        btnMicro?.isEnabled = true
+        btnSend?.isEnabled = true
+        progress?.visibility = View.GONE
+        messageInput?.requestFocus()
+
+        val builder = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(causeText)
+            .setNegativeButton(R.string.btn_cancel) { _, _ -> }
+        when (failureActionFor(failure.errorCause)) {
+            ImageFailureAction.EDIT_PROMPT -> {
+                builder.setPositiveButton(R.string.image_gen_action_edit_prompt) { _, _ ->
+                    // The exact prompt that was sent to the generator, back
+                    // in the composer as a runnable command.
+                    messageInput?.setText("/imagine " + request.prompt)
+                    messageInput?.setSelection(messageInput?.text?.length ?: 0)
+                    messageInput?.requestFocus()
+                }
+            }
+            ImageFailureAction.CHANGE_SETTINGS,
+            ImageFailureAction.OPEN_IMAGE_SETTINGS -> {
+                builder.setPositiveButton(R.string.image_gen_action_change_settings) { _, _ ->
+                    startActivity(Intent(this, ImageGenerationSettingsActivity::class.java))
+                }
+            }
+            ImageFailureAction.RETRY -> {
+                builder.setPositiveButton(R.string.btn_msg_retry) { _, _ ->
+                    sendCoordinatorImageRequest(request)
+                }
+            }
+            ImageFailureAction.NONE -> { /* cancellation shows no action */ }
+        }
+        builder.show()
+    }
+
+    private fun imageFailureMessageRes(cause: ImageErrorCause): Int = when (cause) {
+        ImageErrorCause.NO_GENERATOR_CONFIGURED -> R.string.image_gen_error_not_configured
+        ImageErrorCause.GENERATOR_MODEL_REJECTED -> R.string.image_gen_error_model_rejected
+        ImageErrorCause.ENDPOINT_UNREACHABLE -> R.string.image_gen_error_unreachable
+        ImageErrorCause.AUTHENTICATION_FAILED -> R.string.image_gen_error_auth
+        ImageErrorCause.PROMPT_REFUSED -> R.string.image_gen_error_prompt_refused
+        ImageErrorCause.TIMED_OUT -> R.string.image_gen_error_timeout
+        ImageErrorCause.NO_USABLE_IMAGE -> R.string.image_gen_error_no_usable_image
+        ImageErrorCause.DOWNLOAD_INVALID -> R.string.image_gen_error_download_invalid
+        ImageErrorCause.UNSUPPORTED_OPTION -> R.string.image_gen_error_unsupported_option
+        ImageErrorCause.PROVIDER_ERROR -> R.string.image_gen_error_provider
+        ImageErrorCause.CANCELLED -> R.string.image_gen_error_cancelled
     }
 
     private fun startRecognition(freshTurn: Boolean = true) {
@@ -5415,12 +5625,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
         // Preserve the existing non-chat command and multimodal/tool pipelines.
         // They do not use the normal chat-completions request built below.
-        if (LegacyImagineCommand.divertsTypedTurnToLegacyPipeline(
-                rawMessage,
-                preferences?.getImagineCommand() == true,
-                model,
-                preferences?.getFunctionCalling() == true
-            )
+        val imagineAttempt = preferences?.getImagineCommandGlobal() == true &&
+            ImagineCommand.isImagineAttempt(rawMessage)
+        if (imagineAttempt ||
+            model.contains(":ft") || model.contains("ft:") ||
+            preferences?.getFunctionCalling() == true
         ) {
             parseMessage(rawMessage)
             return

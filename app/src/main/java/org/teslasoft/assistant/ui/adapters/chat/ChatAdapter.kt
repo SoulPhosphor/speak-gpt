@@ -1013,12 +1013,19 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
          *  the user's own message. */
         @SuppressLint("SetTextI18n")
         private fun processDalleFile(chatMessage: HashMap<String, Any>, position: Int) {
-            val mimeType = "image/png"
             val path = chatMessage["message"].toString().replace("~file:", "")
 
             try {
-                val fullPath = context.getExternalFilesDir("images")?.absolutePath +
-                    "/" + path + ".png"
+                // Rebuilt generated images store their REAL detected type
+                // (image-generation-rebuild-plan.md §4.5), while legacy
+                // markers are always .png files. Resolve the marker against
+                // the supported types, falling back to the legacy name.
+                val imagesDir = context.getExternalFilesDir("images")?.absolutePath
+                val stored = org.teslasoft.assistant.imagegen.ImageFormat.entries
+                    .map { format -> format to File("$imagesDir/$path.${format.fileExtension}") }
+                    .firstOrNull { it.second.exists() }
+                val mimeType = stored?.first?.mimeType ?: "image/png"
+                val fullPath = stored?.second?.absolutePath ?: "$imagesDir/$path.png"
 
                 while (dalleImageStringList.size < itemCount + 1) {
                     dalleImageStringList.add("")

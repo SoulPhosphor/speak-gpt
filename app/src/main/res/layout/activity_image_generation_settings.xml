@@ -152,8 +152,12 @@
                     android:contentDescription="@string/image_gen_row_model" />
             </LinearLayout>
 
-            <!-- ============ Default Shape ============ -->
+            <!-- ============ Default Shape ============
+                 Hidden when the selected service's API cannot carry the
+                 option at all (plan §5: never expose choices the provider
+                 cannot accept). -->
             <LinearLayout
+                android:id="@+id/row_default_shape"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
@@ -173,6 +177,7 @@
 
             <!-- ============ Default Quality ============ -->
             <LinearLayout
+                android:id="@+id/row_default_quality"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
