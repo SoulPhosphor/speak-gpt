@@ -49,18 +49,20 @@
         <item name="android:textAppearance">@style/TextAppearance.App.Button</item>
     </style>
 
-    <!-- Outlined current button appearance. -->
-    <style name="AppButton.Secondary" parent="Widget.Material3.Button.OutlinedButton">
-        <item name="shapeAppearanceOverlay">@style/ShapeAppearance.AppButton</item>
-        <item name="android:textAppearance">@style/TextAppearance.App.Button</item>
-    </style>
+    <!-- No distinct Secondary appearance is approved yet (owner ruling, July 29
+         2026): ignore the missing style and inherit Primary's exact appearance.
+         New secondary-role buttons should reference AppButton.Primary (and its
+         Dialog/DialogAction/Inline variants) directly; this style is kept only
+         so a stray reference to it is never visually orphaned. Changeable
+         later — that is the point of the ruling. -->
+    <style name="AppButton.Secondary" parent="AppButton.Primary" />
 
-    <!-- Currently matches Secondary visually. It remains separately named so
-         destructive buttons can be changed app-wide later without touching layouts. -->
-    <style name="AppButton.Destructive" parent="Widget.Material3.Button.OutlinedButton">
-        <item name="shapeAppearanceOverlay">@style/ShapeAppearance.AppButton</item>
-        <item name="android:textAppearance">@style/TextAppearance.App.Button</item>
-    </style>
+    <!-- Same ruling (owner, July 29 2026): Destructive inherits Primary's exact
+         appearance until a distinct treatment is approved. Kept as its own
+         name, not a direct reference to AppButton.Primary in layouts, so
+         destructive buttons can be redesigned app-wide later without touching
+         every layout that uses one. -->
+    <style name="AppButton.Destructive" parent="AppButton.Primary" />
 
     <!-- Dialog action button. Identical to AppButton.Primary in every respect
          (fill, corner, text appearance, theme color roles) EXCEPT width: a
