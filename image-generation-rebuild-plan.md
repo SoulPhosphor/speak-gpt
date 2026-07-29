@@ -25,6 +25,11 @@ name (a nameless-companion flow is a defect to fix) — owner rulings,
 Change Settings / Retry / settings link), capability-change log entries with
 the strict tools-not-supported guard, and request diagnostics for failures
 and successes with owner-approved example wording — owner rulings,
+2026-07-29.  
+**Revised (same day):** successes split into their own opt-in Image
+Generation Log behind a Successful Image Tracking toggle, with Maximum Image
+Information Saved and Maximum Days Saved retention fields where zero means
+unlimited (error logs keep their existing retention) — owner rulings,
 2026-07-29.
 
 ## 1. Goal
@@ -716,9 +721,7 @@ record:
 - whether the request was retried without tools;
 - whether that retry succeeded or failed.
 
-**Request diagnostics** — for image-generation requests, failures and
-successes alike, so billing disputes and incorrect-but-completed generations
-can also be investigated:
+**Failure diagnostics** — for each failed image-generation request:
 
 - total request duration, and — when downloading the finished image is a
   separate step — generation time and download time separately;
@@ -726,16 +729,7 @@ can also be investigated:
   length-limited, and kept distinct from the app's internal request ID;
 - provider, endpoint, model, timestamp, HTTP status, and final outcome.
 
-Example entries (owner-approved wording, Title Caps per `ui-style-guide.md`):
-
-> Image Request Completed  
-> Provider: OpenRouter  
-> Model: example/image-model  
-> Generation Time: 18.4 seconds  
-> Download Time: 1.2 seconds  
-> HTTP Status: 200  
-> Provider Request ID: req_abc123  
-> Outcome: Image Saved
+Example entry (owner-approved wording, Title Caps per `ui-style-guide.md`):
 
 > Image Request Failed  
 > Provider: OpenAI  
@@ -747,7 +741,42 @@ Example entries (owner-approved wording, Title Caps per `ui-style-guide.md`):
 
 Never log API keys, authorization headers, signed image URLs, complete
 request bodies, raw image data, complete prompts, or private conversation
-content. Entries follow the page's existing retention limits.
+content. Error entries follow the page's existing retention limits; the
+zero-means-unlimited rule of the Image Generation Log below does not apply
+to the error logs.
+
+### Image Generation Log for successes (owner ruling, 2026-07-29)
+
+Successful requests are tracked separately, and never automatically. The
+Alerts, Errors & Logs page gains a **Successful Image Tracking** toggle,
+off until the user turns it on, and an **Image Generation Log** entry in
+its Logs section where the success entries go. This exists for users
+genuinely curious about their usage — including billing disputes and
+generations that completed but produced the wrong image.
+
+When tracking is on, each successful generation records the same
+diagnostics as a failure, with the success outcome:
+
+> Image Request Completed  
+> Provider: OpenRouter  
+> Model: example/image-model  
+> Generation Time: 18.4 seconds  
+> Download Time: 1.2 seconds  
+> HTTP Status: 200  
+> Provider Request ID: req_abc123  
+> Outcome: Image Saved
+
+The same never-log list applies.
+
+The Image Generation Log has its own two retention fields, mirroring the
+error log's fields and their limit dialogs:
+
+- **Maximum Image Information Saved**
+- **Maximum Days Saved**
+
+Both follow the same logic as the error-log retention fields, with one
+difference: zero means unlimited. Zero-means-unlimited applies only to
+these two fields, never to the error logs.
 
 ### Chat message or log entry
 
@@ -841,8 +870,9 @@ phases.
     retaining legacy rendering.
 12. Add the spoken approval announcement and voice answer handling for voice
     conversations.
-13. Add the Image Generation Errors log and its recording toggle to the
-    Alerts, Errors & Logs page.
+13. Add the Image Generation Errors log with its recording toggle, and the
+    Image Generation Log with its Successful Image Tracking toggle and its
+    two retention fields, to the Alerts, Errors & Logs page.
 14. Remove the whole Function Calling feature (section 15): the hard-coded
     `gpt-4o` router, the function map and search stub, the settings tile, and
     the stored preference — plus fixed image-model checks, duplicate image
@@ -903,7 +933,7 @@ The work is complete only when all of the following are true:
     produces the unavailable-option notice with continue and cancel; nothing
     is silently ignored.
 26. With recording on, model-initiated silent fallbacks, rejected tool
-    calls, automatic capability changes, and request diagnostics appear in
+    calls, automatic capability changes, and failure diagnostics appear in
     the Image Generation Errors log; with recording off, nothing is
     recorded; actionable errors appear in chat either way.
 27. A model-initiated image is generated at the user's saved quality default;
@@ -915,6 +945,11 @@ The work is complete only when all of the following are true:
 29. The learned tool capability changes only on a clear tools-not-supported
     provider error — never on a timeout, content refusal, or unrelated
     error.
+30. With Successful Image Tracking on, each completed generation appears in
+    the Image Generation Log; with it off, nothing is recorded. Its Maximum
+    Image Information Saved and Maximum Days Saved fields follow the
+    error-log retention logic except that zero means unlimited, and the
+    error logs' own retention behavior is unchanged.
 
 ## 18. Required Test Matrix
 
@@ -934,8 +969,10 @@ multiple attempted tool calls, cancellation at each stage, response timeout,
 oversized download, malformed Base64, missing files, chat deletion, backup and
 restore, process recreation, each spoken-approval outcome ("create it",
 "cancel", and unrelated speech), and the `/imagine` options (valid overrides,
-invalid values, unknown options, and the unsupported-option notice), and the
-Image Generation Errors log with recording on and off.
+invalid values, unknown options, and the unsupported-option notice), the
+Image Generation Errors log with recording on and off, and the Image
+Generation Log with tracking on and off including zero-as-unlimited
+retention.
 
 ## 19. Explicit Non-Goals
 
