@@ -1750,7 +1750,7 @@
     <string name="memory_controls_row_advanced_subtitle">Diagnostics, indexing, model files, and repair tools.</string>
 
     <!-- Memory Assistant Advanced Settings (spec §2) -->
-    <string name="memory_assistant_adv_intro">Tune how Memory Assistant analyzes conversation history and creates pending memory drafts. Most users should keep the defaults.</string>
+    <string name="memory_assistant_adv_intro">Analyze conversations to suggest memories that the embedding model can hand to your AI to remember who you are.\n\nMemory suggestions are sent to the memory browser as pending so you can approve them.\n\nYou may continue chatting while this process runs, but do not close the app completely. Messages that are added to scanned conversations will be marked for review on next analysis.</string>
     <string name="memory_assistant_adv_temperature">Temperature</string>
     <string name="memory_assistant_adv_temperature_hint">Controls how literal or creative the AI is when analyzing conversations. Lower values are stricter; higher values may find more but can be less reliable.</string>
     <string name="memory_assistant_adv_temperature_recommended">Recommended: 0.3</string>
