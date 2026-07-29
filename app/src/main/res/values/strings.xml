@@ -556,6 +556,12 @@
     <string name="image_gen_card_title">%1$s Wants to Create an Image</string>
     <string name="image_gen_action_create">Create</string>
     <string name="image_gen_action_view_prompt">View Prompt</string>
+    <string name="image_gen_tools_unsupported_notice">This model cannot request image creation. You can still use /imagine.</string>
+    <!-- Endpoint editor: reset for the learned tool capability (plan §8),
+         mirroring the image-capability clear action. -->
+    <string name="tool_capability_clear_action">Clear Tool Capability History</string>
+    <string name="tool_capability_clear_confirm_title">Clear tool capability history?</string>
+    <string name="tool_capability_clear_confirm_body">The recorded tool support for every model at this endpoint will be forgotten. The app will try sending tools again on the next request, so a provider upgrade is never treated as permanent.</string>
     <string name="tile_openai_tts">Use OpenAI TTS</string>
     <string name="tile_google_tts">Google TTS is used</string>
     <string name="tile_tts_desc">This feature allows you to set TTS engine. OpenAI TTS is paid.</string>

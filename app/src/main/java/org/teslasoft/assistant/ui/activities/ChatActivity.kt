@@ -227,6 +227,9 @@ import org.teslasoft.assistant.imagegen.ImageGeneratorCoordinator
 import org.teslasoft.assistant.imagegen.ImageProviderAdapters
 import org.teslasoft.assistant.imagegen.ImagineCommand
 import org.teslasoft.assistant.imagegen.StreamedToolCallAssembler
+import org.teslasoft.assistant.imagegen.ToolCapability
+import org.teslasoft.assistant.imagegen.ToolCapabilityStore
+import org.teslasoft.assistant.imagegen.ToolSupportClassifier
 import org.teslasoft.assistant.imagegen.failureActionFor
 import org.teslasoft.assistant.util.LocaleParser
 import org.teslasoft.assistant.util.ModelContextCapacity
@@ -5527,6 +5530,63 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
     /* --------------- Model-initiated image creation (§6/§7/§8) --------------- */
 
+    /** Whether the most recent regular request carried the create_image
+     *  tool — the §8 retry wrapper's evidence that a failure could be a
+     *  tools rejection at all. */
+    private var lastRegularRequestCarriedImageTools = false
+
+    /** §8: UNKNOWN tries the tool, SUPPORTED keeps sending it, UNSUPPORTED
+     *  withholds it until the endpoint editor's reset forgets the record. */
+    private fun chatModelMayReceiveImageTool(selectedModel: String): Boolean {
+        return try {
+            val chatEndpointId = preferences?.getApiEndpointId().orEmpty()
+            if (chatEndpointId.isEmpty()) return true
+            val chatEndpoint =
+                apiEndpointPreferences?.getApiEndpoint(this, chatEndpointId) ?: return true
+            ToolCapabilityStore.get(chatEndpoint.toolCapabilityByModel, selectedModel) !=
+                ToolCapability.UNSUPPORTED
+        } catch (_: Exception) {
+            true
+        }
+    }
+
+    /** Persist a learned tool capability for this chat's exact
+     *  endpoint/model pair — same persistence shape as vision capability.
+     *  Learning must never break a turn. */
+    private fun recordChatToolCapability(capability: ToolCapability) {
+        try {
+            val chatEndpointId = preferences?.getApiEndpointId().orEmpty()
+            if (chatEndpointId.isEmpty() || model.isBlank()) return
+            val prefs = ApiEndpointPreferences.getApiEndpointPreferences(this)
+            val endpoint = prefs.getApiEndpoint(this, chatEndpointId)
+            val updated =
+                ToolCapabilityStore.set(endpoint.toolCapabilityByModel, model, capability)
+            if (updated != endpoint.toolCapabilityByModel) {
+                endpoint.toolCapabilityByModel = updated
+                prefs.setApiEndpoint(this, endpoint)
+            }
+        } catch (_: Exception) { /* capability learning must never break a turn */ }
+    }
+
+    /** The §8 UNSUPPORTED transition: record it, drop the dead streaming
+     *  placeholder so the retry doesn't stack empty bubbles, and show the
+     *  one-time notice — it appears exactly once because the learned state
+     *  prevents any further tool-bearing request to this pair. */
+    private fun learnToolsUnsupportedAndNotify() {
+        recordChatToolCapability(ToolCapability.UNSUPPORTED)
+        runOnUiThread {
+            if (messages.isNotEmpty() && messages.last()["isBot"] == true &&
+                messages.last()["message"].toString().isEmpty()
+            ) {
+                messages.removeAt(messages.size - 1)
+                adapter?.notifyItemRemoved(messages.size)
+                updateMessagesSelectionProjection()
+            }
+            putMessage(getString(R.string.image_gen_tools_unsupported_notice), true)
+            saveSettings()
+        }
+    }
+
     /** Resolved by the inline confirmation card's Create/Cancel tap. */
     private var pendingImageConfirmation: CompletableDeferred<Boolean>? = null
 
@@ -6751,7 +6811,29 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                         .setNegativeButton("Cancel") { _, _ -> }
                         .show()
                 } else {
-                    regularGPTResponse(shouldPronounce, preparedTurn)
+                    try {
+                        regularGPTResponse(shouldPronounce, preparedTurn)
+                    } catch (toolsError: Exception) {
+                        // §8: ONLY a clear tools-not-supported rejection of a
+                        // tool-bearing request learns the capability and
+                        // retries once without tools — the user's message is
+                        // neither lost nor duplicated. Anything else (or a
+                        // failing retry) falls through to the normal error
+                        // funnel below.
+                        if (toolsError !is CancellationException &&
+                            lastRegularRequestCarriedImageTools &&
+                            ToolSupportClassifier.isToolsNotSupportedError(toolsError.message)
+                        ) {
+                            learnToolsUnsupportedAndNotify()
+                            regularGPTResponse(
+                                shouldPronounce,
+                                preparedTurn,
+                                suppressImageTools = true
+                            )
+                        } else {
+                            throw toolsError
+                        }
+                    }
                 }
             }
         } catch (_: CancellationException) {
@@ -7551,14 +7633,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
         // §7: the create_image tool rides the SAME regular request when
         // offered — never a separate routing request. Both request builders
-        // share this one availability decision.
+        // share this one availability decision, and §8's learned capability
+        // withholds the tool only after a clear tools-not-supported error.
         val globalImagePreferences = Preferences.getPreferences(this, "")
         val imageTools = if (
             CreateImageTool.shouldOfferTool(
                 globalImagePreferences.getAiCreateImagesEnabled(),
                 globalImagePreferences.getImageGeneratorEndpointId(),
                 globalImagePreferences.getImageGeneratorModel()
-            )
+            ) &&
+            chatModelMayReceiveImageTool(selectedModel)
         ) {
             listOf(CreateImageTool.definition())
         } else {
@@ -7603,7 +7687,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
     private suspend fun regularGPTResponse(
         shouldPronounce: Boolean,
-        preparedTurn: PreparedRegularTurn? = null
+        preparedTurn: PreparedRegularTurn? = null,
+        suppressImageTools: Boolean = false
     ) {
         disableAutoScroll = false
 
@@ -7615,8 +7700,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         val chatCompletionRequest: ChatCompletionRequest
         if (preparedTurn != null) {
             // This is the object that was measured before the composer was
-            // committed. Do not rebuild any part of it here.
-            chatCompletionRequest = preparedTurn.request
+            // committed. Do not rebuild any part of it here — the §8
+            // tools-rejected retry only strips the tool definition.
+            chatCompletionRequest = if (suppressImageTools) {
+                preparedTurn.request.copy(tools = null, toolChoice = null)
+            } else {
+                preparedTurn.request
+            }
             msgs = ArrayList(preparedTurn.request.messages)
         } else {
             msgs = arrayListOf()
@@ -7826,11 +7916,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         // builder — neither regular path may silently omit the image tool.
         val globalImagePreferences = Preferences.getPreferences(this, "")
         val legacyPathImageTools = if (
+            !suppressImageTools &&
             CreateImageTool.shouldOfferTool(
                 globalImagePreferences.getAiCreateImagesEnabled(),
                 globalImagePreferences.getImageGeneratorEndpointId(),
                 globalImagePreferences.getImageGeneratorModel()
-            )
+            ) &&
+            chatModelMayReceiveImageTool(model)
         ) {
             listOf(CreateImageTool.definition())
         } else {
@@ -7864,6 +7956,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             )
         }
         }
+
+        // §8 retry support: remembered so a failure of THIS request can be
+        // judged as a tools rejection by the wrapper in generateResponse.
+        lastRegularRequestCarriedImageTools = chatCompletionRequest.tools != null
 
         val completions: Flow<ChatCompletionChunk> =
             ai!!.chatCompletions(chatCompletionRequest)
@@ -7910,6 +8006,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     }
                 }
             }
+        }
+
+        // §8: a completed stream of a tool-bearing request proves the
+        // endpoint ACCEPTED tools for this model — whether or not the model
+        // chose to use them. Refusal to call the tool never marks anything.
+        if (chatCompletionRequest.tools != null) {
+            recordChatToolCapability(ToolCapability.SUPPORTED)
         }
 
         // §7: an actual tool call is the ONLY thing that triggers a second
