@@ -5663,7 +5663,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
         val globalPreferences = Preferences.getPreferences(this, "")
         var executedImageCall = false
-        val results = ArrayList<Pair<StreamedToolCallAssembler.AssembledToolCall, String>>()
+        val results =
+            ArrayList<kotlin.Pair<StreamedToolCallAssembler.AssembledToolCall, String>>()
         for (call in calls) {
             val result = when {
                 call.name != CreateImageTool.NAME ->
@@ -5677,7 +5678,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     executeCreateImageCall(call, globalPreferences)
                 }
             }
-            results.add(call to result)
+            results.add(kotlin.Pair(call, result))
         }
 
         var assistantCallId = 0
@@ -5692,17 +5693,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             }
         )
         var resultCallId = 0
-        val toolResultMessages = results.map { (call, result) ->
+        val toolResultMessages = results.map { pair ->
             ChatMessage(
                 role = ChatRole.Tool,
-                content = result,
-                toolCallId = ToolId(call.id ?: "call_${resultCallId++}")
+                content = pair.second,
+                toolCallId = ToolId(pair.first.id ?: "call_${resultCallId++}")
             )
         }
-        val followUpRequest = originalRequest.copy(
-            messages = originalRequest.messages + assistantToolCallMessage + toolResultMessages,
-            tools = null,
-            toolChoice = null
+        val followUpRequest = rebuildRequestWithoutTools(
+            originalRequest,
+            originalRequest.messages + assistantToolCallMessage + toolResultMessages
         )
         streamAssistantTextResponse(followUpRequest, shouldPronounce)
     }
@@ -5789,6 +5789,24 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             }
         }
     }
+
+    /** ChatCompletionRequest is not a data class, so the §7 follow-up and
+     *  the §8 without-tools retry rebuild it field-by-field, carrying the
+     *  original sampling values and deliberately no tools. */
+    private fun rebuildRequestWithoutTools(
+        original: ChatCompletionRequest,
+        requestMessages: List<ChatMessage>
+    ): ChatCompletionRequest = ChatCompletionRequest(
+        model = original.model,
+        messages = requestMessages,
+        maxTokens = original.maxTokens,
+        temperature = original.temperature,
+        topP = original.topP,
+        frequencyPenalty = original.frequencyPenalty,
+        presencePenalty = original.presencePenalty,
+        seed = original.seed,
+        logitBias = original.logitBias
+    )
 
     /** The follow-up response after tool results (§7.7): plain streamed
      *  text into a fresh assistant bubble, then the normal turn
@@ -7703,7 +7721,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             // committed. Do not rebuild any part of it here — the §8
             // tools-rejected retry only strips the tool definition.
             chatCompletionRequest = if (suppressImageTools) {
-                preparedTurn.request.copy(tools = null, toolChoice = null)
+                rebuildRequestWithoutTools(preparedTurn.request, preparedTurn.request.messages)
             } else {
                 preparedTurn.request
             }
