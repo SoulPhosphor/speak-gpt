@@ -212,6 +212,10 @@
                 style="@style/Widget.App.Section.Title"
                 android:text="@string/summarizer_section_prompt" />
 
+            <TextView
+                style="@style/Widget.App.Section.Hint"
+                android:text="@string/summarizer_section_prompt_hint" />
+
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"

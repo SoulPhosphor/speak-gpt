@@ -2542,6 +2542,7 @@
     <string name="summarizer_length_hint">Maximum amount of words the summary can become.</string>
 
     <string name="summarizer_section_prompt">Summary Prompt</string>
+    <string name="summarizer_section_prompt_hint">This prompt gives instructions to the Summarizer Model so it properly helps your AI what\'s important in your conversation.\n\nOnly one prompt can be active at a time. The first two prompts are suggested styles.</string>
     <string name="summarizer_prompt_dropdown">Prompt</string>
     <string name="summarizer_slot_default_name">Slot %1$d</string>
     <string name="summarizer_rename_slot">Rename</string>
