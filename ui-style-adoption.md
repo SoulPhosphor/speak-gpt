@@ -76,8 +76,90 @@ Do not guess its status from appearance or old documentation.
 | Edit Activation Prompt | `activity_edit_activation_prompt.xml` | Partial | Field labels and boxes (`Field.Label`/`Field.Box`), inline field error, save/discard flow all use shared styles and the same house header as Edit Companion | Partial | Same unresolved two-trailing-icon header gap as Edit Companion/Edit Persona/API Endpoint Editor — the Delete icon's 48dp geometry is repeated locally. Uses `ic_delete` (trash can) for its header Delete icon rather than Edit Companion/Edit Persona's `ic_remove_moderator`, matching the icon already used the same way in API Endpoint Editor's header. No hint text under either field (owner ruling, July 28 2026). |
 | Edit System Prompt | `activity_system_prompt_editor.xml` | Partial | Field labels and boxes (`Field.Label`/`Field.Box`), inline field error, header Save/Delete icons | Partial | Same unresolved two-trailing-icon header gap as the other full-screen editors — the Delete icon's 48dp geometry is repeated locally. Uses `ic_delete`, same as Edit Activation Prompt. The old bottom Save/Delete buttons are removed; both actions now live only in the header. No hint text under either field. |
 | System Prompts List | `activity_system_prompts_list.xml` | Shared | Manager-mode row (`view_system_prompt_item_row.xml`): `Row.TitleOnly`/`TextColumn`/`Title`/`Chevron` | Shared | None for the header or the manager-mode row. The separate pick-mode tile (`view_system_prompt_item.xml`, used only when choosing a prompt from Quick Settings) intentionally keeps its own "checked tile" look, the same owner-approved pattern as the Activation Prompts and Personas pickers — not audited as part of this row style. |
+| Characters Hub | `activity_characters.xml` | Shared | Three navigation rows (`Row.WithSubtitle`/`TextColumn`/`Title`/`Subtitle`/`Chevron`) | Shared | None. Full layout read: every view uses a shared style. |
+| Default Images | `activity_default_images.xml` | Shared | Two navigation rows | Shared | None. Full structure verified: header and rows only, all shared. |
+| Summarizer Settings | `activity_summarizer_settings.xml` | Shared | `Screen.Intro`, toggle row, two `Field.NumberBlank` fields with `Field.Label`/`Hint`, section titles and hints, endpoint/model rows with `Dropdown.Value`, prompt `Field.Box`, three `AppButton.Primary.Inline` actions; its dialogs use `App.MaterialAlertDialog` and shared-styled dialog layouts | Shared | None. |
+| Profile Image Properties | `activity_profile_image_properties.xml` | Shared | Three navigation rows, all shared | Partial | The screen itself is fully shared; its Default Shape and Fine Rotation dialogs (`dialog_default_shape.xml`, `dialog_fine_rotation.xml`) are unconverted local layouts. |
+| Memory Filters Panel | `activity_memory_filter_panel.xml` | Shared | Close-panel header (`Title.LeftAligned`/`CloseButton`); filter sections are appended in code | Partial | The code-built filter sections and selection pills have not been audited against shared styles. |
+| Memory Manager | `activity_memory_manager.xml` | Unconverted | Navigation rows use the shared row family throughout | Partial | Header is copied local XML (raw back button, local 20sp title) instead of the shared header styles. |
+| Roleplay Hub | `activity_roleplay_hub.xml` | Unconverted | `Screen.Intro` and navigation rows are shared | Partial | Header is copied local XML instead of the shared header styles. |
+| AI System Settings | `activity_ai_system_settings.xml` | Unconverted | Navigation rows and toggle rows are shared | Partial | Header is copied local XML; the intro paragraph is local 14sp text instead of `Screen.Intro`. |
+| Logs viewer | `activity_logs.xml` | Shared | Header with one trailing icon (`Title.NearBack`/`SecondaryButton`) | Partial | Two buttons use stock Material button styles instead of the app's semantic `AppButton` styles; the log body has not been audited. |
+| Lorebook Entries | `activity_lorebook_entries.xml` | Partial | Header `Title.NearBack` plus end icon | Partial | Same unresolved two-trailing-icon header gap as the full-screen editors (second icon geometry is local); the description text is local 14sp; list item layout unconverted. |
+| Lorebooks List | `activity_lorebooks_list.xml` | Shared | Header shared | Partial | List item layout and the add/search controls have not been audited. |
+| Logit Bias Profiles | `activity_logit_bias_config_list.xml` | Shared | Header with trailing icon | Partial | List item layout unconverted. The floating Add button has no approved shared style family (none exists yet for FABs). |
+| Logit Bias Entries | `activity_logit_bias_list.xml` | Shared | Header with trailing icon | Partial | Entry input fields and item layout not audited; same FAB note. |
+| Personas List | `activity_persona_list.xml` | Shared | Header shared | Partial | List item layout unconverted; same FAB note. |
+| Local Whisper Models | `activity_local_whisper_models.xml` | Shared | Header shared | Partial | Body rows and download controls not audited. |
+| Local Whisper Storage | `activity_local_whisper_manage.xml` | Shared | Header shared | Partial | Body not audited. |
+| Voice Settings | `activity_voice_settings.xml` | Shared | Header plus several shared rows | Partial | Remaining body components not audited; a few local attributes remain. |
+| Advanced Voice Settings | `activity_voice_advanced.xml` | Shared | Header shared | Partial | Deliberately plain row structure is kept by design; ~48 local text attributes remain — convert gently without changing the row structure or removing any control. |
+| Control Center | `activity_settings.xml` | Shared | Extensive shared row adoption (largest shared-style user in the app) | Partial | A handful of local hardcoded attributes remain; full component audit pending. |
+| Alert Debug Menu | `activity_alert_debug_menu.xml` | Shared | Some shared rows and fields | Partial | Many local text attributes remain. Debug-only screen, low priority. |
+| Audio Debugging | `activity_audio_debugging.xml` | Shared | Header shared | Partial | Body largely local. Debug-only screen, low priority. |
+| Memory list scaffold (Worlds, User Personas, Roleplay Characters, Campaigns, Party Members, Tags) | `activity_memory_list_simple.xml` | Shared | One shared list scaffold reused by six list screens | Partial | Scaffold header is shared; list item layouts and the search field have not been audited. |
+| Character Card | `activity_character_card.xml` | Partial | Many shared field/section styles | Partial | Header only partially on shared styles; several local attributes; needs a full component audit. |
+| Campaign Detail | `activity_campaign_detail.xml` | Partial | A few shared pieces | Partial | Fields and buttons largely local. |
+| World Detail | `activity_world_detail.xml` | Partial | A few shared pieces | Partial | Fields largely local. |
+| Recovery Backup | `activity_recovery_backup.xml` | Unconverted | Shared button variants are present | Partial | No shared header; many local attributes remain. |
+| Profile Images | `activity_profile_images.xml` | Unconverted | A couple of shared references | Partial | Mostly local; grid and controls not audited. |
+| Chat | `activity_chat.xml` | Unconverted | Attachment strip uses the shared `Include` family | Partial | Everything else awaits the dedicated chat restyle phase (redesign plan Phase 4) with its view-ID contracts — do not restyle piecemeal. |
+| Memory Browser | `activity_memory_list.xml` | Unconverted | None | Unconverted | Header and controls local. |
+| Memory Assistant | `activity_memory_assistant.xml` | Unconverted | None | Unconverted | Header, buttons, and rows local. |
+| Memory Editor | `activity_memory_editor.xml` | Unconverted | None | Unconverted | Fields and buttons local. |
+| Advanced Memory Settings | `activity_advanced_memory_settings.xml` | Unconverted | None | Unconverted | Fields and buttons local. |
+| Model Rule Editor | `activity_model_rule_editor.xml` | Unconverted | None | Unconverted | Fields and buttons local. |
+| Card Entry Editor | `activity_card_entry_editor.xml` | Unconverted | None | Unconverted | Large editor (30+ inputs), all local field styling. |
+| Companion Detail | `activity_companion_detail.xml` | Unconverted | None | Unconverted | Buttons and image treatment local. |
+| API Endpoints List | `activity_api_endpoint_list.xml` | Unconverted | None | Unconverted | Header local; list item layout unconverted. |
+| About | `activity_about_new.xml` | Unconverted | None | Unconverted | Buttons rely on the theme-default `App.Button` shape only. |
+| Documentation | `activity_documentation.xml` | Unconverted | None | Unconverted | Header local. |
+| Lorebook Debug | `activity_lorebook_debug.xml` | Unconverted | None | Unconverted | Debug-only screen, low priority. |
+| Main (tab host) | `activity_main.xml` | Unconverted | None | Unconverted | Scheduled for structural replacement by the drawer (redesign plan Phase 3) — convert only what survives that change. |
+| Onboarding (Welcome, Purpose, Activation, Terms) | `activity_welcome.xml`, `activity_purpose.xml`, `activity_activation.xml`, `activity_terms.xml` | Unconverted | None | Unconverted | Keep the flow and manifest entries intact when converting. |
+| Crash Reporter | `activity_crash.xml` | Unconverted | None | Unconverted | Buttons rely on the theme default only. |
+| Chat Storage Locked | `activity_chat_storage_locked.xml` | Unconverted | None | Unconverted | Buttons rely on the theme default only. |
+| Translator | `activity_translator.xml` | Unconverted | None | Unconverted | — |
+| Image Browser | `activity_imageview.xml` | N/A | Minimal viewer UI | Unconverted | — |
+| AI Photo Editor | `activity_ai_photo_editor.xml` | Unconverted | None | Unconverted | — |
+| Photo Variations | `activity_variations.xml` | Unconverted | None | Unconverted | — |
+| Fine-tune (Jobs, New Job, Job Info) | `activity_fine_tune_jobs.xml`, `activity_fine_tune_new_job.xml`, `activity_fine_tune_job_info.xml` | Unconverted | None | Unconverted | — |
+| Profile Image Framing | `activity_profile_image_framing.xml` | Unconverted | None | Unconverted | Its rotation dialog is also unconverted. |
+| Component gallery (developer) | `activity_material.xml` | Custom approved | Developer-only Material component gallery | Custom approved | Redesign plan §7.3: leave untouched. |
+| Reviewer instructions screen | `instructions_for_degraded_teapots_with_zero_iq_designed_for_google_reviewers.xml` | Custom approved | Store-reviewer-only screen | Custom approved | Leave untouched; removal is a pending owner decision (see orphan list below). |
+| Chats List tab | `fragment_chats_list.xml` | N/A | Chat rows (`view_chat_name*.xml`), search, FABs | Unconverted | Row design is reused by the future drawer — convert together with the drawer work. |
+| Playground tab | `fragment_playground.xml` | N/A | Fields | Unconverted | — |
+| Settings tile | `fragment_tile.xml` | N/A | The tile component used by tile grids | Unconverted | The redesign plan replaces tiles with rows/cards in its Phase 5; convert or retire with that decision. |
+| Add Chat dialog | `fragment_add_chat.xml` | N/A | Fields, action buttons | Unconverted | — |
+| Message Edit dialog | `fragment_message_edit.xml` | N/A | Field, action buttons | Unconverted | — |
+| Report Content sheet | `fragment_report_content.xml` | N/A | Five stock-styled buttons, field | Unconverted | — |
+| Edit API Endpoint sheet | `fragment_edit_api_endpoint.xml` | N/A | Large floating-hint field set | Unconverted | Possibly superseded by the API Endpoint Editor screen — confirm which is live before converting. |
+| Edit Lorebook / Edit Lorebook Entry sheets | `fragment_edit_lorebook.xml`, `fragment_edit_lorebook_entry.xml` | N/A | Fields | Unconverted | — |
+| Edit Bias Config sheet | `fragment_edit_bias_config.xml` | N/A | Fields | Unconverted | — |
+| Picker sheets (Language, Voice, Resolution, Image Model, Activation Prompt, System) | `fragment_select_language.xml`, `fragment_select_voice.xml`, `fragment_resolution.xml`, `fragment_image_model.xml`, `fragment_activation_prompt.xml`, `fragment_system.xml` | N/A | Pick tiles / option lists | Unconverted | The owner-approved "checked tile" pick pattern exists for some pickers; audit each against it before converting. |
+| Card dialogs | `dialog_add_to_card.xml`, `dialog_delete_companion.xml` | N/A | Dialog bodies | Unconverted | — |
+| List item layouts (`view_*_item*.xml` and similar) | various | N/A | Rows rendered inside list screens | Unconverted | 26 of 34 item layouts contain no shared styles; convert each together with its parent list screen (gaps noted per screen above). |
 
-All screens not listed above are **Unaudited** in this map until their current layouts and relevant code are checked.
+All screens or layouts not listed above are **Unaudited** in this map until their current layouts and relevant code are checked. Note on buttons: `MaterialButton`s without an explicit style still inherit the shared semi-square `App.Button` default from the theme; "Unconverted" rows above mean no explicit shared-style adoption, not that buttons render with the old pill shape.
+
+## Orphaned and unreachable candidates — pending owner decision
+
+Nothing in this section may be deleted without explicit owner approval. Each entry is verified unreferenced (no code inflates the layout) or unreachable (no launch path) as of this audit.
+
+| Item | What it is | Evidence |
+|---|---|---|
+| `activity_about.xml` | Old About screen layout, superseded by `activity_about_new.xml` | No code references it |
+| `activity_data_sources.xml`, `activity_data_sources_selector.xml` | Upstream "data sources" screens, never wired in | No code references them |
+| `DebugActivity` + `activity_debug.xml` | Hollow debug activity that closes itself immediately on open; still registered in the manifest | Activity body is `finish()` only; layout unreferenced |
+| `activity_remove_ads.xml` + `tileRemoveAds` strings | Upstream paid "Remove Ads" purchase screen; this app has no ads | Layout unreferenced |
+| `activity_thanks.xml` | Upstream thanks/donation screen | No code references it |
+| `fragment_change_api.xml`, `fragment_set_hostname.xml` | Upstream API host/key dialogs, superseded by the API endpoints system | No code references them |
+| `fragment_network_error.xml` | Old network-error dialog layout | No code references it |
+| `dialog_webview.xml` | Web-view dialog layout | No code references it |
+| `Theme.PWA` + `pwa_*` colors | Theme for a removed web-app activity | No activity uses the theme |
+| `TipsActivity` + `activity_tips.xml`, `TipsFragment` + `fragment_tips.xml` | Tips screen and tab | No launch path anywhere in the app |
+| `ToolsFragment` + `fragment_tools.xml` | Tools tab fragment; the bottom bar has only Chats and Playground tabs | Instantiated in `MainActivity` but appears never shown — verify before removal |
+| Reviewer instructions screen (the "Teapots" activity) | Store-reviewer-only instruction screen, exported in the manifest with no in-app launch path | Whether it is still needed is an owner decision |
 
 ## Current legacy direction
 
