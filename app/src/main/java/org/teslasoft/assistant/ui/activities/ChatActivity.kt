@@ -5793,6 +5793,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     /** ChatCompletionRequest is not a data class, so the §7 follow-up and
      *  the §8 without-tools retry rebuild it field-by-field, carrying the
      *  original sampling values and deliberately no tools. */
+    @OptIn(com.aallam.openai.api.BetaOpenAI::class) // reading seed back is beta-gated
     private fun rebuildRequestWithoutTools(
         original: ChatCompletionRequest,
         requestMessages: List<ChatMessage>
