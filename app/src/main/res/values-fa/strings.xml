@@ -2,8 +2,6 @@
     <string name="activation_prompt_set_message">برای تنظیم پیام فعال‌سازی ضربه بزنید</string>
     <string name="menu_chat">گفتگو</string>
     <string name="menu_prompts">پیام‌ها</string>
-    <string name="menu_tips">نکات</string>
-    <string name="about_developer">توسعه‌دهنده: AndraxDev</string>
     <string name="about_version">نگارش:</string>
     <string name="about_view_other_projects">مشاهده پروژه‌های دیگر</string>
     <string name="about_send_feedback">بازخورد</string>
@@ -83,9 +81,6 @@
     <string name="btn_save">ذخیره</string>
     <string name="btn_new_chat">گفتگوی جدید</string>
     <string name="btn_import_chat">وارد کردن گفتگو</string>
-    <string name="title_network_error">خطای شبکه</string>
-    <string name="network_error_desc">مشکلی در اتصال شما وجود دارد. ممکن است سرورهای ما در دسترس نباشند یا اتصال اینترنت نداشته باشید.</string>
-    <string name="btn_try_again">دوباره تلاش کنید</string>
     <string name="title_post_a_prompt">ارسال پیام</string>
     <string name="hint_name">نام شما</string>
     <string name="hint_prompt_title">عنوان پیام</string>
@@ -112,17 +107,6 @@
     <string name="title_prompts_store">کتابخانه پیام‌ها</string>
     <string name="hint_search">جستجو</string>
     <string name="title_select_language">انتخاب زبان</string>
-    <string name="title_tips">نکات</string>
-    <string name="tip1">پیام خود را با «ایجاد تصویر»، «ایجاد عکس» یا «/imagine» شروع کنید تا تصاویر تولید شوند.</string>
-    <string name="tip2">نام گفتگو را طولانی فشار دهید تا ویرایش یا حذف کنید.</string>
-    <string name="tip3">تکنیک‌های جستجو:\n\nاز پیشوند «author:» برای جستجو بر اساس نویسنده استفاده کنید.\nاز پیشوند «title:» برای جستجو بر اساس عنوان استفاده کنید.\nاز پیشوند «id:» برای جستجو بر اساس شناسه استفاده کنید.\nاز پیشوند «cat:» برای جستجو بر اساس دسته‌بندی استفاده کنید.\nاز پیشوند «type:» برای جستجو بر اساس نوع استفاده کنید.</string>
-    <string name="tip4">ChatGPT خسته‌کننده است؟ مدل‌های دیگر را امتحان کنید. گاهی نتایج بسیار جالبی به دست می‌آید.</string>
-    <string name="tip5">فقط مدل‌های GPT می‌توانند پیام‌های قبلی را به خاطر بیاورند. سایر مدل‌ها برای این کار بهینه نشده‌اند.</string>
-    <string name="tip6">گاهی برخی ویژگی‌های عجیب یا غیرمفید ممکن است ظاهر شوند. این به این دلیل است که این برنامه در حالت آزمایشی است.</string>
-    <string name="tip7">متن را در هر برنامه‌ای انتخاب کنید و روی «SpeakGPT» ضربه بزنید تا گفتگو با دستیار شروع شود. این ویژگی حتی اگر ویژگی برنامه دستیار پیش‌فرض خاموش باشد، در دسترس است. همچنین می‌توانید متن را با استفاده از گزینه هم‌رسانی پیش‌فرض با SpeakGPT به اشتراک بگذارید اگر گزینه SpeakGPT در دسترس نباشد.</string>
-    <string name="tip8">می‌توانید گفتگوی خود با دستیار را ذخیره کنید. هنگامی که دکمه ذخیره را کلیک کنید، همه پیام‌های آینده نیز ذخیره خواهند شد.</string>
-    <string name="tip9">SpeakGPT خیلی کند است؟ سعی کنید حداکثر توکن‌ها در هر خروجی را کاهش دهید.</string>
-    <string name="tip10">ورودی صوتی توسط گوگل ممکن است در همه دستگاه‌ها (به‌ویژه دستگاه‌های بدون خدمات گوگل) پشتیبانی نشود. در این صورت می‌توانید به مدل Whisper تغییر دهید. لطفاً توجه کنید که Whisper یک API پولی است و به اتصال اینترنت نیاز دارد.</string>
     <string name="btn_copy">رونویسی</string>
     <string name="user">کاربر</string>
     <string name="title_edit_chat">ویرایش گفتگو</string>
@@ -136,7 +120,6 @@
     <string name="title_save_chat">ذخیره گفتگو</string>
     <string name="cat_all">همه</string>
     <string name="incorrect_category">دسته‌بندی نادرست</string>
-    <string name="setting_custom_host">نشانی API سفارشی</string>
     <string name="setting_custom_host_desc">اگر می‌خواهید از مدل‌های زبان دیگر استفاده کنید یا OpenAI در کشور شما ممنوع است، تنظیم کنید</string>
     <string name="setting_assistant_voice">صدای دستیار</string>
     <string name="setting_assistant_voice_desc">سفارشی‌سازی صدای دستیار</string>
@@ -163,12 +146,10 @@
     <string name="prompt_report_success">اعتراض ارسال شد. از بازخورد شما سپاسگزاریم!</string>
     <string name="prompt_report_failed">ارسال گزارش ناموفق بود</string>
     <string name="option_summarize">خلاصه‌سازی</string>
-    <string name="tip_11">دکمه توقف ضبط را طولانی فشار دهید تا تشخیص گفتار لغو شود و از تولید پاسخ جلوگیری شود.</string>
     <string name="global_settings_tip">شما در حال ویرایش تنظیمات عمومی هستید. این یک الگو برای گفتگوهای جدید و تنظیمات دستیار است. این تنظیمات روی گفتگوهای موجود اعمال نمی‌شوند. برای ویرایش تنظیمات گفتگوی موجود، گفتگو را باز کنید و روی نماد تنظیمات کلیک کنید.</string>
     <string name="global_settings_title">تنظیمات عمومی</string>
     <string name="chat_settings_title">تنظیمات گفتگو</string>
     <string name="title_control_center">مرکز کنترل</string>
-    <string name="tip_12">روی کاشی تنظیمات طولانی فشار دهید تا توضیحات عملکرد نمایش داده شود. فقط در رابط کاربری تنظیمات جدید کار می‌کند. می‌توانید با فشار دادن نماد «آزمایشگاه» در تنظیمات معمولی به رابط کاربری تنظیمات جدید (مرکز کنترل) دسترسی پیدا کنید.</string>
     <string name="menu_explore">کاوش</string>
     <string name="chat_role_user">کاربر</string>
     <string name="control_center_general">عمومی</string>
@@ -179,7 +160,6 @@
     <string name="control_center_debug">اشکال‌زدایی</string>
     <string name="control_center_text_generation">تولید متن</string>
     <string name="control_center_audio_and_voice_recognition">صدا و تشخیص گفتار</string>
-    <string name="btn_remove_ads">حذف تبلیغات</string>
     <string name="go_back">بازگشت</string>
     <string name="label_api_endpoint">نشانی API</string>
     <string name="title_api_endpoints">نشانی‌های API</string>
@@ -226,10 +206,6 @@
     <string name="label_microphone_permission_requested">درخواست مجوز میکروفون</string>
     <string name="label_camera_permission_requested">درخواست مجوز دوربین</string>
     <string name="label_generated_image">تصویر تولیدشده</string>
-    <string name="title_remove_ads">حذف تبلیغات</string>
-    <string name="title_thank_you">سپاس از شما!</string>
-    <string name="donation_thanks_message">کمک مالی شما تأیید شد. کمک‌های مالی و تبلیغات به ما کمک می‌کند تا این برنامه را به‌روز نگه داریم، تجربه‌ای باکیفیت ارائه دهیم و ویژگی‌های جدید منتشر کنیم. حالا می‌توانید از تجربه بدون تبلیغات لذت ببرید! این مجوز مادام‌العمر است. اگر می‌خواهید مجوز را روی دستگاه دیگری فعال کنید، لطفاً با ما تماس بگیرید.</string>
-    <string name="donation_important_note">یادداشت مهم:\nاگر همچنان تبلیغات می‌بینید، ممکن است نیاز به باز راه‌اندازی برنامه داشته باشید. لطفاً توجه کنید که اگر از شناسه نصب برای فعال‌سازی مجوز استفاده کرده‌اید، با نصب مجدد برنامه ممکن است تبلیغات ظاهر شوند. در این صورت، لطفاً برای مجوز جدید با ما تماس بگیرید یا از شناسه اندروید برای فعال‌سازی مجوز استفاده کنید. شناسه اندروید برای هر برنامه منحصربه‌فرد است و تا زمانی که بازنشانی کارخانه انجام ندهید، ثابت می‌ماند. شناسه نصب موقتی است و پس از نصب مجدد برنامه یا بازنشانی/لغو مجوز به‌صورت دستی تغییر می‌کند.</string>
     <string name="btn_close">بستن</string>
     <string name="chat_generate_name_automatically">تولید خودکار نام</string>
     <string name="btn_favorite_models">مدل‌های برگزیده</string>
@@ -250,7 +226,6 @@
     <string name="hint_logit_bias_config_name">نام پیکربندی</string>
     <string name="chat_edit_message">ویرایش پیام</string>
     <string name="chat_enter_message_here" tools:ignore="TypographyEllipsis">اینجا پیام را وارد کنید...</string>
-    <string name="no_internet_show_error_details">نمایش جزئیات خطا</string>
     <string name="label_quick_settings">تنظیمات سریع</string>
     <string name="cost_explanation">این داده‌ها فقط برای اهداف اطلاعاتی ارائه شده‌اند. هزینه بر اساس مدل شما و پیام‌های متنی محاسبه می‌شود. هزینه‌های اضافی ممکن است برای پردازش/تولید تصاویر اعمال شود. این کارت را اضافه کردیم تا به کاربران کمک کنیم استفاده خود را درک کنند و نحوه محاسبه هزینه را بفهمند.</string>
     <string name="btn_learn_more">بیشتر بدانید</string>
@@ -424,9 +399,6 @@
     <string name="msg_cost_not_enough_data"><![CDATA[هزینه: <SpeakGPT داده کافی برای محاسبه هزینه این مدل ندارد. مستندات را بررسی کنید و هزینه را بر اساس استفاده بالا به‌صورت دستی محاسبه کنید.>]]></string>
     <string name="cost_loading" tools:ignore="TypographyEllipsis">هزینه: در حال بارگذاری...</string>
     <string formatted="false" name="cost_counter_usage">استفاده (توکن‌ها): %s ورودی / %s خروجی</string>
-    <string name="teslasoft_id_version">نگارش Teslasoft ID:</string>
-    <string name="buy_me_a_coffee">برایم قهوه بخر</string>
-    <string name="view_source_code">مشاهده کد منبع</string>
     <string name="cat_all_new">همه دسته‌بندی‌ها</string>
     <string name="search_chats">جستجوی گفتگوها</string>
     <string name="waffle_play_01">نماد جستجوی گفتگوها</string>

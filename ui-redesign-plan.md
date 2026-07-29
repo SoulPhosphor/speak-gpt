@@ -743,10 +743,13 @@ errors here are silent or crash at the worst moment (mid-conversation).
 6. **Markwon renders messages.** Restyle bubbles around the `message`
    TextView; don't replace the markdown pipeline or set conflicting
    `textAppearance` mid-stream.
-7. **Strings only in `res/values/strings.xml`**; never edit other locales
-   unless asked. Removing a string requires removing usages — but orphaned
-   translations in locale files are harmless; missing *default* strings
-   break the build.
+7. **Strings only in `res/values/strings.xml`**; never edit or add locale
+   translations unless asked. Removing a string requires removing usages —
+   and (verified against CI, July 2026) also requires deleting that string's
+   entries from every locale file in the same change: the build's release
+   lint treats a translation without a default-locale string as a **fatal
+   error** (`ExtraTranslation`), so orphaned translations are *not*
+   harmless. Missing *default* strings break the build too.
 8. **Copyright header on every new file**; comments explain constraints/why.
 9. **Do-not-touch list** (CLAUDE.md): Ktor 2.3.12, TLS/OkHttp defaults,
    native JNI loading gates, checked-in debug keystore, `ChatPreferences`
