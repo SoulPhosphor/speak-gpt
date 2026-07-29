@@ -319,6 +319,56 @@
                 app:srcCompat="@drawable/ic_bug"
                 tools:visibility="visible" />
 
+            <!-- Summary view (decision 11): visible only while the
+                 summarizer is on for this chat. -->
+            <ImageButton
+                android:id="@+id/btn_summary"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_marginEnd="8dp"
+                android:background="@drawable/btn_accent_tonal_v4"
+                android:contentDescription="@string/summarizer_icon_summary_desc"
+                android:tooltipText="@string/summarizer_icon_summary_desc"
+                android:visibility="gone"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toStartOf="@+id/btn_debug_log"
+                app:layout_constraintTop_toTopOf="parent"
+                app:srcCompat="@drawable/ic_subject"
+                tools:visibility="visible" />
+
+            <!-- Summarizer Errors (decision 16): first in the icon row,
+                 visible while this chat's error log has entries. The badge
+                 shows the stored-error count (1–5). -->
+            <ImageButton
+                android:id="@+id/btn_summarizer_errors"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_marginEnd="8dp"
+                android:background="@drawable/btn_accent_tonal_v4"
+                android:contentDescription="@string/summarizer_icon_errors_desc"
+                android:tooltipText="@string/summarizer_icon_errors_desc"
+                android:visibility="gone"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toStartOf="@+id/btn_summary"
+                app:layout_constraintTop_toTopOf="parent"
+                app:srcCompat="@drawable/ic_data_alert"
+                tools:visibility="visible" />
+
+            <TextView
+                android:id="@+id/summarizer_error_badge"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:background="@drawable/bg_summarizer_badge"
+                android:gravity="center"
+                android:importantForAccessibility="no"
+                android:textColor="?attr/colorOnPrimary"
+                android:textSize="10sp"
+                android:visibility="gone"
+                app:layout_constraintEnd_toEndOf="@+id/btn_summarizer_errors"
+                app:layout_constraintTop_toTopOf="@+id/btn_summarizer_errors"
+                tools:text="3"
+                tools:visibility="visible" />
+
             <ImageButton
                 android:id="@+id/btn_back"
                 android:layout_width="48dp"
@@ -346,7 +396,7 @@
                 android:textSize="20sp"
                 android:textStyle="bold"
                 app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintEnd_toStartOf="@+id/btn_debug_log"
+                app:layout_constraintEnd_toStartOf="@+id/btn_summarizer_errors"
                 app:layout_constraintStart_toEndOf="@+id/btn_back"
                 app:layout_constraintTop_toTopOf="parent" />
         </androidx.constraintlayout.widget.ConstraintLayout>

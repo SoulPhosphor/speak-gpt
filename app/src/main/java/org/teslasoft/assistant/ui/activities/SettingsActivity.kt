@@ -41,7 +41,6 @@ import androidx.interpolator.view.animation.LinearOutSlowInInterpolator
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.elevation.SurfaceColors
 import org.teslasoft.assistant.R
-import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.ui.fragments.TileFragment
@@ -63,6 +62,7 @@ class SettingsActivity : FragmentActivity() {
     private var rowRoleplay: LinearLayout? = null
     private var rowProfileImageProperties: LinearLayout? = null
     private var rowVoiceSettings: LinearLayout? = null
+    private var rowSummarizerSettings: LinearLayout? = null
     private var tileImageModel: TileFragment? = null
     private var tileImageResolution: TileFragment? = null
     private var tileChatLayout: TileFragment? = null
@@ -70,7 +70,6 @@ class SettingsActivity : FragmentActivity() {
     private var tileSlashCommands: TileFragment? = null
     private var tileDesktopMode: TileFragment? = null
     private var rowAboutApp: LinearLayout? = null
-    private var rowClearChat: LinearLayout? = null
     private var tileDocumentation: TileFragment? = null
     private var tileAmoledMode: TileFragment? = null
     private var tileCustomize: TileFragment? = null
@@ -188,7 +187,6 @@ class SettingsActivity : FragmentActivity() {
         transition.excludeTarget(R.id.tile_slash_commands, true)
         transition.excludeTarget(R.id.tile_desktop_mode, true)
         transition.excludeTarget(R.id.tile_about_app, true)
-        transition.excludeTarget(R.id.tile_clear_chat, true)
         transition.excludeTarget(R.id.tile_documentation, true)
         transition.excludeTarget(R.id.tile_amoled_mode, true)
         transition.excludeTarget(R.id.tile_customize, true)
@@ -239,7 +237,6 @@ class SettingsActivity : FragmentActivity() {
         transition2.excludeTarget(R.id.tile_slash_commands, true)
         transition2.excludeTarget(R.id.tile_desktop_mode, true)
         transition2.excludeTarget(R.id.tile_about_app, true)
-        transition2.excludeTarget(R.id.tile_clear_chat, true)
         transition2.excludeTarget(R.id.tile_documentation, true)
         transition2.excludeTarget(R.id.tile_amoled_mode, true)
         transition2.excludeTarget(R.id.tile_customize, true)
@@ -280,14 +277,6 @@ class SettingsActivity : FragmentActivity() {
 
         if (extras != null) {
             chatId = extras.getString("chatId", "")
-
-            if (chatId == "") {
-                rowClearChat?.isEnabled = false
-                rowClearChat?.visibility = View.GONE
-            }
-        } else {
-            rowClearChat?.isEnabled = false
-            rowClearChat?.visibility = View.GONE
         }
 
         preferences = Preferences.getPreferences(this, chatId)
@@ -334,14 +323,6 @@ class SettingsActivity : FragmentActivity() {
 
                 initializeLogic()
                 adjustPaddings()
-
-                if (chatId == "") {
-                    rowClearChat?.isEnabled = false
-                    rowClearChat?.visibility = View.GONE
-                } else {
-                    rowClearChat?.isEnabled = true
-                    rowClearChat?.visibility = View.VISIBLE
-                }
             }
         }.start()
     }
@@ -568,8 +549,8 @@ class SettingsActivity : FragmentActivity() {
         rowRoleplay = findViewById(R.id.tile_roleplay)
         rowProfileImageProperties = findViewById(R.id.tile_profile_image_properties)
         rowVoiceSettings = findViewById(R.id.tile_voice_settings)
+        rowSummarizerSettings = findViewById(R.id.tile_summarizer_settings)
         rowAboutApp = findViewById(R.id.tile_about_app)
-        rowClearChat = findViewById(R.id.tile_clear_chat)
         rowAlertDebugMenu = findViewById(R.id.tile_alert_debug_menu)
 
         rowCharacters?.setOnClickListener {
@@ -596,22 +577,12 @@ class SettingsActivity : FragmentActivity() {
             startActivity(Intent(this, VoiceSettingsActivity::class.java).putExtra("chatId", chatId))
         }
 
-        rowAboutApp?.setOnClickListener {
-            startActivity(Intent(this, AboutActivity::class.java).putExtra("chatId", chatId))
+        rowSummarizerSettings?.setOnClickListener {
+            startActivity(Intent(this, SummarizerSettingsActivity::class.java))
         }
 
-        rowClearChat?.setOnClickListener {
-            MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-                .setTitle(R.string.label_clear_chat)
-                .setMessage(R.string.msg_clear_chat)
-                .setPositiveButton(R.string.yes) { _, _ ->
-                    run {
-                        ChatPreferences.getChatPreferences().clearChat(this, chatId)
-                        Toast.makeText(this, getString(R.string.submsg_chat_cleared), Toast.LENGTH_SHORT).show()
-                    }
-                }
-                .setNegativeButton(R.string.no) { _, _ -> }
-                .show()
+        rowAboutApp?.setOnClickListener {
+            startActivity(Intent(this, AboutActivity::class.java).putExtra("chatId", chatId))
         }
 
         rowAlertDebugMenu?.setOnClickListener {

@@ -98,6 +98,17 @@ object PerChatSettingKeys {
         "pending_includes",
         "apply_model_rules",
 
+        // Conversation summarizer (conversation-summary-plan.md decision 9:
+        // the summary, bookmark, and error log are chat data — encrypted with
+        // the chat, moved by renames, deleted with the chat)
+        "use_summarizer",
+        "summarizer_window",
+        "summarizer_summary",
+        "summarizer_folded",
+        "summarizer_over_length",
+        "summarizer_episode",
+        "summarizer_errors",
+
         // Legacy (deprecated plaintext API key slot; secureApiKey migrates it out)
         "api_key"
     )

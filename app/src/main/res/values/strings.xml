@@ -63,7 +63,6 @@
     <string name="setting_silent_desc">Do not pronounce bot answers</string>
     <string name="setting_about_desc">Tap to see app and developer info</string>
     <string name="setting_about">About app</string>
-    <string name="setting_clear_chat">Clear chat history</string>
     <string name="title_terms">Terms</string>
     <string name="terms_desc1">SpeakGPT is an open-source client that allow you to use different LLMs including OpenAI ChatGPT, Facebook LLama. We (developer) are not affiliated with OpenAI or other API providers. All logos and materials are property of respective companies.</string>
     <string name="btn_next">Next</string>
@@ -355,7 +354,6 @@
     <string name="label_frequency_penalty">Frequency penalty</string>
     <string name="label_presence_penalty">Presence penalty</string>
     <string name="btn_exit">Exit</string>
-    <string name="btn_clear_chat">Clear chat</string>
     <string name="label_customize_assistant">Customize Assistant</string>
     <string name="hint_assistant_name">Assistant name</string>
     <string name="label_select_an_avatar">Select an avatar</string>
@@ -643,9 +641,6 @@
     <string name="tile_new_ui_desc">This feature allows you to enable new experimental UI. New UI is more compact and intuitive.</string>
     <string name="tile_about_app_title">About App</string>
     <string name="tile_about_app_desc">This feature allows you to open about SpeakGPT page.</string>
-    <string name="tile_clear_chat_title">Clear Chat</string>
-    <string name="tile_clear_chat_subtitle">Clear chat history.</string>
-    <string name="tile_clear_chat_desc">This feature allows you to clear chat history.</string>
     <string name="tile_documentation_title">Documentation</string>
     <string name="tile_documentation_subtitle">Open documentation</string>
     <string name="tile_documentation_desc">This feature allows you to open SpeakGPT documentation.</string>
@@ -682,9 +677,6 @@
     <string name="on">On</string>
     <string name="off">Off</string>
     <string name="tile_about_app_subtitle">About SpeakGPT.</string>
-    <string name="label_clear_chat">Clear chat</string>
-    <string name="msg_clear_chat">Are you sure? This action cannot be undone.</string>
-    <string name="submsg_chat_cleared">Chat cleared</string>
     <string name="cancel">Cancel</string>
     <string name="btn_reset">Reset</string>
     <string name="label_provided_by">Provided by:</string>
@@ -2526,4 +2518,91 @@
     <string name="image_capability_clear_confirm_title">Clear image capability history?</string>
     <string name="image_capability_clear_confirm_body">The recorded image support for every model at this endpoint will be forgotten. The app will need to learn each one again on the next image request.</string>
     <string name="image_capability_clear_confirm_button">Clear</string>
+
+    <!-- ==================================================================
+         Conversation summarizer (conversation-summary-plan.md §5 +
+         conversation-summary-errors.md). All wording owner-approved; the
+         error titles and messages are the exact normative texts from the
+         errors addendum and must not be reworded without owner approval.
+         ================================================================== -->
+    <string name="title_summarizer_settings">Summarizer Settings</string>
+    <string name="tile_summarizer_settings_subtitle">Settings related to the summarizer feature.</string>
+    <string name="summarizer_intro">The summarizer sends the specified number of messages to the model each turn. Anything beyond that amount is summarized using the AI model selected in these settings. At any time, the summarizer can be turned off in Quick settings, which will allow all messages to be sent to the AI again.</string>
+
+    <string name="summarizer_section_model">Summary Model</string>
+    <string name="summarizer_row_endpoint">Endpoint</string>
+    <string name="summarizer_row_endpoint_hint">The API profile used for summary calls.</string>
+    <string name="summarizer_row_model">Model</string>
+    <string name="summarizer_row_model_hint">The model that writes the summary. A cheaper model than the chat\'s own is fine here.</string>
+
+    <string name="summarizer_complete_messages">Complete Messages</string>
+    <string name="summarizer_complete_messages_hint">Last number of complete messages sent to the model before summarizing.</string>
+    <string name="summarizer_new_chats_toggle">Use Summarizer for New Chats</string>
+    <string name="summarizer_length">Summary Length</string>
+    <string name="summarizer_length_hint">Maximum amount of words the summary can become.</string>
+
+    <string name="summarizer_section_prompt">Summary Prompt</string>
+    <string name="summarizer_prompt_dropdown">Prompt</string>
+    <string name="summarizer_slot_default_name">Slot %1$d</string>
+    <string name="summarizer_rename_slot">Rename</string>
+    <string name="summarizer_rename_slot_title">Rename Slot</string>
+    <string name="summarizer_revert_prompt">Revert</string>
+    <string name="summarizer_revert_prompt_confirm">Revert to the shipped prompt?</string>
+    <string name="summarizer_empty_prompt_guard">Model summary prompts can\'t be empty. Last good prompt has been selected.</string>
+
+    <!-- Quick Settings (decision 3): toggle and number box, no hints. -->
+    <string name="summarizer_use_toggle">Use Summarizer</string>
+
+    <!-- Summary view (decision 11; wording owner-approved July 29 2026). -->
+    <string name="summarizer_summary_title">Summary</string>
+    <string name="summarizer_update_now">Update Now</string>
+    <string name="summarizer_icon_summary_desc">Summary</string>
+    <string name="summarizer_icon_errors_desc">Summarizer Errors</string>
+
+    <!-- Summarizer Errors dialog (decision 16 + errors addendum §1). -->
+    <string name="summarizer_errors_title">Summarizer Errors</string>
+    <string name="summarizer_errors_status_behind">The summary is behind because one or more updates failed. No messages were lost. Until it catches up, unsummarized messages are being sent to the AI in full.</string>
+    <string name="summarizer_errors_status_caught_up">The summarizer has caught up. No messages were lost. The errors below are kept for review until you delete them.</string>
+    <string name="summarizer_errors_status_off">The summarizer is off for this chat. No messages were lost. All messages are being sent to the AI in full. The errors below are kept for review until you delete them.</string>
+    <string name="summarizer_errors_copy">Copy</string>
+    <string name="summarizer_errors_delete">Delete</string>
+    <string name="summarizer_errors_repeated">Repeated %1$d times.</string>
+    <string name="summarizer_errors_profile_line">Profile: %1$s</string>
+    <string name="summarizer_errors_model_line">Model: %1$s</string>
+    <string name="summarizer_unknown_profile">(unknown)</string>
+    <string name="summarizer_unknown_model">(unknown)</string>
+
+    <!-- Failure categories — exact normative wording (errors addendum §2). -->
+    <string name="summarizer_err_model_missing_title">Summary Model Missing</string>
+    <string name="summarizer_err_model_missing">The selected Summary Model is no longer available. Choose another model in Summarizer Settings.</string>
+    <string name="summarizer_err_unreachable_title">AI Service Unreachable</string>
+    <string name="summarizer_err_unreachable">The summarizer couldn\'t reach the selected AI service. Check your connection and the selected endpoint, then try again.</string>
+    <string name="summarizer_err_connect_timeout_title">Connection Timed Out</string>
+    <string name="summarizer_err_connect_timeout">The summarizer couldn\'t connect before the endpoint\'s Connection Timeout expired. The app will try again automatically. Check your connection or increase Connection Timeout for the selected endpoint.</string>
+    <string name="summarizer_err_response_timeout_title">Response Timed Out</string>
+    <string name="summarizer_err_response_timeout">The summarizer connected, but the model didn\'t respond before the endpoint\'s Response Time expired. The app will try again automatically. You can also choose another Summary Model or increase Response Time for the selected endpoint.</string>
+    <string name="summarizer_err_access_rejected_title">Access Rejected</string>
+    <string name="summarizer_err_access_rejected">The selected AI service rejected access. Check the endpoint\'s API key, authentication mode, and model access.</string>
+    <string name="summarizer_err_model_unavailable_title">Model Unavailable</string>
+    <string name="summarizer_err_model_unavailable">The selected AI service couldn\'t use the Summary Model. Check the model name and access, or choose another model in Summarizer Settings.</string>
+    <string name="summarizer_err_rate_limit_title">Rate Limit Reached</string>
+    <string name="summarizer_err_rate_limit">The selected AI service temporarily limited summary requests. The app will try again automatically. If it continues, wait or choose another Summary Model.</string>
+    <string name="summarizer_err_quota_title">Quota Reached</string>
+    <string name="summarizer_err_quota">The selected AI account reached its quota or spending limit. Check the provider account\'s usage and billing, or choose another Summary Model.</string>
+    <string name="summarizer_err_too_large_title">Summary Request Too Large</string>
+    <string name="summarizer_err_too_large">The current summary or one or more messages are too large for the selected Summary Model to process. Shorten the summary, choose a model or endpoint with a larger input limit, or turn off the summarizer for this chat.</string>
+    <string name="summarizer_err_rejected_title">Summary Request Rejected</string>
+    <string name="summarizer_err_rejected">The selected AI service rejected the summary request because of its content rules. Choose another Summary Model or turn off the summarizer for this chat.</string>
+    <string name="summarizer_err_service_title">AI Service Error</string>
+    <string name="summarizer_err_service">The selected AI service returned an error while updating the summary. The app will try again automatically. If it continues, check the endpoint or choose another Summary Model.</string>
+    <string name="summarizer_err_unreadable_title">Summary Response Unreadable</string>
+    <string name="summarizer_err_unreadable">The Summary Model returned a response the app couldn\'t use. The previous summary was kept unchanged. Try another model or check whether the endpoint supports chat completions.</string>
+    <string name="summarizer_err_save_title">Summary Couldn\'t Be Saved</string>
+    <string name="summarizer_err_save">The model returned an updated summary, but the app couldn\'t save it on this device. The previous summary and bookmark were kept. Check available storage and try again.</string>
+    <string name="summarizer_err_unexpected_title">Unexpected Summarizer Error</string>
+    <string name="summarizer_err_unexpected">The summary update failed for an unknown reason. The previous summary and bookmark were kept. Copy this error when reporting the problem.</string>
+
+    <!-- Model-facing label for the injected summary (decision 14; approved
+         July 29 2026). Sent as its own system message, never shown in chat. -->
+    <string name="summarizer_injection_header">Summary of the earlier conversation so far:</string>
 </resources>

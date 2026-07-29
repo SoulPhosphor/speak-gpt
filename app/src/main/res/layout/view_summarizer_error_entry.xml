@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  One entry in the Summarizer Errors dialog (conversation-summary-errors.md
+  §1). Body text for stored error detail uses the same shared style as any
+  other explanatory paragraph following a heading.
+-->
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/summarizer_error_entry_text"
+    style="@style/Widget.App.Section.Hint"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:paddingTop="16dp"
+    android:textIsSelectable="true" />

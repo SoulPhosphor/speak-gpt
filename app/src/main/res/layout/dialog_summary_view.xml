@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Summary view (conversation-summary-plan.md decision 11): the chat's rolling
+  summary, editable in place, with the manual Update Now action. Opened from
+  the chat's "subject" top-bar icon; edits save automatically when the view
+  closes (owner approval, July 29 2026). The single action button reuses the
+  standard single-action dialog pattern.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical">
+
+    <com.google.android.material.textfield.TextInputEditText
+        android:id="@+id/field_summary_text"
+        style="@style/Widget.App.Field.Box"
+        android:layout_marginHorizontal="24dp"
+        android:layout_marginTop="8dp"
+        android:gravity="top"
+        android:inputType="textMultiLine|textCapSentences"
+        android:maxLines="14"
+        android:minLines="6"
+        android:overScrollMode="always"
+        android:scrollbars="vertical" />
+
+    <include layout="@layout/dialog_single_action" />
+</LinearLayout>

@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Summarizer Errors dialog (conversation-summary-plan.md decision 16 +
+  conversation-summary-errors.md §1): exactly one status paragraph, then the
+  chat's stored errors (newest first, at most five), then the standard
+  two-action row — Copy (primary) and Delete (destructive). The entries are
+  built by ChatActivity from the stored log.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical">
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:fadeScrollbars="false">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingHorizontal="24dp">
+
+            <TextView
+                android:id="@+id/summarizer_errors_status"
+                style="@style/Widget.App.Screen.Intro" />
+
+            <LinearLayout
+                android:id="@+id/summarizer_errors_container"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
+        </LinearLayout>
+    </ScrollView>
+
+    <include layout="@layout/dialog_two_actions" />
+</LinearLayout>

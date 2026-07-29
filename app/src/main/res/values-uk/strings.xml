@@ -55,7 +55,6 @@
     <string name="setting_silent_desc">Не вимовляти відповіді бота</string>
     <string name="setting_about_desc">Натисніть, щоб переглянути інформацію про додаток і розробника</string>
     <string name="setting_about">Про додаток</string>
-    <string name="setting_clear_chat">Очистити історію чату</string>
     <string name="title_terms">Умови</string>
     <string name="terms_desc1">Це приклад використання різних LLMs включаючи OpenAI ChatGPT, Facebook LLama. Ми (розробник) не афілійовані з OpenAI або іншими провайдерами API. Усі логотипи та матеріали належать відповідним компаніям.</string>
     <string name="btn_next">Далі</string>
@@ -242,7 +241,6 @@
     <string name="label_frequency_penalty">Штраф за частотність</string>
     <string name="label_presence_penalty">Штраф за присутність</string>
     <string name="btn_exit">Вихід</string>
-    <string name="btn_clear_chat">Очистити чат</string>
     <string name="label_customize_assistant">Налаштувати помічника</string>
     <string name="hint_assistant_name">Ім\'я помічника</string>
     <string name="label_select_an_avatar">Вибрати аватар</string>
@@ -351,9 +349,6 @@
     <string name="tile_new_ui_desc">Ця функція дозволяє включити новий експериментальний інтерфейс. Новий інтерфейс більш компактний та інтуїтивно зрозумілий.</string>
     <string name="tile_about_app_title">Про додаток</string>
     <string name="tile_about_app_desc">Ця функція дозволяє відкрити сторінку про додаток SpeakGPT.</string>
-    <string name="tile_clear_chat_title">Очистити чат</string>
-    <string name="tile_clear_chat_subtitle">Очистити історію чату</string>
-    <string name="tile_clear_chat_desc">Ця функція дозволяє очистити історію чату.</string>
     <string name="tile_documentation_title">Документація</string>
     <string name="tile_documentation_subtitle">Відкрити документацію</string>
     <string name="tile_documentation_desc">Ця функція дозволяє відкрити документацію SpeakGPT.</string>
@@ -371,9 +366,6 @@
     <string name="on">Увімкнено</string>
     <string name="off">Вимкнено</string>
     <string name="tile_about_app_subtitle">Про SpeakGPT</string>
-    <string name="label_clear_chat">Очистити чат</string>
-    <string name="msg_clear_chat">Ви впевнені? Цю дію не можна скасувати.</string>
-    <string name="submsg_chat_cleared">Чат очищено</string>
     <string name="cancel">Скасувати</string>
     <string name="btn_reset">Скинути</string>
     <string name="label_provided_by">Надано:</string>
