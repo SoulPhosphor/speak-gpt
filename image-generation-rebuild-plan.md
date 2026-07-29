@@ -5,7 +5,11 @@
 **Status:** Planning only. No application code has been changed.  
 **Repository:** `SoulPhosphor/speak-gpt`  
 **Baseline:** `main` at commit `16592e7d0d0798eaf85c2d83fb3e020aaad099bb`  
-**Prepared:** 2026-07-28
+**Prepared:** 2026-07-28  
+**Revised:** 2026-07-29 — settings placement moved to the existing Images row,
+tile and Slash commands removal, full Function Calling removal, screen layout
+order set by the owner. Code claims re-verified against `main` at
+`5c6fb13`.
 
 ## 1. Goal
 
@@ -174,25 +178,58 @@ all replacement image-generation settings.
 
 ## 5. User Interface
 
-Replace the current two small image tiles with one **Image Generation** settings
-screen or one full-width row that opens that screen.
+The settings screen already contains an **Images** row (subtitle "Image
+generation settings.") above the two small Image model and Resolution tiles.
+Today that row is decorative: it has no tap action wired to it. The rebuild
+wires it up instead of adding a new row.
 
-### Main settings
+### Main settings screen changes
 
-1. **Image service**
-   - Selects the saved API endpoint used for image generation.
+1. The existing **Images** row opens the new **Image Generation** settings
+   screen.
+2. The two small tiles beneath it — **Image model** and **Resolution** — are
+   removed, together with their fixed-list selection dialogs.
+3. The standalone **Slash commands** toggle tile is removed. Its only real
+   function is enabling `/imagine`; that control moves into the Image
+   Generation screen.
+4. The **Function calling** tile is removed entirely (section 15).
+
+### Image Generation screen
+
+Follow the interaction pattern of the Summarizer settings screen: a dedicated
+screen whose rows save as they are changed, with an endpoint row that opens
+the existing endpoint list picker and a model row that opens the shared
+searchable model picker fed by the chosen endpoint.
+
+Rows, top to bottom:
+
+1. **Let the AI create images** (toggle, at the top)
+   - Makes `create_image` available to the current conversation model.
+   - This setting is independent from `/imagine`.
+
+2. **Ask before creating** (toggle)
+   - Visible only while **Let the AI create images** is enabled.
+   - Enabled by default.
+   - Protects against unexpected image-generation charges from an
+     over-enthusiastic model.
+
+3. **Image service**
+   - Selects the saved API endpoint used for image generation, using the
+     existing endpoint picker.
    - Subtitle shows the endpoint's friendly label.
    - It may differ from the current conversation endpoint.
 
-2. **Image model**
-   - Opens a searchable model picker for the selected image service.
+4. **Image model**
+   - Opens the shared searchable model picker for the selected image service
+     (the same picker family the chat and the Summarizer use).
    - If the provider exposes image-output capability information, show only
      image-generating models.
-   - Otherwise show the provider's available models and include **Enter model
-     ID**.
+   - Otherwise show the provider's available models.
+   - Manual model-ID entry must be available. The shared picker does not
+     currently offer manual entry, so this rebuild adds it.
    - No model name is rejected merely because it is unfamiliar to the app.
 
-3. **Default shape**
+5. **Default shape**
    - Automatic
    - Square
    - Portrait
@@ -202,14 +239,9 @@ screen or one full-width row that opens that screen.
    adapter. The app must not expose choices the selected provider explicitly
    says it cannot accept.
 
-4. **Let the AI create images**
-   - Makes `create_image` available to the current conversation model.
-   - This setting is independent from `/imagine`.
-
-5. **Ask before creating**
-   - Visible only while **Let the AI create images** is enabled.
-   - Enabled by default.
-   - Protects against unexpected image-generation charges.
+   This is deliberately the only image-output setting in the first release.
+   Quality tiers, exact pixel sizes, image counts, and output formats stay on
+   provider defaults (section 11) until their cost implications are designed.
 
 6. **Enable `/imagine`**
    - Preserves the existing direct command setting.
@@ -300,7 +332,10 @@ normal. There is only one model request.
 ### Image tool call
 
 1. Accumulate streamed tool-call fragments until the tool name and JSON
-   arguments are complete.
+   arguments are complete. Providers differ in how they stream tool calls, so
+   the assembler must also accept a complete non-streamed tool call, and must
+   treat a stream that ends mid-tool-call as a clean failure rather than a
+   hang.
 2. Validate the request.
 3. Ask for confirmation when required.
 4. Run the configured image generator.
@@ -394,8 +429,11 @@ Suggested normalized result:
      provider.
 
 2. **OpenRouter Image API**
-   - Uses OpenRouter's dedicated image generation and image-model discovery
-     endpoints.
+   - OpenRouter has no separate images endpoint: image generation goes
+     through its normal chat endpoint with an image-output request flag, and
+     image models are discovered by filtering the model catalog by output
+     capability. The adapter must speak that mechanism, not an OpenAI-style
+     generations path.
    - Maps normalized shape and output choices to the provider's supported
      request fields.
 
@@ -521,21 +559,30 @@ For each existing chat and the default settings:
 Only remove legacy fields after migration tests and at least one stable release
 path are established.
 
-## 15. Old Function Calling and Search Stub
+## 15. Old Function Calling Is Removed Entirely
 
-Image generation must be separated from the old generic Function Calling
-switch and the `searchAtInternet` browser-opening stub.
+**Owner ruling, 2026-07-29:** the old Function Calling feature is removed
+completely, not retained behind separate behavior. Everything the switch
+controls today is part of the broken image router, so nothing of value is
+lost:
 
-This work should:
+- the hidden `gpt-4o` routing request;
+- the hard-coded `generateImage` / `searchAtInternet` function map;
+- the `searchAtInternet` search stub itself;
+- the **Function calling** settings tile;
+- the stored function-calling preference and its new-chat copy;
+- the routing checks that divert function-calling chats away from the normal
+  typed-send path and exclude them from summarizer transmission.
 
-- Remove the hidden `gpt-4o` routing request.
-- Remove `generateImage` from the old hard-coded function map.
-- Move image creation to the new normal-request tool coordinator.
-- Avoid redesigning web search inside this image-generation project.
+Image creation moves to the new normal-request tool coordinator described in
+sections 6 and 7.
 
-The existing search stub may be retained temporarily behind separate behavior
-or retired by a later approved plan. It must not dictate the architecture of
-image creation.
+One behavior consequence must be covered by tests: chats that had Function
+Calling enabled were excluded from summarizer transmission. After removal
+they follow the normal summarizer rules like any other chat.
+
+A future web-search feature, if ever wanted, starts from its own approved
+plan. It must not dictate the architecture of image creation.
 
 ## 16. Ordered Implementation
 
@@ -548,8 +595,10 @@ phases.
 3. Build the provider-neutral image request/result models and generator
    coordinator.
 4. Add the OpenAI-compatible and OpenRouter adapters.
-5. Replace the fixed image-model dialog with endpoint selection, model
-   discovery, search, and manual entry.
+5. Build the Image Generation screen behind the existing Images row —
+   endpoint selection, model discovery, search, manual entry, and the toggles
+   in the approved order — and remove the Image model tile, the Resolution
+   tile, their fixed-list dialogs, and the Slash commands tile.
 6. Route `/imagine` through the new generator coordinator.
 7. Add the `create_image` tool to both normal chat request builders.
 8. Implement streamed tool-call assembly, validation, confirmation, execution,
@@ -559,8 +608,10 @@ phases.
 10. Add endpoint/model tool-capability learning and text-only fallback.
 11. Replace new generated-image markers with structured metadata while
     retaining legacy rendering.
-12. Remove the hard-coded `gpt-4o` router, fixed image-model checks, duplicate
-    image clients, and OpenAI-only error wording.
+12. Remove the whole Function Calling feature (section 15): the hard-coded
+    `gpt-4o` router, the function map and search stub, the settings tile, and
+    the stored preference — plus fixed image-model checks, duplicate image
+    clients, and OpenAI-only error wording.
 13. Run the complete acceptance matrix and repair any regressions before
     removing legacy settings.
 
@@ -598,6 +649,12 @@ The work is complete only when all of the following are true:
 19. User-facing image errors do not claim that OpenAI is required.
 20. No API key, auth header, or temporary signed image URL is persisted in chat
     history or logs.
+21. The main settings screen no longer shows the Image model tile, the
+    Resolution tile, the Slash commands tile, or the Function calling tile,
+    and the Images row opens the Image Generation screen.
+22. No function-calling preference, router, or search stub remains in the
+    code, and a chat that previously had Function Calling enabled behaves as
+    a normal chat, including normal summarizer transmission.
 
 ## 18. Required Test Matrix
 
