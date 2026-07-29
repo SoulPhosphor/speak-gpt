@@ -5,7 +5,32 @@
 **Status:** Planning only. No application code has been changed.  
 **Repository:** `SoulPhosphor/speak-gpt`  
 **Baseline:** `main` at commit `16592e7d0d0798eaf85c2d83fb3e020aaad099bb`  
-**Prepared:** 2026-07-28
+**Prepared:** 2026-07-28  
+**Revised:** 2026-07-29 — settings placement moved to the existing Images row,
+tile and Slash commands removal, full Function Calling removal, screen layout
+order set by the owner. Code claims re-verified against `main` at
+`5c6fb13`.  
+**Revised (same day):** app-wide settings scope, model picker works like the
+existing shared picker, spoken approval with companion name — all owner
+rulings, 2026-07-29.  
+**Revised (same day):** saved shape and quality defaults with per-request
+`--shape` / `--quality` overrides, precedence, Automatic semantics, and the
+unsupported-option notice — owner ruling, 2026-07-29.  
+**Revised (same day):** model-initiated images use the saved quality default
+(the tool controls shape only), Image Generation Errors log with opt-in
+recording toggle, chat-versus-log error split, and companions always have a
+name (a nameless-companion flow is a defect to fix) — owner rulings,
+2026-07-29.  
+**Revised (same day):** cause-appropriate failure actions (Edit Prompt /
+Change Settings / Retry / settings link), capability-change log entries with
+the strict tools-not-supported guard, and request diagnostics for failures
+and successes with owner-approved example wording — owner rulings,
+2026-07-29.  
+**Revised (same day):** successes split into their own opt-in Image
+Generation Log behind a Successful Image Tracking toggle, with Maximum Image
+Information Saved and Maximum Days Saved retention fields where zero means
+unlimited (error logs keep their existing retention) — owner rulings,
+2026-07-29.
 
 ## 1. Goal
 
@@ -43,11 +68,15 @@ Behavior:
 
 1. The app recognizes `/imagine` only when it appears at the beginning of the
    raw user message and is followed by a prompt.
-2. The app sends the user's text after `/imagine` directly to the configured
+2. Optional trailing options — for example
+   `/imagine a luminous forest temple --shape landscape --quality high` —
+   are parsed and removed before the artistic prompt is sent. They override
+   the saved defaults for that request only (section 11).
+3. The app sends the remaining prompt text directly to the configured
    image generator.
-3. The conversation model is not called to rewrite or approve the prompt.
-4. This path does not require the conversation model to support tools.
-5. Because the command itself is an explicit request, it does not require an
+4. The conversation model is not called to rewrite or approve the prompt.
+5. This path does not require the conversation model to support tools.
+6. Because the command itself is an explicit request, it does not require an
    additional confirmation.
 
 The existing command must remain enabled by default. Its setting stays
@@ -169,72 +198,148 @@ accidentally generate an image.
 ### 4.7 New-chat setting loss
 
 New-chat creation copies the resolution and several older DALL-E settings but
-does not appear to copy `imageModel`. Migration and new-chat tests must cover
-all replacement image-generation settings.
+does not appear to copy `imageModel`. The rebuild makes this whole problem
+moot by storing image-generation settings app-wide (section 14); migration
+tests must cover the seeding of that global configuration.
 
 ## 5. User Interface
 
-Replace the current two small image tiles with one **Image Generation** settings
-screen or one full-width row that opens that screen.
+The settings screen already contains an **Images** row (subtitle "Image
+generation settings.") above the two small Image model and Resolution tiles.
+Today that row is decorative: it has no tap action wired to it. The rebuild
+wires it up instead of adding a new row.
 
-### Main settings
+### Main settings screen changes
 
-1. **Image service**
-   - Selects the saved API endpoint used for image generation.
+1. The existing **Images** row opens the new **Image Generation** settings
+   screen.
+2. The two small tiles beneath it — **Image model** and **Resolution** — are
+   removed, together with their fixed-list selection dialogs.
+3. The standalone **Slash commands** toggle tile is removed. Its only real
+   function is enabling `/imagine`; that control moves into the Image
+   Generation screen.
+4. The **Function calling** tile is removed entirely (section 15).
+
+### Image Generation screen
+
+Follow the interaction pattern of the Summarizer settings screen: a dedicated
+screen whose rows save as they are changed, with an endpoint row that opens
+the existing endpoint list picker and a model row that opens the shared
+searchable model picker fed by the chosen endpoint.
+
+Every setting on this screen is stored app-wide (owner ruling, 2026-07-29),
+like the Summarizer settings: one image-generation configuration for the
+whole app. Switching generators means changing it here. This includes the
+`/imagine` toggle, which was previously stored per chat.
+
+Rows, top to bottom:
+
+1. **Let the AI Create Images** (toggle, at the top)
+   - Makes `create_image` available to the current conversation model.
+   - This setting is independent from `/imagine`.
+
+2. **Ask Before Creating** (toggle)
+   - Visible only while **Let the AI Create Images** is enabled.
+   - Enabled by default.
+   - Protects against unexpected image-generation charges from an
+     over-enthusiastic model.
+
+3. **Image Service**
+   - Selects the saved API endpoint used for image generation, using the
+     existing endpoint picker.
    - Subtitle shows the endpoint's friendly label.
    - It may differ from the current conversation endpoint.
 
-2. **Image model**
-   - Opens a searchable model picker for the selected image service.
+4. **Image Model**
+   - Works like the app's existing model picker (owner ruling, 2026-07-29):
+     the provider's model list is fetched, the search field narrows it, and
+     the user picks from the results. No separate manual model-ID entry
+     field.
    - If the provider exposes image-output capability information, show only
      image-generating models.
-   - Otherwise show the provider's available models and include **Enter model
-     ID**.
+   - Otherwise show the provider's available models.
+   - The chat picker's name exclusions must not be inherited: the chat
+     variant hides model names containing "dall" and other non-chat
+     families, which would hide exactly the models this picker exists to
+     show. The image variant must show image models.
    - No model name is rejected merely because it is unfamiliar to the app.
 
-3. **Default shape**
+5. **Default Shape**
    - Automatic
    - Square
    - Portrait
    - Landscape
 
-   Automatic is the default. Exact dimensions are chosen by the provider
-   adapter. The app must not expose choices the selected provider explicitly
-   says it cannot accept.
+6. **Default Quality**
+   - Automatic
+   - Low
+   - Medium
+   - High
 
-4. **Let the AI create images**
-   - Makes `create_image` available to the current conversation model.
-   - This setting is independent from `/imagine`.
+   Automatic is the default for both rows. "Automatic" never means the
+   conversation model chooses: it means the provider adapter sends the
+   provider's own "auto" value when the provider supports one, or omits the
+   parameter so the image provider applies its default (section 11). The app
+   must not expose choices the selected provider explicitly says it cannot
+   accept.
 
-5. **Ask before creating**
-   - Visible only while **Let the AI create images** is enabled.
-   - Enabled by default.
-   - Protects against unexpected image-generation charges.
+   These are saved defaults. A single request can override them with
+   `/imagine` options or tool-call fields (section 11) without changing the
+   saved values.
 
-6. **Enable `/imagine`**
+   Exact pixel sizes, image counts, backgrounds, compression, seeds, and
+   reference images stay on provider defaults until their provider mappings
+   and cost implications are designed.
+
+7. **Enable `/imagine`**
    - Preserves the existing direct command setting.
    - Enabled by default.
 
 ### Confirmation experience
 
 When the conversation model requests an image and confirmation is enabled,
-show an inline card:
+show an inline card. The card names the chat's companion (assistant name)
+rather than a generic "AI" (owner ruling, 2026-07-29):
 
-> **AI wants to create an image**
+> **<Companion Name> Wants to Create an Image**
 
 Actions:
 
 - **Create**
 - **Cancel**
-- **View prompt**
+- **View Prompt**
 
 The prompt remains collapsed initially so an intended surprise is not spoiled.
 `/imagine` bypasses this card because the user already issued a direct command.
 
+A companion cannot exist without a name (owner ruling, 2026-07-29), so the
+card and the announcement always have a real name to use. If any flow allows
+a companion to be saved without a name — or lets a chat reach image
+generation showing only the factory-default display name — that flow is
+defective and must be fixed as part of this work, not worked around with
+fallback wording.
+
+### Spoken approval in voice conversations (owner ruling, 2026-07-29)
+
+When the app is set to read responses aloud and a confirmation is pending:
+
+1. The app speaks the announcement:
+
+   > <Companion name> would like to create an image. Say "create it" to
+   > allow it or "cancel" to deny.
+
+2. The next recognized utterance answers the request:
+   - an utterance matching "create it" approves;
+   - an utterance matching "cancel" denies;
+   - anything else denies the image, and the words are handled as a normal
+     message so an over-enthusiastic model cannot derail the conversation.
+3. The on-screen card stays available the whole time; a tap always works,
+   whichever comes first.
+
 ### Progress experience
 
 After approval, place an inline assistant image bubble in a
-**Creating image…** state with a visible **Cancel** action.
+**Creating Image…** state with a visible **Cancel** action.
 
 Requirements:
 
@@ -258,6 +363,37 @@ The image should not automatically be sent back to the conversation model on
 every future turn. That would create avoidable vision-token cost. The stored
 prompt and description can preserve text-level conversational continuity.
 
+### Shared styles and theme compatibility are mandatory
+
+The app's current and future theming depends entirely on the shared style
+system. Every piece of UI this plan creates must respect it — no exceptions
+for speed.
+
+Before building any UI in this plan, read `ui-style-guide.md` (including the
+Label Capitalization rule) and `ui-style-adoption.md`, and inspect the
+target screens.
+
+Every new surface — the Image Generation screen, the confirmation card, the
+Creating Image and completed-image bubble states, the two log pages, the
+retention fields, and every dialog and notice — must be composed from the
+approved shared style families: rows, buttons, dialogs, headers, fields,
+section titles, typography, spacing, icons, and status text. Do not
+hardcode colors, typography, shapes, spacing, or geometry in Kotlin or XML.
+New UI must remain compatible with app-wide themes and future palette
+changes.
+
+If no adequate shared style exists for a needed element, stop before
+copying attributes and obtain approval for the shared solution, exactly as
+`ui-style-guide.md` requires. A shared-style change that would alter
+existing screens requires owner approval before implementation.
+
+AMOLED and palette/theme work is paused (owner ruling, July 26 2026): do not
+add or extend AMOLED-specific styling on any of this plan's new screens, and
+do not break the AMOLED code already in place.
+
+Record each new screen's status in `ui-style-adoption.md` in the same change
+that introduces it.
+
 ## 6. Tool Contract
 
 Expose one narrowly defined client-side tool:
@@ -276,9 +412,14 @@ Rules:
 
 - The generator creates exactly one image per tool call.
 - Allow at most one successful image-generation tool call per user turn.
+- A supplied `shape` acts as that request's override in the precedence of
+  section 11; an omitted field falls back to the saved default.
+- The tool has no quality field (owner ruling, 2026-07-29). A model-initiated
+  image always uses the user's saved quality default. The conversation model
+  may choose only the shape and must never raise quality or any other
+  cost-affecting setting.
 - The conversation model cannot choose the generator endpoint, generator
-  model, number of images, quality tier, or another cost-affecting provider
-  setting.
+  model, number of images, or another cost-affecting provider setting.
 - Those choices remain under user control.
 - Reject an empty prompt, invalid JSON, unknown fields that would change
   behavior, or an excessive prompt length with a clean tool error.
@@ -300,7 +441,10 @@ normal. There is only one model request.
 ### Image tool call
 
 1. Accumulate streamed tool-call fragments until the tool name and JSON
-   arguments are complete.
+   arguments are complete. Providers differ in how they stream tool calls, so
+   the assembler must also accept a complete non-streamed tool call, and must
+   treat a stream that ends mid-tool-call as a clean failure rather than a
+   hang.
 2. Validate the request.
 3. Ask for confirmation when required.
 4. Run the configured image generator.
@@ -346,12 +490,18 @@ If tools are explicitly unsupported:
 
    > This model cannot request image creation. You can still use `/imagine`.
 
-5. Provide a **Try again** or reset action in advanced settings so a provider
+5. Provide a **Try Again** or reset action in advanced settings so a provider
    upgrade is not treated as permanent.
 
 Do not classify a model as unsupported because it chose not to call the tool.
 A clean text response proves that the provider accepted the tool-bearing
 request, not that the model will use the tool every time.
+
+Only mark tools unsupported when the provider error clearly indicates that
+tools are not supported. Timeouts, content refusals, and unrelated errors
+must not change the learned capability (owner ruling, 2026-07-29). Every
+automatic capability change is recorded in the Image Generation Errors log
+when recording is on (section 13).
 
 ## 9. Image-Generator API Layer
 
@@ -372,6 +522,7 @@ Suggested normalized request:
 
 - prompt
 - shape
+- quality
 - endpoint ID
 - generator model ID
 - one image
@@ -394,8 +545,11 @@ Suggested normalized result:
      provider.
 
 2. **OpenRouter Image API**
-   - Uses OpenRouter's dedicated image generation and image-model discovery
-     endpoints.
+   - OpenRouter has no separate images endpoint: image generation goes
+     through its normal chat endpoint with an image-output request flag, and
+     image models are discovered by filtering the model catalog by output
+     capability. The adapter must speak that mechanism, not an OpenAI-style
+     generations path.
    - Maps normalized shape and output choices to the provider's supported
      request fields.
 
@@ -420,31 +574,87 @@ When the Image Model row is opened:
 1. Ask the selected generator endpoint for its image-model catalog when it
    provides one.
 2. Otherwise ask for its ordinary model catalog.
-3. Show a searchable list.
-4. Always provide manual model-ID entry.
+3. Show a searchable list, selected from exactly like the app's existing
+   model picker (owner ruling, 2026-07-29): search the fetched list and pick.
+   There is no separate manual model-ID entry field.
+4. Do not inherit the chat picker's name-based exclusions, which hide image
+   models.
 5. Preserve the user's current selection even when it is temporarily absent
    from the catalog.
 
 Provider capability metadata may improve the list, but it must never become a
 hard-coded name filter.
 
-## 11. Request Parameters and Cost Control
+## 11. Request Parameters, Overrides, and Cost Control
 
-Initial release behavior:
+Image generation uses saved defaults plus optional per-request overrides
+(owner ruling, 2026-07-29).
 
-- Generate one image.
-- Default shape is Automatic.
-- Default quality and output format come from the provider.
-- Omit optional API parameters when set to Automatic rather than sending values
-  an endpoint may reject.
-- Do not let the conversation model raise quality, request many images, or
-  select an expensive generator.
+### Saved defaults
+
+- **Default Shape:** Automatic / Square / Portrait / Landscape.
+- **Default Quality:** Automatic / Low / Medium / High.
+
+### Per-request overrides
+
+`/imagine` accepts optional options after the prompt:
+
+`/imagine a luminous forest temple --shape landscape --quality high`
+
+- The app parses and removes the options before the artistic prompt is sent
+  to the image generator.
+- Overrides apply to that request only and never change the saved settings.
+- A model-initiated `create_image` call may carry a `shape` field
+  (section 6); a supplied shape is that request's override. Quality always
+  comes from the user's saved default for model-initiated images.
+- A trailing option with an unknown name or an invalid value is a clear
+  user-facing error naming the supported options and values, and no image is
+  generated, so the command can be corrected (section 8 error standard).
+
+### Precedence
+
+1. Explicit per-request override.
+2. The user's saved default.
+3. The image provider's default.
+
+### The meaning of Automatic
+
+"Automatic" never means the conversation model chooses the setting. It means
+the provider adapter sends the provider's own "auto" value when that provider
+supports one, or omits the parameter entirely so the image provider applies
+its default. Omission is always preferred over sending a value an endpoint
+may reject.
+
+### Unsupported options are never silently ignored
+
+If the user explicitly requests an option value the selected generator cannot
+support, the app must say that option is unavailable, explain that the
+provider's default will be used instead, and let the user continue or cancel.
+When a model-initiated tool call carries an unsupported value, the app
+applies the fallback and reports it in the tool result instead of
+interrupting the user.
+
+### Shared pipeline
+
+Both `/imagine` and model-initiated generation convert their inputs into the
+same shared internal image request, and the provider-specific adapter
+translates that request into values the selected provider accepts. Neither
+path may bypass the adapter layer.
+
+### Cost control
+
+- Generate one image per request.
+- The conversation model cannot set quality at all (owner ruling,
+  2026-07-29): model-initiated images use the user's saved quality default,
+  and the model may select only the shape.
+- The conversation model can never choose the generator endpoint, generator
+  model, or image count.
 - Preserve the configured image-generator response timeout because image
   generation can take substantially longer than ordinary chat.
 
-Quality, exact dimensions, background, compression, seed, and reference images
-can be added later under Advanced settings after their provider mappings and
-cost implications are designed.
+Exact dimensions, background, compression, seed, and reference images can be
+added later under Advanced settings after their provider mappings and cost
+implications are designed.
 
 ## 12. Storage and Message Representation
 
@@ -490,9 +700,22 @@ Errors must identify which side failed:
 - The image download was too large or invalid.
 - The user cancelled.
 
-Normal users receive a concise message and a retry/configure action where
-appropriate. Detailed stack traces remain limited to the existing debugging or
-error-log surfaces.
+### Actions on failed image requests (owner ruling, 2026-07-29)
+
+A failed request shows an action appropriate to its cause:
+
+- The provider refused the prompt: offer **Edit Prompt**, opening the exact
+  prompt that was sent to the generator.
+- A requested shape or quality is unsupported: offer **Change Settings**.
+- Failures that may succeed without changing the request — timeouts,
+  temporary provider errors, malformed image responses: offer **Retry**.
+  Retry is used only for these.
+- Configuration and authentication failures: link to the image-generator
+  settings.
+
+Sanitized technical details stay in the log. Detailed stack traces remain
+limited to the existing debugging or error-log surfaces. All labels here and
+throughout this plan follow the Title Caps rule in `ui-style-guide.md`.
 
 If no generator is configured:
 
@@ -501,41 +724,155 @@ If no generator is configured:
   model must be selected, with a **Configure** action.
 - The message must not claim that OpenAI is required.
 
+### Image Generation Errors log (owner ruling, 2026-07-29)
+
+The Alerts, Errors & Logs page gains an **Image Generation Errors** log in
+its Logs section, plus a toggle on that same page that turns recording on.
+Recording is off until the user enables it.
+
+When recording is on, the log captures:
+
+**Silent fallbacks** — a model-initiated request whose option fell back to
+the provider default because the selected generator could not support it:
+the case the user cannot otherwise see.
+
+**Conversation-model tool mistakes** — invalid JSON arguments, an empty or
+over-long prompt, unknown fields, extra image attempts beyond the
+one-per-turn limit, and attempts to set options the tool does not offer.
+
+**Automatic tool-capability changes** — when the provider rejects tool use
+and the app marks an endpoint/model combination as unable to use tools,
+record:
+
+- the endpoint name;
+- the model identifier;
+- the previous and new capability state, such as Unknown → Unsupported;
+- that the change was learned automatically;
+- the provider's sanitized error code and message;
+- whether the request was retried without tools;
+- whether that retry succeeded or failed.
+
+**Failure diagnostics** — for each failed image-generation request:
+
+- total request duration, and — when downloading the finished image is a
+  separate step — generation time and download time separately;
+- the provider-issued request ID whenever available, sanitized and
+  length-limited, and kept distinct from the app's internal request ID;
+- provider, endpoint, model, timestamp, HTTP status, and final outcome.
+
+Example entry (owner-approved wording, Title Caps per `ui-style-guide.md`):
+
+> Image Request Failed  
+> Provider: OpenAI  
+> Model: example/image-model  
+> Elapsed Time: 31.7 seconds  
+> HTTP Status: 500  
+> Provider Request ID: req_xyz789  
+> Outcome: Provider Error
+
+Never log API keys, authorization headers, signed image URLs, complete
+request bodies, raw image data, complete prompts, or private conversation
+content. Error entries follow the page's existing retention limits; the
+zero-means-unlimited rule of the Image Generation Log below does not apply
+to the error logs.
+
+### Image Generation Log for successes (owner ruling, 2026-07-29)
+
+Successful requests are tracked separately, and never automatically. The
+Alerts, Errors & Logs page gains a **Successful Image Tracking** toggle,
+off until the user turns it on, and an **Image Generation Log** entry in
+its Logs section where the success entries go. This exists for users
+genuinely curious about their usage — including billing disputes and
+generations that completed but produced the wrong image.
+
+When tracking is on, each successful generation records the same
+diagnostics as a failure, with the success outcome:
+
+> Image Request Completed  
+> Provider: OpenRouter  
+> Model: example/image-model  
+> Generation Time: 18.4 seconds  
+> Download Time: 1.2 seconds  
+> HTTP Status: 200  
+> Provider Request ID: req_abc123  
+> Outcome: Image Saved
+
+The same never-log list applies.
+
+The Image Generation Log has its own two retention fields, mirroring the
+error log's fields and their limit dialogs:
+
+- **Maximum Image Information Saved**
+- **Maximum Days Saved**
+
+Both follow the same logic as the error-log retention fields, with one
+difference: zero means unlimited. Zero-means-unlimited applies only to
+these two fields, never to the error logs.
+
+### Chat message or log entry
+
+Errors the user must act on appear in chat as concise messages regardless of
+the recording toggle — a timeout, an account out of usage or credit, a
+missing generator configuration, a failed authentication, a provider that
+refused the prompt. Those are not debugging information.
+
+Model mistakes and silent fallbacks are not chat errors; they go to the
+Image Generation Errors log when recording is on, so prompts and behavior
+can be tweaked later.
+
 ## 14. Settings Migration
 
-Migrate without deleting the old values until the rebuilt feature is verified.
+The rebuilt settings are app-wide (owner ruling, 2026-07-29), so migration
+seeds one global configuration instead of rewriting every chat. Seed values
+come from the default settings profile, and old values are not deleted until
+the rebuilt feature is verified.
 
-For each existing chat and the default settings:
+1. Seed the global generator model from the default settings' `imageModel`.
+2. Seed the global shape from the default settings' `resolution`, mapped to
+   the closest shape.
+   Seed the global quality with Automatic — it is a new setting with no
+   legacy value.
+3. Seed the global generator endpoint from the default settings' API
+   endpoint so existing behavior does not abruptly change.
+4. Seed the global `/imagine` toggle from the default settings'
+   `imagine_command`.
+5. Seed **Let the AI Create Images** from the old Function Calling state only
+   where that preserves the user's current choice. Do not keep image creation
+   dependent on the old generic toggle.
+6. Per-chat copies of the legacy image settings stop being read. A chat that
+   had individually different image settings follows the app-wide
+   configuration from then on.
 
-1. Copy the current `imageModel` into the new generator-model field.
-2. Copy the current `resolution` into the closest new shape/default-size
-   setting.
-3. Use the chat's current API endpoint as the initial generator endpoint so
-   existing behavior does not abruptly change.
-4. Preserve `imagine_command`.
-5. Migrate the old Function Calling state only into the new
-   **Let the AI create images** setting where that preserves the user's current
-   choice. Do not keep image creation dependent on the old generic toggle.
-6. Ensure new chats copy every new default image-generation setting.
+New chats need no image-setting copying: the app-wide configuration applies
+to every chat automatically.
 
 Only remove legacy fields after migration tests and at least one stable release
 path are established.
 
-## 15. Old Function Calling and Search Stub
+## 15. Old Function Calling Is Removed Entirely
 
-Image generation must be separated from the old generic Function Calling
-switch and the `searchAtInternet` browser-opening stub.
+**Owner ruling, 2026-07-29:** the old Function Calling feature is removed
+completely, not retained behind separate behavior. Everything the switch
+controls today is part of the broken image router, so nothing of value is
+lost:
 
-This work should:
+- the hidden `gpt-4o` routing request;
+- the hard-coded `generateImage` / `searchAtInternet` function map;
+- the `searchAtInternet` search stub itself;
+- the **Function calling** settings tile;
+- the stored function-calling preference and its new-chat copy;
+- the routing checks that divert function-calling chats away from the normal
+  typed-send path and exclude them from summarizer transmission.
 
-- Remove the hidden `gpt-4o` routing request.
-- Remove `generateImage` from the old hard-coded function map.
-- Move image creation to the new normal-request tool coordinator.
-- Avoid redesigning web search inside this image-generation project.
+Image creation moves to the new normal-request tool coordinator described in
+sections 6 and 7.
 
-The existing search stub may be retained temporarily behind separate behavior
-or retired by a later approved plan. It must not dictate the architecture of
-image creation.
+One behavior consequence must be covered by tests: chats that had Function
+Calling enabled were excluded from summarizer transmission. After removal
+they follow the normal summarizer rules like any other chat.
+
+A future web-search feature, if ever wanted, starts from its own approved
+plan. It must not dictate the architecture of image creation.
 
 ## 16. Ordered Implementation
 
@@ -548,9 +885,12 @@ phases.
 3. Build the provider-neutral image request/result models and generator
    coordinator.
 4. Add the OpenAI-compatible and OpenRouter adapters.
-5. Replace the fixed image-model dialog with endpoint selection, model
-   discovery, search, and manual entry.
-6. Route `/imagine` through the new generator coordinator.
+5. Build the Image Generation screen behind the existing Images row —
+   endpoint selection, model discovery, search, manual entry, and the toggles
+   in the approved order — and remove the Image model tile, the Resolution
+   tile, their fixed-list dialogs, and the Slash commands tile.
+6. Route `/imagine` through the new generator coordinator, including parsing
+   and stripping the trailing `--shape` / `--quality` options.
 7. Add the `create_image` tool to both normal chat request builders.
 8. Implement streamed tool-call assembly, validation, confirmation, execution,
    tool-result return, and final response.
@@ -559,9 +899,16 @@ phases.
 10. Add endpoint/model tool-capability learning and text-only fallback.
 11. Replace new generated-image markers with structured metadata while
     retaining legacy rendering.
-12. Remove the hard-coded `gpt-4o` router, fixed image-model checks, duplicate
-    image clients, and OpenAI-only error wording.
-13. Run the complete acceptance matrix and repair any regressions before
+12. Add the spoken approval announcement and voice answer handling for voice
+    conversations.
+13. Add the Image Generation Errors log with its recording toggle, and the
+    Image Generation Log with its Successful Image Tracking toggle and its
+    two retention fields, to the Alerts, Errors & Logs page.
+14. Remove the whole Function Calling feature (section 15): the hard-coded
+    `gpt-4o` router, the function map and search stub, the settings tile, and
+    the stored preference — plus fixed image-model checks, duplicate image
+    clients, and OpenAI-only error wording.
+15. Run the complete acceptance matrix and repair any regressions before
     removing legacy settings.
 
 ## 17. Acceptance Criteria
@@ -576,7 +923,9 @@ The work is complete only when all of the following are true:
 5. The conversation model receives the full normal context before it writes the
    generator prompt.
 6. A conversation endpoint and generator endpoint can be different.
-7. A model not listed by the app can be manually selected as the generator.
+7. The generator model list comes from the selected provider, not from a
+   hard-coded app list; any model the provider lists can be selected, and
+   the chat picker's name exclusions do not hide image models.
 8. `/imagine` works even when the conversation model does not support tools.
 9. Mentioning `/imagine` in the middle of ordinary text does not generate an
    image.
@@ -591,13 +940,51 @@ The work is complete only when all of the following are true:
 14. Base64 and URL image responses both work.
 15. The stored file uses the real supported MIME type and extension.
 16. Existing generated-image messages still render.
-17. New chats inherit the configured generator endpoint, generator model,
-    shape, `/imagine` state, and AI-image setting.
+17. New and existing chats all use the app-wide generator endpoint, generator
+    model, shape, `/imagine` state, and AI-image setting.
 18. Existing image attachments, image-input capability checks, Reduce, and
     document behavior remain unchanged.
 19. User-facing image errors do not claim that OpenAI is required.
 20. No API key, auth header, or temporary signed image URL is persisted in chat
     history or logs.
+21. The main settings screen no longer shows the Image model tile, the
+    Resolution tile, the Slash commands tile, or the Function calling tile,
+    and the Images row opens the Image Generation screen.
+22. No function-calling preference, router, or search stub remains in the
+    code, and a chat that previously had Function Calling enabled behaves as
+    a normal chat, including normal summarizer transmission.
+23. In a voice conversation with spoken output active, a pending confirmation
+    is announced with the companion's name, "create it" approves, "cancel"
+    denies, unrelated speech denies and is handled as a normal message, and
+    the on-screen card works throughout.
+24. `/imagine` trailing options override shape and quality for that request
+    only; the saved settings are unchanged afterward, and an invalid or
+    unknown option produces a clear correctable error instead of an image.
+25. An explicitly requested option the selected generator cannot support
+    produces the unavailable-option notice with continue and cancel; nothing
+    is silently ignored.
+26. With recording on, model-initiated silent fallbacks, rejected tool
+    calls, automatic capability changes, and failure diagnostics appear in
+    the Image Generation Errors log; with recording off, nothing is
+    recorded; actionable errors appear in chat either way.
+27. A model-initiated image is generated at the user's saved quality default;
+    no tool input can change quality.
+28. Each failed request offers the action matching its cause: Edit Prompt for
+    a refused prompt, Change Settings for an unsupported option, Retry only
+    for failures that may succeed unchanged, and a settings link for
+    configuration and authentication failures.
+29. The learned tool capability changes only on a clear tools-not-supported
+    provider error — never on a timeout, content refusal, or unrelated
+    error.
+30. With Successful Image Tracking on, each completed generation appears in
+    the Image Generation Log; with it off, nothing is recorded. Its Maximum
+    Image Information Saved and Maximum Days Saved fields follow the
+    error-log retention logic except that zero means unlimited, and the
+    error logs' own retention behavior is unchanged.
+31. Every new UI surface uses the approved shared styles and layouts from
+    `ui-style-guide.md`, hardcodes no visual properties, remains
+    theme-compatible, adds no AMOLED-specific styling, and is recorded in
+    `ui-style-adoption.md` in the same change.
 
 ## 18. Required Test Matrix
 
@@ -615,7 +1002,12 @@ At minimum, verify:
 Also test alternate auth modes, provider errors, invalid JSON tool arguments,
 multiple attempted tool calls, cancellation at each stage, response timeout,
 oversized download, malformed Base64, missing files, chat deletion, backup and
-restore, and process recreation.
+restore, process recreation, each spoken-approval outcome ("create it",
+"cancel", and unrelated speech), and the `/imagine` options (valid overrides,
+invalid values, unknown options, and the unsupported-option notice), the
+Image Generation Errors log with recording on and off, and the Image
+Generation Log with tracking on and off including zero-as-unlimited
+retention.
 
 ## 19. Explicit Non-Goals
 
