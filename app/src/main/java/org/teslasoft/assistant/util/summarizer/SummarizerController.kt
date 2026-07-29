@@ -37,7 +37,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
-import org.teslasoft.assistant.preferences.Logger
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.util.GenerationErrorClassifier
@@ -305,18 +304,9 @@ class SummarizerController(
         prefs.setSummarizerErrors(SummarizerErrorLog.toJson(result.entries))
         prefs.setSummarizerEpisode(category.name)
 
-        // §5: the same failure also leaves a concise diagnostic entry in the
-        // app-wide Error Log — which chat is behind lives in the per-chat
-        // dialog; the shared technical context lives here. Never a key, a
-        // request body, or conversation/summary text.
-        try {
-            val title = appContext.getString(SummarizerErrorMessages.titleRes(category))
-            val sb = StringBuilder("Summarizer: ").append(title).append('\n')
-            sb.append("Profile: ").append(profile).append('\n')
-            sb.append("Model: ").append(model)
-            decorated?.let { sb.append('\n').append(it) }
-            Logger.log(appContext, "crash", "SummarizerError", "error", sb.toString())
-        } catch (_: Throwable) { /* diagnostics must never break the chat */ }
+        // Owner ruling (July 29 2026): summarizer failures are recorded ONLY
+        // in the per-chat Summarizer Errors log. No app-wide Error Log entry
+        // is written for this feature.
 
         if (result.newEpisode) {
             listener?.onSummarizerErrorEpisode()
