@@ -9,7 +9,11 @@
 **Revised:** 2026-07-29 — settings placement moved to the existing Images row,
 tile and Slash commands removal, full Function Calling removal, screen layout
 order set by the owner. Code claims re-verified against `main` at
-`5c6fb13`.
+`5c6fb13`.  
+**Revised (same day):** app-wide settings scope, model picker works like the
+existing shared picker, spoken approval with companion name — all owner
+rulings, 2026-07-29. Open items: quality/orientation settings, and the
+default-assistant-name wording noted in section 5.
 
 ## 1. Goal
 
@@ -173,8 +177,9 @@ accidentally generate an image.
 ### 4.7 New-chat setting loss
 
 New-chat creation copies the resolution and several older DALL-E settings but
-does not appear to copy `imageModel`. Migration and new-chat tests must cover
-all replacement image-generation settings.
+does not appear to copy `imageModel`. The rebuild makes this whole problem
+moot by storing image-generation settings app-wide (section 14); migration
+tests must cover the seeding of that global configuration.
 
 ## 5. User Interface
 
@@ -201,6 +206,11 @@ screen whose rows save as they are changed, with an endpoint row that opens
 the existing endpoint list picker and a model row that opens the shared
 searchable model picker fed by the chosen endpoint.
 
+Every setting on this screen is stored app-wide (owner ruling, 2026-07-29),
+like the Summarizer settings: one image-generation configuration for the
+whole app. Switching generators means changing it here. This includes the
+`/imagine` toggle, which was previously stored per chat.
+
 Rows, top to bottom:
 
 1. **Let the AI create images** (toggle, at the top)
@@ -220,13 +230,17 @@ Rows, top to bottom:
    - It may differ from the current conversation endpoint.
 
 4. **Image model**
-   - Opens the shared searchable model picker for the selected image service
-     (the same picker family the chat and the Summarizer use).
+   - Works like the app's existing model picker (owner ruling, 2026-07-29):
+     the provider's model list is fetched, the search field narrows it, and
+     the user picks from the results. No separate manual model-ID entry
+     field.
    - If the provider exposes image-output capability information, show only
      image-generating models.
    - Otherwise show the provider's available models.
-   - Manual model-ID entry must be available. The shared picker does not
-     currently offer manual entry, so this rebuild adds it.
+   - The chat picker's name exclusions must not be inherited: the chat
+     variant hides model names containing "dall" and other non-chat
+     families, which would hide exactly the models this picker exists to
+     show. The image variant must show image models.
    - No model name is rejected merely because it is unfamiliar to the app.
 
 5. **Default shape**
@@ -250,9 +264,10 @@ Rows, top to bottom:
 ### Confirmation experience
 
 When the conversation model requests an image and confirmation is enabled,
-show an inline card:
+show an inline card. The card names the chat's companion (assistant name)
+rather than a generic "AI" (owner ruling, 2026-07-29):
 
-> **AI wants to create an image**
+> **<Companion name> wants to create an image**
 
 Actions:
 
@@ -262,6 +277,27 @@ Actions:
 
 The prompt remains collapsed initially so an intended surprise is not spoiled.
 `/imagine` bypasses this card because the user already issued a direct command.
+
+Open wording item: a chat still carrying the untouched default assistant name
+would surface the upstream app's name, which never appears in wording. What
+the card and announcement say in that case awaits an owner ruling.
+
+### Spoken approval in voice conversations (owner ruling, 2026-07-29)
+
+When the app is set to read responses aloud and a confirmation is pending:
+
+1. The app speaks the announcement:
+
+   > <Companion name> would like to create an image. Say "create it" to
+   > allow it or "cancel" to deny.
+
+2. The next recognized utterance answers the request:
+   - an utterance matching "create it" approves;
+   - an utterance matching "cancel" denies;
+   - anything else denies the image, and the words are handled as a normal
+     message so an over-enthusiastic model cannot derail the conversation.
+3. The on-screen card stays available the whole time; a tap always works,
+   whichever comes first.
 
 ### Progress experience
 
@@ -458,8 +494,11 @@ When the Image Model row is opened:
 1. Ask the selected generator endpoint for its image-model catalog when it
    provides one.
 2. Otherwise ask for its ordinary model catalog.
-3. Show a searchable list.
-4. Always provide manual model-ID entry.
+3. Show a searchable list, selected from exactly like the app's existing
+   model picker (owner ruling, 2026-07-29): search the fetched list and pick.
+   There is no separate manual model-ID entry field.
+4. Do not inherit the chat picker's name-based exclusions, which hide image
+   models.
 5. Preserve the user's current selection even when it is temporarily absent
    from the catalog.
 
@@ -541,20 +580,27 @@ If no generator is configured:
 
 ## 14. Settings Migration
 
-Migrate without deleting the old values until the rebuilt feature is verified.
+The rebuilt settings are app-wide (owner ruling, 2026-07-29), so migration
+seeds one global configuration instead of rewriting every chat. Seed values
+come from the default settings profile, and old values are not deleted until
+the rebuilt feature is verified.
 
-For each existing chat and the default settings:
+1. Seed the global generator model from the default settings' `imageModel`.
+2. Seed the global shape from the default settings' `resolution`, mapped to
+   the closest shape.
+3. Seed the global generator endpoint from the default settings' API
+   endpoint so existing behavior does not abruptly change.
+4. Seed the global `/imagine` toggle from the default settings'
+   `imagine_command`.
+5. Seed **Let the AI create images** from the old Function Calling state only
+   where that preserves the user's current choice. Do not keep image creation
+   dependent on the old generic toggle.
+6. Per-chat copies of the legacy image settings stop being read. A chat that
+   had individually different image settings follows the app-wide
+   configuration from then on.
 
-1. Copy the current `imageModel` into the new generator-model field.
-2. Copy the current `resolution` into the closest new shape/default-size
-   setting.
-3. Use the chat's current API endpoint as the initial generator endpoint so
-   existing behavior does not abruptly change.
-4. Preserve `imagine_command`.
-5. Migrate the old Function Calling state only into the new
-   **Let the AI create images** setting where that preserves the user's current
-   choice. Do not keep image creation dependent on the old generic toggle.
-6. Ensure new chats copy every new default image-generation setting.
+New chats need no image-setting copying: the app-wide configuration applies
+to every chat automatically.
 
 Only remove legacy fields after migration tests and at least one stable release
 path are established.
@@ -608,11 +654,13 @@ phases.
 10. Add endpoint/model tool-capability learning and text-only fallback.
 11. Replace new generated-image markers with structured metadata while
     retaining legacy rendering.
-12. Remove the whole Function Calling feature (section 15): the hard-coded
+12. Add the spoken approval announcement and voice answer handling for voice
+    conversations.
+13. Remove the whole Function Calling feature (section 15): the hard-coded
     `gpt-4o` router, the function map and search stub, the settings tile, and
     the stored preference — plus fixed image-model checks, duplicate image
     clients, and OpenAI-only error wording.
-13. Run the complete acceptance matrix and repair any regressions before
+14. Run the complete acceptance matrix and repair any regressions before
     removing legacy settings.
 
 ## 17. Acceptance Criteria
@@ -627,7 +675,9 @@ The work is complete only when all of the following are true:
 5. The conversation model receives the full normal context before it writes the
    generator prompt.
 6. A conversation endpoint and generator endpoint can be different.
-7. A model not listed by the app can be manually selected as the generator.
+7. The generator model list comes from the selected provider, not from a
+   hard-coded app list; any model the provider lists can be selected, and
+   the chat picker's name exclusions do not hide image models.
 8. `/imagine` works even when the conversation model does not support tools.
 9. Mentioning `/imagine` in the middle of ordinary text does not generate an
    image.
@@ -642,8 +692,8 @@ The work is complete only when all of the following are true:
 14. Base64 and URL image responses both work.
 15. The stored file uses the real supported MIME type and extension.
 16. Existing generated-image messages still render.
-17. New chats inherit the configured generator endpoint, generator model,
-    shape, `/imagine` state, and AI-image setting.
+17. New and existing chats all use the app-wide generator endpoint, generator
+    model, shape, `/imagine` state, and AI-image setting.
 18. Existing image attachments, image-input capability checks, Reduce, and
     document behavior remain unchanged.
 19. User-facing image errors do not claim that OpenAI is required.
@@ -655,6 +705,10 @@ The work is complete only when all of the following are true:
 22. No function-calling preference, router, or search stub remains in the
     code, and a chat that previously had Function Calling enabled behaves as
     a normal chat, including normal summarizer transmission.
+23. In a voice conversation with spoken output active, a pending confirmation
+    is announced with the companion's name, "create it" approves, "cancel"
+    denies, unrelated speech denies and is handled as a normal message, and
+    the on-screen card works throughout.
 
 ## 18. Required Test Matrix
 
@@ -672,7 +726,8 @@ At minimum, verify:
 Also test alternate auth modes, provider errors, invalid JSON tool arguments,
 multiple attempted tool calls, cancellation at each stage, response timeout,
 oversized download, malformed Base64, missing files, chat deletion, backup and
-restore, and process recreation.
+restore, process recreation, and each spoken-approval outcome ("create it",
+"cancel", and unrelated speech).
 
 ## 19. Explicit Non-Goals
 
