@@ -220,6 +220,7 @@ import org.teslasoft.assistant.util.FrozenChatPayload
 import org.teslasoft.assistant.util.FrozenPayloadMessage
 import org.teslasoft.assistant.util.GenerationErrorClassifier
 import org.teslasoft.assistant.imagegen.CreateImageTool
+import org.teslasoft.assistant.imagegen.ImageConfirmationSpeech
 import org.teslasoft.assistant.imagegen.ImageErrorCause
 import org.teslasoft.assistant.imagegen.ImageFailureAction
 import org.teslasoft.assistant.imagegen.ImageGenerationRequest
@@ -1024,6 +1025,22 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         }
     }
 
+    /** §5 spoken approval, the deny-and-continue case: the utterance waits
+     *  for the declined turn to finish (tool result plus final text), then
+     *  submits as an ordinary message. Gives up silently after ~60s so a
+     *  wedged turn cannot queue ghost messages forever. */
+    private fun submitRecognizedTextWhenIdle(recognizedText: String, attempt: Int = 0) {
+        if (attempt > 120 || isFinishing || isDestroyed) return
+        handsFreeHandler.postDelayed({
+            if (isFinishing || isDestroyed) return@postDelayed
+            if (isAiCurrentlyBusy()) {
+                submitRecognizedTextWhenIdle(recognizedText, attempt + 1)
+            } else {
+                submitRecognizedText(recognizedText)
+            }
+        }, 500)
+    }
+
     private fun scheduleHandsFreeSubmit() {
         handsFreeSubmitRunnable?.let { handsFreeHandler.removeCallbacks(it) }
         val silenceMs = (preferences?.getHandsFreeSilenceSeconds() ?: 5).coerceAtLeast(1) * 1000L
@@ -1075,6 +1092,34 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     }
 
     private fun submitRecognizedText(recognizedText: String) {
+        // §5 spoken approval: while an image confirmation is pending, the
+        // next recognized utterance answers it — "create it" approves,
+        // "cancel" denies, and anything else denies the image and then
+        // continues as a normal message once the declined turn finishes.
+        // The on-screen card keeps working the whole time.
+        if (pendingImageConfirmation != null) {
+            when (ImageConfirmationSpeech.interpret(recognizedText)) {
+                ImageConfirmationSpeech.Answer.APPROVE -> {
+                    playTranscriptionDoneSignal()
+                    pendingImageConfirmation?.complete(true)
+                    return
+                }
+                ImageConfirmationSpeech.Answer.DENY -> {
+                    playTranscriptionDoneSignal()
+                    pendingImageConfirmation?.complete(false)
+                    return
+                }
+                ImageConfirmationSpeech.Answer.DENY_AND_CONTINUE -> {
+                    pendingImageConfirmation?.complete(false)
+                    // The declined turn still returns its tool result and
+                    // final text; these words follow as the next normal
+                    // message the moment the turn is over.
+                    submitRecognizedTextWhenIdle(recognizedText)
+                    return
+                }
+            }
+        }
+
         playTranscriptionDoneSignal()
 
         // Sample the box BEFORE inserting: an already-typed message must never be
@@ -5618,17 +5663,28 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     }
 
     /** §5 confirmation: the inline card naming the companion, prompt
-     *  collapsed behind View Prompt. Skipped when Ask Before Creating is
-     *  off. Cancelling the turn (the progress tap) cancels the await and
-     *  removes the card. */
+     *  collapsed behind View Prompt, plus the spoken announcement over the
+     *  same read-aloud gate as replies (owner-approved wording) — in a
+     *  hands-free conversation its completed readback is what re-arms the
+     *  mic so the next utterance can answer. Skipped when Ask Before
+     *  Creating is off. Cancelling the turn (the progress tap) cancels the
+     *  await and removes the card. */
     private suspend fun requestImageConfirmation(
         prompt: String,
-        globalPreferences: Preferences
+        globalPreferences: Preferences,
+        shouldPronounce: Boolean
     ): Boolean {
         if (!globalPreferences.getAskBeforeAiImages()) return true
         val decision = CompletableDeferred<Boolean>()
         pendingImageConfirmation = decision
         runOnUiThread { showImageConfirmationCard(prompt) }
+        pronounce(
+            shouldPronounce,
+            getString(
+                R.string.image_gen_spoken_announcement,
+                preferences?.getAssistantName().orEmpty()
+            )
+        )
         try {
             return decision.await()
         } finally {
@@ -5675,7 +5731,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     CreateImageTool.errorResult("only one image may be created per user turn")
                 else -> {
                     executedImageCall = true
-                    executeCreateImageCall(call, globalPreferences)
+                    executeCreateImageCall(call, globalPreferences, shouldPronounce)
                 }
             }
             results.add(kotlin.Pair(call, result))
@@ -5715,7 +5771,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
      *  §13 cause message in chat and return a clean tool error. */
     private suspend fun executeCreateImageCall(
         call: StreamedToolCallAssembler.AssembledToolCall,
-        globalPreferences: Preferences
+        globalPreferences: Preferences,
+        shouldPronounce: Boolean
     ): String {
         val validation = CreateImageTool.validate(call.arguments)
         if (validation is CreateImageTool.Validation.Invalid) {
@@ -5746,7 +5803,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             modelId = generatorModelId
         )
 
-        if (!requestImageConfirmation(valid.prompt, globalPreferences)) {
+        if (!requestImageConfirmation(valid.prompt, globalPreferences, shouldPronounce)) {
             return CreateImageTool.cancelledResult()
         }
 

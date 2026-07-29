@@ -557,6 +557,7 @@
     <string name="image_gen_action_create">Create</string>
     <string name="image_gen_action_view_prompt">View Prompt</string>
     <string name="image_gen_tools_unsupported_notice">This model cannot request image creation. You can still use /imagine.</string>
+    <string name="image_gen_spoken_announcement">%1$s would like to create an image. Say \"create it\" to allow it or \"cancel\" to deny.</string>
     <!-- Endpoint editor: reset for the learned tool capability (plan §8),
          mirroring the image-capability clear action. -->
     <string name="tool_capability_clear_action">Clear Tool Capability History</string>
