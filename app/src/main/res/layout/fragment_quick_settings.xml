@@ -887,6 +887,86 @@
 
                 </androidx.constraintlayout.widget.ConstraintLayout>
 
+                <!-- Conversation summarizer (conversation-summary-plan.md
+                     decisions 3 and 8): hidden entirely until a summarizer
+                     endpoint/model is configured in Summarizer Settings.
+                     The toggle is the pause control; turning it on reveals
+                     the per-chat Complete Messages number box, prefilled
+                     from the Summarizer Settings default. -->
+                <androidx.constraintlayout.widget.ConstraintLayout
+                    android:id="@+id/card_summarizer"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="24dp"
+                    android:layout_marginTop="12dp"
+                    android:layout_marginEnd="24dp"
+                    android:background="@drawable/btn_accent_24"
+                    android:backgroundTint="?attr/colorSecondaryContainer"
+                    android:paddingBottom="8dp"
+                    android:visibility="gone"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toBottomOf="@+id/card_memory">
+
+                    <LinearLayout
+                        android:id="@+id/row_use_summarizer"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="16dp"
+                        android:layout_marginTop="8dp"
+                        android:layout_marginEnd="16dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintTop_toTopOf="parent">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/summarizer_use_toggle"
+                            android:textColor="@color/text"
+                            android:textSize="15sp" />
+
+                        <com.google.android.material.materialswitch.MaterialSwitch
+                            android:id="@+id/switch_use_summarizer"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="12dp" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:id="@+id/row_summarizer_window"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="16dp"
+                        android:layout_marginEnd="16dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal"
+                        android:visibility="gone"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintTop_toBottomOf="@+id/row_use_summarizer">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/summarizer_complete_messages"
+                            android:textColor="@color/text"
+                            android:textSize="15sp" />
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/field_summarizer_window"
+                            style="@style/Widget.App.Field.NumberBlank"
+                            android:layout_marginStart="12dp"
+                            android:ems="4"
+                            android:maxLength="4"
+                            android:singleLine="true" />
+                    </LinearLayout>
+                </androidx.constraintlayout.widget.ConstraintLayout>
+
                 <LinearLayout
                     android:id="@+id/linearLayout25"
                     android:layout_width="0dp"
@@ -900,7 +980,7 @@
                     android:layoutDirection="ltr"
                     app:layout_constraintEnd_toEndOf="parent"
                     app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toBottomOf="@+id/card_memory">
+                    app:layout_constraintTop_toBottomOf="@+id/card_summarizer">
 
                     <androidx.constraintlayout.widget.ConstraintLayout
                         android:id="@+id/btn_select_model"

@@ -1954,6 +1954,198 @@ class Preferences private constructor(private var preferences: SharedPreferences
         putGlobalBoolean("memory_companion_in_roleplay", allowed)
     }
 
+    /* ------------------------------------------------------------------
+     * Conversation summarizer (conversation-summary-plan.md §5 +
+     * conversation-summary-errors.md). Global settings mirror the Memory
+     * Assistant pattern (endpoint profile id + model + tuning values);
+     * per-chat state lives in this chat's settings file so it is encrypted
+     * like the messages, copied wholesale by a rename, and carried by both
+     * backup formats. Deletion clears it via
+     * ChatPreferences.clearSummarizerState (decision 9).
+     * ------------------------------------------------------------------ */
+
+    /** Summarizer endpoint profile id (global). "" = not configured. */
+    fun getSummarizerEndpointId(): String =
+        getGlobalString("summarizer_endpoint_id", "")
+
+    fun setSummarizerEndpointId(id: String) {
+        putGlobalString("summarizer_endpoint_id", id)
+    }
+
+    /** Summary Model name on that endpoint. "" = use the endpoint's model. */
+    fun getSummarizerModel(): String =
+        getGlobalString("summarizer_model", "")
+
+    fun setSummarizerModel(model: String) {
+        putGlobalString("summarizer_model", model)
+    }
+
+    /** Complete Messages default (owner-approved default: 20) — the
+     *  recent-window count new chats start with. */
+    fun getSummarizerDefaultWindow(): Int =
+        getGlobalString("summarizer_default_window", "20").toIntOrNull()?.coerceAtLeast(1) ?: 20
+
+    fun setSummarizerDefaultWindow(value: Int) {
+        putGlobalString("summarizer_default_window", value.coerceAtLeast(1).toString())
+    }
+
+    /** Summary Length in words (decision 13; default 300). */
+    fun getSummarizerLength(): Int =
+        getGlobalString("summarizer_length", "300").toIntOrNull()?.coerceAtLeast(10) ?: 300
+
+    fun setSummarizerLength(value: Int) {
+        putGlobalString("summarizer_length", value.coerceAtLeast(10).toString())
+    }
+
+    /** Whether new chats start with the summarizer on (decision 2 toggle). */
+    fun getSummarizerOnForNewChats(): Boolean =
+        getGlobalString("summarizer_on_new_chats", "false") == "true"
+
+    fun setSummarizerOnForNewChats(value: Boolean) {
+        putGlobalString("summarizer_on_new_chats", value.toString())
+    }
+
+    /** Selected prompt slot, 0–4 (decision 6). */
+    fun getSummarizerSelectedSlot(): Int =
+        getGlobalString("summarizer_selected_slot", "0").toIntOrNull()?.coerceIn(0, 4) ?: 0
+
+    fun setSummarizerSelectedSlot(slot: Int) {
+        putGlobalString("summarizer_selected_slot", slot.coerceIn(0, 4).toString())
+    }
+
+    /** A slot's display name; shipped names for slots one and two, "Slot N"
+     *  supplied by the caller for the empty slots. "" = never renamed. */
+    fun getSummarizerSlotName(slot: Int): String =
+        getGlobalString("summarizer_slot_name_$slot", "")
+
+    fun setSummarizerSlotName(slot: Int, name: String) {
+        putGlobalString("summarizer_slot_name_$slot", name)
+    }
+
+    /** A slot's stored prompt text. "" = never written (slots one and two
+     *  then read as their shipped prompts at the call site). */
+    fun getSummarizerSlotPrompt(slot: Int): String =
+        getGlobalString("summarizer_slot_prompt_$slot", "")
+
+    fun setSummarizerSlotPrompt(slot: Int, prompt: String) {
+        putGlobalString("summarizer_slot_prompt_$slot", prompt)
+    }
+
+    /** Slot-selection recency (newest first, CSV of slot indexes) — backs the
+     *  empty-prompt fallback rule of decision 7. */
+    fun getSummarizerSlotRecency(): String =
+        getGlobalString("summarizer_slot_recency", "")
+
+    fun setSummarizerSlotRecency(csv: String) {
+        putGlobalString("summarizer_slot_recency", csv)
+    }
+
+    /** Per-chat Use Summarizer state: "" = never stamped, else "true"/"false".
+     *  Stamped once per chat (see ChatActivity) so flipping the new-chats
+     *  default later never silently changes what an existing chat sends. */
+    fun getChatUseSummarizerRaw(): String =
+        getString("use_summarizer", "")
+
+    fun setChatUseSummarizerRaw(value: String) {
+        putString("use_summarizer", value)
+    }
+
+    fun getChatUseSummarizer(): Boolean = getChatUseSummarizerRaw() == "true"
+
+    fun setChatUseSummarizer(enabled: Boolean) {
+        putString("use_summarizer", if (enabled) "true" else "false")
+    }
+
+    /** Per-chat Complete Messages window; "" = follow the global default. */
+    fun getChatSummarizerWindow(): Int {
+        val raw = getString("summarizer_window", "")
+        return raw.toIntOrNull()?.coerceAtLeast(1) ?: getSummarizerDefaultWindow()
+    }
+
+    fun setChatSummarizerWindow(value: Int) {
+        putString("summarizer_window", value.coerceAtLeast(1).toString())
+    }
+
+    /** The chat's rolling summary text ("" = none yet). */
+    fun getSummarizerSummary(): String =
+        getString("summarizer_summary", "")
+
+    /** The fold-in bookmark: how many of the chat's oldest stored messages
+     *  are already folded into the summary. */
+    fun getSummarizerFoldedCount(): Int =
+        getString("summarizer_folded", "0").toIntOrNull()?.coerceAtLeast(0) ?: 0
+
+    /** Over-length marker (owner ruling): the saved summary exceeded the
+     *  configured length + 10%, so the next fold-in must compress it. */
+    fun getSummarizerOverLength(): Boolean =
+        getString("summarizer_over_length", "") == "true"
+
+    /** The ongoing failure-episode category name ("" = last fold-in
+     *  succeeded); drives error dedup and the once-per-episode sound. */
+    fun getSummarizerEpisode(): String =
+        getString("summarizer_episode", "")
+
+    fun setSummarizerEpisode(value: String) {
+        putString("summarizer_episode", value)
+    }
+
+    /** The chat's Summarizer Errors log (JSON via SummarizerErrorLog). */
+    fun getSummarizerErrors(): String =
+        getString("summarizer_errors", "")
+
+    fun setSummarizerErrors(json: String) {
+        putString("summarizer_errors", json)
+    }
+
+    /**
+     * Commits a successful fold-in atomically: the updated summary, the
+     * advanced bookmark, the over-length marker, and the episode reset are
+     * one synchronous commit, so the summary and bookmark can never be saved
+     * without each other (errors doc §2.13).
+     *
+     * @return false when the commit failed — the caller must treat the
+     *         fold-in as unsaved and leave its in-memory state unchanged.
+     */
+    fun commitSummarizerFoldIn(summary: String, foldedCount: Int, overLength: Boolean): Boolean {
+        return try {
+            preferences.edit()
+                .putString("summarizer_summary", summary)
+                .putString("summarizer_folded", foldedCount.coerceAtLeast(0).toString())
+                .putString("summarizer_over_length", if (overLength) "true" else "false")
+                .putString("summarizer_episode", "")
+                .commit()
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /** User edit of the summary text (bookmark untouched), committed
+     *  synchronously so a hand correction is never lost to a process kill. */
+    fun commitSummarizerSummaryEdit(summary: String): Boolean {
+        return try {
+            preferences.edit()
+                .putString("summarizer_summary", summary)
+                .putString("summarizer_over_length", "false")
+                .commit()
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /** Adjusts the fold-in bookmark when a stored message before it is
+     *  deleted, so the folded prefix stays aligned with the stored list. */
+    fun decrementSummarizerFoldedCount() {
+        val current = getSummarizerFoldedCount()
+        if (current > 0) {
+            putString("summarizer_folded", (current - 1).toString())
+        }
+    }
+
+    /** Direct bookmark realignment for bulk deletions. */
+    fun setSummarizerFoldedCount(value: Int) {
+        putString("summarizer_folded", value.coerceAtLeast(0).toString())
+    }
+
     /**
      * Get logit biases config ID
      *

@@ -164,6 +164,16 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     private var rowChatModelRules: LinearLayout? = null
     private var switchChatModelRules: com.google.android.material.materialswitch.MaterialSwitch? = null
 
+    // Conversation summarizer (conversation-summary-plan.md decisions 3 + 8):
+    // the whole card stays hidden until a summarizer endpoint/model exists, so
+    // the feature can never be switched on in a broken state. The toggle IS
+    // the pause control; the number box appears only while it is on.
+    private var cardSummarizer: ConstraintLayout? = null
+    private var rowSummarizerWindow: LinearLayout? = null
+    private var switchUseSummarizer: com.google.android.material.materialswitch.MaterialSwitch? = null
+    private var fieldSummarizerWindow: TextInputEditText? = null
+    private var suppressSummarizerWindowWatcher = false
+
     private var textUsage: TextView? = null
     private var textCost: TextView? = null
     private var btnCostInfo: MaterialButton? = null
@@ -720,7 +730,12 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         textChatProject = view.findViewById(R.id.text_chat_project)
         rowChatModelRules = view.findViewById(R.id.row_chat_model_rules)
         switchChatModelRules = view.findViewById(R.id.switch_chat_model_rules)
+        cardSummarizer = view.findViewById(R.id.card_summarizer)
+        rowSummarizerWindow = view.findViewById(R.id.row_summarizer_window)
+        switchUseSummarizer = view.findViewById(R.id.switch_use_summarizer)
+        fieldSummarizerWindow = view.findViewById(R.id.field_summarizer_window)
         setupModelRulesRow()
+        setupSummarizerControls()
         switchChatMemory?.isChecked = preferences?.getChatMemoryEnabled() ?: true
         // "Archive this chat": positive framing. Checked = archive (capture on).
         // The stored pref is still "excluded" (the inverse), so flip both ways.
@@ -1084,6 +1099,57 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
             }
             .setNegativeButton(android.R.string.cancel) { _, _ -> }
             .show()
+    }
+
+    /* ------------------------------ conversation summarizer ------------------------------ */
+
+    /**
+     * Decision 3: "Use Summarizer" turns the summarizer on or off for this
+     * chat (turning it off IS the pause action). When on, the "Complete
+     * Messages" number box appears, prefilled from the Summarizer Settings
+     * default; changing it affects only this chat. The whole card is hidden
+     * until a summarizer endpoint/model is configured (decision 8).
+     */
+    private fun setupSummarizerControls() {
+        val configured = try {
+            org.teslasoft.assistant.util.summarizer.SummarizerController.isConfigured(requireContext())
+        } catch (_: Exception) {
+            false
+        }
+        cardSummarizer?.visibility = if (configured) View.VISIBLE else View.GONE
+        if (!configured) return
+
+        val on = preferences?.getChatUseSummarizer() == true
+        switchUseSummarizer?.isChecked = on
+        rowSummarizerWindow?.visibility = if (on) View.VISIBLE else View.GONE
+        setSummarizerWindowFieldText(preferences?.getChatSummarizerWindow()?.toString() ?: "")
+
+        switchUseSummarizer?.setOnCheckedChangeListener { _, checked ->
+            preferences?.setChatUseSummarizer(checked)
+            rowSummarizerWindow?.visibility = if (checked) View.VISIBLE else View.GONE
+            if (checked) {
+                setSummarizerWindowFieldText(preferences?.getChatSummarizerWindow()?.toString() ?: "")
+            }
+            // The chat screen re-reads the toggle, refreshes its icons, and
+            // runs catch-up (or cancels an in-flight fold-in) on reload.
+            shouldForceUpdate = true
+        }
+
+        fieldSummarizerWindow?.addTextChangedListener { text ->
+            if (suppressSummarizerWindowWatcher) return@addTextChangedListener
+            val parsed = text?.toString()?.trim()?.toIntOrNull()
+            if (parsed != null && parsed >= 1) {
+                preferences?.setChatSummarizerWindow(parsed)
+                shouldForceUpdate = true
+            }
+        }
+    }
+
+    private fun setSummarizerWindowFieldText(text: String) {
+        suppressSummarizerWindowWatcher = true
+        fieldSummarizerWindow?.setText(text)
+        fieldSummarizerWindow?.setSelection(text.length)
+        suppressSummarizerWindowWatcher = false
     }
 
     /* ------------------------------ model rules (Stage 4, §11) ------------------------------ */

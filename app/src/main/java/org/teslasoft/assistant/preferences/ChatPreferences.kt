@@ -131,6 +131,50 @@ class ChatPreferences private constructor() {
     fun clearChat(context: Context, chatId: String) {
         if (chatWriteBlocked(context, "chat_$chatId", "clear a chat")) return
         SecurePrefs.get(context, "chat_$chatId").edit { putString("chat", "[]") }
+        resetSummarizerContent(context, chatId)
+    }
+
+    /**
+     * Summarizer content-state keys inside `settings.<chatId>`: the rolling
+     * summary, its fold-in bookmark, the over-length marker, the failure
+     * episode, and the per-chat error log. The per-chat Use Summarizer toggle
+     * and Complete Messages window are deliberately not listed — clearing a
+     * chat's MESSAGES keeps its settings, like every other per-chat setting.
+     */
+    private val summarizerContentKeys = arrayOf(
+        "summarizer_summary", "summarizer_folded", "summarizer_over_length",
+        "summarizer_episode", "summarizer_errors"
+    )
+
+    /**
+     * Removes the summary, bookmark, and summarizer error log when the
+     * conversation's messages are cleared — a summary of messages that no
+     * longer exist must not keep being sent, and a bookmark past the end of
+     * an empty list would break catch-up.
+     */
+    private fun resetSummarizerContent(context: Context, chatId: String) {
+        try {
+            SecurePrefs.get(context, "settings.$chatId").edit(commit = true) {
+                for (key in summarizerContentKeys) remove(key)
+            }
+        } catch (_: Exception) { /* best-effort; a stale bookmark is clamped at read time */ }
+    }
+
+    /**
+     * Deletion companion for decision 9 (conversation-summary-plan.md): the
+     * summary and ALL summarizer state die with the chat on every deletion
+     * path. The chat's settings file itself is (historically) left behind by
+     * deletion, so the summarizer keys — which hold condensed conversation
+     * content — are removed explicitly, including the toggle and window.
+     */
+    private fun clearSummarizerState(context: Context, chatId: String) {
+        try {
+            SecurePrefs.get(context, "settings.$chatId").edit(commit = true) {
+                for (key in summarizerContentKeys) remove(key)
+                remove("use_summarizer")
+                remove("summarizer_window")
+            }
+        } catch (_: Exception) { /* best-effort; content keys carry no plaintext outside SecurePrefs */ }
     }
 
     /**
@@ -159,6 +203,9 @@ class ChatPreferences private constructor() {
 
         val settings2: SharedPreferences = SecurePrefs.get(context, "chat_${Hash.hash(chatName)}")
         settings2.edit { clear() }
+
+        // The summary and all summarizer state die with the chat (decision 9).
+        clearSummarizerState(context, Hash.hash(chatName))
 
         // Locally stored attachment images belong to this chat only; a delete
         // takes them with it (owner ruling). The user's ORIGINAL files are
@@ -459,6 +506,7 @@ class ChatPreferences private constructor() {
         val chat: SharedPreferences = SecurePrefs.get(context, "chat_$chatId")
 
         chat.edit { putString("chat", "[]") }
+        resetSummarizerContent(context, chatId)
     }
 
     /**
@@ -564,6 +612,22 @@ class ChatPreferences private constructor() {
 
         val settings: SharedPreferences = SecurePrefs.get(context, "chat_$chatId")
         settings.edit { putString("chat", json) }
+
+        // Summarizer bookmark alignment: the fold-in bookmark counts the
+        // chat's oldest stored messages. Deleting one of THOSE shifts every
+        // later index down by one, so the bookmark shrinks with it —
+        // otherwise the first not-yet-folded message would be skipped. The
+        // summary text itself deliberately keeps what it already absorbed
+        // (fold-once design, conversation-summary-plan.md §6.2).
+        try {
+            val chatSettings = SecurePrefs.get(context, "settings.$chatId")
+            val folded = chatSettings.getString("summarizer_folded", "0")?.toIntOrNull() ?: 0
+            if (position < folded && folded > 0) {
+                chatSettings.edit(commit = true) {
+                    putString("summarizer_folded", (folded - 1).toString())
+                }
+            }
+        } catch (_: Exception) { /* clamped at read time as a backstop */ }
     }
 
     /**
@@ -854,6 +918,9 @@ class ChatPreferences private constructor() {
 
         val settings2: SharedPreferences = SecurePrefs.get(context, "chat_$chatId")
         settings2.edit { clear() }
+
+        // The summary and all summarizer state die with the chat (decision 9).
+        clearSummarizerState(context, chatId)
 
         // Locally stored attachment images go with the chat (owner ruling);
         // the user's original files are untouched.

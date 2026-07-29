@@ -1,0 +1,6 @@
+<!-- Small circular count badge on the data_alert icon (decision 16): the
+     number of stored summarizer errors (1–5). Theme-driven colors only. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+    <solid android:color="?attr/colorPrimary" />
+</shape>

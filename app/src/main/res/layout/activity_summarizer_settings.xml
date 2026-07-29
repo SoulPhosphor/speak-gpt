@@ -1,0 +1,234 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+/**************************************************************************
+* Copyright (c) 2023-2026 Dmytro Ostapenko. All rights reserved.
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*  http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+**************************************************************************/
+-->
+<!-- Summarizer Settings (conversation-summary-plan.md decision 2): Summary
+     Model endpoint/model pickers, the Complete Messages default, the
+     new-chats toggle, Summary Length, and the five renameable prompt slots.
+     Composed from the shared style families only. -->
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/action_bar"
+        style="@style/Widget.App.ActionBar"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <ImageButton
+            android:id="@+id/btn_back"
+            style="@style/Widget.App.ActionBar.BackButton"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <TextView
+            android:id="@+id/activity_title"
+            style="@style/Widget.App.ActionBar.Title"
+            android:text="@string/title_summarizer_settings"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <ScrollView
+        android:id="@+id/scroll"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:clipToPadding="false"
+        android:paddingBottom="24dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/action_bar">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingHorizontal="20dp">
+
+            <!-- No-model state explanation (decision 8, owner-authored). -->
+            <TextView
+                style="@style/Widget.App.Screen.Intro"
+                android:paddingTop="16dp"
+                android:text="@string/summarizer_intro" />
+
+            <!-- ============ Summary Model ============ -->
+            <TextView
+                style="@style/Widget.App.Section.Title"
+                android:text="@string/summarizer_section_model" />
+
+            <LinearLayout
+                android:id="@+id/row_summarizer_endpoint"
+                style="@style/Widget.App.Row.WithSubtitle">
+
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/summarizer_row_endpoint" />
+
+                    <TextView
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:maxLines="10"
+                        android:text="@string/summarizer_row_endpoint_hint" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/text_summarizer_endpoint_value"
+                    style="@style/Widget.App.Dropdown.Value"
+                    android:layout_width="wrap_content"
+                    android:text="@string/label_endpoint_none" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/row_summarizer_model"
+                style="@style/Widget.App.Row.WithSubtitle">
+
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/summarizer_row_model" />
+
+                    <TextView
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:maxLines="10"
+                        android:text="@string/summarizer_row_model_hint" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/text_summarizer_model_value"
+                    style="@style/Widget.App.Dropdown.Value"
+                    android:layout_width="wrap_content" />
+            </LinearLayout>
+
+            <!-- ============ Complete Messages (default for new chats) ============ -->
+            <TextView
+                style="@style/Widget.App.Field.Label"
+                android:layout_marginTop="16dp"
+                android:text="@string/summarizer_complete_messages" />
+
+            <TextView
+                style="@style/Widget.App.Field.Hint"
+                android:text="@string/summarizer_complete_messages_hint" />
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/field_complete_messages"
+                style="@style/Widget.App.Field.NumberBlank"
+                android:layout_marginTop="8dp"
+                android:ems="4"
+                android:maxLength="4"
+                android:singleLine="true" />
+
+            <!-- ============ Use Summarizer for New Chats ============ -->
+            <LinearLayout style="@style/Widget.App.Row.Toggle">
+
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/summarizer_new_chats_toggle" />
+                </LinearLayout>
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_summarizer_new_chats"
+                    style="@style/Widget.App.Row.Switch" />
+            </LinearLayout>
+
+            <!-- ============ Summary Length ============ -->
+            <TextView
+                style="@style/Widget.App.Field.Label"
+                android:layout_marginTop="16dp"
+                android:text="@string/summarizer_length" />
+
+            <TextView
+                style="@style/Widget.App.Field.Hint"
+                android:text="@string/summarizer_length_hint" />
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/field_summary_length"
+                style="@style/Widget.App.Field.NumberBlank"
+                android:layout_marginTop="8dp"
+                android:ems="5"
+                android:maxLength="5"
+                android:singleLine="true" />
+
+            <!-- ============ Summary Prompt (five renameable slots) ============ -->
+            <TextView
+                style="@style/Widget.App.Section.Title"
+                android:text="@string/summarizer_section_prompt" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    style="@style/Widget.App.Dropdown.Label"
+                    android:text="@string/summarizer_prompt_dropdown" />
+
+                <TextView
+                    android:id="@+id/text_prompt_slot"
+                    style="@style/Widget.App.Dropdown.Value"
+                    android:layout_weight="1" />
+            </LinearLayout>
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_rename_slot"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/summarizer_rename_slot" />
+
+            <com.google.android.material.textfield.TextInputLayout
+                style="?attr/textInputOutlinedDenseStyle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/field_prompt"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="top"
+                    android:inputType="textMultiLine|textCapSentences"
+                    android:minLines="8"
+                    android:overScrollMode="always"
+                    android:scrollbars="vertical" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <!-- Revert exists only under Storyteller and Reporter (decision 6);
+                 the activity hides it for slots three to five. -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_revert_prompt"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="@string/summarizer_revert_prompt" />
+        </LinearLayout>
+    </ScrollView>
+</androidx.constraintlayout.widget.ConstraintLayout>

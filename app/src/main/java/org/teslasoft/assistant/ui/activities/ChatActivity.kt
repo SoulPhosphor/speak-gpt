@@ -288,6 +288,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     private var btnBack: ImageButton? = null
     private var btnDebugLog: ImageButton? = null
 
+    // Conversation summarizer (conversation-summary-plan.md decisions 11 +
+    // 16): data_alert first in the icon row (with the 1–5 count badge),
+    // then the subject summary icon. The controller runs the background
+    // fold-ins; it is cancelled deliberately (never an error) when this
+    // screen goes away.
+    private var btnSummary: ImageButton? = null
+    private var btnSummarizerErrors: ImageButton? = null
+    private var summarizerErrorBadge: TextView? = null
+    private var summarizerController: org.teslasoft.assistant.util.summarizer.SummarizerController? = null
+
     // Database Health A2 banner (§15.2a): persistent + dismissible per chat
     // screen — OK hides it for THIS instance only, so each new chat re-shows
     // it while a database stays disabled (the owner's re-acknowledge rule).
@@ -1105,6 +1115,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
         // Diagnostics may have been toggled in Settings while we were away.
         updateDebugLogButtonVisibility()
+
+        // Summarizer Settings may have changed while we were away (endpoint
+        // removed, defaults changed) — re-resolve the icons and badge.
+        if (chatStartupComplete && chatId != "") refreshSummarizerIcons()
 
         // A2 banner refresh: a repair finished (banner clears) or a database
         // was flagged while we were away (banner appears). No audio cue here —
@@ -2164,6 +2178,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         releaseReadbackKeepAlive()
         readbackKeepAliveHandler.removeCallbacksAndMessages(null)
 
+        // Deliberate cancellation of any in-flight fold-in: leaving the chat
+        // is never a Summarizer Error, and the bookmark only ever advances on
+        // a completed save (errors doc §4).
+        summarizerController?.cancel()
+
         killAllProcesses()
         stopHandsFreeService()
 
@@ -2314,6 +2333,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         actionBar = findViewById(R.id.action_bar)
         btnBack = findViewById(R.id.btn_back)
         btnDebugLog = findViewById(R.id.btn_debug_log)
+        btnSummary = findViewById(R.id.btn_summary)
+        btnSummarizerErrors = findViewById(R.id.btn_summarizer_errors)
+        summarizerErrorBadge = findViewById(R.id.summarizer_error_badge)
         keyboardFrame = findViewById(R.id.keyboard_frame)
         root = findViewById(R.id.root)
         btnAttachFile = findViewById(R.id.btn_attach)
@@ -3722,6 +3744,307 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             )
         }
         updateDebugLogButtonVisibility()
+        initSummarizer()
+    }
+
+    /* ==================== Conversation summarizer ====================
+     * conversation-summary-plan.md §5 + conversation-summary-errors.md.
+     * Transmission is bookmark-based (decision 15): each regular request
+     * sends the summary as its own system message plus every message after
+     * the fold-in bookmark, so a failing summarizer only ever makes requests
+     * temporarily larger — never blocks or drops content. Scope is regular
+     * chat requests only (decision 12): the Playground, image generation,
+     * and the function-calling / fine-tuned-model paths keep full history.
+     */
+
+    private fun initSummarizer() {
+        seedSummarizerToggle()
+        if (summarizerController == null) {
+            summarizerController = org.teslasoft.assistant.util.summarizer.SummarizerController(
+                applicationContext
+            ) { chatId }.also { controller ->
+                controller.listener = object :
+                    org.teslasoft.assistant.util.summarizer.SummarizerController.Listener {
+                    override fun onSummarizerStateChanged() {
+                        runOnUiThread { refreshSummarizerIcons() }
+                    }
+
+                    override fun onSummarizerErrorEpisode() {
+                        playSummarizerErrorSignal()
+                    }
+                }
+            }
+        }
+        btnSummary?.setOnClickListener { showSummaryView() }
+        btnSummarizerErrors?.setOnClickListener { showSummarizerErrorsDialog() }
+        refreshSummarizerIcons()
+        // The next eligible cycle (errors doc §3): opening the chat retries
+        // pending fold-ins and runs catch-up after a re-enable.
+        summarizerCycle()
+    }
+
+    /**
+     * Stamps the per-chat Use Summarizer value once, so flipping the global
+     * "Use Summarizer for New Chats" default later never silently changes
+     * what an EXISTING chat sends (decision 2 + §4.6). A chat is "new" here
+     * while it has no messages yet.
+     */
+    private fun seedSummarizerToggle() {
+        if (chatId.isEmpty() || chatStorageUnavailable) return
+        if (preferences?.getChatUseSummarizerRaw().orEmpty().isNotEmpty()) return
+        val enable = messages.isEmpty() &&
+            preferences?.getSummarizerOnForNewChats() == true &&
+            org.teslasoft.assistant.util.summarizer.SummarizerController.isConfigured(this)
+        preferences?.setChatUseSummarizerRaw(if (enable) "true" else "false")
+    }
+
+    /** data_alert (with count badge) while the error log has entries;
+     *  subject while the summarizer is on for this chat (decisions 11/16). */
+    private fun refreshSummarizerIcons() {
+        val summarizerOn = preferences?.getChatUseSummarizer() == true
+        btnSummary?.visibility = if (summarizerOn) View.VISIBLE else View.GONE
+
+        val errors = org.teslasoft.assistant.util.summarizer.SummarizerErrorLog
+            .fromJson(preferences?.getSummarizerErrors())
+        if (errors.isEmpty()) {
+            btnSummarizerErrors?.visibility = View.GONE
+            summarizerErrorBadge?.visibility = View.GONE
+        } else {
+            btnSummarizerErrors?.visibility = View.VISIBLE
+            summarizerErrorBadge?.visibility = View.VISIBLE
+            summarizerErrorBadge?.text = errors.size.toString()
+        }
+    }
+
+    /** True when this chat's requests use summarizer transmission at all —
+     *  the excluded paths (decision 12) always send full history. */
+    private fun summarizerTransmissionActive(): Boolean =
+        preferences?.getChatUseSummarizer() == true &&
+            preferences?.getFunctionCalling() != true &&
+            !model.contains(":ft") && !model.contains("ft:")
+
+    /** The summary's own system message (decision 14), or null when nothing
+     *  is injected. Sent as the very last injected item before the oldest
+     *  full message; the user's stored words are never mixed with it. */
+    private fun summarizerInjectionText(): String? {
+        if (!summarizerTransmissionActive()) return null
+        val summary = preferences?.getSummarizerSummary().orEmpty()
+        if (summary.isBlank()) return null
+        return getString(R.string.summarizer_injection_header) + "\n\n" + summary
+    }
+
+    /**
+     * The model-facing history AFTER the fold-in bookmark, built from the
+     * stored messages with the same projection rules as
+     * [rebuildModelProjection] (blank-content messages skipped). Null when
+     * summarizer transmission is off or nothing is folded yet — callers then
+     * use the full projection unchanged.
+     */
+    private fun summarizerTrimmedHistory(): Pair<List<ChatMessage>, List<String?>>? {
+        if (!summarizerTransmissionActive()) return null
+        val folded = (preferences?.getSummarizerFoldedCount() ?: 0).coerceAtMost(messages.size)
+        if (folded <= 0) return null
+        val msgs = ArrayList<ChatMessage>()
+        val includes = ArrayList<String?>()
+        for (i in folded until messages.size) {
+            val message = messages[i]
+            val content = modelFacingContent(message)
+            if (content.isBlank()) continue
+            msgs.add(
+                ChatMessage(
+                    role = if (message["isBot"] == true) ChatRole.Assistant else ChatRole.User,
+                    content = content
+                )
+            )
+            includes.add(if (message["isBot"] != true) message[INCLUDES_KEY]?.toString() else null)
+        }
+        return Pair(msgs, includes)
+    }
+
+    /** One snapshot entry per stored message so indexes stay aligned with
+     *  the fold-in bookmark; blank entries advance it without being sent. */
+    private fun summarizerSnapshot(): org.teslasoft.assistant.util.summarizer.SummarizerController.Snapshot? {
+        if (isFinishing || isDestroyed || chatStorageUnavailable || chatId.isEmpty()) return null
+        val entries = messages.map {
+            org.teslasoft.assistant.util.summarizer.SummarizerController.Entry(
+                isBot = it["isBot"] == true,
+                text = modelFacingContent(it)
+            )
+        }
+        return org.teslasoft.assistant.util.summarizer.SummarizerController.Snapshot(
+            entries,
+            preferences?.getChatSummarizerWindow() ?: 20
+        )
+    }
+
+    /** Runs a fold-in cycle when the summarizer is on for this chat. [force]
+     *  (Update Now) also folds the final partial batch; automatic cycles
+     *  wait for a full batch so provider prompt caching keeps applying. */
+    private fun summarizerCycle(force: Boolean = false) {
+        if (preferences?.getChatUseSummarizer() != true) return
+        summarizerController?.runCycle(force) { summarizerSnapshot() }
+    }
+
+    /** Summary view (decision 11): the editable summary and Update Now.
+     *  Edits save automatically when the view closes; Update Now saves them
+     *  first, then folds everything up to the current window edge. */
+    private fun showSummaryView() {
+        val view = layoutInflater.inflate(R.layout.dialog_summary_view, null)
+        val field = view.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.field_summary_text)
+        val update = view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_dialog_action)
+        update?.setText(R.string.summarizer_update_now)
+        field?.setText(preferences?.getSummarizerSummary().orEmpty())
+
+        val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.summarizer_summary_title)
+            .setView(view)
+            .create()
+
+        fun saveEditsIfChanged() {
+            val edited = field?.text?.toString().orEmpty()
+            if (edited != preferences?.getSummarizerSummary().orEmpty()) {
+                preferences?.commitSummarizerSummaryEdit(edited)
+            }
+        }
+        dialog.setOnDismissListener { saveEditsIfChanged() }
+        update?.setOnClickListener {
+            saveEditsIfChanged()
+            dialog.dismiss()
+            summarizerCycle(force = true)
+        }
+        dialog.show()
+    }
+
+    /** Summarizer Errors dialog (decision 16 + errors doc §1): one status
+     *  paragraph, the stored entries newest first, then Copy and Delete. */
+    private fun showSummarizerErrorsDialog() {
+        val entries = org.teslasoft.assistant.util.summarizer.SummarizerErrorLog
+            .fromJson(preferences?.getSummarizerErrors())
+        if (entries.isEmpty()) {
+            refreshSummarizerIcons()
+            return
+        }
+
+        val view = layoutInflater.inflate(R.layout.dialog_summarizer_errors, null)
+        val status = view.findViewById<TextView>(R.id.summarizer_errors_status)
+        val container = view.findViewById<LinearLayout>(R.id.summarizer_errors_container)
+        val copy = view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_dialog_primary_action)
+        val delete = view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_dialog_destructive_action)
+        copy?.setText(R.string.summarizer_errors_copy)
+        delete?.setText(R.string.summarizer_errors_delete)
+
+        val statusText = when {
+            preferences?.getChatUseSummarizer() != true ->
+                getString(R.string.summarizer_errors_status_off)
+            preferences?.getSummarizerEpisode().orEmpty().isNotEmpty() ->
+                getString(R.string.summarizer_errors_status_behind)
+            else ->
+                getString(R.string.summarizer_errors_status_caught_up)
+        }
+        status?.text = statusText
+
+        val density = resources.displayMetrics.density
+        for (entry in entries) {
+            val item = TextView(this)
+            item.text = org.teslasoft.assistant.util.summarizer.SummarizerErrorMessages
+                .renderEntry(this, entry)
+            item.setTextColor(ResourcesCompat.getColor(resources, R.color.text, theme))
+            item.textSize = 13f
+            item.setPadding(0, (16 * density).toInt(), 0, 0)
+            item.setTextIsSelectable(true)
+            container?.addView(item)
+        }
+
+        val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.summarizer_errors_title)
+            .setView(view)
+            .create()
+
+        copy?.setOnClickListener {
+            val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
+            val text = org.teslasoft.assistant.util.summarizer.SummarizerErrorMessages
+                .renderLog(this, statusText, entries)
+            clipboard.setPrimaryClip(ClipData.newPlainText("Summarizer Errors", text))
+        }
+        delete?.setOnClickListener {
+            preferences?.setSummarizerErrors("")
+            preferences?.setSummarizerEpisode("")
+            refreshSummarizerIcons()
+            dialog.dismiss()
+        }
+        dialog.show()
+    }
+
+    /**
+     * The dedicated summarizer error sound (decision 16): plays once at the
+     * start of a failure episode, so the user notices without looking.
+     * Distinct from every other app cue — two short mid pulses then one
+     * longer low note (C5, C5, F4) — where the database warning warbles
+     * D5/Bb4, the generation-error cadence descends three notes, no-speech
+     * is two low notes, and the done chime ascends. Same alarm-stream
+     * routing so it stays audible on silent.
+     */
+    private fun playSummarizerErrorSignal() {
+        Thread {
+            var track: AudioTrack? = null
+            try {
+                val sampleRate = 44100
+                val notes = floatArrayOf(523.25f, 523.25f, 349.23f)
+                val noteDurationsMs = intArrayOf(110, 110, 260)
+                val gapMs = 50
+                var totalSamples = 0
+                for (durationMs in noteDurationsMs) {
+                    totalSamples += sampleRate * (durationMs + gapMs) / 1000
+                }
+                val buffer = ShortArray(totalSamples)
+
+                var idx = 0
+                for (n in notes.indices) {
+                    val samplesPerNote = sampleRate * noteDurationsMs[n] / 1000
+                    val samplesPerGap = sampleRate * gapMs / 1000
+                    for (i in 0 until samplesPerNote) {
+                        val t = i.toDouble() / sampleRate
+                        val envelope = when {
+                            i < samplesPerNote * 0.1 -> i / (samplesPerNote * 0.1)
+                            i > samplesPerNote * 0.8 -> (samplesPerNote - i) / (samplesPerNote * 0.2)
+                            else -> 1.0
+                        }
+                        val sample = Math.sin(2.0 * Math.PI * notes[n] * t) * envelope * 0.45 * Short.MAX_VALUE
+                        buffer[idx++] = sample.toInt().toShort()
+                    }
+                    idx += samplesPerGap
+                }
+
+                val attributes = AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_ALARM)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build()
+                val format = AudioFormat.Builder()
+                    .setSampleRate(sampleRate)
+                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                    .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                    .build()
+
+                track = AudioTrack(
+                    attributes,
+                    format,
+                    totalSamples * 2,
+                    AudioTrack.MODE_STATIC,
+                    AudioManager.AUDIO_SESSION_ID_GENERATE
+                )
+                track.write(buffer, 0, totalSamples)
+                track.play()
+
+                var totalMs = 150
+                for (durationMs in noteDurationsMs) totalMs += durationMs + gapMs
+                Thread.sleep(totalMs.toLong())
+                track.stop()
+            } catch (_: Exception) {
+                // The cue must never interfere with the chat or the log entry.
+            } finally {
+                try { track?.release() } catch (_: Exception) { /* ignore */ }
+            }
+        }.start()
     }
 
     /** The bug shortcut in the chat's top bar is a quick jump to the Event log,
@@ -5119,11 +5442,18 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             storedMessage,
             sentIncludesJson
         )
-        val requestMessages = ArrayList(historySnapshot)
+        // Summarizer transmission (decision 15): the request carries the
+        // summary plus only the messages after the fold-in bookmark. The
+        // trimmed pair and the summary text are captured together here so a
+        // fold-in landing mid-preparation can't split them; the staleness
+        // check in parseMessage keeps comparing the FULL projection snapshot.
+        val summarizerTrim = summarizerTrimmedHistory()
+        val summaryInjection = summarizerInjectionText()
+        val requestMessages = ArrayList(summarizerTrim?.first ?: historySnapshot)
         requestMessages.add(
             ChatMessage(role = ChatRole.User, content = modelFacingMessage)
         )
-        val requestIncludes = ArrayList(historyIncludesSnapshot)
+        val requestIncludes = ArrayList(summarizerTrim?.second ?: historyIncludesSnapshot)
         requestIncludes.add(sentIncludesJson)
 
         btnMicro?.isEnabled = false
@@ -5138,7 +5468,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     requestIncludes = requestIncludes,
                     loreQuery = storedMessage,
                     selectedModel = selectedModel,
-                    maximumResponseTokens = maximumResponseTokens
+                    maximumResponseTokens = maximumResponseTokens,
+                    summaryInjection = summaryInjection
                 )
                 val measurement = RequestCapacity.measure(frozen.payload)
                 if (!RequestCapacity.canAssemble(
@@ -6590,7 +6921,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         requestIncludes: List<String?>,
         loreQuery: String,
         selectedModel: String,
-        maximumResponseTokens: Int
+        maximumResponseTokens: Int,
+        summaryInjection: String? = null
     ): FrozenRegularRequest {
         val msgs = ArrayList<ChatMessage>()
 
@@ -6720,6 +7052,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 loreText.append("\n- ").append(match.entry.content)
             }
             msgs.add(ChatMessage(role = ChatRole.System, content = loreText.toString()))
+        }
+
+        // Summary injection (decision 14): after everything else that's
+        // injected, as the very last item before the oldest full message.
+        if (summaryInjection != null) {
+            msgs.add(ChatMessage(role = ChatRole.System, content = summaryInjection))
         }
 
         // Conversation history, all active attachments embedded in their user
@@ -6989,7 +7327,21 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             )
         }
 
-        msgs.addAll(resolveImagePartsForSend(chatMessages, chatMessageIncludes))
+        // Summarizer transmission on the legacy in-line path (retry/voice):
+        // same summary injection (decision 14) and bookmark trim (decision
+        // 15) as the frozen path. Both values are read back-to-back so a
+        // fold-in commit can't split the summary/bookmark pair.
+        val legacySummaryInjection = summarizerInjectionText()
+        val legacySummarizerTrim = summarizerTrimmedHistory()
+        if (legacySummaryInjection != null) {
+            msgs.add(ChatMessage(role = ChatRole.System, content = legacySummaryInjection))
+        }
+        msgs.addAll(
+            resolveImagePartsForSend(
+                legacySummarizerTrim?.first ?: chatMessages,
+                legacySummarizerTrim?.second ?: chatMessageIncludes
+            )
+        )
 
         chatCompletionRequest = if (preferences?.getLogitBiasesConfigId() == null || preferences?.getLogitBiasesConfigId() == "null" || preferences?.getLogitBiasesConfigId() == "") {
             ChatCompletionRequest(
@@ -7069,6 +7421,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
         saveSettings()
         calculateCost()
+
+        // The next eligible summarizer cycle (decision 15 + errors doc §3):
+        // a completed turn may have pushed a full batch past the window, and
+        // a failed fold-in retries here — never in a rapid background loop.
+        summarizerCycle()
 
         btnMicro?.isEnabled = true
         btnSend?.isEnabled = true
@@ -7980,15 +8337,24 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             .setTitle("Delete selected messages")
             .setMessage("Are you sure you want to delete selected messages?")
             .setPositiveButton("Delete") { _, _ ->
+                val foldedBefore = preferences?.getSummarizerFoldedCount() ?: 0
+                var removedBeforeBookmark = 0
                 var pos = 0
                 var p = 0
                 while (pos < messagesSelectionProjection.size) {
                     if (messagesSelectionProjection[pos]["selected"].toString() == "true") {
+                        // Bulk delete bypasses ChatPreferences.deleteMessage,
+                        // so the fold-in bookmark is realigned here the same
+                        // way: one step per removed already-folded message.
+                        if (pos < foldedBefore) removedBeforeBookmark++
                         messages.removeAt(pos - p)
                         p++
                     }
 
                     pos++
+                }
+                if (removedBeforeBookmark > 0) {
+                    preferences?.setSummarizerFoldedCount(foldedBefore - removedBeforeBookmark)
                 }
 
                 syncChatProjection()
