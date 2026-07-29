@@ -406,10 +406,10 @@ reduction, more the longer the chat runs.
 
 ## 6. Remaining items
 
-1. **Backups**: because the summary is part of the chat's stored data
-   (decision 9), it rides along wherever chat data is backed up or
-   exported. Stated to the owner as the default; flag before
-   implementation if unwanted.
+1. **Backups**: the summary rides along in internal backups and
+   restores (it's part of the chat's stored data per decision 9).
+   Human-readable chat exports do not include the summary — those
+   exports contain only the actual conversation messages.
 2. **Edited/deleted folded messages**: fold-once design means the
    summary doesn't auto-update when an already-folded message is later
    edited or deleted; hand-editing the summary is the remedy. Stated to
