@@ -363,6 +363,37 @@ The image should not automatically be sent back to the conversation model on
 every future turn. That would create avoidable vision-token cost. The stored
 prompt and description can preserve text-level conversational continuity.
 
+### Shared styles and theme compatibility are mandatory
+
+The app's current and future theming depends entirely on the shared style
+system. Every piece of UI this plan creates must respect it — no exceptions
+for speed.
+
+Before building any UI in this plan, read `ui-style-guide.md` (including the
+Label Capitalization rule) and `ui-style-adoption.md`, and inspect the
+target screens.
+
+Every new surface — the Image Generation screen, the confirmation card, the
+Creating Image and completed-image bubble states, the two log pages, the
+retention fields, and every dialog and notice — must be composed from the
+approved shared style families: rows, buttons, dialogs, headers, fields,
+section titles, typography, spacing, icons, and status text. Do not
+hardcode colors, typography, shapes, spacing, or geometry in Kotlin or XML.
+New UI must remain compatible with app-wide themes and future palette
+changes.
+
+If no adequate shared style exists for a needed element, stop before
+copying attributes and obtain approval for the shared solution, exactly as
+`ui-style-guide.md` requires. A shared-style change that would alter
+existing screens requires owner approval before implementation.
+
+AMOLED and palette/theme work is paused (owner ruling, July 26 2026): do not
+add or extend AMOLED-specific styling on any of this plan's new screens, and
+do not break the AMOLED code already in place.
+
+Record each new screen's status in `ui-style-adoption.md` in the same change
+that introduces it.
+
 ## 6. Tool Contract
 
 Expose one narrowly defined client-side tool:
@@ -950,6 +981,10 @@ The work is complete only when all of the following are true:
     Image Information Saved and Maximum Days Saved fields follow the
     error-log retention logic except that zero means unlimited, and the
     error logs' own retention behavior is unchanged.
+31. Every new UI surface uses the approved shared styles and layouts from
+    `ui-style-guide.md`, hardcodes no visual properties, remains
+    theme-compatible, adds no AMOLED-specific styling, and is recorded in
+    `ui-style-adoption.md` in the same change.
 
 ## 18. Required Test Matrix
 
