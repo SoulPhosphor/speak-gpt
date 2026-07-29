@@ -261,7 +261,15 @@ reduction, more the longer the chat runs.
    storage protection as the chat's messages (encrypted if they are) and
    follows the chat through renames.
 
-10. **UI construction rules.** All UI uses the shared style families from
+10. **Pause/resume catch-up (owner, July 28 2026).** Turning the per-chat
+    toggle off keeps the summary and its fold-in bookmark untouched while
+    the app returns to sending everything in full. Turning it back on
+    folds only the messages between the bookmark and the current window
+    edge into the existing summary, in batched background calls. Nothing
+    is ever re-summarized from scratch. The same mechanism handles the
+    first enable on an already-long chat (one big catch-up).
+
+11. **UI construction rules.** All UI uses the shared style families from
    `ui-style-guide.md` (toggle rows, label-above-box and inline number
    fields, dropdown fields, section titles/hints, action-bar headers,
    shared button roles). No hardcoded colors, typography, or geometry —
@@ -271,20 +279,32 @@ reduction, more the longer the chat runs.
 
 ## 6. Decisions still open
 
-1. Pause/resume catch-up behavior: recommended design (summary and its
-   fold-in bookmark are kept when the per-chat toggle turns off; turning
-   it back on catches up from the bookmark in batched background calls —
-   nothing is ever re-summarized). Explained to the owner in chat;
-   awaiting confirmation.
+1. **Where the user views, edits, and pauses the summary.** Approved in
+   principle (visible, editable, pausable, with a manual update action)
+   but its home in the UI is undecided. Recommendation: a row in Quick
+   Settings, revealed with the toggle's other controls, opening a
+   per-chat summary screen that holds the text, the pause switch, and
+   the manual update action.
 2. Target summary length: fixed default, or a user-set value in
    Summarizer settings.
 3. Where the summary is injected (system-side preamble vs. a stand-in
    message at the top of the history).
-4. Whether pinning individual messages to stay in context (Qvink's brain
+4. Failure behavior when a summary call fails (error-honesty rules
+   apply; behavior and wording need approval). Includes what the user
+   sees during a large first-enable catch-up on a long chat.
+5. Editing or deleting a message that was already folded into the
+   summary: the summary does not auto-update (fold-once design). Decide
+   whether that's acceptable with hand-editing as the remedy, or needs
+   more.
+6. Whether the summary travels with chat backups/exports alongside the
+   messages it condenses.
+7. Whether pinning individual messages to stay in context (Qvink's brain
    icon) is in scope now, later, or never.
-5. Failure behavior when a summary call fails (error-honesty rules apply;
-   behavior and wording need approval).
-6. Remaining user-facing wording — settings labels, the summary view, status
+8. Implementation-stage scope check: paths that bypass the regular
+   request builder today (function calling, fine-tuned models, image
+   generation commands) and the Playground screen — confirm where the
+   summarizer applies.
+9. Remaining user-facing wording — settings labels, the summary view, status
    and failure text — approved as a batch once behavior is settled.
 
 ---
