@@ -1955,6 +1955,90 @@ class Preferences private constructor(private var preferences: SharedPreferences
     }
 
     /* ------------------------------------------------------------------
+     * Image generation (image-generation-rebuild-plan.md §5/§14). Every
+     * image-generation setting is app-wide (owner ruling, 2026-07-29),
+     * like the Summarizer settings: one configuration for the whole app.
+     * ImageGenerationMigration seeds these once from the default settings
+     * profile; the legacy per-chat copies (imageModel, resolution,
+     * dalle_version, imagine_command, function_calling) stop being read
+     * as the rebuild rewires each path, and are removed only after
+     * migration tests plus a stable release (§14).
+     * ------------------------------------------------------------------ */
+
+    /** Let the AI Create Images: whether the create_image tool is offered
+     *  to the conversation model. Independent from `/imagine`. */
+    fun getAiCreateImagesEnabled(): Boolean =
+        getGlobalBoolean("image_gen_let_ai_create", false)
+
+    fun setAiCreateImagesEnabled(value: Boolean) {
+        putGlobalBoolean("image_gen_let_ai_create", value)
+    }
+
+    /** Ask Before Creating (default on): the confirmation card shown before
+     *  a model-initiated image is generated. */
+    fun getAskBeforeAiImages(): Boolean =
+        getGlobalBoolean("image_gen_ask_before_creating", true)
+
+    fun setAskBeforeAiImages(value: Boolean) {
+        putGlobalBoolean("image_gen_ask_before_creating", value, true)
+    }
+
+    /** Image Service endpoint profile id (global). "" = not configured. It
+     *  may differ from any conversation endpoint (§3). */
+    fun getImageGeneratorEndpointId(): String =
+        getGlobalString("image_gen_endpoint_id", "")
+
+    fun setImageGeneratorEndpointId(id: String) {
+        putGlobalString("image_gen_endpoint_id", id)
+    }
+
+    /** Image Model on that endpoint. "" = not configured. */
+    fun getImageGeneratorModel(): String =
+        getGlobalString("image_gen_model", "")
+
+    fun setImageGeneratorModel(model: String) {
+        putGlobalString("image_gen_model", model)
+    }
+
+    /** Default Shape (§5/§11). Unknown stored values read as AUTOMATIC. */
+    fun getImageGeneratorShape(): org.teslasoft.assistant.imagegen.ImageShape =
+        org.teslasoft.assistant.imagegen.ImageShape.fromStored(
+            getGlobalString("image_gen_default_shape", "automatic")
+        )
+
+    fun setImageGeneratorShape(shape: org.teslasoft.assistant.imagegen.ImageShape) {
+        putGlobalString("image_gen_default_shape", shape.storedValue, "automatic")
+    }
+
+    /** Default Quality (§5/§11). Unknown stored values read as AUTOMATIC. */
+    fun getImageGeneratorQuality(): org.teslasoft.assistant.imagegen.ImageQuality =
+        org.teslasoft.assistant.imagegen.ImageQuality.fromStored(
+            getGlobalString("image_gen_default_quality", "automatic")
+        )
+
+    fun setImageGeneratorQuality(quality: org.teslasoft.assistant.imagegen.ImageQuality) {
+        putGlobalString("image_gen_default_quality", quality.storedValue, "automatic")
+    }
+
+    /** App-wide Enable `/imagine` (default on). Replaces the per-chat
+     *  imagine_command once the rebuild rewires the command path. */
+    fun getImagineCommandGlobal(): Boolean =
+        getGlobalBoolean("image_gen_imagine_command", true)
+
+    fun setImagineCommandGlobal(value: Boolean) {
+        putGlobalBoolean("image_gen_imagine_command", value, true)
+    }
+
+    /** §14 seeding marker: stamped only after every global value above has
+     *  been written by ImageGenerationMigration. */
+    fun getImageGenerationSeeded(): Boolean =
+        getGlobalBoolean("image_gen_settings_seeded", false)
+
+    fun setImageGenerationSeeded() {
+        putGlobalBoolean("image_gen_settings_seeded", true)
+    }
+
+    /* ------------------------------------------------------------------
      * Conversation summarizer (conversation-summary-plan.md §5 +
      * conversation-summary-errors.md). Global settings mirror the Memory
      * Assistant pattern (endpoint profile id + model + tuning values);
