@@ -1,9 +1,10 @@
 # Conversation Summary & Context Control — Research and Proposal
 
 **Status: APPROVED PLAN, READY FOR IMPLEMENTATION — all product decisions
-in §5 were approved by the owner (July 28–29 2026). §6 lists the only
-remaining items: the end-of-implementation wording batch and two stated
-defaults the owner can veto. No code has been changed on this branch.**
+in §5 were approved by the owner (July 28–29 2026). User-facing wording
+corrections applied July 29. §6 lists remaining items: the shipped prompt
+slot names (owner rejected initial proposals) and two stated defaults the
+owner can veto. No code has been changed on this branch.**
 
 Date: July 28–29 2026. Branch: `claude/conversation-summary-research-89akp5`.
 
@@ -179,23 +180,31 @@ reduction, more the longer the chat runs.
    editable, and pausable. Stored messages are never altered. Off by
    default for existing behavior safety.
 
-2. **Summarizer settings screen.** A dedicated screen reached from the
-   regular settings page. It holds:
-   - the API endpoint and model picker for summary calls, modeled on the
-     Memory Assistant's endpoint picker (same interaction shape, and
-     wording of roughly the same kind — final strings still go through
-     wording approval);
-   - the default recent-window message count (the value new chats start
-     with, so the user doesn't retype it);
+2. **Summarizer Settings screen.** A dedicated screen reached from the
+   regular settings page. Settings row: title "Summarizer Settings",
+   subtitle "Settings related to the summarizer feature." The screen
+   holds:
+   - **Summary Model** — the API endpoint and model picker for summary
+     calls, modeled on the Memory Assistant's endpoint picker (same
+     interaction shape);
+   - **Complete Messages** — the default recent-window message count
+     (the value new chats start with, so the user doesn't retype it).
+     Hint: "Last number of complete messages sent to the model before
+     summarizing."
    - a toggle for whether the summarizer is on by default for new chats;
-   - at the bottom, the summarizer prompt, revealed for editing, with a
-     revert button that restores the app's default prompt.
+   - **Summary Length** — a words value. Hint: "Maximum amount of words
+     the summary can become."
+   - **Summary Prompt** — the summarizer prompt area at the bottom,
+     revealed for editing, with a revert button that restores the app's
+     default prompt. The dropdown label is "Prompt".
 
-3. **Quick Settings (per chat).** A toggle turns the summarizer on or off
-   for the current chat. When on, it reveals a number box for how many
-   recent messages are always handed to the model in full. The box is
-   prefilled from the Summarizer settings default; the user can change it
-   for this chat but never has to.
+3. **Quick Settings (per chat).** A toggle labeled "Use Summarizer" turns
+   the summarizer on or off for the current chat — no subtitle or hint.
+   When on, it reveals a number box for how many recent messages are
+   always handed to the model in full. The box is prefilled from the
+   Summarizer Settings default; the user can change it for this chat but
+   never has to. Turning this toggle off is the pause action — there is
+   no separate pause control elsewhere.
 
 4. **Window unit is a message count** (not tokens).
 
@@ -214,20 +223,22 @@ reduction, more the longer the chat runs.
    > summary.
 
 6. **Five renameable prompt slots (owner idea, July 28 2026).** The
-   summarizer prompt area holds five named slots selected by the app's
-   standard dropdown field. Whichever slot is selected on this screen is
-   the prompt in use — the choice does not appear in Quick Settings.
-   Slots one and two ship filled with two different styles (story-flow
-   and plain-facts, both drafted under the delegated-prompt rules in
-   decision 5). Slots three to five start empty; users experiment by
-   copying text with ordinary text selection — no dedicated copy/paste
-   buttons (owner ruling, July 28 2026). Users can rename any slot.
-   Revert buttons exist only under the two shipped slots and restore
-   their shipped prompts; the empty slots have no revert. Different
-   styles are prompt text only — the wiring is identical for every slot.
+   Summary Prompt area holds five named slots selected by the app's
+   standard dropdown field (label: "Prompt"). Whichever slot is selected
+   on this screen is the prompt in use — the choice does not appear in
+   Quick Settings. Slots one and two ship filled with two different
+   styles (both drafted under the delegated-prompt rules in decision 5).
+   **Shipped slot names: awaiting owner approval** — initial proposals
+   ("Story so far", "Plain facts") were rejected as unclear to users.
+   Slots three to five start empty; users experiment by copying text
+   with ordinary text selection — no dedicated copy/paste buttons (owner
+   ruling, July 28 2026). Users can rename any slot. Revert buttons
+   exist only under the two shipped slots and restore their shipped
+   prompts; the empty slots have no revert. Different styles are prompt
+   text only — the wiring is identical for every slot.
 
 7. **Empty-prompt guard on leaving the screen.** If the user leaves
-   Summarizer settings (header back control or system back gesture)
+   Summarizer Settings (header back control or system back gesture)
    while the selected slot's prompt is empty, a standard dialog blocks
    the exit. Approved wording (owner-authored, typos corrected with
    approval): "Model summary prompts can't be empty. Last good prompt
@@ -238,18 +249,18 @@ reduction, more the longer the chat runs.
    it, so summarizing can never run on empty instructions. The dialog
    uses the standard dialog theme and two-action pattern.
 
-8. **No-model state.** The Quick Settings toggle is not shown until a
-   summarizer endpoint/model is set up — without a model the toggle is
-   pointless, and hiding it means the feature can never be switched on
-   in a broken state, so no exit-blocking popup is needed on the
-   Summarizer settings screen. Instead the screen opens with an
-   explanatory paragraph at the top. Approved wording (owner-authored,
+8. **No-model state.** The Quick Settings "Use Summarizer" toggle is
+   not shown until a summarizer endpoint/model is set up — without a
+   model the toggle is pointless, and hiding it means the feature can
+   never be switched on in a broken state, so no exit-blocking popup is
+   needed on the Summarizer Settings screen. Instead the screen opens
+   with an explanatory paragraph at the top. Approved wording (owner-authored,
    typos corrected with approval): "The summarizer sends the specified
    number of messages to the model each turn. Anything beyond that
    amount is summarized using the AI model selected in these settings.
    At any time, the summarizer can be turned off in Quick settings,
    which will allow all messages to be sent to the AI again." The
-   paragraph uses the shared intro/section-hint style per the style
+   paragraph uses the `Widget.App.Screen.Intro` style per the style
    guide.
 
 9. **Summary storage and lifecycle (owner, July 28 2026).** The summary
@@ -273,18 +284,20 @@ reduction, more the longer the chat runs.
 11. **Summary view (owner, July 29 2026).** The chat screen's top icon
     row gains the Material Symbols "subject" icon, visible only while
     the summarizer is on for that chat. Tapping it opens the summary
-    view: the summary text (editable), the pause switch, and the manual
-    update action.
+    view: the summary text (editable) and the manual update action.
+    There is no pause switch here — turning off the Quick Settings
+    "Use Summarizer" toggle is the pause (see decision 3).
 
 12. **Scope (owner, July 29 2026).** Regular chat requests only. The
     Playground, image-generation commands, and the function-calling /
     fine-tuned-model paths are excluded — they keep today's full-history
     behavior. No pinning of individual messages (not now).
 
-13. **Summary length (owner, July 29 2026).** A words value in
-    Summarizer settings with a recommended default of 300 words
-    (delegated pick). The value feeds the length limit in the
-    summarizer prompt.
+13. **Summary Length (owner, July 29 2026).** A words value in
+    Summarizer Settings with a recommended default of 300 words
+    (delegated pick). Label: "Summary Length". Hint: "Maximum amount
+    of words the summary can become." The value feeds the length limit
+    in the summarizer prompt.
 
 14. **Injection position (delegated decision; owner refinement
     July 29 2026).** The summary is sent as its own system-role message,
@@ -309,7 +322,7 @@ reduction, more the longer the chat runs.
     provider prompt-cache discounts keep applying — and fewer summarizer
     calls are made. The bookmark rule makes the waiting safe.
 
-16. **Error surfacing (owner, July 29 2026).** Summarizer trouble is
+16. **Error surfacing — Summarizer Errors (owner, July 29 2026).** Summarizer trouble is
     shown in app chrome only and is never injected into the conversation
     or any API request, so the main model never sees it. A dedicated
     error sound (distinct from other app sounds) plays when a summarizer
@@ -337,24 +350,27 @@ reduction, more the longer the chat runs.
     color, and persists for users who weren't looking when the sound
     played.
 
-17. **Wording process.** Remaining user-facing strings (labels, summary
-    view, error details) are drafted during implementation following the
-    approved behavior, the owner's style rules (sentence case,
-    contractions, concise), and the no-app-name rule, then presented to
-    the owner as one batch for approval — not one string at a time.
+17. **Wording process.** User-facing strings are approved as they come
+    up during design and implementation — not deferred to a single batch.
+    All labels and titles use Title Caps. All wording uses contractions
+    where possible and follows the no-app-name rule. Error detail text
+    is drafted during implementation when the exact failure cases are
+    known.
 
 18. **UI construction rules.** All UI uses the shared style families from
    `ui-style-guide.md` (toggle rows, label-above-box and inline number
    fields, dropdown fields, section titles/hints, action-bar headers,
    shared button roles). No hardcoded colors, typography, or geometry —
    everything must stay compatible with the app-wide theme work. Titles
-   and labels follow the app's sentence-case convention ("Summarizer
-   settings", not "Summarizer Settings").
+   and labels use Title Caps ("Summarizer Settings", "Summary Model",
+   "Complete Messages", etc.).
 
 ## 6. Remaining items
 
-1. **Wording batch approval** happens at the end of implementation per
-   approved decision 17 — the only planned stop.
+1. **Shipped prompt slot names** need owner approval. The two shipped
+   slots (narrative style and factual style) need names that are clear
+   to non-technical users. Initial proposals ("Story so far", "Plain
+   facts") were rejected. See decision 6.
 2. **Backups**: because the summary is part of the chat's stored data
    (decision 9), it rides along wherever chat data is backed up or
    exported. Stated to the owner as the default; flag before
