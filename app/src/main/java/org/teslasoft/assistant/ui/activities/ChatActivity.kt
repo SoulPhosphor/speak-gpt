@@ -6749,7 +6749,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 messageInput?.requestFocus()
             } else {
                 // The old Function Calling router — a hidden gpt-4o request
-                // deciding between generateImage and searchAtInternet — is
+                // choosing between its image and web-search functions — is
                 // removed entirely (image-generation-rebuild-plan.md §15).
                 // Every normal chat goes straight to the regular request;
                 // image creation lives in the create_image tool coordinator.
