@@ -211,10 +211,12 @@ import org.teslasoft.assistant.ui.onboarding.WelcomeActivity
 import org.teslasoft.assistant.ui.permission.CameraPermissionActivity
 import org.teslasoft.assistant.ui.permission.MicrophonePermissionActivity
 import org.teslasoft.assistant.util.Hash
+import org.teslasoft.assistant.util.GeneratedImageStorage
 import org.teslasoft.assistant.util.GenErrorResult
 import org.teslasoft.assistant.util.FrozenChatPayload
 import org.teslasoft.assistant.util.FrozenPayloadMessage
 import org.teslasoft.assistant.util.GenerationErrorClassifier
+import org.teslasoft.assistant.util.LegacyImagineCommand
 import org.teslasoft.assistant.util.LocaleParser
 import org.teslasoft.assistant.util.ModelContextCapacity
 import org.teslasoft.assistant.util.ModelContextDecision
@@ -5223,15 +5225,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
             val imagineCommandEnabled: Boolean = preferences!!.getImagineCommand()
 
-            if (m.lowercase().contains("/imagine") && m.length > 9 && imagineCommandEnabled) {
-                val x: String = m.substring(9)
+            if (LegacyImagineCommand.triggersImageGeneration(m, imagineCommandEnabled)) {
+                val x: String = LegacyImagineCommand.extractPrompt(m)
 
                 if (openAIKey == null) {
                     openAIMissing("dalle", x)
                 } else {
                     sendImageRequest(x)
                 }
-            } else if (m.lowercase().contains("/imagine") && m.length <= 9 && imagineCommandEnabled) {
+            } else if (LegacyImagineCommand.showsEmptyPromptError(m, imagineCommandEnabled)) {
                 putMessage("Prompt can not be empty. Use /imagine &lt;PROMPT&gt;", true)
 
                 saveSettings()
@@ -5413,11 +5415,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
         // Preserve the existing non-chat command and multimodal/tool pipelines.
         // They do not use the normal chat-completions request built below.
-        val imagineCommand = rawMessage.lowercase().contains("/imagine") &&
-            preferences?.getImagineCommand() == true
-        if (imagineCommand ||
-            model.contains(":ft") || model.contains("ft:") ||
-            preferences?.getFunctionCalling() == true
+        if (LegacyImagineCommand.divertsTypedTurnToLegacyPipeline(
+                rawMessage,
+                preferences?.getImagineCommand() == true,
+                model,
+                preferences?.getFunctionCalling() == true
+            )
         ) {
             parseMessage(rawMessage)
             return
@@ -7812,7 +7815,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
 
     private fun writeImageToCache(bytes: ByteArray, imageType: String = "png") {
         try {
-            contentResolver.openFileDescriptor(Uri.fromFile(File(getExternalFilesDir("images")?.absolutePath + "/" + Hash.hash(java.util.Base64.getEncoder().encodeToString(bytes)) + "." + imageType)), "w")?.use { fileDescriptor ->
+            contentResolver.openFileDescriptor(Uri.fromFile(File(getExternalFilesDir("images")?.absolutePath + "/" + GeneratedImageStorage.cacheFileName(bytes, imageType))), "w")?.use { fileDescriptor ->
                 FileOutputStream(fileDescriptor.fileDescriptor).use {
                     it.write(
                         bytes
