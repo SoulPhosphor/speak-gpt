@@ -73,6 +73,90 @@
                 android:paddingTop="16dp"
                 android:text="@string/summarizer_intro" />
 
+            <!-- ============ Use Summarizer for New Chats ============ -->
+            <LinearLayout style="@style/Widget.App.Row.Toggle">
+
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/summarizer_new_chats_toggle" />
+                </LinearLayout>
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_summarizer_new_chats"
+                    style="@style/Widget.App.Row.Switch" />
+            </LinearLayout>
+
+            <!-- ============ Summary Length ============ -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:paddingEnd="12dp">
+
+                    <TextView
+                        style="@style/Widget.App.Field.Label"
+                        android:text="@string/summarizer_length" />
+
+                    <TextView
+                        style="@style/Widget.App.Field.Hint"
+                        android:text="@string/summarizer_length_hint" />
+                </LinearLayout>
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/field_summary_length"
+                    style="@style/Widget.App.Field.NumberBlank"
+                    android:ems="5"
+                    android:maxLength="5"
+                    android:singleLine="true" />
+            </LinearLayout>
+
+            <!-- ============ Complete Messages (default for new chats) ============
+                 NumberBlank belongs inline with its label (its own style
+                 contract, matched by every other use in the app) — the
+                 label/hint sit in a text column beside it, the same shape as
+                 Widget.App.Row.WithSubtitle's TextColumn but paired with a
+                 NumberBlank instead of a Dropdown.Value. -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:paddingEnd="12dp">
+
+                    <TextView
+                        style="@style/Widget.App.Field.Label"
+                        android:text="@string/summarizer_complete_messages" />
+
+                    <TextView
+                        style="@style/Widget.App.Field.Hint"
+                        android:text="@string/summarizer_complete_messages_hint" />
+                </LinearLayout>
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/field_complete_messages"
+                    style="@style/Widget.App.Field.NumberBlank"
+                    android:ems="4"
+                    android:maxLength="4"
+                    android:singleLine="true" />
+            </LinearLayout>
+
             <!-- ============ Summary Model ============ -->
             <TextView
                 style="@style/Widget.App.Section.Title"
@@ -121,90 +205,6 @@
                     android:id="@+id/text_summarizer_model_value"
                     style="@style/Widget.App.Dropdown.Value"
                     android:layout_width="wrap_content" />
-            </LinearLayout>
-
-            <!-- ============ Complete Messages (default for new chats) ============
-                 NumberBlank belongs inline with its label (its own style
-                 contract, matched by every other use in the app) — the
-                 label/hint sit in a text column beside it, the same shape as
-                 Widget.App.Row.WithSubtitle's TextColumn but paired with a
-                 NumberBlank instead of a Dropdown.Value. -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
-
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical"
-                    android:paddingEnd="12dp">
-
-                    <TextView
-                        style="@style/Widget.App.Field.Label"
-                        android:text="@string/summarizer_complete_messages" />
-
-                    <TextView
-                        style="@style/Widget.App.Field.Hint"
-                        android:text="@string/summarizer_complete_messages_hint" />
-                </LinearLayout>
-
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/field_complete_messages"
-                    style="@style/Widget.App.Field.NumberBlank"
-                    android:ems="4"
-                    android:maxLength="4"
-                    android:singleLine="true" />
-            </LinearLayout>
-
-            <!-- ============ Use Summarizer for New Chats ============ -->
-            <LinearLayout style="@style/Widget.App.Row.Toggle">
-
-                <LinearLayout style="@style/Widget.App.Row.TextColumn">
-
-                    <TextView
-                        style="@style/Widget.App.Row.Title"
-                        android:text="@string/summarizer_new_chats_toggle" />
-                </LinearLayout>
-
-                <com.google.android.material.materialswitch.MaterialSwitch
-                    android:id="@+id/switch_summarizer_new_chats"
-                    style="@style/Widget.App.Row.Switch" />
-            </LinearLayout>
-
-            <!-- ============ Summary Length ============ -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
-
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical"
-                    android:paddingEnd="12dp">
-
-                    <TextView
-                        style="@style/Widget.App.Field.Label"
-                        android:text="@string/summarizer_length" />
-
-                    <TextView
-                        style="@style/Widget.App.Field.Hint"
-                        android:text="@string/summarizer_length_hint" />
-                </LinearLayout>
-
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/field_summary_length"
-                    style="@style/Widget.App.Field.NumberBlank"
-                    android:ems="5"
-                    android:maxLength="5"
-                    android:singleLine="true" />
             </LinearLayout>
 
             <!-- ============ Summary Prompt (five renameable slots) ============ -->
