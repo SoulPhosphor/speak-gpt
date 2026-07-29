@@ -12,8 +12,11 @@ order set by the owner. Code claims re-verified against `main` at
 `5c6fb13`.  
 **Revised (same day):** app-wide settings scope, model picker works like the
 existing shared picker, spoken approval with companion name — all owner
-rulings, 2026-07-29. Open items: quality/orientation settings, and the
-default-assistant-name wording noted in section 5.
+rulings, 2026-07-29.  
+**Revised (same day):** saved shape and quality defaults with per-request
+`--shape` / `--quality` overrides, precedence, Automatic semantics, and the
+unsupported-option notice — owner ruling, 2026-07-29. Remaining open item:
+the default-assistant-name wording noted in section 5.
 
 ## 1. Goal
 
@@ -51,11 +54,15 @@ Behavior:
 
 1. The app recognizes `/imagine` only when it appears at the beginning of the
    raw user message and is followed by a prompt.
-2. The app sends the user's text after `/imagine` directly to the configured
+2. Optional trailing options — for example
+   `/imagine a luminous forest temple --shape landscape --quality high` —
+   are parsed and removed before the artistic prompt is sent. They override
+   the saved defaults for that request only (section 11).
+3. The app sends the remaining prompt text directly to the configured
    image generator.
-3. The conversation model is not called to rewrite or approve the prompt.
-4. This path does not require the conversation model to support tools.
-5. Because the command itself is an explicit request, it does not require an
+4. The conversation model is not called to rewrite or approve the prompt.
+5. This path does not require the conversation model to support tools.
+6. Because the command itself is an explicit request, it does not require an
    additional confirmation.
 
 The existing command must remain enabled by default. Its setting stays
@@ -249,15 +256,28 @@ Rows, top to bottom:
    - Portrait
    - Landscape
 
-   Automatic is the default. Exact dimensions are chosen by the provider
-   adapter. The app must not expose choices the selected provider explicitly
-   says it cannot accept.
+6. **Default quality**
+   - Automatic
+   - Low
+   - Medium
+   - High
 
-   This is deliberately the only image-output setting in the first release.
-   Quality tiers, exact pixel sizes, image counts, and output formats stay on
-   provider defaults (section 11) until their cost implications are designed.
+   Automatic is the default for both rows. "Automatic" never means the
+   conversation model chooses: it means the provider adapter sends the
+   provider's own "auto" value when the provider supports one, or omits the
+   parameter so the image provider applies its default (section 11). The app
+   must not expose choices the selected provider explicitly says it cannot
+   accept.
 
-6. **Enable `/imagine`**
+   These are saved defaults. A single request can override them with
+   `/imagine` options or tool-call fields (section 11) without changing the
+   saved values.
+
+   Exact pixel sizes, image counts, backgrounds, compression, seeds, and
+   reference images stay on provider defaults until their provider mappings
+   and cost implications are designed.
+
+7. **Enable `/imagine`**
    - Preserves the existing direct command setting.
    - Enabled by default.
 
@@ -339,14 +359,19 @@ Suggested inputs:
 | `prompt` | Yes | Detailed text sent to the image generator |
 | `description` | Yes | Short plain-language description for the image bubble and accessibility |
 | `shape` | No | `automatic`, `square`, `portrait`, or `landscape` |
+| `quality` | No | `automatic`, `low`, `medium`, or `high` — only when the user explicitly asked for that quality |
 
 Rules:
 
 - The generator creates exactly one image per tool call.
 - Allow at most one successful image-generation tool call per user turn.
+- A supplied `shape` or `quality` acts as that request's override in the
+  precedence of section 11; an omitted field falls back to the saved default.
+- The tool description must state that `quality` may be set only when the
+  user explicitly requested that quality. The conversation model must not
+  independently raise quality or choose a more expensive image setting.
 - The conversation model cannot choose the generator endpoint, generator
-  model, number of images, quality tier, or another cost-affecting provider
-  setting.
+  model, number of images, or another cost-affecting provider setting.
 - Those choices remain under user control.
 - Reject an empty prompt, invalid JSON, unknown fields that would change
   behavior, or an excessive prompt length with a clean tool error.
@@ -443,6 +468,7 @@ Suggested normalized request:
 
 - prompt
 - shape
+- quality
 - endpoint ID
 - generator model ID
 - one image
@@ -505,23 +531,75 @@ When the Image Model row is opened:
 Provider capability metadata may improve the list, but it must never become a
 hard-coded name filter.
 
-## 11. Request Parameters and Cost Control
+## 11. Request Parameters, Overrides, and Cost Control
 
-Initial release behavior:
+Image generation uses saved defaults plus optional per-request overrides
+(owner ruling, 2026-07-29).
 
-- Generate one image.
-- Default shape is Automatic.
-- Default quality and output format come from the provider.
-- Omit optional API parameters when set to Automatic rather than sending values
-  an endpoint may reject.
-- Do not let the conversation model raise quality, request many images, or
-  select an expensive generator.
+### Saved defaults
+
+- **Default shape:** Automatic / Square / Portrait / Landscape.
+- **Default quality:** Automatic / Low / Medium / High.
+
+### Per-request overrides
+
+`/imagine` accepts optional options after the prompt:
+
+`/imagine a luminous forest temple --shape landscape --quality high`
+
+- The app parses and removes the options before the artistic prompt is sent
+  to the image generator.
+- Overrides apply to that request only and never change the saved settings.
+- A model-initiated `create_image` call may carry `shape` and `quality`
+  fields (section 6); a supplied field is that request's override.
+- A trailing option with an unknown name or an invalid value is a clear
+  user-facing error naming the supported options and values, and no image is
+  generated, so the command can be corrected (section 8 error standard).
+
+### Precedence
+
+1. Explicit per-request override.
+2. The user's saved default.
+3. The image provider's default.
+
+### The meaning of Automatic
+
+"Automatic" never means the conversation model chooses the setting. It means
+the provider adapter sends the provider's own "auto" value when that provider
+supports one, or omits the parameter entirely so the image provider applies
+its default. Omission is always preferred over sending a value an endpoint
+may reject.
+
+### Unsupported options are never silently ignored
+
+If the user explicitly requests an option value the selected generator cannot
+support, the app must say that option is unavailable, explain that the
+provider's default will be used instead, and let the user continue or cancel.
+When a model-initiated tool call carries an unsupported value, the app
+applies the fallback and reports it in the tool result instead of
+interrupting the user.
+
+### Shared pipeline
+
+Both `/imagine` and model-initiated generation convert their inputs into the
+same shared internal image request, and the provider-specific adapter
+translates that request into values the selected provider accepts. Neither
+path may bypass the adapter layer.
+
+### Cost control
+
+- Generate one image per request.
+- The conversation model must not independently raise quality or choose a
+  more expensive image setting; the tool permits a `quality` value only when
+  the user explicitly requested it (section 6).
+- The conversation model can never choose the generator endpoint, generator
+  model, or image count.
 - Preserve the configured image-generator response timeout because image
   generation can take substantially longer than ordinary chat.
 
-Quality, exact dimensions, background, compression, seed, and reference images
-can be added later under Advanced settings after their provider mappings and
-cost implications are designed.
+Exact dimensions, background, compression, seed, and reference images can be
+added later under Advanced settings after their provider mappings and cost
+implications are designed.
 
 ## 12. Storage and Message Representation
 
@@ -588,6 +666,8 @@ the rebuilt feature is verified.
 1. Seed the global generator model from the default settings' `imageModel`.
 2. Seed the global shape from the default settings' `resolution`, mapped to
    the closest shape.
+   Seed the global quality with Automatic — it is a new setting with no
+   legacy value.
 3. Seed the global generator endpoint from the default settings' API
    endpoint so existing behavior does not abruptly change.
 4. Seed the global `/imagine` toggle from the default settings'
@@ -645,7 +725,8 @@ phases.
    endpoint selection, model discovery, search, manual entry, and the toggles
    in the approved order — and remove the Image model tile, the Resolution
    tile, their fixed-list dialogs, and the Slash commands tile.
-6. Route `/imagine` through the new generator coordinator.
+6. Route `/imagine` through the new generator coordinator, including parsing
+   and stripping the trailing `--shape` / `--quality` options.
 7. Add the `create_image` tool to both normal chat request builders.
 8. Implement streamed tool-call assembly, validation, confirmation, execution,
    tool-result return, and final response.
@@ -709,6 +790,12 @@ The work is complete only when all of the following are true:
     is announced with the companion's name, "create it" approves, "cancel"
     denies, unrelated speech denies and is handled as a normal message, and
     the on-screen card works throughout.
+24. `/imagine` trailing options override shape and quality for that request
+    only; the saved settings are unchanged afterward, and an invalid or
+    unknown option produces a clear correctable error instead of an image.
+25. An explicitly requested option the selected generator cannot support
+    produces the unavailable-option notice with continue and cancel; nothing
+    is silently ignored.
 
 ## 18. Required Test Matrix
 
@@ -726,8 +813,9 @@ At minimum, verify:
 Also test alternate auth modes, provider errors, invalid JSON tool arguments,
 multiple attempted tool calls, cancellation at each stage, response timeout,
 oversized download, malformed Base64, missing files, chat deletion, backup and
-restore, process recreation, and each spoken-approval outcome ("create it",
-"cancel", and unrelated speech).
+restore, process recreation, each spoken-approval outcome ("create it",
+"cancel", and unrelated speech), and the `/imagine` options (valid overrides,
+invalid values, unknown options, and the unsupported-option notice).
 
 ## 19. Explicit Non-Goals
 
