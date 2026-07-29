@@ -286,11 +286,13 @@ reduction, more the longer the chat runs.
     (delegated pick). The value feeds the length limit in the
     summarizer prompt.
 
-14. **Injection position (delegated decision, July 29 2026).** The
-    summary is sent as its own system-role message, labeled as a summary
-    of the earlier conversation, placed after the chat's system prompt
-    and before the oldest full message. The user's stored words are
-    never mixed with generated text.
+14. **Injection position (delegated decision; owner refinement
+    July 29 2026).** The summary is sent as its own system-role message,
+    labeled as a summary of the earlier conversation. It comes after
+    everything else that's injected — system prompt, document and image
+    include summaries, memory material — as the very last item before
+    the oldest full message. The user's stored words are never mixed
+    with generated text.
 
 15. **Lag tolerance (owner, July 29 2026).** Transmission is
     bookmark-based: each turn sends the summary plus every message after
@@ -299,17 +301,35 @@ reduction, more the longer the chat runs.
     delays, or drops conversation content — requests are just
     temporarily larger until catch-up succeeds.
 
+    **Batched fold-ins for prompt-cache safety (July 29 2026).** Fold-in
+    calls run in batches: the summarizer waits until a chunk of messages
+    (internal default: ten, not a user setting) has accumulated past the
+    window, then folds them in one call. Between batches the summary
+    text is unchanged, so the request prefix stays identical and
+    provider prompt-cache discounts keep applying — and fewer summarizer
+    calls are made. The bookmark rule makes the waiting safe.
+
 16. **Error surfacing (owner, July 29 2026).** Summarizer trouble is
     shown in app chrome only and is never injected into the conversation
     or any API request, so the main model never sees it. A dedicated
     error sound (distinct from other app sounds) plays when a summarizer
-    call fails, so the user notices without looking. The Material
-    Symbols "data_alert" icon appears in the chat's top icon row while
-    the summarizer is failing or behind, and disappears once caught up.
-    Tapping it shows honest detail per the error rules: what failed, why
-    when known, that no messages were lost and unsummarized messages are
-    being sent in full, and what the user can do. Sound plays on the
-    first failure of an episode, not on every retry.
+    call fails — on the first failure of an episode, not every retry —
+    so the user notices without looking.
+
+    **Icon order:** the Material Symbols "data_alert" icon comes first
+    in the chat's top icon row, then the "subject" summary icon, then
+    the existing icons.
+
+    **Per-chat error log (owner, July 29 2026).** Each chat keeps its
+    own last five summarizer errors — no other chat's. Each entry is
+    stamped with the date and a 12-hour hour:minute time (no seconds).
+    The data_alert icon is visible while the log has entries. Tapping it
+    opens a popup dialog with the honest detail per the error rules:
+    what failed, why when known, that no messages were lost and
+    unsummarized messages are being sent in full, and what the user can
+    do. At the bottom: a Copy button and a Delete button. Delete clears
+    the chat's error log and hides the icon. The dialog and buttons use
+    the standard shared dialog and button-role styles.
 
 17. **Wording process.** Remaining user-facing strings (labels, summary
     view, error details) are drafted during implementation following the
@@ -337,6 +357,11 @@ reduction, more the longer the chat runs.
    summary doesn't auto-update when an already-folded message is later
    edited or deleted; hand-editing the summary is the remedy. Stated to
    the owner as the accepted default; flag if more is wanted.
+4. **New-error indicator on the data_alert icon**: recommendation
+   awaiting owner confirmation — a small numeric badge on the icon
+   showing the stored-error count (1–5). The number changing signals a
+   new error without relying on color; pairs with the per-episode
+   sound.
 
 ---
 
