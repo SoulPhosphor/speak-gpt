@@ -331,6 +331,12 @@ reduction, more the longer the chat runs.
     the chat's error log and hides the icon. The dialog and buttons use
     the standard shared dialog and button-role styles.
 
+    **New-error indicator (owner approved, July 29 2026):** a small
+    numeric badge on the data_alert icon shows the stored-error count
+    (1–5). The changing number signals a new error without relying on
+    color, and persists for users who weren't looking when the sound
+    played.
+
 17. **Wording process.** Remaining user-facing strings (labels, summary
     view, error details) are drafted during implementation following the
     approved behavior, the owner's style rules (sentence case,
@@ -357,11 +363,6 @@ reduction, more the longer the chat runs.
    summary doesn't auto-update when an already-folded message is later
    edited or deleted; hand-editing the summary is the remedy. Stated to
    the owner as the accepted default; flag if more is wanted.
-4. **New-error indicator on the data_alert icon**: recommendation
-   awaiting owner confirmation — a small numeric badge on the icon
-   showing the stored-error count (1–5). The number changing signals a
-   new error without relying on color; pairs with the per-episode
-   sound.
 
 ---
 
