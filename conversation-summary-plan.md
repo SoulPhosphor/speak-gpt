@@ -2,9 +2,8 @@
 
 **Status: APPROVED PLAN, READY FOR IMPLEMENTATION — all product decisions
 in §5 were approved by the owner (July 28–29 2026). User-facing wording
-corrections applied July 29. §6 lists remaining items: the shipped prompt
-slot names (owner rejected initial proposals) and two stated defaults the
-owner can veto. No code has been changed on this branch.**
+and prompts finalized July 29. §6 lists two stated defaults the owner can
+veto. No code has been changed on this branch.**
 
 Date: July 28–29 2026. Branch: `claude/conversation-summary-research-89akp5`.
 
@@ -200,42 +199,83 @@ reduction, more the longer the chat runs.
 
 3. **Quick Settings (per chat).** A toggle labeled "Use Summarizer" turns
    the summarizer on or off for the current chat — no subtitle or hint.
-   When on, it reveals a number box for how many recent messages are
-   always handed to the model in full. The box is prefilled from the
-   Summarizer Settings default; the user can change it for this chat but
-   never has to. Turning this toggle off is the pause action — there is
-   no separate pause control elsewhere.
+   Below it, a number box labeled "Complete Messages" (no hint) shows
+   how many recent messages are always handed to the model in full. The
+   number box is visible whether the toggle is on or off, so the user
+   can see and adjust the count without enabling first. The box is
+   prefilled from the Summarizer Settings default; the user can change
+   it for this chat but never has to. Turning the toggle off is the
+   pause action — there is no separate pause control elsewhere.
 
 4. **Window unit is a message count** (not tokens).
 
-5. **Default summarizer prompt is delegated** to implementation by the
-   owner (they don't want to be asked to author it). Owner's style rules
-   for it: use contractions where possible ("don't", not "do not"), and
-   keep it as short as reasonable while keeping the same meaning. Current
-   working draft (refined during implementation under those rules):
+5. **Shipped summarizer prompts (owner-authored, July 29 2026).**
+   Two prompts ship in slots one and two. `{length}` is replaced at
+   runtime with the Summary Length value from Summarizer Settings.
 
-   > You keep a running summary of an ongoing conversation. Below are the
-   > current summary and the oldest messages that are leaving the recent
-   > window. Fold those messages into the summary: keep decisions, facts,
-   > names, feelings, plans, and anything either side would need later.
-   > Be accurate — don't invent anything and don't drop things that still
-   > matter. Keep it under {length} words. Reply with only the updated
-   > summary.
+   **Slot 1 — "Storyteller":**
+
+   > You maintain a concise narrative recap of this conversation. Below
+   > are the existing recap and the messages that have just moved out of
+   > the recent-message window. Integrate the new information into one
+   > coherent updated recap.
+   >
+   > Preserve:
+   >
+   > - the main events and their order;
+   > - the user's goals and concerns;
+   > - important reasoning or context behind decisions;
+   > - decisions that were made;
+   > - unresolved questions, problems, or next steps;
+   > - the current state of active topics.
+   >
+   > Remove repetition, casual filler, and details that no longer affect
+   > the conversation. When newer information replaces or corrects older
+   > information, update the recap rather than preserving both versions.
+   > Do not present suggestions, guesses, or possibilities as settled
+   > facts.
+   >
+   > Write in clear, compact prose under {length} words. Reply only with
+   > the updated recap.
+
+   **Slot 2 — "Reporter":**
+
+   > You maintain compact reference notes for this conversation. Below
+   > are the existing notes and the messages that have just moved out of
+   > the recent-message window. Update the notes using short, standalone
+   > statements.
+   >
+   > Keep only information that may be needed later, including:
+   >
+   > - names and relevant identifying details;
+   > - explicit preferences, requirements, and constraints;
+   > - decisions that were actually made;
+   > - current plans and commitments;
+   > - unresolved tasks or questions;
+   > - important facts stated by the user;
+   > - the present status of active work.
+   >
+   > Do not preserve conversational flow, emotional narration, repeated
+   > explanations, abandoned ideas, or temporary details with no likely
+   > future use. Do not turn an assistant suggestion into a decision. If
+   > newer information corrects, replaces, completes, or cancels an older
+   > item, revise or remove the older item.
+   >
+   > Use brief bullet points, with one fact per bullet. Keep the complete
+   > list under {length} words. Reply only with the updated list.
 
 6. **Five renameable prompt slots (owner idea, July 28 2026).** The
    Summary Prompt area holds five named slots selected by the app's
    standard dropdown field (label: "Prompt"). Whichever slot is selected
    on this screen is the prompt in use — the choice does not appear in
-   Quick Settings. Slots one and two ship filled with two different
-   styles (both drafted under the delegated-prompt rules in decision 5).
-   **Shipped slot names: awaiting owner approval** — initial proposals
-   ("Story so far", "Plain facts") were rejected as unclear to users.
-   Slots three to five start empty; users experiment by copying text
-   with ordinary text selection — no dedicated copy/paste buttons (owner
-   ruling, July 28 2026). Users can rename any slot. Revert buttons
-   exist only under the two shipped slots and restore their shipped
-   prompts; the empty slots have no revert. Different styles are prompt
-   text only — the wiring is identical for every slot.
+   Quick Settings. Slot one ships as "Storyteller" and slot two as
+   "Reporter" (owner-authored prompts in decision 5). Slots three to
+   five start empty; users experiment by copying text with ordinary text
+   selection — no dedicated copy/paste buttons (owner ruling,
+   July 28 2026). Users can rename any slot. Revert buttons exist only
+   under Storyteller and Reporter and restore their shipped prompts;
+   the empty slots have no revert. Different styles are prompt text
+   only — the wiring is identical for every slot.
 
 7. **Empty-prompt guard on leaving the screen.** If the user leaves
    Summarizer Settings (header back control or system back gesture)
@@ -367,15 +407,11 @@ reduction, more the longer the chat runs.
 
 ## 6. Remaining items
 
-1. **Shipped prompt slot names** need owner approval. The two shipped
-   slots (narrative style and factual style) need names that are clear
-   to non-technical users. Initial proposals ("Story so far", "Plain
-   facts") were rejected. See decision 6.
-2. **Backups**: because the summary is part of the chat's stored data
+1. **Backups**: because the summary is part of the chat's stored data
    (decision 9), it rides along wherever chat data is backed up or
    exported. Stated to the owner as the default; flag before
    implementation if unwanted.
-3. **Edited/deleted folded messages**: fold-once design means the
+2. **Edited/deleted folded messages**: fold-once design means the
    summary doesn't auto-update when an already-folded message is later
    edited or deleted; hand-editing the summary is the remedy. Stated to
    the owner as the accepted default; flag if more is wanted.
