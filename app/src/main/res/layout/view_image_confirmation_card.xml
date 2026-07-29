@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+/**************************************************************************
+* Copyright (c) 2023-2026 Dmytro Ostapenko. All rights reserved.
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*  http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+**************************************************************************/
+-->
+<!-- Inline image-creation confirmation card
+     (image-generation-rebuild-plan.md §5, owner ruling 2026-07-29): names
+     the chat's companion, keeps the prompt collapsed so an intended
+     surprise is not spoiled, and offers Create / Cancel / View Prompt.
+     Container reuses the assistant bubble background; text uses the shared
+     row typography; actions use the shared inline button styles (View
+     Prompt awaits an approved inline-secondary variant — recorded in
+     ui-style-adoption.md). -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingStart="12dp"
+    android:paddingTop="12dp"
+    android:paddingEnd="32dp">
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:background="@drawable/bubble_in"
+        android:orientation="vertical"
+        android:padding="12dp">
+
+        <TextView
+            android:id="@+id/confirmation_title"
+            style="@style/Widget.App.Row.Title" />
+
+        <TextView
+            android:id="@+id/confirmation_prompt"
+            style="@style/Widget.App.Row.Subtitle"
+            android:layout_marginTop="8dp"
+            android:maxLines="200"
+            android:visibility="gone" />
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:orientation="horizontal">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_confirmation_create"
+                style="@style/AppButton.Primary.Inline"
+                android:text="@string/image_gen_action_create" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_confirmation_cancel"
+                style="@style/AppButton.Destructive.Inline"
+                android:layout_marginStart="8dp"
+                android:text="@string/btn_cancel" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_confirmation_view_prompt"
+                style="@style/AppButton.Primary.Inline"
+                android:layout_marginStart="8dp"
+                android:text="@string/image_gen_action_view_prompt" />
+        </LinearLayout>
+    </LinearLayout>
+</LinearLayout>

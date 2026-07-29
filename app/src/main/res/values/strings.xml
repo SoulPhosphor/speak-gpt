@@ -553,6 +553,9 @@
     <string name="image_gen_error_unsupported_option">The requested option is not supported by the image service.</string>
     <string name="image_gen_error_provider">The image provider reported an error.</string>
     <string name="image_gen_error_cancelled">The image request was cancelled.</string>
+    <string name="image_gen_card_title">%1$s Wants to Create an Image</string>
+    <string name="image_gen_action_create">Create</string>
+    <string name="image_gen_action_view_prompt">View Prompt</string>
     <string name="tile_openai_tts">Use OpenAI TTS</string>
     <string name="tile_google_tts">Google TTS is used</string>
     <string name="tile_tts_desc">This feature allows you to set TTS engine. OpenAI TTS is paid.</string>

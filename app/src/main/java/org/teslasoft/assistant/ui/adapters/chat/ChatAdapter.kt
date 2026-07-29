@@ -59,6 +59,7 @@ import com.bumptech.glide.Glide
 import com.bumptech.glide.load.resource.bitmap.CenterCrop
 import com.bumptech.glide.load.resource.bitmap.RoundedCorners
 import com.bumptech.glide.request.RequestOptions
+import com.google.android.material.button.MaterialButton
 import com.google.android.material.elevation.SurfaceColors
 import io.noties.markwon.AbstractMarkwonPlugin
 import io.noties.markwon.Markwon
@@ -96,7 +97,7 @@ import org.teslasoft.assistant.ui.fragments.dialogs.ReportAIContentBottomSheet
 import org.teslasoft.assistant.util.ShareUtil.Companion.shareBase64Image
 import org.teslasoft.assistant.util.ShareUtil.Companion.sharePlainText
 
-class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, private val selectorProjection: ArrayList<HashMap<String, Any>>, private val context: FragmentActivity, private val preferences: Preferences, private val isAssistant: Boolean, private var chatId: String) : RecyclerView.Adapter<ChatAdapter.ViewHolder>(), EditMessageDialogFragment.StateChangesListener {
+class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, private val selectorProjection: ArrayList<HashMap<String, Any>>, private val context: FragmentActivity, private val preferences: Preferences, private val isAssistant: Boolean, private var chatId: String) : RecyclerView.Adapter<RecyclerView.ViewHolder>(), EditMessageDialogFragment.StateChangesListener {
 
     private var dalleImageStringList = ArrayList<String>(Collections.nCopies(itemCount + 1, ""))
     private var listener: OnUpdateListener? = null
@@ -146,9 +147,19 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         private const val TYPE_USER = 0
         private const val TYPE_BOT = 1
         private const val TYPE_CLASSIC = 2
+        private const val TYPE_IMAGE_CONFIRMATION = 3
         private const val MENU_INCLUDE_REMOVE = 101
         private const val MENU_INCLUDE_CONDENSE = 102
         private const val MENU_INCLUDE_EDIT = 103
+
+        // Transient inline image-confirmation card row
+        // (image-generation-rebuild-plan.md §5). These rows live only in
+        // the on-screen list: ChatActivity filters them out of persistence,
+        // and the model projection skips them because their message text is
+        // blank.
+        const val KEY_IMAGE_CONFIRMATION = "imageConfirmationCard"
+        const val KEY_IMAGE_CONFIRMATION_PROMPT = "imageConfirmationPrompt"
+        const val KEY_IMAGE_CONFIRMATION_COMPANION = "imageConfirmationCompanion"
     }
 
     fun setChatId(chatId: String) {
@@ -164,6 +175,9 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
     private val expandedIncludeRows: MutableSet<String> = mutableSetOf()
 
     override fun getItemViewType(position: Int): Int {
+        if (dataArray[position][KEY_IMAGE_CONFIRMATION] == true) {
+            return TYPE_IMAGE_CONFIRMATION
+        }
         return if (preferences.getLayout() == "bubbles" || isAssistant) {
             if (dataArray[position]["isBot"] == true) {
                 TYPE_BOT
@@ -175,11 +189,19 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         }
     }
 
-    override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-        holder.bind(dataArray[position], position)
+    override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
+        when (holder) {
+            is ImageConfirmationViewHolder -> holder.bind(dataArray[position])
+            is ViewHolder -> holder.bind(dataArray[position], position)
+        }
     }
 
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
+        if (viewType == TYPE_IMAGE_CONFIRMATION) {
+            val view = LayoutInflater.from(parent.context)
+                .inflate(R.layout.view_image_confirmation_card, parent, false)
+            return ImageConfirmationViewHolder(view)
+        }
         val layoutId = when (viewType) {
             TYPE_BOT -> R.layout.view_assistant_bot_message
             TYPE_USER -> R.layout.view_assistant_user_message
@@ -187,6 +209,30 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         }
         val view = LayoutInflater.from(parent.context).inflate(layoutId, parent, false)
         return ViewHolder(view, context)
+    }
+
+    /** The §5 inline confirmation card: names the companion, keeps the
+     *  prompt collapsed behind View Prompt so an intended surprise is not
+     *  spoiled, and reports Create/Cancel back to the host. */
+    inner class ImageConfirmationViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
+        private val title: TextView = itemView.findViewById(R.id.confirmation_title)
+        private val prompt: TextView = itemView.findViewById(R.id.confirmation_prompt)
+        private val btnCreate: MaterialButton = itemView.findViewById(R.id.btn_confirmation_create)
+        private val btnCancel: MaterialButton = itemView.findViewById(R.id.btn_confirmation_cancel)
+        private val btnViewPrompt: MaterialButton =
+            itemView.findViewById(R.id.btn_confirmation_view_prompt)
+
+        fun bind(chatMessage: HashMap<String, Any>) {
+            val companion = chatMessage[KEY_IMAGE_CONFIRMATION_COMPANION]?.toString().orEmpty()
+            title.text = context.getString(R.string.image_gen_card_title, companion)
+            prompt.text = chatMessage[KEY_IMAGE_CONFIRMATION_PROMPT]?.toString().orEmpty()
+            btnViewPrompt.setOnClickListener {
+                prompt.visibility =
+                    if (prompt.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+            }
+            btnCreate.setOnClickListener { listener?.onImageConfirmationDecision(true) }
+            btnCancel.setOnClickListener { listener?.onImageConfirmationDecision(false) }
+        }
     }
 
     fun setOnUpdateListener(listener: OnUpdateListener) {
@@ -1176,5 +1222,9 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         fun onBulkSelectionChanged(position: Int, selected: Boolean)
         fun onChangeBulkActionMode(mode: Boolean)
         fun onSpeakClick(message: String, position: Int)
+
+        /** The inline image-confirmation card's Create (true) or Cancel
+         *  (false) tap (image-generation-rebuild-plan.md §5). */
+        fun onImageConfirmationDecision(approved: Boolean)
     }
 }
