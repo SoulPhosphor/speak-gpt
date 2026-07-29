@@ -38,6 +38,26 @@ State exactly what is shared:
 
 A screen may use shared styles while retaining its own layout. It may also use a shared layout while adding local controls or behavior.
 
+## Label capitalization (owner ruling, July 29 2026)
+
+Labels are written in Title Caps. This applies to every label-like string:
+button and action labels, row and tile titles, dialog and screen titles,
+section headings, toggle names, log entry titles and field labels, and
+status/outcome values.
+
+Examples: Edit Prompt, Change Settings, Image Request Completed, Provider
+Request ID, Maximum Logs Saved.
+
+Short connecting words (a, an, and, the, of, to, for, or) stay lowercase
+inside a title unless they are the first word. Literal command names such as
+`/imagine` keep their exact form.
+
+Sentence case is for explanatory prose: subtitles, hints, messages, body
+text, and spoken announcements — anything that explains rather than names.
+
+When writing or proposing any new label, apply this rule. Do not carry
+sentence case from drafts, examples, or upstream strings into a label.
+
 ## Core rule
 
 Reuse shared visual rules for repeated components. Do not force screens to have identical structure when the approved product needs differ.

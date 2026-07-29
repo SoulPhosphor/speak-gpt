@@ -21,8 +21,8 @@ unsupported-option notice — owner ruling, 2026-07-29.
 recording toggle, chat-versus-log error split, and companions always have a
 name (a nameless-companion flow is a defect to fix) — owner rulings,
 2026-07-29.  
-**Revised (same day):** cause-appropriate failure actions (Edit prompt /
-Change settings / Retry / settings link), capability-change log entries with
+**Revised (same day):** cause-appropriate failure actions (Edit Prompt /
+Change Settings / Retry / settings link), capability-change log entries with
 the strict tools-not-supported guard, and request diagnostics for failures
 and successes with owner-approved example wording — owner rulings,
 2026-07-29.
@@ -229,23 +229,23 @@ whole app. Switching generators means changing it here. This includes the
 
 Rows, top to bottom:
 
-1. **Let the AI create images** (toggle, at the top)
+1. **Let the AI Create Images** (toggle, at the top)
    - Makes `create_image` available to the current conversation model.
    - This setting is independent from `/imagine`.
 
-2. **Ask before creating** (toggle)
-   - Visible only while **Let the AI create images** is enabled.
+2. **Ask Before Creating** (toggle)
+   - Visible only while **Let the AI Create Images** is enabled.
    - Enabled by default.
    - Protects against unexpected image-generation charges from an
      over-enthusiastic model.
 
-3. **Image service**
+3. **Image Service**
    - Selects the saved API endpoint used for image generation, using the
      existing endpoint picker.
    - Subtitle shows the endpoint's friendly label.
    - It may differ from the current conversation endpoint.
 
-4. **Image model**
+4. **Image Model**
    - Works like the app's existing model picker (owner ruling, 2026-07-29):
      the provider's model list is fetched, the search field narrows it, and
      the user picks from the results. No separate manual model-ID entry
@@ -259,13 +259,13 @@ Rows, top to bottom:
      show. The image variant must show image models.
    - No model name is rejected merely because it is unfamiliar to the app.
 
-5. **Default shape**
+5. **Default Shape**
    - Automatic
    - Square
    - Portrait
    - Landscape
 
-6. **Default quality**
+6. **Default Quality**
    - Automatic
    - Low
    - Medium
@@ -296,13 +296,13 @@ When the conversation model requests an image and confirmation is enabled,
 show an inline card. The card names the chat's companion (assistant name)
 rather than a generic "AI" (owner ruling, 2026-07-29):
 
-> **<Companion name> wants to create an image**
+> **<Companion Name> Wants to Create an Image**
 
 Actions:
 
 - **Create**
 - **Cancel**
-- **View prompt**
+- **View Prompt**
 
 The prompt remains collapsed initially so an intended surprise is not spoiled.
 `/imagine` bypasses this card because the user already issued a direct command.
@@ -334,7 +334,7 @@ When the app is set to read responses aloud and a confirmation is pending:
 ### Progress experience
 
 After approval, place an inline assistant image bubble in a
-**Creating image…** state with a visible **Cancel** action.
+**Creating Image…** state with a visible **Cancel** action.
 
 Requirements:
 
@@ -454,7 +454,7 @@ If tools are explicitly unsupported:
 
    > This model cannot request image creation. You can still use `/imagine`.
 
-5. Provide a **Try again** or reset action in advanced settings so a provider
+5. Provide a **Try Again** or reset action in advanced settings so a provider
    upgrade is not treated as permanent.
 
 Do not classify a model as unsupported because it chose not to call the tool.
@@ -556,8 +556,8 @@ Image generation uses saved defaults plus optional per-request overrides
 
 ### Saved defaults
 
-- **Default shape:** Automatic / Square / Portrait / Landscape.
-- **Default quality:** Automatic / Low / Medium / High.
+- **Default Shape:** Automatic / Square / Portrait / Landscape.
+- **Default Quality:** Automatic / Low / Medium / High.
 
 ### Per-request overrides
 
@@ -668,9 +668,9 @@ Errors must identify which side failed:
 
 A failed request shows an action appropriate to its cause:
 
-- The provider refused the prompt: offer **Edit prompt**, opening the exact
+- The provider refused the prompt: offer **Edit Prompt**, opening the exact
   prompt that was sent to the generator.
-- A requested shape or quality is unsupported: offer **Change settings**.
+- A requested shape or quality is unsupported: offer **Change Settings**.
 - Failures that may succeed without changing the request — timeouts,
   temporary provider errors, malformed image responses: offer **Retry**.
   Retry is used only for these.
@@ -678,9 +678,8 @@ A failed request shows an action appropriate to its cause:
   settings.
 
 Sanitized technical details stay in the log. Detailed stack traces remain
-limited to the existing debugging or error-log surfaces. User-facing labels
-follow the app's established capitalization style; the labels above are the
-owner's approved wording.
+limited to the existing debugging or error-log surfaces. All labels here and
+throughout this plan follow the Title Caps rule in `ui-style-guide.md`.
 
 If no generator is configured:
 
@@ -727,24 +726,24 @@ can also be investigated:
   length-limited, and kept distinct from the app's internal request ID;
 - provider, endpoint, model, timestamp, HTTP status, and final outcome.
 
-Example entries (owner-approved wording):
+Example entries (owner-approved wording, Title Caps per `ui-style-guide.md`):
 
-> Image request completed  
+> Image Request Completed  
 > Provider: OpenRouter  
 > Model: example/image-model  
-> Generation time: 18.4 seconds  
-> Download time: 1.2 seconds  
-> HTTP status: 200  
-> Provider request ID: req_abc123  
-> Outcome: Image saved
+> Generation Time: 18.4 seconds  
+> Download Time: 1.2 seconds  
+> HTTP Status: 200  
+> Provider Request ID: req_abc123  
+> Outcome: Image Saved
 
-> Image request failed  
+> Image Request Failed  
 > Provider: OpenAI  
 > Model: example/image-model  
-> Elapsed time: 31.7 seconds  
-> HTTP status: 500  
-> Provider request ID: req_xyz789  
-> Outcome: Provider error
+> Elapsed Time: 31.7 seconds  
+> HTTP Status: 500  
+> Provider Request ID: req_xyz789  
+> Outcome: Provider Error
 
 Never log API keys, authorization headers, signed image URLs, complete
 request bodies, raw image data, complete prompts, or private conversation
@@ -777,7 +776,7 @@ the rebuilt feature is verified.
    endpoint so existing behavior does not abruptly change.
 4. Seed the global `/imagine` toggle from the default settings'
    `imagine_command`.
-5. Seed **Let the AI create images** from the old Function Calling state only
+5. Seed **Let the AI Create Images** from the old Function Calling state only
    where that preserves the user's current choice. Do not keep image creation
    dependent on the old generic toggle.
 6. Per-chat copies of the legacy image settings stop being read. A chat that
@@ -909,8 +908,8 @@ The work is complete only when all of the following are true:
     recorded; actionable errors appear in chat either way.
 27. A model-initiated image is generated at the user's saved quality default;
     no tool input can change quality.
-28. Each failed request offers the action matching its cause: Edit prompt for
-    a refused prompt, Change settings for an unsupported option, Retry only
+28. Each failed request offers the action matching its cause: Edit Prompt for
+    a refused prompt, Change Settings for an unsupported option, Retry only
     for failures that may succeed unchanged, and a settings link for
     configuration and authentication failures.
 29. The learned tool capability changes only on a clear tools-not-supported
