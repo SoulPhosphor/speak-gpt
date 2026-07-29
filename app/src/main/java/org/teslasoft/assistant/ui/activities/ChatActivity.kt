@@ -216,6 +216,8 @@ import org.teslasoft.assistant.util.GenerationErrorClassifier
 import org.teslasoft.assistant.imagegen.CreateImageTool
 import org.teslasoft.assistant.imagegen.ImageConfirmationSpeech
 import org.teslasoft.assistant.imagegen.ImageErrorCause
+import org.teslasoft.assistant.imagegen.ImageErrorSanitizer
+import org.teslasoft.assistant.imagegen.ImageGenerationEventLog
 import org.teslasoft.assistant.imagegen.ImageFailureAction
 import org.teslasoft.assistant.imagegen.ImageGenerationRequest
 import org.teslasoft.assistant.imagegen.ImageGeneratorCoordinator
@@ -5469,8 +5471,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     ChatPreferences.getChatPreferences()
                         .putTimestampToChatById(this@ChatActivity, chatId)
                 }
+                ImageGenerationEventLog.recordSuccess(this, outcome.diagnostics)
             }
             is ImageGeneratorCoordinator.Outcome.Failure -> {
+                ImageGenerationEventLog.recordFailure(
+                    this, outcome.diagnostics, outcome.errorCause, outcome.sanitizedDetail
+                )
                 runOnUiThread { presentImageGenerationFailure(request, outcome) }
             }
         }
@@ -5583,8 +5589,19 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     /** The §8 UNSUPPORTED transition: record it, drop the dead streaming
      *  placeholder so the retry doesn't stack empty bubbles, and show the
      *  one-time notice — it appears exactly once because the learned state
-     *  prevents any further tool-bearing request to this pair. */
-    private fun learnToolsUnsupportedAndNotify() {
+     *  prevents any further tool-bearing request to this pair. Returns the
+     *  state the pair had before, for the §13 capability-change entry. */
+    private fun learnToolsUnsupportedAndNotify(): ToolCapability {
+        val previousState = try {
+            val chatEndpointId = preferences?.getApiEndpointId().orEmpty()
+            if (chatEndpointId.isEmpty()) ToolCapability.UNKNOWN
+            else ToolCapabilityStore.get(
+                apiEndpointPreferences?.getApiEndpoint(this, chatEndpointId)?.toolCapabilityByModel,
+                model
+            )
+        } catch (_: Exception) {
+            ToolCapability.UNKNOWN
+        }
         recordChatToolCapability(ToolCapability.UNSUPPORTED)
         runOnUiThread {
             if (messages.isNotEmpty() && messages.last()["isBot"] == true &&
@@ -5597,6 +5614,37 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             putMessage(getString(R.string.image_gen_tools_unsupported_notice), true)
             saveSettings()
         }
+        return previousState
+    }
+
+    /** §13 automatic capability-change entry, written once the without-tools
+     *  retry has finished either way. Logging must never break the retry. */
+    private fun recordToolCapabilityChangeEntry(
+        previousState: ToolCapability,
+        rawError: String?,
+        retrySucceeded: Boolean
+    ) {
+        try {
+            val chatEndpointId = preferences?.getApiEndpointId().orEmpty()
+            val endpoint = if (chatEndpointId.isEmpty()) null
+            else apiEndpointPreferences?.getApiEndpoint(this, chatEndpointId)
+            ImageGenerationEventLog.recordCapabilityChange(
+                this,
+                endpointLabel = endpoint?.label.orEmpty(),
+                modelId = model,
+                previousState = toolCapabilityLabel(previousState),
+                newState = toolCapabilityLabel(ToolCapability.UNSUPPORTED),
+                sanitizedError = ImageErrorSanitizer.sanitize(rawError, endpoint?.apiKey),
+                retriedWithoutTools = true,
+                retrySucceeded = retrySucceeded
+            )
+        } catch (_: Exception) { /* logging must never break the retry */ }
+    }
+
+    private fun toolCapabilityLabel(capability: ToolCapability): String = when (capability) {
+        ToolCapability.UNKNOWN -> "Unknown"
+        ToolCapability.SUPPORTED -> "Supported"
+        ToolCapability.UNSUPPORTED -> "Unsupported"
     }
 
     /** Resolved by the inline confirmation card's Create/Cancel tap. */
@@ -5690,12 +5738,20 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             ArrayList<kotlin.Pair<StreamedToolCallAssembler.AssembledToolCall, String>>()
         for (call in calls) {
             val result = when {
-                call.name != CreateImageTool.NAME ->
+                call.name != CreateImageTool.NAME -> {
+                    ImageGenerationEventLog.recordToolMistake(
+                        this, "the model called unknown tool \"${call.name}\""
+                    )
                     CreateImageTool.errorResult(
                         "unknown tool \"${call.name}\" — it was not executed"
                     )
-                executedImageCall ->
+                }
+                executedImageCall -> {
+                    ImageGenerationEventLog.recordToolMistake(
+                        this, "the model attempted more than one image in a single turn"
+                    )
                     CreateImageTool.errorResult("only one image may be created per user turn")
+                }
                 else -> {
                     executedImageCall = true
                     executeCreateImageCall(call, globalPreferences, shouldPronounce)
@@ -5743,6 +5799,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     ): String {
         val validation = CreateImageTool.validate(call.arguments)
         if (validation is CreateImageTool.Validation.Invalid) {
+            // §13: model mistakes are log entries, never chat errors.
+            ImageGenerationEventLog.recordToolMistake(this, validation.toolError)
             return CreateImageTool.errorResult(validation.toolError)
         }
         val valid = validation as CreateImageTool.Validation.Valid
@@ -5754,14 +5812,24 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         }
 
         val endpoint = apiEndpointPreferences!!.getApiEndpoint(this, endpointId)
-        val capabilities = ImageProviderAdapters.forEndpoint(endpoint).capabilities
+        val adapter = ImageProviderAdapters.forEndpoint(endpoint)
         val resolved = ImagineCommand.resolveOptions(
             valid.shapeOverride,
             null,
             globalPreferences.getImageGeneratorShape(),
             globalPreferences.getImageGeneratorQuality(),
-            capabilities
+            adapter.capabilities
         )
+        if (resolved.unsupportedExplicit.isNotEmpty() || resolved.silentFallbacks.isNotEmpty()) {
+            // §13: a model-initiated option that fell back to the provider
+            // default — the case the user cannot otherwise see.
+            ImageGenerationEventLog.recordSilentFallback(
+                this,
+                (resolved.unsupportedExplicit + resolved.silentFallbacks).joinToString(", "),
+                endpoint.provider.ifBlank { adapter.providerName },
+                generatorModelId
+            )
+        }
         val request = ImageGenerationRequest(
             prompt = valid.prompt,
             shape = resolved.shape,
@@ -5798,11 +5866,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 } else {
                     null
                 }
+                ImageGenerationEventLog.recordSuccess(this, outcome.diagnostics)
                 CreateImageTool.successResult(marker, valid.description, fallbackNote)
             }
             is ImageGeneratorCoordinator.Outcome.Failure -> {
                 // §13: actionable causes appear in chat regardless of any
-                // recording toggle; the model receives a concise tool error.
+                // recording toggle; the model receives a concise tool error;
+                // the diagnostics land in the errors log when recording is on.
+                ImageGenerationEventLog.recordFailure(
+                    this, outcome.diagnostics, outcome.errorCause, outcome.sanitizedDetail
+                )
                 runOnUiThread {
                     putMessage(getString(imageFailureMessageRes(outcome.errorCause)), true)
                     saveSettings()
@@ -6767,12 +6840,20 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                             lastRegularRequestCarriedImageTools &&
                             ToolSupportClassifier.isToolsNotSupportedError(toolsError.message)
                         ) {
-                            learnToolsUnsupportedAndNotify()
-                            regularGPTResponse(
-                                shouldPronounce,
-                                preparedTurn,
-                                suppressImageTools = true
-                            )
+                            val previousState = learnToolsUnsupportedAndNotify()
+                            var retrySucceeded = false
+                            try {
+                                regularGPTResponse(
+                                    shouldPronounce,
+                                    preparedTurn,
+                                    suppressImageTools = true
+                                )
+                                retrySucceeded = true
+                            } finally {
+                                recordToolCapabilityChangeEntry(
+                                    previousState, toolsError.message, retrySucceeded
+                                )
+                            }
                         } else {
                             throw toolsError
                         }

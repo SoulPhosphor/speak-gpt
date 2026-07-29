@@ -49,6 +49,12 @@ class Preferences private constructor(private var preferences: SharedPreferences
 
         /** Clamp a max-days value to [1, LOG_MAX_DAYS_LIMIT]. Pure, unit-tested. */
         fun coerceLogMaxDays(value: Int): Int = value.coerceIn(1, LOG_MAX_DAYS_LIMIT)
+
+        /** The Image Generation Log's retention clamp
+         *  (image-generation-rebuild-plan.md §13): identical ceilings to the
+         *  error-log fields, but the floor is ZERO because zero means
+         *  unlimited — only for these two fields. Pure, unit-tested. */
+        fun coerceImageGenRetention(value: Int, cap: Int): Int = value.coerceIn(0, cap)
     }
 
     /**
@@ -2029,6 +2035,58 @@ class Preferences private constructor(private var preferences: SharedPreferences
 
     fun setImageGenerationSeeded() {
         putGlobalBoolean("image_gen_settings_seeded", true)
+    }
+
+    /** §13 Image Generation Error Recording: off until the user enables it.
+     *  Actionable errors appear in chat either way; this gates only the
+     *  Image Generation Errors log entries. */
+    fun getImageGenErrorLogging(): Boolean =
+        getGlobalBoolean("image_gen_error_logging", false)
+
+    fun setImageGenErrorLogging(value: Boolean) {
+        putGlobalBoolean("image_gen_error_logging", value)
+    }
+
+    /** §13 Successful Image Tracking: off until the user enables it —
+     *  successes are never recorded automatically. */
+    fun getSuccessfulImageTracking(): Boolean =
+        getGlobalBoolean("image_gen_success_tracking", false)
+
+    fun setSuccessfulImageTracking(value: Boolean) {
+        putGlobalBoolean("image_gen_success_tracking", value)
+    }
+
+    /** §13 Image Generation Log retention: Maximum Image Information Saved.
+     *  Same logic as the error-log retention fields with one difference —
+     *  ZERO means unlimited (only here, never on the error logs). */
+    fun getImageGenLogMaxEntries(): Int =
+        coerceImageGenRetention(
+            getGlobalInt("image_gen_log_max_entries", LOG_DEFAULT_MAX_ENTRIES),
+            LOG_MAX_ENTRIES_LIMIT
+        )
+
+    fun setImageGenLogMaxEntries(value: Int) {
+        putGlobalInt(
+            "image_gen_log_max_entries",
+            coerceImageGenRetention(value, LOG_MAX_ENTRIES_LIMIT),
+            LOG_DEFAULT_MAX_ENTRIES
+        )
+    }
+
+    /** §13 Image Generation Log retention: Maximum Days Saved; zero means
+     *  unlimited. */
+    fun getImageGenLogMaxDays(): Int =
+        coerceImageGenRetention(
+            getGlobalInt("image_gen_log_max_days", LOG_DEFAULT_MAX_DAYS),
+            LOG_MAX_DAYS_LIMIT
+        )
+
+    fun setImageGenLogMaxDays(value: Int) {
+        putGlobalInt(
+            "image_gen_log_max_days",
+            coerceImageGenRetention(value, LOG_MAX_DAYS_LIMIT),
+            LOG_DEFAULT_MAX_DAYS
+        )
     }
 
     /* ------------------------------------------------------------------

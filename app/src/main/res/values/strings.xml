@@ -558,6 +558,14 @@
     <string name="image_gen_action_view_prompt">View Prompt</string>
     <string name="image_gen_tools_unsupported_notice">This model cannot request image creation. You can still use /imagine.</string>
     <string name="image_gen_spoken_announcement">%1$s would like to create an image. Say \"create it\" to allow it or \"cancel\" to deny.</string>
+    <!-- Image generation logs (image-generation-rebuild-plan.md §13). -->
+    <string name="image_gen_error_logging_title">Image Generation Error Recording</string>
+    <string name="image_gen_error_logging_desc">Records failed image requests, model tool mistakes, silent fallbacks, and automatic capability changes to the Image Generation Errors log. Errors you must act on appear in chat either way.</string>
+    <string name="successful_image_tracking_title">Successful Image Tracking</string>
+    <string name="successful_image_tracking_desc">Records each completed image generation to the Image Generation Log.</string>
+    <string name="label_max_image_info_saved">Maximum Image Information Saved</string>
+    <string name="title_image_gen_errors_log">Image Generation Errors</string>
+    <string name="title_image_gen_log">Image Generation Log</string>
     <!-- Endpoint editor: reset for the learned tool capability (plan §8),
          mirroring the image-capability clear action. -->
     <string name="tool_capability_clear_action">Clear Tool Capability History</string>

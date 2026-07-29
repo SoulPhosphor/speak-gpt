@@ -80,6 +80,15 @@ class AlertDebugMenuActivity : FragmentActivity() {
     private var fieldWhisperMaxDays: EditText? = null
     private var fieldMemUsageMaxLogs: EditText? = null
     private var fieldMemUsageMaxDays: EditText? = null
+    // Image generation logs (image-generation-rebuild-plan.md §13): the two
+    // recording toggles and the success log's own retention pair, where
+    // ZERO means unlimited (only these two fields — never the error logs).
+    private var switchImageGenErrors: MaterialSwitch? = null
+    private var switchSuccessfulImageTracking: MaterialSwitch? = null
+    private var fieldImageGenMaxInfo: EditText? = null
+    private var fieldImageGenMaxDays: EditText? = null
+    private var rowImageGenErrorsLog: LinearLayout? = null
+    private var rowImageGenLog: LinearLayout? = null
     // Shortcut down to the audio-only diagnostics, so a user who lands here
     // looking for VAD logging doesn't have to know it lives under Voice.
     private var rowAudioDebugging: LinearLayout? = null
@@ -118,6 +127,12 @@ class AlertDebugMenuActivity : FragmentActivity() {
         fieldWhisperMaxDays = findViewById(R.id.field_whisper_max_days)
         fieldMemUsageMaxLogs = findViewById(R.id.field_memusage_max_logs)
         fieldMemUsageMaxDays = findViewById(R.id.field_memusage_max_days)
+        switchImageGenErrors = findViewById(R.id.switch_image_gen_errors)
+        switchSuccessfulImageTracking = findViewById(R.id.switch_successful_image_tracking)
+        fieldImageGenMaxInfo = findViewById(R.id.field_image_gen_max_info)
+        fieldImageGenMaxDays = findViewById(R.id.field_image_gen_max_days)
+        rowImageGenErrorsLog = findViewById(R.id.row_image_gen_errors_log)
+        rowImageGenLog = findViewById(R.id.row_image_gen_log)
         rowAudioDebugging = findViewById(R.id.row_audio_debugging)
         rowCrashLog = findViewById(R.id.row_crash_log)
         rowEventLog = findViewById(R.id.row_event_log)
@@ -166,6 +181,11 @@ class AlertDebugMenuActivity : FragmentActivity() {
         fieldWhisperMaxDays?.setText(p.getWhisperPerfLogMaxDays().toString())
         fieldMemUsageMaxLogs?.setText(p.getMemoryUsageLogMaxEntries().toString())
         fieldMemUsageMaxDays?.setText(p.getMemoryUsageLogMaxDays().toString())
+
+        switchImageGenErrors?.isChecked = p.getImageGenErrorLogging()
+        switchSuccessfulImageTracking?.isChecked = p.getSuccessfulImageTracking()
+        fieldImageGenMaxInfo?.setText(p.getImageGenLogMaxEntries().toString())
+        fieldImageGenMaxDays?.setText(p.getImageGenLogMaxDays().toString())
     }
 
     private fun initLogic() {
@@ -228,6 +248,72 @@ class AlertDebugMenuActivity : FragmentActivity() {
         }
         rowMemoryUsageLog?.setOnClickListener {
             startActivity(Intent(this, LogsActivity::class.java).putExtra("type", "memory_usage").putExtra("chatId", chatId))
+        }
+
+        // Image generation logs (plan §13).
+        switchImageGenErrors?.setOnCheckedChangeListener { _, checked ->
+            p.setImageGenErrorLogging(checked)
+        }
+        switchSuccessfulImageTracking?.setOnCheckedChangeListener { _, checked ->
+            p.setSuccessfulImageTracking(checked)
+        }
+        wireZeroAllowedRetentionField(
+            fieldImageGenMaxInfo, Preferences.LOG_MAX_ENTRIES_LIMIT,
+            { p.getImageGenLogMaxEntries() }, { v -> p.setImageGenLogMaxEntries(v) },
+            R.string.dialog_max_logs_exceeded
+        )
+        wireZeroAllowedRetentionField(
+            fieldImageGenMaxDays, Preferences.LOG_MAX_DAYS_LIMIT,
+            { p.getImageGenLogMaxDays() }, { v -> p.setImageGenLogMaxDays(v) },
+            R.string.dialog_max_days_exceeded
+        )
+        rowImageGenErrorsLog?.setOnClickListener {
+            startActivity(Intent(this, LogsActivity::class.java).putExtra("type", "image_gen_errors").putExtra("chatId", chatId))
+        }
+        rowImageGenLog?.setOnClickListener {
+            startActivity(Intent(this, LogsActivity::class.java).putExtra("type", "image_gen").putExtra("chatId", chatId))
+        }
+    }
+
+    /**
+     * The Image Generation Log's retention blanks
+     * (image-generation-rebuild-plan.md §13): same saved-as-typed and
+     * clamp-on-commit behavior as [wireRetentionField], with ONE
+     * difference — zero is a valid stored value meaning unlimited. Only
+     * these two fields carry that rule; the error logs never do.
+     */
+    private fun wireZeroAllowedRetentionField(
+        targetField: EditText?,
+        cap: Int,
+        getStored: () -> Int,
+        store: (Int) -> Unit,
+        overCapMessageRes: Int
+    ) {
+        val editText = targetField ?: return
+
+        editText.doAfterTextChanged { text ->
+            val value = text?.toString()?.toIntOrNull()
+            if (value != null && value in 0..cap) store(value)
+        }
+
+        val commit = {
+            val value = editText.text?.toString()?.toIntOrNull()
+            when {
+                value == null || value < 0 -> editText.setText(getStored().toString())
+                value > cap -> {
+                    store(cap)
+                    editText.setText(cap.toString())
+                    editText.setSelection(editText.text.length)
+                    showCapDialog(overCapMessageRes)
+                }
+                else -> store(value)
+            }
+        }
+
+        editText.setOnFocusChangeListener { _, hasFocus -> if (!hasFocus) commit() }
+        editText.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == EditorInfo.IME_ACTION_DONE) commit()
+            false
         }
     }
 
