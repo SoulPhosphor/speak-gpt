@@ -143,6 +143,11 @@ class ApiEndpointEditorActivity : FragmentActivity() {
     private var imageCapabilityExpanded: Boolean = false
     private var currentCapabilityJson: String = ""
 
+    /** Learned tool capability (image-generation-rebuild-plan.md §8);
+     *  cleared here so a provider upgrade is never treated as permanent. */
+    private var currentToolCapabilityJson: String = ""
+    private var btnClearToolCapability: MaterialButton? = null
+
     /** Snapshot of the initial field values, for the discard-changes check. */
     private var initialSnapshot: String = ""
 
@@ -200,6 +205,7 @@ class ApiEndpointEditorActivity : FragmentActivity() {
         imageCapabilityEmpty = findViewById(R.id.image_capability_empty)
         imageCapabilityRows = findViewById(R.id.image_capability_rows)
         btnClearImageCapability = findViewById(R.id.btn_clear_image_capability)
+        btnClearToolCapability = findViewById(R.id.btn_clear_tool_capability)
     }
 
     @Suppress("DEPRECATION")
@@ -300,6 +306,8 @@ class ApiEndpointEditorActivity : FragmentActivity() {
 
         currentCapabilityJson = endpoint.imageCapabilityByModel
         populateCapabilitySection()
+        currentToolCapabilityJson = endpoint.toolCapabilityByModel
+        refreshToolCapabilityReset()
 
         // A brand-new profile has nothing to delete yet.
         btnDelete?.visibility = if (position == -1) ImageButton.GONE else ImageButton.VISIBLE
@@ -323,6 +331,7 @@ class ApiEndpointEditorActivity : FragmentActivity() {
 
         imageCapabilityHeader?.setOnClickListener { toggleCapabilitySection() }
         btnClearImageCapability?.setOnClickListener { confirmClearCapability() }
+        btnClearToolCapability?.setOnClickListener { confirmClearToolCapability() }
 
         // Tap the key field: drop the star mask so the user gets a blank cursor.
         // If they then leave it blank, re-mask so the stored key is still shown.
@@ -419,7 +428,8 @@ class ApiEndpointEditorActivity : FragmentActivity() {
             } else {
                 selectedModel
             },
-            imageCapabilityByModel = currentCapabilityJson
+            imageCapabilityByModel = currentCapabilityJson,
+            toolCapabilityByModel = currentToolCapabilityJson
         )
     }
 
@@ -631,7 +641,8 @@ class ApiEndpointEditorActivity : FragmentActivity() {
             fieldEndSeparator?.text.toString(),
             fieldPrefix?.text.toString(),
             if (keyChanged) "key_changed" else "key_same",
-            currentCapabilityJson
+            currentCapabilityJson,
+            currentToolCapabilityJson
         ).joinToString("")
     }
 
@@ -752,6 +763,44 @@ class ApiEndpointEditorActivity : FragmentActivity() {
             populateCapabilitySection()
         }
         popup.show()
+    }
+
+    /* ---------- Tool capability reset (plan §8) ---------- */
+
+    private fun refreshToolCapabilityReset() {
+        btnClearToolCapability?.visibility =
+            if (org.teslasoft.assistant.imagegen.ToolCapabilityStore.isEmpty(currentToolCapabilityJson)) {
+                View.GONE
+            } else {
+                View.VISIBLE
+            }
+    }
+
+    private fun confirmClearToolCapability() {
+        val actionsView = layoutInflater.inflate(R.layout.dialog_two_actions, null)
+
+        val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.tool_capability_clear_confirm_title)
+            .setMessage(R.string.tool_capability_clear_confirm_body)
+            .setView(actionsView)
+            .create()
+
+        actionsView.findViewById<MaterialButton>(R.id.btn_dialog_primary_action).apply {
+            setText(R.string.image_capability_clear_confirm_button)
+            setOnClickListener {
+                dialog.dismiss()
+                currentToolCapabilityJson =
+                    org.teslasoft.assistant.imagegen.ToolCapabilityStore.clear()
+                refreshToolCapabilityReset()
+            }
+        }
+
+        actionsView.findViewById<MaterialButton>(R.id.btn_dialog_destructive_action).apply {
+            setText(R.string.btn_cancel)
+            setOnClickListener { dialog.dismiss() }
+        }
+
+        dialog.show()
     }
 
     private fun confirmClearCapability() {

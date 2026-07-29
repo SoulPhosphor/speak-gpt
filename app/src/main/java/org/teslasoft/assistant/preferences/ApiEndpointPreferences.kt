@@ -115,6 +115,7 @@ class ApiEndpointPreferences private constructor(
                 ?: ApiEndpointObject.DEFAULT_RESPONSE_TIMEOUT_SECONDS
         )
         val imageCapabilityByModel = getString(id + "_image_capability_by_model", "")
+        val toolCapabilityByModel = getString(id + "_tool_capability_by_model", "")
 
         return ApiEndpointObject(
             label, host, apiKey, chatEndpoint, authType,
@@ -122,7 +123,7 @@ class ApiEndpointPreferences private constructor(
             maxTokens, endSeparator, prefix, provider,
             connectTimeoutSeconds, responseTimeoutSeconds, id,
             contextWindowTokens, storedContextModel,
-            imageCapabilityByModel
+            imageCapabilityByModel, toolCapabilityByModel
         )
     }
 
@@ -147,6 +148,7 @@ class ApiEndpointPreferences private constructor(
         preferences.edit { remove(id + "_timeout") }
         preferences.edit { remove(id + "_response_timeout") }
         preferences.edit { remove(id + "_image_capability_by_model") }
+        preferences.edit { remove(id + "_tool_capability_by_model") }
         secrets.set(id + "_api_key", "null")
 
         for (listener in listeners) {
@@ -202,6 +204,14 @@ class ApiEndpointPreferences private constructor(
             preferences.edit { remove(id + "_image_capability_by_model") }
         } else {
             putString(id + "_image_capability_by_model", capabilityJson)
+        }
+        val toolCapabilityJson = endpoint.toolCapabilityByModel
+        if (toolCapabilityJson.isBlank() ||
+            toolCapabilityJson == org.teslasoft.assistant.imagegen.ToolCapabilityStore.EMPTY
+        ) {
+            preferences.edit { remove(id + "_tool_capability_by_model") }
+        } else {
+            putString(id + "_tool_capability_by_model", toolCapabilityJson)
         }
         secrets.set(id + "_api_key", endpoint.apiKey)
 

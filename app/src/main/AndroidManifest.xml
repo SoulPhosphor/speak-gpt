@@ -261,6 +261,13 @@
         </activity>
 
         <activity
+            android:name=".ui.activities.ImageGenerationSettingsActivity"
+            android:exported="false"
+            android:label="@string/title_image_generation"
+            android:launchMode="singleTask">
+        </activity>
+
+        <activity
             android:name=".ui.activities.VoiceAdvancedSettingsActivity"
             android:exported="false"
             android:label="@string/title_voice_advanced"

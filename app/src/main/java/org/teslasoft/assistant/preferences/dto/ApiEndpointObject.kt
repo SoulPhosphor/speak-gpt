@@ -80,7 +80,16 @@ class ApiEndpointObject(
      * [ImageCapabilityStore] for the format. Kept at the END of the
      * constructor so existing positional callers stay valid.
      */
-    var imageCapabilityByModel: String = ""
+    var imageCapabilityByModel: String = "",
+    /**
+     * Compact JSON map of `model-id -> capability key` recording which of
+     * this endpoint's models are known to accept (or clearly refuse)
+     * TOOL-BEARING requests (image-generation-rebuild-plan.md §8). A
+     * separate capability from image input, same store shape; see
+     * [org.teslasoft.assistant.imagegen.ToolCapabilityStore]. Kept at the
+     * END of the constructor so existing positional callers stay valid.
+     */
+    var toolCapabilityByModel: String = ""
 ) {
     companion object {
         /* Reserved, fixed id for the built-in "Default" endpoint. It is NOT a

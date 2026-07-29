@@ -608,6 +608,22 @@
                     android:text="@string/image_capability_clear_action"
                     android:visibility="gone" />
             </LinearLayout>
+
+            <!-- Learned tool capability reset
+                 (image-generation-rebuild-plan.md §8): visible only once
+                 something has been learned, so a provider upgrade is never
+                 treated as permanent. -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_clear_tool_capability"
+                style="@style/AppButton.Destructive"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="24dp"
+                android:layout_marginTop="12dp"
+                android:layout_marginEnd="24dp"
+                android:layout_marginBottom="8dp"
+                android:text="@string/tool_capability_clear_action"
+                android:visibility="gone" />
         </LinearLayout>
     </ScrollView>
 </androidx.constraintlayout.widget.ConstraintLayout>

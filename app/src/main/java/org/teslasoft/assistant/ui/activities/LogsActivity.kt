@@ -156,6 +156,18 @@ class LogsActivity : FragmentActivity() {
                             textLog?.text = Logger.getMemoryUsageLog(this)
                         }
 
+                        "image_gen_errors" -> {
+                            activityLogsTitle?.text = getString(R.string.title_image_gen_errors_log)
+                            this.title = getString(R.string.title_image_gen_errors_log)
+                            textLog?.text = Logger.getImageGenErrorsLog(this)
+                        }
+
+                        "image_gen" -> {
+                            activityLogsTitle?.text = getString(R.string.title_image_gen_log)
+                            this.title = getString(R.string.title_image_gen_log)
+                            textLog?.text = Logger.getImageGenLog(this)
+                        }
+
                         else -> finish()
                     }
                 } catch (_: Exception) {
@@ -196,6 +208,16 @@ class LogsActivity : FragmentActivity() {
                                 "memory_usage" -> {
                                     Logger.clearMemoryUsageLog(this)
                                     textLog?.text = Logger.getMemoryUsageLog(this)
+                                }
+
+                                "image_gen_errors" -> {
+                                    Logger.clearImageGenErrorsLog(this)
+                                    textLog?.text = Logger.getImageGenErrorsLog(this)
+                                }
+
+                                "image_gen" -> {
+                                    Logger.clearImageGenLog(this)
+                                    textLog?.text = Logger.getImageGenLog(this)
                                 }
                             }
                         }
