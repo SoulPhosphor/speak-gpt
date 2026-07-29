@@ -78,9 +78,8 @@ Use brief bullet points, with one fact per bullet. Keep the complete list under 
 
     /**
      * The complete user-message body of one fold-in call: the rendered slot
-     * prompt, the current summary, and the departing messages. The block
-     * labels match the prompts' own framing ("the existing recap and the
-     * messages that have just moved out of the recent-message window").
+     * prompt, the current summary, and the departing messages under plain
+     * "Existing summary:" / "New messages to add to the summary:" labels.
      */
     fun foldInRequestBody(
         renderedPrompt: String,
@@ -89,8 +88,8 @@ Use brief bullet points, with one fact per bullet. Keep the complete list under 
     ): String {
         val sb = StringBuilder(renderedPrompt)
         sb.append("\n\nExisting summary:\n")
-        sb.append(existingSummary.ifBlank { "(none yet)" })
-        sb.append("\n\nMessages that have just moved out of the recent-message window:\n")
+        sb.append(existingSummary.ifBlank { "None yet." })
+        sb.append("\n\nNew messages to add to the summary:\n")
         for ((role, text) in departingMessages) {
             sb.append('\n').append(role).append(": ").append(text).append('\n')
         }

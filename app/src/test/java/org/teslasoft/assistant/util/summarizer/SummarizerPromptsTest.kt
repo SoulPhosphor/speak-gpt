@@ -58,6 +58,6 @@ class SummarizerPromptsTest {
     @Test
     fun anEmptySummaryIsNamedRatherThanBlank() {
         val body = SummarizerPrompts.foldInRequestBody("PROMPT", "", listOf(Pair("User", "Hi")))
-        assertTrue(body.contains("(none yet)"))
+        assertTrue(body.contains("None yet."))
     }
 }
