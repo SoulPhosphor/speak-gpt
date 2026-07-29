@@ -125,8 +125,6 @@ import com.aallam.openai.api.completion.TextCompletion
 import com.aallam.openai.api.core.Role
 import com.aallam.openai.api.file.FileSource
 import com.aallam.openai.api.http.Timeout
-import com.aallam.openai.api.image.ImageCreation
-import com.aallam.openai.api.image.ImageSize
 import com.aallam.openai.api.logging.LogLevel
 import com.aallam.openai.api.logging.Logger
 import com.aallam.openai.api.model.ModelId
@@ -143,10 +141,6 @@ import com.google.android.material.progressindicator.CircularProgressIndicator
 import com.google.gson.Gson
 import com.google.mlkit.nl.languageid.LanguageIdentification
 import com.google.mlkit.nl.languageid.LanguageIdentifier
-import com.openai.client.OpenAIClient
-import com.openai.client.okhttp.OpenAIOkHttpClient
-import com.openai.models.images.Image
-import com.openai.models.images.ImageGenerateParams
 import eightbitlab.com.blurview.BlurView
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -607,7 +601,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     // generation path.
     private var parseMessageScope: CoroutineScope? = null
     private var requestPreparationInProgress = false
-    private var generateGptImageJob: Job? = null
 
     private fun killAllProcesses() {
         onSpeechResultsScope?.coroutineContext?.cancel(CancellationException("Killed"))
@@ -629,8 +622,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         artifactJobs.values.toList().forEach { it.cancel(CancellationException("Killed")) }
         artifactJobs.clear()
         requestPreparationInProgress = false
-        generateGptImageJob?.cancel(CancellationException("Killed"))
-        generateGptImageJob = null
         handsFreeStopped = true
         handsFreeReadbackExpected = false
         handsFreeHandler.removeCallbacksAndMessages(null)
@@ -3878,10 +3869,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     }
 
     /** True when this chat's requests use summarizer transmission at all —
-     *  the excluded paths (decision 12) always send full history. */
+     *  the excluded paths (decision 12) always send full history. The old
+     *  Function Calling exclusion is gone with the feature
+     *  (image-generation-rebuild-plan.md §15): those chats now follow the
+     *  normal summarizer rules like any other chat. */
     private fun summarizerTransmissionActive(): Boolean =
         preferences?.getChatUseSummarizer() == true &&
-            preferences?.getFunctionCalling() != true &&
             !model.contains(":ft") && !model.contains("ft:")
 
     /** The summary's own system message (decision 14), or null when nothing
@@ -5362,32 +5355,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         }
     }
 
-    @SuppressLint("ClickableViewAccessibility")
-    private fun sendImageRequest(str: String) {
-        imageRequestScope = CoroutineScope(Dispatchers.Main)
-        imageRequestScope?.launch {
-            runOnUiThread {
-                btnMicro?.isEnabled = false
-                btnSend?.isEnabled = false
-                progress?.visibility = View.VISIBLE
-            }
-
-            progress?.setOnClickListener {
-                cancel()
-                restoreUIState()
-                saveSettings()
-                syncChatProjection()
-                calculateCost()
-            }
-
-            try {
-                generateImageR(str)
-            } catch (_: CancellationException) {
-                restoreUIState()
-            }
-        }
-    }
-
     /**
      * The rebuilt `/imagine` pipeline (image-generation-rebuild-plan.md
      * §2.1/§11/§13): pre-flight configuration check with the persistent
@@ -6014,13 +5981,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             return
         }
 
-        // Preserve the existing non-chat command and multimodal/tool pipelines.
+        // Preserve the existing non-chat command and fine-tuned pipelines.
         // They do not use the normal chat-completions request built below.
+        // The old Function Calling diversion is gone with the feature (§15).
         val imagineAttempt = preferences?.getImagineCommandGlobal() == true &&
             ImagineCommand.isImagineAttempt(rawMessage)
         if (imagineAttempt ||
-            model.contains(":ft") || model.contains("ft:") ||
-            preferences?.getFunctionCalling() == true
+            model.contains(":ft") || model.contains("ft:")
         ) {
             parseMessage(rawMessage)
             return
@@ -6681,27 +6648,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         }
     }
 
-    private fun generateImages(prompt: String) {
-        sendImageRequest(prompt)
-    }
-
-    private fun searchInternet(prompt: String) {
-        putMessage("Searching at Google...", true)
-
-        saveSettings()
-
-        btnMicro?.isEnabled = true
-        btnSend?.isEnabled = true
-        progress?.visibility = View.GONE
-
-        val q = prompt.replace(" ", "+")
-
-        val intent = Intent()
-        intent.action = Intent.ACTION_VIEW
-        intent.data = "https://www.google.com/search?q=$q".toUri()
-        startActivity(intent)
-    }
-
     @Suppress("deprecation")
     private suspend fun generateResponse(
         request: String,
@@ -6802,91 +6748,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 progress?.visibility = View.GONE
                 messageInput?.requestFocus()
             } else {
-                val functionCallingEnabled: Boolean = preferences!!.getFunctionCalling()
-
-                if (functionCallingEnabled && openAIKey != null) {
-                    val cm = mutableListOf(
-                        ChatMessage(
-                            role = ChatRole.User,
-                            content = request
-                        )
-                    )
-
-                    val functionRequest = chatCompletionRequest {
-                        model = ModelId("gpt-4o")
-                        messages = cm
-
-                        tools {
-                            function(
-                                name = "generateImage",
-                                description = "Generate an image based on the entered prompt"
-                            ) {
-                                put("type", "object")
-                                putJsonObject("properties") {
-                                    putJsonObject("prompt") {
-                                        put("type", "string")
-                                        put("description", "The prompt for image generation")
-                                    }
-                                }
-                                putJsonArray("required") {
-                                    add("prompt")
-                                }
-                            }
-
-                            function(
-                                name = "searchAtInternet",
-                                description = "Search the Internet",
-                            ) {
-                                put("type", "object")
-                                putJsonObject("properties") {
-                                    putJsonObject("prompt") {
-                                        put("type", "string")
-                                        put("description", "Search query")
-                                    }
-                                }
-                                putJsonArray("required") {
-                                    add("prompt")
-                                }
-                            }
-                        }
-
-                        toolChoice = ToolChoice.Auto
-                    }
-
-                    val response1 = openAIAI?.chatCompletion(functionRequest)
-
-                    val message = response1?.choices?.first()?.message
-
-                    if (message?.toolCalls != null) {
-                        val toolsCalls = message.toolCalls!!
-
-                        if (toolsCalls.isEmpty()) {
-                            regularGPTResponse(shouldPronounce, preparedTurn)
-                        } else {
-                            for (toolCall in toolsCalls) {
-                                require(toolCall is ToolCall.Function) { "Tool call is not a function" }
-                                toolCall.execute()
-                            }
-
-                            // Put timestamp to chat to sort chats by last message
-                            ChatPreferences.getChatPreferences().putTimestampToChatById(this, chatId)
-                        }
-                    } else {
-                        regularGPTResponse(shouldPronounce, preparedTurn)
-                    }
-                } else if (functionCallingEnabled) {
-                    putMessage("Function calling requires OpenAI endpoint which is missing on your device. Please go to the settings and add OpenAI endpoint or disable Function Calling. OpenAI base url (host) is: https://api.openai.com/v1/ (don't forget to add slash at the end otherwise you will receive an error).", true)
-                    saveSettings()
-                    restoreUIState()
-                    MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-                        .setTitle("Unsupported feature")
-                        .setMessage("Function calling feature is unavailable because it requires OpenAI endpoint. Would you like to disable this feature?")
-                        .setPositiveButton("Disable") { _, _ -> run {
-                            preferences?.setFunctionCalling(false)
-                        }}
-                        .setNegativeButton("Cancel") { _, _ -> }
-                        .show()
-                } else {
+                // The old Function Calling router — a hidden gpt-4o request
+                // deciding between generateImage and searchAtInternet — is
+                // removed entirely (image-generation-rebuild-plan.md §15).
+                // Every normal chat goes straight to the regular request;
+                // image creation lives in the create_image tool coordinator.
+                run {
                     try {
                         regularGPTResponse(shouldPronounce, preparedTurn)
                     } catch (toolsError: Exception) {
@@ -7493,42 +7360,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 try { track?.release() } catch (_: Exception) { /* ignore */ }
             }
         }.start()
-    }
-
-    private val availableFunctions = mapOf("generateImage" to ::generateImage, "searchAtInternet" to ::searchAtInternet)
-
-    private fun ToolCall.Function.execute() {
-        val functionToCall = availableFunctions[function.name] ?: error("Function ${function.name} not found")
-        val functionArgs = function.argumentsAsJson()
-        functionToCall(functionArgs)
-    }
-
-    private fun generateImage(args: JsonObject) {
-        val prompt = args.getValue("prompt").jsonPrimitive.content
-
-        runOnUiThread {
-            btnMicro?.isEnabled = false
-            btnSend?.isEnabled = false
-            progress?.visibility = View.VISIBLE
-        }
-
-        CoroutineScope(Dispatchers.Main).launch {
-            generateImages(prompt)
-        }
-    }
-
-    private fun searchAtInternet(args: JsonObject) {
-        val prompt = args.getValue("prompt").jsonPrimitive.content
-
-        runOnUiThread {
-            btnMicro?.isEnabled = false
-            btnSend?.isEnabled = false
-            progress?.visibility = View.VISIBLE
-        }
-
-        CoroutineScope(Dispatchers.Main).launch {
-            searchInternet(prompt)
-        }
     }
 
     /**
@@ -8534,221 +8365,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         }
     }
 
-    fun generateImageAsync(
-        client: OpenAIClient,
-        params: ImageGenerateParams,
-        onSuccess: (String) -> Unit,
-        onError: (Throwable) -> Unit
-    ) : Job {
-        return CoroutineScope(Dispatchers.IO).launch {
-            progress?.setOnClickListener {
-                cancel()
-                restoreUIState()
-            }
-
-            try {
-                var imageId: String
-                val response = client.images().generate(params)
-                val data: Optional<List<Image>> = response.data()
-                val images = data.orElse(emptyList())
-
-                val b64 = images.firstOrNull()?.b64Json()?.get()
-                    ?: throw NullPointerException("Base64 string is null or empty, stopping...")
-
-                val byteArray = Base64.decode(b64, Base64.DEFAULT)
-                writeImageToCache(byteArray)
-                imageId = Hash.hash(b64)
-
-                withContext(Dispatchers.Main) {
-                    onSuccess(imageId)
-                }
-            } catch (_: CancellationException) {
-                withContext(Dispatchers.Main) {
-                    onSuccess("cancelled")
-                }
-            } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
-                    onError(e)
-                }
-            }
-        }
-    }
-
-    @SuppressLint("ClickableViewAccessibility")
-    private suspend fun generateImageR(p: String) {
-        runOnUiThread {
-            btnMicro?.isEnabled = false
-            btnSend?.isEnabled = false
-            progress?.visibility = View.VISIBLE
-        }
-
-        chat?.setOnTouchListener(null)
-        disableAutoScroll = false
-        // chat?.transcriptMode = ListView.TRANSCRIPT_MODE_ALWAYS_SCROLL
-        try {
-            if (preferences!!.getImageModel().contains("gpt-image-")) {
-                val client: OpenAIClient = OpenAIOkHttpClient
-                    .builder()
-                    .baseUrl(apiEndpointPreferences!!.getApiEndpoint(this, preferences!!.getApiEndpointId()).host)
-                    .apiKey(apiEndpointPreferences!!.getApiEndpoint(this, preferences!!.getApiEndpointId()).apiKey)
-                    .build()
-
-                val params = ImageGenerateParams.builder()
-                    .prompt(p)
-                    .model(preferences!!.getImageModel())
-                    .n(1L)
-                    .quality(ImageGenerateParams.Quality.AUTO) // Settings param "quality" does not exists yet.
-                    .size(ImageGenerateParams.Size._1024X1024) // Settings param "resolution" is ignored as this model supports only 1024x1024 resolution
-                    .build()
-
-                generateGptImageJob = generateImageAsync(
-                    client,
-                    params,
-                    onSuccess = { file ->
-                        if (file == "cancelled") {
-                            runOnUiThread {
-                                restoreUIState()
-                            }
-                            return@generateImageAsync
-                        }
-
-                        runOnUiThread {
-                            putMessage("~file:$file", true)
-
-                            chat?.setOnTouchListener { _, event ->
-                                run {
-                                    if (event.action == MotionEvent.ACTION_SCROLL || event.action == MotionEvent.ACTION_UP) {
-                                        // chat?.transcriptMode = ListView.TRANSCRIPT_MODE_DISABLED
-                                        disableAutoScroll = true
-                                    }
-                                    return@setOnTouchListener false
-                                }
-                            }
-
-                            scroll(true)
-                            scroll(false)
-
-                            saveSettings()
-
-                            btnMicro?.isEnabled = true
-                            btnSend?.isEnabled = true
-                            progress?.visibility = View.GONE
-
-                            messageInput?.requestFocus()
-
-                            // Put timestamp to chat to sort chats by last message
-                            ChatPreferences.getChatPreferences().putTimestampToChatById(this@ChatActivity, chatId)
-                            initSettings()
-                        }
-                    },
-                    onError = { error ->
-                        runOnUiThread {
-                            if (preferences?.showChatErrors() == true) {
-                                putMessage(
-                                    when (error) {
-                                        else -> error.stackTraceToString()
-                                    }, true
-                                )
-                            }
-                            btnMicro?.isEnabled = true
-                            btnSend?.isEnabled = true
-                            progress?.visibility = View.GONE
-                            messageInput?.requestFocus()
-                        }
-                    }
-                )
-            } else {
-                val images = openAIAI?.imageURL(
-                    creation = ImageCreation(
-                        prompt = p,
-                        model = ModelId(preferences!!.getImageModel()),
-                        n = 1,
-                        size = ImageSize(resolution)
-                    )
-                )
-
-                val imageUrl = images?.get(0)?.url!!
-
-                val url = URL(imageUrl)
-
-                val `is` = withContext(Dispatchers.IO) {
-                    url.openStream()
-                }
-                var file = ""
-                val th = Thread {
-                    val bytes: ByteArray = org.apache.commons.io.IOUtils.toByteArray(`is`)
-
-                    writeImageToCache(bytes)
-
-                    val encoded = java.util.Base64.getEncoder().encodeToString(bytes)
-
-                    file = Hash.hash(encoded)
-                }
-
-                th.start()
-                withContext(Dispatchers.IO) {
-                    th.join()
-                    runOnUiThread {
-                        putMessage("~file:$file", true)
-
-                        chat?.setOnTouchListener { _, event ->
-                            run {
-                                if (event.action == MotionEvent.ACTION_SCROLL || event.action == MotionEvent.ACTION_UP) {
-                                    // chat?.transcriptMode = ListView.TRANSCRIPT_MODE_DISABLED
-                                    disableAutoScroll = true
-                                }
-                                return@setOnTouchListener false
-                            }
-                        }
-
-                        scroll(true)
-                        scroll(false)
-
-                        saveSettings()
-
-                        btnMicro?.isEnabled = true
-                        btnSend?.isEnabled = true
-                        progress?.visibility = View.GONE
-
-                        messageInput?.requestFocus()
-
-                        // Put timestamp to chat to sort chats by last message
-                        ChatPreferences.getChatPreferences().putTimestampToChatById(this@ChatActivity, chatId)
-                        initSettings()
-                    }
-                }
-            }
-        } catch (_: CancellationException) {
-            runOnUiThread {
-                restoreUIState()
-            }
-        } catch (e: Exception) {
-            playErrorSignal()
-            stopHandsFreeOnError()
-            // Same funnel as the text path: classify, always log, show the coded
-            // message only when the user has chat errors enabled. See ERROR_CODES.md.
-            val genError = GenerationErrorClassifier.classify(e)
-            logGenerationError(genError, e, "image-generation")
-            if (preferences?.showChatErrors() == true) {
-                putMessage(genError.providerLimitMessage(this) ?: genError.chatMessage(this), true)
-            }
-
-            saveSettings()
-
-            btnMicro?.isEnabled = true
-            btnSend?.isEnabled = true
-            progress?.visibility = View.GONE
-
-            messageInput?.requestFocus()
-        } finally {
-            if (!preferences!!.getImageModel().contains("gpt-image-")) {
-                runOnUiThread {
-                    restoreUIState()
-                }
-            }
-        }
-    }
-
     private fun findLastUserMessage(): HashMap<String, Any> {
         var lastUserMessage = hashMapOf<String, Any>()
 
@@ -8960,28 +8576,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     }
 
     private fun onCancelOpenAIAction(feature: String) {
-        if (feature == "dalle") {
-            putMessage("DALL-E image generation is disabled. Please add OpenAI API endpoint to enable this feature.", true)
-            saveSettings()
-        }
+        // The legacy "dalle" feature branch is gone with the old image
+        // pipeline (image-generation-rebuild-plan.md §15); image requests
+        // now run through the generator coordinator and never pass here.
     }
 
     private fun onOpenAIAction(feature: String, prompt: String) {
         when (feature) {
-            "dalle" -> {
-                btnMicro?.isEnabled = false
-                btnSend?.isEnabled = false
-                progress?.visibility = View.VISIBLE
-
-                CoroutineScope(Dispatchers.Main).launch {
-                    progress?.setOnClickListener {
-                        cancel()
-                        restoreUIState()
-                    }
-
-                    generateImageR(prompt)
-                }
-            }
             "tts" -> speak(prompt)
             "whisper" -> handleWhisperSpeechRecognition()
         }

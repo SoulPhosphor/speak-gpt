@@ -391,21 +391,14 @@ class Preferences private constructor(private var preferences: SharedPreferences
     }
 
     /**
-     * Retrieves the function calling status from the shared preferences.
-     *
-     * @return The function calling status, true if enabled or false otherwise.
+     * Migration-only reader for the removed Function Calling feature's
+     * stored value (image-generation-rebuild-plan.md §15 removed the
+     * feature; §14 seeds Let the AI Create Images from this value once).
+     * Nothing writes it any more; the stored key is erased with the other
+     * legacy fields after the rebuild is verified.
      */
-    fun getFunctionCalling() : Boolean {
+    fun getLegacyFunctionCallingForMigration() : Boolean {
         return getBoolean("function_calling", false)
-    }
-
-    /**
-     * Sets function calling mode.
-     *
-     * @param mode mode.
-     */
-    fun setFunctionCalling(mode: Boolean) {
-        putBoolean("function_calling", mode)
     }
 
     /**

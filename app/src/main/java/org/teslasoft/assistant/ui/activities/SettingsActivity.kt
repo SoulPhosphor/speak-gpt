@@ -61,7 +61,6 @@ class SettingsActivity : FragmentActivity() {
     private var rowSummarizerSettings: LinearLayout? = null
     private var rowImages: LinearLayout? = null
     private var tileChatLayout: TileFragment? = null
-    private var tileFunctionCalling: TileFragment? = null
     private var tileDesktopMode: TileFragment? = null
     private var rowAboutApp: LinearLayout? = null
     private var tileDocumentation: TileFragment? = null
@@ -126,7 +125,6 @@ class SettingsActivity : FragmentActivity() {
         transition.excludeTarget(R.id.tile_always_speak, true)
         transition.excludeTarget(R.id.tile_auto_language_detection, true)
         transition.excludeTarget(R.id.tile_chat_layout, true)
-        transition.excludeTarget(R.id.tile_function_calling, true)
         transition.excludeTarget(R.id.tile_desktop_mode, true)
         transition.excludeTarget(R.id.tile_about_app, true)
         transition.excludeTarget(R.id.tile_documentation, true)
@@ -171,7 +169,6 @@ class SettingsActivity : FragmentActivity() {
         transition2.excludeTarget(R.id.tile_always_speak, true)
         transition2.excludeTarget(R.id.tile_auto_language_detection, true)
         transition2.excludeTarget(R.id.tile_chat_layout, true)
-        transition2.excludeTarget(R.id.tile_function_calling, true)
         transition2.excludeTarget(R.id.tile_desktop_mode, true)
         transition2.excludeTarget(R.id.tile_about_app, true)
         transition2.excludeTarget(R.id.tile_documentation, true)
@@ -271,19 +268,6 @@ class SettingsActivity : FragmentActivity() {
                 false,
                 chatId,
                 getString(R.string.tile_classic_layout_desc)
-            )
-
-            tileFunctionCalling = TileFragment.newInstance(
-                preferences?.getFunctionCalling() == true,
-                true,
-                "Function calling",
-                null,
-                getString(R.string.on),
-                getString(R.string.off),
-                R.drawable.ic_experiment,
-                false,
-                chatId,
-                "This feature allows you to enable function calling. Please note that this feature is experimental and unstable."
             )
 
             tileDesktopMode = TileFragment.newInstance(
@@ -386,7 +370,6 @@ class SettingsActivity : FragmentActivity() {
     private fun placeFragments() : FragmentTransaction {
         val operation = supportFragmentManager.beginTransaction()
             .replace(R.id.tile_chat_layout, tileChatLayout!!)
-            .replace(R.id.tile_function_calling, tileFunctionCalling!!)
             .replace(R.id.tile_desktop_mode, tileDesktopMode!!)
             .replace(R.id.tile_amoled_mode, tileAmoledMode!!)
             .replace(R.id.tile_chats_autosave, tileChatsAutoSave!!)
@@ -461,14 +444,6 @@ class SettingsActivity : FragmentActivity() {
                 preferences?.setLayout("classic")
             } else {
                 preferences?.setLayout("bubbles")
-            }
-        }}
-
-        tileFunctionCalling?.setOnCheckedChangeListener { isChecked -> run {
-            if (isChecked) {
-                preferences?.setFunctionCalling(true)
-            } else {
-                preferences?.setFunctionCalling(false)
             }
         }}
 

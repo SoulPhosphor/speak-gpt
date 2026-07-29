@@ -98,7 +98,7 @@ object ImageGenerationMigration {
             legacyImageModel = preferences.getImageModel(),
             legacyResolution = preferences.getResolution(),
             legacyImagineCommand = preferences.getImagineCommand(),
-            legacyFunctionCalling = preferences.getFunctionCalling()
+            legacyFunctionCalling = preferences.getLegacyFunctionCallingForMigration()
         )
 
         preferences.setImageGeneratorEndpointId(seed.endpointId)

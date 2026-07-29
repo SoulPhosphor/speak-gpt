@@ -63,7 +63,9 @@ class NewChatSettingCopyTest {
             "DalleVersion",
             "EndSeparator",
             "FrequencyPenalty",
-            "FunctionCalling",
+            // FunctionCalling was removed from the copy list with the whole
+            // feature (image-generation-rebuild-plan.md §15) — a deliberate
+            // migration-era change, not drift.
             "ImagineCommand",
             "Layout",
             "LogitBiasesConfigId",
