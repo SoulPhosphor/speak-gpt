@@ -1230,10 +1230,20 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
 
     override fun onDelete(position: Int) {
         if (position < 0 || position >= dataArray.size) return
+        // §12 cleanup: note the generated-image file this message references
+        // BEFORE removing it; once the deletion is persisted, the file goes
+        // too unless another stored message still uses it.
+        val deletedImageHash =
+            org.teslasoft.assistant.imagegen.GeneratedImageMetadata
+                .referencedFileHash(dataArray[position])
         deleteMessage(position)
 
         if (chatId !== "") {
             ChatPreferences.getChatPreferences().deleteMessage(context, chatId, position)
+        }
+        if (deletedImageHash != null) {
+            org.teslasoft.assistant.imagegen.GeneratedImageFiles
+                .deleteIfUnreferenced(context, listOf(deletedImageHash))
         }
 
         listener?.onMessageDeleted()

@@ -33,5 +33,8 @@ data class ImageGenerationRequest(
     val shape: ImageShape,
     val quality: ImageQuality,
     val endpointId: String,
-    val modelId: String
+    val modelId: String,
+    /** The model-supplied accessible description (§6 tool contract),
+     *  carried through to the §12 stored record; null on `/imagine`. */
+    val description: String? = null
 )

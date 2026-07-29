@@ -218,6 +218,8 @@ import org.teslasoft.assistant.imagegen.ImageErrorCause
 import org.teslasoft.assistant.imagegen.ImageErrorSanitizer
 import org.teslasoft.assistant.imagegen.ImageGenerationEventLog
 import org.teslasoft.assistant.imagegen.ImageFailureAction
+import org.teslasoft.assistant.imagegen.GeneratedImageFiles
+import org.teslasoft.assistant.imagegen.GeneratedImageMetadata
 import org.teslasoft.assistant.imagegen.ImageGenerationJobRegistry
 import org.teslasoft.assistant.imagegen.ImageGenerationRequest
 import org.teslasoft.assistant.imagegen.imageFailureMessageRes
@@ -5478,6 +5480,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         when (terminal) {
             is ImageGenerationJobRegistry.Terminal.Complete -> {
                 putMessage("~file:" + terminal.marker, true)
+                attachGeneratedImageRecord(terminal.metadata)
                 scroll(true)
                 scroll(false)
                 saveSettings()
@@ -5492,19 +5495,31 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             }
             is ImageGenerationJobRegistry.Terminal.Failed -> {
                 if (fromImagine) {
-                    presentImageGenerationFailure(job.request, terminal.cause)
+                    presentImageGenerationFailure(job.request, terminal.cause, terminal.metadata)
                 } else {
                     // §13: the cause message appears in chat; the tool flow
                     // returns its own concise tool error to the model.
                     putMessage(getString(imageFailureMessageRes(terminal.cause)), true)
+                    attachGeneratedImageRecord(terminal.metadata)
                     saveSettings()
                 }
             }
             is ImageGenerationJobRegistry.Terminal.Cancelled -> {
                 putMessage(getString(R.string.image_gen_error_cancelled), true)
+                attachGeneratedImageRecord(terminal.metadata)
                 saveSettings()
                 if (fromImagine) restoreUIState()
             }
+        }
+    }
+
+    /** §12: stamp the just-added terminal message with its structured
+     *  record. Rides the same persisted map as the message text, so the
+     *  two can never separate. */
+    private fun attachGeneratedImageRecord(metadata: GeneratedImageMetadata) {
+        val last = messages.lastOrNull() ?: return
+        if (last["isBot"] == true) {
+            last[GeneratedImageMetadata.KEY] = metadata.toJson()
         }
     }
 
@@ -5561,13 +5576,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      *  the log surfaces, never in chat. */
     private fun presentImageGenerationFailure(
         request: ImageGenerationRequest,
-        errorCause: ImageErrorCause
+        errorCause: ImageErrorCause,
+        metadata: GeneratedImageMetadata? = null
     ) {
         playErrorSignal()
         stopHandsFreeOnError()
 
         val causeText = getString(imageFailureMessageRes(errorCause))
         putMessage(causeText, true)
+        if (metadata != null) attachGeneratedImageRecord(metadata)
         saveSettings()
         btnMicro?.isEnabled = true
         btnSend?.isEnabled = true
@@ -5892,7 +5909,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             shape = resolved.shape,
             quality = resolved.quality,
             endpointId = endpointId,
-            modelId = generatorModelId
+            modelId = generatorModelId,
+            description = valid.description
         )
 
         if (!requestImageConfirmation(valid.prompt, globalPreferences, shouldPronounce)) {
@@ -8766,6 +8784,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             .setMessage("Are you sure you want to delete selected messages?")
             .setPositiveButton("Delete") { _, _ ->
                 val foldedBefore = preferences?.getSummarizerFoldedCount() ?: 0
+                // §12 cleanup: note the generated-image files the selected
+                // messages reference before they are removed.
+                val deletedImageHashes = GeneratedImageFiles.referencedHashes(
+                    messages.filterIndexed { index, _ ->
+                        index < messagesSelectionProjection.size &&
+                            messagesSelectionProjection[index]["selected"].toString() == "true"
+                    }
+                )
                 var removedBeforeBookmark = 0
                 var pos = 0
                 var p = 0
@@ -8787,6 +8813,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
                 syncChatProjection()
                 saveSettings()
+                if (deletedImageHashes.isNotEmpty()) {
+                    GeneratedImageFiles.deleteIfUnreferenced(this, deletedImageHashes)
+                }
                 adapter?.notifyDataSetChanged()
                 updateMessagesSelectionProjection()
                 deselectAll()

@@ -73,11 +73,23 @@ object ImageGenerationJobRegistry {
      *  owns the turn state. */
     enum class Origin { IMAGINE, TOOL }
 
-    /** The §5 rule: exactly one terminal state per generation. */
+    /** The §5 rule: exactly one terminal state per generation. Every
+     *  terminal carries the §12 structured record for the message that
+     *  ends the turn. */
     sealed class Terminal {
-        class Complete(val marker: String) : Terminal()
-        class Failed(val cause: ImageErrorCause) : Terminal()
-        data object Cancelled : Terminal()
+        abstract val metadata: GeneratedImageMetadata
+
+        class Complete(
+            val marker: String,
+            override val metadata: GeneratedImageMetadata
+        ) : Terminal()
+
+        class Failed(
+            val cause: ImageErrorCause,
+            override val metadata: GeneratedImageMetadata
+        ) : Terminal()
+
+        class Cancelled(override val metadata: GeneratedImageMetadata) : Terminal()
     }
 
     class ActiveJob internal constructor(
@@ -158,7 +170,22 @@ object ImageGenerationJobRegistry {
             val terminal = try {
                 runGeneration(app, request)
             } catch (_: CancellationException) {
-                Terminal.Cancelled
+                Terminal.Cancelled(
+                    metadataFor(request, GeneratedImageMetadata.STATUS_CANCELLED)
+                )
+            } catch (_: Exception) {
+                // Same catch-all classification the coordinator applies to
+                // an unexpected exception. Without this, a local failure
+                // (e.g. writing the image file) would end the coroutine
+                // with NO terminal state — a stuck Creating Image row.
+                Terminal.Failed(
+                    ImageErrorCause.PROVIDER_ERROR,
+                    metadataFor(
+                        request,
+                        GeneratedImageMetadata.STATUS_FAILED,
+                        failureCode = ImageErrorCause.PROVIDER_ERROR.name
+                    )
+                )
             }
             // NonCancellable: the terminal state must be delivered even when
             // the ending IS a cancellation.
@@ -181,25 +208,74 @@ object ImageGenerationJobRegistry {
             // bytes (GeneratedImageStorage), so the saved message keeps
             // resolving to its file; the real detected type decides the
             // extension (§4.5).
+            val bytes = outcome.image.bytes
             val marker = withContext(Dispatchers.IO) {
                 File(
                     app.getExternalFilesDir("images"),
-                    GeneratedImageStorage.cacheFileName(
-                        outcome.image.bytes, outcome.image.fileExtension
-                    )
-                ).writeBytes(outcome.image.bytes)
-                Hash.hash(java.util.Base64.getEncoder().encodeToString(outcome.image.bytes))
+                    GeneratedImageStorage.cacheFileName(bytes, outcome.image.fileExtension)
+                ).writeBytes(bytes)
+                Hash.hash(java.util.Base64.getEncoder().encodeToString(bytes))
             }
+            // §12 width and height, read from the actual bytes without
+            // decoding the full bitmap.
+            val bounds = android.graphics.BitmapFactory.Options()
+                .apply { inJustDecodeBounds = true }
+            try {
+                android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+            } catch (_: Exception) { /* dimensions stay absent */ }
             ImageGenerationEventLog.recordSuccess(app, outcome.diagnostics)
-            Terminal.Complete(marker)
+            Terminal.Complete(
+                marker,
+                metadataFor(
+                    request,
+                    GeneratedImageMetadata.STATUS_COMPLETE,
+                    fileHash = marker,
+                    mimeType = outcome.image.mimeType,
+                    width = bounds.outWidth.takeIf { it > 0 },
+                    height = bounds.outHeight.takeIf { it > 0 }
+                )
+            )
         }
         is ImageGeneratorCoordinator.Outcome.Failure -> {
             ImageGenerationEventLog.recordFailure(
                 app, outcome.diagnostics, outcome.errorCause, outcome.sanitizedDetail
             )
-            Terminal.Failed(outcome.errorCause)
+            Terminal.Failed(
+                outcome.errorCause,
+                metadataFor(
+                    request,
+                    GeneratedImageMetadata.STATUS_FAILED,
+                    failureCode = outcome.errorCause.name
+                )
+            )
         }
     }
+
+    /** One §12 record per terminal message. Deliberately built only from
+     *  the request and the detected result — no credential or signed URL
+     *  can enter it. */
+    private fun metadataFor(
+        request: ImageGenerationRequest,
+        status: String,
+        fileHash: String? = null,
+        mimeType: String? = null,
+        width: Int? = null,
+        height: Int? = null,
+        failureCode: String? = null
+    ) = GeneratedImageMetadata(
+        imageId = java.util.UUID.randomUUID().toString(),
+        fileHash = fileHash,
+        mimeType = mimeType,
+        width = width,
+        height = height,
+        endpointId = request.endpointId,
+        modelId = request.modelId,
+        prompt = request.prompt,
+        description = request.description,
+        createdAt = System.currentTimeMillis(),
+        status = status,
+        failureCode = failureCode
+    )
 
     private suspend fun finish(app: Context, record: ActiveJob, terminal: Terminal) {
         jobs.remove(record.chatId)
@@ -236,6 +312,9 @@ object ImageGenerationJobRegistry {
                 val map = HashMap<String, Any>()
                 map["message"] = message
                 map["isBot"] = true
+                // §12: the structured record travels with the message; the
+                // `~file:` text above is only the rendering projection.
+                map[GeneratedImageMetadata.KEY] = terminal.metadata.toJson()
                 history.add(map)
                 chatPreferences.saveChatHistory(app, record.chatId, history)
                 if (terminal is Terminal.Complete) {
