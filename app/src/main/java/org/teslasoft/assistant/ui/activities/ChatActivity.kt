@@ -208,7 +208,6 @@ import org.teslasoft.assistant.ui.onboarding.WelcomeActivity
 import org.teslasoft.assistant.ui.permission.CameraPermissionActivity
 import org.teslasoft.assistant.ui.permission.MicrophonePermissionActivity
 import org.teslasoft.assistant.util.Hash
-import org.teslasoft.assistant.util.GeneratedImageStorage
 import org.teslasoft.assistant.util.GenErrorResult
 import org.teslasoft.assistant.util.FrozenChatPayload
 import org.teslasoft.assistant.util.FrozenPayloadMessage
@@ -219,8 +218,9 @@ import org.teslasoft.assistant.imagegen.ImageErrorCause
 import org.teslasoft.assistant.imagegen.ImageErrorSanitizer
 import org.teslasoft.assistant.imagegen.ImageGenerationEventLog
 import org.teslasoft.assistant.imagegen.ImageFailureAction
+import org.teslasoft.assistant.imagegen.ImageGenerationJobRegistry
 import org.teslasoft.assistant.imagegen.ImageGenerationRequest
-import org.teslasoft.assistant.imagegen.ImageGeneratorCoordinator
+import org.teslasoft.assistant.imagegen.imageFailureMessageRes
 import org.teslasoft.assistant.imagegen.ImageProviderAdapters
 import org.teslasoft.assistant.imagegen.ImagineCommand
 import org.teslasoft.assistant.imagegen.StreamedToolCallAssembler
@@ -256,7 +256,8 @@ import kotlinx.coroutines.flow.flowOn
 import okio.FileSystem
 import okio.Path.Companion.toPath
 
-class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
+class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
+    ImageGenerationJobRegistry.Listener {
 
     companion object {
         // Broadcast action posted by the keep-alive notifications' "Hang Up"
@@ -594,7 +595,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     private var whisperPreloadScope: CoroutineScope? = null
     private var processRecordingScope: CoroutineScope? = null
     private var setupScope: CoroutineScope? = null
-    private var imageRequestScope: CoroutineScope? = null
     private var speakScope: CoroutineScope? = null
     // Typed-send / regenerate generation (parseMessage). Was an anonymous
     // CoroutineScope, which meant NOTHING could cancel it — the stop control
@@ -610,7 +610,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         whisperPreloadScope?.coroutineContext?.cancel(CancellationException("Killed"))
         processRecordingScope?.coroutineContext?.cancel(CancellationException("Killed"))
         setupScope?.coroutineContext?.cancel(CancellationException("Killed"))
-        imageRequestScope?.coroutineContext?.cancel(CancellationException("Killed"))
         speakScope?.coroutineContext?.cancel(CancellationException("Killed"))
         parseMessageScope?.coroutineContext?.cancel(CancellationException("Killed"))
         condenseJob?.cancel(CancellationException("Killed"))
@@ -2166,6 +2165,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             onRestoredState(savedInstanceState)
         }
 
+        // §5 recovery: reattach to a generation that is still running for
+        // this chat and re-show its Creating Image row. Skipped while the
+        // blocking storage-unavailable state owns the screen.
+        if (!chatStorageUnavailable && adapter != null) {
+            restoreImageGenerationJobState()
+        }
+
         chatStartupComplete = true
     }
 
@@ -2236,6 +2242,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         // is never a Summarizer Error, and the bookmark only ever advances on
         // a completed save (errors doc §4).
         summarizerController?.cancel()
+
+        // Detach from the image job registry WITHOUT cancelling the job:
+        // the generation deliberately survives leaving the chat and
+        // recreation (§5); with no screen attached its result is written
+        // straight into the stored history.
+        ImageGenerationJobRegistry.detach(chatId, this)
 
         killAllProcesses()
         stopHandsFreeService()
@@ -5170,11 +5182,17 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         // persisting it would overwrite the only copy. The refusal is logged
         // by the guard; the "Chat unavailable" state already blocks the UI.
         if (chatStorageUnavailable) return ChatStorageHealth.WriteOutcome.BLOCKED_CORRUPT
-        // The inline image-confirmation card is a transient UI row
-        // (image-generation-rebuild-plan.md §5) — never persisted.
+        // The inline image-confirmation card and the Creating Image row are
+        // transient UI rows (image-generation-rebuild-plan.md §5) — never
+        // persisted, so no unexplained empty assistant message is saved and
+        // reopening cannot show a stale copy.
+        val isTransientImageRow = { row: HashMap<String, Any> ->
+            row[ChatAdapter.KEY_IMAGE_CONFIRMATION] == true ||
+                row[ChatAdapter.KEY_IMAGE_PROGRESS] == true
+        }
         val persistableMessages =
-            if (messages.any { it[ChatAdapter.KEY_IMAGE_CONFIRMATION] == true }) {
-                ArrayList(messages.filterNot { it[ChatAdapter.KEY_IMAGE_CONFIRMATION] == true })
+            if (messages.any(isTransientImageRow)) {
+                ArrayList(messages.filterNot(isTransientImageRow))
             } else {
                 messages
             }
@@ -5425,60 +5443,113 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         sendCoordinatorImageRequest(request)
     }
 
+    /** §5 progress experience: the generation runs in the process-level
+     *  job registry — NOT an activity scope — so leaving the chat or
+     *  recreating this screen cannot kill it or double it. This screen
+     *  shows the inline Creating Image row (with its visible Cancel), and
+     *  the busy state; the single terminal state arrives through
+     *  [onImageJobFinished]. */
     private fun sendCoordinatorImageRequest(request: ImageGenerationRequest) {
-        imageRequestScope = CoroutineScope(Dispatchers.Main)
-        imageRequestScope?.launch {
-            btnMicro?.isEnabled = false
-            btnSend?.isEnabled = false
-            progress?.visibility = View.VISIBLE
-
-            progress?.setOnClickListener {
-                cancel()
-                restoreUIState()
-                saveSettings()
-                syncChatProjection()
-                calculateCost()
-            }
-
-            try {
-                runCoordinatorImageRequest(request)
-            } catch (_: CancellationException) {
-                restoreUIState()
-            }
-        }
+        btnMicro?.isEnabled = false
+        btnSend?.isEnabled = false
+        progress?.visibility = View.VISIBLE
+        progress?.setOnClickListener { ImageGenerationJobRegistry.cancel(chatId) }
+        showImageProgressCard()
+        // Attach (idempotent) before starting: a chat whose id was assigned
+        // after onCreate must still receive the terminal state here.
+        ImageGenerationJobRegistry.attach(chatId, this)
+        ImageGenerationJobRegistry.start(
+            this, chatId, request, ImageGenerationJobRegistry.Origin.IMAGINE
+        )
     }
 
-    private suspend fun runCoordinatorImageRequest(request: ImageGenerationRequest) {
-        when (val outcome = ImageGeneratorCoordinator.generate(this, request)) {
-            is ImageGeneratorCoordinator.Outcome.Success -> {
-                // The marker id and the stored file name derive from the
-                // same encoded bytes (GeneratedImageStorage), so the saved
-                // message keeps resolving to its file; the real detected
-                // type decides the extension (§4.5).
-                val marker = withContext(Dispatchers.IO) {
-                    writeImageToCache(outcome.image.bytes, outcome.image.fileExtension)
-                    Hash.hash(java.util.Base64.getEncoder().encodeToString(outcome.image.bytes))
-                }
-                runOnUiThread {
-                    putMessage("~file:$marker", true)
-                    scroll(true)
-                    scroll(false)
-                    saveSettings()
+    /** The §5 single terminal state — Complete, Failed, or Cancelled —
+     *  delivered exactly once by the job registry while this screen is
+     *  attached. `/imagine` owns its whole turn, so it also restores the
+     *  busy state; a tool-call generation is mid-turn and leaves the turn
+     *  state to the surrounding tool flow. */
+    override fun onImageJobFinished(
+        job: ImageGenerationJobRegistry.ActiveJob,
+        terminal: ImageGenerationJobRegistry.Terminal
+    ) {
+        if (job.chatId != chatId) return
+        removeImageProgressCard()
+        val fromImagine = job.origin == ImageGenerationJobRegistry.Origin.IMAGINE
+        when (terminal) {
+            is ImageGenerationJobRegistry.Terminal.Complete -> {
+                putMessage("~file:" + terminal.marker, true)
+                scroll(true)
+                scroll(false)
+                saveSettings()
+                ChatPreferences.getChatPreferences()
+                    .putTimestampToChatById(this, chatId)
+                if (fromImagine) {
                     btnMicro?.isEnabled = true
                     btnSend?.isEnabled = true
                     progress?.visibility = View.GONE
                     messageInput?.requestFocus()
-                    ChatPreferences.getChatPreferences()
-                        .putTimestampToChatById(this@ChatActivity, chatId)
                 }
-                ImageGenerationEventLog.recordSuccess(this, outcome.diagnostics)
             }
-            is ImageGeneratorCoordinator.Outcome.Failure -> {
-                ImageGenerationEventLog.recordFailure(
-                    this, outcome.diagnostics, outcome.errorCause, outcome.sanitizedDetail
-                )
-                runOnUiThread { presentImageGenerationFailure(request, outcome) }
+            is ImageGenerationJobRegistry.Terminal.Failed -> {
+                if (fromImagine) {
+                    presentImageGenerationFailure(job.request, terminal.cause)
+                } else {
+                    // §13: the cause message appears in chat; the tool flow
+                    // returns its own concise tool error to the model.
+                    putMessage(getString(imageFailureMessageRes(terminal.cause)), true)
+                    saveSettings()
+                }
             }
+            is ImageGenerationJobRegistry.Terminal.Cancelled -> {
+                putMessage(getString(R.string.image_gen_error_cancelled), true)
+                saveSettings()
+                if (fromImagine) restoreUIState()
+            }
+        }
+    }
+
+    /** The Creating Image row's visible Cancel action (plan §5). */
+    override fun onImageProgressCancel() {
+        ImageGenerationJobRegistry.cancel(chatId)
+    }
+
+    /** Transient §5 Creating Image row — never persisted; restored on
+     *  reopen while the registry still holds the chat's job. */
+    private fun showImageProgressCard() {
+        if (messages.any { it[ChatAdapter.KEY_IMAGE_PROGRESS] == true }) return
+        val card = HashMap<String, Any>()
+        card["isBot"] = true
+        card["message"] = ""
+        card[ChatAdapter.KEY_IMAGE_PROGRESS] = true
+        messages.add(card)
+        adapter?.notifyItemInserted(messages.size - 1)
+        updateMessagesSelectionProjection()
+        scroll(true)
+    }
+
+    private fun removeImageProgressCard() {
+        val index = messages.indexOfLast { it[ChatAdapter.KEY_IMAGE_PROGRESS] == true }
+        if (index >= 0) {
+            messages.removeAt(index)
+            adapter?.notifyItemRemoved(index)
+            updateMessagesSelectionProjection()
+        }
+    }
+
+    /** §5 recovery: reopening (or recreating) the chat while its
+     *  generation is still running re-shows the Creating Image row; an
+     *  `/imagine` turn also re-enters its busy state. Never restarts the
+     *  generation — the registry holds the one running job. */
+    private fun restoreImageGenerationJobState() {
+        if (chatId == "") return
+        ImageGenerationJobRegistry.attach(chatId, this)
+        val activeJob = ImageGenerationJobRegistry.activeJob(chatId) ?: return
+        showImageProgressCard()
+        if (activeJob.origin == ImageGenerationJobRegistry.Origin.IMAGINE) {
+            btnMicro?.isEnabled = false
+            btnSend?.isEnabled = false
+            progress?.visibility = View.VISIBLE
+            progress?.setOnClickListener { ImageGenerationJobRegistry.cancel(chatId) }
         }
     }
 
@@ -5490,12 +5561,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
      *  the log surfaces, never in chat. */
     private fun presentImageGenerationFailure(
         request: ImageGenerationRequest,
-        failure: ImageGeneratorCoordinator.Outcome.Failure
+        errorCause: ImageErrorCause
     ) {
         playErrorSignal()
         stopHandsFreeOnError()
 
-        val causeText = getString(imageFailureMessageRes(failure.errorCause))
+        val causeText = getString(imageFailureMessageRes(errorCause))
         putMessage(causeText, true)
         saveSettings()
         btnMicro?.isEnabled = true
@@ -5506,7 +5577,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
         val builder = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
             .setTitle(causeText)
             .setNegativeButton(R.string.btn_cancel) { _, _ -> }
-        when (failureActionFor(failure.errorCause)) {
+        when (failureActionFor(errorCause)) {
             ImageFailureAction.EDIT_PROMPT -> {
                 builder.setPositiveButton(R.string.image_gen_action_edit_prompt) { _, _ ->
                     // The exact prompt that was sent to the generator, back
@@ -5530,20 +5601,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             ImageFailureAction.NONE -> { /* cancellation shows no action */ }
         }
         builder.show()
-    }
-
-    private fun imageFailureMessageRes(cause: ImageErrorCause): Int = when (cause) {
-        ImageErrorCause.NO_GENERATOR_CONFIGURED -> R.string.image_gen_error_not_configured
-        ImageErrorCause.GENERATOR_MODEL_REJECTED -> R.string.image_gen_error_model_rejected
-        ImageErrorCause.ENDPOINT_UNREACHABLE -> R.string.image_gen_error_unreachable
-        ImageErrorCause.AUTHENTICATION_FAILED -> R.string.image_gen_error_auth
-        ImageErrorCause.PROMPT_REFUSED -> R.string.image_gen_error_prompt_refused
-        ImageErrorCause.TIMED_OUT -> R.string.image_gen_error_timeout
-        ImageErrorCause.NO_USABLE_IMAGE -> R.string.image_gen_error_no_usable_image
-        ImageErrorCause.DOWNLOAD_INVALID -> R.string.image_gen_error_download_invalid
-        ImageErrorCause.UNSUPPORTED_OPTION -> R.string.image_gen_error_unsupported_option
-        ImageErrorCause.PROVIDER_ERROR -> R.string.image_gen_error_provider
-        ImageErrorCause.CANCELLED -> R.string.image_gen_error_cancelled
     }
 
     /* --------------- Model-initiated image creation (§6/§7/§8) --------------- */
@@ -5842,19 +5899,22 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             return CreateImageTool.cancelledResult()
         }
 
-        return when (val outcome = ImageGeneratorCoordinator.generate(this, request)) {
-            is ImageGeneratorCoordinator.Outcome.Success -> {
-                val marker = withContext(Dispatchers.IO) {
-                    writeImageToCache(outcome.image.bytes, outcome.image.fileExtension)
-                    Hash.hash(java.util.Base64.getEncoder().encodeToString(outcome.image.bytes))
-                }
-                runOnUiThread {
-                    putMessage("~file:$marker", true)
-                    scroll(true)
-                    saveSettings()
-                    ChatPreferences.getChatPreferences()
-                        .putTimestampToChatById(this@ChatActivity, chatId)
-                }
+        // §5: the generation itself runs in the process-level job registry
+        // so recreating this screen mid-turn cannot kill it or double it.
+        // The attached screen shows the Creating Image row and appends the
+        // single terminal chat message (and the registry records the §13
+        // entries); this flow only builds the tool result.
+        val job = withContext(Dispatchers.Main) {
+            showImageProgressCard()
+            // Attach (idempotent) before starting: a chat whose id was
+            // assigned after onCreate must still receive the terminal state.
+            ImageGenerationJobRegistry.attach(chatId, this@ChatActivity)
+            ImageGenerationJobRegistry.start(
+                this@ChatActivity, chatId, request, ImageGenerationJobRegistry.Origin.TOOL
+            )
+        }
+        return when (val terminal = job.await()) {
+            is ImageGenerationJobRegistry.Terminal.Complete -> {
                 // §11: a model-initiated unsupported option applies the
                 // fallback and reports it in the tool result instead of
                 // interrupting the user.
@@ -5866,24 +5926,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                 } else {
                     null
                 }
-                ImageGenerationEventLog.recordSuccess(this, outcome.diagnostics)
-                CreateImageTool.successResult(marker, valid.description, fallbackNote)
+                CreateImageTool.successResult(terminal.marker, valid.description, fallbackNote)
             }
-            is ImageGeneratorCoordinator.Outcome.Failure -> {
-                // §13: actionable causes appear in chat regardless of any
-                // recording toggle; the model receives a concise tool error;
-                // the diagnostics land in the errors log when recording is on.
-                ImageGenerationEventLog.recordFailure(
-                    this, outcome.diagnostics, outcome.errorCause, outcome.sanitizedDetail
-                )
-                runOnUiThread {
-                    putMessage(getString(imageFailureMessageRes(outcome.errorCause)), true)
-                    saveSettings()
-                }
+            is ImageGenerationJobRegistry.Terminal.Failed ->
                 CreateImageTool.errorResult(
-                    "image generation failed: " + outcome.errorCause.name.lowercase()
+                    "image generation failed: " + terminal.cause.name.lowercase()
                 )
-            }
+            is ImageGenerationJobRegistry.Terminal.Cancelled ->
+                CreateImageTool.cancelledResult()
         }
     }
 
@@ -6412,6 +6462,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
     private fun cancelAllAiActivity(source: String) {
         logVoiceEvent("all AI activity cancelled ($source)")
         cancelState = true
+        // Stop is a deliberate user cancel, so it DOES end a running image
+        // generation (unlike leaving the screen, which lets it finish).
+        if (chatId != "") ImageGenerationJobRegistry.cancel(chatId)
         whisperTurnToken++ // invalidate any whisper turn callback still in flight
         handsFreeStopped = true
         handsFreeReadbackExpected = false
@@ -8126,7 +8179,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
                     // Main after the IO hop). Never touch views/intent from IO,
                     // and never apply the result to a destroyed screen.
                     if (renamed && !isFinishing && !isDestroyed) {
+                        val previousChatId = chatId
                         chatId = Hash.hash(newChatName)
+                        // Re-point any running image generation (and this
+                        // screen's registry listener) at the renamed chat id
+                        // so its terminal state cannot land in the deleted
+                        // placeholder chat.
+                        ImageGenerationJobRegistry.rename(previousChatId, chatId)
 
                         // Adopt the renamed chat in place. This used to relaunch
                         // ChatActivity (startActivity + finish) to pick up the new
@@ -8428,22 +8487,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener {
             start = end
         }
         return chunks
-    }
-
-    private fun writeImageToCache(bytes: ByteArray, imageType: String = "png") {
-        try {
-            contentResolver.openFileDescriptor(Uri.fromFile(File(getExternalFilesDir("images")?.absolutePath + "/" + GeneratedImageStorage.cacheFileName(bytes, imageType))), "w")?.use { fileDescriptor ->
-                FileOutputStream(fileDescriptor.fileDescriptor).use {
-                    it.write(
-                        bytes
-                    )
-                }
-            }
-        } catch (e: FileNotFoundException) {
-            e.printStackTrace()
-        } catch (e: IOException) {
-            e.printStackTrace()
-        }
     }
 
     private fun findLastUserMessage(): HashMap<String, Any> {

@@ -554,6 +554,7 @@
     <string name="image_gen_error_provider">The image provider reported an error.</string>
     <string name="image_gen_error_cancelled">The image request was cancelled.</string>
     <string name="image_gen_card_title">%1$s Wants to Create an Image</string>
+    <string name="image_gen_creating_title">Creating Image…</string>
     <string name="image_gen_action_create">Create</string>
     <string name="image_gen_action_view_prompt">View Prompt</string>
     <string name="image_gen_tools_unsupported_notice">This model cannot request image creation. You can still use /imagine.</string>

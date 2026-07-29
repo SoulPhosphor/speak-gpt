@@ -85,6 +85,17 @@ class ImageGenerationErrorTest {
         assertEquals(ImageFailureAction.NONE, failureActionFor(ImageErrorCause.CANCELLED))
     }
 
+    // --- §13 chat messages: one distinct message per cause ---
+
+    @Test
+    fun everyFailureCauseHasItsOwnChatMessage() {
+        // An umbrella code must never conceal the specific cause from the
+        // user: each cause maps to its own message resource, none shared.
+        val resIds = ImageErrorCause.entries.map { imageFailureMessageRes(it) }
+        assertEquals(ImageErrorCause.entries.size, resIds.toSet().size)
+        assertFalse(resIds.contains(0))
+    }
+
     // --- sanitization (§13 never-log list) ---
 
     @Test

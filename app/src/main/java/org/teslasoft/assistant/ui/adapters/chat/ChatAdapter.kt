@@ -160,6 +160,14 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         const val KEY_IMAGE_CONFIRMATION = "imageConfirmationCard"
         const val KEY_IMAGE_CONFIRMATION_PROMPT = "imageConfirmationPrompt"
         const val KEY_IMAGE_CONFIRMATION_COMPANION = "imageConfirmationCompanion"
+
+        // Transient inline Creating Image row (plan §5 progress
+        // experience): the visible status and Cancel action for a running
+        // generation. Same transience rules as the confirmation card —
+        // filtered from persistence, blank message text keeps it out of
+        // the model projection.
+        private const val TYPE_IMAGE_PROGRESS = 4
+        const val KEY_IMAGE_PROGRESS = "imageProgressCard"
     }
 
     fun setChatId(chatId: String) {
@@ -178,6 +186,9 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         if (dataArray[position][KEY_IMAGE_CONFIRMATION] == true) {
             return TYPE_IMAGE_CONFIRMATION
         }
+        if (dataArray[position][KEY_IMAGE_PROGRESS] == true) {
+            return TYPE_IMAGE_PROGRESS
+        }
         return if (preferences.getLayout() == "bubbles" || isAssistant) {
             if (dataArray[position]["isBot"] == true) {
                 TYPE_BOT
@@ -192,6 +203,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
     override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
         when (holder) {
             is ImageConfirmationViewHolder -> holder.bind(dataArray[position])
+            is ImageProgressViewHolder -> holder.bind()
             is ViewHolder -> holder.bind(dataArray[position], position)
         }
     }
@@ -201,6 +213,11 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             val view = LayoutInflater.from(parent.context)
                 .inflate(R.layout.view_image_confirmation_card, parent, false)
             return ImageConfirmationViewHolder(view)
+        }
+        if (viewType == TYPE_IMAGE_PROGRESS) {
+            val view = LayoutInflater.from(parent.context)
+                .inflate(R.layout.view_image_progress_card, parent, false)
+            return ImageProgressViewHolder(view)
         }
         val layoutId = when (viewType) {
             TYPE_BOT -> R.layout.view_assistant_bot_message
@@ -232,6 +249,16 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             }
             btnCreate.setOnClickListener { listener?.onImageConfirmationDecision(true) }
             btnCancel.setOnClickListener { listener?.onImageConfirmationDecision(false) }
+        }
+    }
+
+    /** The §5 Creating Image row: the in-chat status for a running
+     *  generation with its required visible Cancel action. */
+    inner class ImageProgressViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
+        private val btnCancel: MaterialButton = itemView.findViewById(R.id.btn_progress_cancel)
+
+        fun bind() {
+            btnCancel.setOnClickListener { listener?.onImageProgressCancel() }
         }
     }
 
@@ -1226,5 +1253,9 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         /** The inline image-confirmation card's Create (true) or Cancel
          *  (false) tap (image-generation-rebuild-plan.md §5). */
         fun onImageConfirmationDecision(approved: Boolean)
+
+        /** The Creating Image row's Cancel tap (plan §5 progress
+         *  experience). */
+        fun onImageProgressCancel()
     }
 }
