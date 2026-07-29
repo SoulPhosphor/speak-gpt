@@ -159,7 +159,10 @@ class MemoryControlsActivity : FragmentActivity() {
 
         /* ---- Memory Engine ---- */
         refreshEngineRow()
+        // The Dropdown.Value style makes the value clickable, so it consumes
+        // taps instead of passing them to the row — it needs its own listener.
         rowMemoryEngine?.setOnClickListener { showMemoryEnginePicker() }
+        textMemoryEngineValue?.setOnClickListener { showMemoryEnginePicker() }
     }
 
     /* ------------------------------ memory engine ------------------------------ */

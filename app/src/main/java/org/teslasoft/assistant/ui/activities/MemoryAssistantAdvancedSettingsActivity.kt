@@ -180,8 +180,12 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
 
         /* ---- Memory Assistant Endpoint & Model ---- */
         refreshArchivistRows()
+        // The Dropdown.Value style makes the value clickable, so it consumes
+        // taps instead of passing them to the row — it needs its own listener.
         rowArchivistEndpoint?.setOnClickListener { openArchivistEndpointPicker() }
+        textArchivistEndpointValue?.setOnClickListener { openArchivistEndpointPicker() }
         rowArchivistModel?.setOnClickListener { openArchivistModelChooser() }
+        textArchivistModelValue?.setOnClickListener { openArchivistModelChooser() }
 
         /* ---- Temperature ---- */
         val temperature = (preferences?.getArchivistTemperature() ?: RECOMMENDED_TEMPERATURE)
@@ -198,6 +202,7 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
         selectedImportance = (preferences?.getArchivistMinImportance() ?: 1).coerceIn(1, 5)
         updateImportanceLabel()
         rowMinImportance?.setOnClickListener { showImportancePicker() }
+        textMinImportanceValue?.setOnClickListener { showImportancePicker() }
 
         /* ---- Extraction Prompt ---- */
         val stored = preferences?.getArchivistCustomPrompt().orEmpty()

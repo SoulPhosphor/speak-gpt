@@ -142,8 +142,12 @@ class SummarizerSettingsActivity : FragmentActivity() {
         btnBack?.setOnClickListener { attemptLeave() }
 
         refreshModelRows()
+        // The Dropdown.Value style makes the value clickable, so it consumes
+        // taps instead of passing them to the row — it needs its own listener.
         rowEndpoint?.setOnClickListener { openEndpointPicker() }
+        textEndpointValue?.setOnClickListener { openEndpointPicker() }
         rowModel?.setOnClickListener { openModelChooser() }
+        textModelValue?.setOnClickListener { openModelChooser() }
 
         suppressWatchers = true
         fieldCompleteMessages?.setText(preferences?.getSummarizerDefaultWindow()?.toString() ?: "20")
