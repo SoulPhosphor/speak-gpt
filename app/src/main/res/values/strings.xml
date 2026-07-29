@@ -2530,9 +2530,9 @@
     <string name="summarizer_intro">The summarizer sends the specified number of messages to the model each turn. Anything beyond that amount is summarized using the AI model selected in these settings. At any time, the summarizer can be turned off in Quick settings, which will allow all messages to be sent to the AI again.</string>
 
     <string name="summarizer_section_model">Summary Model</string>
-    <string name="summarizer_row_endpoint">Endpoint</string>
-    <string name="summarizer_row_endpoint_hint">The API profile used for summary calls.</string>
-    <string name="summarizer_row_model">Model</string>
+    <string name="summarizer_row_endpoint">Summarizer Endpoint</string>
+    <string name="summarizer_row_endpoint_hint">Choose the AI endpoint that will write the conversation summaries.</string>
+    <string name="summarizer_row_model">Summarizer Model</string>
     <string name="summarizer_row_model_hint">The model that writes the summary. A cheaper model than the chat\'s own is fine here.</string>
 
     <string name="summarizer_complete_messages">Complete Messages</string>
