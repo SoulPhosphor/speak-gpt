@@ -123,42 +123,14 @@ class ChatPreferences private constructor() {
     }
 
     /**
-     * Clears all chat messages for a given chat ID.
-     *
-     * @param context The context of the application.
-     * @param chatId The ID of the chat to clear.
-     */
-    fun clearChat(context: Context, chatId: String) {
-        if (chatWriteBlocked(context, "chat_$chatId", "clear a chat")) return
-        SecurePrefs.get(context, "chat_$chatId").edit { putString("chat", "[]") }
-        resetSummarizerContent(context, chatId)
-    }
-
-    /**
-     * Summarizer content-state keys inside `settings.<chatId>`: the rolling
-     * summary, its fold-in bookmark, the over-length marker, the failure
-     * episode, and the per-chat error log. The per-chat Use Summarizer toggle
-     * and Complete Messages window are deliberately not listed — clearing a
-     * chat's MESSAGES keeps its settings, like every other per-chat setting.
+     * Summarizer state keys inside `settings.<chatId>`: the rolling summary,
+     * its fold-in bookmark, the over-length marker, the failure episode, and
+     * the per-chat error log.
      */
     private val summarizerContentKeys = arrayOf(
         "summarizer_summary", "summarizer_folded", "summarizer_over_length",
         "summarizer_episode", "summarizer_errors"
     )
-
-    /**
-     * Removes the summary, bookmark, and summarizer error log when the
-     * conversation's messages are cleared — a summary of messages that no
-     * longer exist must not keep being sent, and a bookmark past the end of
-     * an empty list would break catch-up.
-     */
-    private fun resetSummarizerContent(context: Context, chatId: String) {
-        try {
-            SecurePrefs.get(context, "settings.$chatId").edit(commit = true) {
-                for (key in summarizerContentKeys) remove(key)
-            }
-        } catch (_: Exception) { /* best-effort; a stale bookmark is clamped at read time */ }
-    }
 
     /**
      * Deletion companion for decision 9 (conversation-summary-plan.md): the
@@ -501,13 +473,9 @@ class ChatPreferences private constructor() {
         }
     }
 
-    fun clearChatById(context: Context, chatId: String) {
-        if (chatWriteBlocked(context, "chat_$chatId", "clear a chat")) return
-        val chat: SharedPreferences = SecurePrefs.get(context, "chat_$chatId")
-
-        chat.edit { putString("chat", "[]") }
-        resetSummarizerContent(context, chatId)
-    }
+    // The upstream fork's clear-chat operations (erase a chat's messages but
+    // keep the chat) were removed by owner ruling, July 29 2026: deleting the
+    // chat is the only content-removal action.
 
     /**
      * Generates a unique chat ID for a new chat.

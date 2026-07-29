@@ -41,7 +41,6 @@ import androidx.interpolator.view.animation.LinearOutSlowInInterpolator
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.elevation.SurfaceColors
 import org.teslasoft.assistant.R
-import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.ui.fragments.TileFragment
@@ -71,7 +70,6 @@ class SettingsActivity : FragmentActivity() {
     private var tileSlashCommands: TileFragment? = null
     private var tileDesktopMode: TileFragment? = null
     private var rowAboutApp: LinearLayout? = null
-    private var rowClearChat: LinearLayout? = null
     private var tileDocumentation: TileFragment? = null
     private var tileAmoledMode: TileFragment? = null
     private var tileCustomize: TileFragment? = null
@@ -189,7 +187,6 @@ class SettingsActivity : FragmentActivity() {
         transition.excludeTarget(R.id.tile_slash_commands, true)
         transition.excludeTarget(R.id.tile_desktop_mode, true)
         transition.excludeTarget(R.id.tile_about_app, true)
-        transition.excludeTarget(R.id.tile_clear_chat, true)
         transition.excludeTarget(R.id.tile_documentation, true)
         transition.excludeTarget(R.id.tile_amoled_mode, true)
         transition.excludeTarget(R.id.tile_customize, true)
@@ -240,7 +237,6 @@ class SettingsActivity : FragmentActivity() {
         transition2.excludeTarget(R.id.tile_slash_commands, true)
         transition2.excludeTarget(R.id.tile_desktop_mode, true)
         transition2.excludeTarget(R.id.tile_about_app, true)
-        transition2.excludeTarget(R.id.tile_clear_chat, true)
         transition2.excludeTarget(R.id.tile_documentation, true)
         transition2.excludeTarget(R.id.tile_amoled_mode, true)
         transition2.excludeTarget(R.id.tile_customize, true)
@@ -281,14 +277,6 @@ class SettingsActivity : FragmentActivity() {
 
         if (extras != null) {
             chatId = extras.getString("chatId", "")
-
-            if (chatId == "") {
-                rowClearChat?.isEnabled = false
-                rowClearChat?.visibility = View.GONE
-            }
-        } else {
-            rowClearChat?.isEnabled = false
-            rowClearChat?.visibility = View.GONE
         }
 
         preferences = Preferences.getPreferences(this, chatId)
@@ -335,14 +323,6 @@ class SettingsActivity : FragmentActivity() {
 
                 initializeLogic()
                 adjustPaddings()
-
-                if (chatId == "") {
-                    rowClearChat?.isEnabled = false
-                    rowClearChat?.visibility = View.GONE
-                } else {
-                    rowClearChat?.isEnabled = true
-                    rowClearChat?.visibility = View.VISIBLE
-                }
             }
         }.start()
     }
@@ -571,7 +551,6 @@ class SettingsActivity : FragmentActivity() {
         rowVoiceSettings = findViewById(R.id.tile_voice_settings)
         rowSummarizerSettings = findViewById(R.id.tile_summarizer_settings)
         rowAboutApp = findViewById(R.id.tile_about_app)
-        rowClearChat = findViewById(R.id.tile_clear_chat)
         rowAlertDebugMenu = findViewById(R.id.tile_alert_debug_menu)
 
         rowCharacters?.setOnClickListener {
@@ -604,20 +583,6 @@ class SettingsActivity : FragmentActivity() {
 
         rowAboutApp?.setOnClickListener {
             startActivity(Intent(this, AboutActivity::class.java).putExtra("chatId", chatId))
-        }
-
-        rowClearChat?.setOnClickListener {
-            MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-                .setTitle(R.string.label_clear_chat)
-                .setMessage(R.string.msg_clear_chat)
-                .setPositiveButton(R.string.yes) { _, _ ->
-                    run {
-                        ChatPreferences.getChatPreferences().clearChat(this, chatId)
-                        Toast.makeText(this, getString(R.string.submsg_chat_cleared), Toast.LENGTH_SHORT).show()
-                    }
-                }
-                .setNegativeButton(R.string.no) { _, _ -> }
-                .show()
         }
 
         rowAlertDebugMenu?.setOnClickListener {

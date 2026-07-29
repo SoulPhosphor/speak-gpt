@@ -56,7 +56,6 @@
     <string name="setting_silent_desc">Не озвучивать ответы бота</string>
     <string name="setting_about_desc">Нажмите, чтобы узнать информацию о приложении и разработчике</string>
     <string name="setting_about">О приложении</string>
-    <string name="setting_clear_chat">Очистить историю чата</string>
     <string name="title_terms">Условия</string>
     <string name="terms_desc1">Это пример использования различных LLM, включая OpenAI ChatGPT и Facebook LLama. Мы (разработчики) не аффилированы с OpenAI или другими поставщиками API. Все логотипы и материалы являются собственностью соответствующих компаний.</string>
     <string name="btn_next">Далее</string>
@@ -225,7 +224,6 @@
     <string name="field_logit_bias_with_desc">Смещение логита (значение от -100 до 100)</string>
     <string name="title_logs">Логи</string>
     <string name="btn_clear_log">Очистить лог</string>
-    <string name="btn_clear_chat">Очистить чат</string>
     <string name="label_microphone_permission_requested">Запрошено разрешение на использование микрофона</string>
     <string name="label_camera_permission_requested">Запрошено разрешение на использование камеры</string>
     <string name="label_generated_image">Сгенерированное изображение</string>
@@ -352,9 +350,6 @@
     <string name="tile_new_ui_desc">Эта функция позволяет включить новый экспериментальный интерфейс. Новый интерфейс более компактен и интуитивно понятен.</string>
     <string name="tile_about_app_title">О приложении</string>
     <string name="tile_about_app_desc">Эта функция позволяет открыть страницу о SpeakGPT.</string>
-    <string name="tile_clear_chat_title">Очистить чат</string>
-    <string name="tile_clear_chat_subtitle">Очистить историю чата</string>
-    <string name="tile_clear_chat_desc">Эта функция позволяет очистить историю чата.</string>
     <string name="tile_documentation_title">Документация</string>
     <string name="tile_documentation_subtitle">Открыть документацию</string>
     <string name="tile_documentation_desc">Эта функция позволяет открыть документацию SpeakGPT.</string>
@@ -372,9 +367,6 @@
     <string name="on">Включено</string>
     <string name="off">Отключено</string>
     <string name="tile_about_app_subtitle">О SpeakGPT</string>
-    <string name="label_clear_chat">Очистить чат</string>
-    <string name="msg_clear_chat">Вы уверены? Это действие нельзя отменить.</string>
-    <string name="submsg_chat_cleared">Чат очищен</string>
     <string name="cancel">Отмена</string>
     <string name="btn_reset">Сброс</string>
     <string name="label_provided_by">Предоставлено:</string>

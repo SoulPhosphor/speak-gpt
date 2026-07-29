@@ -56,7 +56,6 @@
     <string name="setting_silent_desc">Nie wymawiaj odpowiedzi bota</string>
     <string name="setting_about_desc">Kliknij, aby zobaczyć informacje o aplikacji i deweloperze</string>
     <string name="setting_about">O aplikacji</string>
-    <string name="setting_clear_chat">Wyczyść historię czatu</string>
     <string name="title_terms">Warunki</string>
     <string name="terms_desc1">To jest przykład, jak używać różnych LLM, w tym OpenAI ChatGPT, Facebook LLama. My (deweloper) nie jesteśmy powiązani z OpenAI ani innymi dostawcami API. Wszystkie loga i materiały są własnością odpowiednich firm.</string>
     <string name="btn_next">Dalej</string>
@@ -241,7 +240,6 @@
     <string name="label_frequency_penalty">Kara częstotliwości</string>
     <string name="label_presence_penalty">Kara obecności</string>
     <string name="btn_exit">Wyjdź</string>
-    <string name="btn_clear_chat">Wyczyść czat</string>
     <string name="label_customize_assistant">Dostosuj asystenta</string>
     <string name="hint_assistant_name">Nazwa asystenta</string>
     <string name="label_select_an_avatar">Wybierz awatar</string>
@@ -349,9 +347,6 @@
     <string name="tile_new_ui_desc">Ta funkcja pozwala włączyć nowy eksperymentalny interfejs użytkownika. Nowy interfejs użytkownika jest bardziej kompaktowy i intuicyjny.</string>
     <string name="tile_about_app_title">O aplikacji</string>
     <string name="tile_about_app_desc">Ta funkcja pozwala otworzyć stronę o SpeakGPT.</string>
-    <string name="tile_clear_chat_title">Wyczyść czat</string>
-    <string name="tile_clear_chat_subtitle">Wyczyść historię czatu</string>
-    <string name="tile_clear_chat_desc">Ta funkcja pozwala wyczyścić historię czatu.</string>
     <string name="tile_documentation_title">Dokumentacja</string>
     <string name="tile_documentation_subtitle">Otwórz dokumentację</string>
     <string name="tile_documentation_desc">Ta funkcja pozwala otworzyć dokumentację SpeakGPT.</string>
@@ -370,9 +365,6 @@
     <string name="on">Włączone</string>
     <string name="off">Wyłączone</string>
     <string name="tile_about_app_subtitle">O SpeakGPT</string>
-    <string name="label_clear_chat">Wyczyść czat</string>
-    <string name="msg_clear_chat">Czy jesteś pewien? Ta czynność jest nieodwracalna.</string>
-    <string name="submsg_chat_cleared">Czat wyczyszczony</string>
     <string name="cancel">Anuluj</string>
     <string name="btn_reset">Zresetuj</string>
     <string name="label_provided_by">Dostarczone przez:</string>

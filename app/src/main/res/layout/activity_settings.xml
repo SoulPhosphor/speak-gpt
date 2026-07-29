@@ -747,36 +747,9 @@
                     android:contentDescription="@string/tile_about_app_title" />
             </LinearLayout>
 
-            <LinearLayout
-                android:id="@+id/tile_clear_chat"
-                style="@style/Widget.App.Row.WithSubtitle"
-                android:paddingHorizontal="20dp"
-                app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toBottomOf="@+id/tile_about_app">
-
-                <ImageView
-                    style="@style/Widget.App.Row.Icon"
-                    android:contentDescription="@null"
-                    android:src="@drawable/ic_close"
-                    android:tint="?attr/colorPrimary" />
-
-                <LinearLayout style="@style/Widget.App.Row.TextColumn">
-
-                    <TextView
-                        style="@style/Widget.App.Row.Title"
-                        android:text="@string/tile_clear_chat_title" />
-
-                    <TextView
-                        style="@style/Widget.App.Row.Subtitle"
-                        android:maxLines="3"
-                        android:text="@string/tile_clear_chat_subtitle" />
-                </LinearLayout>
-
-                <ImageView
-                    style="@style/Widget.App.Row.Chevron"
-                    android:contentDescription="@string/tile_clear_chat_title" />
-            </LinearLayout>
+            <!-- The upstream fork's "Clear chat" row (erase messages, keep
+                 the chat) was removed by owner ruling, July 29 2026: deleting
+                 the chat is the only content-removal action. -->
 
             <androidx.constraintlayout.widget.ConstraintLayout
                 android:id="@+id/constraintLayout16"
@@ -788,7 +761,7 @@
                 android:visibility="gone"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toBottomOf="@+id/tile_clear_chat">
+                app:layout_constraintTop_toBottomOf="@+id/tile_about_app">
 
                 <androidx.constraintlayout.widget.ConstraintLayout
                     android:id="@+id/tile_documentation"
