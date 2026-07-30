@@ -77,6 +77,65 @@ already works without it.)
   may use both memory systems in chats or run each analysis type separately,
   but a single analysis run must not create both kinds at once.
 
+## Roleplay Memory Budget Calculator
+
+The proposed active-scene word or token notice in Chat → Quick Settings is
+rejected. Do not add an **Always-active scene** total or memory-budget notice
+there. The dedicated calculator below is the only approved location for this
+feature.
+
+Add a row at the bottom of the **Roleplay** screen:
+
+- Title: **Memory Budget Calculator**
+- Tapping the row opens a dedicated calculator and editor screen.
+
+Screen introduction, verbatim:
+
+> Estimate the token footprint of static memories included in every prompt.
+> Select active Lorebooks, worlds, or characters below to preview their text
+> and calculate their combined impact on your context window.
+
+The selectable sections appear vertically, one beneath another. Every selector
+starts at **None** and lists the existing named items currently available in the
+app:
+
+1. **Lorebooks**
+2. **World**
+3. **Campaign**
+4. **Roleplay Character**
+5. **Party Members**
+
+Use the app's existing selection behavior for each type. Types that currently
+allow one active item remain single-select; types that currently allow several
+active items retain their existing multi-selection behavior.
+
+Only static text that would be included every turn is counted. For Lorebooks,
+count only always-active or core text. Keyword-triggered entries are excluded
+from the static total because they are not present in every prompt.
+
+When an item is selected, immediately show its editable data using the same
+field order, section layout, labels, text styling, spacing, line height,
+validation, and behavior as its actual card editor. Example section header:
+
+> **World: Sparktown**    **500 Tokens**
+
+Each selected section shows a live estimated token count, and the screen shows a
+live combined estimate for all selected static content. Use the app's shared
+token-estimation utility rather than introducing a separate counting formula.
+
+Each selected section has:
+
+- **Revert** — discard unsaved edits in that section and restore the last saved
+  card data.
+- **Save** — save that section's changes to the underlying card so the normal
+  card screen and all other uses immediately reflect them.
+
+The calculator must not contain a copied second version of the card layout or
+hard-coded duplicate line-height values. Reuse the same card-editor component
+where practical, or the same shared field and text styles where a shared
+component is not possible. A later card-layout or line-height change must update
+both the normal card and calculator without separate maintenance.
+
 ## What's left — in any order, or never
 
 - **Self-repairing search** — background housekeeping so search stays
