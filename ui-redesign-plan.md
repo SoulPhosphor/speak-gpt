@@ -481,6 +481,42 @@ colors.
   `bg_gallery_tile_label`, `shadow_bottom`). Reconcile against the icon
   tint convention during the audit-palette pass; record, don't spot-patch.
 
+### 4.6 Typography and text-size future-proofing (owner requirement, July 30 2026)
+
+The owner may change the app's font later, and text sizes may need to
+change for accessibility. Both are future-variable, like palette colors:
+the architecture must keep each a central change, not a per-screen edit.
+This section records compatibility requirements only — no font change and
+no in-app text-size control is approved or scheduled.
+
+**Fonts (verified July 30 2026 — already centralized).** The app font is
+set once per theme (`android:fontFamily` on `Theme.App` and variants:
+`@font/roboto_ttf` day, `@font/default_font` night); only two layout files
+override it. A future font swap is therefore a theme-level change. Keep it
+that way: do **not** scatter `fontFamily` into layouts or individual
+styles, and route any style-level typeface need through a shared text
+appearance so it still inherits the theme font decision.
+
+**Text sizes (verified July 30 2026 — accessible now, centralizing
+gradually).** Every text size in the app is in `sp` (432 layout
+declarations plus 17 in shared styles; zero `dp` text). Android's
+system-level accessibility font scaling therefore already works app-wide.
+Binding rules:
+
+1. Text sizes stay in `sp` — never `dp` — and nothing may disable or
+   clamp system font scaling.
+2. As screens convert to shared styles (Phase 1.5), size and typography
+   ownership moves into the shared styles / text appearances, per the
+   existing 6.3 direction. That conversion is what turns a future
+   app-wide size adjustment into a change in one place instead of ~400.
+3. If an in-app text-size preference is ever approved, the two-source
+   logic of 4.5 applies unchanged (e.g. compiled size-step overlays over
+   shared text appearances). Do not build one, and do not hardcode
+   assumptions that text sizes are permanent constants.
+4. Restyles must be checked at a large system font scale — text that
+   truncates, overlaps, or pushes controls off-screen at accessibility
+   sizes is a bug, not an acceptable trade.
+
 ---
 
 ## 5. Navigation redesign — the side panel
