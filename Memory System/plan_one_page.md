@@ -190,6 +190,81 @@ shown as two paragraphs with visible spacing between them:
 >
 > Once complete, import the result file. Your memory manager will organize all flagged suggestions into their respective slots so you can review and confirm them at your own pace.
 
+The screen order is:
+
+1. The export function at the top.
+2. The import function directly below it.
+
+The export function's detailed controls and wording remain the next owner-review
+group. Do not insert the old two-card design as though it were approved.
+
+### Import
+
+Title:
+
+> **Import**
+
+Helper text:
+
+> Upload the result file created by the external AI to add its suggestions to Pending.
+
+Button:
+
+> **Import**
+
+After the user chooses a result file, reuse the same inline progress pattern as
+the API Memory Assistant: an indeterminate spinner with status text beneath the
+Import section. The correct active status is:
+
+> **Importing Suggestions…**
+
+Do not say **Importing Conversations**. Conversations remain in the review
+package and are not imported into the app.
+
+When import and validation finish successfully, remove the spinner and replace
+the progress text with:
+
+> **Potential Memories Found: N**
+
+Show a **View** button beside or directly beneath the result. **View** opens the
+appropriate Pending area based on the result file's declared analysis type:
+
+- Associative-memory results open **Memories → Pending**.
+- Lorebook-memory results open **Lorebooks → Pending**.
+- Existing-memory housekeeping results open **Memories → Pending**.
+
+The import may finish quickly, but the app must still validate the file, IDs,
+placements, evidence, duplicates, and current phone state before creating Pending
+items. The computer never writes directly into the memory store, and nothing is
+approved automatically.
+
+### Existing-memory housekeeping
+
+The existing-memory review is a database-housekeeping job, not a second review
+of current conversations. It exports the existing associative-memory catalog
+for an external AI to inspect. Lorebooks and roleplay cards may be included as
+read-only comparison material so overlap can be detected, but this job does not
+edit them.
+
+This housekeeping package does not include new, current, or unprocessed
+conversations for memory discovery. It may include evidence or provenance already
+attached to existing memories, but it does not scan chats for additional
+memories. Chat review is a separate export purpose chosen explicitly by the
+user.
+
+The external AI may flag:
+
+- exact duplicates and likely near-duplicates;
+- memories apparently replaced by newer information;
+- possible contradictions;
+- memories that should be edited, merged, archived, or split;
+- unclear wording or placement that may make retrieval unreliable;
+- missing evidence or provenance.
+
+The result file contains proposals only. After import, the phone validates and
+organizes them into Pending cards for the user to review, correct, accept, or
+reject.
+
 The initial computer workflow does not require a dedicated desktop application
 or custom desktop UI. The user opens the exported package in an existing
 file-capable AI application on the computer and asks it to follow the package's
