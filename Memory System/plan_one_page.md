@@ -10,7 +10,7 @@ changes — it must always be true.)*
 ## What already works (on main)
 
 - Chats are recorded for review while **Archive this chat** is on.
-- **Memory Assistant** reads them and suggests memories. Everything lands
+- **API Memory Assistant** reads them and suggests memories. Everything lands
   in **Pending**. Nothing is ever saved, changed, or deleted without your
   approval.
 - Analysis keeps running if you leave the screen or the screen turns off,
@@ -45,7 +45,7 @@ already works without it.)
   chats until an embedding model is installed.** Action: **Okay**. Show it
   again on the next visit while the model is still missing; do not use a
   permanent inline banner.
-- Before adding or replacing Memory Assistant wording, inventory the exact
+- Before adding or replacing API Memory Assistant wording, inventory the exact
   text already in the app and when it appears. Reuse the existing status
   surface rather than inventing a parallel set of progress or result messages.
 - **Lorebook suggestion review structure is approved.** Lorebook Suggestions
@@ -60,7 +60,7 @@ already works without it.)
   suggestion. Nothing is written to a Lorebook until that suggestion is
   individually approved, and this flow never edits or deletes existing
   Lorebook entries.
-- When Lorebook analysis finds suggestions, use the existing Memory Assistant
+- When Lorebook analysis finds suggestions, use the existing API Memory Assistant
   result surface and show **Potential Lorebook Memories found: N** with a
   **View** button. **View** opens the Lorebooks area directly on **Pending**.
 - The **Memory Analysis Type** control uses the app's existing two-column
@@ -171,6 +171,44 @@ hard-coded duplicate line-height values. Reuse the same card-editor component
 where practical, or the same shared field and text styles where a shared
 component is not possible. A later card-layout or line-height change must update
 both the normal card and calculator without separate maintenance.
+
+## Computer Memory Review
+
+The Memory Manager list contains two separate rows for the two analysis routes:
+
+1. Rename the existing **Memory Assistant** row to **API Memory Assistant**.
+2. Directly beneath it, add a row titled **Computer Memory Review**.
+
+Approved subtitle for **Computer Memory Review**:
+
+> **Use an AI on your computer to review chats or check existing memories.**
+
+The initial computer workflow does not require a dedicated desktop application
+or custom desktop UI. The user opens the exported package in an existing
+file-capable AI application on the computer and asks it to follow the package's
+included instructions. The AI writes a structured suggestions file for the
+phone to import.
+
+The package, not a visual desktop card editor, preserves placement:
+
+- existing memories and other records carry stable IDs, current revisions,
+  scopes, targets, and evidence;
+- an edit, merge, or archive suggestion names the exact existing record or
+  records it concerns;
+- a new memory suggestion carries a proposed scope and target;
+- the phone validates every ID, placement, and piece of evidence against its
+  current state before anything reaches Pending;
+- invalid placement is rejected or returned for correction, and the computer
+  never writes directly into the memory store;
+- every usable result still requires user review and approval in Pending.
+
+The AI may propose the wrong placement for a new memory, but it cannot silently
+save it there. Exact edits and merges are tied to existing IDs; new placements
+remain visible proposals that the user can correct before approval.
+
+This file-based computer workflow is separate from any tentative future web or
+desktop client that mirrors the phone app. A custom client may be considered
+later, but it is not required for the first working computer-review route.
 
 ## What's left — in any order, or never
 
