@@ -53,15 +53,14 @@ already works without it.)
   each suggestion. Nothing is written to a lore book until that suggestion is
   individually approved, and this flow never edits or deletes existing lore
   book entries.
-- The **Memory Analysis Type** control is laid out as follows:
-  - Title: **Memory Analysis Type**
-  - Helper text directly beneath the title: **Choose what kind of memories this analysis should create.**
-  - A drop-down beneath the helper text with exactly two choices:
+- The **Memory Analysis Type** control uses the app's existing two-column
+  settings-row pattern, matching the **Memory Engine** row rather than creating
+  a new layout:
+  - Left column title: **Memory Analysis Type**
+  - Left column subtitle: **Choose which memory system this analysis should create suggestions for. Associative Memories use an embedding model to surface memories connected to the ideas and topics being discussed. Lorebook Memories are activated by specific keywords and do not require an embedding model.**
+  - Right column: a drop-down aligned at the top with exactly two choices:
     **Associative Memories** and **Lorebook Memories**.
   - **Associative Memories** is the default.
-  - Explanatory text beneath the drop-down:
-    - **Associative Memories require an embedding model before they can be used in chats. They are matched to related conversations.**
-    - **Lorebook Memories use keyword triggers and do not require an embedding model.**
   There is no **Both** option: one run creates one kind of suggestion. Users
   may use both memory systems in chats or run each analysis type separately,
   but a single analysis run must not create both kinds at once.
@@ -76,7 +75,7 @@ already works without it.)
 - **No-model mode** — a notice that Associative Search can't enter chats yet,
   plus an optional **Lorebook Memories** analysis type that creates lore book
   entry suggestions with trigger keywords instead. The review structure,
-  analysis-type labels, and helper wording are approved.
+  analysis-type labels, helper wording, and row layout are approved.
 - **The computer feature** — the original goal: export your chats as a
   package, let an AI on your computer suggest memories from them, bring
   the suggestions back into Pending. Needs the duplicate-screen
