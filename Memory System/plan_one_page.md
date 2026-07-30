@@ -57,8 +57,14 @@ already works without it.)
   settings-row pattern, matching the **Memory Engine** row rather than creating
   a new layout:
   - Left column title: **Memory Analysis Type**
-  - Left column subtitle: **Choose which memory system this analysis should create suggestions for. Associative Memories use an embedding model to surface memories connected to the ideas and topics being discussed. Lorebook Memories are activated by specific keywords and do not require an embedding model.**
-  - Right column: a drop-down aligned at the top with exactly two choices:
+  - Left column subtitle, shown as three paragraphs with visible spacing between them:
+
+    **Choose which memory system this analysis should create suggestions for.**
+
+    **Associative Memories use an embedding model to surface memories connected to the ideas and topics being discussed.**
+
+    **Lorebook Memories are activated by specific keywords and do not require an embedding model.**
+  - Right-hand column: a drop-down aligned at the top with exactly two choices:
     **Associative Memories** and **Lorebook Memories**.
   - **Associative Memories** is the default.
   There is no **Both** option: one run creates one kind of suggestion. Users
