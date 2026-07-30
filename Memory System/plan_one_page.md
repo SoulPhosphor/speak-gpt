@@ -50,15 +50,19 @@ already works without it.)
   surface rather than inventing a parallel set of progress or result messages.
 - **Lorebook suggestion review structure is approved.** Lorebook Suggestions
   are reviewed in the Lorebooks area, not the Memory Browser. The ordinary
-  Lorebooks screen does not show a pending-suggestions split menu. That split
-  menu appears only while one or more Lorebook Suggestions are pending and
-  disappears when none remain. Each suggestion shows the proposed entry text
+  Lorebooks screen does not show the split control. While one or more Lorebook
+  Suggestions are pending, show a split control at the top matching the Memory
+  Browser pattern, with **Lorebooks** and **Pending**. The split disappears when
+  no Lorebook Suggestions remain. Each suggestion shows the proposed entry text
   and trigger keywords — no separate title — plus a drop-down labeled
   **Assign Lorebook** for choosing an existing Lorebook or creating a new one
   through the normal full-page flow. The user may edit, approve, or delete each
   suggestion. Nothing is written to a Lorebook until that suggestion is
   individually approved, and this flow never edits or deletes existing
   Lorebook entries.
+- When Lorebook analysis finds suggestions, use the existing Memory Assistant
+  result surface and show **Potential Lorebook Memories found: N** with a
+  **View** button. **View** opens the Lorebooks area directly on **Pending**.
 - The **Memory Analysis Type** control uses the app's existing two-column
   settings-row pattern, matching the **Memory Engine** row rather than creating
   a new layout:
@@ -98,7 +102,7 @@ Screen introduction, verbatim:
 Directly beneath the introduction and before the selectable sections, show a
 live total using the app's title-size text style:
 
-> **Total Approximate Tokens Used: X**
+> **Total Estimated Tokens: X**
 
 The total reflects the current on-screen selections and text, including edits
 that have not been saved yet. Saving is not required for the preview total to
@@ -143,6 +147,25 @@ Each selected section has:
 - **Save** — save that section's changes to the underlying card so the normal
   card screen and all other uses immediately reflect them.
 
+If the user tries to leave the calculator or replace a selection while any
+section contains unsaved edits, show a dedicated confirmation box:
+
+> **Discard all changes?**
+>
+> The following sections have unsaved changes:
+>
+> [Each affected section appears on its own row.]
+
+Actions:
+
+1. **Save All** — save every listed section, then continue the action the user
+   attempted.
+2. **Discard All** — discard every listed section's unsaved edits, then continue
+   the action the user attempted.
+3. **Continue Editing** — close the box, cancel the attempted navigation or
+   selection change, and return to the calculator exactly as it was. Nothing is
+   saved, discarded, or otherwise changed.
+
 The calculator must not contain a copied second version of the card layout or
 hard-coded duplicate line-height values. Reuse the same card-editor component
 where practical, or the same shared field and text styles where a shared
@@ -159,7 +182,8 @@ both the normal card and calculator without separate maintenance.
 - **No-model mode** — a notice that Associative Search can't enter chats yet,
   plus an optional **Lorebook Memories** analysis type that creates Lorebook
   entry suggestions with trigger keywords instead. The review structure,
-  analysis-type labels, helper wording, and row layout are approved.
+  analysis-type labels, helper wording, row layout, result wording, and Pending
+  navigation are approved.
 - **The computer feature** — the original goal: export your chats as a
   package, let an AI on your computer suggest memories from them, bring
   the suggestions back into Pending. Needs the duplicate-screen
