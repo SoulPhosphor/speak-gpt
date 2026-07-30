@@ -59,18 +59,11 @@
              values/themes.xml. -->
         <ImageButton
             android:id="@+id/btn_edit_book"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:layout_marginEnd="8dp"
-            android:layout_marginTop="8dp"
-            android:layout_marginBottom="8dp"
-            android:background="@drawable/btn_accent_icon_large_100"
+            style="@style/Widget.App.ActionBar.ChainedButton"
             android:contentDescription="@string/label_edit_lorebook"
             android:src="@drawable/ic_settings"
             android:tooltipText="@string/label_edit_lorebook"
-            app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toStartOf="@+id/btn_debug"
-            app:layout_constraintTop_toTopOf="parent"
             app:srcCompat="@drawable/ic_settings" />
 
         <ImageButton

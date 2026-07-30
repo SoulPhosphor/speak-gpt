@@ -494,6 +494,33 @@
         <item name="layout_constraintTop_toTopOf">parent</item>
     </style>
 
+    <!-- ADDITIONAL trailing header icons (owner approval, July 30 2026): any
+         header icon that sits BEFORE the end-anchored SecondaryButton. Same
+         geometry/background as SecondaryButton, but with NO end anchor baked
+         in — each instance sets app:layout_constraintEnd_toStartOf pointing
+         at its right-hand neighbor (each screen's neighbor id differs, same
+         reason Title.NearBack leaves its end anchor to the instance). NOT a
+         child of SecondaryButton: a view can't cleanly carry both an
+         inherited layout_constraintEnd_toEndOf and an added
+         layout_constraintEnd_toStartOf (both would apply — ambiguous), the
+         same conflict documented on the Title variants above, so the shared
+         items are duplicated rather than inherited.
+         android:src/contentDescription/tooltipText/visibility stay on the
+         instance. This closes the "two or more trailing icons" gap that had
+         Edit Companion/Edit Persona/API Endpoint Editor/Edit Activation
+         Prompt/Edit System Prompt/Lorebook Entries hand-copying this
+         geometry. -->
+    <style name="Widget.App.ActionBar.ChainedButton" parent="">
+        <item name="android:layout_width">48dp</item>
+        <item name="android:layout_height">48dp</item>
+        <item name="android:layout_marginEnd">8dp</item>
+        <item name="android:layout_marginTop">8dp</item>
+        <item name="android:layout_marginBottom">8dp</item>
+        <item name="android:background">@drawable/btn_accent_icon_large_100</item>
+        <item name="layout_constraintBottom_toBottomOf">parent</item>
+        <item name="layout_constraintTop_toTopOf">parent</item>
+    </style>
+
     <!-- THE "close panel" PATTERN (owner ruling, July 19 2026): use this,
          not raw XML, for any slide-out/slide-in panel whose header closes
          with an X instead of navigating back with an arrow - the shape

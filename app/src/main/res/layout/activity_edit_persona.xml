@@ -51,19 +51,12 @@
              delete yet), shown by EditPersonaActivity when editing. -->
         <ImageButton
             android:id="@+id/btn_delete"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:layout_marginEnd="8dp"
-            android:layout_marginTop="8dp"
-            android:layout_marginBottom="8dp"
-            android:background="@drawable/btn_accent_icon_large_100"
+            style="@style/Widget.App.ActionBar.ChainedButton"
             android:contentDescription="@string/btn_delete"
             android:src="@drawable/ic_remove_moderator"
             android:tooltipText="@string/btn_delete"
             android:visibility="gone"
-            app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toStartOf="@+id/btn_save"
-            app:layout_constraintTop_toTopOf="parent"
             app:srcCompat="@drawable/ic_remove_moderator" />
 
         <ImageButton

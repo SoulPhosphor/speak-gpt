@@ -320,11 +320,14 @@ Use when the header contains one trailing Save, Delete, Help, Debug, Edit, or si
 
 ### Header with two or more trailing action icons
 
-No complete approved shared pattern currently covers additional chained icons. `Widget.App.ActionBar.SecondaryButton` directly covers only the end-anchored icon.
+Use:
 
-Do not copy its geometry into the additional icon and call the header converted. Present the missing shared variant or shared header-layout decision for owner approval.
+- `Widget.App.ActionBar.SecondaryButton` for the last icon, anchored to the bar's end
+- `Widget.App.ActionBar.ChainedButton` for every additional icon before it (owner approval, July 30 2026)
 
-Until that gap is resolved, a screen with locally repeated additional-icon geometry is Partial in `ui-style-adoption.md`.
+`ChainedButton` supplies the same geometry and background as `SecondaryButton` but bakes in no end anchor. Each instance sets `app:layout_constraintEnd_toStartOf` pointing at its right-hand neighbor, and keeps its own icon, content description, tooltip, and visibility.
+
+Do not hand-copy the icon geometry; that is what this style exists to prevent.
 
 ### Close-panel header
 
