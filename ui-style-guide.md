@@ -145,9 +145,9 @@ A group should normally have one clearly primary action.
 
 Use for a neutral alternative action that is not the main commitment and is not Cancel, Discard, Remove, Reset, Revert, or Delete.
 
-The owner has not approved a distinct visual treatment for secondary buttons. Do not invent one. The current implementation may resemble another role until reviewed separately.
-
 Possible uses include Preview, Test, Learn More, or Choose Another Source when appropriate to the feature.
+
+No distinct visual treatment for Secondary is approved yet (owner ruling, July 29 2026). Ignore that gap: reference `AppButton.Primary` directly (and its `Dialog`/`DialogAction`/`Inline` variants for sizing) for any secondary-role button. Do not invent a new appearance and do not block on the missing style. This is deliberately temporary — a distinct Secondary look can be designed and swapped in later without new decisions about which buttons are secondary, since the role is already correctly assigned by meaning.
 
 ### Destructive, cancel, or back-out action
 
@@ -156,6 +156,8 @@ Possible uses include Preview, Test, Learn More, or Choose Another Source when a
 Use for Cancel and other actions that back out of a pending operation, as well as Remove, Reset, Revert, Discard, or Delete.
 
 The style does not authorize destructive behavior. The wording and consequence still determine whether confirmation is required.
+
+No distinct visual treatment for Destructive is approved yet either (owner ruling, July 29 2026): it renders identically to `AppButton.Primary` — same fill, shape, and text appearance, inherited directly. It keeps its own style name rather than being replaced with direct `AppButton.Primary` references in layouts, so it can be redesigned app-wide later by changing one style instead of every layout that uses a destructive button. Changeable later; that is the point of the ruling.
 
 ### Single dialog action
 

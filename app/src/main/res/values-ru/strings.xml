@@ -3,8 +3,6 @@
     <string name="activation_prompt_set_message">Нажмите, чтобы установить активационный запрос</string>
     <string name="menu_chat">Чат</string>
     <string name="menu_prompts">Запросы</string>
-    <string name="menu_tips">Советы</string>
-    <string name="about_developer">Разработчик: AndraxDev</string>
     <string name="about_version">"Версия: "</string>
     <string name="about_view_other_projects">Посмотреть другие проекты</string>
     <string name="about_send_feedback">Отправить отзыв</string>
@@ -84,9 +82,6 @@
     <string name="btn_save">Сохранить</string>
     <string name="btn_new_chat">Новый чат</string>
     <string name="btn_import_chat">Импортировать чат</string>
-    <string name="title_network_error">Ошибка сети</string>
-    <string name="network_error_desc">Что-то не так с вашим соединением. Наши серверы могут быть недоступны или у вас нет интернет-соединения.</string>
-    <string name="btn_try_again">Попробовать снова</string>
     <string name="title_post_a_prompt">Опубликовать запрос</string>
     <string name="hint_name">Ваше имя</string>
     <string name="hint_prompt_title">Заголовок запроса</string>
@@ -113,17 +108,6 @@
     <string name="title_prompts_store">Магазин запросов</string>
     <string name="hint_search">Поиск</string>
     <string name="title_select_language">Выбрать язык</string>
-    <string name="title_tips">Советы</string>
-    <string name="tip1">Начните сообщение с \"Создать изображение\", \"Создать фото\" или \"/imagine\", чтобы генерировать изображения.</string>
-    <string name="tip2">Удерживайте нажатое имя чата, чтобы его редактировать или удалить.</string>
-    <string name="tip3">Секреты поиска:\n\nИспользуйте префикс \"author:\" для поиска по автору.\nИспользуйте префикс \"title:\" для поиска по названию.\nИспользуйте префикс \"id:\" для поиска по идентификатору.\nИспользуйте префикс \"cat:\" для поиска по категории.\nИспользуйте префикс \"type:\" для поиска по типу.</string>
-    <string name="tip4">ChatGPT кажется заблокированным? Попробуйте другие модели. Иногда вы можете получить очень интересные результаты.</string>
-    <string name="tip5">Только модели GPT могут запоминать предыдущие сообщения. Другие модели не оптимизированы для этого.</string>
-    <string name="tip6">Иногда могут появляться странные или бесполезные функции. Это потому, что это приложение находится в стадии бета-тестирования.</string>
-    <string name="tip7">Выделите текст в любом приложении и нажмите \"SpeakGPT\", чтобы начать разговор с ассистентом. Эта функция доступна даже если функция стандартного ассистента выключена. Также вы можете поделиться текстом с SpeakGPT, используя стандартную опцию \"Поделиться\", если опция SpeakGPT недоступна.</string>
-    <string name="tip8">Вы можете сохранить свой разговор с ассистентом. После нажатия кнопки сохранения все будущие сообщения также будут сохранены.</string>
-    <string name="tip9">SpeakGPT работает слишком медленно? Попробуйте уменьшить максимальное количество токенов на выходе.</string>
-    <string name="tip10">Голосовой ввод от Google может не поддерживаться на всех устройствах (особенно устройствах без сервисов Google). В этом случае вы можете переключиться на модель Whisper. Пожалуйста, обратите внимание, что Whisper является платной API и требует интернет-соединения.</string>
     <string name="btn_copy">Копировать</string>
     <string name="user">Пользователь</string>
     <string name="title_edit_chat">Редактировать чат</string>
@@ -137,7 +121,6 @@
     <string name="title_save_chat">Сохранить чат</string>
     <string name="cat_all">Все</string>
     <string name="incorrect_category">Неверная категория</string>
-    <string name="setting_custom_host">Пользовательский конечный точка API</string>
     <string name="setting_custom_host_desc">Установите, если вы хотите использовать другие LLM или OpenAI запрещен в вашей стране</string>
     <string name="setting_assistant_voice">Голос помощника</string>
     <string name="setting_assistant_voice_desc">Настроить голос помощника</string>
@@ -164,12 +147,10 @@
     <string name="prompt_report_success">Возражение отправлено. Спасибо за ваш отзыв!</string>
     <string name="prompt_report_failed">Не удалось отправить отчет</string>
     <string name="option_summarize">Суммировать</string>
-    <string name="tip_11">Долгое нажатие кнопки остановки записи для отмены распознавания речи и предотвращения формирования ответа.</string>
     <string name="global_settings_tip">Вы редактируете глобальные настройки. Это шаблон для новых чатов и настроек для ассистента. Эти настройки не применяются к существующим чатам. Чтобы редактировать настройки для существующего чата, откройте чат и нажмите на иконку настроек.</string>
     <string name="global_settings_title">Глобальные настройки</string>
     <string name="chat_settings_title">Настройки чата</string>
     <string name="title_control_center">Центр управления</string>
-    <string name="tip_12">Долгое нажатие на плитку настроек для отображения описания функции. Работает только в новом интерфейсе настроек. Вы можете получить доступ к новому интерфейсу настроек (Центр управления) нажав на иконку \'лаборатории\' в обычных настройках.</string>
     <string name="menu_explore">Исследовать</string>
     <string name="chat_role_user">Пользователь</string>
     <string name="control_center_general">Основные</string>
@@ -180,7 +161,6 @@
     <string name="control_center_debug">Отладка</string>
     <string name="control_center_text_generation">Генерация текста</string>
     <string name="control_center_audio_and_voice_recognition">Аудио и распознавание голоса</string>
-    <string name="btn_remove_ads">Убрать рекламу</string>
     <string name="go_back">Вернуться назад</string>
     <string name="label_api_endpoint">API конечная точка</string>
     <string name="title_api_endpoints">API конечные точки</string>
@@ -227,10 +207,6 @@
     <string name="label_microphone_permission_requested">Запрошено разрешение на использование микрофона</string>
     <string name="label_camera_permission_requested">Запрошено разрешение на использование камеры</string>
     <string name="label_generated_image">Сгенерированное изображение</string>
-    <string name="title_remove_ads">Убрать рекламу</string>
-    <string name="title_thank_you">Спасибо!</string>
-    <string name="donation_thanks_message">Ваше пожертвование подтверждено. Пожертвования и реклама помогают нам поддерживать это приложение в актуальном состоянии, предоставлять вам качественный сервис и выпускать новые функции. Теперь вы можете наслаждаться приложением без рекламы! Эта лицензия пожизненная. Если вы хотите активировать лицензию на другом устройстве, пожалуйста, свяжитесь с нами.</string>
-    <string name="donation_important_note">ВАЖНОЕ ЗАМЕЧАНИЕ:\nЕсли вы все еще видите рекламу, возможно, вам нужно перезапустить приложение. Обратите внимание, что если вы использовали ID установки для активации лицензии, реклама может появиться после переустановки приложения. Пожалуйста, свяжитесь с нами за новой лицензией или используйте Android ID для активации лицензии в этом случае. Android ID уникален для каждого приложения и сохраняется до выполнения сброса до заводских настроек. ID установки временный и меняется после переустановки приложения или когда вы вручную его сбрасываете/отзываете авторизацию.</string>
     <string name="btn_close">Закрыть</string>
     <string name="chat_generate_name_automatically">Генерировать имя автоматически</string>
     <string name="btn_favorite_models">Любимые модели</string>
@@ -251,7 +227,6 @@
     <string name="hint_logit_bias_config_name">Название конфигурации</string>
     <string name="chat_edit_message">Редактировать сообщение</string>
     <string name="chat_enter_message_here">Введите сообщение здесь...</string>
-    <string name="no_internet_show_error_details">Показать детали ошибки</string>
     <string name="label_quick_settings">Быстрые настройки</string>
     <string name="cost_explanation">Эти данные предоставляются исключительно в информационных целях. Расчет стоимости основан на вашей модели и сообщениях только текстом. Дополнительные расходы могут возникнуть при обработке/генерации изображений. Мы добавили эту карточку, чтобы помочь пользователям понять их использование и как рассчитывается стоимость.</string>
     <string name="btn_learn_more">Узнать больше</string>
@@ -424,9 +399,6 @@
     <string name="msg_cost_not_enough_data"><![CDATA[Стоимость: <SpeakGPT не имеет достаточно данных для расчета стоимости этой модели. Изучите документацию и рассчитайте стоимость вручную на основе вышеуказанного использования.>]]></string>
     <string name="cost_loading" tools:ignore="TypographyEllipsis">Стоимость: Загрузка...</string>
     <string formatted="false" name="cost_counter_usage">Использование (токены): %s в / %s из</string>
-    <string name="teslasoft_id_version">Версия Teslasoft ID:</string>
-    <string name="buy_me_a_coffee">Купите мне кофе</string>
-    <string name="view_source_code">Просмотреть исходный код</string>
     <string name="cat_all_new">Все категории</string>
     <string name="search_chats">поиск чатов</string>
     <string name="waffle_play_01">значок поиска чатов</string>

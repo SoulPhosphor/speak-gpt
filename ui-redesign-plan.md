@@ -17,6 +17,52 @@ specification for the "UI overhaul" referenced in CLAUDE.md's roadmap.
 > it. Also recorded in this revision: the chat top bar now has a **bug-icon
 > shortcut to the Event log** (`btn_debug_log`) that is a real feature to
 > preserve — see Sections 7.1 and 9.1.
+
+> **July 29, 2026 revision:** This plan is reconciled with the verified state
+> of the app and with owner rulings made after June 17. The corrections:
+>
+> - **Phase status (verified in code):** Phases 0 and 1 are complete. Phase 2
+>   shipped only a placeholder `ThemeOverlay.Phosphor.Violet` overlay carrying
+>   the two shared row-color attributes — it is **not** an owner-chosen
+>   palette, there is no picker, and no alternative palettes exist. Phase 3
+>   (the drawer) has **not started**; no drawer code exists anywhere.
+> - **Theme creation is deferred and no longer blocks other work.** The
+>   original "theming first" ordering assumed the palettes would be designed
+>   up front. The owner will instead design palettes **later, visually, in
+>   `palette-designer.html`** (repository root) — that page is the official
+>   tool for creating this app's themes. Until the owner hands over designed
+>   palettes, the app runs on the Violet placeholder. The placeholder was
+>   never chosen by the owner and will be replaced by an owner-designed
+>   default palette when one exists; do not treat its colors as intent.
+> - **The palette contract is the designer's zone list**, not a pure Material
+>   color-role swap. See the Section 4 note: the designer defines ~25 named
+>   zones (page background, input box, top bar, drawer, both message bubbles,
+>   buttons, accent, selection, dividers, error/warning) **plus outline
+>   colors 1–3, a glow color, and calm/vibrant treatments**. Outline
+>   gradients and glow require hand-drawn backgrounds that read theme colors —
+>   this is why the app's boxes are drawn rather than stock Material
+>   components.
+> - **A shared-style system now exists and is the component authority:**
+>   `ui-style-guide.md` (style families and composition), `ui-style-adoption.md`
+>   (per-screen conversion status), and the `Widget.App.*` / `AppButton.*`
+>   families in `themes.xml`. Where Section 6 of this plan conflicts with the
+>   style guide, **the style guide and owner rulings win** — notably: buttons
+>   are semi-square (4dp corners, owner ruling: no pills), not Material tonal
+>   pills. Screen-by-screen conversion to shared styles is the current
+>   groundwork phase; it is what makes every screen palette-ready.
+> - **AMOLED / palette / theme polish is paused** (owner ruling, July 26 2026
+>   — see CLAUDE.md). The pause was precautionary so AMOLED work would not
+>   interfere with the future theme system; the existing AMOLED code stays in
+>   place and untouched until the owner reinstates that work.
+> - **Section 7's screen inventory is stale.** The app has grown from ~30 to
+>   ~70 activities (memory system, summarizer, profile images, local Whisper,
+>   and more). `ui-style-adoption.md` is the living per-screen tracker;
+>   Section 7 remains useful only for its risk notes and contracts.
+> - **Open owner decisions — do not assume:** what the drawer header shows
+>   (the app's name may **not** appear in user-facing text per the July 28
+>   2026 naming ruling, and the owner has not decided what replaces it), and
+>   when the drawer phase is scheduled relative to the ongoing style
+>   conversion.
 **Audience:** AI agents implementing the redesign. Read `CLAUDE.md` in full
 before this document — every rule there still applies. This plan was written
 after a complete inventory of all 30 activities, 20+ dialog fragments, and
@@ -176,6 +222,18 @@ The phases in Section 8 are ordered deliberately:
 
 ### 4.2 Target design
 
+> **Superseded in part (July 29 2026):** palettes will be designed by the
+> owner in `palette-designer.html` and handed over as exported zone values;
+> the "suggested initial palettes" table below is historical — do not build
+> those palettes. The overlay mechanism described here still applies, but a
+> palette must define the designer's zones (including the custom attributes
+> the style guide requires, e.g. `appRowTitleColor` / `appRowSubtitleColor`,
+> and whatever attributes the drawn outline/glow backgrounds read), not only
+> the Material color roles. Also verified the hard way (CharactersActivity
+> crash, July 18 2026): the palette overlay must be the **last** theme layer
+> applied at runtime, because it is the only layer guaranteed present when a
+> screen resolves the custom attributes.
+
 **One source of truth: Material theme attributes.** A "palette" is a
 `ThemeOverlay` style that redefines the M3 color roles (`colorPrimary`,
 `colorOnPrimary`, `colorPrimaryContainer`, `colorSecondaryContainer`,
@@ -282,7 +340,10 @@ Two-stage plan:
 
 ### 5.1 What the drawer contains (top to bottom)
 
-1. **Header** — app name; optionally the active persona's avatar/name later.
+1. **Header** — content is an **open owner decision** (July 29 2026): the
+   app's name may not appear in user-facing text (July 28 2026 ruling), and
+   the owner has not chosen what the header shows instead. Ask before
+   building it.
 2. **"New chat" row** (replaces the chats-tab FAB; opens the existing
    `AddChatDialogFragment`).
 3. **Search field** filtering the chat list (reuse the filter logic from
@@ -318,9 +379,9 @@ the left. Get there in three separately-shippable steps:
   hamburger icon and opens the drawer instead of finishing.
 - **Step C — retire the bottom tab bar.** Once the drawer covers everything
   (chats, Playground, settings), remove `BottomNavigationView` from
-  `MainActivity` and slim it down to a router + first-run host. Tips/Tools
-  fragments fold into Settings or are dropped (ask owner before deleting
-  features).
+  `MainActivity` and slim it down to a router + first-run host. (The dead
+  Tips/Tools fragments were already removed with owner approval, July 2026 —
+  only Chats and Playground remain to rehome.)
 
 Ship A, then B, then C — never as one PR.
 
@@ -350,6 +411,15 @@ Ship A, then B, then C — never as one PR.
 ---
 
 ## 6. Design language (the "clean, elegant, modern" spec)
+
+> **Superseded where it conflicts (July 29 2026):** the component authority is
+> now `ui-style-guide.md` plus owner rulings. Known conflicts in this section:
+> buttons are **semi-square** (`@dimen/button_corner_radius`, 4dp — owner: no
+> pills), not `TonalButton` pills; repeated components must use the
+> `Widget.App.*` / `AppButton.*` shared families, and the target look is the
+> palette designer's drawn-box treatment (outlines/glow), not stock M3
+> surfaces. The inset recipe (6.6), motion rules (6.5), and the
+> voice-state/semantic-color rules remain valid.
 
 ### 6.1 Shape
 - Chat input bar: pill container (28dp radius), full-width with 12–16dp
@@ -429,7 +499,7 @@ attributes (Phase 1), then visual restyle (its listed phase).
 
 | Screen | Files | Notes |
 |---|---|---|
-| Control Center | `SettingsActivity.kt`, `activity_settings.xml`, `TileFragment` | Tile → M3 row/card restyle; add **Appearance → Theme palette** picker here. Contains legacy `tileRemoveAds` remnants (`activity_remove_ads.xml`, strings) from upstream — ask owner before deleting; hide at minimum. |
+| Control Center | `SettingsActivity.kt`, `activity_settings.xml`, `TileFragment` | Tile → M3 row/card restyle; add **Appearance → Theme palette** picker here. (The legacy RemoveAds remnants were removed with owner approval, July 2026.) |
 | Characters hub | `CharactersActivity.kt`, `activity_characters.xml` | Same tile restyle. |
 | Voice settings | `VoiceSettingsActivity.kt` + `VoiceAdvancedSettingsActivity.kt` | Advanced screen is deliberately plain rows (CLAUDE.md) — modernize gently, keep the row structure and every existing control. Insets were recently fixed; don't regress. |
 | List screens: Personas, API endpoints, Activation prompts, Logit bias (x2), Lorebooks, Lorebook entries, Whisper models (x2) | respective `activity_*.xml` + `view_*_item.xml` + adapters | Restyle item layouts + FABs only; keep adapter view-binding ids; keep delete-confirmation dialogs. Lorebook screens show tag/description under headers — preserve. |
@@ -437,12 +507,13 @@ attributes (Phase 1), then visual restyle (its listed phase).
 
 ### 7.3 Low-risk / cosmetic-only
 
-About, Tips, Documentation, Logs, Translator, Image viewer, AI photo editor,
+About, Documentation, Logs, Translator, Image viewer, AI photo editor,
 photo variations, fine-tune screens (3), onboarding (Welcome → Purpose →
 Activation → Terms — keep the flow and exported intents intact), permission
 activities, crash handler. Restyle freely; same palette/inset rules.
-Leave untouched unless asked: `DebugMaterial`, the Teapots activity,
-`Theme.PWA`, `activity_data_sources*.xml` (orphaned).
+Leave untouched unless asked: `DebugMaterial`. (Tips, the Teapots activity,
+`Theme.PWA`, and the orphaned data-sources layouts were removed with owner
+approval, July 2026.)
 
 ### 7.4 Known chat-screen bug to fix as part of Phase 4 (reported June 17, 2026)
 
@@ -529,18 +600,32 @@ gaps worth checking during Phase 4:
 
 ## 8. Phase plan (each box = one or more small PRs)
 
-- **Phase 0 — Groundwork** (tiny, mechanical): bump material to `1.14.0`
-  stable; add explicit `androidx.drawerlayout:drawerlayout:1.2.0`; create
-  `ThemeManager.applyPalette()` with only the `violet` overlay defined as an
-  empty/no-op overlay and wire the call into every activity `onCreate`
-  (zero visual change — this PR proves the wiring compiles everywhere).
+- **Phase 0 — Groundwork** ✅ (verified July 29 2026): material `1.14.0`
+  stable and explicit `androidx.drawerlayout:drawerlayout:1.2.0` are in
+  `build.gradle`; `ThemeManager.applyPalette()` exists with the placeholder
+  `Violet` overlay and is wired into every activity `onCreate` (~70
+  activities as the app has grown).
 - **Phase 1 — Theme-attribute migration** ✅ (commit 1a2b8ae): migrated layout, drawable, menu, and color-state XML from hard-coded `@color/accent_*` / `@color/window_background` references to Material theme attributes; updated the vector icon tint convention. `rg '@color/(accent|window_background)' app/src/main/res/layout app/src/main/res/drawable app/src/main/res/drawable-v24 app/src/main/res/menu` now returns only the deliberate `@color/accent_250_static` animated-vector exception. Kotlin runtime color lookups remain for a later, narrower pass because many are AMOLED/state-machine-specific and need screen-by-screen behavioral verification.
-- **Phase 2 — Palettes shipped**: define the 5 overlays (light+dark role
-  sets), the `ui_palette` preference, the Appearance picker UI with swatches,
-  `recreate()` flow. Verify AMOLED still correct on every screen family.
+- **Phase 1.5 — Shared-style conversion** (current, ongoing): convert
+  screens one at a time to the shared style families per `ui-style-guide.md`,
+  tracked per screen in `ui-style-adoption.md`. This phase was not in the
+  original plan; it is the groundwork that makes each screen palette-ready.
+  The owner directs it screen by screen — do not batch screens without
+  approval.
+- **Phase 2 — Palettes shipped** (deferred — waiting on owner-designed
+  palettes): the owner designs each palette visually in
+  `palette-designer.html` and hands over the exported values plus a name.
+  Then: translate each approved export into an overlay (designer zones +
+  required custom attributes, light and dark), add the `ui_palette`
+  preference and the Appearance picker with `recreate()` flow, and replace
+  the placeholder Violet with the owner's chosen default. Do not invent
+  palettes; do not start this phase until the owner supplies designs.
 - **Phase 2.5 (optional) — AMOLED-as-overlay cleanup**, screen-by-screen.
-- **Phase 3 — Drawer**: Step A (drawer in ChatActivity), then Step B
+  **Paused** with all AMOLED work (owner ruling, July 26 2026).
+- **Phase 3 — Drawer** (not started; scheduling relative to Phase 1.5 is an
+  open owner decision): Step A (drawer in ChatActivity), then Step B
   (launch into last chat), then Step C (retire bottom nav) — three PRs.
+  Drawer header content is undecided — see Section 5.1.
 - **Phase 4 — Chat restyle**: input pill, bubbles, top bar (preserving the
   `btn_debug_log` shortcut). Single UI now — no `AssistantFragment` to mirror.
   **Must also resolve the standing intermittent top-bar/header-vanishing bug —
@@ -658,10 +743,13 @@ errors here are silent or crash at the worst moment (mid-conversation).
 6. **Markwon renders messages.** Restyle bubbles around the `message`
    TextView; don't replace the markdown pipeline or set conflicting
    `textAppearance` mid-stream.
-7. **Strings only in `res/values/strings.xml`**; never edit other locales
-   unless asked. Removing a string requires removing usages — but orphaned
-   translations in locale files are harmless; missing *default* strings
-   break the build.
+7. **Strings only in `res/values/strings.xml`**; never edit or add locale
+   translations unless asked. Removing a string requires removing usages —
+   and (verified against CI, July 2026) also requires deleting that string's
+   entries from every locale file in the same change: the build's release
+   lint treats a translation without a default-locale string as a **fatal
+   error** (`ExtraTranslation`), so orphaned translations are *not*
+   harmless. Missing *default* strings break the build too.
 8. **Copyright header on every new file**; comments explain constraints/why.
 9. **Do-not-touch list** (CLAUDE.md): Ktor 2.3.12, TLS/OkHttp defaults,
    native JNI loading gates, checked-in debug keystore, `ChatPreferences`

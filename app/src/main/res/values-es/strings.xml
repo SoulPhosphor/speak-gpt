@@ -3,8 +3,6 @@
     <string name="activation_prompt_set_message">Toca para establecer el mensaje de activación</string>
     <string name="menu_chat">Chat</string>
     <string name="menu_prompts">Sugerencias</string>
-    <string name="menu_tips">Consejos</string>
-    <string name="about_developer">Desarrollador: AndraxDev</string>
     <string name="about_version">"Versión: "</string>
     <string name="about_view_other_projects">Ver otros proyectos</string>
     <string name="about_send_feedback">Enviar comentarios</string>
@@ -85,9 +83,6 @@
     <string name="btn_save">Guardar</string>
     <string name="btn_new_chat">Nuevo chat</string>
     <string name="btn_import_chat">Importar chat</string>
-    <string name="title_network_error">Error de red</string>
-    <string name="network_error_desc">Algo está mal en tu conexión. Nuestros servidores podrían estar no disponibles o no tienes conexión a Internet.</string>
-    <string name="btn_try_again">Intentar de nuevo</string>
     <string name="title_post_a_prompt">Publicar una sugerencia</string>
     <string name="hint_name">Tu nombre</string>
     <string name="hint_prompt_title">Título de la sugerencia</string>
@@ -114,17 +109,6 @@
     <string name="title_prompts_store">Tienda de sugerencias</string>
     <string name="hint_search">Buscar</string>
     <string name="title_select_language">Seleccionar idioma</string>
-    <string name="title_tips">Consejos</string>
-    <string name="tip1">Inicia tu mensaje con \"Crear una imagen\", \"Crear una foto\" o \"/imaginar\" para generar imágenes.</string>
-    <string name="tip2">Mantén presionado el nombre del chat para editarlo o eliminarlo.</string>
-    <string name="tip3">Trucos de búsqueda:\n\nUsa el prefijo \"author:\" para buscar por autor.\nUsa el prefijo \"title:\" para buscar por título.\nUsa el prefijo \"id:\" para buscar por identificación.\nUsa el prefijo \"cat:\" para buscar por categoría.\nUsa el prefijo \"type:\" para buscar por tipo.</string>
-    <string name="tip4">¿ChatGPT está pesado? Prueba otros modelos. A veces puedes obtener resultados muy interesantes.</string>
-    <string name="tip5">Solo los modelos GPT pueden recordar mensajes anteriores. Otros modelos no están optimizados para ello.</string>
-    <string name="tip6">A veces pueden aparecer características raras o inútiles. Es porque esta aplicación está en prueba beta.</string>
-    <string name="tip7">Selecciona texto en cualquier aplicación y toca \"SpeakGPT\" para iniciar una conversación con el asistente. Esta función está disponible incluso si la función de aplicación de asistente predeterminada está desactivada. También puedes compartir texto con SpeakGPT usando la opción de compartir predeterminada si la opción de SpeakGPT no está disponible.</string>
-    <string name="tip8">Puedes guardar tu conversación con el asistente. Una vez que se haga clic en el botón de guardar, todos los mensajes futuros también se guardarán.</string>
-    <string name="tip9">¿SpeakGPT es demasiado lento? Intenta reducir los tokens máximos por salida.</string>
-    <string name="tip10">La entrada de voz de Google puede no ser compatible con todos los dispositivos (especialmente dispositivos sin servicios de Google). En este caso, puedes cambiar al modelo Whisper. Ten en cuenta que Whisper es una API de pago y requiere conexión a Internet.</string>
     <string name="btn_copy">Copiar</string>
     <string name="user">Usuario</string>
     <string name="title_edit_chat">Editar chat</string>
@@ -138,7 +122,6 @@
     <string name="title_save_chat">Guardar chat</string>
     <string name="cat_all">Todos</string>
     <string name="incorrect_category">Categoría incorrecta</string>
-    <string name="setting_custom_host">Punto final de API personalizado</string>
     <string name="setting_custom_host_desc">Establecer si deseas usar otros LLMs o si OpenAI está prohibido en tu país</string>
     <string name="setting_assistant_voice">Voz del asistente</string>
     <string name="setting_assistant_voice_desc">Personalizar la voz del asistente</string>
@@ -165,12 +148,10 @@
     <string name="prompt_report_success">Objeción enviada. ¡Gracias por tu comentario!</string>
     <string name="prompt_report_failed">Fallo al enviar el informe</string>
     <string name="option_summarize">Resumir</string>
-    <string name="tip_11">Mantén presionado el botón de detener grabación para cancelar el reconocimiento de voz y evitar generar una respuesta.</string>
     <string name="global_settings_tip">Estás editando los ajustes globales. Este es un modelo para nuevos chats y ajustes para el asistente. Estos ajustes no se aplican a chats existentes. Para editar ajustes de un chat existente, abre el chat y haz clic en el icono de ajustes.</string>
     <string name="global_settings_title">Ajustes globales</string>
     <string name="chat_settings_title">Ajustes del chat</string>
     <string name="title_control_center">Centro de control</string>
-    <string name="tip_12">Mantén presionado en el mosaico de ajustes para mostrar la descripción de la función. Funciona solo en la nueva interfaz de ajustes. Puedes acceder a la nueva interfaz de ajustes (Centro de control) presionando el icono de \'laboratorio\' en los ajustes regulares.</string>
     <string name="menu_explore">Explorar</string>
     <string name="chat_role_user">Usuario</string>
     <string name="control_center_general">General</string>
@@ -181,7 +162,6 @@
     <string name="control_center_debug">Depuración</string>
     <string name="control_center_text_generation">Generación de texto</string>
     <string name="control_center_audio_and_voice_recognition">Reconocimiento de audio y voz</string>
-    <string name="btn_remove_ads">Eliminar anuncios</string>
     <string name="go_back">Regresar</string>
     <string name="label_api_endpoint">Punto final API</string>
     <string name="title_api_endpoints">Puntos finales API</string>
@@ -229,10 +209,6 @@
     <string name="label_microphone_permission_requested">Permiso de micrófono solicitado</string>
     <string name="label_camera_permission_requested">Permiso de cámara solicitado</string>
     <string name="label_generated_image">Imagen generada</string>
-    <string name="title_remove_ads">Eliminar anuncios</string>
-    <string name="title_thank_you">¡Gracias!</string>
-    <string name="donation_thanks_message">Tu donación ha sido verificada. Las donaciones y los anuncios nos ayudan a mantener esta aplicación actualizada, ofrecerte una experiencia de alta calidad y lanzar nuevas funciones. ¡Ahora puedes disfrutar de una experiencia sin anuncios! Esta licencia es de por vida. Si deseas activar la licencia en otro dispositivo, por favor contáctanos.</string>
-    <string name="donation_important_note">NOTA IMPORTANTE:\nSi aún ves anuncios, es posible que necesites reiniciar la aplicación. Ten en cuenta que si usaste el ID de instalación para activar la licencia, los anuncios pueden aparecer una vez que reinstales la aplicación. Por favor, contáctanos para obtener una nueva licencia o usa el ID de Android para activar la licencia en este caso. El ID de Android es único para cada aplicación y persiste hasta que realices un restablecimiento de fábrica. El ID de instalación es temporal y cambia después de reinstalar la aplicación o cuando lo restableces/revoques autorización manualmente.</string>
     <string name="btn_close">Cerrar</string>
     <string name="chat_generate_name_automatically">Generar nombre automáticamente</string>
     <string name="btn_favorite_models">Modelos favoritos</string>
@@ -253,7 +229,6 @@
     <string name="hint_logit_bias_config_name">Nombre de la configuración</string>
     <string name="chat_edit_message">Editar mensaje</string>
     <string name="chat_enter_message_here">Ingrese el mensaje aquí...</string>
-    <string name="no_internet_show_error_details">Mostrar detalles del error</string>
     <string name="label_quick_settings">Ajustes rápidos</string>
     <string name="cost_explanation">Esta información se proporciona solo con fines informativos. El costo se calcula basado en tu modelo y mensajes de texto solamente. Pueden ocurrir cargos adicionales por el procesamiento/generación de imágenes. Agregamos esta tarjeta para ayudar a los usuarios a entender su uso y cómo se calcula el costo.</string>
     <string name="btn_learn_more">Aprender más</string>
@@ -428,9 +403,6 @@
     <string name="msg_cost_not_enough_data"><![CDATA[Coste: <SpeakGPT no tiene suficientes datos para calcular el coste para este modelo. Consulta la documentación y calcula el coste manualmente basándote en el uso anterior.>]]></string>
     <string name="cost_loading" tools:ignore="TypographyEllipsis">Coste: Cargando...</string>
     <string formatted="false"  name="cost_counter_usage">Uso (tokens): %s entrada / %s salida</string>
-    <string name="teslasoft_id_version">Versión de Teslasoft ID:</string>
-    <string name="buy_me_a_coffee">Cómprame un café</string>
-    <string name="view_source_code">Ver código fuente</string>
     <string name="cat_all_new">Todas las categorías</string>
     <string name="search_chats">buscar chats</string>
     <string name="waffle_play_01">icono de buscar chats</string>

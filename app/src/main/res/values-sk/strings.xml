@@ -3,8 +3,6 @@
     <string name="activation_prompt_set_message">Kliknite pre nastavenie aktivačného výzvu</string>
     <string name="menu_chat">Chat</string>
     <string name="menu_prompts">Výzvy</string>
-    <string name="menu_tips">Tipy</string>
-    <string name="about_developer">Vývojár: AndraxDev</string>
     <string name="about_version">"Verzia: "</string>
     <string name="about_view_other_projects">Zobraziť ďalšie projekty</string>
     <string name="about_send_feedback">Spätná väzba</string>
@@ -84,9 +82,6 @@
     <string name="btn_save">Save</string>
     <string name="btn_new_chat">New chat</string>
     <string name="btn_import_chat">Import chat</string>
-    <string name="title_network_error">Network error</string>
-    <string name="network_error_desc">Something is wrong in your connection. Our servers might be unavailable or you don\'t have Internet connection.</string>
-    <string name="btn_try_again">Try again</string>
     <string name="title_post_a_prompt">Post a prompt</string>
     <string name="hint_name">Your name</string>
     <string name="hint_prompt_title">Prompt title</string>
@@ -113,17 +108,6 @@
     <string name="title_prompts_store">Obchod s príkazmi</string>
     <string name="hint_search">Hľadanie</string>
     <string name="title_select_language">Vybrať jazyk</string>
-    <string name="title_tips">Tipy</string>
-    <string name="tip1">Svoju správu začnite slovami "Vytvoriť obrázok", "Vytvoriť fotografiu" alebo "/predstav si" na generovanie obrázkov.</string>
-    <string name="tip2">Dlhým stlačením názvu chatu ho môžete upraviť alebo odstrániť.</string>
-    <string name="tip3">Tipy na vyhľadávanie:\n\nPoužite predponu "autor:" na vyhľadávanie podľa autora.\nPoužite predponu "názov:" na vyhľadávanie podľa názvu.\nPoužite predponu "id:" na vyhľadávanie podľa id.\nPoužite predponu "cat:" na vyhľadávanie podľa kategórie.\nPoužite predponu "type:" na vyhľadávanie podľa typu.</string>
-    <string name="tip4">ChatGPT je plný? Vyskúšajte iné modely. Niekedy môžete dostať veľmi zaujímavé výsledky.</string>
-    <string name="tip5">Iba modely GPT si môžu pamätať predchádzajúce správy. Iné modely pre to nie sú optimalizované.</string>
-    <string name="tip6">Niekedy sa môžu objaviť nejaké čudné alebo zbytočné funkcie. Je to preto, lebo táto aplikácia je v beta teste.</string>
-    <string name="tip7">Vyberte text v akejkoľvek aplikácii a ťuknite na "SpeakGPT" na začatie rozhovoru s asistentom. Táto funkcia je dostupná aj v prípade, že predvolená funkcia asistent aplikácie je vypnutá. Text môžete tiež zdieľať so SpeakGPT pomocou predvolenej možnosti zdieľania, ak možnosť SpeakGPT nie je k dispozícii.</string>
-    <string name="tip8">Svoj rozhovor s asistentom môžete uložiť. Po kliknutí na tlačidlo uložiť sa uložia aj všetky budúce správy.</string>
-    <string name="tip9">SpeakGPT je príliš pomalý? Skúste znížiť max tokenov na výstup.</string>
-    <string name="tip10">Hlasový vstup od Google nemusí byť podporovaný na všetkých zariadeniach (najmä na zariadeniach bez služieb Google). V tomto prípade môžete prepnúť na model Whisper. Upozorňujeme, že Whisper je platené API a vyžaduje internetové pripojenie.</string>
     <string name="btn_copy">Kopírovať</string>
     <string name="user">Používateľ</string><string name="title_edit_chat">Upraviť chat</string>
     <string name="prompt_explain">Čo znamená "%s"?</string>
@@ -136,7 +120,6 @@
     <string name="title_save_chat">Uložiť chat</string>
     <string name="cat_all">Všetko</string>
     <string name="incorrect_category">Nesprávna kategória</string>
-    <string name="setting_custom_host">Vlastný koncový bod API</string>
     <string name="setting_custom_host_desc">Nastavte, ak chcete používať iné LLM alebo ak je OpenAI zakázané vo vašej krajine</string>
     <string name="setting_assistant_voice">Hlas asistenta</string>
     <string name="setting_assistant_voice_desc">Prispôsobte hlas asistenta</string>
@@ -163,12 +146,10 @@
     <string name="prompt_report_success">Námietka odoslaná. Ďakujeme za vašu spätnú väzbu!</string>
     <string name="prompt_report_failed">Odoslanie správy zlyhalo</string>
     <string name="option_summarize">Zhrnúť</string>
-    <string name="tip_11">Dlhým stlačením tlačidla na zastavenie nahrávania zrušíte rozpoznávanie reči a zabránite vygenerovaniu odpovede.</string>
     <string name="global_settings_tip">Upravujete globálne nastavenia. Toto je šablóna pre nové chaty a nastavenia pre asistenta. Tieto nastavenia sa nevzťahujú na existujúce chaty. Pre úpravu nastavení existujúceho chatu, otvorte chat a kliknite na ikonu nastavení.</string>
     <string name="global_settings_title">Globálne nastavenia</string>
     <string name="chat_settings_title">Nastavenia chatu</string>
     <string name="title_control_center">Ovládacie centrum</string>
-    <string name="tip_12">Dlhým stlačením dlaždice s nastavením zobrazíte popis funkcie. Funguje iba v novom užívateľskom rozhraní nastavení. Do nového užívateľského rozhrania nastavení (ovládacie centrum) sa dostanete stlačením ikony \'lab\' v klasických nastaveniach.</string>
     <string name="menu_explore">Preskúmať</string>
     <string name="chat_role_user">Používateľ</string>
     <string name="control_center_general">Všeobecné</string>
@@ -179,7 +160,6 @@
     <string name="control_center_debug">Ladenie</string>
     <string name="control_center_text_generation">Generovanie textu</string>
     <string name="control_center_audio_and_voice_recognition">Audio a rozpoznávanie hlasu</string>
-    <string name="btn_remove_ads">Odstrániť reklamy</string>
     <string name="go_back">Vráť sa späť</string>
     <string name="label_api_endpoint">Koncový bod API</string>
     <string name="title_api_endpoints">Koncové body API</string>
@@ -224,10 +204,6 @@
     <string name="label_microphone_permission_requested">Požiadavka na povolenie mikrofónu</string>
     <string name="label_camera_permission_requested">Požiadavka na povolenie kamery</string>
     <string name="label_generated_image">Generovaný obrázok</string>
-    <string name="title_remove_ads">Odstrániť reklamy</string>
-    <string name="title_thank_you">Ďakujeme!</string>
-    <string name="donation_thanks_message">Vaše darovanie bolo overené. Darovania a reklamy nám pomáhajú udržiavať túto aplikáciu aktualizovanú, poskytovať vám kvalitný zážitok a uvádzať nové funkcie. Teraz si môžete vychutnať zážitok bez reklám! Táto licencia je doživotná. Ak chcete aktivovať licenciu na inom zariadení, prosím, kontaktujte nás.</string>
-    <string name="donation_important_note">DÔLEŽITÁ POZNÁMKA:\nAk stále vidíte reklamy, možno budete musieť reštartovať aplikáciu. Upozorňujeme, že ak ste použili ID inštalácie na aktiváciu licencie, reklamy sa môžu objaviť, keď aplikáciu preinštalujete. V tomto prípade nás prosím kontaktujte pre novú licenciu alebo použite Android ID na aktiváciu licencie. Android ID je jedinečné pre každú aplikáciu a zachováva sa, kým nevykonáte továrenský reset. ID inštalácie je dočasné a mení sa po preinštalovaní aplikácie alebo keď ho manuálne resetujete/odvoláte povolenie.</string>
     <string name="btn_close">Zatvoriť</string>
     <string name="chat_generate_name_automatically">Generovať názov automaticky</string>
     <string name="btn_favorite_models">Obľúbené modely</string>
@@ -248,7 +224,6 @@
     <string name="hint_logit_bias_config_name">Názov konfigurácie</string>
     <string name="chat_edit_message">Upraviť správu</string>
     <string name="chat_enter_message_here">Zadajte správu sem...</string>
-    <string name="no_internet_show_error_details">Zobraziť detaily chyby</string>
     <string name="label_quick_settings">Rýchle nastavenia</string>
     <string name="cost_explanation">Tieto údaje sú poskytované len na informačné účely. Náklady sú vypočítané na základe vášho modelu a len textových správ. Dodatočné náklady môžu vzniknúť pri spracovaní/generovaní obrázkov. Túto kartu sme pridali, aby sme používateľom pomohli pochopiť ich používanie a ako sú náklady vypočítané.</string>
     <string name="btn_learn_more">Dozvedieť sa viac</string>
@@ -421,9 +396,6 @@
     <string name="msg_cost_not_enough_data"><![CDATA[Cena: <SpeakGPT nemá dostatok údajov na výpočet ceny pre tento model. Pozrite si dokumentáciu a vypočítajte si cenu ručne na základe vyššie uvedeného použitia.>]]></string>
     <string name="cost_loading" tools:ignore="TypographyEllipsis">Cena: Načítava sa...</string>
     <string formatted="false" name="cost_counter_usage">Použitie (tokeny): %s von / %s dnu</string>
-    <string name="teslasoft_id_version">Verzia Teslasoft ID:</string>
-    <string name="buy_me_a_coffee">Kúp mi kávu</string>
-    <string name="view_source_code">Zobraziť zdrojový kód</string>
     <string name="cat_all_new">Všetky kategórie</string>
     <string name="search_chats">vyhľadávanie chatov</string>
     <string name="waffle_play_01">ikona vyhľadávania chatov</string>

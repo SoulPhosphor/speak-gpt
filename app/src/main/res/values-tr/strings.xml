@@ -3,8 +3,6 @@
     <string name="activation_prompt_set_message">Aktivasyon istemini ayarlamak için dokunun</string>
     <string name="menu_chat">Sohbet</string>
     <string name="menu_prompts">İstemler</string>
-    <string name="menu_tips">İpuçları</string>
-    <string name="about_developer">Geliştirici: AndraxDev</string>
     <string name="about_version">"Sürüm: "</string>
     <string name="about_view_other_projects">Diğer projeleri görüntüle</string>
     <string name="about_send_feedback">Geri bildirim gönder</string>
@@ -84,9 +82,6 @@
     <string name="btn_save">Kaydet</string>
     <string name="btn_new_chat">Yeni sohbet</string>
     <string name="btn_import_chat">Sohbeti içe aktar</string>
-    <string name="title_network_error">Ağ hatası</string>
-    <string name="network_error_desc">Bağlantınızda bir sorun var. Sunucularımız kullanılamıyor olabilir veya internet bağlantınız yok.</string>
-    <string name="btn_try_again">Tekrar dene</string>
     <string name="title_post_a_prompt">Bir istem yayınla</string>
     <string name="hint_name">Adınız</string>
     <string name="hint_prompt_title">İstem başlığı</string>
@@ -113,17 +108,6 @@
     <string name="title_prompts_store">İstemler kütüphanesi</string>
     <string name="hint_search">Ara</string>
     <string name="title_select_language">Dil seçin</string>
-    <string name="title_tips">İpuçları</string>
-    <string name="tip1">\"Bir görüntü oluştur\", \"Bir fotoğraf oluştur\" veya \"/imagine\" ile mesajınıza başlayarak görüntüler oluşturun.</string>
-    <string name="tip2">Sohbet adını düzenlemek veya silmek için uzun basın.</string>
-    <string name="tip3">Arama hileleri:\n\nYazar aramak için \"author:\" ön ekini kullanın.\nBaşlık aramak için \"title:\" ön ekini kullanın.\nID aramak için \"id:\" ön ekini kullanın.\nKategori aramak için \"cat:\" ön ekini kullanın.\nTür aramak için \"type:\" ön ekini kullanın.</string>
-    <string name="tip4">ChatGPT sıkıcı mı? Diğer modelleri deneyin. Bazen çok ilginç sonuçlar alabilirsiniz.</string>
-    <string name="tip5">Yalnızca GPT modelleri önceki mesajları hatırlayabilir. Diğer modeller bunun için optimize edilmemiştir.</string>
-    <string name="tip6">Bazen bazı garip veya işe yaramaz özellikler görünebilir. Bunun nedeni, bu uygulamanın beta testinde olmasıdır.</string>
-    <string name="tip7">Herhangi bir uygulamada metni seçin ve asistanla konuşmaya başlamak için \"SpeakGPT\"ye dokunun. Bu özellik, varsayılan asistan uygulaması özelliği kapalı olsa bile kullanılabilir. Ayrıca, SpeakGPT seçeneği mevcut değilse, varsayılan paylaşma seçeneğini kullanarak metni SpeakGPT ile paylaşabilirsiniz.</string>
-    <string name="tip8">Asistanla konuşmanızı kaydedebilirsiniz. Kaydet düğmesine bir kez tıkladığınızda, gelecekteki tüm mesajlar da kaydedilecektir.</string>
-    <string name="tip9">SpeakGPT çok mu yavaş? Çıktı başına maksimum token sayısını azaltmayı deneyin.</string>
-    <string name="tip10">Google tarafından ses girişi, tüm cihazlarda (özellikle Google Hizmetleri olmayan cihazlarda) desteklenmeyebilir. Bu durumda Whisper modeline geçebilirsiniz. Lütfen Whisper\'ın ücretli bir API olduğunu ve internet bağlantısı gerektirdiğini unutmayın.</string>
     <string name="btn_copy">Kopyala</string>
     <string name="user">Kullanıcı</string>
     <string name="title_edit_chat">Sohbeti düzenle</string>
@@ -137,7 +121,6 @@
     <string name="title_save_chat">Sohbeti kaydet</string>
     <string name="cat_all">Tümü</string>
     <string name="incorrect_category">Yanlış kategori</string>
-    <string name="setting_custom_host">Özel API uç noktası</string>
     <string name="setting_custom_host_desc">Diğer LLM\'leri kullanmak istiyorsanız veya OpenAI ülkenizde yasaklanmışsa ayarlayın</string>
     <string name="setting_assistant_voice">Asistan sesi</string>
     <string name="setting_assistant_voice_desc">Asistan sesini özelleştirin</string>
@@ -164,12 +147,10 @@
     <string name="prompt_report_success">İtiraz gönderildi. Geri bildiriminiz için teşekkür ederiz!</string>
     <string name="prompt_report_failed">Rapor gönderilemedi</string>
     <string name="option_summarize">Özetle</string>
-    <string name="tip_11">Kayıt durdurma düğmesine uzun basarak konuşma tanımayı iptal edebilir ve yanıt oluşturulmasını önleyebilirsiniz.</string>
     <string name="global_settings_tip">Genel ayarları düzenliyorsunuz. Bu, yeni sohbetler için bir şablon ve asistan için ayarlardır. Bu ayarlar mevcut sohbetlere uygulanmaz. Mevcut bir sohbetin ayarlarını düzenlemek için, sohbeti açın ve ayarlar simgesine tıklayın.</string>
     <string name="global_settings_title">Genel ayarlar</string>
     <string name="chat_settings_title">Sohbet ayarları</string>
     <string name="title_control_center">Kontrol merkezi</string>
-    <string name="tip_12">Ayar kutucuğuna uzun basarak fonksiyon açıklamasını gösterin. Yalnızca yeni ayarlar arayüzünde çalışır. Yeni ayarlar arayüzüne (Kontrol merkezi) erişmek için, normal ayarlarda \'lab\' simgesine basabilirsiniz.</string>
     <string name="menu_explore">Keşfet</string>
     <string name="chat_role_user">Kullanıcı</string>
     <string name="control_center_general">Genel</string>
@@ -180,7 +161,6 @@
     <string name="control_center_debug">Hata ayıklama</string>
     <string name="control_center_text_generation">Metin oluşturma</string>
     <string name="control_center_audio_and_voice_recognition">Ses ve ses tanıma</string>
-    <string name="btn_remove_ads">Reklamları kaldır</string>
     <string name="go_back">Geri dön</string>
     <string name="label_api_endpoint">API uç noktası</string>
     <string name="title_api_endpoints">API uç noktaları</string>
@@ -227,10 +207,6 @@
     <string name="label_microphone_permission_requested">Mikrofon İzni İstendi</string>
     <string name="label_camera_permission_requested">Kamera İzni İstendi</string>
     <string name="label_generated_image">Oluşturulan Görüntü</string>
-    <string name="title_remove_ads">Reklamları kaldır</string>
-    <string name="title_thank_you">Teşekkürler!</string>
-    <string name="donation_thanks_message">Bağışınız doğrulandı. Bağışlar ve reklamlar, bu uygulamayı güncel tutmamıza, size yüksek kaliteli deneyim sunmamıza ve yeni özellikler yayınlamamıza yardımcı olur. Artık reklamsız deneyimin tadını çıkarabilirsiniz! Bu lisans ömür boyudur. Lisansı başka bir cihazda etkinleştirmek istiyorsanız, lütfen bizimle iletişime geçin.</string>
-    <string name="donation_important_note">ÖNEMLİ NOT:\nHala reklam görüyorsanız, uygulamayı yeniden başlatmanız gerekebilir. Lütfen, lisansı etkinleştirmek için kurulum kimliğini kullandıysanız, uygulamayı yeniden yükledikten sonra reklamların yeniden görünebileceğini unutmayın. Bu durumda yeni bir lisans için lütfen bizimle iletişime geçin veya lisansı etkinleştirmek için Android Kimliğini kullanın. Android Kimliği, her uygulama için benzersizdir ve fabrika ayarlarına sıfırlama yapana kadar kalıcıdır. Kurulum Kimliği geçicidir ve uygulama yeniden yüklendiğinde veya manuel olarak sıfırladığınızda/ yetkiyi iptal ettiğinizde değişir.</string>
     <string name="btn_close">Kapat</string>
     <string name="chat_generate_name_automatically">Otomatik olarak ad oluştur</string>
     <string name="btn_favorite_models">Favori modeller</string>
@@ -251,7 +227,6 @@
     <string name="hint_logit_bias_config_name">Yapılandırma adı</string>
     <string name="chat_edit_message">Mesajı düzenle</string>
     <string name="chat_enter_message_here">Buraya mesaj girin...</string>
-    <string name="no_internet_show_error_details">Hata ayrıntılarını göster</string>
     <string name="label_quick_settings">Hızlı Ayarlar</string>
     <string name="cost_explanation">Bu veriler yalnızca bilgilendirme amaçlıdır. Maliyet, modelinize ve yalnızca metin mesajlarına dayalı olarak hesaplanır. Görüntü işleme/oluşturma için ek ücretler uygulanabilir. Kullanıcıların kullanımlarını anlamalarına ve maliyetin nasıl hesaplandığını öğrenmelerine yardımcı olmak için bu kartı ekledik.</string>
     <string name="btn_learn_more">Daha fazla bilgi edinin</string>
@@ -425,9 +400,6 @@
     <string name="msg_cost_not_enough_data"><![CDATA[Maliyet: <SpeakGPT, bu model için maliyeti hesaplamak için yeterli veriye sahip değil. Dokümantasyonu arayın ve yukarıdaki kullanıma dayanarak maliyeti manuel olarak hesaplayın.>]]></string>
     <string name="cost_loading" tools:ignore="TypographyEllipsis">Maliyet: Yükleniyor...</string>
     <string formatted="false" name="cost_counter_usage">Kullanım (token): %s giriş / %s çıkış</string>
-    <string name="teslasoft_id_version">Teslasoft ID sürümü:</string>
-    <string name="buy_me_a_coffee">Bana bir kahve ısmarla</string>
-    <string name="view_source_code">Kaynak kodunu görüntüle</string>
     <string name="cat_all_new">Tüm kategoriler</string>
     <string name="search_chats">sohbetleri ara</string>
     <string name="waffle_play_01">sohbetleri ara simgesi</string>

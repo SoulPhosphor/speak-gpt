@@ -63,7 +63,6 @@ import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.DatabaseRecoveryFlows
 import org.teslasoft.assistant.ui.fragments.tabs.ChatsListFragment
 import org.teslasoft.assistant.ui.fragments.tabs.PlaygroundFragment
-import org.teslasoft.assistant.ui.fragments.tabs.ToolsFragment
 import org.teslasoft.assistant.ui.onboarding.WelcomeActivity
 import org.teslasoft.assistant.util.WindowInsetsUtil
 import java.util.EnumSet
@@ -82,7 +81,6 @@ class MainActivity : FragmentActivity() {
     private var devIds: TextView? = null
     private var frameChats: Fragment? = null
     private var framePlayground: Fragment? = null
-    private var frameTools: Fragment? = null
     private var root: ConstraintLayout? = null
     private var preferences: Preferences? = null
     private var btnDebugActivity: MaterialButton? = null
@@ -218,10 +216,6 @@ class MainActivity : FragmentActivity() {
                         }
                         R.id.menu_playground -> {
                             menuPlayground()
-                            return@OnItemSelectedListener true
-                        }
-                        R.id.menu_tools -> {
-                            menuTools()
                             return@OnItemSelectedListener true
                         }
                     }
@@ -361,7 +355,6 @@ class MainActivity : FragmentActivity() {
     private fun initUI() {
         frameChats = ChatsListFragment()
         framePlayground = PlaygroundFragment()
-        frameTools = ToolsFragment()
 
         loadFragment(frameChats, 1, 1)
         reloadAmoled()
@@ -482,12 +475,6 @@ class MainActivity : FragmentActivity() {
         loadFragment(framePlayground, st, selectedTab)
     }
 
-    private fun menuTools() {
-        val st = selectedTab
-        selectedTab = 3
-        loadFragment(frameTools, st, selectedTab)
-    }
-
     private fun onRestoredState(savedInstanceState: Bundle?) {
         selectedTab = savedInstanceState!!.getInt("tab")
 
@@ -500,12 +487,9 @@ class MainActivity : FragmentActivity() {
                 navigationBar?.selectedItemId = R.id.menu_playground
                 loadFragment(framePlayground, 1, 1)
             }
-            3 -> {
-                navigationBar?.selectedItemId = R.id.menu_tools
-                loadFragment(frameTools, 1, 1)
-            }
-            // Tabs 4/5 (Prompts marketplace, Explore) were removed with the
-            // upstream Teslasoft services; fall back to the chats tab.
+            // Tab 3 (Tools) and tabs 4/5 (Prompts marketplace, Explore) were
+            // removed with the upstream Teslasoft services; fall back to the
+            // chats tab.
             else -> {
                 navigationBar?.selectedItemId = R.id.menu_chat
                 loadFragment(frameChats, 1, 1)
