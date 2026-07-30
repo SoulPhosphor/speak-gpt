@@ -89,14 +89,16 @@ Do not make an entire screen or behavior shared merely because it is new. Share 
 
 ## Theme and palette contract
 
-Shared styles should resolve colors through theme roles or shared color resources rather than screen-specific values.
+The canonical palette contract is the designer's semantic zone list, recorded in `ui-redesign-plan.md` Section 4.5 (owner ruling, July 30 2026). A palette — whether a compiled preset overlay or a future user-saved custom theme — defines values for those zones. Custom user themes are a committed future goal with restart-to-apply semantics; shared styles must not close that route off.
 
-Every `ThemeOverlay.Phosphor.*` palette must define:
+Shared styles resolve repeated colors through theme attributes (zone attributes or mapped Material roles), never through palette-specific `@color/` values that a palette cannot override. New custom-drawn backgrounds — including the future outline-gradient and glow treatments — must read theme attributes, and exceptional visuals (bubbles, button state lists, icon tints, dialogs) get their colors from shared drawables or one shared code path, never from color-handling code copied into individual screens.
+
+The zone attributes implemented so far, which every `ThemeOverlay.Phosphor.*` palette must define:
 
 - `appRowTitleColor`
 - `appRowSubtitleColor`
 
-These attributes supply the shared row title, subtitle, and chevron colors.
+These attributes supply the shared row title, subtitle, and chevron colors. They are the pattern the remaining zones follow when theme work resumes; several shared text styles still resolve `@color/text*` directly and are recorded as gaps in the plan's Section 4.5.
 
 A change to a shared style or shared layout may alter every screen using it. Treat that as an app-wide visual decision, not a local cleanup.
 

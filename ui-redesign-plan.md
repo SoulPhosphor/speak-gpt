@@ -63,6 +63,15 @@ specification for the "UI overhaul" referenced in CLAUDE.md's roadmap.
 >   2026 naming ruling, and the owner has not decided what replaces it), and
 >   when the drawer phase is scheduled relative to the ongoing style
 >   conversion.
+
+> **July 30, 2026 revision (owner ruling):** user-created custom themes are a
+> **future product goal**, not a hypothetical. The first shipped theming is
+> still a small set of polished pre-made palettes, but the architecture must
+> keep the custom-theme route open. Section 4.5 records the ruling, the
+> canonical palette contract, and the compatibility requirements that bind
+> all migration work from now on. This ruling does **not** reinstate the
+> paused theme work and does **not** authorize building the editor.
+
 **Audience:** AI agents implementing the redesign. Read `CLAUDE.md` in full
 before this document — every rule there still applies. This plan was written
 after a complete inventory of all 30 activities, 20+ dialog fragments, and
@@ -333,6 +342,144 @@ Two-stage plan:
   deleted screen-by-screen. Do not attempt this big-bang; one screen per PR,
   AMOLED toggled on in your head (or screenshot via CI artifacts if
   available) for each.
+
+### 4.5 Custom user themes — future goal and binding compatibility rules (owner ruling, July 30 2026)
+
+**The ruling.** Users will eventually be able to choose the colors for the
+named visual zones inside an in-app editor, save the theme, and restart the
+app to apply it. This is a committed future product goal. It is **not**
+being built now — the first implementation remains pre-made palettes — and
+this section does not reinstate the paused theme work or authorize the
+editor or any runtime custom-palette engine. It exists so the ongoing
+migration and future agents do not close off the custom-theme route.
+
+**Restart-to-apply is the accepted model.** A custom theme may be loaded
+only during app startup and may require an app restart after saving or
+selecting it. Live whole-app recoloring of already-open screens is **not**
+required and must not be used to argue the feature is infeasible.
+
+**Do not treat the compiled-overlay limitation as a dead end.** It is true
+that arbitrary user colors cannot become a newly compiled `ThemeOverlay` at
+runtime. It is **not** true that custom themes therefore require permanent
+per-screen recoloring like the legacy AMOLED mechanism, or that they would
+undo the shared-style migration. The exact runtime application mechanism
+for custom themes will be designed later; what matters now is preserving
+the seams below.
+
+**One canonical palette contract, two sources.** A `PaletteDefinition` is
+the full set of values for the designer's zone list — the canonical
+semantic contract for every palette, preset or custom. The zones (keys as
+defined in `palette-designer.html`, the contract's source of truth):
+
+| Zone key | Meaning |
+|---|---|
+| `pageBg` | Page background behind everything |
+| `readSurface` | Input box fill |
+| `readText` | Default text (input text and anything not set below) |
+| `topbarBg` / `topbarText` | Top bar background; top bar text & icons |
+| `drawerBg` / `drawerText` / `drawerSelectedBg` | Drawer background, text, current-chat highlight |
+| `userBg` / `userText` | The user's message fill and text |
+| `botBg` / `botText` | The AI's message fill and text |
+| `edge1` / `edge2` / `edge3` | Outline colors 1–3 (calm uses only `edge1`; vibrant gradients use all three) |
+| `glow` | Glow color (vibrant treatment only) |
+| `divider` | Divider lines |
+| `primaryBtnBg` / `primaryBtnText` | Primary action button fill and text |
+| `secondaryBtnBg` / `secondaryBtnText` | Secondary/cancel button fill and text |
+| `accent` | Accent (icons, send button, active states) |
+| `selected` | Selection accent (open-chat bar, checked items) |
+| `error` / `warning` | Error and warning colors |
+
+plus the **calm / vibrant treatment** flag. Each zone comes in light and
+dark variants. This contract — not a reduced set of stock Material color
+roles — is what a palette defines. Zones may be *implemented* by mapping
+onto Material theme attributes where a role fits exactly, but the contract
+is the zone list, and distinct zones must remain independently settable.
+
+The two sources for a `PaletteDefinition`:
+
+1. **Preset palettes** (Phase 2): compiled `ThemeOverlay.Phosphor.*` styles,
+   one per owner-designed palette. This mechanism stays.
+2. **A future saved custom palette**: the same zone values read from
+   storage at startup. Mechanism designed later.
+
+**Binding compatibility requirements for all current and future work:**
+
+1. **Single application point.** `theme/ThemeManager.applyPalette(activity)`
+   is the only place a palette is applied, before `setContentView`, and the
+   palette overlay is the last theme layer (see the 4.2 note). A future
+   custom source plugs in here — do not add second palette-application
+   paths, and do not resolve palette colors during static/class init where
+   a startup-loaded palette could not reach them.
+2. **Zones stay distinct.** Do not build assumptions such as "this
+   component is violet," and do not conflate two zones because today's
+   placeholder gives them the same color. Known conflation to resolve when
+   theme work resumes: `bubble_out.xml` fills the user message bubble with
+   `?attr/colorPrimary`, making `userBg` inseparable from `primaryBtnBg`;
+   the designer treats them as separate zones.
+3. **Shared styles, shared layouts, and custom-drawn backgrounds resolve
+   colors through theme attributes** (zone attributes such as
+   `appRowTitleColor`, or mapped Material roles) — never through
+   palette-specific `@color/` values that an overlay cannot override.
+4. **Centralize exceptional visuals.** Message bubbles, the future outline
+   gradients and glow, button state lists, icon tints, dialogs, and other
+   custom drawables get their colors from shared drawables reading theme
+   attributes or from one shared code path (ThemeManager). A future runtime
+   palette must never require color-handling code copied into every
+   Activity — that is the legacy AMOLED failure mode, not the plan.
+5. **Semantic non-palette colors stay literal** (4.3): voice-state colors
+   and true error/destructive semantics are not palette zones' hostages —
+   `error`/`warning` zones cover the palette-facing cases; the mic
+   green/red never change. Whether the category identity tints
+   (`cat_*`/`tint_cat_*`) stay palette-independent is an **open owner
+   decision** — do not fold them into the contract without asking.
+
+**Audit palettes (binding on Phase 2).** When preset theme work resumes,
+use at least two visually different palettes as an audit tool: applying
+substantially different colors must be expected to expose hardcoded
+resources, unreadable state combinations, inherited dialog problems, icon
+tints, disabled-state assumptions, and custom backgrounds not actually
+connected to the palette system. **Record those gaps** (here or in
+`ui-style-adoption.md`) rather than patching them with isolated per-screen
+colors.
+
+**Verified compatibility state (audited July 30 2026):**
+
+- *Already two-source compatible:* the `AppButton.*` family (Material roles
+  via theme), the shared button/surface drawables (`btn_accent_tonal*`,
+  `btn_accent_icon_large_100`, `expandable_window_background_24`,
+  `bg_attachment_tile`), both message-bubble drawables (`bubble_in`,
+  `bubble_out` — but see the zone-conflation note above), the row
+  title/subtitle/chevron system (`appRowTitleColor`/`appRowSubtitleColor`
+  custom attributes — the proven pattern for the rest of the contract),
+  layout XML generally (Phase 1 removed `@color/accent_*`), and 171 of 277
+  drawables already resolving via `?attr/`.
+- *Still bound to compiled color resources (cannot be recolored by any
+  overlay):* the shared **text** styles in `themes.xml` referencing
+  `@color/text` / `@color/text_subtitle` / `@color/text_title` directly —
+  `Widget.App.ActionBar.Title` (and variants), `Widget.App.Field.Hint`,
+  `Widget.App.Section.Hint`, `Widget.App.Screen.Intro`,
+  `Widget.App.Include.Name`/`Weight`/`Notice`, the dropdown/quick-tile text
+  styles, `App.NegativeButtonStyle`/`App.PositiveButtonStyle`
+  (`@color/accent_900`), and `BottomNavigationView.ActiveIndicator`. Each
+  needs a zone attribute (following the `appRow*Color` pattern) when theme
+  work resumes.
+- *Kotlin runtime lookups:* 57 files still call
+  `ContextCompat/ResourcesCompat.getColor` (only 4 use `MaterialColors`);
+  51 files carry AMOLED runtime blocks. This is the already-documented
+  deferred Kotlin pass — for the two-source model those lookups must end up
+  resolving theme attributes via `MaterialColors` (or one ThemeManager
+  helper), not raw color resources.
+- *Zones with no implementation yet (green field):* `edge1–3`, `glow`,
+  `divider`, the three `drawer*` zones (no drawer exists), `userText` /
+  `botText` as distinct attributes, `secondaryBtn*` (Secondary currently
+  inherits Primary by ruling), `selected`, `warning`, and the calm/vibrant
+  flag. These must be **born** reading zone attributes — no retrofit needed
+  if nothing hardcodes them first.
+- *Hardcoded-hex drawables:* 23 files, almost all vector icons with baked
+  fill colors (`ic_mem_*`, `ic_arrow_forward`, `ic_chevron_right`, …) plus
+  a few one-off backgrounds (`bg_gallery_locked_badge`,
+  `bg_gallery_tile_label`, `shadow_bottom`). Reconcile against the icon
+  tint convention during the audit-palette pass; record, don't spot-patch.
 
 ---
 
@@ -620,6 +767,11 @@ gaps worth checking during Phase 4:
   preference and the Appearance picker with `recreate()` flow, and replace
   the placeholder Violet with the owner's chosen default. Do not invent
   palettes; do not start this phase until the owner supplies designs.
+  **Binding (July 30 2026, Section 4.5):** overlays define the full zone
+  contract, not only Material roles; use at least two visually different
+  palettes as an audit tool and record the gaps they expose rather than
+  patching per-screen; keep the two-source seams (preset overlay now, saved
+  custom palette later, restart-to-apply) intact.
 - **Phase 2.5 (optional) — AMOLED-as-overlay cleanup**, screen-by-screen.
   **Paused** with all AMOLED work (owner ruling, July 26 2026).
 - **Phase 3 — Drawer** (not started; scheduling relative to Phase 1.5 is an
