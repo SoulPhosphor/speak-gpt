@@ -453,16 +453,18 @@ colors.
   custom attributes — the proven pattern for the rest of the contract),
   layout XML generally (Phase 1 removed `@color/accent_*`), and 171 of 277
   drawables already resolving via `?attr/`.
-- *Still bound to compiled color resources (cannot be recolored by any
-  overlay):* the shared **text** styles in `themes.xml` referencing
-  `@color/text` / `@color/text_subtitle` / `@color/text_title` directly —
-  `Widget.App.ActionBar.Title` (and variants), `Widget.App.Field.Hint`,
-  `Widget.App.Section.Hint`, `Widget.App.Screen.Intro`,
-  `Widget.App.Include.Name`/`Weight`/`Notice`, the dropdown/quick-tile text
-  styles, `App.NegativeButtonStyle`/`App.PositiveButtonStyle`
-  (`@color/accent_900`), and `BottomNavigationView.ActiveIndicator`. Each
-  needs a zone attribute (following the `appRow*Color` pattern) when theme
-  work resumes.
+- *Shared text styles — fixed July 30 2026 (owner-approved scoped
+  exception to the theme pause):* the shared text styles that referenced
+  `@color/text` / `@color/text_subtitle` / `@color/text_title` directly now
+  resolve three new zone attributes — `appTextColor` (default text),
+  `appSubtleTextColor` (hints, section explanations, secondary readouts),
+  `appTitleTextColor` (screen/header titles and intro paragraphs) — and the
+  dialog text buttons plus the bottom-nav active indicator now resolve
+  `?attr/colorAccent`. The attributes default to the exact previous colors
+  (no visual change) and are defined in every theme that defines the row
+  attributes, including both night themes and the Violet overlay (the
+  overlay-last rule applies to them equally). A palette — preset or custom
+  — now reaches all shared-style text.
 - *Kotlin runtime lookups:* 57 files still call
   `ContextCompat/ResourcesCompat.getColor` (only 4 use `MaterialColors`);
   51 files carry AMOLED runtime blocks. This is the already-documented
@@ -495,7 +497,12 @@ set once per theme (`android:fontFamily` on `Theme.App` and variants:
 override it. A future font swap is therefore a theme-level change. Keep it
 that way: do **not** scatter `fontFamily` into layouts or individual
 styles, and route any style-level typeface need through a shared text
-appearance so it still inherits the theme font decision.
+appearance so it still inherits the theme font decision. Because each text
+role already has its own shared style (titles, hints, body, and so on), a
+future *per-role* font — for example, hints in a different typeface than
+titles — is a one-line addition to that role's shared style whenever the
+owner wants it. No groundwork is required now; noted (owner, July 30 2026)
+as a possibility, not a plan.
 
 **Text sizes (verified July 30 2026 — accessible now, centralizing
 gradually).** Every text size in the app is in `sp` (432 layout

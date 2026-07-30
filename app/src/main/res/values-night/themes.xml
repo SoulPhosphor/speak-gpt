@@ -8,6 +8,9 @@
         <item name="colorAccent">@color/accent_900</item>
         <item name="appRowTitleColor">@color/text</item>
         <item name="appRowSubtitleColor">@color/text_subtitle</item>
+        <item name="appTextColor">@color/text</item>
+        <item name="appSubtleTextColor">@color/text_subtitle</item>
+        <item name="appTitleTextColor">@color/text_title</item>
         <item name="android:windowContentTransitions">true</item>
         <item name="android:statusBarColor">@color/window_background</item>
         <item name="android:windowLightStatusBar">false</item>
@@ -27,6 +30,9 @@
         <item name="colorAccent">@color/accent_900</item>
         <item name="appRowTitleColor">@color/text</item>
         <item name="appRowSubtitleColor">@color/text_subtitle</item>
+        <item name="appTextColor">@color/text</item>
+        <item name="appSubtleTextColor">@color/text_subtitle</item>
+        <item name="appTitleTextColor">@color/text_title</item>
         <item name="android:typeface">sans</item>
         <item name="android:fontFamily">@font/default_font</item>
         <item name="android:backgroundDimAmount">0.4</item>

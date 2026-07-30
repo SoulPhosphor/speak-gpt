@@ -95,10 +95,13 @@ Shared styles resolve repeated colors through theme attributes (zone attributes 
 
 The zone attributes implemented so far, which every `ThemeOverlay.Phosphor.*` palette must define:
 
-- `appRowTitleColor`
-- `appRowSubtitleColor`
+- `appRowTitleColor` — shared row titles and chevrons
+- `appRowSubtitleColor` — shared row subtitles
+- `appTextColor` — default text (dropdown/tile values, number fields, attachment names)
+- `appSubtleTextColor` — muted secondary text (field hints, section explanations, size readouts)
+- `appTitleTextColor` — screen and header titles, screen intro paragraphs
 
-These attributes supply the shared row title, subtitle, and chevron colors. They are the pattern the remaining zones follow when theme work resumes; several shared text styles still resolve `@color/text*` directly and are recorded as gaps in the plan's Section 4.5.
+Every theme that defines one of these must define all of them, including the night themes and every palette overlay — a style resolving an attribute that no theme layer carries crashes at inflation. They are the pattern the remaining zones follow when theme work resumes.
 
 A change to a shared style or shared layout may alter every screen using it. Treat that as an app-wide visual decision, not a local cleanup.
 

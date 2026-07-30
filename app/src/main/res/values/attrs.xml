@@ -22,4 +22,15 @@
          palette without editing row layouts or row component styles. -->
     <attr name="appRowTitleColor" format="color" />
     <attr name="appRowSubtitleColor" format="color" />
+
+    <!-- Canonical shared-text color roles (ui-redesign-plan.md Section 4.5).
+         Same pattern as the row attributes above: they default to the app's
+         existing light/dark text colors, so nothing changes visually until a
+         palette overlay (or a future saved custom palette) redefines them.
+         Every theme that defines appRowTitleColor must define these too —
+         a style resolving an attribute no theme layer carries crashes at
+         inflation (see the overlay-last note on ThemeOverlay.Phosphor.Violet). -->
+    <attr name="appTextColor" format="color" />
+    <attr name="appSubtleTextColor" format="color" />
+    <attr name="appTitleTextColor" format="color" />
 </resources>
