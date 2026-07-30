@@ -79,10 +79,10 @@ already works without it.)
 
 ## Roleplay Memory Budget Calculator
 
-The proposed active-scene word or token notice in Chat → Quick Settings is
-rejected. Do not add an **Always-active scene** total or memory-budget notice
-there. The dedicated calculator below is the only approved location for this
-feature.
+Remove only the proposed active-scene word or token feature from Chat → Quick
+Settings. Quick Settings itself remains unchanged. Do not add an
+**Always-active scene** total or memory-budget notice there. The dedicated
+calculator below is the only approved location for this feature.
 
 Add a row at the bottom of the **Roleplay** screen:
 
@@ -104,6 +104,7 @@ app:
 3. **Campaign**
 4. **Roleplay Character**
 5. **Party Members**
+6. **Glamour** — place this selector last.
 
 Use the app's existing selection behavior for each type. Types that currently
 allow one active item remain single-select; types that currently allow several
