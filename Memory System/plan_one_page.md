@@ -52,12 +52,19 @@ already works without it.)
   one through the normal full-page flow. The user may edit, approve, or delete
   each suggestion. Nothing is written to a lore book until that suggestion is
   individually approved, and this flow never edits or deletes existing lore
-  book entries. The **Memory Analysis Type** control uses a drop-down with
-  exactly two choices: **Associative Memories** and **Lorebook Memories**.
-  **Associative Memories** is the default. There is no **Both** option: one run
-  creates one kind of suggestion. Users may use both memory systems in chats or
-  run each analysis type separately, but a single analysis run must not create
-  both kinds at once.
+  book entries.
+- The **Memory Analysis Type** control is laid out as follows:
+  - Title: **Memory Analysis Type**
+  - Helper text directly beneath the title: **Choose what kind of memories this analysis should create.**
+  - A drop-down beneath the helper text with exactly two choices:
+    **Associative Memories** and **Lorebook Memories**.
+  - **Associative Memories** is the default.
+  - Explanatory text beneath the drop-down:
+    - **Associative Memories require an embedding model before they can be used in chats. They are matched to related conversations.**
+    - **Lorebook Memories use keyword triggers and do not require an embedding model.**
+  There is no **Both** option: one run creates one kind of suggestion. Users
+  may use both memory systems in chats or run each analysis type separately,
+  but a single analysis run must not create both kinds at once.
 
 ## What's left — in any order, or never
 
@@ -68,8 +75,8 @@ already works without it.)
 - **Faster lore books** — speed and better logs. Needs nothing from you.
 - **No-model mode** — a notice that Associative Search can't enter chats yet,
   plus an optional **Lorebook Memories** analysis type that creates lore book
-  entry suggestions with trigger keywords instead. The review structure and
-  analysis-type labels are approved.
+  entry suggestions with trigger keywords instead. The review structure,
+  analysis-type labels, and helper wording are approved.
 - **The computer feature** — the original goal: export your chats as a
   package, let an AI on your computer suggest memories from them, bring
   the suggestions back into Pending. Needs the duplicate-screen
