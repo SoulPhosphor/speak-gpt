@@ -37,10 +37,10 @@ already works without it.)
   fully processed. Never show an **Include Earlier Messages?** prompt or any
   equivalent choice.
 - Each time Memory Browser opens without an embedding model, show a
-  dismissible reminder for that visit: **Saved memories can't be used in chats
-  until an embedding model is installed.** Action: **Okay**. Show it again on
-  the next visit while the model is still missing; do not use a permanent
-  inline banner.
+  dismissible reminder for that visit: **Associative Search can't be used in
+  chats until an embedding model is installed.** Action: **Okay**. Show it
+  again on the next visit while the model is still missing; do not use a
+  permanent inline banner.
 - Before adding or replacing Memory Assistant wording, inventory the exact
   text already in the app and when it appears. Reuse the existing status
   surface rather than inventing a parallel set of progress or result messages.
@@ -52,8 +52,10 @@ already works without it.)
   one through the normal full-page flow. The user may edit, approve, or delete
   each suggestion. Nothing is written to a lore book until that suggestion is
   individually approved, and this flow never edits or deletes existing lore
-  book entries. The wording for the Memory Analysis Type control and its two
-  choices is still undecided; do not invent it during implementation.
+  book entries. The **Memory Analysis Type** control uses a drop-down with
+  **Associative Search** and **Lorebooks Only**. **Associative Search** is the
+  default. Do not replace these owner-chosen terms with "saved memories,"
+  "semantic search," or other substitute wording.
 
 ## What's left — in any order, or never
 
@@ -62,10 +64,10 @@ already works without it.)
 - **The duplicate screen** — when a new memory looks like one you have,
   a side-by-side where you pick keep / replace / delete.
 - **Faster lore books** — speed and better logs. Needs nothing from you.
-- **No-model mode** — a notice that memories can't enter chats yet, plus an
-  optional analysis type that creates lore book entry suggestions instead of
-  saved-memory suggestions. The review structure is approved; the analysis
-  type wording still needs an owner decision.
+- **No-model mode** — a notice that Associative Search can't enter chats yet,
+  plus an optional **Lorebooks Only** analysis type that creates lore book
+  entry suggestions with trigger keywords instead. The review structure and
+  analysis-type labels are approved.
 - **The computer feature** — the original goal: export your chats as a
   package, let an AI on your computer suggest memories from them, bring
   the suggestions back into Pending. Needs the duplicate-screen
