@@ -69,3 +69,31 @@ Show a **View** button. Route it according to the result type:
 - Existing-memory audit results: **Memories → Pending**
 
 Nothing is approved automatically. The phone validates the file, identifiers, placement, evidence, duplicates, and current phone state before creating Pending items.
+
+## Memory Auditor entry and screen structure
+
+Add a separate row to the Memory Manager titled **Memory Auditor**. This row owns existing-memory database housekeeping. It is separate from **API Memory Assistant**, which finds memories in conversations, and **Computer Memory Review**, which exports conversations for an external AI to review.
+
+The exact Memory Auditor row subtitle remains owner-approval wording.
+
+The Memory Auditor screen contains these three sections in this order:
+
+1. **Analyze Using the Memory Assistant Model**
+   - Button: **Audit**
+   - Show live status directly beneath this section.
+2. **Audit Using AI on Computer**
+   - Button: **Export Memories for Audit**
+   - The exported `.sgmemory` package includes `README.md`, `instructions/agent_workflow.md`, `instructions/safety_and_scope.md`, and a proposals template so the external AI knows what to inspect and how to write the result.
+3. **Import Memory Audit Results**
+   - Button: **Import**
+   - Show live status and all import errors directly beneath this section.
+
+Both audit routes inspect the existing associative-memory catalog, not conversations. Their findings are staged in **Memories → Pending** as reviewable proposals. Nothing is applied automatically.
+
+## Background and interruption behavior
+
+The **Analyze Using the Memory Assistant Model** audit must use the same durable foreground-service pattern as API Memory Assistant analysis. The user may leave the screen, continue chatting, or turn the screen off without cancelling the audit. A process restart must recover the durable run rather than silently losing it or pretending it completed.
+
+Creating an audit package and importing an audit result must also be durable operations. The screen is not required to stay open. Verified progress and completion remain visible when the user returns. Import staging is resumable and idempotent: validated but uncommitted items resume after interruption, while replayed committed proposals do not create duplicates.
+
+Exact status, success, empty-result, and failure wording for the new Memory Auditor sections remains owner-approval material.
