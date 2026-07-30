@@ -224,7 +224,7 @@ wires it up instead of adding a new row.
 
 Follow the interaction pattern of the Summarizer settings screen: a dedicated
 screen whose rows save as they are changed, with an endpoint row that opens
-the existing endpoint list picker and a model row that opens the shared
+an anchored dropdown of saved endpoint profiles and a model row that opens the shared
 searchable model picker fed by the chosen endpoint.
 
 Every setting on this screen is stored app-wide (owner ruling, 2026-07-29),
@@ -245,8 +245,8 @@ Rows, top to bottom:
      over-enthusiastic model.
 
 3. **Image Service**
-   - Selects the saved API endpoint used for image generation, using the
-     existing endpoint picker.
+   - Selects the saved API endpoint used for image generation from an
+     anchored dropdown of all saved endpoint profiles.
    - Subtitle shows the endpoint's friendly label.
    - It may differ from the current conversation endpoint.
 
@@ -1040,4 +1040,3 @@ release carry all of them.
   endpoints, illustrating why image API behavior cannot safely be guessed from
   a model name:
   <https://openrouter.ai/docs/guides/overview/multimodal/image-generation>
-

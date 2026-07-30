@@ -16,7 +16,6 @@
 
 package org.teslasoft.assistant.ui.activities
 
-import android.content.Intent
 import android.content.res.ColorStateList
 import android.os.Build
 import android.os.Bundle
@@ -29,7 +28,6 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.activity.OnBackPressedCallback
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.widget.ListPopupWindow
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.graphics.drawable.toDrawable
@@ -47,6 +45,7 @@ import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.fragments.dialogs.AdvancedFavoriteModelSelectorDialogFragment
 import org.teslasoft.assistant.ui.fragments.dialogs.AdvancedModelSelectorDialogFragment
 import org.teslasoft.assistant.ui.util.DiscardChangesDialog
+import org.teslasoft.assistant.ui.util.EndpointProfileDropdown
 import org.teslasoft.assistant.util.summarizer.SummarizerPrompts
 
 /**
@@ -86,16 +85,6 @@ class SummarizerSettingsActivity : FragmentActivity() {
 
     /** The selected preset's last saved text — the draft's dirty baseline. */
     private var savedPromptText = ""
-
-    private val endpointLauncher = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == RESULT_OK) {
-            val id = result.data?.getStringExtra("apiEndpointId")
-            if (id != null) preferences?.setSummarizerEndpointId(id)
-        }
-        refreshModelRows()
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -153,8 +142,8 @@ class SummarizerSettingsActivity : FragmentActivity() {
         refreshModelRows()
         // The Dropdown.Value style makes the value clickable, so it consumes
         // taps instead of passing them to the row — it needs its own listener.
-        rowEndpoint?.setOnClickListener { openEndpointPicker() }
-        textEndpointValue?.setOnClickListener { openEndpointPicker() }
+        rowEndpoint?.setOnClickListener { showEndpointDropdown() }
+        textEndpointValue?.setOnClickListener { showEndpointDropdown() }
         rowModel?.setOnClickListener { openModelChooser() }
         textModelValue?.setOnClickListener { openModelChooser() }
 
@@ -213,8 +202,13 @@ class SummarizerSettingsActivity : FragmentActivity() {
         textModelValue?.text = model.ifEmpty { getString(R.string.summarizer_unknown_model) }
     }
 
-    private fun openEndpointPicker() {
-        endpointLauncher.launch(Intent(this, ApiEndpointsListActivity::class.java))
+    private fun showEndpointDropdown() {
+        val anchor = textEndpointValue ?: return
+        val endpoints = apiEndpointPreferences?.getApiEndpointsList(this) ?: return
+        EndpointProfileDropdown.show(this, anchor, endpoints) { endpointId ->
+            preferences?.setSummarizerEndpointId(endpointId)
+            refreshModelRows()
+        }
     }
 
     /** The same model picker the chat and the Memory Assistant use, fetching
@@ -222,7 +216,7 @@ class SummarizerSettingsActivity : FragmentActivity() {
     private fun openModelChooser() {
         val endpointId = preferences?.getSummarizerEndpointId().orEmpty()
         if (endpointId.isEmpty()) {
-            openEndpointPicker()
+            showEndpointDropdown()
             return
         }
 
