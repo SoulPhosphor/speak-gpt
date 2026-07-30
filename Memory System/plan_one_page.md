@@ -31,6 +31,10 @@ already works without it.)
 
 ## Binding owner corrections
 
+- **Lorebook** is always one word in user-facing text throughout the app,
+  including plurals and compound labels: **Lorebook**, **Lorebooks**,
+  **Lorebook Memories**, and **Lorebook Suggestions**. Never display
+  **lore book** or **lore books** as two words.
 - Turning **Archive this chat** off pauses archiving without erasing,
   resetting, advancing, or replacing the last truthful archive bookmark.
   Turning it back on silently processes every eligible message not already
@@ -44,15 +48,17 @@ already works without it.)
 - Before adding or replacing Memory Assistant wording, inventory the exact
   text already in the app and when it appears. Reuse the existing status
   surface rather than inventing a parallel set of progress or result messages.
-- **Lorebook suggestion review structure is approved.** Lore book suggestions
-  are reviewed in the lore book area, not the Memory Browser. A split menu
-  appears only while suggestions are pending. Each suggestion shows the
-  proposed entry text and trigger keywords — no separate title — plus a
-  destination drop-down for choosing an existing lore book or creating a new
-  one through the normal full-page flow. The user may edit, approve, or delete
-  each suggestion. Nothing is written to a lore book until that suggestion is
-  individually approved, and this flow never edits or deletes existing lore
-  book entries.
+- **Lorebook suggestion review structure is approved.** Lorebook Suggestions
+  are reviewed in the Lorebooks area, not the Memory Browser. The ordinary
+  Lorebooks screen does not show a pending-suggestions split menu. That split
+  menu appears only while one or more Lorebook Suggestions are pending and
+  disappears when none remain. Each suggestion shows the proposed entry text
+  and trigger keywords — no separate title — plus a drop-down labeled
+  **Assign Lorebook** for choosing an existing Lorebook or creating a new one
+  through the normal full-page flow. The user may edit, approve, or delete each
+  suggestion. Nothing is written to a Lorebook until that suggestion is
+  individually approved, and this flow never edits or deletes existing
+  Lorebook entries.
 - The **Memory Analysis Type** control uses the app's existing two-column
   settings-row pattern, matching the **Memory Engine** row rather than creating
   a new layout:
@@ -77,9 +83,9 @@ already works without it.)
   fast and fixes its own index. Needs nothing from you.
 - **The duplicate screen** — when a new memory looks like one you have,
   a side-by-side where you pick keep / replace / delete.
-- **Faster lore books** — speed and better logs. Needs nothing from you.
+- **Faster Lorebooks** — speed and better logs. Needs nothing from you.
 - **No-model mode** — a notice that Associative Search can't enter chats yet,
-  plus an optional **Lorebook Memories** analysis type that creates lore book
+  plus an optional **Lorebook Memories** analysis type that creates Lorebook
   entry suggestions with trigger keywords instead. The review structure,
   analysis-type labels, helper wording, and row layout are approved.
 - **The computer feature** — the original goal: export your chats as a
