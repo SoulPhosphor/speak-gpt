@@ -96,4 +96,38 @@ The **Analyze Using the Memory Assistant Model** audit must use the same durable
 
 Creating an audit package and importing an audit result must also be durable operations. The screen is not required to stay open. Verified progress and completion remain visible when the user returns. Import staging is resumable and idempotent: validated but uncommitted items resume after interruption, while replayed committed proposals do not create duplicates.
 
-Exact status, success, empty-result, and failure wording for the new Memory Auditor sections remains owner-approval material.
+Directly after the Memory Auditor screen introduction and before the first audit section, show this approved foreground-work notice:
+
+**You may continue using the app and move between screens while the audit runs. It will continue working in the foreground as long as the app remains open.**
+
+The notice describes normal navigation and screen-off behavior. Force-stopping the app ends the live service. If the process ends unexpectedly, the durable run record must recover the unfinished audit when the app starts again; the UI must not claim that work continued while the process was dead.
+
+## Active audit status and progress
+
+While the Memory Assistant model audit is running, show an indeterminate spinner with this exact status text directly beneath the **Audit** button:
+
+**Auditing Memories**
+
+Once the auditor has frozen the finite memory snapshot and divided it into fixed audit batches, show a determinate progress bar beneath the spinner and status. Show the completed percentage beneath the bar as:
+
+**X%**
+
+The percentage must be calculated from completed audit batches divided by the fixed total number of audit batches. It must not estimate model-token progress, advance on a timer, or count a batch as complete before its result has been received and durably recorded. Before the total batch count is known, show only the spinner and **Auditing Memories**.
+
+Reaching 100% means every audit batch has completed, but the success result must not replace the running state until final parsing, validation, deduplication, and Pending staging have also finished successfully.
+
+## Durable foreground-service notification wording
+
+The Memory Auditor model audit uses a silent, ongoing, low-priority foreground-service notification while the audit is active.
+
+Notification title:
+
+**Auditing Memories**
+
+When determinate progress is available, the notification mirrors the same progress bar and shows:
+
+**X% complete**
+
+Before determinate progress is available, the notification uses an indeterminate progress state and no invented percentage. Tapping the notification opens the **Memory Auditor** screen. The notification ends when the run reaches a terminal success, empty-result, failure, or interruption state; do not create a separate completion notification.
+
+Exact success, empty-result, and failure wording for the new Memory Auditor sections remains owner-approval material.
