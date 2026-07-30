@@ -183,6 +183,13 @@ Approved subtitle for **Computer Memory Review**:
 
 > **Use an AI on your computer to review chats or check existing memories.**
 
+Approved introduction at the top of the **Computer Memory Review** screen,
+shown as two paragraphs with visible spacing between them:
+
+> Create a review package for an AI on your computer. It can review chats for new memories or check existing memories for possible duplicates, edits, merges, or outdated information.
+>
+> Once complete, import the result file. Your memory manager will organize all flagged suggestions into their respective slots so you can review and confirm them at your own pace.
+
 The initial computer workflow does not require a dedicated desktop application
 or custom desktop UI. The user opens the exported package in an existing
 file-capable AI application on the computer and asks it to follow the package's
