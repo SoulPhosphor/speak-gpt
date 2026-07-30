@@ -44,10 +44,16 @@ already works without it.)
 - Before adding or replacing Memory Assistant wording, inventory the exact
   text already in the app and when it appears. Reuse the existing status
   surface rather than inventing a parallel set of progress or result messages.
-- The lorebook-only analysis and lorebook-suggestion review flow described in
-  the long counterplan is not approved. Do not build its proposed split menu,
-  destination selector, approval cards, behavior, or wording unless the owner
-  discusses and approves that feature later.
+- **Lorebook suggestion review structure is approved.** Lore book suggestions
+  are reviewed in the lore book area, not the Memory Browser. A split menu
+  appears only while suggestions are pending. Each suggestion shows the
+  proposed entry text and trigger keywords — no separate title — plus a
+  destination drop-down for choosing an existing lore book or creating a new
+  one through the normal full-page flow. The user may edit, approve, or delete
+  each suggestion. Nothing is written to a lore book until that suggestion is
+  individually approved, and this flow never edits or deletes existing lore
+  book entries. The wording for the Memory Analysis Type control and its two
+  choices is still undecided; do not invent it during implementation.
 
 ## What's left — in any order, or never
 
@@ -56,8 +62,10 @@ already works without it.)
 - **The duplicate screen** — when a new memory looks like one you have,
   a side-by-side where you pick keep / replace / delete.
 - **Faster lore books** — speed and better logs. Needs nothing from you.
-- **No-model mode** — a notice that memories can't enter chats yet. Any
-  analysis mode that writes lore book entries remains unapproved.
+- **No-model mode** — a notice that memories can't enter chats yet, plus an
+  optional analysis type that creates lore book entry suggestions instead of
+  saved-memory suggestions. The review structure is approved; the analysis
+  type wording still needs an owner decision.
 - **The computer feature** — the original goal: export your chats as a
   package, let an AI on your computer suggest memories from them, bring
   the suggestions back into Pending. Needs the duplicate-screen
