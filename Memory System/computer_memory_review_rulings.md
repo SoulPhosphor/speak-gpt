@@ -131,3 +131,26 @@ When determinate progress is available, the notification mirrors the same progre
 Before determinate progress is available, the notification uses an indeterminate progress state and no invented percentage. Tapping the notification opens the **Memory Auditor** screen. The notification ends when the run reaches a terminal success, empty-result, failure, or interruption state; do not create a separate completion notification.
 
 Exact success, empty-result, and failure wording for the new Memory Auditor sections remains owner-approval material.
+
+## API Memory Assistant conversation-analysis progress
+
+Replace the current Android-facing conversation-count wording, **Memory Assistant is reviewing X of Y conversations**, with the same progress pattern used by Memory Auditor. Do not show the raw number of conversations as the primary progress display.
+
+While conversation analysis is active, the API Memory Assistant screen shows:
+
+1. An indeterminate spinner.
+2. Exact status text: **Analyzing Conversations**
+3. Once a fixed analysis batch total is known, a determinate progress bar beneath the spinner and status.
+4. Exact percentage text beneath the bar: **X%**
+
+Keep the spinner visible while the analysis is actively working, including while the determinate progress bar is available. Before the total number of analysis batches is known, show the spinner and **Analyzing Conversations** without an invented percentage.
+
+The percentage is completed sealed analysis batches divided by the fixed total number of batches claimed for that run. Conversations or messages added after the run begins remain outside that frozen denominator and wait for a later analysis. The percentage must not be estimated from elapsed time, token generation, or an individual model request.
+
+The API Memory Assistant foreground-service notification uses:
+
+- Title: **Analyzing Conversations**
+- Before the total is known: an indeterminate progress state.
+- After the total is known: a determinate progress bar with **X% complete**.
+
+Remove the notification sentence that reports **X of Y conversations**. Tapping the notification continues to open API Memory Assistant. Reaching 100% does not replace the running state with success until every batch result has been durably recorded and final parsing, validation, duplicate checking, and Pending staging have completed.
