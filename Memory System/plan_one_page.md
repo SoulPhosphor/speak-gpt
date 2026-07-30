@@ -95,6 +95,18 @@ Screen introduction, verbatim:
 > Select active Lorebooks, worlds, or characters below to preview their text
 > and calculate their combined impact on your context window.
 
+Directly beneath the introduction and before the selectable sections, show a
+live total using the app's title-size text style:
+
+> **Total Approximate Tokens Used: X**
+
+The total reflects the current on-screen selections and text, including edits
+that have not been saved yet. Saving is not required for the preview total to
+change. Dropdown selection changes update it immediately. Text edits trigger an
+event-driven recalculation after a 300 ms debounce from the most recent edit;
+do not continuously poll or recalculate on every keystroke. Revert and Save
+also update the total immediately.
+
 The selectable sections appear vertically, one beneath another. Every selector
 starts at **None** and lists the existing named items currently available in the
 app:
@@ -120,9 +132,9 @@ validation, and behavior as its actual card editor. Example section header:
 
 > **World: Sparktown**    **500 Tokens**
 
-Each selected section shows a live estimated token count, and the screen shows a
-live combined estimate for all selected static content. Use the app's shared
-token-estimation utility rather than introducing a separate counting formula.
+Each selected section shows its own live approximate token count. The per-section
+counts and the combined total use the app's shared token-estimation utility
+rather than introducing a separate counting formula.
 
 Each selected section has:
 
