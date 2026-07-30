@@ -53,9 +53,11 @@ already works without it.)
   each suggestion. Nothing is written to a lore book until that suggestion is
   individually approved, and this flow never edits or deletes existing lore
   book entries. The **Memory Analysis Type** control uses a drop-down with
-  **Associative Search** and **Lorebooks Only**. **Associative Search** is the
-  default. Do not replace these owner-chosen terms with "saved memories,"
-  "semantic search," or other substitute wording.
+  exactly two choices: **Associative Memories** and **Lorebook Memories**.
+  **Associative Memories** is the default. There is no **Both** option: one run
+  creates one kind of suggestion. Users may use both memory systems in chats or
+  run each analysis type separately, but a single analysis run must not create
+  both kinds at once.
 
 ## What's left — in any order, or never
 
@@ -65,7 +67,7 @@ already works without it.)
   a side-by-side where you pick keep / replace / delete.
 - **Faster lore books** — speed and better logs. Needs nothing from you.
 - **No-model mode** — a notice that Associative Search can't enter chats yet,
-  plus an optional **Lorebooks Only** analysis type that creates lore book
+  plus an optional **Lorebook Memories** analysis type that creates lore book
   entry suggestions with trigger keywords instead. The review structure and
   analysis-type labels are approved.
 - **The computer feature** — the original goal: export your chats as a
