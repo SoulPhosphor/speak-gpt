@@ -238,6 +238,7 @@ import org.teslasoft.assistant.util.RequestCapacity
 import org.teslasoft.assistant.util.RequestHeapState
 import org.teslasoft.assistant.util.WindowInsetsUtil
 import org.teslasoft.assistant.util.chatMessage
+import org.teslasoft.assistant.util.providerDetailBlock
 import org.teslasoft.assistant.util.providerLimitMessage
 import java.io.BufferedReader
 import java.io.ByteArrayOutputStream
@@ -6991,8 +6992,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 recordVisionCapability(ImageCapability.UNSUPPORTED)
             }
 
-            val response = genError.providerLimitMessage(this)
+            // Owner ruling (July 31 2026): beneath the app's own explanation,
+            // always show the raw provider detail — the server's error and the
+            // provider name (or a truthful placeholder for each).
+            val appExplanation = genError.providerLimitMessage(this)
                 ?: genError.chatMessage(this)
+            val response = appExplanation + "\n" +
+                genError.providerDetailBlock(this, e.message)
 
             if (messages.isEmpty() || messages[messages.size - 1]["isBot"] == false) {
                 putMessage("", true)
