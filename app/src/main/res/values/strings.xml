@@ -312,6 +312,7 @@
     <string name="btn_clear_log">Clear log</string>
     <string name="btn_copy_log">Copy / Export</string>
     <string name="label_log_copied">Log copied to clipboard</string>
+    <string name="label_error_copied">Error copied to clipboard</string>
     <string name="label_log_empty">The log is empty</string>
     <string name="label_microphone_permission_requested">Microphone Permission Requested</string>
     <string name="label_camera_permission_requested">Camera Permission Requested</string>
@@ -320,6 +321,8 @@
     <string name="chat_generate_name_automatically">Generate name automatically</string>
     <string name="btn_favorite_models">Favorite models</string>
     <string name="btn_all_models">See all models</string>
+    <string name="label_view_all">View all</string>
+    <string name="label_favorite_models_section">Favorites</string>
     <string name="label_creative">Creative</string>
     <string name="label_deterministic">Deterministic</string>
     <string name="label_temperature">Temperature (response creativity)</string>
@@ -439,6 +442,8 @@
     <string name="msg_confirm_exit">Do you want to exit?</string>
     <string name="label_sorry_action_failed">Sorry, action failed</string>
     <string name="label_copy">Text copied to clipboard</string>
+    <string name="copy_code_block">Copy code block</string>
+    <string name="label_code_copied">Code copied to clipboard</string>
     <string name="model_error_empty">Error, no model name is provided</string>
     <string name="language_error_empty">Please select language</string>
     <string name="image_resolution_error_empty">Please select image resolution</string>
@@ -847,6 +852,7 @@
     <string name="tile_voice_settings_subtitle">Settings related to transcription and text to speech.</string>
     <string name="tile_voice_settings_desc">Everything related to speech in one place: text-to-speech voice and engine, speech-to-text (dictation) engine, hands-free mode, voice-activity detection, and audio feedback. Tap to open.</string>
     <string name="voice_section_tts">Text-to-speech</string>
+    <string name="read_formatting_language_toggle">Read Formatting Language</string>
     <string name="voice_section_stt">Speech-to-text (dictation)</string>
     <string name="voice_section_handsfree">Hands-free &amp; voice activity</string>
     <string name="voice_section_feedback">Audio feedback</string>

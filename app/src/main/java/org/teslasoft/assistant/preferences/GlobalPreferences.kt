@@ -153,4 +153,27 @@ class GlobalPreferences private constructor(private var gp: SharedPreferences) {
     fun setProfileImageShowLabels(show: Boolean) {
         gp.edit().putBoolean("profile_image_show_labels", show).apply()
     }
+
+    /**
+     * Read Formatting Language: whether spoken replies read Markdown
+     * formatting out loud. Global, one switch for the whole app. Default
+     * false (off) — replies are spoken as plain words and symbols like #, *,
+     * table lines and dividers are not pronounced; fenced code blocks are
+     * replaced by a short spoken note. When true, replies are spoken exactly
+     * as written. Affects text-to-speech only, never on-screen rendering.
+     *
+     * @return true if formatting should be read aloud
+     * */
+    fun getReadFormattingLanguage() : Boolean {
+        return gp.getBoolean("read_formatting_language", false)
+    }
+
+    /**
+     * Set whether spoken replies read Markdown formatting out loud.
+     *
+     * @param read true to read formatting aloud
+     * */
+    fun setReadFormattingLanguage(read: Boolean) {
+        gp.edit().putBoolean("read_formatting_language", read).apply()
+    }
 }

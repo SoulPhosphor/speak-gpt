@@ -35,10 +35,16 @@ import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.text.Layout
 import android.text.SpannableStringBuilder
 import android.text.Spanned
+import android.text.TextPaint
 import android.text.method.LinkMovementMethod
+import android.text.style.AlignmentSpan
+import android.text.style.ClickableSpan
+import android.text.style.ImageSpan
 import android.text.style.LineHeightSpan
+import android.text.style.TtsSpan
 import android.util.DisplayMetrics
 import android.view.LayoutInflater
 import android.view.View
@@ -63,6 +69,7 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.elevation.SurfaceColors
 import io.noties.markwon.AbstractMarkwonPlugin
 import io.noties.markwon.Markwon
+import io.noties.markwon.core.spans.CodeBlockSpan
 import io.noties.markwon.ext.latex.JLatexMathPlugin
 import io.noties.markwon.ext.strikethrough.StrikethroughPlugin
 import io.noties.markwon.ext.tables.TablePlugin
@@ -1004,10 +1011,102 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
 
                 val pre = parseLatex(trimLineByLine(src))
                 markwon.setMarkdown(message, pre)
+                addCodeBlockCopyControls(message)
             } else {
                 message.text = chatMessage["message"].toString()
             }
             enableTextSelection()
+        }
+
+        /**
+         * Adds a small right-aligned copy icon to the top of every fenced code
+         * block, without changing the message renderer or splitting the reply
+         * into separate views. Markwon has already drawn each block with a
+         * [CodeBlockSpan] (the gray box); we reuse that span's range to insert a
+         * one-line control at the block's start and reuse the SAME span
+         * instance so the gray styling is untouched. The control is a single
+         * placeholder character carrying three spans: an [ImageSpan] (the
+         * app's existing content_copy glyph, R.drawable.ic_copy — the same
+         * drawable and theme tint already used by the app's other copy/save/
+         * delete icon buttons, so this reads as the same icon language, not a
+         * one-off), a [ClickableSpan] limited to that one character so only the
+         * icon — never the surrounding code — is tappable, and a [TtsSpan]
+         * carrying the "Copy code block" label for screen readers. Copies only
+         * that block; the code text stays fully selectable. Best-effort per
+         * block: a failure on one never breaks the bind.
+         */
+        private fun addCodeBlockCopyControls(textView: TextView) {
+            val rendered = textView.text as? Spanned ?: return
+            if (rendered.getSpans(0, rendered.length, CodeBlockSpan::class.java).isEmpty()) return
+
+            val icon = ContextCompat.getDrawable(textView.context, R.drawable.ic_copy) ?: return
+            // Sized relative to the message text so it reads as an inline
+            // glyph next to the code, not a full icon-button.
+            val iconSizePx = (textView.textSize * 1.15f).toInt().coerceAtLeast(1)
+            icon.setBounds(0, 0, iconSizePx, iconSizePx)
+
+            val builder = SpannableStringBuilder(rendered)
+            // Object Replacement Character: the single glyph the ImageSpan
+            // draws over. Kept off-limits to text selection semantics by being
+            // exactly one character, same as any other inline image span.
+            val placeholder = "￼\n"
+            // Highest-index block first so earlier blocks' offsets stay valid as
+            // we insert.
+            val blocks = builder.getSpans(0, builder.length, CodeBlockSpan::class.java)
+                .sortedByDescending { builder.getSpanStart(it) }
+
+            for (block in blocks) {
+                try {
+                    val start = builder.getSpanStart(block)
+                    val end = builder.getSpanEnd(block)
+                    if (start < 0 || end < 0 || start >= end) continue
+
+                    val code = builder.subSequence(start, end).toString().trim('\n')
+                    if (code.isEmpty()) continue
+
+                    builder.insert(start, placeholder)
+
+                    // Re-anchor the existing gray-box span so it also covers the
+                    // control line — same instance, so styling is identical.
+                    builder.removeSpan(block)
+                    builder.setSpan(block, start, end + placeholder.length, Spanned.SPAN_INCLUSIVE_EXCLUSIVE)
+
+                    val controlEnd = start + 1 // the single placeholder character
+                    try {
+                        builder.setSpan(
+                            AlignmentSpan.Standard(Layout.Alignment.ALIGN_OPPOSITE),
+                            start, start + placeholder.length, Spanned.SPAN_PARAGRAPH
+                        )
+                    } catch (_: Exception) { /* alignment is cosmetic; keep the control if it can't align */ }
+
+                    builder.setSpan(
+                        ImageSpan(icon, ImageSpan.ALIGN_BASELINE),
+                        start, controlEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                    )
+
+                    builder.setSpan(object : ClickableSpan() {
+                        override fun onClick(widget: View) {
+                            val clipboard = widget.context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                            clipboard.setPrimaryClip(ClipData.newPlainText("code", code))
+                            Toast.makeText(widget.context, R.string.label_code_copied, Toast.LENGTH_SHORT).show()
+                        }
+
+                        // No underline/tint override: the icon itself is the
+                        // affordance, so ClickableSpan's default link styling
+                        // (which would only apply to text) must not be drawn.
+                        override fun updateDrawState(ds: TextPaint) { /* no-op: icon needs no link styling */ }
+                    }, start, controlEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+
+                    builder.setSpan(
+                        TtsSpan.TextBuilder(textView.context.getString(R.string.copy_code_block)).build(),
+                        start, controlEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                    )
+                } catch (_: Exception) {
+                    // A single malformed block must never crash the message bind.
+                }
+            }
+
+            textView.text = builder
         }
 
         private fun enableTextSelection() {
