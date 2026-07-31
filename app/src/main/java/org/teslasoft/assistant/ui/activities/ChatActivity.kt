@@ -1243,7 +1243,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val personaId = preferences?.getPersonaId().orEmpty()
         val shape = GlobalPreferences.getPreferences(this).getProfileImageShape()
         CoroutineScope(Dispatchers.Main).launch {
-            val resolved: Pair<File?, String> = withContext(Dispatchers.IO) {
+            // kotlin.Pair explicitly: this file imports androidx.core.util.Pair
+            // (for scene transitions), so a bare `Pair` would bind to that.
+            val resolved: kotlin.Pair<File?, String> = withContext(Dispatchers.IO) {
                 try {
                     val persona = if (personaId.isEmpty()) null
                         else PersonaPreferences.getPersonaPreferences(this@ChatActivity).getPersona(personaId)
