@@ -38,6 +38,7 @@ import androidx.core.view.WindowCompat
 import androidx.fragment.app.FragmentActivity
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.elevation.SurfaceColors
+import com.google.android.material.materialswitch.MaterialSwitch
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.Preferences
@@ -76,6 +77,7 @@ class VoiceSettingsActivity : FragmentActivity() {
     private var tileVadMethod: TileFragment? = null
     private var rowVoiceAdvanced: LinearLayout? = null
     private var rowVoiceDebugging: LinearLayout? = null
+    private var switchReadFormatting: MaterialSwitch? = null
 
     private var btnBack: ImageButton? = null
     private var actionBar: ConstraintLayout? = null
@@ -392,6 +394,12 @@ class VoiceSettingsActivity : FragmentActivity() {
 
         tileVadMethod?.setOnTileClickListener {
             vadMethodSelector()
+        }
+
+        switchReadFormatting = findViewById(R.id.switch_read_formatting)
+        switchReadFormatting?.isChecked = GlobalPreferences.getPreferences(this).getReadFormattingLanguage()
+        switchReadFormatting?.setOnCheckedChangeListener { _, checked ->
+            GlobalPreferences.getPreferences(this).setReadFormattingLanguage(checked)
         }
 
         rowVoiceAdvanced = findViewById(R.id.tile_voice_advanced)

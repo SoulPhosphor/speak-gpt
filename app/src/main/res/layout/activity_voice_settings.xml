@@ -139,6 +139,22 @@
                     android:layout_weight="1" />
             </LinearLayout>
 
+            <LinearLayout
+                style="@style/Widget.App.Row.Toggle"
+                android:paddingHorizontal="20dp">
+
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/read_formatting_language_toggle" />
+                </LinearLayout>
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_read_formatting"
+                    style="@style/Widget.App.Row.Switch" />
+            </LinearLayout>
+
             <!-- Speech-to-text -->
             <TextView
                 android:layout_width="match_parent"

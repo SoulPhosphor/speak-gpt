@@ -196,6 +196,7 @@ import org.teslasoft.assistant.preferences.lorebook.LoreBookMatch
 import org.teslasoft.assistant.preferences.lorebook.LoreBookStore
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.stt.LocalWhisperEngine
+import org.teslasoft.assistant.stt.SpeechTextFormatter
 import org.teslasoft.assistant.stt.LocalWhisperModels
 import org.teslasoft.assistant.stt.LocalWhisperStorage
 import org.teslasoft.assistant.service.GenerationForegroundService
@@ -8303,6 +8304,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // ([FREEZER BINDER ASYNC FULL], owner Event log, July 17 2026). Key
             // the skip on the service actually running, never on the pref.
             if (!handsFree || !HandsFreeService.isRunning) acquireReadbackKeepAlive()
+            val spoken = toSpokenText(message)
             if (autoLangDetect) {
                 try {
                     // ML Kit clients hold native resources: re-creating one per
@@ -8310,7 +8312,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     // spoken reply across a long hands-free session.
                     try { languageIdentifier?.close() } catch (_: Exception) { /* already closed */ }
                     languageIdentifier = LanguageIdentification.getClient()
-                    languageIdentifier?.identifyLanguage(message)
+                    languageIdentifier?.identifyLanguage(spoken)
                         ?.addOnSuccessListener { languageCode ->
                             if (languageCode == "und") {
                                 Log.i("MLKit", "Can't identify language.")
@@ -8321,23 +8323,37 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                                 )
                             }
 
-                            speak(message, session)
+                            speak(spoken, session)
                         }?.addOnFailureListener {
                             // Ignore auto language detection if an error is occurred
                             autoLangDetect = false
                             ttsPostInit()
 
-                            speak(message, session)
+                            speak(spoken, session)
                         }
                 } catch (_: NullPointerException) {
                     autoLangDetect = false
                     ttsPostInit()
 
-                    speak(message, session)
+                    speak(spoken, session)
                 }
             } else {
-                speak(message, session)
+                speak(spoken, session)
             }
+        }
+    }
+
+    /** What TTS should actually say. When "Read Formatting Language" is off
+     *  (the default), Markdown formatting is not pronounced and code blocks
+     *  become a short spoken note; when on, the reply is spoken verbatim. This
+     *  only affects speech — the on-screen message is rendered from the
+     *  original text elsewhere and is never changed here. Applied once at each
+     *  top-level entry to the speech path, before the text is chunked. */
+    private fun toSpokenText(raw: String): String {
+        return if (GlobalPreferences.getPreferences(this).getReadFormattingLanguage()) {
+            raw
+        } else {
+            SpeechTextFormatter.forSpeech(raw)
         }
     }
 
@@ -8571,7 +8587,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         ttsRemainingText = ""
         finalTtsUtteranceId = null
         ttsUtteranceText.clear()
-        speak(message)
+        speak(toSpokenText(message))
     }
 
     override fun onRetryClick() {
@@ -8725,7 +8741,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     private fun onOpenAIAction(feature: String, prompt: String) {
         when (feature) {
-            "tts" -> speak(prompt)
+            "tts" -> speak(toSpokenText(prompt))
             "whisper" -> handleWhisperSpeechRecognition()
         }
     }
