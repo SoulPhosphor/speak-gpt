@@ -155,7 +155,7 @@ class ImageGenerationEventLogTest {
             Preferences.LOG_MAX_ENTRIES_LIMIT,
             Preferences.coerceImageGenRetention(99999, Preferences.LOG_MAX_ENTRIES_LIMIT)
         )
-        assertEquals(500, Preferences.coerceImageGenRetention(500, Preferences.LOG_MAX_ENTRIES_LIMIT))
+        assertEquals(25, Preferences.coerceImageGenRetention(25, Preferences.LOG_MAX_ENTRIES_LIMIT))
     }
 
     @Test
