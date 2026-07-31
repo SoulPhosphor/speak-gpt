@@ -370,7 +370,7 @@ object GenerationErrorClassifier {
             Regex("""status\s*code[ =:]*\s*(\d{3})""", RegexOption.IGNORE_CASE),
             Regex("""\bHTTP/?\d?(?:\.\d)?\s+(\d{3})\b"""),
             Regex(
-                """\b(\d{3})\s+(?:Unauthorized|Forbidden|Not Found|Bad Request|Too Many Requests|""" +
+                """\b(\d{3})\s+(?:Unauthorized|Payment Required|Forbidden|Not Found|Bad Request|Too Many Requests|""" +
                     """Payload Too Large|Request Entity Too Large|Internal Server Error|""" +
                     """Bad Gateway|Service Unavailable|Gateway Timeout)\b"""
             )
