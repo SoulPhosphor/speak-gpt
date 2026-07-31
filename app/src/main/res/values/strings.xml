@@ -440,6 +440,8 @@
     <string name="msg_confirm_exit">Do you want to exit?</string>
     <string name="label_sorry_action_failed">Sorry, action failed</string>
     <string name="label_copy">Text copied to clipboard</string>
+    <string name="copy_code_block">Copy code block</string>
+    <string name="label_code_copied">Code copied to clipboard</string>
     <string name="model_error_empty">Error, no model name is provided</string>
     <string name="language_error_empty">Please select language</string>
     <string name="image_resolution_error_empty">Please select image resolution</string>
