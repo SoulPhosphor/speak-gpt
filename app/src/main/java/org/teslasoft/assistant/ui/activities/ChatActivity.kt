@@ -240,6 +240,10 @@ import org.teslasoft.assistant.util.WindowInsetsUtil
 import org.teslasoft.assistant.util.chatMessage
 import org.teslasoft.assistant.util.providerDetailBlock
 import org.teslasoft.assistant.util.providerLimitMessage
+import org.teslasoft.assistant.util.ProviderErrorInfo
+import io.ktor.client.plugins.observer.ResponseObserver
+import io.ktor.client.statement.bodyAsText
+import io.ktor.http.isSuccess
 import java.io.BufferedReader
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -4983,7 +4987,23 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 headers = extraHeaders,
                 host = OpenAIHost(composeChatHost(apiEndpointObject?.host, apiEndpointObject?.chatEndpoint)),
                 proxy = null,
-                retry = RetryStrategy(maxRetries = 0)
+                retry = RetryStrategy(maxRetries = 0),
+                // Capture the raw error-response body for a failed request so the
+                // failure handler can name the upstream provider (OpenRouter puts
+                // it in a non-standard metadata field the client otherwise drops).
+                // The filter restricts observation to error responses ONLY, so a
+                // successful streaming response is never buffered — streaming is
+                // untouched.
+                httpClientConfig = {
+                    install(ResponseObserver) {
+                        filter { call -> !call.response.status.isSuccess() }
+                        onResponse { response ->
+                            try {
+                                capturedProviderErrorBody = response.bodyAsText()
+                            } catch (_: Exception) { /* best effort; never disturb the failure path */ }
+                        }
+                    }
+                }
             )
 
             ai = OpenAI(config)
@@ -6821,6 +6841,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     @Suppress("deprecation")
+    // The raw error-response body captured by the chat client's ResponseObserver
+    // for the current turn (null on success or a transport failure that never got
+    // a response). Read in the failure handler to name the upstream provider.
+    @Volatile private var capturedProviderErrorBody: String? = null
+
     private suspend fun generateResponse(
         request: String,
         shouldPronounce: Boolean,
@@ -6832,6 +6857,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // flow through here, and a reply that can't be saved must not be
         // produced over the blocking "Chat unavailable" state.
         if (chatStorageUnavailable) return
+
+        // Clear any provider error captured on a previous turn before this one
+        // makes its request, so a failure never shows a stale provider.
+        capturedProviderErrorBody = null
 
         if (preparedTurn == null && !awaitVisionCapabilityCheck()) {
             restoreUIState()
@@ -6997,8 +7026,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // provider name (or a truthful placeholder for each).
             val appExplanation = genError.providerLimitMessage(this)
                 ?: genError.chatMessage(this)
+            val providerInfo = ProviderErrorInfo.parse(capturedProviderErrorBody)
             val response = appExplanation + "\n" +
-                genError.providerDetailBlock(this, e.message)
+                genError.providerDetailBlock(
+                    this, e.message, providerInfo.providerName, providerInfo.message
+                )
 
             if (messages.isEmpty() || messages[messages.size - 1]["isBot"] == false) {
                 putMessage("", true)
