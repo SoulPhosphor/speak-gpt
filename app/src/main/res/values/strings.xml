@@ -739,6 +739,9 @@
     <string name="message_state_stopped">Reply stopped and may be incomplete.</string>
     <string name="message_state_failed">Reply failed and may be incomplete.</string>
     <string name="message_state_incomplete">Reply status is unknown and may be incomplete.</string>
+    <!-- Screen-reader description for the red error avatar shown on a chat whose
+         only reply so far failed (no successful reply yet). Not visible text. -->
+    <string name="chat_avatar_error_desc">No successful reply yet — the last response failed.</string>
     <!-- Internal, model-facing only (never shown to the user): appended to an
          unfinished reply in the model's context so it is not mistaken for an
          intentionally completed reply. -->

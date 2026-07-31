@@ -105,4 +105,83 @@ class MessageCompletionStateTest {
         assertEquals(MessageCompletionState.INTERRUPTED, once)
         assertNull(MessageCompletionState.reconcileOnLoad(once))
     }
+
+    // ---- isTerminalFailure ------------------------------------------------
+
+    @Test
+    fun terminalFailureCoversFailedStoppedInterruptedAndUnknown() {
+        assertTrue(MessageCompletionState.isTerminalFailure(MessageCompletionState.FAILED))
+        assertTrue(MessageCompletionState.isTerminalFailure(MessageCompletionState.STOPPED))
+        assertTrue(MessageCompletionState.isTerminalFailure(MessageCompletionState.INTERRUPTED))
+        assertTrue(MessageCompletionState.isTerminalFailure("some_future_state"))
+    }
+
+    @Test
+    fun streamingAndCompleteAreNotTerminalFailures() {
+        // Still generating, or already a good reply — neither is a finished
+        // failure, so neither triggers the error avatar.
+        assertFalse(MessageCompletionState.isTerminalFailure(MessageCompletionState.STREAMING))
+        assertFalse(MessageCompletionState.isTerminalFailure(MessageCompletionState.DONE))
+        assertFalse(MessageCompletionState.isTerminalFailure(null))
+        assertFalse(MessageCompletionState.isTerminalFailure(""))
+    }
+
+    // ---- chatShowsErrorAvatar --------------------------------------------
+
+    private fun userMsg(text: String = "hi"): Map<String, Any?> =
+        mapOf("isBot" to false, "message" to text)
+
+    private fun botMsg(state: String?): Map<String, Any?> =
+        if (state == null) mapOf("isBot" to true, "message" to "reply")
+        else mapOf("isBot" to true, "message" to "reply", MessageCompletionState.KEY_STATE to state)
+
+    @Test
+    fun failedFirstReplyShowsErrorAvatar() {
+        // The reported case: the user sends a message and the only reply failed.
+        val chat = listOf(userMsg(), botMsg(MessageCompletionState.FAILED))
+        assertTrue(MessageCompletionState.chatShowsErrorAvatar(chat))
+    }
+
+    @Test
+    fun stoppedOrInterruptedOnlyReplyAlsoShowsErrorAvatar() {
+        assertTrue(MessageCompletionState.chatShowsErrorAvatar(listOf(userMsg(), botMsg(MessageCompletionState.STOPPED))))
+        assertTrue(MessageCompletionState.chatShowsErrorAvatar(listOf(userMsg(), botMsg(MessageCompletionState.INTERRUPTED))))
+    }
+
+    @Test
+    fun anyCompletedReplyClearsTheErrorAvatarPermanently() {
+        // First good reply hands the avatar back to the Companion, even if a
+        // later reply in the same chat then fails (owner ruling).
+        val failThenGood = listOf(userMsg(), botMsg(MessageCompletionState.FAILED), userMsg(), botMsg(MessageCompletionState.DONE))
+        val goodThenFail = listOf(userMsg(), botMsg(MessageCompletionState.DONE), userMsg(), botMsg(MessageCompletionState.FAILED))
+        assertFalse(MessageCompletionState.chatShowsErrorAvatar(failThenGood))
+        assertFalse(MessageCompletionState.chatShowsErrorAvatar(goodThenFail))
+    }
+
+    @Test
+    fun legacyReplyWithNoStateCountsAsGood() {
+        // A pre-feature chat with a normal reply (no state) must never light up
+        // the error avatar.
+        assertFalse(MessageCompletionState.chatShowsErrorAvatar(listOf(userMsg(), botMsg(null))))
+    }
+
+    @Test
+    fun onlyUserMessagesOrStreamingFirstReplyDoNotShowErrorAvatar() {
+        // Nothing has failed yet: a lone user message, or a first reply still
+        // streaming, must not show the badge.
+        assertFalse(MessageCompletionState.chatShowsErrorAvatar(listOf(userMsg())))
+        assertFalse(MessageCompletionState.chatShowsErrorAvatar(listOf(userMsg(), botMsg(MessageCompletionState.STREAMING))))
+        assertFalse(MessageCompletionState.chatShowsErrorAvatar(emptyList()))
+    }
+
+    @Test
+    fun isBotStoredAsStringIsHonored() {
+        // Storage round-trips isBot as a JSON boolean, but be robust to a
+        // string "true" as well.
+        val chat = listOf(
+            mapOf("isBot" to "false", "message" to "hi"),
+            mapOf("isBot" to "true", "message" to "reply", MessageCompletionState.KEY_STATE to MessageCompletionState.FAILED)
+        )
+        assertTrue(MessageCompletionState.chatShowsErrorAvatar(chat))
+    }
 }

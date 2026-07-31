@@ -877,6 +877,14 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
          *  original XML background explicitly restored so recycling from a
          *  photo row never leaves it blank. */
         private fun displayAvatar() {
+            // While this chat has only failed replies (no completed reply yet),
+            // the assistant avatar is the red error badge instead of the
+            // Companion picture / glyph (owner ruling, July 31 2026). The first
+            // completed reply clears it and the normal avatar returns.
+            if (MessageCompletionState.chatShowsErrorAvatar(dataArray)) {
+                displayErrorAvatar()
+                return
+            }
             val file = companionImageFile
             if (file != null && file.exists()) {
                 ProfileImageBinder.bind(context, icon, file, companionImageShape) {
@@ -889,6 +897,19 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 icon.imageTintList = null
                 displayLegacyOrBuiltinAvatar()
             }
+        }
+
+        /** Full-bleed red-disc-with-white-X badge shown when the chat has no
+         *  successful reply yet. Self-contained, so the tonal backing and any
+         *  tint are cleared and the view fully reset to avoid recycled-row
+         *  bleed, matching the Companion-photo binder's discipline. */
+        private fun displayErrorAvatar() {
+            icon.background = null
+            icon.imageTintList = null
+            icon.clearColorFilter()
+            icon.scaleType = ImageView.ScaleType.FIT_CENTER
+            icon.setImageResource(R.drawable.ic_avatar_error)
+            icon.contentDescription = context.getString(R.string.chat_avatar_error_desc)
         }
 
         private fun displayLegacyOrBuiltinAvatar() {
