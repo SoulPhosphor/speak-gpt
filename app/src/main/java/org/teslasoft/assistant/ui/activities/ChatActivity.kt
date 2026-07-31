@@ -240,6 +240,7 @@ import org.teslasoft.assistant.util.WindowInsetsUtil
 import org.teslasoft.assistant.util.chatMessage
 import org.teslasoft.assistant.util.providerDetailBlock
 import org.teslasoft.assistant.util.providerLimitMessage
+import org.teslasoft.assistant.util.reachedServer
 import org.teslasoft.assistant.util.ProviderErrorInfo
 import io.ktor.client.plugins.observer.ResponseObserver
 import io.ktor.client.statement.bodyAsText
@@ -7031,6 +7032,24 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 genError.providerDetailBlock(
                     this, e.message, providerInfo.providerName, providerInfo.message
                 )
+
+            // Record to the Provider Failure Log when enabled AND the server
+            // actually answered — a user stop or a request that never reached a
+            // server is not a provider fault and is never logged. Raw only: the
+            // provider name (or the configured endpoint host when none is
+            // reported) and the server's own error, no app interpretation.
+            if (preferences?.getLogChatFailures() == true && genError.reachedServer()) {
+                val provider = providerInfo.providerName?.trim()?.ifBlank { null }
+                    ?: apiEndpointObject?.host?.trim()?.ifBlank { null }
+                if (provider != null) {
+                    val providerErrorRaw = listOfNotNull(
+                        genError.httpStatus?.toString(),
+                        (providerInfo.message ?: e.message)?.trim()?.ifBlank { null }
+                    ).joinToString(" ").ifBlank { "(no message)" }
+                    org.teslasoft.assistant.preferences.Logger
+                        .logProviderFailure(this, provider, providerErrorRaw)
+                }
+            }
 
             if (messages.isEmpty() || messages[messages.size - 1]["isBot"] == false) {
                 putMessage("", true)

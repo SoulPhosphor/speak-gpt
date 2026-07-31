@@ -54,6 +54,11 @@ private val NO_RESPONSE_CODES = setOf(
     GenErrorCode.N1, GenErrorCode.N2, GenErrorCode.N3, GenErrorCode.N4
 )
 
+/** Whether the request reached a server that actually answered (even with an
+ *  error). A transport failure did not, so nothing can be attributed to a
+ *  provider — the Provider Failure Log skips these. */
+fun GenErrorResult.reachedServer(): Boolean = code !in NO_RESPONSE_CODES
+
 /**
  * The raw provider detail shown beneath the app's own failure explanation
  * (owner ruling, July 31 2026): two always-present lines —
