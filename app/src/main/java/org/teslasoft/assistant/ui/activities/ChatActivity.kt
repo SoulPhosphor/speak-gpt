@@ -7002,17 +7002,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // partial text streamed in) and stash the coded error SEPARATELY from
             // the reply text — the error prose is no longer appended into the
             // message body, so the model's own words are never contaminated. The
-            // adapter renders the error next to the failure marker only when
-            // "Show chat errors" is on.
+            // adapter always renders the error next to the failure marker: a
+            // failed reply is never hidden (owner ruling, July 31 2026).
             val failedIndex = messages.size - 1
             if (messages[failedIndex]["isBot"] == true) {
                 messages[failedIndex][MessageCompletionState.KEY_STATE] = MessageCompletionState.FAILED
                 messages[failedIndex][MessageCompletionState.KEY_STATE_DETAIL] = genError.code.code
-                if (preferences?.showChatErrors() == true) {
-                    messages[failedIndex][MessageCompletionState.KEY_ERROR_TEXT] = response
-                } else {
-                    messages[failedIndex].remove(MessageCompletionState.KEY_ERROR_TEXT)
-                }
+                messages[failedIndex][MessageCompletionState.KEY_ERROR_TEXT] = response
                 if (messages.size > 2) {
                     adapter?.notifyItemRangeChanged(messages.size - 3, messages.size - 1)
                 } else {

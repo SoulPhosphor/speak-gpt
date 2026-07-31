@@ -786,9 +786,9 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 else -> context.getString(R.string.message_state_incomplete)
             }
             val errorText = chatMessage[MessageCompletionState.KEY_ERROR_TEXT]?.toString().orEmpty()
-            marker.text = if (state == MessageCompletionState.FAILED &&
-                preferences.showChatErrors() && errorText.isNotBlank()
-            ) {
+            // A failed reply always shows its error detail below the marker —
+            // failures are never hidden (owner ruling, July 31 2026).
+            marker.text = if (state == MessageCompletionState.FAILED && errorText.isNotBlank()) {
                 "$label\n$errorText"
             } else {
                 label

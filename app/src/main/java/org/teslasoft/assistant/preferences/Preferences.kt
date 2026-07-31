@@ -198,24 +198,6 @@ class Preferences private constructor(private var preferences: SharedPreferences
     }
 
     /**
-    * Show chat errors
-    *
-    * @return show chat errors
-    * */
-    fun showChatErrors() : Boolean {
-        return getGlobalBoolean("show_chat_errors", true)
-    }
-
-    /**
-     * Set show chat errors
-     *
-     * @param state show chat errors
-     * */
-    fun setShowChatErrors(state: Boolean) {
-        putGlobalBoolean("show_chat_errors", state, true)
-    }
-
-    /**
      * Whether to play an audible alert when a response fails (e.g. the model is
      * overloaded or the connection drops), so the user knows a reply isn't coming.
      *

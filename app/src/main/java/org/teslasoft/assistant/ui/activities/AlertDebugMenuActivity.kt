@@ -67,7 +67,6 @@ class AlertDebugMenuActivity : FragmentActivity() {
     private var actionBar: ConstraintLayout? = null
     private var btnBack: ImageButton? = null
 
-    private var switchShowChatErrors: MaterialSwitch? = null
     private var switchErrorSound: MaterialSwitch? = null
     private var switchMemoryDebug: MaterialSwitch? = null
     private var switchWhisperPerf: MaterialSwitch? = null
@@ -116,7 +115,6 @@ class AlertDebugMenuActivity : FragmentActivity() {
         actionBar = findViewById(R.id.action_bar)
         btnBack = findViewById(R.id.btn_back)
 
-        switchShowChatErrors = findViewById(R.id.switch_show_chat_errors)
         switchErrorSound = findViewById(R.id.switch_error_sound)
         switchMemoryDebug = findViewById(R.id.switch_memory_debug)
         switchWhisperPerf = findViewById(R.id.switch_whisper_perf)
@@ -166,7 +164,6 @@ class AlertDebugMenuActivity : FragmentActivity() {
 
     private fun loadValues() {
         val p = preferences ?: return
-        switchShowChatErrors?.isChecked = p.showChatErrors()
         switchErrorSound?.isChecked = p.getErrorSound()
         switchMemoryDebug?.isChecked = p.getMemoryDebugLogging()
         switchWhisperPerf?.isChecked = p.getWhisperPerfLogging()
@@ -193,7 +190,6 @@ class AlertDebugMenuActivity : FragmentActivity() {
 
         btnBack?.setOnClickListener { finish() }
 
-        switchShowChatErrors?.setOnCheckedChangeListener { _, checked -> p.setShowChatErrors(checked) }
         switchErrorSound?.setOnCheckedChangeListener { _, checked -> p.setErrorSound(checked) }
         switchMemoryDebug?.setOnCheckedChangeListener { _, checked -> p.setMemoryDebugLogging(checked) }
         switchWhisperPerf?.setOnCheckedChangeListener { _, checked -> p.setWhisperPerfLogging(checked) }
