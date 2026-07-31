@@ -227,24 +227,14 @@ class SummarizerSettingsActivity : FragmentActivity() {
         }
 
         val current = preferences?.getSummarizerModel().orEmpty()
-        val favorites = favoriteModelsPreferences?.getFavoriteModels(endpointId) ?: arrayListOf()
-
-        if (favorites.isEmpty()) {
-            val dialog = AdvancedModelSelectorDialogFragment.newInstance(current, "", endpointId)
-            dialog.setModelSelectedListener { model ->
-                preferences?.setSummarizerModel(model)
-                refreshModelRows()
-            }
-            dialog.show(supportFragmentManager, "SummarizerModelSelector")
-        } else {
-            val dialog = AdvancedFavoriteModelSelectorDialogFragment.newInstance(current, "", endpointId)
-            dialog.setModelSelectedListener { model, pickedEndpointId ->
-                preferences?.setSummarizerEndpointId(pickedEndpointId)
-                preferences?.setSummarizerModel(model)
-                refreshModelRows()
-            }
-            dialog.show(supportFragmentManager, "SummarizerFavoriteModelSelector")
+        // One full-screen selector, scoped to the Summarizer's own endpoint: it
+        // opens on that endpoint's favorites and offers "View all".
+        val dialog = AdvancedModelSelectorDialogFragment.newInstance(current, "", endpointId)
+        dialog.setModelSelectedListener { model ->
+            preferences?.setSummarizerModel(model)
+            refreshModelRows()
         }
+        dialog.show(supportFragmentManager, "SummarizerModelSelector")
     }
 
     /* ------------------------------ Prompt slots ------------------------------ */

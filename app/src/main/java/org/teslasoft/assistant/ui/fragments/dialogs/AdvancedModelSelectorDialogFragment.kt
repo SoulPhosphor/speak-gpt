@@ -17,7 +17,6 @@
 package org.teslasoft.assistant.ui.fragments.dialogs
 
 import android.app.Activity
-import android.app.Dialog
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -25,11 +24,13 @@ import android.content.DialogInterface
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
+import android.view.LayoutInflater
 import android.view.View
+import android.view.ViewGroup
+import android.widget.ImageButton
 import android.widget.ListView
 import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.DialogFragment
 import com.aallam.openai.api.http.Timeout
 import com.aallam.openai.api.logging.LogLevel
@@ -40,6 +41,7 @@ import com.aallam.openai.client.OpenAI
 import com.aallam.openai.client.OpenAIConfig
 import com.aallam.openai.client.OpenAIHost
 import com.aallam.openai.client.RetryStrategy
+import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.loadingindicator.LoadingIndicator
 import com.google.android.material.textfield.TextInputEditText
@@ -52,10 +54,20 @@ import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.preferences.dto.FavoriteModelObject
+import org.teslasoft.assistant.ui.adapters.FavoriteModelListAdapter
 import org.teslasoft.assistant.ui.adapters.ModelListAdapter
 import org.teslasoft.core.api.network.RequestNetwork
 import kotlin.time.Duration.Companion.seconds
 
+/**
+ * Full-screen model picker (owner redesign, July 31 2026). Replaces the old
+ * pop-up: it fills the screen, has a header with a back button, and opens on a
+ * favorites-first landing — the current endpoint's favorites, a search box that
+ * searches the endpoint's whole catalog, and a "View all" button that swaps the
+ * screen to the full model list. Favorites are per-endpoint (see
+ * [FavoriteModelsPreferences]); the image-generator variant keeps its previous
+ * behavior of showing the full (capability-narrowed) catalog directly.
+ */
 class AdvancedModelSelectorDialogFragment : DialogFragment() {
     companion object {
         /** [endpointId], when non-blank, fetches models for that specific saved
@@ -85,11 +97,12 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
         }
     }
 
-    private var builder: AlertDialog.Builder? = null
     private var modelList: ListView? = null
     private var progressBar: LoadingIndicator? = null
-    private var ttsSelectorTitle: TextView? = null
+    private var selectorTitle: TextView? = null
     private var fieldSearch: TextInputEditText? = null
+    private var btnBack: ImageButton? = null
+    private var btnViewAll: MaterialButton? = null
 
     private var preferences: Preferences? = null
     private var apiEndpointPreferences: ApiEndpointPreferences? = null
@@ -98,11 +111,22 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
     private var apiEndpointObject: ApiEndpointObject? = null
     private var listener: OnModelSelectedListener? = null
 
+    /** The endpoint this picker is choosing a model for (caller override, else
+     *  the chat's active endpoint). Favorites and stars are scoped to it. */
+    private var resolvedEndpointId: String = ""
+
+    /** The endpoint's full catalog, populated once the fetch completes. */
     private var availableModels: ArrayList<String> = arrayListOf()
-    private var availableModelsProjection: ArrayList<String> = arrayListOf()
+    private var catalogLoaded = false
+
+    /** This endpoint's favorites (landing list). */
+    private var favorites: ArrayList<Map<String, String>> = arrayListOf()
+
+    /** false = favorites landing; true = the full "View all" list. */
+    private var showingAll = false
+    private var query = ""
 
     private var requestNetwork: RequestNetwork? = null
-    private var modelListAdapter: ModelListAdapter? = null
 
     private var mContext: Context? = null
 
@@ -123,15 +147,30 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
 
     private var modelSelectedListener: ModelListAdapter.OnItemClickListener = object : ModelListAdapter.OnItemClickListener {
         override fun onItemClick(model: String) {
-            modelListAdapter?.notifyDataSetChanged()
             listener?.onModelSelected(model)
             dismiss()
         }
 
         override fun onActionClick(model: String, endpointId: String, position: Int) {
+            // Star in the all-models list adds to this endpoint's favorites.
             val m = FavoriteModelObject(model, endpointId)
             Toast.makeText(mContext ?: return, getString(R.string.label_added_to_favorites), Toast.LENGTH_SHORT).show()
             favoriteModelsPreferences?.addFavoriteModel(m)
+            reloadFavorites()
+        }
+    }
+
+    private var favoriteSelectedListener: FavoriteModelListAdapter.OnItemClickListener = object : FavoriteModelListAdapter.OnItemClickListener {
+        override fun onItemClick(model: String, endpointId: String) {
+            listener?.onModelSelected(model)
+            dismiss()
+        }
+
+        override fun onActionClick(model: String, endpointId: String, position: Int) {
+            // The action on a favorite removes it (one entry, whole store).
+            favoriteModelsPreferences?.removeFavoriteModel(model, endpointId)
+            reloadFavorites()
+            render()
         }
     }
 
@@ -167,15 +206,8 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
                 }
 
                 availableModels.addAll(ids)
-
-                updateProjection("")
-
-                modelListAdapter = ModelListAdapter(requireContext(), availableModelsProjection, requireArguments().getString("chatId").toString(), apiEndpointObject?.id ?: "")
-                modelListAdapter?.setOnItemClickListener(modelSelectedListener)
-                modelList?.divider = null
-                modelList?.adapter = modelListAdapter
-                modelListAdapter?.notifyDataSetChanged()
-                progressBar?.visibility = View.GONE
+                catalogLoaded = true
+                render()
             } catch (e: Exception) {
                 showProviderError(message, e)
             }
@@ -214,10 +246,11 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
                 append("\n\nDetails: ${e.javaClass.simpleName}: ${e.message}")
             }
         }
+        progressBar?.visibility = View.GONE
         val dialog = MaterialAlertDialogBuilder(requireContext())
             .setTitle(R.string.label_error)
             .setMessage(msg)
-            .setPositiveButton(R.string.btn_ok) { _, _ -> this@AdvancedModelSelectorDialogFragment.dismiss() }
+            .setPositiveButton(R.string.btn_ok) { _, _ -> }
             .setNeutralButton(R.string.btn_copy, null)
             .create()
         // Override the Copy button AFTER show so a copy does NOT close the
@@ -276,57 +309,130 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
         }
     }
 
-    override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
-        builder = MaterialAlertDialogBuilder(this.requireContext(), R.style.App_MaterialAlertDialog)
+    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
+        return inflater.inflate(R.layout.fragment_model_selector, container, false)
+    }
 
-        val view: View = this.layoutInflater.inflate(R.layout.fragment_select_voice, null)
+    override fun onStart() {
+        super.onStart()
+        // Fill the screen: this is a full-screen selector, not a floating pop-up.
+        dialog?.window?.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+    }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
 
         modelList = view.findViewById(R.id.voices_list)
-        ttsSelectorTitle = view.findViewById(R.id.tts_selector_title)
+        modelList?.divider = null
+        selectorTitle = view.findViewById(R.id.selector_title)
         progressBar = view.findViewById(R.id.progressBar)
         fieldSearch = view.findViewById(R.id.field_search_text)
+        btnBack = view.findViewById(R.id.btn_back)
+        btnViewAll = view.findViewById(R.id.btn_view_all)
 
-        builder!!.setView(view)
-            .setCancelable(false)
-            .setNegativeButton(android.R.string.cancel, null)
-
-        fieldSearch?.addTextChangedListener(object : TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) { /* unused */ }
-
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                updateProjection(s.toString().trim())
-            }
-
-            override fun afterTextChanged(s: Editable?) { /* unused */ }
-        })
+        val ctx = mContext ?: requireContext()
 
         imageMode = requireArguments().getBoolean("imageModels", false)
-        ttsSelectorTitle?.text = getString(
+        selectorTitle?.text = getString(
             if (imageMode) R.string.label_select_image_model else R.string.label_select_ai_model
         )
 
-        progressBar?.visibility = View.VISIBLE
-
-        preferences = Preferences.getPreferences(mContext ?: return builder!!.create(), requireArguments().getString("chatId").toString())
-        apiEndpointPreferences = ApiEndpointPreferences.getApiEndpointPreferences(mContext ?: return builder!!.create())
+        preferences = Preferences.getPreferences(ctx, requireArguments().getString("chatId").toString())
+        apiEndpointPreferences = ApiEndpointPreferences.getApiEndpointPreferences(ctx)
         val endpointIdOverride = requireArguments().getString("endpointId").orEmpty()
-        val resolvedEndpointId = endpointIdOverride.ifEmpty { preferences?.getApiEndpointId() ?: "" }
-        apiEndpointObject = apiEndpointPreferences?.getApiEndpoint(mContext ?: return builder!!.create(), resolvedEndpointId)
-        favoriteModelsPreferences = FavoriteModelsPreferences.getPreferences(mContext ?: return builder!!.create())
+        resolvedEndpointId = endpointIdOverride.ifEmpty { preferences?.getApiEndpointId() ?: "" }
+        apiEndpointObject = apiEndpointPreferences?.getApiEndpoint(ctx, resolvedEndpointId)
+        favoriteModelsPreferences = FavoriteModelsPreferences.getPreferences(ctx)
 
-        val extraHeaders: Map<String, String> = when (apiEndpointObject?.authType) {
-            ApiEndpointObject.AUTH_X_API_KEY -> mapOf("x-api-key" to apiEndpointObject!!.apiKey)
-            ApiEndpointObject.AUTH_API_KEY -> mapOf("api-key" to apiEndpointObject!!.apiKey)
+        reloadFavorites()
+
+        btnBack?.setOnClickListener { handleBack() }
+
+        btnViewAll?.setOnClickListener {
+            showingAll = true
+            fieldSearch?.setText("")
+            query = ""
+            render()
+        }
+
+        fieldSearch?.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) { /* unused */ }
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                query = s.toString().trim()
+                render()
+            }
+            override fun afterTextChanged(s: Editable?) { /* unused */ }
+        })
+
+        // Image mode has no favorites landing — it goes straight to the full
+        // (capability-narrowed) catalog, as it did before this redesign.
+        if (imageMode) showingAll = true
+
+        render()
+        startCatalogFetch()
+    }
+
+    /** System/hardware back: from the full list return to the favorites
+     *  landing; from the landing, close the picker. */
+    private fun handleBack() {
+        if (showingAll && !imageMode) {
+            showingAll = false
+            fieldSearch?.setText("")
+            query = ""
+            render()
+        } else {
+            dismiss()
+        }
+    }
+
+    private fun reloadFavorites() {
+        favorites = favoriteModelsPreferences?.getFavoriteModels(resolvedEndpointId) ?: arrayListOf()
+    }
+
+    /** Decide, from the current mode/search/catalog state, which list to show
+     *  and whether the "View all" button and spinner belong on screen. */
+    private fun render() {
+        if (!isAdded) return
+        val allMode = imageMode || showingAll || query.isNotEmpty()
+
+        btnViewAll?.visibility = if (!imageMode && !showingAll && query.isEmpty()) View.VISIBLE else View.GONE
+        progressBar?.visibility = if (allMode && !catalogLoaded) View.VISIBLE else View.GONE
+
+        if (allMode) {
+            val filtered = if (query.isEmpty()) {
+                ArrayList(availableModels)
+            } else {
+                // Preserve the existing match rule (owner: keep search as it is).
+                ArrayList(availableModels.filter { item -> item == query || item.contains(query) || query.contains(item) })
+            }
+            val adapter = ModelListAdapter(requireContext(), filtered, requireArguments().getString("chatId").toString(), apiEndpointObject?.id ?: "")
+            adapter.setOnItemClickListener(modelSelectedListener)
+            modelList?.adapter = adapter
+        } else {
+            val adapter = FavoriteModelListAdapter(requireContext(), ArrayList(favorites), requireArguments().getString("chatId").toString())
+            adapter.setOnItemClickListener(favoriteSelectedListener)
+            modelList?.adapter = adapter
+        }
+    }
+
+    /** Fetch the endpoint's catalog: the OpenAI SDK path first (with the chat
+     *  variant's name exclusions), falling back to a plain GET; image mode uses
+     *  the raw request directly so capability metadata survives. */
+    private fun startCatalogFetch() {
+        val endpoint = apiEndpointObject ?: return
+        val extraHeaders: Map<String, String> = when (endpoint.authType) {
+            ApiEndpointObject.AUTH_X_API_KEY -> mapOf("x-api-key" to endpoint.apiKey)
+            ApiEndpointObject.AUTH_API_KEY -> mapOf("api-key" to endpoint.apiKey)
             else -> emptyMap()
         }
 
         val config = OpenAIConfig(
-            token = apiEndpointObject?.apiKey!!,
+            token = endpoint.apiKey,
             logging = LoggingConfig(LogLevel.None, Logger.Simple),
             timeout = Timeout(socket = 30.seconds),
             organization = null,
             headers = extraHeaders,
-            host = OpenAIHost(apiEndpointObject?.host!!),
+            host = OpenAIHost(endpoint.host),
             proxy = null,
             retry = RetryStrategy()
         )
@@ -334,10 +440,6 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
 
         CoroutineScope(Dispatchers.Main).launch {
             if (imageMode) {
-                // The image variant always fetches the raw catalog: only its
-                // JSON carries the provider's output-modality capability
-                // information (§10), and the chat variant's name exclusions
-                // below must not apply to image models (§5).
                 startRawModelsRequest()
                 return@launch
             }
@@ -350,21 +452,12 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
                         availableModels.add(model.id.id)
                     }
                 }
-
-                updateProjection("")
-
-                modelListAdapter = ModelListAdapter(requireContext(), availableModelsProjection, requireArguments().getString("chatId").toString(), apiEndpointObject?.id ?: "")
-                modelListAdapter?.setOnItemClickListener(modelSelectedListener)
-                modelList?.divider = null
-                modelList?.adapter = modelListAdapter
-                modelListAdapter?.notifyDataSetChanged()
-                progressBar?.visibility = View.GONE
+                catalogLoaded = true
+                render()
             } catch (_: Exception) {
                 startRawModelsRequest()
             }
         }
-
-        return builder!!.create()
     }
 
     /** Plain GET {base}models with the endpoint's auth mode; the parsed
@@ -382,23 +475,6 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
         requestNetwork?.setHeaders(authHeaders)
         val base = (apiEndpointObject?.host ?: "").let { if (it.isBlank() || it.endsWith("/")) it else "$it/" }
         requestNetwork?.startRequestNetwork("GET", base + "models", "A", requestListener)
-    }
-
-    private fun updateProjection(query: String) {
-        if (availableModelsProjection == null) availableModelsProjection = arrayListOf()
-        availableModelsProjection.clear()
-        if (availableModelsProjection == null) availableModelsProjection = arrayListOf()
-
-        if (query == "") {
-            availableModelsProjection.addAll(availableModels)
-        } else {
-            availableModelsProjection = availableModels.filter { item -> item == query || item.contains(query) || query.contains(item)} as ArrayList<String>
-        }
-
-        modelListAdapter = ModelListAdapter(requireContext(), availableModelsProjection, requireArguments().getString("chatId").toString(), apiEndpointObject?.id ?: "")
-        modelListAdapter?.setOnItemClickListener(modelSelectedListener)
-        modelList?.adapter = modelListAdapter
-        modelListAdapter?.notifyDataSetChanged()
     }
 
     fun interface OnModelSelectedListener {

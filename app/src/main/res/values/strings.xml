@@ -321,6 +321,8 @@
     <string name="chat_generate_name_automatically">Generate name automatically</string>
     <string name="btn_favorite_models">Favorite models</string>
     <string name="btn_all_models">See all models</string>
+    <string name="label_view_all">View all</string>
+    <string name="label_favorite_models_section">Favorites</string>
     <string name="label_creative">Creative</string>
     <string name="label_deterministic">Deterministic</string>
     <string name="label_temperature">Temperature (response creativity)</string>
