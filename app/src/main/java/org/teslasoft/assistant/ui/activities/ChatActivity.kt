@@ -1243,19 +1243,23 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val personaId = preferences?.getPersonaId().orEmpty()
         val shape = GlobalPreferences.getPreferences(this).getProfileImageShape()
         CoroutineScope(Dispatchers.Main).launch {
-            val file = withContext(Dispatchers.IO) {
+            val resolved: Pair<File?, String> = withContext(Dispatchers.IO) {
                 try {
-                    val ref = if (personaId.isEmpty()) ""
-                        else PersonaPreferences.getPersonaPreferences(this@ChatActivity).getPersona(personaId).avatarRef
-                    ProfileImageResolver.resolveAiImageFile(this@ChatActivity, ref)
+                    val persona = if (personaId.isEmpty()) null
+                        else PersonaPreferences.getPersonaPreferences(this@ChatActivity).getPersona(personaId)
+                    val file = ProfileImageResolver.resolveAiImageFile(this@ChatActivity, persona?.avatarRef ?: "")
+                    file to (persona?.label ?: "")
                 } catch (_: Exception) {
-                    null
+                    null to ""
                 }
             }
             if (isFinishing || isDestroyed) return@launch
             // Drop this result if a newer refresh has since been requested.
             if (!companionAvatarRefresh.isCurrent(token)) return@launch
-            adapter?.setCompanionAvatar(file, shape)
+            adapter?.setCompanionAvatar(resolved.first, shape)
+            // The chat's current companion name, used to label assistant
+            // messages that carry no stamped name of their own.
+            adapter?.setCompanionLabel(resolved.second)
         }
     }
 
@@ -6630,11 +6634,31 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         } catch (_: Exception) { /* ignore */ }
     }
 
+    /** The active companion's display name for this chat, or "" when none is
+     *  set. A cheap prefs read; used to stamp each assistant reply so its label
+     *  is locked to the companion that produced it. */
+    private fun currentCompanionLabel(): String {
+        val personaId = preferences?.getPersonaId().orEmpty()
+        if (personaId.isEmpty()) return ""
+        return try {
+            PersonaPreferences.getPersonaPreferences(this).getPersona(personaId).label
+        } catch (_: Exception) {
+            ""
+        }
+    }
+
     private fun putMessage(message: String, isBot: Boolean) {
         val map: HashMap<String, Any> = HashMap()
 
         map["message"] = message
         map["isBot"] = isBot
+
+        // Lock this assistant reply's label to the companion active right now,
+        // so a later companion switch never rewrites past labels.
+        if (isBot) {
+            val companion = currentCompanionLabel()
+            if (companion.isNotBlank()) map[ChatAdapter.KEY_COMPANION_NAME] = companion
+        }
 
         messages.add(map)
         adapter?.notifyItemInserted(messages.size - 1)
