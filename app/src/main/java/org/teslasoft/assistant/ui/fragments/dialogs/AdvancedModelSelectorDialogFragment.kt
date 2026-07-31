@@ -18,7 +18,10 @@ package org.teslasoft.assistant.ui.fragments.dialogs
 
 import android.app.Activity
 import android.app.Dialog
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
+import android.content.DialogInterface
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
@@ -199,6 +202,10 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
         if (context == null) return
         val excerpt = (responseBody ?: "").take(400)
         val msg = buildString {
+            // Plain-language cause first, so a human sees what to do before the
+            // raw provider dump. The technical detail stays below, unchanged.
+            append(plainLanguageCause(responseBody))
+            append("\n\n")
             append("Couldn't read the models list from ")
             append(apiEndpointObject?.label ?: "this profile")
             append(".\n\nProvider returned:\n")
@@ -207,11 +214,66 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
                 append("\n\nDetails: ${e.javaClass.simpleName}: ${e.message}")
             }
         }
-        MaterialAlertDialogBuilder(requireContext())
+        val dialog = MaterialAlertDialogBuilder(requireContext())
             .setTitle(R.string.label_error)
             .setMessage(msg)
             .setPositiveButton(R.string.btn_ok) { _, _ -> this@AdvancedModelSelectorDialogFragment.dismiss() }
-            .show()
+            .setNeutralButton(R.string.btn_copy, null)
+            .create()
+        // Override the Copy button AFTER show so a copy does NOT close the
+        // dialog — the user can copy and keep reading.
+        dialog.setOnShowListener {
+            dialog.getButton(DialogInterface.BUTTON_NEUTRAL)?.setOnClickListener {
+                val ctx = context ?: return@setOnClickListener
+                val clipboard = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                clipboard.setPrimaryClip(ClipData.newPlainText(getString(R.string.label_error), msg))
+                Toast.makeText(ctx, R.string.label_error_copied, Toast.LENGTH_SHORT).show()
+            }
+        }
+        dialog.show()
+    }
+
+    /** One plain sentence naming the most likely cause of a failed models
+     *  fetch, shown above the raw provider response. Detects the cases we can
+     *  recognise from the response itself; falls back to an honest "couldn't
+     *  read it" line when the cause is genuinely unknown (§8: no invented
+     *  causes). */
+    private fun plainLanguageCause(responseBody: String?): String {
+        val body = (responseBody ?: "").trim()
+
+        if (body.isEmpty()) {
+            return "The server sent back an empty response, so there was no model list to read. The server may be temporarily down, or the Base URL for this profile may be wrong."
+        }
+
+        val lower = body.lowercase()
+        if (lower.startsWith("<!doctype") || lower.startsWith("<html") || lower.startsWith("<?xml") || lower.startsWith("<")) {
+            return "The server sent back a web page instead of data. This almost always means the Base URL for this profile is wrong. For OpenRouter it must be https://openrouter.ai/api/v1/ — open this profile's settings and check the Base URL."
+        }
+
+        // A real error the provider reported in JSON (e.g. a rejected key).
+        // Showing its own message is the truthful cause, not a guess.
+        extractProviderMessage(body)?.let { providerMsg ->
+            return "The server reported an error: \"$providerMsg\""
+        }
+
+        return "The server replied, but its response was not a model list the app could read. The full response is shown below so you can see what it sent."
+    }
+
+    /** Pulls a human-readable message out of a provider JSON error body of the
+     *  common shapes `{"error":{"message":...}}` or `{"error":"..."}`. Returns
+     *  null when the body is not JSON or carries no such message. */
+    private fun extractProviderMessage(body: String): String? {
+        return try {
+            val json = com.google.gson.Gson().fromJson(body, com.google.gson.JsonObject::class.java) ?: return null
+            val errEl = json.get("error") ?: return null
+            when {
+                errEl.isJsonObject -> errEl.asJsonObject.get("message")?.takeIf { it.isJsonPrimitive }?.asString
+                errEl.isJsonPrimitive -> errEl.asString
+                else -> null
+            }?.takeIf { it.isNotBlank() }
+        } catch (_: Exception) {
+            null
+        }
     }
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {

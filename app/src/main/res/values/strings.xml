@@ -312,6 +312,7 @@
     <string name="btn_clear_log">Clear log</string>
     <string name="btn_copy_log">Copy / Export</string>
     <string name="label_log_copied">Log copied to clipboard</string>
+    <string name="label_error_copied">Error copied to clipboard</string>
     <string name="label_log_empty">The log is empty</string>
     <string name="label_microphone_permission_requested">Microphone Permission Requested</string>
     <string name="label_camera_permission_requested">Camera Permission Requested</string>
