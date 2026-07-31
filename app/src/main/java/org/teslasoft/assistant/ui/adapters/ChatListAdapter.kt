@@ -48,6 +48,7 @@ import com.google.android.material.card.MaterialCardView
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.GlobalPreferences
+import org.teslasoft.assistant.preferences.MessageCompletionState
 import org.teslasoft.assistant.preferences.PersonaPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.memory.MemoryStore
@@ -237,6 +238,8 @@ class ChatListAdapter(
                 } else {
                     EMPTY_CHAT_PREVIEW
                 }
+                val noGoodReply =
+                    if (MessageCompletionState.chatShowsErrorAvatar(result.messages)) "true" else "false"
 
                 mContext.activity?.runOnUiThread {
                     if (disposed.get()) return@runOnUiThread
@@ -246,9 +249,16 @@ class ChatListAdapter(
                     if (position < 0) return@runOnUiThread
 
                     val chat = dataArray[position]
-                    if (chat["first_message"] != preview) {
-                        chat["first_message"] = preview
-                        notifyItemChanged(position, PAYLOAD_CHAT_PREVIEW)
+                    // The error-avatar flag drives the icon, which is not part
+                    // of the lightweight preview payload — a change to it needs a
+                    // full rebind, not just a preview-text refresh.
+                    val avatarChanged = chat["no_good_reply"] != noGoodReply
+                    val previewChanged = chat["first_message"] != preview
+                    chat["first_message"] = preview
+                    chat["no_good_reply"] = noGoodReply
+                    when {
+                        avatarChanged -> notifyItemChanged(position)
+                        previewChanged -> notifyItemChanged(position, PAYLOAD_CHAT_PREVIEW)
                     }
                 }
             } catch (_: Exception) {
@@ -333,6 +343,13 @@ class ChatListAdapter(
         private var companionImageFile: File? = null
         private var companionImageShape: String = "flower"
 
+        // True when this chat has only failed replies so far (no completed
+        // reply yet). Set in bind() from the list data and re-checked by
+        // applyCompanionOverride so the error avatar wins over the Companion
+        // picture and glyph on every icon-setting path (including bulk-select
+        // re-renders). Cleared for good once any reply completes.
+        private var hasNoGoodReply = false
+
         @SuppressLint("SetTextI18n")
         fun bind(
             chatMessage: HashMap<String, String>,
@@ -382,6 +399,12 @@ class ChatListAdapter(
                 PersonaPreferences.getPersonaPreferences(mContext.requireActivity()).getPersona(personaId).avatarRef
             } else ""
             companionImageFile = ProfileImageResolver.resolveAiImageFile(mContext.requireActivity(), companionRef)
+
+            // Read the "only failed replies so far" flag the list read computed
+            // (see ChatPreferences.getChatListResult). Set before the card/glyph
+            // styling below runs, since those call applyCompanionOverride, which
+            // now defers to the error avatar when this is true.
+            hasNoGoodReply = chatMessage["no_good_reply"] == "true"
 
             bindMemoryMarker(chatMessage, chatPreferences)
 
@@ -565,6 +588,13 @@ class ChatListAdapter(
          *  Companion has an available picture. No-op otherwise, leaving the
          *  existing avatar/glyph in place. */
         private fun applyCompanionOverride() {
+            // "No successful reply yet" wins over the Companion picture and the
+            // glyph (owner ruling, July 31 2026): a dead chat is visible in the
+            // list until a good reply lands.
+            if (hasNoGoodReply) {
+                applyErrorAvatar()
+                return
+            }
             val file = companionImageFile
             if (file != null) {
                 ProfileImageBinder.bind(mContext.requireActivity(), icon, file, companionImageShape) { }
@@ -573,6 +603,18 @@ class ChatListAdapter(
                 // undo a centerCrop left by a recycled photo row.
                 icon.scaleType = iconInitialScaleType
             }
+        }
+
+        /** Full-bleed red-disc-with-white-X badge. It is self-contained, so the
+         *  glyph background/tint updateCard set is cleared and the view is fully
+         *  reset (like the photo binder does) to avoid recycled-row bleed. */
+        private fun applyErrorAvatar() {
+            icon.background = null
+            icon.imageTintList = null
+            icon.clearColorFilter()
+            icon.scaleType = ImageView.ScaleType.FIT_CENTER
+            icon.setImageResource(R.drawable.ic_avatar_error)
+            icon.contentDescription = mContext.getString(R.string.chat_avatar_error_desc)
         }
 
         private fun updateCard(selector: MaterialCardView, icon: ImageView, pin: ImageView, tintColor: Int, iconColor: Int, chatMessage: HashMap<String, String>, isSelected: Boolean) {

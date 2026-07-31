@@ -34,7 +34,7 @@
     <string name="setting_change_openai_api_key">تغییر کلید API</string>
     <string name="setting_manage_account_desc">برای مدیریت حساب API خود ضربه بزنید</string>
     <string name="setting_account">حساب</string>
-    <string name="setting_default_desc">SpeakGPT را به‌عنوان دستیار پیش‌فرض خود تنظیم کنید</string>
+    <string name="setting_default_desc">این برنامه را به‌عنوان دستیار پیش‌فرض خود تنظیم کنید</string>
     <string name="setting_default">تنظیمات دستیار</string>
     <string name="setting_lang_desc">زبان خروجی صوتی را تنظیم کنید</string>
     <string name="setting_lang">زبان دستیار</string>
@@ -130,7 +130,7 @@
     <string name="setting_auto_language_detect">تشخیص خودکار زبان</string>
     <string name="setting_auto_language_detect_desc">تنظیم زبان TTS از پاسخ گفتگو</string>
     <string name="setting_function_calling">فراخوانی تابع</string>
-    <string name="setting_function_calling_desc">فعال‌سازی ویژگی‌های آزمایشی SpeakGPT</string>
+    <string name="setting_function_calling_desc">فعال‌سازی ویژگی‌های آزمایشی</string>
     <string name="setting_cmd_desc">فعال‌سازی دستورهای خط‌مورب گفتگو مانند /imagine</string>
     <string name="setting_cmd">دستورهای خط‌مورب گفتگو</string>
     <string name="assistant_action_menu">با این متن چه می‌خواهید انجام دهید؟</string>
@@ -282,7 +282,7 @@
     <string name="tile_api_endpoint_title">نشانی API</string>
     <string name="tile_api_endpoint_desc">این ویژگی به شما امکان تنظیم نشانی API را می‌دهد.</string>
     <string name="tile_autosend_title">ارسال خودکار</string>
-    <string name="tile_autosend_desc">این ویژگی به شما امکان فعال یا غیرفعال کردن ارسال خودکار پیام‌ها را می‌دهد. وقتی ارسال خودکار فعال باشد، SpeakGPT پیام‌ها را پس از پایان گوش دادن بدون فشار دادن دکمه «ارسال» به‌صورت خودکار ارسال می‌کند.</string>
+    <string name="tile_autosend_desc">این ویژگی به شما امکان فعال یا غیرفعال کردن ارسال خودکار پیام‌ها را می‌دهد. وقتی ارسال خودکار فعال باشد، این برنامه پیام‌ها را پس از پایان گوش دادن بدون فشار دادن دکمه «ارسال» به‌صورت خودکار ارسال می‌کند.</string>
     <string name="tile_tts_voice_title">صدای TTS</string>
     <string name="tile_tts_voice_desc">این ویژگی به شما امکان تنظیم صدای TTS را می‌دهد.</string>
     <string name="tile_voice_lang_title">زبان صوتی</string>
@@ -299,9 +299,9 @@
     <string name="tile_google_stt">STT گوگل استفاده شده است</string>
     <string name="tile_stt_desc">این ویژگی به شما امکان تنظیم موتور STT را می‌دهد. Whisper پولی است.</string>
     <string name="tile_silent_mode_title">حالت بی‌صدا</string>
-    <string name="tile_silent_mode_desc">این ویژگی به شما امکان می‌دهد که SpeakGPT هرگز پاسخ‌ها را تلفظ نکند.</string>
+    <string name="tile_silent_mode_desc">این ویژگی به شما امکان می‌دهد که این برنامه هرگز پاسخ‌ها را تلفظ نکند.</string>
     <string name="tile_always_speak_title">همیشه صحبت کن</string>
-    <string name="tile_always_speak_desc">این ویژگی به شما امکان می‌دهد که SpeakGPT همیشه پاسخ‌ها را تلفظ کند.</string>
+    <string name="tile_always_speak_desc">این ویژگی به شما امکان می‌دهد که این برنامه همیشه پاسخ‌ها را تلفظ کند.</string>
     <string name="tile_text_model_title">مدل تولید متن</string>
     <string name="tile_text_generation_model_desc">این ویژگی به شما امکان تنظیم مدل تولید متن و همچنین پارامترهای مدل را می‌دهد.</string>
     <string name="tile_activation_prompt_title">پیام فعال‌سازی</string>
@@ -315,14 +315,14 @@
     <string name="tile_sh_title">دستورهای خط‌مورب</string>
     <string name="tile_sh_desc">این ویژگی به شما امکان فعال کردن دستورهای خط‌مورب را می‌دهد. لطفاً توجه کنید که این ویژگی آزمایشی و ناپایدار است. مثال: /imagine a cat.</string>
     <string name="tile_desktop_mode_title">حالت دسکتاپ</string>
-    <string name="tile_desktop_mode_desc">این ویژگی به شما امکان فعال کردن حالت دسکتاپ را می‌دهد. وقتی حالت دسکتاپ فعال باشد، SpeakGPT از میانبرهای صفحه‌کلید استفاده می‌کند و ورودی پیام به‌صورت خودکار متمرکز می‌شود. برای ارسال پیام «Enter» را فشار دهید، برای افزودن خط جدید «Shift + Enter» و برای بستن گفتگو «Shift+Esc» را فشار دهید. استفاده از آن در گوشی‌ها توصیه نمی‌شود مگر اینکه بخواهید صفحه‌کلید هر بار که گفتگو را باز می‌کنید، باز شود.</string>
+    <string name="tile_desktop_mode_desc">این ویژگی به شما امکان فعال کردن حالت دسکتاپ را می‌دهد. وقتی حالت دسکتاپ فعال باشد، این برنامه از میانبرهای صفحه‌کلید استفاده می‌کند و ورودی پیام به‌صورت خودکار متمرکز می‌شود. برای ارسال پیام «Enter» را فشار دهید، برای افزودن خط جدید «Shift + Enter» و برای بستن گفتگو «Shift+Esc» را فشار دهید. استفاده از آن در گوشی‌ها توصیه نمی‌شود مگر اینکه بخواهید صفحه‌کلید هر بار که گفتگو را باز می‌کنید، باز شود.</string>
     <string name="tile_new_ui_title">رابط کاربری جدید</string>
     <string name="tile_new_ui_desc">این ویژگی به شما امکان فعال کردن رابط کاربری جدید آزمایشی را می‌دهد. رابط کاربری جدید فشرده‌تر و شهودی‌تر است.</string>
     <string name="tile_about_app_title">درباره برنامه</string>
-    <string name="tile_about_app_desc">این ویژگی به شما امکان باز کردن صفحه درباره SpeakGPT را می‌دهد.</string>
+    <string name="tile_about_app_desc">این ویژگی به شما امکان باز کردن صفحه درباره را می‌دهد.</string>
     <string name="tile_documentation_title">مستندات</string>
     <string name="tile_documentation_subtitle">باز کردن مستندات</string>
-    <string name="tile_documentation_desc">این ویژگی به شما امکان باز کردن مستندات SpeakGPT را می‌دهد.</string>
+    <string name="tile_documentation_desc">این ویژگی به شما امکان باز کردن مستندات را می‌دهد.</string>
     <string name="tile_amoled_mode_title">حالت AMOLED</string>
     <string name="tile_amoled_mode_desc">این ویژگی به شما امکان فعال کردن حالت AMOLED برای نمایشگرهای پشتیبانی‌شده را می‌دهد. این می‌تواند به‌طور قابل‌توجهی در مصرف باتری صرفه‌جویی کند. حالت AMOLED فقط در پوسته تیره در دسترس است.</string>
     <string name="tile_crash_log_title">گزارش خرابی</string>
@@ -330,12 +330,12 @@
     <string name="tile_events_log_title">گزارش رویداد</string>
     <string name="tile_events_log_desc">این ویژگی به شما امکان مشاهده گزارش رویداد را می‌دهد. ما این گزارش را جمع‌آوری نمی‌کنیم زیرا ممکن است حاوی اطلاعات حساس باشد. اگر می‌خواهید اشکالی را گزارش کنید، از این گزارش استفاده کنید.</string>
     <string name="tile_autosave_title">ذخیره خودکار گفتگوها</string>
-    <string name="tile_autosave_desc">این ویژگی به شما امکان فعال کردن ذخیره خودکار گفتگوها در پنجره دستیار را می‌دهد. وقتی ذخیره خودکار گفتگوها فعال باشد، SpeakGPT تمام گفتگوها را در حافظه دستگاه ذخیره می‌کند.</string>
+    <string name="tile_autosave_desc">این ویژگی به شما امکان فعال کردن ذخیره خودکار گفتگوها در پنجره دستیار را می‌دهد. وقتی ذخیره خودکار گفتگوها فعال باشد، این برنامه تمام گفتگوها را در حافظه دستگاه ذخیره می‌کند.</string>
     <string name="tile_show_chat_errors_title">نمایش خطاهای گفتگو</string>
     <string name="tile_show_chat_errors_desc">این ویژگی به شما امکان فعال کردن خطاهای گفتگو را می‌دهد. وقتی خطاهای گفتگو فعال باشد، SpeakGPT خطاهایی که رخ داده‌اند را در گفتگو نمایش می‌دهد.</string>
     <string name="on">روشن</string>
     <string name="off">خاموش</string>
-    <string name="tile_about_app_subtitle">درباره SpeakGPT</string>
+    <string name="tile_about_app_subtitle">درباره برنامه</string>
     <string name="cancel">لغو</string>
     <string name="btn_reset">بازنشانی</string>
     <string name="label_provided_by">ارائه‌شده توسط:</string>
@@ -361,8 +361,8 @@
     <string name="label_permission_denied">دسترسی رد شد</string>
     <string name="label_use_camera">استفاده از دوربین</string>
     <string name="label_use_microphone">استفاده از میکروفون</string>
-    <string name="msg_use_camera">SpeakGPT به شما امکان تعامل با ChatGPT Vision با استفاده از عکس‌هایی که مستقیماً از دوربین در این برنامه گرفته شده‌اند را می‌دهد. برای فعال کردن دوربین برای GPT Vision، لطفاً به ما اجازه استفاده از دوربین شما را بدهید. همچنان می‌توانید تصاویر موجود خود را از گالری بدون نیاز به مجوز دوربین انتخاب کنید. آیا اجازه دسترسی به دوربین را می‌دهید؟</string>
-    <string name="msg_use_microphone">SpeakGPT به شما امکان تعامل با ChatGPT از طریق فعال‌سازی صوتی را می‌دهد. برای فعال کردن فعال‌سازی صوتی، لطفاً به این برنامه اجازه استفاده از میکروفون دستگاه شما را بدهید. آیا اجازه دسترسی به میکروفون را می‌دهید؟</string>
+    <string name="msg_use_camera">این برنامه به شما امکان تعامل با ChatGPT Vision با استفاده از عکس‌هایی که مستقیماً از دوربین در این برنامه گرفته شده‌اند را می‌دهد. برای فعال کردن دوربین برای GPT Vision، لطفاً به ما اجازه استفاده از دوربین شما را بدهید. همچنان می‌توانید تصاویر موجود خود را از گالری بدون نیاز به مجوز دوربین انتخاب کنید. آیا اجازه دسترسی به دوربین را می‌دهید؟</string>
+    <string name="msg_use_microphone">این برنامه به شما امکان تعامل با ChatGPT از طریق فعال‌سازی صوتی را می‌دهد. برای فعال کردن فعال‌سازی صوتی، لطفاً به این برنامه اجازه استفاده از میکروفون دستگاه شما را بدهید. آیا اجازه دسترسی به میکروفون را می‌دهید؟</string>
     <string name="btn_allow">اجازه دادن</string>
     <string name="btn_no_thanks">خیر، متشکرم</string>
     <string name="msg_camera_denied">نمی‌توانید از این ویژگی استفاده کنید زیرا برنامه به دوربین دسترسی ندارد.</string>
@@ -396,7 +396,7 @@
     <string name="msg_delete_message">آیا مطمئن هستید که می‌خواهید این پیام را حذف کنید؟</string>
     <string name="btn_post">ارسال</string>
     <string name="msg_error_calculating_cost">هزینه: خطا در محاسبه هزینه. لطفاً اتصال خود را بررسی کنید.</string>
-    <string name="msg_cost_not_enough_data"><![CDATA[هزینه: <SpeakGPT داده کافی برای محاسبه هزینه این مدل ندارد. مستندات را بررسی کنید و هزینه را بر اساس استفاده بالا به‌صورت دستی محاسبه کنید.>]]></string>
+    <string name="msg_cost_not_enough_data"><![CDATA[هزینه: <این برنامه داده کافی برای محاسبه هزینه این مدل ندارد. مستندات را بررسی کنید و هزینه را بر اساس استفاده بالا به‌صورت دستی محاسبه کنید.>]]></string>
     <string name="cost_loading" tools:ignore="TypographyEllipsis">هزینه: در حال بارگذاری...</string>
     <string formatted="false" name="cost_counter_usage">استفاده (توکن‌ها): %s ورودی / %s خروجی</string>
     <string name="cat_all_new">همه دسته‌بندی‌ها</string>

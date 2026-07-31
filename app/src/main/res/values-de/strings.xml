@@ -34,7 +34,7 @@
     <string name="setting_change_openai_api_key">API-Schlüssel ändern</string>
     <string name="setting_manage_account_desc">Tippe, um dein API-Konto zu verwalten</string>
     <string name="setting_account">Konto</string>
-    <string name="setting_default_desc">Mache SpeakGPT zu deinem Standardassistenten</string>
+    <string name="setting_default_desc">Mache die App zu deinem Standardassistenten</string>
     <string name="setting_default">Assistenteinstellungen</string>
     <string name="setting_lang_desc">Sprache für die Sprachausgabe festlegen</string>
     <string name="setting_lang">Sprache des Assistenten</string>
@@ -130,7 +130,7 @@
     <string name="setting_auto_language_detect">Automatische Spracherkennung</string>
     <string name="setting_auto_language_detect_desc">Sprache für TTS aus Chat-Antworten einstellen</string>
     <string name="setting_function_calling">Funktionsaufruf</string>
-    <string name="setting_function_calling_desc">Experimentelle Funktionen von SpeakGPT aktivieren</string>
+    <string name="setting_function_calling_desc">Experimentelle Funktionen aktivieren</string>
     <string name="setting_cmd_desc">Chat-Schrägstrichbefehle wie /imagine aktivieren</string>
     <string name="setting_cmd">Chat-Schrägstrichbefehle</string>
     <string name="assistant_action_menu">Was möchten Sie mit diesem Text tun?</string>
@@ -282,7 +282,7 @@
     <string name="tile_api_endpoint_title">API-Endpunkt</string>
     <string name="tile_api_endpoint_desc">Diese Funktion ermöglicht es Ihnen, Ihren API-Endpunkt festzulegen.</string>
     <string name="tile_autosend_title">Automatisches Senden</string>
-    <string name="tile_autosend_desc">Diese Funktion ermöglicht es Ihnen, das automatische Senden von Nachrichten zu aktivieren oder zu deaktivieren. Wenn das automatische Senden aktiviert ist, sendet SpeakGPT automatisch Nachrichten, sobald das Zuhören beendet ist, ohne dass die \'Senden\'-Taste gedrückt werden muss.</string>
+    <string name="tile_autosend_desc">Diese Funktion ermöglicht es Ihnen, das automatische Senden von Nachrichten zu aktivieren oder zu deaktivieren. Wenn das automatische Senden aktiviert ist, sendet die App automatisch Nachrichten, sobald das Zuhören beendet ist, ohne dass die \'Senden\'-Taste gedrückt werden muss.</string>
     <string name="tile_tts_voice_title">TTS-Stimme</string>
     <string name="tile_tts_voice_desc">Diese Funktion ermöglicht es Ihnen, Ihre TTS-Stimme festzulegen.</string>
     <string name="tile_voice_lang_title">Sprache der Stimme</string>
@@ -299,9 +299,9 @@
     <string name="tile_google_stt">Google STT wird verwendet</string>
     <string name="tile_stt_desc">Diese Funktion ermöglicht es Ihnen, den STT-Motor festzulegen. Whisper ist kostenpflichtig.</string>
     <string name="tile_silent_mode_title">Stiller Modus</string>
-    <string name="tile_silent_mode_desc">Diese Funktion ermöglicht es Ihnen, SpeakGPT so einzustellen, dass Antworten nie ausgesprochen werden.</string>
+    <string name="tile_silent_mode_desc">Diese Funktion ermöglicht es Ihnen, die App so einzustellen, dass Antworten nie ausgesprochen werden.</string>
     <string name="tile_always_speak_title">Immer sprechen</string>
-    <string name="tile_always_speak_desc">Diese Funktion ermöglicht es Ihnen, SpeakGPT so einzustellen, dass Antworten immer ausgesprochen werden.</string>
+    <string name="tile_always_speak_desc">Diese Funktion ermöglicht es Ihnen, die App so einzustellen, dass Antworten immer ausgesprochen werden.</string>
     <string name="tile_text_model_title">Textgenerierungsmodell</string>
     <string name="tile_text_generation_model_desc">Diese Funktion ermöglicht es Ihnen, das Textgenerierungsmodell sowie die Parameter des Modells festzulegen.</string>
     <string name="tile_activation_prompt_title">Aktivierungsaufforderung</string>
@@ -315,14 +315,14 @@
     <string name="tile_sh_title">Slash-Befehle</string>
     <string name="tile_sh_desc">Diese Funktion erm\u00F6glicht es Ihnen, Slash-Befehle zu aktivieren. Bitte beachten Sie, dass diese Funktion experimentell und instabil ist. Beispiel: /imagine a cat.</string>
     <string name="tile_desktop_mode_title">Desktopmodus</string>
-    <string name="tile_desktop_mode_desc">Diese Funktion ermöglicht es Ihnen, den Desktopmodus zu aktivieren. Wenn der Desktopmodus aktiviert ist, verwendet SpeakGPT Tastenkürzel und die Eingabe von Nachrichten wird automatisch fokussiert. Drücken Sie \'Enter\', um Nachrichten zu senden, \'Shift + Enter\', um eine neue Zeile hinzuzufügen, und \'Shift+Esc\', um den Chat zu schließen. Nicht empfohlen für die Verwendung auf Telefonen, es sei denn, Sie möchten, dass die Tastatur jedes Mal geöffnet wird, wenn Sie den Chat öffnen.</string>
+    <string name="tile_desktop_mode_desc">Diese Funktion ermöglicht es Ihnen, den Desktopmodus zu aktivieren. Wenn der Desktopmodus aktiviert ist, verwendet die App Tastenkürzel und die Eingabe von Nachrichten wird automatisch fokussiert. Drücken Sie \'Enter\', um Nachrichten zu senden, \'Shift + Enter\', um eine neue Zeile hinzuzufügen, und \'Shift+Esc\', um den Chat zu schließen. Nicht empfohlen für die Verwendung auf Telefonen, es sei denn, Sie möchten, dass die Tastatur jedes Mal geöffnet wird, wenn Sie den Chat öffnen.</string>
     <string name="tile_new_ui_title">Neue Benutzeroberfläche</string>
     <string name="tile_new_ui_desc">Diese Funktion ermöglicht es Ihnen, eine neue experimentelle Benutzeroberfläche zu aktivieren. Die neue Benutzeroberfläche ist kompakter und intuitiver.</string>
     <string name="tile_about_app_title">Über die App</string>
-    <string name="tile_about_app_desc">Diese Funktion ermöglicht es Ihnen, die Seite \'Über SpeakGPT\' zu öffnen.</string>
+    <string name="tile_about_app_desc">Diese Funktion ermöglicht es Ihnen, die Seite \'Über\' zu öffnen.</string>
     <string name="tile_documentation_title">Dokumentation</string>
     <string name="tile_documentation_subtitle">Dokumentation öffnen</string>
-    <string name="tile_documentation_desc">Diese Funktion ermöglicht es Ihnen, die Dokumentation von SpeakGPT zu öffnen.</string>
+    <string name="tile_documentation_desc">Diese Funktion ermöglicht es Ihnen, die Dokumentation zu öffnen.</string>
     <string name="tile_amoled_mode_title">AMOLED-Modus</string>
     <string name="tile_amoled_mode_desc">Diese Funktion ermöglicht Ihnen die Aktivierung des AMOLED-Modus für unterstützte Displays. Dies kann die Akkulaufzeit erheblich verlängern. Der AMOLED-Modus ist nur im Dunkelmodus verfügbar.</string>
     <string name="tile_crash_log_title">Absturzprotokoll</string>
@@ -330,12 +330,12 @@
     <string name="tile_events_log_title">Ereignisprotokoll</string>
     <string name="tile_events_log_desc">Diese Funktion ermöglicht Ihnen das Ansehen des Ereignisprotokolls. Wir erfassen dieses Protokoll nicht, da es sensible Informationen enthalten kann. Verwenden Sie dieses Protokoll, wenn Sie einen Fehler melden möchten.</string>
     <string name="tile_autosave_title">Automatisches Speichern von Chats</string>
-    <string name="tile_autosave_desc">Diese Funktion ermöglicht Ihnen das automatische Speichern von Chats im Assistentenfenster. Wenn das automatische Speichern von Chats aktiviert ist, speichert SpeakGPT alle Chats auf dem Gerätespeicher.</string>
+    <string name="tile_autosave_desc">Diese Funktion ermöglicht Ihnen das automatische Speichern von Chats im Assistentenfenster. Wenn das automatische Speichern von Chats aktiviert ist, speichert die App alle Chats auf dem Gerätespeicher.</string>
     <string name="tile_show_chat_errors_title">Chat-Fehler anzeigen</string>
     <string name="tile_show_chat_errors_desc">Diese Funktion ermöglicht es Ihnen, Chat-Fehler zu aktivieren. Wenn Chat-Fehler aktiviert sind, zeigt SpeakGPT Fehler im Chat an, wenn sie auftreten.</string>
     <string name="on">Ein</string>
     <string name="off">Aus</string>
-    <string name="tile_about_app_subtitle">Über SpeakGPT</string>
+    <string name="tile_about_app_subtitle">Über die App</string>
     <string name="cancel">Abbrechen</string>
     <string name="btn_reset">Zurücksetzen</string>
     <string name="label_provided_by">Bereitgestellt von:</string>
@@ -361,8 +361,8 @@
     <string name="label_permission_denied">Berechtigung verweigert</string>
     <string name="label_use_camera">Kamera verwenden</string>
     <string name="label_use_microphone">Mikrofon verwenden</string>
-    <string name="msg_use_camera">SpeakGPT ermöglicht es Ihnen, mit ChatGPT Vision über Fotos, die direkt von der Kamera in dieser App aufgenommen wurden, zu interagieren. Um die Kamera für GPT Vision zu aktivieren, erlauben Sie uns bitte, Ihre Kamera zu verwenden. Sie können weiterhin Ihre vorhandenen Bilder aus der Galerie auswählen, ohne Kameraberechtigung. Kamerazugriff erlauben?</string>
-    <string name="msg_use_microphone">SpeakGPT ermöglicht es Ihnen, über Sprachaktivierung mit ChatGPT zu interagieren. Um die Sprachaktivierung zu ermöglichen, erlauben Sie bitte dieser App, das Mikrofon Ihres Geräts zu verwenden. Mikrofonzugriff erlauben?</string>
+    <string name="msg_use_camera">Die App ermöglicht es Ihnen, mit ChatGPT Vision über Fotos, die direkt von der Kamera in dieser App aufgenommen wurden, zu interagieren. Um die Kamera für GPT Vision zu aktivieren, erlauben Sie uns bitte, Ihre Kamera zu verwenden. Sie können weiterhin Ihre vorhandenen Bilder aus der Galerie auswählen, ohne Kameraberechtigung. Kamerazugriff erlauben?</string>
+    <string name="msg_use_microphone">Die App ermöglicht es Ihnen, über Sprachaktivierung mit ChatGPT zu interagieren. Um die Sprachaktivierung zu ermöglichen, erlauben Sie bitte dieser App, das Mikrofon Ihres Geräts zu verwenden. Mikrofonzugriff erlauben?</string>
     <string name="btn_allow">Erlauben</string>
     <string name="btn_no_thanks">Nein danke</string>
     <string name="msg_camera_denied">Sie können diese Funktion nicht verwenden, da die App keinen Kamerazugriff hat.</string>
@@ -396,7 +396,7 @@
     <string name="msg_delete_message">Sind Sie sicher, dass Sie diese Nachricht löschen möchten?</string>
     <string name="btn_post">Posten</string>
     <string name="msg_error_calculating_cost">Kosten: Fehler bei der Kostenberechnung. Bitte überprüfen Sie Ihre Verbindung.</string>
-    <string name="msg_cost_not_enough_data"><![CDATA[Kosten: <SpeakGPT hat nicht genug Daten, um die Kosten für dieses Modell zu berechnen. Suchen Sie nach Dokumentation und berechnen Sie die Kosten manuell basierend auf der Nutzung oben.>]]></string>
+    <string name="msg_cost_not_enough_data"><![CDATA[Kosten: <Die App hat nicht genug Daten, um die Kosten für dieses Modell zu berechnen. Suchen Sie nach Dokumentation und berechnen Sie die Kosten manuell basierend auf der Nutzung oben.>]]></string>
     <string name="cost_loading" tools:ignore="TypographyEllipsis">Kosten: Laden...</string>
     <string formatted="false"  name="cost_counter_usage">Nutzung (Tokens): %s eingehend / %s ausgehend</string>
     <string name="cat_all_new">Alle Kategorien</string>

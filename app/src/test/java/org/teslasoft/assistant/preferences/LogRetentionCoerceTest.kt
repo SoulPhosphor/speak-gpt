@@ -22,8 +22,9 @@ import org.junit.Test
 /**
  * Pins the per-log retention clamps (owner spec, July 23 2026): the three
  * configurable diagnostic logs (Memory Diagnostics, Whisper Performance,
- * Memory Usage) each cap Maximum Logs Saved at 1,000 and Maximum Days Saved at
- * 30, with a floor of 1 (a 0 would erase the log on the next write). The UI
+ * Memory Usage) each cap Maximum Logs Saved at 50 (lowered from 1,000, owner
+ * ruling July 31 2026) and Maximum Days Saved at 30, with a floor of 1 (a 0
+ * would erase the log on the next write). The UI
  * shows the over-ceiling dialog and then stores the clamped value; this proves
  * the storage layer itself also refuses to hold an out-of-range value, so a
  * bad number can never reach the trimmer regardless of entry point.
@@ -31,13 +32,13 @@ import org.junit.Test
 class LogRetentionCoerceTest {
 
     @Test fun ceilingsMatchTheOwnerSpec() {
-        assertEquals(1000, Preferences.LOG_MAX_ENTRIES_LIMIT)
+        assertEquals(50, Preferences.LOG_MAX_ENTRIES_LIMIT)
         assertEquals(30, Preferences.LOG_MAX_DAYS_LIMIT)
     }
 
     @Test fun maxEntriesClampsAboveCeiling() {
-        assertEquals(1000, Preferences.coerceLogMaxEntries(1001))
-        assertEquals(1000, Preferences.coerceLogMaxEntries(9999))
+        assertEquals(50, Preferences.coerceLogMaxEntries(51))
+        assertEquals(50, Preferences.coerceLogMaxEntries(9999))
     }
 
     @Test fun maxEntriesFloorsAtOne() {
@@ -47,8 +48,8 @@ class LogRetentionCoerceTest {
 
     @Test fun maxEntriesPassesInRange() {
         assertEquals(1, Preferences.coerceLogMaxEntries(1))
-        assertEquals(500, Preferences.coerceLogMaxEntries(500))
-        assertEquals(1000, Preferences.coerceLogMaxEntries(1000))
+        assertEquals(25, Preferences.coerceLogMaxEntries(25))
+        assertEquals(50, Preferences.coerceLogMaxEntries(50))
     }
 
     @Test fun maxDaysClampsAboveCeiling() {

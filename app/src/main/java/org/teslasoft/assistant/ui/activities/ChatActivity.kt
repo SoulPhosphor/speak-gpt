@@ -196,6 +196,7 @@ import org.teslasoft.assistant.preferences.lorebook.LoreBookMatch
 import org.teslasoft.assistant.preferences.lorebook.LoreBookStore
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.stt.LocalWhisperEngine
+import org.teslasoft.assistant.stt.SpeechTextFormatter
 import org.teslasoft.assistant.stt.LocalWhisperModels
 import org.teslasoft.assistant.stt.LocalWhisperStorage
 import org.teslasoft.assistant.service.GenerationForegroundService
@@ -237,7 +238,13 @@ import org.teslasoft.assistant.util.RequestCapacity
 import org.teslasoft.assistant.util.RequestHeapState
 import org.teslasoft.assistant.util.WindowInsetsUtil
 import org.teslasoft.assistant.util.chatMessage
+import org.teslasoft.assistant.util.providerDetailBlock
 import org.teslasoft.assistant.util.providerLimitMessage
+import org.teslasoft.assistant.util.reachedServer
+import org.teslasoft.assistant.util.ProviderErrorInfo
+import io.ktor.client.plugins.observer.ResponseObserver
+import io.ktor.client.statement.bodyAsText
+import io.ktor.http.isSuccess
 import java.io.BufferedReader
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -1242,19 +1249,25 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val personaId = preferences?.getPersonaId().orEmpty()
         val shape = GlobalPreferences.getPreferences(this).getProfileImageShape()
         CoroutineScope(Dispatchers.Main).launch {
-            val file = withContext(Dispatchers.IO) {
+            // kotlin.Pair explicitly: this file imports androidx.core.util.Pair
+            // (for scene transitions), so a bare `Pair` would bind to that.
+            val resolved: kotlin.Pair<File?, String> = withContext(Dispatchers.IO) {
                 try {
-                    val ref = if (personaId.isEmpty()) ""
-                        else PersonaPreferences.getPersonaPreferences(this@ChatActivity).getPersona(personaId).avatarRef
-                    ProfileImageResolver.resolveAiImageFile(this@ChatActivity, ref)
+                    val persona = if (personaId.isEmpty()) null
+                        else PersonaPreferences.getPersonaPreferences(this@ChatActivity).getPersona(personaId)
+                    val file = ProfileImageResolver.resolveAiImageFile(this@ChatActivity, persona?.avatarRef ?: "")
+                    file to (persona?.label ?: "")
                 } catch (_: Exception) {
-                    null
+                    null to ""
                 }
             }
             if (isFinishing || isDestroyed) return@launch
             // Drop this result if a newer refresh has since been requested.
             if (!companionAvatarRefresh.isCurrent(token)) return@launch
-            adapter?.setCompanionAvatar(file, shape)
+            adapter?.setCompanionAvatar(resolved.first, shape)
+            // The chat's current companion name, used to label assistant
+            // messages that carry no stamped name of their own.
+            adapter?.setCompanionLabel(resolved.second)
         }
     }
 
@@ -4975,7 +4988,23 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 headers = extraHeaders,
                 host = OpenAIHost(composeChatHost(apiEndpointObject?.host, apiEndpointObject?.chatEndpoint)),
                 proxy = null,
-                retry = RetryStrategy(maxRetries = 0)
+                retry = RetryStrategy(maxRetries = 0),
+                // Capture the raw error-response body for a failed request so the
+                // failure handler can name the upstream provider (OpenRouter puts
+                // it in a non-standard metadata field the client otherwise drops).
+                // The filter restricts observation to error responses ONLY, so a
+                // successful streaming response is never buffered — streaming is
+                // untouched.
+                httpClientConfig = {
+                    install(ResponseObserver) {
+                        filter { call -> !call.response.status.isSuccess() }
+                        onResponse { response ->
+                            try {
+                                capturedProviderErrorBody = response.bodyAsText()
+                            } catch (_: Exception) { /* best effort; never disturb the failure path */ }
+                        }
+                    }
+                }
             )
 
             ai = OpenAI(config)
@@ -5735,7 +5764,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         card[ChatAdapter.KEY_IMAGE_CONFIRMATION] = true
         card[ChatAdapter.KEY_IMAGE_CONFIRMATION_PROMPT] = prompt
         card[ChatAdapter.KEY_IMAGE_CONFIRMATION_COMPANION] =
-            preferences?.getAssistantName().orEmpty()
+            currentCompanionLabel().ifBlank { getString(R.string.chat_role_assistant) }
         messages.add(card)
         adapter?.notifyItemInserted(messages.size - 1)
         updateMessagesSelectionProjection()
@@ -5771,7 +5800,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             shouldPronounce,
             getString(
                 R.string.image_gen_spoken_announcement,
-                preferences?.getAssistantName().orEmpty()
+                currentCompanionLabel().ifBlank { getString(R.string.chat_role_assistant) }
             )
         )
         try {
@@ -6629,11 +6658,31 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         } catch (_: Exception) { /* ignore */ }
     }
 
+    /** The active companion's display name for this chat, or "" when none is
+     *  set. A cheap prefs read; used to stamp each assistant reply so its label
+     *  is locked to the companion that produced it. */
+    private fun currentCompanionLabel(): String {
+        val personaId = preferences?.getPersonaId().orEmpty()
+        if (personaId.isEmpty()) return ""
+        return try {
+            PersonaPreferences.getPersonaPreferences(this).getPersona(personaId).label
+        } catch (_: Exception) {
+            ""
+        }
+    }
+
     private fun putMessage(message: String, isBot: Boolean) {
         val map: HashMap<String, Any> = HashMap()
 
         map["message"] = message
         map["isBot"] = isBot
+
+        // Lock this assistant reply's label to the companion active right now,
+        // so a later companion switch never rewrites past labels.
+        if (isBot) {
+            val companion = currentCompanionLabel()
+            if (companion.isNotBlank()) map[ChatAdapter.KEY_COMPANION_NAME] = companion
+        }
 
         messages.add(map)
         adapter?.notifyItemInserted(messages.size - 1)
@@ -6793,6 +6842,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     @Suppress("deprecation")
+    // The raw error-response body captured by the chat client's ResponseObserver
+    // for the current turn (null on success or a transport failure that never got
+    // a response). Read in the failure handler to name the upstream provider.
+    @Volatile private var capturedProviderErrorBody: String? = null
+
     private suspend fun generateResponse(
         request: String,
         shouldPronounce: Boolean,
@@ -6804,6 +6858,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // flow through here, and a reply that can't be saved must not be
         // produced over the blocking "Chat unavailable" state.
         if (chatStorageUnavailable) return
+
+        // Clear any provider error captured on a previous turn before this one
+        // makes its request, so a failure never shows a stale provider.
+        capturedProviderErrorBody = null
 
         if (preparedTurn == null && !awaitVisionCapabilityCheck()) {
             restoreUIState()
@@ -6964,8 +7022,34 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 recordVisionCapability(ImageCapability.UNSUPPORTED)
             }
 
-            val response = genError.providerLimitMessage(this)
+            // Owner ruling (July 31 2026): beneath the app's own explanation,
+            // always show the raw provider detail — the server's error and the
+            // provider name (or a truthful placeholder for each).
+            val appExplanation = genError.providerLimitMessage(this)
                 ?: genError.chatMessage(this)
+            val providerInfo = ProviderErrorInfo.parse(capturedProviderErrorBody)
+            val response = appExplanation + "\n" +
+                genError.providerDetailBlock(
+                    this, e.message, providerInfo.providerName, providerInfo.message
+                )
+
+            // Record to the Provider Failure Log when enabled AND the server
+            // actually answered — a user stop or a request that never reached a
+            // server is not a provider fault and is never logged. Raw only: the
+            // provider name (or the configured endpoint host when none is
+            // reported) and the server's own error, no app interpretation.
+            if (preferences?.getLogChatFailures() == true && genError.reachedServer()) {
+                val provider = providerInfo.providerName?.trim()?.ifBlank { null }
+                    ?: apiEndpointObject?.host?.trim()?.ifBlank { null }
+                if (provider != null) {
+                    val providerErrorRaw = listOfNotNull(
+                        genError.httpStatus?.toString(),
+                        (providerInfo.message ?: e.message)?.trim()?.ifBlank { null }
+                    ).joinToString(" ").ifBlank { "(no message)" }
+                    org.teslasoft.assistant.preferences.Logger
+                        .logProviderFailure(this, provider, providerErrorRaw)
+                }
+            }
 
             if (messages.isEmpty() || messages[messages.size - 1]["isBot"] == false) {
                 putMessage("", true)
@@ -6975,17 +7059,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // partial text streamed in) and stash the coded error SEPARATELY from
             // the reply text — the error prose is no longer appended into the
             // message body, so the model's own words are never contaminated. The
-            // adapter renders the error next to the failure marker only when
-            // "Show chat errors" is on.
+            // adapter always renders the error next to the failure marker: a
+            // failed reply is never hidden (owner ruling, July 31 2026).
             val failedIndex = messages.size - 1
             if (messages[failedIndex]["isBot"] == true) {
                 messages[failedIndex][MessageCompletionState.KEY_STATE] = MessageCompletionState.FAILED
                 messages[failedIndex][MessageCompletionState.KEY_STATE_DETAIL] = genError.code.code
-                if (preferences?.showChatErrors() == true) {
-                    messages[failedIndex][MessageCompletionState.KEY_ERROR_TEXT] = response
-                } else {
-                    messages[failedIndex].remove(MessageCompletionState.KEY_ERROR_TEXT)
-                }
+                messages[failedIndex][MessageCompletionState.KEY_ERROR_TEXT] = response
                 if (messages.size > 2) {
                     adapter?.notifyItemRangeChanged(messages.size - 3, messages.size - 1)
                 } else {
@@ -8303,6 +8383,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // ([FREEZER BINDER ASYNC FULL], owner Event log, July 17 2026). Key
             // the skip on the service actually running, never on the pref.
             if (!handsFree || !HandsFreeService.isRunning) acquireReadbackKeepAlive()
+            val spoken = toSpokenText(message)
             if (autoLangDetect) {
                 try {
                     // ML Kit clients hold native resources: re-creating one per
@@ -8310,7 +8391,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     // spoken reply across a long hands-free session.
                     try { languageIdentifier?.close() } catch (_: Exception) { /* already closed */ }
                     languageIdentifier = LanguageIdentification.getClient()
-                    languageIdentifier?.identifyLanguage(message)
+                    languageIdentifier?.identifyLanguage(spoken)
                         ?.addOnSuccessListener { languageCode ->
                             if (languageCode == "und") {
                                 Log.i("MLKit", "Can't identify language.")
@@ -8321,23 +8402,37 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                                 )
                             }
 
-                            speak(message, session)
+                            speak(spoken, session)
                         }?.addOnFailureListener {
                             // Ignore auto language detection if an error is occurred
                             autoLangDetect = false
                             ttsPostInit()
 
-                            speak(message, session)
+                            speak(spoken, session)
                         }
                 } catch (_: NullPointerException) {
                     autoLangDetect = false
                     ttsPostInit()
 
-                    speak(message, session)
+                    speak(spoken, session)
                 }
             } else {
-                speak(message, session)
+                speak(spoken, session)
             }
+        }
+    }
+
+    /** What TTS should actually say. When "Read Formatting Language" is off
+     *  (the default), Markdown formatting is not pronounced and code blocks
+     *  become a short spoken note; when on, the reply is spoken verbatim. This
+     *  only affects speech — the on-screen message is rendered from the
+     *  original text elsewhere and is never changed here. Applied once at each
+     *  top-level entry to the speech path, before the text is chunked. */
+    private fun toSpokenText(raw: String): String {
+        return if (GlobalPreferences.getPreferences(this).getReadFormattingLanguage()) {
+            raw
+        } else {
+            SpeechTextFormatter.forSpeech(raw)
         }
     }
 
@@ -8571,7 +8666,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         ttsRemainingText = ""
         finalTtsUtteranceId = null
         ttsUtteranceText.clear()
-        speak(message)
+        speak(toSpokenText(message))
     }
 
     override fun onRetryClick() {
@@ -8725,7 +8820,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     private fun onOpenAIAction(feature: String, prompt: String) {
         when (feature) {
-            "tts" -> speak(prompt)
+            "tts" -> speak(toSpokenText(prompt))
             "whisper" -> handleWhisperSpeechRecognition()
         }
     }

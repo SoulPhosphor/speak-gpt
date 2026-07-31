@@ -35,10 +35,16 @@ import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.text.Layout
 import android.text.SpannableStringBuilder
 import android.text.Spanned
+import android.text.TextPaint
 import android.text.method.LinkMovementMethod
+import android.text.style.AlignmentSpan
+import android.text.style.ClickableSpan
+import android.text.style.ImageSpan
 import android.text.style.LineHeightSpan
+import android.text.style.TtsSpan
 import android.util.DisplayMetrics
 import android.view.LayoutInflater
 import android.view.View
@@ -63,6 +69,7 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.elevation.SurfaceColors
 import io.noties.markwon.AbstractMarkwonPlugin
 import io.noties.markwon.Markwon
+import io.noties.markwon.core.spans.CodeBlockSpan
 import io.noties.markwon.ext.latex.JLatexMathPlugin
 import io.noties.markwon.ext.strikethrough.StrikethroughPlugin
 import io.noties.markwon.ext.tables.TablePlugin
@@ -111,6 +118,10 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
     private var companionImageFile: File? = null
     private var companionImageShape: String = "flower"
 
+    // The chat's current companion name, used only as the display fallback for
+    // assistant messages that carry no stamped [KEY_COMPANION_NAME] of their own.
+    private var companionLabel: String? = null
+
     // User-side picture (owner ruling, July 21 2026), already cascaded by
     // ChatActivity: the active Roleplay Character's picture, else the active My
     // Persona's, else the Default Personal Avatar. Null only when none of those
@@ -124,6 +135,16 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
     fun setCompanionAvatar(file: File?, shape: String) {
         companionImageFile = file
         companionImageShape = shape
+        notifyDataSetChanged()
+    }
+
+    /** Called by ChatActivity with the chat's current companion name. Used
+     *  only as the fallback label for assistant messages that predate the
+     *  per-message stamp (see [KEY_COMPANION_NAME]); stamped messages keep
+     *  their own locked name. Rebinds visible rows so a companion switch is
+     *  reflected on those unstamped rows. */
+    fun setCompanionLabel(label: String?) {
+        companionLabel = label
         notifyDataSetChanged()
     }
 
@@ -160,6 +181,14 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         const val KEY_IMAGE_CONFIRMATION = "imageConfirmationCard"
         const val KEY_IMAGE_CONFIRMATION_PROMPT = "imageConfirmationPrompt"
         const val KEY_IMAGE_CONFIRMATION_COMPANION = "imageConfirmationCompanion"
+
+        // The companion name shown on an assistant message's label. Stamped
+        // onto the message when the reply is created (ChatActivity.putMessage)
+        // so it is LOCKED to the companion that was active for that reply and
+        // a later companion switch never rewrites past labels. Absent on
+        // messages written before this feature; those fall back to the chat's
+        // current companion name at display time.
+        const val KEY_COMPANION_NAME = "companionName"
 
         // Transient inline Creating Image row (plan §5 progress
         // experience): the visible status and Cancel action for a running
@@ -433,7 +462,21 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             btnCopy.setImageResource(R.drawable.ic_copy)
             btnCopy.setOnClickListener {
                 val clipboard: ClipboardManager = context.getSystemService(FragmentActivity.CLIPBOARD_SERVICE) as ClipboardManager
-                val clip = ClipData.newPlainText("response", chatMessage["message"].toString())
+                val messageText = chatMessage["message"].toString()
+                // The failed/interrupted/stopped marker (and, when "Show chat
+                // errors" is on, the coded error beneath it) lives in a separate
+                // TextView from the reply body. Fold it into the copied text so
+                // sharing a failure captures the exact wording shown on screen,
+                // not just whatever partial reply text preceded it.
+                val markerText = statusMarker
+                    ?.takeIf { it.visibility == View.VISIBLE }
+                    ?.text?.toString()?.takeIf { it.isNotBlank() }
+                val fullText = when {
+                    markerText == null -> messageText
+                    messageText.isBlank() -> markerText
+                    else -> "$messageText\n\n$markerText"
+                }
+                val clip = ClipData.newPlainText("response", fullText)
                 clipboard.setPrimaryClip(clip)
                 Toast.makeText(context, context.getString(R.string.label_copy), Toast.LENGTH_SHORT).show()
             }
@@ -743,9 +786,9 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 else -> context.getString(R.string.message_state_incomplete)
             }
             val errorText = chatMessage[MessageCompletionState.KEY_ERROR_TEXT]?.toString().orEmpty()
-            marker.text = if (state == MessageCompletionState.FAILED &&
-                preferences.showChatErrors() && errorText.isNotBlank()
-            ) {
+            // A failed reply always shows its error detail below the marker —
+            // failures are never hidden (owner ruling, July 31 2026).
+            marker.text = if (state == MessageCompletionState.FAILED && errorText.isNotBlank()) {
                 "$label\n$errorText"
             } else {
                 label
@@ -836,7 +879,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             if (chatMessage["isBot"] == true) {
                 displayAvatar()
 
-                username.text = preferences.getAssistantName()
+                username.text = resolveAssistantLabel(chatMessage)
                 ui.setBackgroundColor(getSurfaceColor(context))
             } else {
                 displayUserAvatar()
@@ -844,6 +887,19 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 btnCopy.visibility = View.VISIBLE
                 ui.setBackgroundColor(getSurface2Color(context))
             }
+        }
+
+        /** The name shown on an assistant message: the companion name stamped
+         *  on the message when it was created (locked, so a later companion
+         *  switch never rewrites it), else the chat's current companion name
+         *  for messages written before the stamp existed, else the generic
+         *  "Assistant". Never the app name. */
+        private fun resolveAssistantLabel(chatMessage: HashMap<String, Any>): String {
+            val stamped = chatMessage[KEY_COMPANION_NAME]?.toString()
+            if (!stamped.isNullOrBlank()) return stamped
+            val live = companionLabel
+            if (!live.isNullOrBlank()) return live
+            return context.getString(R.string.chat_role_assistant)
         }
 
         /** Assistant-side precedence (profile-images-plan.md): Companion
@@ -856,6 +912,14 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
          *  original XML background explicitly restored so recycling from a
          *  photo row never leaves it blank. */
         private fun displayAvatar() {
+            // While this chat has only failed replies (no completed reply yet),
+            // the assistant avatar is the red error badge instead of the
+            // Companion picture / glyph (owner ruling, July 31 2026). The first
+            // completed reply clears it and the normal avatar returns.
+            if (MessageCompletionState.chatShowsErrorAvatar(dataArray)) {
+                displayErrorAvatar()
+                return
+            }
             val file = companionImageFile
             if (file != null && file.exists()) {
                 ProfileImageBinder.bind(context, icon, file, companionImageShape) {
@@ -868,6 +932,19 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 icon.imageTintList = null
                 displayLegacyOrBuiltinAvatar()
             }
+        }
+
+        /** Full-bleed red-disc-with-white-X badge shown when the chat has no
+         *  successful reply yet. Self-contained, so the tonal backing and any
+         *  tint are cleared and the view fully reset to avoid recycled-row
+         *  bleed, matching the Companion-photo binder's discipline. */
+        private fun displayErrorAvatar() {
+            icon.background = null
+            icon.imageTintList = null
+            icon.clearColorFilter()
+            icon.scaleType = ImageView.ScaleType.FIT_CENTER
+            icon.setImageResource(R.drawable.ic_avatar_error)
+            icon.contentDescription = context.getString(R.string.chat_avatar_error_desc)
         }
 
         private fun displayLegacyOrBuiltinAvatar() {
@@ -1004,10 +1081,102 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
 
                 val pre = parseLatex(trimLineByLine(src))
                 markwon.setMarkdown(message, pre)
+                addCodeBlockCopyControls(message)
             } else {
                 message.text = chatMessage["message"].toString()
             }
             enableTextSelection()
+        }
+
+        /**
+         * Adds a small right-aligned copy icon to the top of every fenced code
+         * block, without changing the message renderer or splitting the reply
+         * into separate views. Markwon has already drawn each block with a
+         * [CodeBlockSpan] (the gray box); we reuse that span's range to insert a
+         * one-line control at the block's start and reuse the SAME span
+         * instance so the gray styling is untouched. The control is a single
+         * placeholder character carrying three spans: an [ImageSpan] (the
+         * app's existing content_copy glyph, R.drawable.ic_copy — the same
+         * drawable and theme tint already used by the app's other copy/save/
+         * delete icon buttons, so this reads as the same icon language, not a
+         * one-off), a [ClickableSpan] limited to that one character so only the
+         * icon — never the surrounding code — is tappable, and a [TtsSpan]
+         * carrying the "Copy code block" label for screen readers. Copies only
+         * that block; the code text stays fully selectable. Best-effort per
+         * block: a failure on one never breaks the bind.
+         */
+        private fun addCodeBlockCopyControls(textView: TextView) {
+            val rendered = textView.text as? Spanned ?: return
+            if (rendered.getSpans(0, rendered.length, CodeBlockSpan::class.java).isEmpty()) return
+
+            val icon = ContextCompat.getDrawable(textView.context, R.drawable.ic_copy) ?: return
+            // Sized relative to the message text so it reads as an inline
+            // glyph next to the code, not a full icon-button.
+            val iconSizePx = (textView.textSize * 1.15f).toInt().coerceAtLeast(1)
+            icon.setBounds(0, 0, iconSizePx, iconSizePx)
+
+            val builder = SpannableStringBuilder(rendered)
+            // Object Replacement Character: the single glyph the ImageSpan
+            // draws over. Kept off-limits to text selection semantics by being
+            // exactly one character, same as any other inline image span.
+            val placeholder = "￼\n"
+            // Highest-index block first so earlier blocks' offsets stay valid as
+            // we insert.
+            val blocks = builder.getSpans(0, builder.length, CodeBlockSpan::class.java)
+                .sortedByDescending { builder.getSpanStart(it) }
+
+            for (block in blocks) {
+                try {
+                    val start = builder.getSpanStart(block)
+                    val end = builder.getSpanEnd(block)
+                    if (start < 0 || end < 0 || start >= end) continue
+
+                    val code = builder.subSequence(start, end).toString().trim('\n')
+                    if (code.isEmpty()) continue
+
+                    builder.insert(start, placeholder)
+
+                    // Re-anchor the existing gray-box span so it also covers the
+                    // control line — same instance, so styling is identical.
+                    builder.removeSpan(block)
+                    builder.setSpan(block, start, end + placeholder.length, Spanned.SPAN_INCLUSIVE_EXCLUSIVE)
+
+                    val controlEnd = start + 1 // the single placeholder character
+                    try {
+                        builder.setSpan(
+                            AlignmentSpan.Standard(Layout.Alignment.ALIGN_OPPOSITE),
+                            start, start + placeholder.length, Spanned.SPAN_PARAGRAPH
+                        )
+                    } catch (_: Exception) { /* alignment is cosmetic; keep the control if it can't align */ }
+
+                    builder.setSpan(
+                        ImageSpan(icon, ImageSpan.ALIGN_BASELINE),
+                        start, controlEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                    )
+
+                    builder.setSpan(object : ClickableSpan() {
+                        override fun onClick(widget: View) {
+                            val clipboard = widget.context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                            clipboard.setPrimaryClip(ClipData.newPlainText("code", code))
+                            Toast.makeText(widget.context, R.string.label_code_copied, Toast.LENGTH_SHORT).show()
+                        }
+
+                        // No underline/tint override: the icon itself is the
+                        // affordance, so ClickableSpan's default link styling
+                        // (which would only apply to text) must not be drawn.
+                        override fun updateDrawState(ds: TextPaint) { /* no-op: icon needs no link styling */ }
+                    }, start, controlEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+
+                    builder.setSpan(
+                        TtsSpan.TextBuilder(textView.context.getString(R.string.copy_code_block)).build(),
+                        start, controlEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                    )
+                } catch (_: Exception) {
+                    // A single malformed block must never crash the message bind.
+                }
+            }
+
+            textView.text = builder
         }
 
         private fun enableTextSelection() {

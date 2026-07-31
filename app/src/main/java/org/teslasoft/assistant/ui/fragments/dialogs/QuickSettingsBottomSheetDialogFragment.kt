@@ -841,19 +841,12 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         }
 
         btnSelectModel?.setOnClickListener {
-            var favorites = favoriteModelsPreferences?.getFavoriteModels()
-
-            if (favorites == null) favorites = arrayListOf()
-
-            if (favorites.isEmpty()) {
-                val dialog = AdvancedModelSelectorDialogFragment.newInstance(model!!, chatId)
-                dialog.setModelSelectedListener(modelSelectedListener)
-                dialog.show(parentFragmentManager, "AdvancedModelSelectorDialogFragment")
-            } else {
-                val dialog = AdvancedFavoriteModelSelectorDialogFragment.newInstance(model!!, chatId)
-                dialog.setModelSelectedListener(modelSelectedListenerV2)
-                dialog.show(parentFragmentManager, "AdvancedFavoriteModelSelectorDialogFragment")
-            }
+            // One full-screen selector: it opens on this endpoint's favorites and
+            // offers "View all". Favorites are scoped to the chat's active
+            // endpoint, so a picked favorite always belongs to it.
+            val dialog = AdvancedModelSelectorDialogFragment.newInstance(model!!, chatId)
+            dialog.setModelSelectedListener(modelSelectedListener)
+            dialog.show(parentFragmentManager, "AdvancedModelSelectorDialogFragment")
         }
 
         // System Prompt tile: the value is an inline dropdown of saved prompts;

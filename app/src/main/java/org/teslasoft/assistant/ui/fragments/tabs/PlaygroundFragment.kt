@@ -382,10 +382,9 @@ class PlaygroundFragment : Fragment() {
                 }
             }
 
-            if (preferences?.showChatErrors() == true) {
-                output = "${output}\n\n${getString(R.string.prompt_show_error)}\n\n$response"
-                editTextOut?.setText(output)
-            }
+            // A failed run always shows its error — never hidden.
+            output = "${output}\n\n${getString(R.string.prompt_show_error)}\n\n$response"
+            editTextOut?.setText(output)
 
             (mContext as Activity?)?.runOnUiThread {
                 runLoader?.visibility = View.GONE

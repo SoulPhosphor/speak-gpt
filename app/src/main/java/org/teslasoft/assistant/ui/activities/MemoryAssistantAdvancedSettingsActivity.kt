@@ -287,24 +287,14 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
         }
 
         val current = preferences?.getArchivistModel().orEmpty()
-        val favorites = favoriteModelsPreferences?.getFavoriteModels() ?: arrayListOf()
-
-        if (favorites.isEmpty()) {
-            val dialog = AdvancedModelSelectorDialogFragment.newInstance(current, chatId, endpointId)
-            dialog.setModelSelectedListener { model ->
-                preferences?.setArchivistModel(model)
-                refreshArchivistRows()
-            }
-            dialog.show(supportFragmentManager, "ArchivistModelSelector")
-        } else {
-            val dialog = AdvancedFavoriteModelSelectorDialogFragment.newInstance(current, chatId, endpointId)
-            dialog.setModelSelectedListener { model, pickedEndpointId ->
-                preferences?.setArchivistEndpointId(pickedEndpointId)
-                preferences?.setArchivistModel(model)
-                refreshArchivistRows()
-            }
-            dialog.show(supportFragmentManager, "ArchivistFavoriteModelSelector")
+        // One full-screen selector, scoped to the Archivist's own endpoint: it
+        // opens on that endpoint's favorites and offers "View all".
+        val dialog = AdvancedModelSelectorDialogFragment.newInstance(current, chatId, endpointId)
+        dialog.setModelSelectedListener { model ->
+            preferences?.setArchivistModel(model)
+            refreshArchivistRows()
         }
+        dialog.show(supportFragmentManager, "ArchivistModelSelector")
     }
 
     /* ------------------------------ Temperature ------------------------------ */

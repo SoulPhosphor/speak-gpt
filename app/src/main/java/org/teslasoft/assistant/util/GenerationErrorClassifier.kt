@@ -51,6 +51,11 @@ enum class ProviderLimitKind {
     REQUEST_BODY,
     RATE_OR_THROUGHPUT,
     QUOTA_OR_SPENDING,
+    // The account has no spendable credits (HTTP 402 / "insufficient credits").
+    // Kept DISTINCT from RATE_OR_THROUGHPUT and QUOTA_OR_SPENDING so a temporary
+    // throttle, a usage cap, and an empty balance can never be confused in the
+    // message the user reads (owner ruling, July 31 2026).
+    OUT_OF_CREDITS,
     UNIDENTIFIED
 }
 
@@ -132,6 +137,12 @@ object GenerationErrorClassifier {
         if (status == 413) {
             return providerLimitResult(ProviderLimitKind.REQUEST_BODY, status)
         }
+        // HTTP 402 Payment Required is the unambiguous "no credits" signal —
+        // kept ahead of the throttle/quota checks so an empty balance is never
+        // reported as a rate limit.
+        if (status == 402) {
+            return providerLimitResult(ProviderLimitKind.OUT_OF_CREDITS, status)
+        }
         providerLimitFromEvidence(structuredCodes)?.let {
             return providerLimitResult(it, status)
         }
@@ -203,6 +214,18 @@ object GenerationErrorClassifier {
     private fun providerLimitFromEvidence(evidence: String): ProviderLimitKind? {
         if (evidence.isBlank()) return null
         return when {
+            // Checked before the quota/spending markers: an empty balance is a
+            // distinct cause from a usage cap, and OpenRouter's 402 body reads
+            // "Insufficient credits. Add more using …".
+            containsAny(
+                evidence,
+                "insufficient_credits",
+                "insufficient credit",
+                "not enough credit",
+                "no credits remaining",
+                "negative balance",
+                "payment required"
+            ) -> ProviderLimitKind.OUT_OF_CREDITS
             containsAny(
                 evidence,
                 "request_body_too_large",
@@ -265,7 +288,8 @@ object GenerationErrorClassifier {
             ProviderLimitKind.MODEL_CONTEXT,
             ProviderLimitKind.MODEL_INPUT -> GenErrorCode.M3
             ProviderLimitKind.RATE_OR_THROUGHPUT,
-            ProviderLimitKind.QUOTA_OR_SPENDING -> GenErrorCode.Q1
+            ProviderLimitKind.QUOTA_OR_SPENDING,
+            ProviderLimitKind.OUT_OF_CREDITS -> GenErrorCode.Q1
             ProviderLimitKind.UNIDENTIFIED -> GenErrorCode.U0
         }
         return GenErrorResult(code, status, kind)
@@ -346,7 +370,7 @@ object GenerationErrorClassifier {
             Regex("""status\s*code[ =:]*\s*(\d{3})""", RegexOption.IGNORE_CASE),
             Regex("""\bHTTP/?\d?(?:\.\d)?\s+(\d{3})\b"""),
             Regex(
-                """\b(\d{3})\s+(?:Unauthorized|Forbidden|Not Found|Bad Request|Too Many Requests|""" +
+                """\b(\d{3})\s+(?:Unauthorized|Payment Required|Forbidden|Not Found|Bad Request|Too Many Requests|""" +
                     """Payload Too Large|Request Entity Too Large|Internal Server Error|""" +
                     """Bad Gateway|Service Unavailable|Gateway Timeout)\b"""
             )
