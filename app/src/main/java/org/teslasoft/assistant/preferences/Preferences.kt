@@ -36,12 +36,15 @@ class Preferences private constructor(private var preferences: SharedPreferences
          * logs are deliberately NOT configurable and keep their own constants
          * in Logger. Floors are 1 (a value of 0 would erase the log on the next
          * write). Defaults match the diagnostics' pre-split behaviour (the old
-         * shared Performance Log's 2000-entry default exceeded the new 1000
-         * ceiling, so the fresh channels start at the ceiling-safe 1000/7).
+         * shared Performance Log's 2000-entry default exceeded the cap).
+         * The entry ceiling was lowered to 50 (owner ruling, July 31 2026):
+         * a hundreds/thousands-deep diagnostic log is unnecessary, so every
+         * configurable log — the three diagnostics plus the Provider Failure
+         * Log — keeps at most 50 entries.
          */
-        const val LOG_MAX_ENTRIES_LIMIT = 1000
+        const val LOG_MAX_ENTRIES_LIMIT = 50
         const val LOG_MAX_DAYS_LIMIT = 30
-        const val LOG_DEFAULT_MAX_ENTRIES = 1000
+        const val LOG_DEFAULT_MAX_ENTRIES = 50
         const val LOG_DEFAULT_MAX_DAYS = 7
 
         /** Clamp a max-entries value to [1, LOG_MAX_ENTRIES_LIMIT]. Pure, unit-tested. */
@@ -1693,6 +1696,35 @@ class Preferences private constructor(private var preferences: SharedPreferences
 
     fun setMemoryUsageLogMaxDays(value: Int) {
         putGlobalInt("memory_usage_log_max_days", coerceLogMaxDays(value), LOG_DEFAULT_MAX_DAYS)
+    }
+
+    // Provider Failure Log (owner ruling, July 31 2026): records the raw
+    // provider name and server error of failed replies so a consistently bad
+    // provider can be spotted. Same configurable retention as the diagnostics.
+    fun getProviderFailLogMaxEntries() : Int {
+        return coerceLogMaxEntries(getGlobalInt("provider_fail_log_max_entries", LOG_DEFAULT_MAX_ENTRIES))
+    }
+
+    fun setProviderFailLogMaxEntries(value: Int) {
+        putGlobalInt("provider_fail_log_max_entries", coerceLogMaxEntries(value), LOG_DEFAULT_MAX_ENTRIES)
+    }
+
+    fun getProviderFailLogMaxDays() : Int {
+        return coerceLogMaxDays(getGlobalInt("provider_fail_log_max_days", LOG_DEFAULT_MAX_DAYS))
+    }
+
+    fun setProviderFailLogMaxDays(value: Int) {
+        putGlobalInt("provider_fail_log_max_days", coerceLogMaxDays(value), LOG_DEFAULT_MAX_DAYS)
+    }
+
+    /** Whether failed replies are recorded to the Provider Failure Log. Off by
+     *  default; independent of the always-on in-chat error display. */
+    fun getLogChatFailures() : Boolean {
+        return getGlobalBoolean("log_chat_failures", false)
+    }
+
+    fun setLogChatFailures(state: Boolean) {
+        putGlobalBoolean("log_chat_failures", state, false)
     }
 
     /**
