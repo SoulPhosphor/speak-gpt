@@ -704,7 +704,7 @@ class Preferences private constructor(private var preferences: SharedPreferences
      * @return The assistant name value or "Assistant" if not found.
      */
     fun getAssistantName() : String {
-        return getString("assistant_name", "SpeakGPT")
+        return getString("assistant_name", "Assistant")
     }
 
     /**

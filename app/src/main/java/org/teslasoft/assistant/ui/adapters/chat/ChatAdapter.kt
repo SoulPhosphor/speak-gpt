@@ -892,14 +892,14 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         /** The name shown on an assistant message: the companion name stamped
          *  on the message when it was created (locked, so a later companion
          *  switch never rewrites it), else the chat's current companion name
-         *  for messages written before the stamp existed, else the stored
-         *  assistant name as a last resort. */
+         *  for messages written before the stamp existed, else the generic
+         *  "Assistant". Never the app name. */
         private fun resolveAssistantLabel(chatMessage: HashMap<String, Any>): String {
             val stamped = chatMessage[KEY_COMPANION_NAME]?.toString()
             if (!stamped.isNullOrBlank()) return stamped
             val live = companionLabel
             if (!live.isNullOrBlank()) return live
-            return preferences.getAssistantName()
+            return context.getString(R.string.chat_role_assistant)
         }
 
         /** Assistant-side precedence (profile-images-plan.md): Companion

@@ -5740,7 +5740,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         card[ChatAdapter.KEY_IMAGE_CONFIRMATION] = true
         card[ChatAdapter.KEY_IMAGE_CONFIRMATION_PROMPT] = prompt
         card[ChatAdapter.KEY_IMAGE_CONFIRMATION_COMPANION] =
-            preferences?.getAssistantName().orEmpty()
+            currentCompanionLabel().ifBlank { getString(R.string.chat_role_assistant) }
         messages.add(card)
         adapter?.notifyItemInserted(messages.size - 1)
         updateMessagesSelectionProjection()
@@ -5776,7 +5776,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             shouldPronounce,
             getString(
                 R.string.image_gen_spoken_announcement,
-                preferences?.getAssistantName().orEmpty()
+                currentCompanionLabel().ifBlank { getString(R.string.chat_role_assistant) }
             )
         )
         try {
