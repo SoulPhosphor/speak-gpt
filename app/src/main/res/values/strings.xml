@@ -429,6 +429,7 @@
     <string name="title_performance_log">Performance Log</string>
     <string name="title_whisper_perf_log">Whisper Performance Log</string>
     <string name="title_memory_usage_log">Memory Usage Log</string>
+    <string name="title_provider_fail_log">Provider Failure Log</string>
     <!-- Per-log retention fields (Alerts, Errors & Logs), owner spec July 23 2026. -->
     <string name="label_max_logs_saved">Maximum Logs Saved</string>
     <string name="label_max_days_saved">Maximum Days Saved</string>
@@ -1134,6 +1135,8 @@
          from the Voice Debug and Error logs so they stay readable). -->
     <string name="whisper_perf_logging_title">Whisper performance logging</string>
     <string name="whisper_perf_logging_desc">Write one line per on-device transcription to the Performance Log: how long the recording was, how long the model took to load, and how long it took to transcribe — plus a snapshot of memory use. Off by default; turn on to find out why Whisper is suddenly slow.</string>
+    <string name="tile_log_chat_failures_title">Log Chat Failures</string>
+    <string name="tile_log_chat_failures_desc">Save each failed reply\'s provider and the raw server error to the Provider Failure Log. This does not change what appears in chat — failures always show there. Off by default.</string>
     <string name="memory_usage_logging_title">Memory usage logging</string>
     <string name="memory_usage_logging_desc">Write the app\'s memory use to the Performance Log about once a minute (and whenever the system asks the app to free memory). Off by default; leave it on across a long session to spot a memory leak — a steadily rising figure is the tell-tale sign.</string>
 

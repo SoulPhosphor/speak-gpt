@@ -79,6 +79,11 @@ class AlertDebugMenuActivity : FragmentActivity() {
     private var fieldWhisperMaxDays: EditText? = null
     private var fieldMemUsageMaxLogs: EditText? = null
     private var fieldMemUsageMaxDays: EditText? = null
+    // Provider Failure Log (owner ruling, July 31 2026).
+    private var switchLogChatFailures: MaterialSwitch? = null
+    private var fieldProviderFailMaxLogs: EditText? = null
+    private var fieldProviderFailMaxDays: EditText? = null
+    private var rowProviderFailLog: LinearLayout? = null
     // Image generation logs (image-generation-rebuild-plan.md §13): the two
     // recording toggles and the success log's own retention pair, where
     // ZERO means unlimited (only these two fields — never the error logs).
@@ -125,6 +130,10 @@ class AlertDebugMenuActivity : FragmentActivity() {
         fieldWhisperMaxDays = findViewById(R.id.field_whisper_max_days)
         fieldMemUsageMaxLogs = findViewById(R.id.field_memusage_max_logs)
         fieldMemUsageMaxDays = findViewById(R.id.field_memusage_max_days)
+        switchLogChatFailures = findViewById(R.id.switch_log_chat_failures)
+        fieldProviderFailMaxLogs = findViewById(R.id.field_provider_fail_max_logs)
+        fieldProviderFailMaxDays = findViewById(R.id.field_provider_fail_max_days)
+        rowProviderFailLog = findViewById(R.id.row_provider_fail_log)
         switchImageGenErrors = findViewById(R.id.switch_image_gen_errors)
         switchSuccessfulImageTracking = findViewById(R.id.switch_successful_image_tracking)
         fieldImageGenMaxInfo = findViewById(R.id.field_image_gen_max_info)
@@ -179,6 +188,10 @@ class AlertDebugMenuActivity : FragmentActivity() {
         fieldMemUsageMaxLogs?.setText(p.getMemoryUsageLogMaxEntries().toString())
         fieldMemUsageMaxDays?.setText(p.getMemoryUsageLogMaxDays().toString())
 
+        switchLogChatFailures?.isChecked = p.getLogChatFailures()
+        fieldProviderFailMaxLogs?.setText(p.getProviderFailLogMaxEntries().toString())
+        fieldProviderFailMaxDays?.setText(p.getProviderFailLogMaxDays().toString())
+
         switchImageGenErrors?.isChecked = p.getImageGenErrorLogging()
         switchSuccessfulImageTracking?.isChecked = p.getSuccessfulImageTracking()
         fieldImageGenMaxInfo?.setText(p.getImageGenLogMaxEntries().toString())
@@ -225,6 +238,21 @@ class AlertDebugMenuActivity : FragmentActivity() {
             { p.getMemoryUsageLogMaxDays() }, { v -> p.setMemoryUsageLogMaxDays(v) },
             R.string.dialog_max_days_exceeded
         )
+
+        switchLogChatFailures?.setOnCheckedChangeListener { _, checked -> p.setLogChatFailures(checked) }
+        wireRetentionField(
+            fieldProviderFailMaxLogs, Preferences.LOG_MAX_ENTRIES_LIMIT,
+            { p.getProviderFailLogMaxEntries() }, { v -> p.setProviderFailLogMaxEntries(v) },
+            R.string.dialog_max_logs_exceeded
+        )
+        wireRetentionField(
+            fieldProviderFailMaxDays, Preferences.LOG_MAX_DAYS_LIMIT,
+            { p.getProviderFailLogMaxDays() }, { v -> p.setProviderFailLogMaxDays(v) },
+            R.string.dialog_max_days_exceeded
+        )
+        rowProviderFailLog?.setOnClickListener {
+            startActivity(Intent(this, LogsActivity::class.java).putExtra("type", "provider_fail").putExtra("chatId", chatId))
+        }
 
         rowAudioDebugging?.setOnClickListener {
             startActivity(Intent(this, AudioDebuggingActivity::class.java).putExtra("chatId", chatId))
