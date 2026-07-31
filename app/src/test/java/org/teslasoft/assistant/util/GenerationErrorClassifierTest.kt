@@ -118,6 +118,27 @@ class GenerationErrorClassifierTest {
         )
     }
 
+    @Test fun http402IsOutOfCredits() {
+        // HTTP 402 Payment Required is the unambiguous "no credits" case and
+        // must never be reported as a rate limit or a generic quota cap.
+        val result = GenerationErrorClassifier.classify(
+            RuntimeException("Client request invalid: 402 Payment Required")
+        )
+        assertEquals(ProviderLimitKind.OUT_OF_CREDITS, result.providerLimit)
+        assertEquals(402, result.httpStatus)
+    }
+
+    @Test fun insufficientCreditsBodyIsOutOfCreditsNotRate() {
+        // OpenRouter's out-of-credits body, whose status is not cleanly scraped,
+        // is still separated from a 429 throttle by its text.
+        assertEquals(
+            ProviderLimitKind.OUT_OF_CREDITS,
+            GenerationErrorClassifier.classify(
+                RuntimeException("""{"error":{"code":402,"message":"Insufficient credits. Add more using https://openrouter.ai/credits"}}""")
+            ).providerLimit
+        )
+    }
+
     @Test fun structuredCodeWinsOverConflictingExceptionProse() {
         val result = GenerationErrorClassifier.classify(
             StructuredProviderException(

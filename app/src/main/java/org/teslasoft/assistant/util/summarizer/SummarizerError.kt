@@ -164,7 +164,8 @@ object SummarizerErrorClassifier {
             ProviderLimitKind.MODEL_INPUT,
             ProviderLimitKind.REQUEST_BODY -> return SummarizerErrorCategory.REQUEST_TOO_LARGE
             ProviderLimitKind.RATE_OR_THROUGHPUT -> return SummarizerErrorCategory.RATE_LIMIT
-            ProviderLimitKind.QUOTA_OR_SPENDING -> return SummarizerErrorCategory.QUOTA
+            ProviderLimitKind.QUOTA_OR_SPENDING,
+            ProviderLimitKind.OUT_OF_CREDITS -> return SummarizerErrorCategory.QUOTA
             ProviderLimitKind.UNIDENTIFIED, null -> { /* fall through */ }
         }
         // A 403 is a permission refusal even when the shared classifier could

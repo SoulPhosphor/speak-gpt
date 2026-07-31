@@ -60,6 +60,8 @@ fun GenErrorResult.providerLimitMessage(context: Context): String? =
             context.getString(R.string.provider_rate_limit)
         ProviderLimitKind.QUOTA_OR_SPENDING ->
             context.getString(R.string.provider_quota_limit)
+        ProviderLimitKind.OUT_OF_CREDITS ->
+            context.getString(R.string.provider_out_of_credits)
         ProviderLimitKind.UNIDENTIFIED ->
             context.getString(R.string.provider_unknown_limit)
         null -> null

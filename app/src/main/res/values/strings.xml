@@ -766,8 +766,9 @@
     <string name="provider_context_overflow">The provider rejected the complete request because it exceeded the selected model’s context limit. Nothing was shortened or retried. Remove content or attachments, start a new chat, or choose a model with a larger context window.</string>
     <string name="provider_input_limit">The provider rejected the request because the complete input exceeded the selected model’s input limit. Nothing was shortened or retried. Remove content or attachments, start a new chat, or choose another model.</string>
     <string name="provider_request_body_limit">The server rejected the request because the request body was larger than it accepts. This is a server request-size limit, not necessarily the model’s context limit. Nothing was shortened or retried.</string>
-    <string name="provider_rate_limit">The provider rejected the request because it exceeded the account’s current rate or token-throughput limit. This is not a document or context-size limit. Nothing was shortened or retried. Try again later or send a smaller request.</string>
-    <string name="provider_quota_limit">The provider rejected the request because the account’s quota or spending limit has been reached. This is not a document-size limit. Nothing was shortened or retried. Check the provider account’s usage and billing limits.</string>
+    <string name="provider_rate_limit">The reply failed because the service hit a rate or throughput limit. Wait a moment and retry, or switch models.</string>
+    <string name="provider_quota_limit">The reply failed because the account reached its usage or spending limit on the service. Check the account\'s usage and billing limits.</string>
+    <string name="provider_out_of_credits">The reply failed because the service reports the account is out of credits. Add credits with the service, then retry.</string>
     <string name="provider_unknown_limit">The server rejected the request but did not provide enough information to identify which limit was exceeded. Nothing was shortened or retried. Technical details were saved to the Error Log.</string>
     <string name="label_debug">Debug</string>
     <string name="label_permission_denied">Permission denied</string>
