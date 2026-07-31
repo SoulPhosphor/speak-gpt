@@ -440,7 +440,21 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             btnCopy.setImageResource(R.drawable.ic_copy)
             btnCopy.setOnClickListener {
                 val clipboard: ClipboardManager = context.getSystemService(FragmentActivity.CLIPBOARD_SERVICE) as ClipboardManager
-                val clip = ClipData.newPlainText("response", chatMessage["message"].toString())
+                val messageText = chatMessage["message"].toString()
+                // The failed/interrupted/stopped marker (and, when "Show chat
+                // errors" is on, the coded error beneath it) lives in a separate
+                // TextView from the reply body. Fold it into the copied text so
+                // sharing a failure captures the exact wording shown on screen,
+                // not just whatever partial reply text preceded it.
+                val markerText = statusMarker
+                    ?.takeIf { it.visibility == View.VISIBLE }
+                    ?.text?.toString()?.takeIf { it.isNotBlank() }
+                val fullText = when {
+                    markerText == null -> messageText
+                    messageText.isBlank() -> markerText
+                    else -> "$messageText\n\n$markerText"
+                }
+                val clip = ClipData.newPlainText("response", fullText)
                 clipboard.setPrimaryClip(clip)
                 Toast.makeText(context, context.getString(R.string.label_copy), Toast.LENGTH_SHORT).show()
             }
