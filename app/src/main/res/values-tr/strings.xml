@@ -35,7 +35,7 @@
     <string name="setting_change_openai_api_key">API anahtarını değiştir</string>
     <string name="setting_manage_account_desc">API hesabınızı yönetmek için dokunun</string>
     <string name="setting_account">Hesap</string>
-    <string name="setting_default_desc">SpeakGPT\'yi varsayılan asistanınız yapın</string>
+    <string name="setting_default_desc">Bu uygulamayı varsayılan asistanınız yapın</string>
     <string name="setting_default">Asistan ayarları</string>
     <string name="setting_lang_desc">Ses çıkışı için bir dil ayarlayın</string>
     <string name="setting_lang">Asistan dili</string>
@@ -131,7 +131,7 @@
     <string name="setting_auto_language_detect">Otomatik Dil Tespiti</string>
     <string name="setting_auto_language_detect_desc">TTS Dilini Sohbet Yanıtından Ayarla</string>
     <string name="setting_function_calling">Fonksiyon çağırma</string>
-    <string name="setting_function_calling_desc">SpeakGPT deneysel özelliklerini etkinleştirin</string>
+    <string name="setting_function_calling_desc">Deneysel özellikleri etkinleştirin</string>
     <string name="setting_cmd_desc">Sohbet slash komutlarını etkinleştirin, örneğin /imagine</string>
     <string name="setting_cmd">Sohbet slash komutları</string>
     <string name="assistant_action_menu">Bu metinle ne yapmak istiyorsunuz?</string>
@@ -283,7 +283,7 @@
     <string name="tile_api_endpoint_title">API uç noktası</string>
     <string name="tile_api_endpoint_desc">Bu özellik, API uç noktanızı ayarlamanıza olanak tanır.</string>
     <string name="tile_autosend_title">Otomatik gönder</string>
-    <string name="tile_autosend_desc">Bu özellik, mesajların otomatik gönderimini etkinleştirmenize veya devre dışı bırakmanıza olanak tanır. Otomatik gönderi etkinleştirildiğinde, SpeakGPT dinleme bittiğinde \'Gönder\' düğmesine basmadan mesajları otomatik olarak gönderecektir.</string>
+    <string name="tile_autosend_desc">Bu özellik, mesajların otomatik gönderimini etkinleştirmenize veya devre dışı bırakmanıza olanak tanır. Otomatik gönderi etkinleştirildiğinde, uygulama dinleme bittiğinde \'Gönder\' düğmesine basmadan mesajları otomatik olarak gönderecektir.</string>
     <string name="tile_tts_voice_title">TTS Sesi</string>
     <string name="tile_tts_voice_desc">Bu özellik, TTS sesinizi ayarlamanıza olanak tanır.</string>
     <string name="tile_voice_lang_title">Ses dili</string>
@@ -300,9 +300,9 @@
     <string name="tile_google_stt">Google STT kullanılıyor</string>
     <string name="tile_stt_desc">Bu özellik, STT motorunu ayarlamanıza olanak tanır. Whisper ücretlidir.</string>
     <string name="tile_silent_mode_title">Sessiz mod</string>
-    <string name="tile_silent_mode_desc">Bu özellik, SpeakGPT\'nin yanıtları asla telaffuz etmemesini sağlar.</string>
+    <string name="tile_silent_mode_desc">Bu özellik, uygulamanın yanıtları asla telaffuz etmemesini sağlar.</string>
     <string name="tile_always_speak_title">Her zaman konuş</string>
-    <string name="tile_always_speak_desc">Bu özellik, SpeakGPT\'nin yanıtları her zaman telaffuz etmesini sağlar.</string>
+    <string name="tile_always_speak_desc">Bu özellik, uygulamanın yanıtları her zaman telaffuz etmesini sağlar.</string>
     <string name="tile_text_model_title">Metin oluşturma modeli</string>
     <string name="tile_text_generation_model_desc">Bu özellik, metin oluşturma modelini ve model parametrelerini ayarlamanıza olanak tanır.</string>
     <string name="tile_activation_prompt_title">Aktivasyon istemi</string>
@@ -316,14 +316,14 @@
     <string name="tile_sh_title">Slash komutları</string>
     <string name="tile_sh_desc">Bu özellik, slash komutlarını etkinleştirmenize olanak tanır. Lütfen bu özelliğin deneysel ve kararsız olduğunu unutmayın. Örnek: /imagine bir kedi.</string>
     <string name="tile_desktop_mode_title">Masaüstü modu</string>
-    <string name="tile_desktop_mode_desc">Bu özellik, masaüstü modunu etkinleştirmenize olanak tanır. Masaüstü modu etkinleştirildiğinde, SpeakGPT klavye kısayollarını kullanır ve mesaj girişi otomatik olarak odaklanır. Mesaj göndermek için \'Enter\'a, yeni satır eklemek için \'Shift + Enter\'a ve sohbeti kapatmak için \'Shift+Esc\'ye basın. Telefonlarda, her sohbet açılışında klavyenin açılmasını istemiyorsanız önerilmez.</string>
+    <string name="tile_desktop_mode_desc">Bu özellik, masaüstü modunu etkinleştirmenize olanak tanır. Masaüstü modu etkinleştirildiğinde, uygulama klavye kısayollarını kullanır ve mesaj girişi otomatik olarak odaklanır. Mesaj göndermek için \'Enter\'a, yeni satır eklemek için \'Shift + Enter\'a ve sohbeti kapatmak için \'Shift+Esc\'ye basın. Telefonlarda, her sohbet açılışında klavyenin açılmasını istemiyorsanız önerilmez.</string>
     <string name="tile_new_ui_title">Yeni arayüz</string>
     <string name="tile_new_ui_desc">Bu özellik, yeni deneysel arayüzü etkinleştirmenize olanak tanır. Yeni arayüz daha kompakt ve sezgiseldir.</string>
     <string name="tile_about_app_title">Uygulama hakkında</string>
-    <string name="tile_about_app_desc">Bu özellik, SpeakGPT hakkında sayfayı açmanıza olanak tanır.</string>
+    <string name="tile_about_app_desc">Bu özellik, hakkında sayfasını açmanıza olanak tanır.</string>
     <string name="tile_documentation_title">Dokümantasyon</string>
     <string name="tile_documentation_subtitle">Dokümantasyonu aç</string>
-    <string name="tile_documentation_desc">Bu özellik, SpeakGPT dokümantasyonunu açmanıza olanak tanır.</string>
+    <string name="tile_documentation_desc">Bu özellik, dokümantasyonu açmanıza olanak tanır.</string>
     <string name="tile_amoled_mode_title">AMOLED modu</string>
     <string name="tile_amoled_mode_desc">Bu özellik, desteklenen ekranlar için AMOLED modunu etkinleştirmenize olanak tanır. Pil tasarrufu sağlayabilir. AMOLED modu yalnızca karanlık temada mevcuttur.</string>
     <string name="tile_crash_log_title">Çökme günlüğü</string>
@@ -331,12 +331,12 @@
     <string name="tile_events_log_title">Olay günlüğü</string>
     <string name="tile_events_log_desc">Bu özellik, olay günlüğünü görüntülemenize olanak tanır. Bu günlüğü toplamaz, hassas bilgiler içerebilir. Bir hata bildirmek istiyorsanız bu günlüğü kullanın.</string>
     <string name="tile_autosave_title">Sohbetleri otomatik kaydet</string>
-    <string name="tile_autosave_desc">Bu özellik, asistan penceresinde sohbetleri otomatik kaydetmeyi etkinleştirmenize olanak tanır. Sohbetleri otomatik kaydetme etkinleştirildiğinde, SpeakGPT tüm sohbetleri cihaz depolamasına kaydedecektir.</string>
+    <string name="tile_autosave_desc">Bu özellik, asistan penceresinde sohbetleri otomatik kaydetmeyi etkinleştirmenize olanak tanır. Sohbetleri otomatik kaydetme etkinleştirildiğinde, uygulama tüm sohbetleri cihaz depolamasına kaydedecektir.</string>
     <string name="tile_show_chat_errors_title">Sohbet hatalarını göster</string>
     <string name="tile_show_chat_errors_desc">Bu özellik, sohbet hatalarını etkinleştirmenize olanak tanır. Sohbet hataları etkinleştirildiğinde, SpeakGPT oluşan hataları sohbette gösterecektir.</string>
     <string name="on">Açık</string>
     <string name="off">Kapalı</string>
-    <string name="tile_about_app_subtitle">SpeakGPT Hakkında</string>
+    <string name="tile_about_app_subtitle">Uygulama Hakkında</string>
     <string name="cancel">İptal</string>
     <string name="btn_reset">Sıfırla</string>
     <string name="label_provided_by">Tarafından sağlandı:</string>
@@ -362,8 +362,8 @@
     <string name="label_permission_denied">İzin reddedildi</string>
     <string name="label_use_camera">Kamerayı kullan</string>
     <string name="label_use_microphone">Mikrofonu kullan</string>
-    <string name="msg_use_camera">SpeakGPT, bu uygulamadaki kameradan doğrudan çekilen fotoğraflarınızı kullanarak ChatGPT Vision ile etkileşime girmenize olanak tanır. GPT Vision için kamerayı etkinleştirmek için lütfen kameramızı kullanmamıza izin verin. Kamera izni olmadan galerinizden mevcut resimlerinizi seçebilirsiniz. Kamera erişimine izin verilsin mi?</string>
-    <string name="msg_use_microphone">SpeakGPT, ses aktivasyonu yoluyla ChatGPT ile etkileşime girmenize olanak tanır. Ses aktivasyonunu etkinleştirmek için lütfen bu uygulamanın cihaz mikrofonunuzu kullanmasına izin verin. Mikrofon erişimine izin verilsin mi?</string>
+    <string name="msg_use_camera">Bu uygulama, bu uygulamadaki kameradan doğrudan çekilen fotoğraflarınızı kullanarak ChatGPT Vision ile etkileşime girmenize olanak tanır. GPT Vision için kamerayı etkinleştirmek için lütfen kameramızı kullanmamıza izin verin. Kamera izni olmadan galerinizden mevcut resimlerinizi seçebilirsiniz. Kamera erişimine izin verilsin mi?</string>
+    <string name="msg_use_microphone">Bu uygulama, ses aktivasyonu yoluyla ChatGPT ile etkileşime girmenize olanak tanır. Ses aktivasyonunu etkinleştirmek için lütfen bu uygulamanın cihaz mikrofonunuzu kullanmasına izin verin. Mikrofon erişimine izin verilsin mi?</string>
     <string name="btn_allow">İzin ver</string>
     <string name="btn_no_thanks">Hayır, teşekkürler</string>
     <string name="msg_camera_denied">Uygulama kamera erişimine sahip olmadığı için bu özelliği kullanamazsınız.</string>
@@ -397,7 +397,7 @@
     <string name="msg_delete_message">Bu mesajı silmek istediğinizden emin misiniz?</string>
     <string name="btn_post">Yayınla</string>
     <string name="msg_error_calculating_cost">Maliyet: Maliyet hesaplama hatası. Lütfen bağlantınızı kontrol edin.</string>
-    <string name="msg_cost_not_enough_data"><![CDATA[Maliyet: <SpeakGPT, bu model için maliyeti hesaplamak için yeterli veriye sahip değil. Dokümantasyonu arayın ve yukarıdaki kullanıma dayanarak maliyeti manuel olarak hesaplayın.>]]></string>
+    <string name="msg_cost_not_enough_data"><![CDATA[Maliyet: <Bu uygulama, bu model için maliyeti hesaplamak için yeterli veriye sahip değil. Dokümantasyonu arayın ve yukarıdaki kullanıma dayanarak maliyeti manuel olarak hesaplayın.>]]></string>
     <string name="cost_loading" tools:ignore="TypographyEllipsis">Maliyet: Yükleniyor...</string>
     <string formatted="false" name="cost_counter_usage">Kullanım (token): %s giriş / %s çıkış</string>
     <string name="cat_all_new">Tüm kategoriler</string>

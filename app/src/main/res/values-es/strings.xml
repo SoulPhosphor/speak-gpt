@@ -35,7 +35,7 @@
     <string name="setting_change_openai_api_key">Cambiar clave API</string>
     <string name="setting_manage_account_desc">Toca para gestionar tu cuenta API</string>
     <string name="setting_account">Cuenta</string>
-    <string name="setting_default_desc">Haz de SpeakGPT tu asistente predeterminado</string>
+    <string name="setting_default_desc">Haz de la aplicación tu asistente predeterminado</string>
     <string name="setting_default">Configuración del asistente</string>
     <string name="setting_lang_desc">Establecer un idioma para la salida de voz</string>
     <string name="setting_lang">Idioma del asistente</string>
@@ -132,7 +132,7 @@
     <string name="setting_auto_language_detect">Detección automática de idioma</string>
     <string name="setting_auto_language_detect_desc">Configurar idioma de TTS a partir de la respuesta del chat</string>
     <string name="setting_function_calling">Llamada de función</string>
-    <string name="setting_function_calling_desc">Habilitar las características experimentales de SpeakGPT</string>
+    <string name="setting_function_calling_desc">Habilitar las características experimentales</string>
     <string name="setting_cmd_desc">Habilitar comandos de barra del chat como /imagine</string>
     <string name="setting_cmd">Comandos de barra del chat</string>
     <string name="assistant_action_menu">¿Qué quieres hacer con este texto?</string>
@@ -286,7 +286,7 @@
     <string name="tile_api_endpoint_title">Punto final de API</string>
     <string name="tile_api_endpoint_desc">Esta función te permite configurar tu punto final de API.</string>
     <string name="tile_autosend_title">Envío automático</string>
-    <string name="tile_autosend_desc">Esta función te permite habilitar o deshabilitar el envío automático de mensajes. Cuando el envío automático está activado, SpeakGPT enviará mensajes automáticamente sin necesidad de presionar el botón \'Enviar\' una vez que se termine de escuchar.</string>
+    <string name="tile_autosend_desc">Esta función te permite habilitar o deshabilitar el envío automático de mensajes. Cuando el envío automático está activado, la aplicación enviará mensajes automáticamente sin necesidad de presionar el botón \'Enviar\' una vez que se termine de escuchar.</string>
     <string name="tile_tts_voice_title">Voz TTS</string>
     <string name="tile_tts_voice_desc">Esta función te permite configurar tu voz TTS.</string>
     <string name="tile_voice_lang_title">Idioma de voz</string>
@@ -303,9 +303,9 @@
     <string name="tile_google_stt">Se usa STT de Google</string>
     <string name="tile_stt_desc">Esta función te permite configurar el motor STT. Whisper es de pago.</string>
     <string name="tile_silent_mode_title">Modo silencioso</string>
-    <string name="tile_silent_mode_desc">Esta función te permite configurar SpeakGPT para que nunca pronuncie respuestas.</string>
+    <string name="tile_silent_mode_desc">Esta función te permite configurar la aplicación para que nunca pronuncie respuestas.</string>
     <string name="tile_always_speak_title">Hablar siempre</string>
-    <string name="tile_always_speak_desc">Esta función te permite configurar SpeakGPT para que siempre pronuncie respuestas.</string>
+    <string name="tile_always_speak_desc">Esta función te permite configurar la aplicación para que siempre pronuncie respuestas.</string>
     <string name="tile_text_model_title">Modelo de generación de texto</string>
     <string name="tile_text_generation_model_desc">Esta función te permite configurar el modelo de generación de texto así como los parámetros del modelo.</string>
     <string name="tile_activation_prompt_title">Mensaje de activación</string>
@@ -319,14 +319,14 @@
     <string name="tile_sh_title">Comandos slash</string>
     <string name="tile_sh_desc">Esta función te permite habilitar comandos slash. Ten en cuenta que esta función es experimental e inestable. Ejemplo: /imagina un gato.</string>
     <string name="tile_desktop_mode_title">Modo de escritorio</string>
-    <string name="tile_desktop_mode_desc">Esta función te permite habilitar el modo de escritorio. Cuando el modo de escritorio está activado, SpeakGPT usará atajos de teclado y el ingreso de mensajes se enfocará automáticamente. Presiona \'Enter\' para enviar mensaje, \'Shift + Enter\' para agregar una nueva línea y \'Shift+Esc\' para cerrar el chat. No se recomienda usar en teléfonos a menos que desees que el teclado se abra cada vez que abras el chat.</string>
+    <string name="tile_desktop_mode_desc">Esta función te permite habilitar el modo de escritorio. Cuando el modo de escritorio está activado, la aplicación usará atajos de teclado y el ingreso de mensajes se enfocará automáticamente. Presiona \'Enter\' para enviar mensaje, \'Shift + Enter\' para agregar una nueva línea y \'Shift+Esc\' para cerrar el chat. No se recomienda usar en teléfonos a menos que desees que el teclado se abra cada vez que abras el chat.</string>
     <string name="tile_new_ui_title">Nueva interfaz de usuario</string>
     <string name="tile_new_ui_desc">Esta función te permite habilitar una nueva interfaz de usuario experimental. La nueva UI es más compacta e intuitiva.</string>
     <string name="tile_about_app_title">Acerca de la aplicación</string>
-    <string name="tile_about_app_desc">Esta función te permite abrir la página sobre SpeakGPT.</string>
+    <string name="tile_about_app_desc">Esta función te permite abrir la página de información.</string>
     <string name="tile_documentation_title">Documentación</string>
     <string name="tile_documentation_subtitle">Abrir documentación</string>
-    <string name="tile_documentation_desc">Esta función te permite abrir la documentación de SpeakGPT.</string>
+    <string name="tile_documentation_desc">Esta función te permite abrir la documentación.</string>
     <string name="tile_amoled_mode_title">Modo AMOLED</string>
     <string name="tile_amoled_mode_desc">Esta función te permite activar el modo AMOLED para pantallas compatibles. Puede ahorrar batería significativamente. El modo AMOLED solo está disponible en el tema oscuro.</string>
     <string name="tile_crash_log_title">Registro de errores</string>
@@ -334,12 +334,12 @@
     <string name="tile_events_log_title">Registro de eventos</string>
     <string name="tile_events_log_desc">Esta función te permite ver el registro de eventos. No recopilamos este registro ya que puede contener información sensible. Usa este registro si deseas reportar un error.</string>
     <string name="tile_autosave_title">Auto-guardar chats</string>
-    <string name="tile_autosave_desc">Esta función te permite habilitar el auto-guardado de chats en la ventana del asistente. Cuando el auto-guardado de chats está habilitado, SpeakGPT guardará todos los chats en el almacenamiento del dispositivo.</string>
+    <string name="tile_autosave_desc">Esta función te permite habilitar el auto-guardado de chats en la ventana del asistente. Cuando el auto-guardado de chats está habilitado, la aplicación guardará todos los chats en el almacenamiento del dispositivo.</string>
     <string name="tile_show_chat_errors_title">Mostrar errores de chat</string>
     <string name="tile_show_chat_errors_desc">Esta función te permite habilitar errores de chat. Cuando los errores de chat están habilitados, SpeakGPT mostrará errores en el chat si ocurren.</string>
     <string name="on">Encendido</string>
     <string name="off">Apagado</string>
-    <string name="tile_about_app_subtitle">Acerca de SpeakGPT</string>
+    <string name="tile_about_app_subtitle">Acerca de la aplicación</string>
     <string name="cancel">Cancelar</string>
     <string name="btn_reset">Restablecer</string>
     <string name="label_provided_by">Proporcionado por:</string>
@@ -365,8 +365,8 @@
     <string name="label_permission_denied">Permiso denegado</string>
     <string name="label_use_camera">Usar cámara</string>
     <string name="label_use_microphone">Usar micrófono</string>
-    <string name="msg_use_camera">SpeakGPT te permite interactuar con ChatGPT Vision utilizando tus fotos tomadas directamente desde la cámara de esta aplicación. Para habilitar la cámara para GPT Vision, por favor permítenos usar tu cámara. Aún puedes seleccionar tus imágenes existentes desde la galería sin permiso de cámara. ¿Permitir acceso a la cámara?</string>
-    <string name="msg_use_microphone">SpeakGPT te permite interactuar con ChatGPT mediante activación por voz. Para habilitar la activación por voz, por favor permite que esta aplicación use el micrófono de tu dispositivo. ¿Permitir acceso al micrófono?</string>
+    <string name="msg_use_camera">La aplicación te permite interactuar con ChatGPT Vision utilizando tus fotos tomadas directamente desde la cámara de esta aplicación. Para habilitar la cámara para GPT Vision, por favor permítenos usar tu cámara. Aún puedes seleccionar tus imágenes existentes desde la galería sin permiso de cámara. ¿Permitir acceso a la cámara?</string>
+    <string name="msg_use_microphone">La aplicación te permite interactuar con ChatGPT mediante activación por voz. Para habilitar la activación por voz, por favor permite que esta aplicación use el micrófono de tu dispositivo. ¿Permitir acceso al micrófono?</string>
     <string name="btn_allow">Permitir</string>
     <string name="btn_no_thanks">No, gracias</string>
     <string name="msg_camera_denied">No puedes usar esta función porque la aplicación no tiene acceso a la cámara.</string>
@@ -400,7 +400,7 @@
     <string name="msg_delete_message">¿Estás seguro de que quieres eliminar este mensaje?</string>
     <string name="btn_post">Publicar</string>
     <string name="msg_error_calculating_cost">Coste: Error al calcular el coste. Por favor, verifica tu conexión.</string>
-    <string name="msg_cost_not_enough_data"><![CDATA[Coste: <SpeakGPT no tiene suficientes datos para calcular el coste para este modelo. Consulta la documentación y calcula el coste manualmente basándote en el uso anterior.>]]></string>
+    <string name="msg_cost_not_enough_data"><![CDATA[Coste: <La aplicación no tiene suficientes datos para calcular el coste para este modelo. Consulta la documentación y calcula el coste manualmente basándote en el uso anterior.>]]></string>
     <string name="cost_loading" tools:ignore="TypographyEllipsis">Coste: Cargando...</string>
     <string formatted="false"  name="cost_counter_usage">Uso (tokens): %s entrada / %s salida</string>
     <string name="cat_all_new">Todas las categorías</string>
