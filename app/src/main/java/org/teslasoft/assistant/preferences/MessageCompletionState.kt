@@ -104,6 +104,41 @@ object MessageCompletionState {
     fun isIncomplete(state: String?): Boolean = !isComplete(state)
 
     /**
+     * A reply that has come to rest in a terminal non-complete state — failed,
+     * stopped, interrupted, or any unrecognized non-streaming value. Excludes
+     * [STREAMING] (still generating) and complete/legacy replies. This is the
+     * "a real reply attempt has finished and it did not succeed" test.
+     */
+    fun isTerminalFailure(state: String?): Boolean =
+        isIncomplete(state) && state != STREAMING
+
+    /**
+     * Whether a chat should show the "no successful reply yet" error avatar in
+     * place of its Companion picture / glyph (owner ruling, July 31 2026).
+     *
+     * True when the conversation contains at least one assistant reply that
+     * ended in a terminal failure ([isTerminalFailure]) and NOT ONE completed
+     * reply ([isComplete]). A single completed reply anywhere clears it
+     * permanently: the first good reply hands the avatar back to the Companion
+     * even if a later reply in the same chat fails. A chat with only user
+     * messages, or one still streaming its very first reply, does not qualify.
+     *
+     * Only assistant replies are considered (`isBot`); the state lives under
+     * [KEY_STATE]. Pure Kotlin (no Android) so it is unit-testable on the JVM.
+     */
+    fun chatShowsErrorAvatar(messages: List<Map<String, Any?>>): Boolean {
+        var sawFailure = false
+        for (m in messages) {
+            val isBot = m["isBot"] == true || m["isBot"]?.toString() == "true"
+            if (!isBot) continue
+            val state = m[KEY_STATE]?.toString()
+            if (isComplete(state)) return false
+            if (isTerminalFailure(state)) sawFailure = true
+        }
+        return sawFailure
+    }
+
+    /**
      * The terminal state a stale on-disk state should be reconciled to at
      * load time, or null if the state needs no change. Only a still-open
      * [STREAMING] row is reconciled (to [INTERRUPTED]); every already-terminal

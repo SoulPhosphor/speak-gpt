@@ -1,0 +1,26 @@
+<!--
+     Self-contained "no successful reply" avatar badge: a solid red disc with
+     a white X. Fully opaque and full-bleed so it drops straight into an avatar
+     slot, replacing the Companion picture / glyph without any backing showing
+     through. Used on the chat-list row and the in-chat assistant avatar while
+     a conversation has only failed replies.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+    <path
+        android:fillColor="@color/light_red"
+        android:pathData="M24,24 m-24,0 a24,24 0 1,0 48,0 a24,24 0 1,0 -48,0 z" />
+    <path
+        android:strokeColor="@color/white"
+        android:strokeWidth="4.5"
+        android:strokeLineCap="round"
+        android:pathData="M16,16 L32,32" />
+    <path
+        android:strokeColor="@color/white"
+        android:strokeWidth="4.5"
+        android:strokeLineCap="round"
+        android:pathData="M32,16 L16,32" />
+</vector>

@@ -165,6 +165,27 @@ class Logger {
         }
 
         /**
+         * Provider Failure Log — the raw provider name and the server's own
+         * error for a failed reply, written only while "Log Chat Failures" is
+         * on. Deliberately carries NO app interpretation of the error (owner
+         * ruling, July 31 2026): a consistently bad provider must be
+         * identifiable without our reading of the failure muddying the record.
+         * Written via [logProviderFailure] in the owner-specified shape, not
+         * through [log].
+         */
+        fun getProviderFailLog(context: Context) : String {
+            return EncryptedPreferences.getEncryptedPreference(context, "logs", "provider_fail")
+        }
+
+        private fun setProviderFailLog(context: Context, log: String) {
+            EncryptedPreferences.setEncryptedPreference(context, "logs", "provider_fail", log)
+        }
+
+        fun clearProviderFailLog(context: Context) {
+            setProviderFailLog(context, "")
+        }
+
+        /**
          * Image Generation Errors log (image-generation-rebuild-plan.md §13,
          * owner ruling 2026-07-29): silent fallbacks, conversation-model tool
          * mistakes, automatic tool-capability changes, and failure
@@ -353,6 +374,30 @@ class Logger {
             }
         }
 
+        /**
+         * Append one entry to the Provider Failure Log, in the owner-specified
+         * shape (July 31 2026):
+         *
+         *     [2026-07-31 8:42 PM]
+         *     Provider: <name>
+         *     Provider Error: <verbatim server error>
+         *
+         * Two blank lines separate consecutive entries. No app interpretation
+         * is written — only the raw provider name and the server's own error.
+         * Trimmed by whole entries to the log's configurable retention. Called
+         * off the main thread by the failure handler.
+         */
+        fun logProviderFailure(context: Context, provider: String, providerError: String) {
+            val timestamp = LocalDateTime.now().format(LOG_TIME_FORMAT)
+            val entry = "[$timestamp]\nProvider: $provider\nProvider Error: $providerError\n\n\n"
+            val p = Preferences.getPreferences(context, "")
+            val log = trimByEntries(
+                "${getProviderFailLog(context)}$entry",
+                p.getProviderFailLogMaxEntries(), p.getProviderFailLogMaxDays().toLong()
+            )
+            setProviderFailLog(context, log)
+        }
+
         private val LOG_TIME_FORMAT: DateTimeFormatter =
             DateTimeFormatter.ofPattern("yyyy-MM-dd h:mm a")
 
@@ -389,8 +434,11 @@ class Logger {
         // lines and split correctly; such an old-format timestamp still fails
         // to parse against LOG_TIME_FORMAT below and is handled by the
         // existing "unparseable timestamp is kept" rule.
+        // The trailing lookahead accepts either a space (the "[ts] [tag] …"
+        // shape the standard log() writes) or a newline (the Provider Failure
+        // Log's "[ts]\nProvider: …" shape), so both split correctly by entry.
         private val ENTRY_HEADER =
-            Regex("""(?m)^\[(\d{4}-\d{2}-\d{2} \d{1,2}:\d{2}(?::\d{2})?(?: [AP]M)?)] """)
+            Regex("""(?m)^\[(\d{4}-\d{2}-\d{2} \d{1,2}:\d{2}(?::\d{2})?(?: [AP]M)?)\](?=[ \n])""")
 
         /**
          * Trim a stored log by **whole entries** — never by physical lines — so a

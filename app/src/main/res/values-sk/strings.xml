@@ -35,7 +35,7 @@
     <string name="setting_change_openai_api_key">Zmeniť API kľúč</string>
     <string name="setting_manage_account_desc">Kliknite pre správu vášho API účtu</string>
     <string name="setting_account">Účet</string>
-    <string name="setting_default_desc">Nastaviť SpeakGPT ako predvoleného asistenta</string>
+    <string name="setting_default_desc">Nastaviť túto aplikáciu ako predvoleného asistenta</string>
     <string name="setting_default">Nastavenia asistenta</string>
     <string name="setting_lang_desc">Nastaviť jazyk pre hlasový výstup</string>
     <string name="setting_lang">Jazyk asistenta</string>
@@ -130,7 +130,7 @@
     <string name="setting_auto_language_detect">Automatická detekcia jazyka</string>
     <string name="setting_auto_language_detect_desc">Nastavte jazyk TTS z odpovede chatu</string>
     <string name="setting_function_calling">Volanie funkcií</string>
-    <string name="setting_function_calling_desc">Povoliť experimentálne funkcie SpeakGPT</string>
+    <string name="setting_function_calling_desc">Povoliť experimentálne funkcie</string>
     <string name="setting_cmd_desc">Povoliť príkazy chatu ako /imagine</string>
     <string name="setting_cmd">Príkazy chatu</string>
     <string name="assistant_action_menu">Čo chcete robiť s týmto textom?</string>
@@ -279,7 +279,7 @@
     <string name="tile_api_endpoint_title">API koncový bod</string>
     <string name="tile_api_endpoint_desc">Táto funkcia umožňuje nastaviť váš API koncový bod.</string>
     <string name="tile_autosend_title">Automatické odosielanie</string>
-    <string name="tile_autosend_desc">Táto funkcia umožňuje povoliť alebo zakázať automatické odosielanie správ. Keď je automatické odosielanie zapnuté, SpeakGPT automaticky odošle správy bez stlačenia tlačidla \'Odoslať\' po dokončení počúvania.</string>
+    <string name="tile_autosend_desc">Táto funkcia umožňuje povoliť alebo zakázať automatické odosielanie správ. Keď je automatické odosielanie zapnuté, aplikácia automaticky odošle správy bez stlačenia tlačidla \'Odoslať\' po dokončení počúvania.</string>
     <string name="tile_tts_voice_title">Hlas TTS</string>
     <string name="tile_tts_voice_desc">Táto funkcia umožňuje nastaviť váš hlas TTS.</string>
     <string name="tile_voice_lang_title">Jazyk hlasu</string>
@@ -296,9 +296,9 @@
     <string name="tile_google_stt">Používa sa STT od Google</string>
     <string name="tile_stt_desc">Táto funkcia umožňuje nastaviť motor STT. Whisper je platený.</string>
     <string name="tile_silent_mode_title">Tichý režim</string>
-    <string name="tile_silent_mode_desc">Táto funkcia umožňuje nechať SpeakGPT nikdy nevyslovovať odpovede.</string>
+    <string name="tile_silent_mode_desc">Táto funkcia umožňuje nechať aplikáciu nikdy nevyslovovať odpovede.</string>
     <string name="tile_always_speak_title">Vždy hovoriť</string>
-    <string name="tile_always_speak_desc">Táto funkcia umožňuje nechať SpeakGPT vždy vyslovovať odpovede.</string>
+    <string name="tile_always_speak_desc">Táto funkcia umožňuje nechať aplikáciu vždy vyslovovať odpovede.</string>
     <string name="tile_text_model_title">Model generovania textu</string>
     <string name="tile_text_generation_model_desc">Táto funkcia umožňuje nastaviť model generovania textu, ako aj parametre modelu.</string>
     <string name="tile_activation_prompt_title">Aktivačný výzva</string>
@@ -312,14 +312,14 @@
     <string name="tile_sh_title">Príkazy so znakom /</string>
     <string name="tile_sh_desc">Táto funkcia umožňuje povoliť príkazy so znakom /. Upozorňujeme, že táto funkcia je experimentálna a nestabilná. Príklad: /imagine mačka.</string>
     <string name="tile_desktop_mode_title">Režim pre desktop</string>
-    <string name="tile_desktop_mode_desc">Táto funkcia umožňuje povoliť režim pre desktop. Keď je režim pre desktop zapnutý, SpeakGPT používa klávesové skratky a vstup správ je automaticky zameraný. Stlačte \'Enter\' na odoslanie správy, \'Shift + Enter\' na pridanie nového riadku a \'Shift+Esc\' na zatvorenie chatu. Nie je odporúčané používať na telefónoch, pokiaľ nechcete, aby sa klávesnica otvárala vždy, keď otvoríte chat.</string>
+    <string name="tile_desktop_mode_desc">Táto funkcia umožňuje povoliť režim pre desktop. Keď je režim pre desktop zapnutý, aplikácia používa klávesové skratky a vstup správ je automaticky zameraný. Stlačte \'Enter\' na odoslanie správy, \'Shift + Enter\' na pridanie nového riadku a \'Shift+Esc\' na zatvorenie chatu. Nie je odporúčané používať na telefónoch, pokiaľ nechcete, aby sa klávesnica otvárala vždy, keď otvoríte chat.</string>
     <string name="tile_new_ui_title">Nové UI</string>
     <string name="tile_new_ui_desc">Táto funkcia umožňuje povoliť nové experimentálne UI. Nové UI je kompaktnejšie a intuitívnejšie.</string>
     <string name="tile_about_app_title">O aplikácii</string>
-    <string name="tile_about_app_desc">Táto funkcia umožňuje otvoriť stránku O SpeakGPT.</string>
+    <string name="tile_about_app_desc">Táto funkcia umožňuje otvoriť informačnú stránku.</string>
     <string name="tile_documentation_title">Dokumentácia</string>
     <string name="tile_documentation_subtitle">Otvoriť dokumentáciu</string>
-    <string name="tile_documentation_desc">Táto funkcia umožňuje otvoriť dokumentáciu SpeakGPT.</string>
+    <string name="tile_documentation_desc">Táto funkcia umožňuje otvoriť dokumentáciu.</string>
     <string name="tile_amoled_mode_title">Režim AMOLED</string>
     <string name="tile_amoled_mode_desc">Táto funkcia umožňuje povoliť režim AMOLED pre podporované displeje. Môže výrazne ušetriť batériu. Režim AMOLED je dostupný iba v tmavom režime.</string>
     <string name="tile_crash_log_title">Log pádu</string>
@@ -327,12 +327,12 @@
     <string name="tile_events_log_title">Log udalostí</string>
     <string name="tile_events_log_desc">Táto funkcia umožňuje zobraziť log udalostí. Tento log nezbierame, pretože môže obsahovať citlivé informácie. Použite tento log, ak chcete nahlásiť chybu.</string>
     <string name="tile_autosave_title">Automatické ukladanie chatov</string>
-    <string name="tile_autosave_desc">Táto funkcia umožňuje povoliť automatické ukladanie chatov v okne asistenta. Keď je povolené automatické ukladanie chatov, SpeakGPT uloží všetky chaty do úložiska zariadenia.</string>
+    <string name="tile_autosave_desc">Táto funkcia umožňuje povoliť automatické ukladanie chatov v okne asistenta. Keď je povolené automatické ukladanie chatov, aplikácia uloží všetky chaty do úložiska zariadenia.</string>
     <string name="tile_show_chat_errors_title">Zobraziť chyby v chate</string>
     <string name="tile_show_chat_errors_desc">Táto funkcia umožňuje povoliť chyby v chate. Keď sú chyby v chate povolené, SpeakGPT zobrazí chyby v chate, ak nastanú.</string>
     <string name="on">Zapnuté</string>
     <string name="off">Vypnuté</string>
-    <string name="tile_about_app_subtitle">O aplikácii SpeakGPT</string>
+    <string name="tile_about_app_subtitle">O aplikácii</string>
     <string name="cancel">Zrušiť</string>
     <string name="btn_reset">Resetovať</string>
     <string name="label_provided_by">Poskytovateľ:</string>
@@ -358,8 +358,8 @@
     <string name="label_permission_denied">Povolenie zamietnuté</string>
     <string name="label_use_camera">Použiť kameru</string>
     <string name="label_use_microphone">Použiť mikrofón</string>
-    <string name="msg_use_camera">SpeakGPT vám umožňuje interagovať s ChatGPT Vision pomocou vašich fotografií priamo z kamery v tejto aplikácii. Ak chcete povoliť kameru pre GPT Vision, prosím, dovoľte nám používať vašu kameru. Stále môžete vyberať svoje existujúce obrázky z galérie bez povolenia kamery. Povoliť prístup k kamere?</string>
-    <string name="msg_use_microphone">SpeakGPT vám umožňuje interagovať s ChatGPT prostredníctvom hlasovej aktivácie. Pre povolenie hlasovej aktivácie prosím dovoľte tejto aplikácii používať mikrofón vášho zariadenia. Povoliť prístup k mikrofónu?</string>
+    <string name="msg_use_camera">Táto aplikácia vám umožňuje interagovať s ChatGPT Vision pomocou vašich fotografií priamo z kamery v tejto aplikácii. Ak chcete povoliť kameru pre GPT Vision, prosím, dovoľte nám používať vašu kameru. Stále môžete vyberať svoje existujúce obrázky z galérie bez povolenia kamery. Povoliť prístup k kamere?</string>
+    <string name="msg_use_microphone">Táto aplikácia vám umožňuje interagovať s ChatGPT prostredníctvom hlasovej aktivácie. Pre povolenie hlasovej aktivácie prosím dovoľte tejto aplikácii používať mikrofón vášho zariadenia. Povoliť prístup k mikrofónu?</string>
     <string name="btn_allow">Povoliť</string>
     <string name="btn_no_thanks">Nie, ďakujem</string>
     <string name="msg_camera_denied">Nemôžete používať túto funkciu, pretože aplikácia nemá prístup k kamere.</string>
@@ -393,7 +393,7 @@
     <string name="msg_delete_message">Ste si istí, že chcete zmazať túto správu?</string>
     <string name="btn_post">Odoslať</string>
     <string name="msg_error_calculating_cost">Cena: Chyba pri výpočte ceny. Prosím, skontrolujte svoje pripojenie.</string>
-    <string name="msg_cost_not_enough_data"><![CDATA[Cena: <SpeakGPT nemá dostatok údajov na výpočet ceny pre tento model. Pozrite si dokumentáciu a vypočítajte si cenu ručne na základe vyššie uvedeného použitia.>]]></string>
+    <string name="msg_cost_not_enough_data"><![CDATA[Cena: <Táto aplikácia nemá dostatok údajov na výpočet ceny pre tento model. Pozrite si dokumentáciu a vypočítajte si cenu ručne na základe vyššie uvedeného použitia.>]]></string>
     <string name="cost_loading" tools:ignore="TypographyEllipsis">Cena: Načítava sa...</string>
     <string formatted="false" name="cost_counter_usage">Použitie (tokeny): %s von / %s dnu</string>
     <string name="cat_all_new">Všetky kategórie</string>

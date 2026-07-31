@@ -39,7 +39,7 @@
     <string name="setting_change_openai_api_key">Change API key</string>
     <string name="setting_manage_account_desc">Tap to manage your API account</string>
     <string name="setting_account">Account</string>
-    <string name="setting_default_desc">Make SpeakGPT your default assistant</string>
+    <string name="setting_default_desc">Make this app your default assistant</string>
     <string name="setting_default">Assistant settings</string>
     <string name="setting_lang_desc">Set a language for voice output</string>
     <string name="setting_lang">Assistant language</string>
@@ -137,7 +137,7 @@
     <string name="setting_auto_language_detect">Auto Language Detect</string>
     <string name="setting_auto_language_detect_desc">Set TTS Language From Chat Response</string>
     <string name="setting_function_calling">Function calling</string>
-    <string name="setting_function_calling_desc">Enable SpeakGPT experimental features</string>
+    <string name="setting_function_calling_desc">Enable experimental features</string>
     <string name="setting_cmd_desc">Enable chat slash commands like /imagine</string>
     <string name="setting_cmd">Chat slash commands</string>
     <string name="assistant_action_menu">What do you want to do with this text?</string>
@@ -161,6 +161,10 @@
     <string name="title_control_center">The Hearth</string>
     <string name="menu_explore">Explore</string>
     <string name="chat_role_user">User</string>
+    <!-- Generic assistant label, used only as a last-resort fallback when a
+         chat has no companion name (a regular chat always has one). Never
+         "SpeakGPT". -->
+    <string name="chat_role_assistant">Assistant</string>
     <string name="control_center_general">General</string>
     <string name="control_center_image_generation">Image generation</string>
     <string name="control_center_appearance">Appearance</string>
@@ -425,6 +429,7 @@
     <string name="title_performance_log">Performance Log</string>
     <string name="title_whisper_perf_log">Whisper Performance Log</string>
     <string name="title_memory_usage_log">Memory Usage Log</string>
+    <string name="title_provider_fail_log">Provider Failure Log</string>
     <!-- Per-log retention fields (Alerts, Errors & Logs), owner spec July 23 2026. -->
     <string name="label_max_logs_saved">Maximum Logs Saved</string>
     <string name="label_max_days_saved">Maximum Days Saved</string>
@@ -480,7 +485,7 @@
     <string name="tile_api_endpoint_title">API endpoint</string>
     <string name="tile_api_endpoint_desc">This feature allows you to set your API endpoint.</string>
     <string name="tile_autosend_title">Auto send</string>
-    <string name="tile_autosend_desc">This feature allows you to enable or disable messages auto send. When auto send is enabled, SpeakGPT will automatically send messages without pressing \'Send\' button once listening is finished.</string>
+    <string name="tile_autosend_desc">This feature allows you to enable or disable messages auto send. When auto send is enabled, the app will automatically send messages without pressing \'Send\' button once listening is finished.</string>
     <string name="tile_tts_voice_title">TTS Voice</string>
     <string name="tile_tts_voice_desc">This feature allows you to set your TTS voice.</string>
     <string name="tile_voice_lang_title">Voice language</string>
@@ -600,9 +605,9 @@
     <string name="local_whisper_meta_active_fmt">%1$d MB · Active</string>
     <string name="local_whisper_meta_not_installed_fmt">%1$d MB · Not downloaded</string>
     <string name="tile_silent_mode_title">Silent mode</string>
-    <string name="tile_silent_mode_desc">This feature allows you let SpeakGPT never pronounce answers.</string>
+    <string name="tile_silent_mode_desc">This feature allows you let the app never pronounce answers.</string>
     <string name="tile_always_speak_title">Always speak</string>
-    <string name="tile_always_speak_desc">This feature allows you let SpeakGPT always pronounce answers.</string>
+    <string name="tile_always_speak_desc">This feature allows you let the app always pronounce answers.</string>
     <string name="tile_hands_free_title">Hands-free conversation</string>
     <string name="tile_hands_free_desc">After the assistant speaks, the microphone reopens automatically so you can reply without tapping. Uses Google speech recognition and spoken (auto-send) replies. Long-press the mic to stop.</string>
     <string name="tile_hands_free_timing_title">Hands-free timing</string>
@@ -669,14 +674,14 @@
     <string name="tile_sh_title">Slash commands</string>
     <string name="tile_sh_desc">This feature allows you to enable slash commands. Please note that this feature is experimental and unstable. Example: /imagine a cat.</string>
     <string name="tile_desktop_mode_title">Desktop mode</string>
-    <string name="tile_desktop_mode_desc">This feature allows you to enable desktop mode. When desktop mode is enabled, SpeakGPT will use keyboard shortcuts and message input will be automatically focused. Press \'Enter\' to send message, \'Shift + Enter\' to add new line and \'Shift+Esc\' to close chat. Not recommended to use on phones unless you want keyboard to be opened every time you open the chat.</string>
+    <string name="tile_desktop_mode_desc">This feature allows you to enable desktop mode. When desktop mode is enabled, the app will use keyboard shortcuts and message input will be automatically focused. Press \'Enter\' to send message, \'Shift + Enter\' to add new line and \'Shift+Esc\' to close chat. Not recommended to use on phones unless you want keyboard to be opened every time you open the chat.</string>
     <string name="tile_new_ui_title">New UI</string>
     <string name="tile_new_ui_desc">This feature allows you to enable new experimental UI. New UI is more compact and intuitive.</string>
     <string name="tile_about_app_title">About App</string>
-    <string name="tile_about_app_desc">This feature allows you to open about SpeakGPT page.</string>
+    <string name="tile_about_app_desc">This feature allows you to open the about page.</string>
     <string name="tile_documentation_title">Documentation</string>
     <string name="tile_documentation_subtitle">Open documentation</string>
-    <string name="tile_documentation_desc">This feature allows you to open SpeakGPT documentation.</string>
+    <string name="tile_documentation_desc">This feature allows you to open the documentation.</string>
     <string name="tile_amoled_mode_title">AMOLED mode</string>
 
 
@@ -686,7 +691,7 @@
     <string name="tile_events_log_title">Voice Debug Log</string>
     <string name="tile_events_log_desc">This feature allows you to view event log. We do not collect this log as it may contain sensitive information. Use this log if you want to report a bug.</string>
     <string name="tile_autosave_title">Auto-save chats</string>
-    <string name="tile_autosave_desc">This feature allows you to enable auto-save chats in assistant window. When auto-save chats is enabled, SpeakGPT will save all chats to the device storage.</string>
+    <string name="tile_autosave_desc">This feature allows you to enable auto-save chats in assistant window. When auto-save chats is enabled, the app will save all chats to the device storage.</string>
     <string name="tile_show_chat_errors_title">Show chat errors</string>
     <string name="tile_show_chat_errors_desc">Show error messages directly in the chat when a request fails, instead of failing silently.</string>
     <string name="tile_error_sound_title">Sound alert for model errors</string>
@@ -707,7 +712,7 @@
     <string name="alert_debug_section_logs">Logs</string>
     <string name="on">On</string>
     <string name="off">Off</string>
-    <string name="tile_about_app_subtitle">About SpeakGPT.</string>
+    <string name="tile_about_app_subtitle">About the app.</string>
     <string name="cancel">Cancel</string>
     <string name="btn_reset">Reset</string>
     <string name="label_provided_by">Provided by:</string>
@@ -739,6 +744,9 @@
     <string name="message_state_stopped">Reply stopped and may be incomplete.</string>
     <string name="message_state_failed">Reply failed and may be incomplete.</string>
     <string name="message_state_incomplete">Reply status is unknown and may be incomplete.</string>
+    <!-- Screen-reader description for the red error avatar shown on a chat whose
+         only reply so far failed (no successful reply yet). Not visible text. -->
+    <string name="chat_avatar_error_desc">No successful reply yet — the last response failed.</string>
     <!-- Internal, model-facing only (never shown to the user): appended to an
          unfinished reply in the model's context so it is not mistaken for an
          intentionally completed reply. -->
@@ -763,15 +771,23 @@
     <string name="provider_context_overflow">The provider rejected the complete request because it exceeded the selected model’s context limit. Nothing was shortened or retried. Remove content or attachments, start a new chat, or choose a model with a larger context window.</string>
     <string name="provider_input_limit">The provider rejected the request because the complete input exceeded the selected model’s input limit. Nothing was shortened or retried. Remove content or attachments, start a new chat, or choose another model.</string>
     <string name="provider_request_body_limit">The server rejected the request because the request body was larger than it accepts. This is a server request-size limit, not necessarily the model’s context limit. Nothing was shortened or retried.</string>
-    <string name="provider_rate_limit">The provider rejected the request because it exceeded the account’s current rate or token-throughput limit. This is not a document or context-size limit. Nothing was shortened or retried. Try again later or send a smaller request.</string>
-    <string name="provider_quota_limit">The provider rejected the request because the account’s quota or spending limit has been reached. This is not a document-size limit. Nothing was shortened or retried. Check the provider account’s usage and billing limits.</string>
+    <string name="provider_rate_limit">The reply failed because the service hit a rate or throughput limit. Wait a moment and retry, or switch models.</string>
+    <string name="provider_quota_limit">The reply failed because the account reached its usage or spending limit on the service. Check the account\'s usage and billing limits.</string>
+    <string name="provider_out_of_credits">The reply failed because the service reports the account is out of credits. Add credits with the service, then retry.</string>
+    <!-- Raw provider detail shown beneath the app's own failure explanation.
+         Labels are Title Case; the placeholder values are full sentences. -->
+    <string name="provider_error_line">Provider Error: %1$s</string>
+    <string name="provider_name_line">Provider: %1$s</string>
+    <string name="provider_error_no_response">No response received from the server.</string>
+    <string name="provider_error_none">None provided by the server.</string>
+    <string name="provider_name_none">No provider reported.</string>
     <string name="provider_unknown_limit">The server rejected the request but did not provide enough information to identify which limit was exceeded. Nothing was shortened or retried. Technical details were saved to the Error Log.</string>
     <string name="label_debug">Debug</string>
     <string name="label_permission_denied">Permission denied</string>
     <string name="label_use_camera">Use camera</string>
     <string name="label_use_microphone">Use microphone</string>
-    <string name="msg_use_camera">SpeakGPT allows you to interact with ChatGPT Vision using your photos taken directly from camera in this app. To enable camera for GPT Vision please allow us to use your camera. You can still pick your existing pictures from gallery without camera permission. Allow camera access?</string>
-    <string name="msg_use_microphone">SpeakGPT allows you to interact with ChatGPT via voice activation. To enable voice activation please allow this app to use your device microphone. Allow microphone access?</string>
+    <string name="msg_use_camera">This app allows you to interact with ChatGPT Vision using your photos taken directly from camera in this app. To enable camera for GPT Vision please allow us to use your camera. You can still pick your existing pictures from gallery without camera permission. Allow camera access?</string>
+    <string name="msg_use_microphone">This app allows you to interact with ChatGPT via voice activation. To enable voice activation please allow this app to use your device microphone. Allow microphone access?</string>
     <string name="btn_allow">Allow</string>
     <string name="btn_no_thanks">No thanks</string>
     <string name="msg_camera_denied">You cannot use this feature because app do not have camera access.</string>
@@ -812,7 +828,7 @@
     <string name="msg_delete_message">Are you sure you want to delete this message?</string>
     <string name="btn_post">Post</string>
     <string name="msg_error_calculating_cost">Cost: Error calculating cost. Please check your connection.</string>
-    <string name="msg_cost_not_enough_data"><![CDATA[Cost: <SpeakGPT hasn\'t enough data to calculate cost for this model. Look for documentation and calculate cost manually based on the usage above.>]]></string>
+    <string name="msg_cost_not_enough_data"><![CDATA[Cost: <This app hasn\'t enough data to calculate cost for this model. Look for documentation and calculate cost manually based on the usage above.>]]></string>
     <string name="cost_template" translatable="false">Cost: $%.5f in / $%.5f out\nTotal: $%.5f\nPrice: $%.2f (in) $%.2f (out) per 1M tokens</string>
     <string name="cost_loading" tools:ignore="TypographyEllipsis">Cost: Loading...</string>
     <string formatted="false"  name="cost_counter_usage">Usage (tokens): %s in / %s out</string>
@@ -1119,6 +1135,8 @@
          from the Voice Debug and Error logs so they stay readable). -->
     <string name="whisper_perf_logging_title">Whisper performance logging</string>
     <string name="whisper_perf_logging_desc">Write one line per on-device transcription to the Performance Log: how long the recording was, how long the model took to load, and how long it took to transcribe — plus a snapshot of memory use. Off by default; turn on to find out why Whisper is suddenly slow.</string>
+    <string name="tile_log_chat_failures_title">Log Chat Failures</string>
+    <string name="tile_log_chat_failures_desc">Save each failed reply\'s provider and the raw server error to the Provider Failure Log. This does not change what appears in chat — failures always show there. Off by default.</string>
     <string name="memory_usage_logging_title">Memory usage logging</string>
     <string name="memory_usage_logging_desc">Write the app\'s memory use to the Performance Log about once a minute (and whenever the system asks the app to free memory). Off by default; leave it on across a long session to spot a memory leak — a steadily rising figure is the tell-tale sign.</string>
 
@@ -2474,10 +2492,10 @@
     <string name="include_error_duplicate">Document already attached.</string>
     <string name="include_error_duplicate_image">Image already attached.</string>
     <string name="document_attach_failed_title">Document could not be attached</string>
-    <string name="document_attach_memory_body">SpeakGPT could not process the complete document within this device’s safe memory limit. No part of the document was attached. Try attaching a smaller copy.</string>
-    <string name="document_attach_expansion_body">This document expands into more data than SpeakGPT can safely process. No part of the document was attached. Try saving a smaller copy and attaching that instead.</string>
+    <string name="document_attach_memory_body">This app could not process the complete document within this device’s safe memory limit. No part of the document was attached. Try attaching a smaller copy.</string>
+    <string name="document_attach_expansion_body">This document expands into more data than this app can safely process. No part of the document was attached. Try saving a smaller copy and attaching that instead.</string>
     <string name="document_storage_failed_title">Not enough storage</string>
-    <string name="document_attach_storage_body">SpeakGPT does not have enough free device storage to finish and safely save this document. No part of the document was attached. Free some storage and try again.</string>
+    <string name="document_attach_storage_body">This app does not have enough free device storage to finish and safely save this document. No part of the document was attached. Free some storage and try again.</string>
     <string name="document_attach_interrupted_body">The document could not be read completely because the file connection was interrupted. No part of the document was attached. Try again.</string>
     <string name="document_export_failed_title">Document could not be exported</string>
     <string name="document_export_incomplete_body">The source app did not finish exporting the complete document. No part of the document was attached. Check that you are online and signed in to the source app, then try again.</string>
@@ -2488,8 +2506,8 @@
     <string name="request_context_exceeded_title">Request exceeds this model’s context limit</string>
     <string name="request_context_exceeded_body">The complete request requires at least %1$s tokens after including the conversation, instructions, memory, attachments, and space for the reply. The selected model supports %2$s. Nothing was sent or shortened. Remove content or attachments, start a new chat, or choose a model with a larger context window.</string>
     <string name="request_context_warning_title">This request may exceed the model’s context limit</string>
-    <string name="request_context_range_warning_body">Sending this request is not recommended because SpeakGPT cannot confirm that it fits. The complete request is estimated at %1$s to %2$s tokens after including the conversation, instructions, memory, attachments, and space for the reply. The selected model supports %3$s. The provider may reject it, and nothing will be shortened automatically.</string>
-    <string name="request_context_approximate_warning_body">Sending this request is not recommended because SpeakGPT cannot confirm that it fits. The complete request is approximately %1$s tokens after including the conversation, instructions, memory, attachments, and space for the reply. The selected model supports %2$s. The provider may reject it, and nothing will be shortened automatically.</string>
+    <string name="request_context_range_warning_body">Sending this request is not recommended because the app cannot confirm that it fits. The complete request is estimated at %1$s to %2$s tokens after including the conversation, instructions, memory, attachments, and space for the reply. The selected model supports %3$s. The provider may reject it, and nothing will be shortened automatically.</string>
+    <string name="request_context_approximate_warning_body">Sending this request is not recommended because the app cannot confirm that it fits. The complete request is approximately %1$s tokens after including the conversation, instructions, memory, attachments, and space for the reply. The selected model supports %2$s. The provider may reject it, and nothing will be shortened automatically.</string>
     <string name="send_anyway">Send anyway</string>
 
     <!-- Accessibility labels. -->
