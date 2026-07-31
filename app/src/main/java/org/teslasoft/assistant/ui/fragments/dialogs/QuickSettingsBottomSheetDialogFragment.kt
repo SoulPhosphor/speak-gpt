@@ -841,7 +841,9 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         }
 
         btnSelectModel?.setOnClickListener {
-            var favorites = favoriteModelsPreferences?.getFavoriteModels()
+            // Favorites are per-endpoint: only offer the favorites picker when
+            // THIS chat's active endpoint has favorites of its own.
+            var favorites = favoriteModelsPreferences?.getFavoriteModels(preferences?.getApiEndpointId() ?: "")
 
             if (favorites == null) favorites = arrayListOf()
 

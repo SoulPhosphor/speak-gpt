@@ -95,7 +95,10 @@ class AdvancedFavoriteModelSelectorDialogFragment : DialogFragment() {
             val modelObject = FavoriteModelObject(model, endpointId)
             availableModels.remove(hashMapOf("modelId" to modelObject.modelId, "endpointId" to modelObject.endpointId))
             availableModelsProjection.remove(hashMapOf("modelId" to modelObject.modelId, "endpointId" to modelObject.endpointId))
-            favoriteModelsPreferences?.setFavoriteModels(availableModels)
+            // Remove just this one entry from the whole store — never rewrite the
+            // store from this endpoint's filtered view, which would drop other
+            // profiles' favorites.
+            favoriteModelsPreferences?.removeFavoriteModel(modelObject.modelId, modelObject.endpointId)
             modelListAdapter?.notifyDataSetChanged()
         }
     }
@@ -153,7 +156,7 @@ class AdvancedFavoriteModelSelectorDialogFragment : DialogFragment() {
     }
 
     private fun reloadList() {
-        val list = favoriteModelsPreferences?.getFavoriteModels()?.toMutableList()
+        val list = favoriteModelsPreferences?.getFavoriteModels(resolvedEndpointId)?.toMutableList()
 
         if (list != null) {
             availableModels.addAll(list)

@@ -287,7 +287,7 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
         }
 
         val current = preferences?.getArchivistModel().orEmpty()
-        val favorites = favoriteModelsPreferences?.getFavoriteModels() ?: arrayListOf()
+        val favorites = favoriteModelsPreferences?.getFavoriteModels(endpointId) ?: arrayListOf()
 
         if (favorites.isEmpty()) {
             val dialog = AdvancedModelSelectorDialogFragment.newInstance(current, chatId, endpointId)

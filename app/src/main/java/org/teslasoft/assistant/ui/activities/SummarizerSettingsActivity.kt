@@ -227,7 +227,7 @@ class SummarizerSettingsActivity : FragmentActivity() {
         }
 
         val current = preferences?.getSummarizerModel().orEmpty()
-        val favorites = favoriteModelsPreferences?.getFavoriteModels() ?: arrayListOf()
+        val favorites = favoriteModelsPreferences?.getFavoriteModels(endpointId) ?: arrayListOf()
 
         if (favorites.isEmpty()) {
             val dialog = AdvancedModelSelectorDialogFragment.newInstance(current, "", endpointId)
