@@ -113,6 +113,12 @@ class ApiEndpointEditorActivity : FragmentActivity() {
     private var fieldChatEndpoint: TextInputEditText? = null
     private var fieldApiKey: TextInputEditText? = null
     private var fieldAuthType: TextInputEditText? = null
+
+    /** OpenRouter-only rows: the Choose Provider navigation row and the whole
+     *  Advanced Options section. Shown only while the Base URL is an OpenRouter
+     *  endpoint; both are presentational this pass (no navigation, no saving). */
+    private var rowChooseProvider: View? = null
+    private var sectionAdvancedOptions: View? = null
     private var sliderTemperature: Slider? = null
     private var sliderTopP: Slider? = null
     private var sliderFrequencyPenalty: Slider? = null
@@ -207,6 +213,8 @@ class ApiEndpointEditorActivity : FragmentActivity() {
         fieldChatEndpoint = findViewById(R.id.field_chat_endpoint)
         fieldApiKey = findViewById(R.id.field_api_key)
         fieldAuthType = findViewById(R.id.field_auth_type)
+        rowChooseProvider = findViewById(R.id.row_choose_provider)
+        sectionAdvancedOptions = findViewById(R.id.section_advanced_options)
         sliderTemperature = findViewById(R.id.slider_temperature)
         sliderTopP = findViewById(R.id.slider_top_p)
         sliderFrequencyPenalty = findViewById(R.id.slider_frequency_penalty)
@@ -327,6 +335,7 @@ class ApiEndpointEditorActivity : FragmentActivity() {
         btnDelete?.visibility = if (position == -1) ImageButton.GONE else ImageButton.VISIBLE
 
         updateHostWarning()
+        updateOpenRouterSections()
         initialSnapshot = snapshot()
     }
 
@@ -335,7 +344,10 @@ class ApiEndpointEditorActivity : FragmentActivity() {
         btnSave?.setOnClickListener { onSaveClicked() }
         btnDelete?.setOnClickListener { onDeleteClicked() }
 
-        fieldHost?.doAfterTextChanged { updateHostWarning() }
+        fieldHost?.doAfterTextChanged {
+            updateHostWarning()
+            updateOpenRouterSections()
+        }
 
         fieldAuthType?.setOnClickListener { showAuthTypeChooser() }
         fieldModel?.setOnClickListener { showModelChooser() }
@@ -490,6 +502,20 @@ class ApiEndpointEditorActivity : FragmentActivity() {
             imageCapabilityByModel = currentCapabilityJson,
             toolCapabilityByModel = currentToolCapabilityJson
         )
+    }
+
+    /**
+     * Show the OpenRouter-only rows (Choose Provider, Advanced Options) only
+     * while the Base URL points at an OpenRouter endpoint, using the same rule
+     * the rest of the app applies (ImageProviderAdapters.isOpenRouter): the host
+     * contains "openrouter.ai". Called on load and live as the host is edited,
+     * so the rows appear or disappear as soon as the URL matches.
+     */
+    private fun updateOpenRouterSections() {
+        val isOpenRouter = fieldHost?.text.toString().contains("openrouter.ai", ignoreCase = true)
+        val visibility = if (isOpenRouter) View.VISIBLE else View.GONE
+        rowChooseProvider?.visibility = visibility
+        sectionAdvancedOptions?.visibility = visibility
     }
 
     private fun updateHostWarning() {

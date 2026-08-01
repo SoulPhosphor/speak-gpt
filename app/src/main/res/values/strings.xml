@@ -351,6 +351,12 @@
     <string name="auth_mode_api_key">API key header (api-key)</string>
     <string name="api_endpoint_model">Model</string>
     <string name="api_endpoint_model_help">Tap to choose from models available on this endpoint.</string>
+    <string name="endpoint_choose_provider_title">Choose Provider</string>
+    <string name="endpoint_choose_provider_subtitle">Optional. Allows you to select what your preferred or required model provider is. Not available on all endpoints.</string>
+    <string name="endpoint_advanced_options_title">Advanced Options</string>
+    <string name="endpoint_provider_discovery_path_title">Provider Discovery Path</string>
+    <string name="endpoint_provider_discovery_path_subtitle">Only change this if using a custom API proxy.</string>
+    <string name="endpoint_provider_discovery_path_hint_openrouter">/models/{model}/endpoints</string>
     <string name="sampling_label_temperature">Temperature</string>
     <string name="sampling_hint_temperature">Temperature controls model creativity. Low settings will create more conservative, predictable responses. High temperatures may be more creative. If settings are too high responses may become less coherent.</string>
     <string name="sampling_label_top_p">Top P</string>
