@@ -167,4 +167,80 @@ class ArchivistResponseParserTest {
         assertEquals(ArchivistResponseParser.MAX_RULES_PER_CONVERSATION, parsed.rules.size)
         assertEquals(3, parsed.dropped) // 2 over the cap + 1 blank
     }
+
+    /* ---------------- Lorebook Memories analysis (Step 1.7) ---------------- */
+
+    @Test
+    fun parsesWellFormedLoreEntries() {
+        val parsed = ArchivistResponseParser.parseLore(
+            """
+            {"entries":[
+              {"content":"Eldoria is a sunken kingdom beneath the northern sea.","triggers":["Eldoria","sunken kingdom"]}
+            ]}
+            """.trimIndent()
+        )
+        assertEquals(1, parsed.entries.size)
+        assertEquals("Eldoria is a sunken kingdom beneath the northern sea.", parsed.entries[0].content)
+        assertEquals(listOf("Eldoria", "sunken kingdom"), parsed.entries[0].triggers)
+        assertEquals(0, parsed.dropped)
+    }
+
+    @Test
+    fun loreEntryWithoutTriggersIsDropped() {
+        // A lore book entry with no keyword could never fire — never coerce it
+        // into a keywordless entry; drop and count it.
+        val parsed = ArchivistResponseParser.parseLore(
+            """
+            {"entries":[
+              {"content":"has no triggers","triggers":[]},
+              {"content":"empty triggers omitted","triggers":["  "]},
+              {"content":"kept","triggers":["Keyword"]}
+            ]}
+            """.trimIndent()
+        )
+        assertEquals(1, parsed.entries.size)
+        assertEquals("kept", parsed.entries[0].content)
+        assertEquals(2, parsed.dropped)
+    }
+
+    @Test
+    fun loreEntryWithoutContentIsDropped() {
+        val parsed = ArchivistResponseParser.parseLore(
+            """{"entries":[{"content":"  ","triggers":["x"]},{"content":"ok","triggers":["y"]}]}"""
+        )
+        assertEquals(1, parsed.entries.size)
+        assertEquals(1, parsed.dropped)
+    }
+
+    @Test
+    fun loreTriggersDedupedCaseInsensitively() {
+        val parsed = ArchivistResponseParser.parseLore(
+            """{"entries":[{"content":"c","triggers":["Fog","fog","FOG","Mist"]}]}"""
+        )
+        assertEquals(listOf("Fog", "Mist"), parsed.entries[0].triggers)
+    }
+
+    @Test
+    fun loreEntryFloodIsBoundedAndCounted() {
+        val rows = (1..50).joinToString(",") {
+            """{"content":"c$it","triggers":["t$it"]}"""
+        }
+        val parsed = ArchivistResponseParser.parseLore("""{"entries":[$rows]}""")
+        assertEquals(ArchivistResponseParser.MAX_LORE_ENTRIES_PER_CONVERSATION, parsed.entries.size)
+        assertEquals(50 - ArchivistResponseParser.MAX_LORE_ENTRIES_PER_CONVERSATION, parsed.dropped)
+    }
+
+    @Test
+    fun loreUnwrapsMarkdownFence() {
+        val parsed = ArchivistResponseParser.parseLore(
+            "```json\n{\"entries\":[]}\n```"
+        )
+        assertTrue(parsed.entries.isEmpty())
+        assertEquals(0, parsed.dropped)
+    }
+
+    @Test(expected = Exception::class)
+    fun loreNoJsonObjectThrows() {
+        ArchivistResponseParser.parseLore("no json here")
+    }
 }

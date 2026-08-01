@@ -61,6 +61,48 @@
             app:srcCompat="@drawable/ic_storage" />
     </androidx.constraintlayout.widget.ConstraintLayout>
 
+    <!-- Lorebooks | Pending split control (Step 1.7 — owner approved), matching
+         the Memory Browser pattern. Shown only while one or more Lorebook
+         Suggestions are pending; hidden (and the whole Pending mode gone) when
+         nothing is pending. -->
+    <LinearLayout
+        android:id="@+id/mode_toggle_container"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:gravity="center_horizontal"
+        android:orientation="horizontal"
+        android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/action_bar">
+
+        <TextView
+            android:id="@+id/btn_mode_lorebooks"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:padding="8dp"
+            android:text="@string/lore_mode_lorebooks"
+            android:textSize="17sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/mem_mode_separator"
+            android:textColor="@color/text_subtitle"
+            android:textSize="17sp" />
+
+        <TextView
+            android:id="@+id/btn_mode_pending"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:padding="8dp"
+            android:text="@string/lore_mode_pending"
+            android:textSize="17sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
     <LinearLayout
         android:id="@+id/filter_bar"
         android:layout_width="0dp"
@@ -72,7 +114,7 @@
         android:orientation="horizontal"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/action_bar">
+        app:layout_constraintTop_toBottomOf="@+id/mode_toggle_container">
 
         <com.google.android.material.textfield.TextInputLayout
             android:id="@+id/textInputLayoutSearch"

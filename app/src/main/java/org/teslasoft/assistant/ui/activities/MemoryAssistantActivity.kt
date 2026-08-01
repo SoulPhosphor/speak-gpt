@@ -24,8 +24,10 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.WindowInsets
+import android.widget.ArrayAdapter
 import android.widget.ImageButton
 import android.widget.LinearLayout
+import android.widget.ListPopupWindow
 import android.widget.TextView
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
@@ -86,6 +88,11 @@ class MemoryAssistantActivity : FragmentActivity() {
     private var notReadyContainer: LinearLayout? = null
     private var btnSetup: MaterialButton? = null
     private var btnAnalyze: MaterialButton? = null
+    private var rowAnalysisType: LinearLayout? = null
+    private var textAnalysisTypeValue: TextView? = null
+    /** True when the run whose outcome is currently shown was a Lorebook
+     *  Memories run — routes the View link to the Lorebooks Pending area. */
+    private var lastOutcomeLorebook = false
 
     // A3 (§15.2a): the hard database-health block — stronger than not-ready,
     // with WORKING Repair / Revert buttons (owner: "make those buttons that
@@ -124,6 +131,8 @@ class MemoryAssistantActivity : FragmentActivity() {
         notReadyContainer = findViewById(R.id.not_ready_container)
         btnSetup = findViewById(R.id.btn_setup)
         btnAnalyze = findViewById(R.id.btn_analyze)
+        rowAnalysisType = findViewById(R.id.row_analysis_type)
+        textAnalysisTypeValue = findViewById(R.id.text_analysis_type_value)
         analysisProgressContainer = findViewById(R.id.analysis_progress_container)
         analysisBar = findViewById(R.id.analysis_bar)
         analysisPercent = findViewById(R.id.analysis_percent)
@@ -142,7 +151,15 @@ class MemoryAssistantActivity : FragmentActivity() {
         btnBack?.setOnClickListener { finish() }
         btnAnalyze?.setOnClickListener { if (!running) startRun(null) }
         btnSetup?.setOnClickListener { openArchivistSettings() }
-        linkViewPending?.setOnClickListener { openPendingBrowser() }
+        // The View link routes to whichever Pending area the shown run filled:
+        // the Memory Browser for saved memories, the Lorebooks area for lore
+        // book suggestions (Step 1.7).
+        linkViewPending?.setOnClickListener {
+            if (lastOutcomeLorebook) openLorebookPending() else openPendingBrowser()
+        }
+        rowAnalysisType?.setOnClickListener { showAnalysisTypePicker() }
+        textAnalysisTypeValue?.setOnClickListener { showAnalysisTypePicker() }
+        refreshAnalysisTypeRow()
         // The A3 buttons act on the memory database — the store the Archivist
         // writes to (the block itself trips on ANY database problem, owner
         // rule, but memory is what these two actions repair).
@@ -330,7 +347,8 @@ class MemoryAssistantActivity : FragmentActivity() {
         // and its percent wait until the run reports its fixed total.
         showAnalyzing(null)
 
-        if (!MemoryAnalysisForegroundService.start(this, rerunOfRunId)) {
+        val analysisType = Preferences.getPreferences(this, "").getMemoryAnalysisType()
+        if (!MemoryAnalysisForegroundService.start(this, rerunOfRunId, analysisType)) {
             running = false
             btnAnalyze?.isEnabled = true
             showOutcome(
@@ -375,22 +393,46 @@ class MemoryAssistantActivity : FragmentActivity() {
     private fun showOutcome(o: Archivist.RunOutcome) {
         clearStatusBlock()
         completedThisVisit = true
+        lastOutcomeLorebook = o.analysisType == "lorebook"
         when (o.outcome) {
             "completed" -> {
                 btnAnalyze?.setText(R.string.memory_assistant_btn_done)
-                showStatus(null, getString(R.string.memory_assistant_done_found, o.memoriesFound), null, null, null)
+                // Step 1.7: a Lorebook Memories run reports its suggestions with
+                // the approved "Potential Lorebook Memories found: N" line, and
+                // the View link opens the Lorebooks area on Pending instead of
+                // the Memory Browser.
+                if (lastOutcomeLorebook) {
+                    showStatus(null, getString(R.string.memory_assistant_lore_found, o.memoriesFound), null, null, null)
+                    linkViewPending?.text = getString(R.string.memory_assistant_view_lore_pending)
+                } else {
+                    showStatus(null, getString(R.string.memory_assistant_done_found, o.memoriesFound), null, null, null)
+                    linkViewPending?.text = getString(R.string.memory_assistant_view_pending)
+                }
                 linkViewPending?.visibility = View.VISIBLE
             }
             "no_new" -> {
                 btnAnalyze?.setText(R.string.memory_assistant_btn_done)
-                showStatus(
-                    getString(R.string.mem_arch_nonew_label),
-                    getString(R.string.mem_arch_nonew_msg),
-                    if (o.duplicatesSkipped > 0) getString(R.string.mem_arch_nonew_dupes)
-                    else getString(R.string.mem_arch_nonew_nothing),
-                    getString(R.string.mem_arch_btn_run_again),
-                    neutralLabelColor()
-                ) { startRun(null) }
+                if (lastOutcomeLorebook) {
+                    // A Lorebook run that found nothing new reports through the
+                    // same approved result surface with a count of zero — no
+                    // View link, since there is nothing new to review.
+                    showStatus(
+                        null,
+                        getString(R.string.memory_assistant_lore_found, o.memoriesFound),
+                        null,
+                        getString(R.string.mem_arch_btn_run_again),
+                        null
+                    ) { startRun(null) }
+                } else {
+                    showStatus(
+                        getString(R.string.mem_arch_nonew_label),
+                        getString(R.string.mem_arch_nonew_msg),
+                        if (o.duplicatesSkipped > 0) getString(R.string.mem_arch_nonew_dupes)
+                        else getString(R.string.mem_arch_nonew_nothing),
+                        getString(R.string.mem_arch_btn_run_again),
+                        neutralLabelColor()
+                    ) { startRun(null) }
+                }
             }
             "nothing" -> {
                 btnAnalyze?.setText(R.string.memory_assistant_btn_idle)
@@ -404,45 +446,73 @@ class MemoryAssistantActivity : FragmentActivity() {
             }
             "partial_failed" -> {
                 btnAnalyze?.setText(R.string.memory_assistant_btn_idle)
-                val counts = getString(
-                    R.string.mem_arch_partial_counts,
-                    o.memoriesFound, o.conversationsAnalyzed, o.failedChatIds.size
-                )
-                val reason = partialReason(o.failureReason)
-                showStatus(
-                    getString(R.string.mem_arch_partial_label),
-                    getString(R.string.mem_arch_partial_msg),
-                    counts + "\n\n" + reason,
-                    getString(R.string.mem_arch_btn_try_again),
-                    MaterialColors.getColor(statusLabel!!, com.google.android.material.R.attr.colorTertiary)
-                ) { startRun(null) }
+                if (lastOutcomeLorebook) {
+                    // A Lorebook run that finished with some skipped
+                    // conversations: report the run-level outcome plus the
+                    // approved count of suggestions that were filed, and offer
+                    // to review them. The saved-memory-specific reason detail is
+                    // not shown here, since it names "memories".
+                    showLorePartialOrInterrupted(R.string.mem_arch_partial_label, o.memoriesFound)
+                } else {
+                    val counts = getString(
+                        R.string.mem_arch_partial_counts,
+                        o.memoriesFound, o.conversationsAnalyzed, o.failedChatIds.size
+                    )
+                    val reason = partialReason(o.failureReason)
+                    showStatus(
+                        getString(R.string.mem_arch_partial_label),
+                        getString(R.string.mem_arch_partial_msg),
+                        counts + "\n\n" + reason,
+                        getString(R.string.mem_arch_btn_try_again),
+                        MaterialColors.getColor(statusLabel!!, com.google.android.material.R.attr.colorTertiary)
+                    ) { startRun(null) }
+                }
             }
             "full_failed" -> {
                 btnAnalyze?.setText(R.string.memory_assistant_btn_idle)
                 val reason = o.failureReason ?: ArchivistFailure.UNKNOWN
-                showStatus(
-                    getString(R.string.mem_arch_full_label),
-                    getString(R.string.mem_arch_full_msg),
-                    fullReason(reason),
-                    if (reason.settingsRelated) getString(R.string.mem_arch_btn_check_settings)
-                    else getString(R.string.mem_arch_btn_try_again),
-                    // colorError lives in appcompat's attrs (material inherits
-                    // it rather than declaring it — material.R has no entry).
-                    MaterialColors.getColor(statusLabel!!, androidx.appcompat.R.attr.colorError)
-                ) {
-                    if (reason.settingsRelated) openArchivistSettings() else startRun(null)
+                val errorColor = MaterialColors.getColor(statusLabel!!, androidx.appcompat.R.attr.colorError)
+                if (lastOutcomeLorebook) {
+                    // A full failure files nothing; show the run-level label and
+                    // the recovery action without the saved-memory reason line.
+                    showStatus(
+                        getString(R.string.mem_arch_full_label),
+                        null, null,
+                        if (reason.settingsRelated) getString(R.string.mem_arch_btn_check_settings)
+                        else getString(R.string.mem_arch_btn_try_again),
+                        errorColor
+                    ) {
+                        if (reason.settingsRelated) openArchivistSettings() else startRun(null)
+                    }
+                } else {
+                    showStatus(
+                        getString(R.string.mem_arch_full_label),
+                        getString(R.string.mem_arch_full_msg),
+                        fullReason(reason),
+                        if (reason.settingsRelated) getString(R.string.mem_arch_btn_check_settings)
+                        else getString(R.string.mem_arch_btn_try_again),
+                        // colorError lives in appcompat's attrs (material inherits
+                        // it rather than declaring it — material.R has no entry).
+                        errorColor
+                    ) {
+                        if (reason.settingsRelated) openArchivistSettings() else startRun(null)
+                    }
                 }
             }
             "interrupted" -> {
                 btnAnalyze?.setText(R.string.memory_assistant_btn_idle)
-                showStatus(
-                    getString(R.string.mem_arch_interrupted_label),
-                    getString(R.string.mem_arch_interrupted_msg),
-                    if (o.memoriesFound > 0) getString(R.string.mem_arch_interrupted_saved)
-                    else getString(R.string.mem_arch_interrupted_none),
-                    getString(R.string.mem_arch_btn_try_again),
-                    MaterialColors.getColor(statusLabel!!, com.google.android.material.R.attr.colorTertiary)
-                ) { startRun(null) }
+                if (lastOutcomeLorebook) {
+                    showLorePartialOrInterrupted(R.string.mem_arch_interrupted_label, o.memoriesFound)
+                } else {
+                    showStatus(
+                        getString(R.string.mem_arch_interrupted_label),
+                        getString(R.string.mem_arch_interrupted_msg),
+                        if (o.memoriesFound > 0) getString(R.string.mem_arch_interrupted_saved)
+                        else getString(R.string.mem_arch_interrupted_none),
+                        getString(R.string.mem_arch_btn_try_again),
+                        MaterialColors.getColor(statusLabel!!, com.google.android.material.R.attr.colorTertiary)
+                    ) { startRun(null) }
+                }
             }
             "not_configured" -> {
                 btnAnalyze?.setText(R.string.memory_assistant_btn_idle)
@@ -462,9 +532,27 @@ class MemoryAssistantActivity : FragmentActivity() {
     private fun neutralLabelColor(): Int =
         ResourcesCompat.getColor(resources, R.color.text_title, theme)
 
+    /** A Lorebook run that ended partially or was interrupted: show the
+     *  run-level label plus the approved count of suggestions that were filed,
+     *  offering a review link when any exist. Uses only approved and
+     *  content-type-agnostic wording. */
+    private fun showLorePartialOrInterrupted(labelRes: Int, found: Int) {
+        showStatus(
+            getString(labelRes),
+            getString(R.string.memory_assistant_lore_found, found),
+            null,
+            getString(R.string.mem_arch_btn_try_again),
+            MaterialColors.getColor(statusLabel!!, com.google.android.material.R.attr.colorTertiary)
+        ) { startRun(null) }
+        if (found > 0) {
+            linkViewPending?.text = getString(R.string.memory_assistant_view_lore_pending)
+            linkViewPending?.visibility = View.VISIBLE
+        }
+    }
+
     private fun showStatus(
         label: String?,
-        message: String,
+        message: String?,
         details: String?,
         actionText: String?,
         labelColor: Int?,
@@ -475,8 +563,10 @@ class MemoryAssistantActivity : FragmentActivity() {
             statusLabel?.text = label
             labelColor?.let { statusLabel?.setTextColor(it) }
         }
-        textRunStatus?.visibility = View.VISIBLE
-        textRunStatus?.text = message
+        if (!message.isNullOrBlank()) {
+            textRunStatus?.visibility = View.VISIBLE
+            textRunStatus?.text = message
+        }
         if (details != null) {
             statusDetails?.visibility = View.VISIBLE
             statusDetails?.text = details
@@ -556,6 +646,50 @@ class MemoryAssistantActivity : FragmentActivity() {
      *  reorged Memory Settings, July 9 2026). */
     private fun openArchivistSettings() {
         startActivity(Intent(this, MemoryControlsActivity::class.java).putExtra("chatId", chatId))
+    }
+
+    /** Open the Lorebooks area on Pending — the review home for lore book
+     *  suggestions a Lorebook Memories run produced (Step 1.7). */
+    private fun openLorebookPending() {
+        startActivity(
+            Intent(this, LoreBooksListActivity::class.java)
+                .putExtra(LoreBooksListActivity.EXTRA_OPEN_PENDING, true)
+        )
+    }
+
+    /* ---------------- memory analysis type (Step 1.7) ---------------- */
+
+    private fun analysisTypeLabel(type: String): String = getString(
+        if (type == "lorebook") R.string.memory_analysis_type_lorebook
+        else R.string.memory_analysis_type_associative
+    )
+
+    private fun refreshAnalysisTypeRow() {
+        val type = Preferences.getPreferences(this, "").getMemoryAnalysisType()
+        textAnalysisTypeValue?.text = analysisTypeLabel(type)
+    }
+
+    /** The Memory Analysis Type dropdown (owner design): exactly two choices —
+     *  Associative Memories (default) and Lorebook Memories. One run creates
+     *  one kind; there is no "Both". */
+    private fun showAnalysisTypePicker() {
+        val anchor = textAnalysisTypeValue ?: return
+        val types = arrayOf("associative", "lorebook")
+        val labels = arrayOf(
+            getString(R.string.memory_analysis_type_associative),
+            getString(R.string.memory_analysis_type_lorebook)
+        )
+        val popup = ListPopupWindow(this)
+        popup.anchorView = anchor
+        popup.isModal = true
+        popup.width = ListPopupWindow.WRAP_CONTENT
+        popup.setAdapter(ArrayAdapter(this, android.R.layout.simple_list_item_1, labels))
+        popup.setOnItemClickListener { _, _, position, _ ->
+            popup.dismiss()
+            Preferences.getPreferences(this, "").setMemoryAnalysisType(types[position])
+            refreshAnalysisTypeRow()
+        }
+        popup.show()
     }
 
     private fun jsonIds(json: String): List<String> = try {

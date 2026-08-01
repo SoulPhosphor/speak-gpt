@@ -71,6 +71,23 @@ object ArchivistResponseParser {
 
     data class DraftRule(val text: String)
 
+    /** One proposed lore book entry (Step 1.7, Lorebook Memories analysis
+     *  type): the [content] to inject and the [triggers] that fire it. */
+    data class DraftLoreEntry(
+        val content: String,
+        val triggers: List<String>
+    )
+
+    data class ParsedLore(
+        val entries: List<DraftLoreEntry>,
+        /** Rows rejected by validation or the defensive bounds. */
+        val dropped: Int
+    )
+
+    /** Defensive bounds for the lorebook path, mirroring the memory bounds. */
+    const val MAX_LORE_ENTRIES_PER_CONVERSATION = 40
+    private const val MAX_TRIGGERS_PER_ENTRY = 12
+
     data class Parsed(
         val memories: List<DraftMemory>,
         val rules: List<DraftRule>,
@@ -137,6 +154,44 @@ object ArchivistResponseParser {
         }
 
         return Parsed(memories, rules, dropped)
+    }
+
+    /**
+     * Parse one model response in the Lorebook Memories analysis type (Step
+     * 1.7). Only lore book entries come through. An entry missing content OR
+     * every trigger keyword is DROPPED and counted — a lore book entry with no
+     * trigger could never fire, so it is never coerced into a keywordless
+     * entry. Same gate philosophy as [parse].
+     */
+    fun parseLore(raw: String): ParsedLore {
+        val json = JSONObject(extractJsonObject(raw))
+        var dropped = 0
+        val entries = ArrayList<DraftLoreEntry>()
+        val arr = json.optJSONArray("entries")
+        if (arr != null) {
+            for (i in 0 until arr.length()) {
+                val o = arr.optJSONObject(i)
+                if (o == null) { dropped++; continue }
+                val content = o.optString("content").trim()
+                if (content.isEmpty()) { dropped++; continue }
+                val triggers = ArrayList<String>()
+                o.optJSONArray("triggers")?.let { t ->
+                    for (k in 0 until t.length()) {
+                        val kw = t.optString(k).trim()
+                        if (kw.isNotEmpty() && kw.length <= 128 &&
+                            triggers.none { it.equals(kw, ignoreCase = true) } &&
+                            triggers.size < MAX_TRIGGERS_PER_ENTRY
+                        ) triggers.add(kw)
+                    }
+                }
+                // A lore book entry with no trigger keyword can never fire —
+                // reject it rather than file a dead entry.
+                if (triggers.isEmpty()) { dropped++; continue }
+                if (entries.size >= MAX_LORE_ENTRIES_PER_CONVERSATION) { dropped++; continue }
+                entries.add(DraftLoreEntry(content, triggers))
+            }
+        }
+        return ParsedLore(entries, dropped)
     }
 
     /** Models often wrap JSON in prose or a markdown fence; take the outermost

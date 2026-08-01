@@ -37,6 +37,7 @@ import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.preferences.memory.ArchivistRunRecord
 import org.teslasoft.assistant.preferences.memory.CardSections
 import org.teslasoft.assistant.preferences.memory.CardType
+import org.teslasoft.assistant.preferences.memory.LorebookSuggestionRecord
 import org.teslasoft.assistant.preferences.memory.MemoryLog
 import org.teslasoft.assistant.preferences.memory.MemoryRecord
 import org.teslasoft.assistant.preferences.memory.MemoryStore
@@ -99,7 +100,12 @@ object Archivist {
          *  fact; the user turn beside it is still sent). In-memory run
          *  diagnostic only — not persisted, logged, or shown. */
         val incompleteTurnsExcluded: Int = 0,
-        val error: String? = null
+        val error: String? = null,
+        /** Which analysis type produced this run (Step 1.7): "associative"
+         *  (saved-memory drafts) or "lorebook" (lore book entry suggestions).
+         *  The Memory Assistant uses it to show the matching result surface —
+         *  memoriesFound counts whichever kind the run created. */
+        val analysisType: String = "associative"
     ) {
         val notConfigured: Boolean get() = outcome == "not_configured"
     }
@@ -176,15 +182,25 @@ object Archivist {
      *  number — owner answer 4; size batching happens inside). Eligibility is
      *  re-derived and atomically claimed inside the run, after stale-run
      *  reconciliation, so the run analyzes exactly what it sealed. */
-    suspend fun analyze(context: Context, onProgress: (Progress) -> Unit): RunOutcome =
-        run(context, { eligibleConversations(context) }, markProcessed = true, onProgress = onProgress)
+    suspend fun analyze(
+        context: Context,
+        analysisType: String,
+        onProgress: (Progress) -> Unit
+    ): RunOutcome =
+        run(context, { eligibleConversations(context) }, markProcessed = true,
+            analysisType = analysisType, onProgress = onProgress)
 
     /** Re-analyze a past run's conversations (the Rerun row action): re-feeds
      *  exactly the transcript rows that run stored, for chats that still
      *  exist. Files any NEW findings as drafts (existing identical drafts are
      *  deduplicated); records a fresh run row. Rerun rows are already
      *  processed, so nothing is claimed or re-marked. */
-    suspend fun rerun(context: Context, runId: String, onProgress: (Progress) -> Unit): RunOutcome {
+    suspend fun rerun(
+        context: Context,
+        runId: String,
+        analysisType: String,
+        onProgress: (Progress) -> Unit
+    ): RunOutcome {
         val store = MemoryStore.getInstance(context)
         val past = store.getArchivistRun(runId)
             ?: return RunOutcome(
@@ -199,13 +215,14 @@ object Archivist {
                 .filter { it.chatId != null && liveChats.containsKey(it.chatId) }
                 .groupBy { it.chatId!! }
                 .map { (chatId, rows) -> Conversation(chatId, liveChats[chatId] ?: chatId, rows) }
-        }, markProcessed = false, onProgress = onProgress)
+        }, markProcessed = false, analysisType = analysisType, onProgress = onProgress)
     }
 
     private suspend fun run(
         context: Context,
         selectConversations: () -> List<Conversation>,
         markProcessed: Boolean,
+        analysisType: String,
         onProgress: (Progress) -> Unit
     ): RunOutcome {
         val prefs = Preferences.getPreferences(context, "")
@@ -235,7 +252,7 @@ object Archivist {
             return RunOutcome(null, 0, 0, 0, 0, emptyList(), outcome = "already_running")
         }
         try {
-            return runLocked(context, selectConversations, markProcessed, onProgress, prefs, endpoint, model)
+            return runLocked(context, selectConversations, markProcessed, analysisType, onProgress, prefs, endpoint, model)
         } finally {
             liveRun.set(false)
         }
@@ -245,11 +262,13 @@ object Archivist {
         context: Context,
         selectConversations: () -> List<Conversation>,
         markProcessed: Boolean,
+        analysisType: String,
         onProgress: (Progress) -> Unit,
         prefs: Preferences,
         endpoint: ApiEndpointObject,
         model: String
     ): RunOutcome {
+        val lorebookMode = analysisType == "lorebook"
         val store = MemoryStore.getInstance(context)
 
         // Recover-at-startup, applied at next-run too (§4(a)): any 'running'
@@ -309,7 +328,11 @@ object Archivist {
         val maxSuggestions = prefs.getArchivistMaxSuggestions()
         val minImportance = prefs.getArchivistMinImportance()
         val temperature = prefs.getArchivistTemperature().toDouble()
-        val systemPrompt = prefs.getArchivistCustomPrompt().ifBlank { ArchivistPrompt.SYSTEM }
+        // Lorebook Memories analysis (Step 1.7) always uses the built-in lore
+        // librarian prompt — the user's custom extraction prompt is written for
+        // the standard saved-memory output and would not produce lore entries.
+        val systemPrompt = if (lorebookMode) ArchivistPrompt.LOREBOOK_SYSTEM
+            else prefs.getArchivistCustomPrompt().ifBlank { ArchivistPrompt.SYSTEM }
         // The card-append toggle (§2, ON by default): off discards any
         // proposed placements — the memories themselves still file.
         val cardSuggestionsOn = prefs.getArchivistCardSuggestions()
@@ -375,6 +398,36 @@ object Archivist {
                                 )
                             )
                             val raw = response.choices.firstOrNull()?.message?.content.orEmpty()
+                            if (lorebookMode) {
+                                // Lorebook Memories analysis (Step 1.7): parse
+                                // lore book entries and file them as pending
+                                // suggestions instead of memory drafts. The
+                                // per-conversation cap still applies; there is
+                                // no importance floor (lore entries carry none).
+                                val parsedLore = try {
+                                    ArchivistResponseParser.parseLore(raw)
+                                } catch (e: Exception) {
+                                    throw TaggedArchivistException(ArchivistFailure.UNREADABLE, e)
+                                }
+                                if (parsedLore.dropped > 0) {
+                                    MemoryLog.log(context, "Archivist", "warn",
+                                        "chat=${conversation.chatId}: ${parsedLore.dropped} lore proposal(s) failed validation and were dropped")
+                                }
+                                var loreCandidates = parsedLore.entries
+                                if (maxSuggestions > 0) {
+                                    val room = (maxSuggestions - filedThisConversation).coerceAtLeast(0)
+                                    if (loreCandidates.size > room) {
+                                        MemoryLog.log(context, "Archivist", "info",
+                                            "chat=${conversation.chatId}: cap $maxSuggestions reached, ${loreCandidates.size - room} lore suggestion(s) not filed")
+                                        loreCandidates = loreCandidates.take(room)
+                                    }
+                                }
+                                val before = memoryIds.size
+                                duplicatesSkipped += fileLorebookSuggestions(
+                                    context, store, conversation, runId, loreCandidates, memoryIds
+                                )
+                                filedThisConversation += memoryIds.size - before
+                            } else {
                             // A parse failure is reason D (unreadable result) —
                             // tag it so the generic classifier can't misfile it.
                             val parsed = try {
@@ -409,6 +462,7 @@ object Archivist {
                             )
                             filedThisConversation += memoryIds.size - before
                             fileRuleDrafts(context, store, conversation, parsed.rules, ruleIds)
+                            }
                         }
                         if (markProcessed) {
                             // Only rows still carrying THIS run's claim stamp
@@ -547,8 +601,58 @@ object Archivist {
             failureReason = dominantReason,
             duplicatesSkipped = duplicatesSkipped,
             incompleteTurnsExcluded = incompleteTurnsExcluded,
-            error = runError
+            error = runError,
+            analysisType = analysisType
         )
+    }
+
+    /**
+     * File the run's proposed lore book entries as pending suggestions (Step
+     * 1.7, Lorebook Memories analysis type). Mirrors [fileMemoryDrafts]'s
+     * durability rules: an identical pending suggestion from the same chat is
+     * skipped (content dedup, so an interrupted-then-rerun conversation never
+     * doubles up), and a suggestion the user already deleted from this chat is
+     * not refiled (rejection dedup). Returns how many candidates were skipped
+     * as duplicates. A store insert failure aborts the conversation as reason E
+     * (save failed), exactly like the memory path.
+     */
+    private fun fileLorebookSuggestions(
+        context: Context,
+        store: MemoryStore,
+        conversation: Conversation,
+        runId: String,
+        entries: List<ArchivistResponseParser.DraftLoreEntry>,
+        collectedIds: MutableList<String>
+    ): Int {
+        if (entries.isEmpty()) return 0
+        var duplicates = 0
+        val now = Instant.now().toString()
+        for (e in entries) {
+            if (store.lorebookSuggestionExists(e.content, conversation.chatId)) { duplicates++; continue }
+            if (store.isLorebookSuggestionRejected(e.content, conversation.chatId)) {
+                MemoryLog.log(context, "Archivist", "info",
+                    "chat=${conversation.chatId}: previously rejected lore suggestion not refiled")
+                continue
+            }
+            val record = LorebookSuggestionRecord(
+                suggestionId = MemoryStore.newId("ls-"),
+                runId = runId,
+                content = e.content,
+                triggers = e.triggers,
+                sourceChatId = conversation.chatId,
+                sourceChatName = conversation.chatName,
+                assignedLorebookId = null,
+                createdAt = now
+            )
+            try {
+                store.insertLorebookSuggestion(record)
+                collectedIds.add(record.suggestionId)
+            } catch (ex: Exception) {
+                MemoryLog.logAlways(context, "Archivist", "error", "lore suggestion insert failed: ${ex.message}")
+                throw TaggedArchivistException(ArchivistFailure.SAVE_FAILED, ex)
+            }
+        }
+        return duplicates
     }
 
     /** Returns how many candidates were skipped as duplicates of memories

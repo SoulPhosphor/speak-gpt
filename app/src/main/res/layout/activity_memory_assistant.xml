@@ -191,6 +191,48 @@
                     android:text="@string/health_btn_revert" />
             </LinearLayout>
 
+            <!-- Memory Analysis Type (Step 1.7, owner approved): the app's
+                 two-column settings row, matching the Memory Engine row, with a
+                 top-aligned dropdown choosing Associative Memories (default) or
+                 Lorebook Memories. One run creates one kind — no "Both". -->
+            <LinearLayout
+                android:id="@+id/row_analysis_type"
+                style="@style/Widget.App.Row.WithSubtitle"
+                android:layout_marginTop="20dp"
+                android:gravity="top">
+
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/memory_analysis_type_title" />
+
+                    <TextView
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:layout_marginTop="6dp"
+                        android:maxLines="10"
+                        android:text="@string/memory_analysis_type_p1" />
+
+                    <TextView
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:layout_marginTop="10dp"
+                        android:maxLines="10"
+                        android:text="@string/memory_analysis_type_p2" />
+
+                    <TextView
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:layout_marginTop="10dp"
+                        android:maxLines="10"
+                        android:text="@string/memory_analysis_type_p3" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/text_analysis_type_value"
+                    style="@style/Widget.App.Dropdown.Value"
+                    android:layout_width="wrap_content"
+                    android:text="@string/memory_analysis_type_associative" />
+            </LinearLayout>
+
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_analyze"
                 android:layout_width="match_parent"

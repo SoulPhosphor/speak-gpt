@@ -77,18 +77,23 @@ class MemoryAnalysisForegroundService : Service() {
         private const val NOTIFICATION_ID = 9923
         private const val WAKE_LOCK_TAG = "PhosphorShines:MemoryAnalysis"
         private const val EXTRA_RERUN_ID = "rerunOfRunId"
+        private const val EXTRA_ANALYSIS_TYPE = "analysisType"
 
         val state = MutableStateFlow<MemoryAnalysisState?>(null)
 
         /**
-         * Launch an analysis run inside the service. Returns false when the
-         * platform refuses to start the service — in that case no run began,
-         * no rows were claimed, and the caller must show a durable failure
-         * (never fall back to an Activity-owned run).
+         * Launch an analysis run inside the service. [analysisType] is the
+         * Memory Analysis Type the run should create suggestions for (Step
+         * 1.7): "associative" (saved-memory drafts) or "lorebook" (lore book
+         * entry suggestions). Returns false when the platform refuses to start
+         * the service — in that case no run began, no rows were claimed, and
+         * the caller must show a durable failure (never fall back to an
+         * Activity-owned run).
          */
-        fun start(context: Context, rerunOfRunId: String?): Boolean {
+        fun start(context: Context, rerunOfRunId: String?, analysisType: String): Boolean {
             val intent = Intent(context, MemoryAnalysisForegroundService::class.java)
                 .putExtra(EXTRA_RERUN_ID, rerunOfRunId)
+                .putExtra(EXTRA_ANALYSIS_TYPE, analysisType)
             return try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     context.startForegroundService(intent)
@@ -146,6 +151,7 @@ class MemoryAnalysisForegroundService : Service() {
         if (runActive.compareAndSet(false, true)) {
             acquireWakeLock()
             val rerunOfRunId = intent?.getStringExtra(EXTRA_RERUN_ID)
+            val analysisType = intent?.getStringExtra(EXTRA_ANALYSIS_TYPE) ?: "associative"
             state.value = MemoryAnalysisState.Running(null)
             scope.launch {
                 val onProgress: (Archivist.Progress) -> Unit = { p ->
@@ -154,8 +160,8 @@ class MemoryAnalysisForegroundService : Service() {
                 }
                 val appContext = applicationContext
                 val outcome = try {
-                    if (rerunOfRunId == null) Archivist.analyze(appContext, onProgress)
-                    else Archivist.rerun(appContext, rerunOfRunId, onProgress)
+                    if (rerunOfRunId == null) Archivist.analyze(appContext, analysisType, onProgress)
+                    else Archivist.rerun(appContext, rerunOfRunId, analysisType, onProgress)
                 } catch (e: Exception) {
                     Archivist.RunOutcome(
                         null, 0, 0, 0, 0, emptyList(),

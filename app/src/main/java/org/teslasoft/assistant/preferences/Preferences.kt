@@ -1762,6 +1762,23 @@ class Preferences private constructor(private var preferences: SharedPreferences
     }
 
     /**
+     * Memory Analysis Type (owner ruling, plan_one_page.md): which memory
+     * system one Memory Assistant run creates suggestions for. "associative"
+     * (default) files saved-memory drafts exactly as before; "lorebook" files
+     * keyword-triggered lore book entry suggestions into the Lorebooks Pending
+     * area instead. One run only ever creates one kind — there is no "both".
+     * Global and sticky, defaulting to associative.
+     */
+    fun getMemoryAnalysisType() : String {
+        val stored = getGlobalString("memory_analysis_type", "associative")
+        return if (stored == "lorebook") "lorebook" else "associative"
+    }
+
+    fun setMemoryAnalysisType(type: String) {
+        putGlobalString("memory_analysis_type", if (type == "lorebook") "lorebook" else "associative")
+    }
+
+    /**
      * Archivist model (global, decision D7): an endpoint profile id from
      * ApiEndpointPreferences plus a model name. Phase 4 uses it for the
      * standing-packet compressor; Phase 6's Archivist runs use the same

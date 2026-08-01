@@ -1043,6 +1043,44 @@
     <string name="mem_arch_deleted_badge">Some Memories Deleted Later</string>
     <string name="mem_arch_deleted_explain">This run created memories that no longer exist because they were deleted after extraction.</string>
 
+    <!-- Memory Analysis Type control (Step 1.7 — plan_one_page.md, owner
+         approved). Two-column settings row on the Memory Assistant screen,
+         matching the Memory Engine row. The subtitle is three paragraphs shown
+         with visible spacing between them. -->
+    <string name="memory_analysis_type_title">Memory Analysis Type</string>
+    <string name="memory_analysis_type_p1">Choose which memory system this analysis should create suggestions for.</string>
+    <string name="memory_analysis_type_p2">Associative Memories use an embedding model to surface memories connected to the ideas and topics being discussed.</string>
+    <string name="memory_analysis_type_p3">Lorebook Memories are activated by specific keywords and do not require an embedding model.</string>
+    <string name="memory_analysis_type_associative">Associative Memories</string>
+    <string name="memory_analysis_type_lorebook">Lorebook Memories</string>
+
+    <!-- Lorebook analysis result on the Memory Assistant (Step 1.7 — owner
+         approved). Shown when a Lorebook Memories run finds suggestions; View
+         opens the Lorebooks area on Pending. -->
+    <string name="memory_assistant_lore_found">Potential Lorebook Memories found: %1$d</string>
+    <string name="memory_assistant_view_lore_pending">View</string>
+
+    <!-- Lorebooks Pending review (Step 1.7 — owner approved). The split control
+         at the top of the Lorebooks screen while suggestions are pending. -->
+    <string name="lore_mode_lorebooks">Lorebooks</string>
+    <string name="lore_mode_pending">Pending</string>
+    <string name="lore_suggestion_triggers">Triggers: %1$s</string>
+    <string name="lore_suggestion_assign">Assign Lorebook</string>
+    <string name="lore_suggestion_create_new">Create new Lorebook…</string>
+    <string name="lore_suggestion_edit">Edit</string>
+    <string name="lore_suggestion_approve">Approve</string>
+    <string name="lore_suggestion_delete">Delete</string>
+    <string name="lore_suggestion_needs_book">Assign a Lorebook before approving.</string>
+    <string name="lore_suggestion_edit_title">Edit suggestion</string>
+    <string name="lore_suggestion_edit_content_hint">Lorebook entry text</string>
+    <string name="lore_suggestion_edit_triggers_hint">Trigger keywords, separated by commas</string>
+
+    <!-- Memory Browser reminder while no embedding model is installed (Step 1.7
+         — owner approved, plan_one_page.md). A dismissible per-visit reminder,
+         never a permanent banner. -->
+    <string name="lore_no_model_reminder">Associative Search can\'t be used in chats until an embedding model is installed.</string>
+    <string name="lore_no_model_reminder_ok">Okay</string>
+
     <!-- Two-mode memory browser + pending actions (owner design, July 8 2026
          evening — phase6_owner_answers_2026-07-08.md; owner wording). -->
     <string name="mem_mode_memories">Memories</string>
