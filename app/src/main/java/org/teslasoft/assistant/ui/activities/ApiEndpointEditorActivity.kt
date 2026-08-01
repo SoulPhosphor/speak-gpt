@@ -157,13 +157,23 @@ class ApiEndpointEditorActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         ThemeManager.getThemeManager().applyPalette(this)
-        setContentView(R.layout.activity_api_endpoint_editor)
-
-        preferences = Preferences.getPreferences(this, "")
-        apiEndpointPreferences = ApiEndpointPreferences.getApiEndpointPreferences(this)
 
         position = intent.getIntExtra("position", -1)
         endpointId = intent.getStringExtra("id") ?: ""
+
+        // Adding a new profile and editing an existing one share this activity
+        // and every view id, but lead with a different field order: a new
+        // profile puts the connection details before Model, since choosing a
+        // model before the endpoint does not make sense. Same-id layouts mean
+        // none of the binding or logic below has to know which one is showing.
+        val isNewEndpoint = position == -1 || endpointId.isEmpty()
+        setContentView(
+            if (isNewEndpoint) R.layout.activity_api_endpoint_editor_new
+            else R.layout.activity_api_endpoint_editor
+        )
+
+        preferences = Preferences.getPreferences(this, "")
+        apiEndpointPreferences = ApiEndpointPreferences.getApiEndpointPreferences(this)
 
         bindViews()
         applyTheme()

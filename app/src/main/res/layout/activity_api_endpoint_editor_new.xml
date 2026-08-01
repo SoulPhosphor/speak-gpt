@@ -1,0 +1,623 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+/**************************************************************************
+* Copyright (c) 2023-2026 Dmytro Ostapenko. All rights reserved.
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*  http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+**************************************************************************/
+-->
+<!--
+  Add New API Endpoint variant of activity_api_endpoint_editor.xml. Same
+  ApiEndpointEditorActivity, same view ids, same shared styles — only the
+  field ORDER differs, and the Base URL label reads the longer
+  api_endpoint_host_add string. ApiEndpointEditorActivity picks this layout
+  when adding a new endpoint and the edit layout when opening an existing one
+  (owner ruling). A new profile leads with the connection details (Base URL,
+  Chat Completions Endpoint, API Key, Auth Mode) before Model, since choosing
+  a model before the endpoint does not make sense. Keep the two layouts in
+  step when a field is added or changed.
+-->
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/action_bar"
+        style="@style/Widget.App.ActionBar">
+
+        <!-- Upper-left double chevron = back / cancel. Backing out with unsaved
+             edits triggers the discard-changes dialog (see the activity). -->
+        <ImageButton
+            android:id="@+id/btn_back"
+            style="@style/Widget.App.ActionBar.BackButton" />
+
+        <!-- Title shows the profile's own name ("<label> API Endpoint"), set in
+             ApiEndpointEditorActivity.loadValues() so it can preserve whatever
+             capitalization the user gave the label. -->
+        <TextView
+            android:id="@+id/activity_title"
+            style="@style/Widget.App.ActionBar.Title.NearBack"
+            app:layout_constraintEnd_toStartOf="@+id/btn_delete" />
+
+        <!-- Same chained-icon shape as Edit Companion/Edit Persona's header
+             (activity_edit_persona.xml/activity_edit_user_persona.xml): no
+             shared style yet covers a second trailing icon, so this repeats
+             that geometry locally (see SecondaryButton's doc comment in
+             values/themes.xml). Hidden for a brand-new profile (nothing to
+             delete yet). -->
+        <ImageButton
+            android:id="@+id/btn_delete"
+            style="@style/Widget.App.ActionBar.ChainedButton"
+            android:contentDescription="@string/btn_delete"
+            android:src="@drawable/ic_delete"
+            android:tooltipText="@string/btn_delete"
+            android:visibility="gone"
+            app:layout_constraintEnd_toStartOf="@+id/btn_save"
+            app:srcCompat="@drawable/ic_delete" />
+
+        <ImageButton
+            android:id="@+id/btn_save"
+            style="@style/Widget.App.ActionBar.SecondaryButton"
+            android:contentDescription="@string/btn_save"
+            android:src="@drawable/ic_save"
+            android:tooltipText="@string/btn_save"
+            app:srcCompat="@drawable/ic_save" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <ScrollView
+        android:id="@+id/scroll"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:clipToPadding="false"
+        android:fillViewport="true"
+        android:paddingBottom="24dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/action_bar">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <!-- Profile name. Empty on a new endpoint: the field name shows as
+                 placeholder inside the box, and the top-left title appears only
+                 once the box has text (see initFloatingLabels in the activity). -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="24dp"
+                android:layout_marginTop="24dp"
+                android:layout_marginEnd="24dp"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/label_label"
+                    style="@style/Widget.App.Field.Label"
+                    android:text="@string/api_endpoint_friendly_name"
+                    android:visibility="gone" />
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/field_label"
+                    style="@style/Widget.App.Field.Box"
+                    android:hint="@string/api_endpoint_friendly_name"
+                    android:singleLine="true"
+                    android:textColorHint="?attr/appSubtleTextColor" />
+
+                <TextView
+                    android:id="@+id/text_field_label_error"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:textColor="?attr/colorError"
+                    android:textSize="13sp"
+                    android:visibility="gone" />
+            </LinearLayout>
+
+            <!-- Base URL. Longer label on this Add-New screen. The plain-http
+                 security warning and the empty / invalid-URL save errors show
+                 inline beneath the box. -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="24dp"
+                android:layout_marginTop="18dp"
+                android:layout_marginEnd="24dp"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/label_host"
+                    style="@style/Widget.App.Field.Label"
+                    android:text="@string/api_endpoint_host_add"
+                    android:visibility="gone" />
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/field_host"
+                    style="@style/Widget.App.Field.Box"
+                    android:hint="@string/api_endpoint_host_add"
+                    android:singleLine="true"
+                    android:textColorHint="?attr/appSubtleTextColor" />
+
+                <TextView
+                    android:id="@+id/text_field_host_error"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:textColor="?attr/colorError"
+                    android:textSize="13sp"
+                    android:visibility="gone" />
+            </LinearLayout>
+
+            <!-- Chat completions endpoint. Pre-filled with /chat/completions. -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="24dp"
+                android:layout_marginTop="18dp"
+                android:layout_marginEnd="24dp"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/label_chat_endpoint"
+                    style="@style/Widget.App.Field.Label"
+                    android:text="@string/api_endpoint_chat_endpoint"
+                    android:visibility="gone" />
+
+                <TextView
+                    style="@style/Widget.App.Field.Hint"
+                    android:text="@string/api_endpoint_chat_endpoint_help" />
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/field_chat_endpoint"
+                    style="@style/Widget.App.Field.Box"
+                    android:hint="@string/api_endpoint_chat_endpoint"
+                    android:singleLine="true"
+                    android:textColorHint="?attr/appSubtleTextColor" />
+            </LinearLayout>
+
+            <!-- API key. Empty on a new endpoint. -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="24dp"
+                android:layout_marginTop="18dp"
+                android:layout_marginEnd="24dp"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/label_api_key"
+                    style="@style/Widget.App.Field.Label"
+                    android:text="@string/api_endpoint_key_unchanged"
+                    android:visibility="gone" />
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/field_api_key"
+                    style="@style/Widget.App.Field.Box"
+                    android:hint="@string/api_endpoint_key_unchanged"
+                    android:singleLine="true"
+                    android:textColorHint="?attr/appSubtleTextColor" />
+            </LinearLayout>
+
+            <!-- Auth mode. Tap to choose (focusable=false). Pre-filled with the
+                 Bearer default, so its title shows from the start. -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="24dp"
+                android:layout_marginTop="18dp"
+                android:layout_marginEnd="24dp"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/label_auth"
+                    style="@style/Widget.App.Field.Label"
+                    android:text="@string/api_endpoint_auth_mode"
+                    android:visibility="gone" />
+
+                <TextView
+                    style="@style/Widget.App.Field.Hint"
+                    android:text="@string/api_endpoint_auth_help" />
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/field_auth_type"
+                    style="@style/Widget.App.Field.Box"
+                    android:clickable="true"
+                    android:cursorVisible="false"
+                    android:focusable="false"
+                    android:focusableInTouchMode="false"
+                    android:hint="@string/api_endpoint_auth_mode"
+                    android:singleLine="true"
+                    android:textColorHint="?attr/appSubtleTextColor" />
+            </LinearLayout>
+
+            <!-- Model. Tap to open the model selector (focusable=false so a tap
+                 is a click, not the keyboard). Empty on a new endpoint (no gpt-4o
+                 pre-load); a model must be chosen before saving. Placed after the
+                 endpoint details on purpose — a model is chosen for a known
+                 endpoint. The guidance line stays visible whether or not the top
+                 title is showing. -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="24dp"
+                android:layout_marginTop="18dp"
+                android:layout_marginEnd="24dp"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/label_model"
+                    style="@style/Widget.App.Field.Label"
+                    android:text="@string/api_endpoint_model"
+                    android:visibility="gone" />
+
+                <TextView
+                    style="@style/Widget.App.Field.Hint"
+                    android:text="@string/api_endpoint_model_help" />
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/field_model"
+                    style="@style/Widget.App.Field.Box"
+                    android:clickable="true"
+                    android:cursorVisible="false"
+                    android:focusable="false"
+                    android:focusableInTouchMode="false"
+                    android:hint="@string/api_endpoint_model"
+                    android:singleLine="true"
+                    android:textColorHint="?attr/appSubtleTextColor" />
+            </LinearLayout>
+
+            <!-- Connection timeout in seconds. Consumed by ChatActivity.initAI()
+                 as the per-endpoint CONNECT timeout; clamped to 5..300 on save. -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="24dp"
+                android:layout_marginTop="18dp"
+                android:layout_marginEnd="24dp"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/label_timeout"
+                    style="@style/Widget.App.Field.Label"
+                    android:text="@string/api_endpoint_connection_timeout"
+                    android:visibility="gone" />
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/field_timeout"
+                    style="@style/Widget.App.Field.Box"
+                    android:hint="@string/api_endpoint_connection_timeout"
+                    android:inputType="number"
+                    android:singleLine="true"
+                    android:textColorHint="?attr/appSubtleTextColor" />
+            </LinearLayout>
+
+            <!-- Response time in seconds. Consumed by ChatActivity.initAI() as
+                 the per-endpoint SOCKET (response) timeout; floored at 45 on
+                 save, no maximum. -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="24dp"
+                android:layout_marginTop="18dp"
+                android:layout_marginEnd="24dp"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/label_response_time"
+                    style="@style/Widget.App.Field.Label"
+                    android:text="@string/api_endpoint_response_time"
+                    android:visibility="gone" />
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/field_response_time"
+                    style="@style/Widget.App.Field.Box"
+                    android:hint="@string/api_endpoint_response_time"
+                    android:inputType="number"
+                    android:singleLine="true"
+                    android:textColorHint="?attr/appSubtleTextColor" />
+            </LinearLayout>
+
+            <!-- Temperature: shared Widget.App.Section.Title/.Hint (see
+                 values/themes.xml + ui-style-guide.md), title then explanation
+                 before the control, per the section-ordering rule. -->
+            <TextView
+                android:id="@+id/label_temperature"
+                style="@style/Widget.App.Section.Title"
+                android:layout_marginStart="24dp"
+                android:layout_marginEnd="24dp"
+                android:text="@string/sampling_label_temperature" />
+
+            <TextView
+                style="@style/Widget.App.Section.Hint"
+                android:layout_marginStart="24dp"
+                android:layout_marginEnd="24dp"
+                android:text="@string/sampling_hint_temperature" />
+
+            <com.google.android.material.slider.Slider
+                android:id="@+id/slider_temperature"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="20dp"
+                android:layout_marginEnd="20dp"
+                android:stepSize="1.0"
+                android:value="7.0"
+                android:valueFrom="0.0"
+                android:valueTo="20.0" />
+
+            <!-- Top P -->
+            <TextView
+                android:id="@+id/label_top_p"
+                style="@style/Widget.App.Section.Title"
+                android:layout_marginStart="24dp"
+                android:layout_marginEnd="24dp"
+                android:text="@string/sampling_label_top_p" />
+
+            <TextView
+                style="@style/Widget.App.Section.Hint"
+                android:layout_marginStart="24dp"
+                android:layout_marginEnd="24dp"
+                android:text="@string/sampling_hint_top_p" />
+
+            <com.google.android.material.slider.Slider
+                android:id="@+id/slider_top_p"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="20dp"
+                android:layout_marginEnd="20dp"
+                android:stepSize="1.0"
+                android:value="10.0"
+                android:valueFrom="0.0"
+                android:valueTo="10.0" />
+
+            <!-- Frequency Penalty -->
+            <TextView
+                android:id="@+id/label_frequency_penalty"
+                style="@style/Widget.App.Section.Title"
+                android:layout_marginStart="24dp"
+                android:layout_marginEnd="24dp"
+                android:text="@string/sampling_label_frequency_penalty" />
+
+            <TextView
+                style="@style/Widget.App.Section.Hint"
+                android:layout_marginStart="24dp"
+                android:layout_marginEnd="24dp"
+                android:text="@string/sampling_hint_frequency_penalty" />
+
+            <com.google.android.material.slider.Slider
+                android:id="@+id/slider_frequency_penalty"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="20dp"
+                android:layout_marginEnd="20dp"
+                android:stepSize="1.0"
+                android:value="0.0"
+                android:valueFrom="-20.0"
+                android:valueTo="20.0" />
+
+            <!-- Presence Penalty -->
+            <TextView
+                android:id="@+id/label_presence_penalty"
+                style="@style/Widget.App.Section.Title"
+                android:layout_marginStart="24dp"
+                android:layout_marginEnd="24dp"
+                android:text="@string/sampling_label_presence_penalty" />
+
+            <TextView
+                style="@style/Widget.App.Section.Hint"
+                android:layout_marginStart="24dp"
+                android:layout_marginEnd="24dp"
+                android:text="@string/sampling_hint_presence_penalty" />
+
+            <com.google.android.material.slider.Slider
+                android:id="@+id/slider_presence_penalty"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="20dp"
+                android:layout_marginEnd="20dp"
+                android:stepSize="1.0"
+                android:value="0.0"
+                android:valueFrom="-20.0"
+                android:valueTo="20.0" />
+
+            <!-- Maximum response tokens. Pre-filled with the profile's value. -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="24dp"
+                android:layout_marginTop="18dp"
+                android:layout_marginEnd="24dp"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/label_max_tokens"
+                    style="@style/Widget.App.Field.Label"
+                    android:text="@string/label_max_tokens"
+                    android:visibility="gone" />
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/field_max_tokens"
+                    style="@style/Widget.App.Field.Box"
+                    android:hint="@string/label_max_tokens"
+                    android:inputType="number"
+                    android:singleLine="true"
+                    android:textColorHint="?attr/appSubtleTextColor" />
+            </LinearLayout>
+
+            <!-- Optional capacity for this exact endpoint profile and model id.
+                 Title + hint: shared Widget.App.Section.Title/.Hint, same
+                 pattern as the sampling-parameter sections above (owner
+                 ruling, July 26 2026). -->
+            <TextView
+                style="@style/Widget.App.Section.Title"
+                android:layout_marginStart="24dp"
+                android:layout_marginEnd="24dp"
+                android:text="@string/title_context_window" />
+
+            <TextView
+                style="@style/Widget.App.Section.Hint"
+                android:layout_marginStart="24dp"
+                android:layout_marginEnd="24dp"
+                android:text="@string/hint_context_window" />
+
+            <!-- The Context Window section title above is this field's heading,
+                 so the box carries no separate top title — it shows the field
+                 name as placeholder until a value is entered. -->
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/field_context_window"
+                style="@style/Widget.App.Field.Box"
+                android:layout_marginStart="24dp"
+                android:layout_marginTop="12dp"
+                android:layout_marginEnd="24dp"
+                android:hint="@string/label_context_window"
+                android:inputType="number"
+                android:singleLine="true"
+                android:textColorHint="?attr/appSubtleTextColor" />
+
+            <!-- End separator -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="24dp"
+                android:layout_marginTop="18dp"
+                android:layout_marginEnd="24dp"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/label_end_separator"
+                    style="@style/Widget.App.Field.Label"
+                    android:text="@string/label_end_separator"
+                    android:visibility="gone" />
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/field_end_separator"
+                    style="@style/Widget.App.Field.Box"
+                    android:hint="@string/label_end_separator"
+                    android:singleLine="true"
+                    android:textColorHint="?attr/appSubtleTextColor" />
+            </LinearLayout>
+
+            <!-- Prefix. Last field before the collapsible sections, so it carries
+                 the small bottom margin. -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="24dp"
+                android:layout_marginTop="18dp"
+                android:layout_marginEnd="24dp"
+                android:layout_marginBottom="8dp"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/label_prefix"
+                    style="@style/Widget.App.Field.Label"
+                    android:text="@string/label_prefix"
+                    android:visibility="gone" />
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/field_prefix"
+                    style="@style/Widget.App.Field.Box"
+                    android:hint="@string/label_prefix"
+                    android:singleLine="true"
+                    android:textColorHint="?attr/appSubtleTextColor" />
+            </LinearLayout>
+
+            <!-- Image capability by model — collapsible section.
+                 Collapsed by default; chevron rotates 0°/180° on toggle. -->
+            <LinearLayout
+                android:id="@+id/image_capability_header"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="24dp"
+                android:layout_marginEnd="24dp"
+                android:background="?attr/selectableItemBackground"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    style="@style/Widget.App.Section.Title"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:text="@string/image_capability_section_title" />
+
+                <ImageView
+                    android:id="@+id/image_capability_chevron"
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:layout_marginStart="8dp"
+                    android:contentDescription="@string/include_expand_desc"
+                    android:rotation="0"
+                    android:src="@drawable/ic_chevron_down"
+                    android:tint="?attr/colorPrimary" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/image_capability_body"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="24dp"
+                android:layout_marginEnd="24dp"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <TextView
+                    style="@style/Widget.App.Section.Hint"
+                    android:text="@string/image_capability_section_desc" />
+
+                <TextView
+                    android:id="@+id/image_capability_empty"
+                    style="@style/Widget.App.Section.Hint"
+                    android:paddingTop="12dp"
+                    android:text="@string/image_capability_empty"
+                    android:visibility="gone" />
+
+                <LinearLayout
+                    android:id="@+id/image_capability_rows"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingTop="8dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_clear_image_capability"
+                    style="@style/AppButton.Destructive"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:layout_marginBottom="8dp"
+                    android:text="@string/image_capability_clear_action"
+                    android:visibility="gone" />
+            </LinearLayout>
+
+            <!-- Learned tool capability reset
+                 (image-generation-rebuild-plan.md §8): visible only once
+                 something has been learned, so a provider upgrade is never
+                 treated as permanent. -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_clear_tool_capability"
+                style="@style/AppButton.Destructive"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="24dp"
+                android:layout_marginTop="12dp"
+                android:layout_marginEnd="24dp"
+                android:layout_marginBottom="8dp"
+                android:text="@string/tool_capability_clear_action"
+                android:visibility="gone" />
+        </LinearLayout>
+    </ScrollView>
+</androidx.constraintlayout.widget.ConstraintLayout>
