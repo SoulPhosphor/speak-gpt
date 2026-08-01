@@ -51,6 +51,8 @@ import org.teslasoft.assistant.preferences.memory.ArchivistRunRecord
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.memory.archivist.Archivist
 import org.teslasoft.assistant.preferences.memory.archivist.ArchivistFailure
+import org.teslasoft.assistant.preferences.memory.archivist.ArchivistFailureCategory
+import org.teslasoft.assistant.util.providerDetailBlock
 import org.teslasoft.assistant.service.MemoryAnalysisForegroundService
 import org.teslasoft.assistant.service.MemoryAnalysisState
 import org.teslasoft.assistant.theme.ThemeManager
@@ -490,16 +492,23 @@ class MemoryAssistantActivity : FragmentActivity() {
                 val reason = o.failureReason ?: ArchivistFailure.UNKNOWN
                 val errorColor = MaterialColors.getColor(statusLabel!!, androidx.appcompat.R.attr.colorError)
                 if (lastOutcomeLorebook) {
-                    // A full failure files nothing; show the run-level label and
-                    // the recovery action without the saved-memory reason line.
+                    // Map the failure to the owner-approved Lorebook state
+                    // (title + subtitle) and show the shared provider-detail
+                    // block beneath it (Function: Archiving). Configuration,
+                    // model, and rejection causes point at settings; the rest
+                    // offer a retry.
+                    val category = ArchivistFailureCategory.of(o.failureReason, o.genError)
+                    val (titleRes, msgRes) = loreFailureStrings(category)
+                    val settingsRelated = category in LORE_FAIL_SETTINGS
                     showStatus(
-                        getString(R.string.mem_arch_full_label),
-                        null, null,
-                        if (reason.settingsRelated) getString(R.string.mem_arch_btn_check_settings)
+                        getString(titleRes),
+                        getString(msgRes),
+                        loreProviderBlock(o),
+                        if (settingsRelated) getString(R.string.mem_arch_btn_check_settings)
                         else getString(R.string.mem_arch_btn_try_again),
                         errorColor
                     ) {
-                        if (reason.settingsRelated) openArchivistSettings() else startRun(null)
+                        if (settingsRelated) openArchivistSettings() else startRun(null)
                     }
                 } else {
                     showStatus(
@@ -579,6 +588,46 @@ class MemoryAssistantActivity : FragmentActivity() {
 
     private fun neutralLabelColor(): Int =
         ResourcesCompat.getColor(resources, R.color.text_title, theme)
+
+    /** The owner-approved Lorebook full-failure title + subtitle for a mapped
+     *  failure category (Aug 1 2026). */
+    private fun loreFailureStrings(category: String): Pair<Int, Int> = when (category) {
+        ArchivistFailureCategory.CONNECTION ->
+            R.string.mem_arch_fail_connection_title to R.string.mem_arch_fail_connection_msg
+        ArchivistFailureCategory.TIMEOUT ->
+            R.string.mem_arch_fail_timeout_title to R.string.mem_arch_fail_timeout_msg
+        ArchivistFailureCategory.REJECTED ->
+            R.string.mem_arch_fail_rejected_title to R.string.mem_arch_fail_rejected_msg
+        ArchivistFailureCategory.USAGE_LIMIT ->
+            R.string.mem_arch_fail_usage_limit_title to R.string.mem_arch_fail_usage_limit_msg
+        ArchivistFailureCategory.CREDITS ->
+            R.string.mem_arch_fail_credits_title to R.string.mem_arch_fail_credits_msg
+        ArchivistFailureCategory.MODEL_UNAVAILABLE ->
+            R.string.mem_arch_fail_model_unavailable_title to R.string.mem_arch_fail_model_unavailable_msg
+        ArchivistFailureCategory.CONFIG ->
+            R.string.mem_arch_fail_config_title to R.string.mem_arch_fail_config_msg
+        ArchivistFailureCategory.UNREADABLE ->
+            R.string.mem_arch_fail_unreadable_title to R.string.mem_arch_fail_unreadable_msg
+        ArchivistFailureCategory.INVALID_RESULT ->
+            R.string.mem_arch_fail_invalid_result_title to R.string.mem_arch_fail_invalid_result_msg
+        else ->
+            R.string.mem_arch_fail_unknown_title to R.string.mem_arch_fail_unknown_msg
+    }
+
+    /** The shared provider-detail block for an archivist failure, with
+     *  Function: Archiving. Null when the run did not fail against a provider. */
+    private fun loreProviderBlock(o: Archivist.RunOutcome): String? {
+        val gen = o.genError ?: return null
+        val notReported = getString(R.string.provider_value_not_reported)
+        return gen.providerDetailBlock(
+            this, o.error,
+            o.apiProvider ?: notReported,
+            o.upstreamProvider ?: notReported,
+            o.model ?: notReported,
+            getString(R.string.mem_arch_function_archiving),
+            o.providerMessage
+        )
+    }
 
     /** A Lorebook run that ended partially or was interrupted: show the
      *  run-level label plus the approved count of suggestions that were filed,
@@ -807,5 +856,14 @@ class MemoryAssistantActivity : FragmentActivity() {
     companion object {
         /** Owner answer 3: the Recent Memory Analysis list shows 5 runs. */
         private const val RECENT_RUNS = 5
+
+        /** Lorebook failure categories whose recovery is a settings fix, so the
+         *  action button points at the Memory Assistant settings instead of a
+         *  plain retry. */
+        private val LORE_FAIL_SETTINGS = setOf(
+            ArchivistFailureCategory.CONFIG,
+            ArchivistFailureCategory.MODEL_UNAVAILABLE,
+            ArchivistFailureCategory.REJECTED
+        )
     }
 }

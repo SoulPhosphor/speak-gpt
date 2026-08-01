@@ -43,6 +43,14 @@ import org.teslasoft.assistant.preferences.memory.MemoryRecord
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.memory.ModelRuleRecord
 import org.teslasoft.assistant.preferences.memory.TranscriptRecord
+import org.teslasoft.assistant.R
+import org.teslasoft.assistant.util.GenErrorResult
+import org.teslasoft.assistant.util.GenerationErrorClassifier
+import org.teslasoft.assistant.util.ProviderErrorInfo
+import org.teslasoft.assistant.util.reachedServer
+import io.ktor.client.plugins.observer.ResponseObserver
+import io.ktor.client.statement.bodyAsText
+import io.ktor.http.isSuccess
 import org.teslasoft.assistant.util.Hash
 import java.time.Instant
 import kotlin.time.Duration.Companion.seconds
@@ -105,7 +113,21 @@ object Archivist {
          *  (saved-memory drafts) or "lorebook" (lore book entry suggestions).
          *  The Memory Assistant uses it to show the matching result surface —
          *  memoriesFound counts whichever kind the run created. */
-        val analysisType: String = "associative"
+        val analysisType: String = "associative",
+        /** Classified transport/provider result for a failed run (Aug 1 2026),
+         *  reused from the chat funnel so the Memory Assistant can name the
+         *  precise failure and render the same provider-detail block. Null when
+         *  the run did not fail against a provider. */
+        val genError: GenErrorResult? = null,
+        /** The connection profile's name (API Provider line). */
+        val apiProvider: String? = null,
+        /** The upstream model service the provider reported (Model Service
+         *  Provider line); null when none was reported. */
+        val upstreamProvider: String? = null,
+        /** The server's own error message, when captured. */
+        val providerMessage: String? = null,
+        /** The model the run used (Model line). */
+        val model: String? = null
     ) {
         val notConfigured: Boolean get() = outcome == "not_configured"
     }
@@ -160,6 +182,14 @@ object Archivist {
      *  and touches nothing — claims make an overlap structurally harmless,
      *  but two live runs would still fight over progress bookkeeping. */
     private val liveRun = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    /** Raw error-response body of the most recent failed request in the live
+     *  run (Aug 1 2026), captured by the client's ResponseObserver so the
+     *  failure surface can name the upstream provider and quote the server's
+     *  own message — exactly the chat funnel's approach. One run at a time
+     *  (the liveRun gate), reset before each request. */
+    @Volatile
+    private var capturedErrorBody: String? = null
 
     /**
      * Startup recovery entry point (counterplan §4(a)): reconcile dead runs
@@ -341,6 +371,10 @@ object Archivist {
         val ruleIds = ArrayList<String>()
         val failedChats = ArrayList<String>()
         val failedReasons = ArrayList<ArchivistFailure>()
+        // Chat-funnel classification of each failure and the last captured
+        // provider error body, for the precise failure surface (Aug 1 2026).
+        val genResults = ArrayList<GenErrorResult>()
+        var failureBody: String? = null
         val analyzedChatIds = ArrayList<String>()
         val fedTranscriptIds = ArrayList<String>()
         var duplicatesSkipped = 0
@@ -384,6 +418,10 @@ object Archivist {
                                 conversation.chatName, companionName, rows
                             )
                             incompleteTurnsExcluded += rendered.incompleteAssistantTurnsDropped
+                            // Fresh capture window per request: the observer only
+                            // writes on an error response, so a success leaves
+                            // this null.
+                            capturedErrorBody = null
                             val response = ai.chatCompletion(
                                 ChatCompletionRequest(
                                     model = ModelId(model),
@@ -503,6 +541,8 @@ object Archivist {
                         val reason = ArchivistFailure.classify(e)
                         failedChats.add(conversation.chatId)
                         failedReasons.add(reason)
+                        genResults.add(GenerationErrorClassifier.classify(e))
+                        capturedErrorBody?.let { failureBody = it }
                         MemoryLog.logAlways(context, "Archivist", "error",
                             "chat=${conversation.chatId} failed (${reason.key}): ${e.message}")
                     }
@@ -520,6 +560,8 @@ object Archivist {
         } catch (e: Exception) {
             runError = e.message ?: e.javaClass.simpleName
             runErrorFailure = ArchivistFailure.classify(e)
+            genResults.add(GenerationErrorClassifier.classify(e))
+            capturedErrorBody?.let { failureBody = it }
         }
 
         // Display outcome (archivist_status_wording_spec.md). A partial
@@ -543,6 +585,45 @@ object Archivist {
         val dominantReason: ArchivistFailure? = runErrorFailure
             ?: failedReasons.groupingBy { it }.eachCount().maxByOrNull { it.value }?.key
             ?: if (outcome == "full_failed") ArchivistFailure.UNKNOWN else null
+
+        // Precise failure surface (Aug 1 2026): the dominant chat-funnel
+        // classification, the provider detail captured from the failed request,
+        // and the connection/model this run used. Only meaningful for a full
+        // failure; the Memory Assistant maps these to the owner-approved state
+        // and renders the shared provider-detail block (Function: Archiving).
+        val dominantGen: GenErrorResult? = if (outcome == "full_failed") {
+            genResults.groupingBy { it.code }.eachCount().maxByOrNull { it.value }?.key
+                ?.let { code -> genResults.firstOrNull { it.code == code } }
+        } else null
+        val providerInfo = ProviderErrorInfo.parse(failureBody)
+        val apiProviderName = endpoint.label.trim().ifBlank { null } ?: endpoint.host.trim().ifBlank { null }
+        val runModel = model.trim().ifBlank { null } ?: endpoint.model.trim().ifBlank { null }
+
+        // Record archivist provider failures to the SAME Provider Failure Log as
+        // chat (owner ruling, Aug 1 2026) — when logging is on and the server
+        // actually answered — with Function: Archiving. Background, so a failure
+        // is logged even when no screen is watching.
+        if (outcome == "full_failed" && dominantGen != null && dominantGen.reachedServer() &&
+            prefs.getLogChatFailures()
+        ) {
+            try {
+                val notReported = context.getString(R.string.provider_value_not_reported)
+                val raw = listOfNotNull(
+                    dominantGen.httpStatus?.toString(),
+                    (providerInfo.message ?: runError)?.trim()?.ifBlank { null }
+                ).joinToString(" ").ifBlank { "(no message)" }
+                org.teslasoft.assistant.preferences.Logger.logProviderFailure(
+                    context,
+                    apiProviderName ?: notReported,
+                    providerInfo.providerName?.trim()?.ifBlank { null } ?: notReported,
+                    runModel ?: notReported,
+                    context.getString(R.string.mem_arch_function_archiving),
+                    raw
+                )
+            } catch (e: Exception) {
+                MemoryLog.log(context, "Archivist", "error", "provider failure log write failed: ${e.message}")
+            }
+        }
 
         // Failure and partial-failure records are ALWAYS written to the
         // Memory Debug Log (owner rule — recovery information, not optional
@@ -606,7 +687,12 @@ object Archivist {
             duplicatesSkipped = duplicatesSkipped,
             incompleteTurnsExcluded = incompleteTurnsExcluded,
             error = runError,
-            analysisType = analysisType
+            analysisType = analysisType,
+            genError = dominantGen,
+            apiProvider = apiProviderName,
+            upstreamProvider = providerInfo.providerName?.trim()?.ifBlank { null },
+            providerMessage = providerInfo.message?.trim()?.ifBlank { null },
+            model = runModel
         )
     }
 
@@ -840,7 +926,21 @@ object Archivist {
                 headers = extraHeaders,
                 host = OpenAIHost(composeChatHost(endpoint.host, endpoint.chatEndpoint)),
                 proxy = null,
-                retry = RetryStrategy()
+                retry = RetryStrategy(),
+                // Capture the raw error-response body of a failed request (error
+                // responses only — a success is never buffered) so the failure
+                // surface can name the upstream provider and quote the server's
+                // message, the same way the chat funnel does.
+                httpClientConfig = {
+                    install(ResponseObserver) {
+                        filter { call -> !call.response.status.isSuccess() }
+                        onResponse { response ->
+                            try {
+                                capturedErrorBody = response.bodyAsText()
+                            } catch (_: Exception) { /* best effort; never disturb the failure path */ }
+                        }
+                    }
+                }
             )
         )
     }
