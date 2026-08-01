@@ -72,6 +72,19 @@ specification for the "UI overhaul" referenced in CLAUDE.md's roadmap.
 > all migration work from now on. This ruling does **not** reinstate the
 > paused theme work and does **not** authorize building the editor.
 
+> **August 1 2026 revision (owner ruling):** theme selection will be
+> **layered**, not global-only: Companion, Persona, and Roleplay Character
+> cards each get a "Choose Chat Theme" default, the user controls the
+> priority among card defaults in the Appearance menu, and a per-conversation
+> Quick Settings selection overrides everything. Recorded in new Section 4.7.
+> Additionally, **decorated themes** — static artwork packs (page
+> backgrounds/textures, edge frames, decorated bubbles, custom list bullets,
+> decorative dividers; **no animated or moving elements**) — are a committed
+> future direction; new Section 11 records the platform mechanisms and the
+> binding door-keeping rules so current work does not close that route off.
+> Neither ruling reinstates the paused theme work or schedules these
+> features.
+
 **Audience:** AI agents implementing the redesign. Read `CLAUDE.md` in full
 before this document — every rule there still applies. This plan was written
 after a complete inventory of all 30 activities, 20+ dialog fragments, and
@@ -265,7 +278,11 @@ full M3 role set in light + dark):
 **Selection mechanics:**
 
 - Store the palette key in `GlobalPreferences` (e.g. `ui_palette`,
-  default `violet`). Global, not per-chat.
+  default `violet`). ~~Global, not per-chat.~~ **Superseded (owner ruling,
+  August 1 2026):** the global preference is the *lowest layer* of the
+  selection model in Section 4.7, not the only source. Phase 2 may still
+  ship the global picker alone, but nothing may be built assuming the theme
+  is global-only.
 - Extend `theme/ThemeManager.kt` with
   `applyPalette(activity: Activity)` that reads the preference and calls
   `activity.theme.applyStyle(R.style.ThemeOverlay_Phosphor_<Palette>, true)`
@@ -523,6 +540,77 @@ Binding rules:
 4. Restyles must be checked at a large system font scale — text that
    truncates, overlaps, or pushes controls off-screen at accessibility
    sizes is a bug, not an acceptable trade.
+
+### 4.7 Theme selection layering — card defaults, priority, and the Quick Settings override (owner ruling, August 1 2026)
+
+**The ruling.** Theme selection is a layered system, not a single global
+choice. This section records the approved model. It does not reinstate the
+paused theme work, and the scheduling of each layer relative to Phases 2
+and beyond is an open owner decision — but no work from now on may be built
+in a way that closes any layer off.
+
+**Delivery order (owner-directed):** first, several pre-built themes are
+implemented (Phase 2, from owner-designed palettes). Then users gain the
+ability to create their own themes (the Section 4.5 future editor). The
+selection layers below apply to both kinds equally.
+
+**Themes are named.** Every theme — pre-built or user-created — is saved
+under its own original theme name. Every selection surface lists themes by
+name. A theme name is the stable identity that cards and conversations
+reference; design the storage so renaming/deleting a theme that cards still
+reference has a defined, non-destructive outcome (exact behavior is an open
+owner decision — ask before building).
+
+**The selection layers, lowest to highest priority:**
+
+1. **Global default** — the Appearance picker in the Control Center
+   (the Phase 2 picker; `ui_palette` preference). Applies when nothing
+   below sets a theme.
+2. **Card defaults** — Companion, Persona, and Roleplay Character cards
+   each get a **"Choose Chat Theme"** dropdown listing all currently
+   available themes. A card's theme becomes the default look of
+   conversations that card participates in. (Whether/how a card declines to
+   set a theme — e.g. a "use default" entry — is an open detail; ask
+   before building.)
+3. **Priority among card defaults** — when one conversation has multiple
+   participating cards with theme defaults, the **user** decides which
+   source wins, via a control in the Appearance menu. The exact mechanism
+   is an **open owner decision**; the owner's current leaning is an
+   ordering/ranking system (e.g. drag-to-reorder the source types). Do not
+   invent the mechanism — present options for approval when this layer is
+   built.
+4. **Per-conversation override in Quick Settings** — highest priority,
+   overriding every other layer. Quick Settings gets a **"Choose Theme:"**
+   dropdown. If a theme is already in effect for the conversation
+   (inherited from any layer), the dropdown shows it. Beneath the dropdown,
+   a hint reads **"Current Theme: X"** and communicates that the Quick
+   Settings selection overrides all other settings (owner-specified
+   wording; confirm final hint text with the owner at implementation).
+
+**Binding compatibility requirements from now on:**
+
+1. **One resolution step, one application point.** Which theme a screen
+   uses is decided by a single resolution step (conversation override →
+   card priority → global default) feeding the existing single application
+   point (`ThemeManager.applyPalette`, Section 4.5 rule 1). No second
+   theming path, no per-screen resolution logic.
+2. **Per-conversation theming fits the existing lifecycle.** Each chat
+   opens a fresh `ChatActivity`, and themes apply before `setContentView`
+   — so per-conversation themes need **no live re-theming** and remain
+   consistent with restart-to-apply (4.5). Do not implement in-place
+   re-theming of a live chat to make this work.
+3. **Changing the theme from Quick Settings mid-conversation implies
+   re-inflating the open chat screen.** When and how that happens is an
+   open implementation decision with a hard constraint: an uncontrolled
+   `recreate()` must never interrupt active generation, readback, or the
+   hands-free voice loop (Sections 5.3, 9.5). Bring options to the owner
+   at build time.
+4. **The conversation override is a per-chat preference.** Per Section
+   9.5.3, it must be added to ChatActivity's preference-copy block so
+   auto-naming does not lose it.
+5. **Priority applies to card *defaults* only.** The Quick Settings
+   override and the global default are single values; only layer 3 needs
+   the priority mechanism.
 
 ---
 
@@ -814,7 +902,10 @@ gaps worth checking during Phase 4:
   contract, not only Material roles; use at least two visually different
   palettes as an audit tool and record the gaps they expose rather than
   patching per-screen; keep the two-source seams (preset overlay now, saved
-  custom palette later, restart-to-apply) intact.
+  custom palette later, restart-to-apply) intact. The Appearance picker
+  built in this phase is the **global-default layer** of the selection
+  model in Section 4.7 — build it so the higher layers (card defaults,
+  priority, Quick Settings override) can be added without rework.
 - **Phase 2.5 (optional) — AMOLED-as-overlay cleanup**, screen-by-screen.
   **Paused** with all AMOLED work (owner ruling, July 26 2026).
 - **Phase 3 — Drawer** (not started; scheduling relative to Phase 1.5 is an
@@ -997,3 +1088,86 @@ errors here are silent or crash at the worst moment (mid-conversation).
    the redesigned screen.
 7. No dependency changes other than those named in this plan.
 8. This document's phase list updated if a phase completed.
+
+---
+
+## 11. Future: decorated themes (artwork packs) — compatibility requirements (owner ruling, August 1 2026)
+
+**The goal.** A theme may eventually include **static artwork** in addition
+to its zone colors — the "skinned chat" concept: a fully decorated chat
+screen in the spirit of themed chat apps, with the theme's own art
+supplying atmosphere. This is a committed someday-goal, not scheduled work.
+Nothing here reinstates the paused theme work or authorizes building any of
+it. This section exists so current and future work keeps the route open.
+
+**No motion (owner ruling, August 1 2026).** Decorated themes are static.
+No animated, moving, or ambient-motion elements are planned; do not design
+the artwork format around animation.
+
+**What a decorated theme may add** (each optional per theme):
+
+- **Page background artwork or texture** behind the chat, including
+  decorative frames around the screen edges (edge-to-edge lets frame art
+  reach the physical screen edges).
+- **Decorated message-bubble backgrounds**, including ornaments on the
+  bubble border and artwork occupying a reserved corner (e.g. an avatar in
+  the lower corner).
+- **Decorative dividers.**
+- **Custom list-bullet images** — the AI response's markdown bullets drawn
+  as small theme images instead of dots.
+- **A theme font** (theme-level, per Section 4.6 — already centralized).
+- Possibly small static corner/edge sprites (in-version-1 or later is an
+  open decision).
+
+**Platform mechanisms (verified — no fighting the framework):**
+
+- **Tiling textures:** Android natively tiles a small bitmap across any
+  area (`BitmapDrawable` with repeat tile mode, declared in XML). One small
+  tile asset + one XML declaration covers any screen size efficiently.
+- **Nine-patch stretchable images** solve both "one frame fits every
+  screen size" and the bubble text-safety problem: a nine-patch defines its
+  own stretch zones **and its own content padding**, so a decorated bubble
+  asset itself declares where text may go. The artwork and its text-safe
+  area travel together; chat code never special-cases a theme's avatar
+  corner.
+- **Custom bullets are a single central change:** all message text renders
+  through the one Markwon pipeline (9.5.6), which supports replacing bullet
+  drawing. Real full-color images, not font glyphs — do not take the
+  "symbol font" route.
+
+**Binding door-keeping rules (apply to all work from now on):**
+
+1. **A decorated theme = a palette + an optional artwork pack, applied
+   through the same single application point** (4.5 rule 1, 4.7 rule 1).
+   No second theming mechanism; no per-screen decoration code — that is
+   the legacy AMOLED failure mode.
+2. **The Phase 4 chat restyle must keep the page background, message-bubble
+   backgrounds, and dividers as swappable theme-resolved drawables** — not
+   visuals baked into layout XML or Kotlin. This is the load-bearing
+   requirement; everything else layers on top of it.
+3. **Protected text zones.** Message text always sits on an opaque fill
+   supplied by the bubble asset; background artwork lives in margins and
+   empty space, never behind text. The artwork format must make this true
+   by construction (bubble assets carry their own content padding), so no
+   future theme can produce unreadable text.
+4. **Accessibility checks apply to artwork.** Decorated bubbles and frames
+   must survive large system font scales (4.6 rule 4), and zone colors on
+   decorated surfaces still need readable contrast.
+5. **Semantic non-palette colors stay untouched** (4.3): the mic
+   green/red voice-state colors never become theme artwork's hostages.
+6. **The system keyboard is not themeable** (platform limit). Record as
+   expectation, not a bug, when the feature is built.
+7. **App size:** a bundled artwork pack is roughly hundreds of KB to a few
+   MB. A handful bundled is fine; a large catalog should use the same
+   load-from-storage route as future custom themes (4.5) rather than
+   growing the APK indefinitely.
+
+**Open owner decisions (ask before building — do not assume):**
+
+- **Version-1 artwork scope.** Owner leaning: the chat screen gets the
+  full artwork treatment; other screens receive only the theme's colors
+  through the normal palette system. Not yet ruled.
+- **Package-deal vs. mixable:** whether a theme's artwork is inseparable
+  from its palette, or users may combine one theme's artwork with another's
+  colors. Owner has not decided.
+- **Static sprites** in the first decorated-theme version or deferred.
