@@ -92,6 +92,12 @@
         </activity>
 
         <activity
+            android:name=".ui.activities.ChooseProviderActivity"
+            android:exported="false"
+            android:label="@string/endpoint_choose_provider_title">
+        </activity>
+
+        <activity
             android:name=".ui.activities.PersonasListActivity"
             android:exported="false"
             android:label="@string/title_personas">

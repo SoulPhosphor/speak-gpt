@@ -43,8 +43,10 @@ import com.google.android.material.slider.Slider
 import com.google.android.material.textfield.TextInputEditText
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
+import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
+import org.teslasoft.assistant.preferences.dto.FavoriteModelObject
 import org.teslasoft.assistant.preferences.includes.ImageCapability
 import org.teslasoft.assistant.preferences.includes.ImageCapabilityStore
 import org.teslasoft.assistant.theme.ThemeManager
@@ -92,6 +94,32 @@ class ApiEndpointEditorActivity : FragmentActivity() {
 
     private var preferences: Preferences? = null
     private var apiEndpointPreferences: ApiEndpointPreferences? = null
+    private var favoriteModelsPreferences: FavoriteModelsPreferences? = null
+
+    /** Set once the user opens Choose Provider and returns with Save. Only then
+     *  does the endpoint's save apply the favorite/routing choices below. */
+    private var chooseProviderVisited: Boolean = false
+    private var pendingRoutingType: String = FavoriteModelObject.ROUTING_AUTOMATIC
+    private var pendingMakeFavorite: Boolean = false
+
+    /** Result from the Choose Provider screen: the chosen model becomes the
+     *  endpoint's model (same value the Model box sets), and the routing type +
+     *  favorite flag are applied to the favorites store when the profile saves. */
+    private val chooseProviderLauncher = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == RESULT_OK) {
+            val data = result.data ?: return@registerForActivityResult
+            val model = data.getStringExtra(ChooseProviderActivity.EXTRA_MODEL) ?: ""
+            pendingRoutingType = data.getStringExtra(ChooseProviderActivity.EXTRA_ROUTING_TYPE)
+                ?: FavoriteModelObject.ROUTING_AUTOMATIC
+            pendingMakeFavorite = data.getBooleanExtra(ChooseProviderActivity.EXTRA_MAKE_FAVORITE, true)
+            chooseProviderVisited = true
+            if (model != selectedModel) fieldContextWindow?.setText("")
+            selectedModel = model
+            fieldModel?.setText(model)
+        }
+    }
 
     private var actionBar: ConstraintLayout? = null
     private var btnBack: ImageButton? = null
@@ -180,6 +208,7 @@ class ApiEndpointEditorActivity : FragmentActivity() {
 
         preferences = Preferences.getPreferences(this, "")
         apiEndpointPreferences = ApiEndpointPreferences.getApiEndpointPreferences(this)
+        favoriteModelsPreferences = FavoriteModelsPreferences.getPreferences(this)
 
         bindViews()
         applyTheme()
@@ -351,6 +380,7 @@ class ApiEndpointEditorActivity : FragmentActivity() {
 
         fieldAuthType?.setOnClickListener { showAuthTypeChooser() }
         fieldModel?.setOnClickListener { showModelChooser() }
+        rowChooseProvider?.setOnClickListener { openChooseProvider() }
 
         initFloatingLabels()
 
@@ -442,6 +472,26 @@ class ApiEndpointEditorActivity : FragmentActivity() {
             }
             .setNegativeButton(R.string.btn_cancel) { _, _ -> }
             .show()
+    }
+
+    /**
+     * Open the Choose Provider screen for this endpoint (OpenRouter). Seeds it
+     * with the current model and its stored routing type; the result flows back
+     * through [chooseProviderLauncher].
+     */
+    private fun openChooseProvider() {
+        val routingType = when {
+            chooseProviderVisited -> pendingRoutingType
+            selectedModel.isNotBlank() ->
+                favoriteModelsPreferences?.getRoutingType(selectedModel, endpointId)
+                    ?: FavoriteModelObject.ROUTING_AUTOMATIC
+            else -> FavoriteModelObject.ROUTING_AUTOMATIC
+        }
+        val intent = android.content.Intent(this, ChooseProviderActivity::class.java)
+        intent.putExtra(ChooseProviderActivity.EXTRA_ENDPOINT_ID, endpointId)
+        intent.putExtra(ChooseProviderActivity.EXTRA_MODEL, selectedModel)
+        intent.putExtra(ChooseProviderActivity.EXTRA_ROUTING_TYPE, routingType)
+        chooseProviderLauncher.launch(intent)
     }
 
     private fun showModelChooser() {
@@ -634,6 +684,20 @@ class ApiEndpointEditorActivity : FragmentActivity() {
         // selection stay attached.
         val savedId = apiEndpointPreferences!!.setApiEndpoint(this, endpoint)
 
+        // Choose Provider choices (OpenRouter): applied only if the user visited
+        // that screen and saved. Favoriting the model stores its routing memory;
+        // turning the toggle off removes the favorite AND that memory (owner
+        // ruling — the favorite is the housekeeping unit for provider choices).
+        if (chooseProviderVisited) {
+            if (pendingMakeFavorite && selectedModel.isNotBlank()) {
+                favoriteModelsPreferences?.addFavoriteModel(
+                    FavoriteModelObject(selectedModel, savedId, pendingRoutingType)
+                )
+            } else if (selectedModel.isNotBlank()) {
+                favoriteModelsPreferences?.removeFavoriteModel(selectedModel, savedId)
+            }
+        }
+
         val data = android.content.Intent()
         data.putExtra("apiEndpointId", savedId)
         data.putExtra("deleted", false)
@@ -733,7 +797,10 @@ class ApiEndpointEditorActivity : FragmentActivity() {
             fieldPrefix?.text.toString(),
             if (keyChanged) "key_changed" else "key_same",
             currentCapabilityJson,
-            currentToolCapabilityJson
+            currentToolCapabilityJson,
+            // Choose Provider choices count as unsaved edits once made, so the
+            // discard-changes guard offers to save them.
+            if (chooseProviderVisited) "cp:$pendingRoutingType:$pendingMakeFavorite" else "cp:none"
         ).joinToString("")
     }
 

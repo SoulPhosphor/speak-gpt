@@ -76,11 +76,39 @@ class FavoriteModelsPreferences private constructor(private val sharedPreference
 
         if (models == null) models = arrayListOf()
 
-        val modelExists: Boolean = models.any { m -> m["modelId"] == model.modelId && m["endpointId"] == model.endpointId }
-        if (!modelExists) {
-            models.add(hashMapOf("modelId" to model.modelId, "endpointId" to model.endpointId))
-            setFavoriteModels(models)
+        // Upsert: a model already favorited keeps its single entry, but its
+        // stored routing memory is refreshed to the latest choice. A new model
+        // is appended. Both carry the routing type so removing the favorite
+        // later also removes that memory (see removeFavoriteModel).
+        val existingIndex = models.indexOfFirst { m -> m["modelId"] == model.modelId && m["endpointId"] == model.endpointId }
+        val entry = hashMapOf(
+            "modelId" to model.modelId,
+            "endpointId" to model.endpointId,
+            "routingType" to model.routingType
+        )
+        if (existingIndex >= 0) {
+            models[existingIndex] = entry
+        } else {
+            models.add(entry)
         }
+        setFavoriteModels(models)
+    }
+
+    /**
+     * The stored provider-routing type for a favorited model, or
+     * [FavoriteModelObject.ROUTING_AUTOMATIC] when the model is not a favorite
+     * (or is an older favorite saved before routing memory existed). Automatic
+     * is the safe default everywhere: it means "let the provider choose".
+     */
+    fun getRoutingType(modelId: String, endpointId: String): String {
+        val match = getFavoriteModels().firstOrNull { it["modelId"] == modelId && it["endpointId"] == endpointId }
+        return match?.get("routingType")?.takeIf { it.isNotBlank() }
+            ?: FavoriteModelObject.ROUTING_AUTOMATIC
+    }
+
+    /** True when [modelId] is a favorite under [endpointId]. */
+    fun isFavorite(modelId: String, endpointId: String): Boolean {
+        return getFavoriteModels().any { it["modelId"] == modelId && it["endpointId"] == endpointId }
     }
 
     /**
