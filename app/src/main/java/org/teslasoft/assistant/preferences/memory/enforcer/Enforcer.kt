@@ -20,6 +20,7 @@ import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
 import org.teslasoft.assistant.preferences.Preferences
+import org.teslasoft.assistant.preferences.lorebook.LoreBookBudget
 import org.teslasoft.assistant.preferences.lorebook.LoreBookMatch
 import org.teslasoft.assistant.preferences.lorebook.LoreBookStore
 import org.teslasoft.assistant.preferences.memory.CampaignRecord
@@ -228,16 +229,13 @@ class Enforcer private constructor(private val appContext: Context) {
         }
         val pool = poolScored.map { toAssembled(it.memory, it.score, it.similarity) }
 
-        // Lore notes: the user's hand-written tier, same budget caps as the
-        // classic path (core-book-first order is preserved from the caller).
-        val loreNotes = ArrayList<LoreNote>()
-        var loreChars = 0
-        for (match in input.loreMatches) {
-            if (loreNotes.size >= LoreBookStore.MAX_INJECTED_ENTRIES) break
-            if (loreNotes.isNotEmpty() && loreChars + match.entry.content.length > LoreBookStore.MAX_INJECTED_CHARS) break
-            loreChars += match.entry.content.length
-            loreNotes.add(LoreNote(match.entry.label, match.entry.content))
-        }
+        // Lore notes: the user's hand-written tier, same budget selection as
+        // the classic path (core-book-first order is preserved from the
+        // caller) — both now share LoreBookBudget.select (counterplan Step
+        // 1.6) so the two paths can never disagree on what was injected.
+        val loreNotes = LoreBookBudget.select(
+            input.loreMatches, LoreBookStore.MAX_INJECTED_ENTRIES, LoreBookStore.MAX_INJECTED_CHARS
+        ).kept.map { LoreNote(it.entry.label, it.entry.content) }
 
         // Freshness cooldown state (§10 / Stage 3.3): the turn clock and the
         // pool's last-injection turns, fetched once. A clock/store failure
