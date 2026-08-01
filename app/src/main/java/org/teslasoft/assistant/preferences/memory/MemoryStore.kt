@@ -83,6 +83,11 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         const val META_LAST_AUTO_EXPORT_AT = "last_auto_export_at"
         const val META_INDEX_MODEL_TAG = "index_model_tag"
         const val META_BACKFILL_DONE = "backfill_done"
+
+        // A scoped vector load passes the eligible memory ids as bound
+        // parameters; chunk them so the IN(...) list stays well under
+        // SQLite's ~999 bound-variable ceiling (one slot is the model tag).
+        private const val EMBEDDING_ID_CHUNK = 400
         // Set once the one-time purge of pre-written origin='system' modes has
         // run (owner_approved_rules.md §15 — the app pre-authors no modes).
         const val META_SYSTEM_MODES_PURGED = "system_modes_purged"
@@ -3304,6 +3309,39 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         return out
     }
 
+    /** Stored vectors for [embeddingModel] over just the given active memory
+     *  ids, keyed by memory id — the scoped working-set load a retrieval turn
+     *  uses instead of [activeEmbeddings], so it reads only the current scene's
+     *  eligible candidates rather than every active vector in the library
+     *  (counterplan Step 1.4). A candidate with no current vector is simply
+     *  absent from the map. Ids are chunked to respect the bound-variable
+     *  limit; an empty request reads nothing. */
+    fun embeddingsForMemories(memoryIds: Collection<String>, embeddingModel: String): HashMap<String, ByteArray> {
+        val out = HashMap<String, ByteArray>()
+        if (memoryIds.isEmpty()) return out
+        val ids = memoryIds.toList()
+        val db = readableDatabase
+        var i = 0
+        while (i < ids.size) {
+            val chunk = ids.subList(i, minOf(i + EMBEDDING_ID_CHUNK, ids.size))
+            val placeholders = chunk.joinToString(",") { "?" }
+            val args = ArrayList<String>(chunk.size + 1)
+            args.add(embeddingModel)
+            args.addAll(chunk)
+            db.rawQuery(
+                "SELECT e.memory_id, e.vector FROM embeddings e " +
+                    "JOIN memories m ON m.memory_id = e.memory_id " +
+                    "WHERE e.embedding_model = ? AND m.status = 'active' " +
+                    "AND e.memory_id IN ($placeholders)",
+                args.toTypedArray()
+            ).use {
+                while (it.moveToNext()) out[it.getString(0)] = it.getBlob(1)
+            }
+            i += EMBEDDING_ID_CHUNK
+        }
+        return out
+    }
+
     fun upsertEmbedding(memoryId: String, embeddingModel: String, vector: ByteArray) {
         writableDatabase.execSQL(
             "INSERT INTO embeddings (memory_id, embedding_model, vector, embedded_at) VALUES (?, ?, ?, ?) " +
@@ -3332,6 +3370,27 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 "(SELECT 1 FROM embeddings e WHERE e.memory_id = m.memory_id AND e.embedding_model = ?)",
             arrayOf(embeddingModel)
         ).use { return if (it.moveToFirst()) it.getInt(0) else 0 }
+    }
+
+    /** The derived missing-vector inventory: active memories that still lack a
+     *  vector for [embeddingModel], oldest first, with the columns the semantic
+     *  document needs. The background repair re-embeds exactly these
+     *  (counterplan Step 1.4); it is computed fresh each pass, never a stored
+     *  queue that could drift from the truth. */
+    fun activeMemoriesMissingEmbedding(embeddingModel: String): List<RetrievableMemory> {
+        val out = ArrayList<RetrievableMemory>()
+        readableDatabase.rawQuery(
+            "SELECT m.memory_id, m.scope, m.title, m.content, m.embedding_text, " +
+                "m.importance, m.created_at, m.updated_at, m.world_id, m.provenance_confidence, " +
+                "m.protection_json, m.provenance_source, m.kind, m.tags_json " +
+                "FROM memories m WHERE m.status = 'active' AND NOT EXISTS " +
+                "(SELECT 1 FROM embeddings e WHERE e.memory_id = m.memory_id AND e.embedding_model = ?) " +
+                "ORDER BY m.created_at ASC",
+            arrayOf(embeddingModel)
+        ).use {
+            while (it.moveToNext()) out.add(readRetrievable(it))
+        }
+        return out
     }
 
     fun hasAnyTranscriptForChat(chatId: String): Boolean {

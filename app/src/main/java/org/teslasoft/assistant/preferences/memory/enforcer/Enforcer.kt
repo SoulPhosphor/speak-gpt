@@ -37,6 +37,7 @@ import org.teslasoft.assistant.preferences.memory.RoleplayCharacterRecord
 import org.teslasoft.assistant.preferences.memory.ScoredMemory
 import org.teslasoft.assistant.preferences.memory.WorldRecord
 import org.teslasoft.assistant.preferences.memory.librarian.Librarian
+import org.teslasoft.assistant.preferences.memory.librarian.RetrievalDocument
 import org.teslasoft.assistant.preferences.memory.librarian.VectorMath
 
 /**
@@ -215,11 +216,12 @@ class Enforcer private constructor(private val appContext: Context) {
         // selection tell "relevance exhausted" apart from "cap reached with
         // relevant candidates still waiting".
         val scanCap = RetrievalBackfill.scanCap(policy.topK)
+        var retrievalDiag: Librarian.RetrievalDiagnostics? = null
         val poolScored: List<ScoredMemory> = try {
             librarian.search(
                 retrievalScope, query, scanCap + 1,
                 input.projectId?.takeIf { it.isNotBlank() }
-            )
+            ) { d -> retrievalDiag = d }
         } catch (e: Exception) {
             notes.add("retrieval failed: ${e.message}")
             emptyList()
@@ -259,17 +261,26 @@ class Enforcer private constructor(private val appContext: Context) {
         // wins — and the pair is recorded via flagContradictions (silent
         // disagreement between the tiers is the one thing never allowed).
         // Those flags are write-only today; see flagContradictions for the
-        // details. Lore vectors are prepared once; each examined candidate is
-        // checked lazily below so the embed work stays bounded by the scan
-        // cap rather than the whole pool.
+        // details. Both sides reuse vectors instead of re-embedding every turn
+        // (counterplan Step 1.4): the memory's own stored index vector is read
+        // once for the whole pool in a scoped query, and each lore note's
+        // vector is cached by content + model tag. When either is unavailable
+        // (partial index, no model) the deterministic word-overlap fallback
+        // still runs, so suppression never silently stops.
         val loreVectors: List<Pair<LoreNote, FloatArray?>> =
             if (loreNotes.isEmpty() || pool.isEmpty()) emptyList()
-            else loreNotes.map { note -> note to librarian.embedOrNull("${note.label}: ${note.content}", false) }
+            else loreNotes.map { note -> note to librarian.embedLoreCached("${note.label}: ${note.content}") }
         val anyLoreVector = loreVectors.any { it.second != null }
+        val poolVectors: Map<String, ByteArray> =
+            if (loreVectors.isEmpty() || !anyLoreVector) emptyMap()
+            else librarian.activeTag()?.let { tag ->
+                try { store.embeddingsForMemories(pool.map { it.memoryId }, RetrievalDocument.effectiveKey(tag)) }
+                catch (_: Exception) { emptyMap<String, ByteArray>() }
+            } ?: emptyMap()
         fun loreDupOf(mem: AssembledMemory): LoreNote? {
             if (loreVectors.isEmpty()) return null
             val memText = "${mem.title}: ${mem.content}"
-            val memVec = if (anyLoreVector) librarian.embedOrNull(memText, false) else null
+            val memVec = poolVectors[mem.memoryId]?.let { VectorMath.fromBlob(it) }
             return loreVectors.firstOrNull { (note, loreVec) ->
                 if (memVec != null && loreVec != null) {
                     VectorMath.cosine(memVec, loreVec) >= NearDuplicate.COSINE_THRESHOLD
@@ -431,6 +442,23 @@ class Enforcer private constructor(private val appContext: Context) {
         }
         if (suppressed.isNotEmpty()) flagContradictions(store, suppressed)
 
+        // Per-source retrieval summary for the debug log (counterplan Step 1.4):
+        // how many memories were eligible, how many carried a current vector,
+        // which ranking path actually ran, how many were injected, and the
+        // deterministic reason each omitted one was dropped. Stable ids sit on
+        // the injected/cut lines below.
+        retrievalDiag?.let { d ->
+            val mode = when {
+                !d.hasModel -> "keyword — no model"
+                d.semantic -> "semantic"
+                else -> "keyword — partial index (${d.withVector}/${d.eligible} vectored)"
+            }
+            notes.add(
+                "saved memories: eligible ${d.eligible}, ranked ${pool.size} ($mode), " +
+                    "injected ${kept.size}, omitted budget ${budgetCut.size} / cooldown ${cooled.size} / lore-overlap ${suppressed.size}"
+            )
+        }
+
         var pullRemaining = (memoryAvailable - memoryChars).coerceAtLeast(0)
         val pullKept = ArrayList<Pair<AssembledCardEntry, String>>()
         for (f in cardPull) {
@@ -512,19 +540,20 @@ class Enforcer private constructor(private val appContext: Context) {
                 injected = kept.map {
                     AssemblyLog.Line(
                         it.title,
-                        "(${it.provenanceMarker}) score %.3f sim %.3f%s%s".format(
+                        "(${it.provenanceMarker}) score %.3f sim %.3f%s%s · %s".format(
                             it.score, it.similarity,
                             if (it.isProtected) " [protected]" else "",
-                            if (it.isInstruction) " [instruction rule]" else ""
+                            if (it.isInstruction) " [instruction rule]" else "",
+                            it.memoryId
                         )
                     )
                 } + cardsFinal.map { (a, reason) ->
                     AssemblyLog.Line("card: ${a.name}", "§${a.sectionLabel} — fired by $reason")
                 },
-                cut = budgetCut.map { AssemblyLog.Line(it.title, "over budget (score %.3f)".format(it.score)) } +
-                    suppressed.map { (m, l) -> AssemblyLog.Line(m.title, "near-duplicate of lore \"${l.label}\" — flagged") } +
+                cut = budgetCut.map { AssemblyLog.Line(it.title, "over budget (score %.3f) · %s".format(it.score, it.memoryId)) } +
+                    suppressed.map { (m, l) -> AssemblyLog.Line(m.title, "near-duplicate of lore \"${l.label}\" — flagged · ${m.memoryId}") } +
                     cooled.map { (m, ago) ->
-                        AssemblyLog.Line(m.title, "cooldown — injected $ago turn(s) ago, refreshes after $COOLDOWN_TURNS")
+                        AssemblyLog.Line(m.title, "cooldown — injected $ago turn(s) ago, refreshes after $COOLDOWN_TURNS · ${m.memoryId}")
                     } +
                     cardCooled.map { (name, ago) ->
                         AssemblyLog.Line("card: $name", "cooldown — injected $ago turn(s) ago, refreshes after $COOLDOWN_TURNS")
