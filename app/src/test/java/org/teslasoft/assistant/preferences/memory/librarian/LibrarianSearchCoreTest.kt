@@ -143,6 +143,45 @@ class LibrarianSearchCoreTest {
     }
 
     @Test
+    fun modeCallbackReportsSemanticWhenTheIndexIsComplete() {
+        val modes = ArrayList<Boolean>()
+        Librarian.searchCore(
+            "anything",
+            { floatArrayOf(1f, 0f, 0f) },
+            listOf(row(mem("a"), vector = floatArrayOf(1f, 0f, 0f))),
+            weights, topK = 5
+        ) { modes.add(it) }
+        assertEquals(listOf(true), modes)
+    }
+
+    @Test
+    fun modeCallbackReportsLexicalOnAPartialIndex() {
+        val modes = ArrayList<Boolean>()
+        Librarian.searchCore(
+            "the harvest festival",
+            { floatArrayOf(1f, 0f, 0f) },
+            listOf(
+                row(mem("vectored", content = "the harvest festival"), vector = floatArrayOf(1f, 0f, 0f)),
+                row(mem("vectorless", content = "the harvest festival"))
+            ),
+            weights, topK = 5
+        ) { modes.add(it) }
+        assertEquals(listOf(false), modes)
+    }
+
+    @Test
+    fun modeCallbackReportsLexicalWhenTheQueryEmbedFails() {
+        val modes = ArrayList<Boolean>()
+        Librarian.searchCore(
+            "the harvest festival",
+            { null },
+            listOf(row(mem("match", content = "the harvest festival"), vector = floatArrayOf(1f, 0f, 0f))),
+            weights, topK = 5
+        ) { modes.add(it) }
+        assertEquals(listOf(false), modes)
+    }
+
+    @Test
     fun filteredCandidatesBackfillFromTheRankedPool() {
         // Four relevant memories, importance forcing the order m1 > m2 > m3 > m4.
         val corpus = (1..4).map { i ->

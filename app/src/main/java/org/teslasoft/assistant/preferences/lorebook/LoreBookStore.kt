@@ -98,6 +98,11 @@ class LoreBookStore private constructor(context: Context, password: ByteArray) :
         const val MAX_INJECTED_ENTRIES = 20
         const val MAX_INJECTED_CHARS = 6000
 
+        // A multi-book/multi-entry batched query passes ids as bound
+        // parameters; chunk them so the IN(...) list stays well under
+        // SQLite's ~999 bound-variable ceiling.
+        private const val ID_CHUNK = 400
+
         @Volatile
         private var instance: LoreBookStore? = null
 
@@ -417,41 +422,84 @@ class LoreBookStore private constructor(context: Context, password: ByteArray) :
     }
 
     /**
-     * Find every enabled memory in [lorebookId] with a trigger that fires on
-     * [message]. Matching is delegated to [LoreBookTriggerMatcher]: whole-word,
-     * case-insensitive, with light suffix folding (dragon ↔ dragons), and
-     * triggers wrapped in double quotes demand that exact text instead.
+     * Find every enabled memory across [lorebookIds] with a trigger that fires
+     * on [message], searched in that order (the caller's book-priority order —
+     * core book first) and by-book recency within each book, same as calling
+     * the single-book search once per book and concatenating. Matching is
+     * delegated to [LoreBookTriggerMatcher]: whole-word, case-insensitive, with
+     * light suffix folding (dragon ↔ dragons), and triggers wrapped in double
+     * quotes demand that exact text instead.
+     *
+     * One batched entries query plus one batched triggers query for ALL active
+     * books, rather than a query per book and a trigger query per entry
+     * (counterplan Step 1.6 — the N+1 pattern on every lore-enabled turn).
      */
-    fun findMatches(message: String, lorebookId: String): ArrayList<LoreBookMatch> {
+    fun findMatches(message: String, lorebookIds: List<String>): ArrayList<LoreBookMatch> {
         val result = ArrayList<LoreBookMatch>()
-        if (message.isBlank() || lorebookId.isBlank()) return result
+        if (message.isBlank() || lorebookIds.isEmpty()) return result
 
-        for (entry in queryEntries("$COL_LOREBOOK_ID = ? AND $COL_ENABLED = 1", arrayOf(lorebookId))) {
-            for (trigger in entry.triggers) {
-                if (LoreBookTriggerMatcher.matches(message, trigger)) {
-                    result.add(LoreBookMatch(entry, trigger.trim()))
-                    break // one match per memory is enough to inject it once
+        val byBook = enabledEntriesByBook(lorebookIds.distinct())
+        for (bookId in lorebookIds) {
+            for (entry in byBook[bookId].orEmpty()) {
+                for (trigger in entry.triggers) {
+                    if (LoreBookTriggerMatcher.matches(message, trigger)) {
+                        result.add(LoreBookMatch(entry, trigger.trim()))
+                        break // one match per memory is enough to inject it once
+                    }
                 }
             }
         }
         return result
     }
 
-    private fun queryEntries(selection: String?, selectionArgs: Array<String>?): ArrayList<LoreBookEntry> {
+    /**
+     * Enabled entries across [lorebookIds], triggers attached, grouped by book.
+     * Each book's list keeps the same order [queryEntries] already produced
+     * (updated-at descending) — one entries query and one triggers query,
+     * chunked to respect the bound-variable limit, instead of one query per
+     * book plus one per entry.
+     */
+    private fun enabledEntriesByBook(lorebookIds: List<String>): Map<String, List<LoreBookEntry>> {
+        if (lorebookIds.isEmpty()) return emptyMap()
         val entries = ArrayList<LoreBookEntry>()
-        val db = readableDatabase
+        var i = 0
+        while (i < lorebookIds.size) {
+            val chunk = lorebookIds.subList(i, minOf(i + ID_CHUNK, lorebookIds.size))
+            val placeholders = chunk.joinToString(",") { "?" }
+            entries.addAll(
+                queryEntryRows(
+                    "$COL_LOREBOOK_ID IN ($placeholders) AND $COL_ENABLED = 1",
+                    chunk.toTypedArray()
+                )
+            )
+            i += ID_CHUNK
+        }
+        val triggersById = fetchTriggersForEntries(entries.map { it.id })
+        for (entry in entries) entry.triggers = triggersById[entry.id] ?: ArrayList()
+        return entries.groupBy { it.lorebookId }
+    }
 
-        val cursor = db.query(
-            TABLE_ENTRIES,
-            null,
-            selection,
-            selectionArgs,
-            null,
-            null,
-            "$COL_UPDATED_AT DESC"
-        )
+    /**
+     * All memories matching [selection], triggers attached — one entries query
+     * plus one batched triggers query for every returned row, instead of a
+     * trigger query per entry (counterplan Step 1.6).
+     */
+    private fun queryEntries(selection: String?, selectionArgs: Array<String>?): ArrayList<LoreBookEntry> {
+        val entries = queryEntryRows(selection, selectionArgs)
+        val triggersById = fetchTriggersForEntries(entries.map { it.id })
+        for (entry in entries) entry.triggers = triggersById[entry.id] ?: ArrayList()
+        return entries
+    }
 
-        cursor.use {
+    /** Entry rows matching [selection], triggers left empty — callers attach
+     *  triggers themselves via [fetchTriggersForEntries] so a multi-book fetch
+     *  can batch that lookup once across every returned row instead of once
+     *  per query. */
+    private fun queryEntryRows(selection: String?, selectionArgs: Array<String>?): ArrayList<LoreBookEntry> {
+        val entries = ArrayList<LoreBookEntry>()
+        readableDatabase.query(
+            TABLE_ENTRIES, null, selection, selectionArgs, null, null, "$COL_UPDATED_AT DESC"
+        ).use {
             val idIdx = it.getColumnIndexOrThrow(COL_ID)
             val bookIdx = it.getColumnIndexOrThrow(COL_LOREBOOK_ID)
             val labelIdx = it.getColumnIndexOrThrow(COL_LABEL)
@@ -462,15 +510,14 @@ class LoreBookStore private constructor(context: Context, password: ByteArray) :
             val updatedIdx = it.getColumnIndexOrThrow(COL_UPDATED_AT)
 
             while (it.moveToNext()) {
-                val id = it.getString(idIdx)
                 entries.add(
                     LoreBookEntry(
-                        id = id,
+                        id = it.getString(idIdx),
                         lorebookId = it.getString(bookIdx) ?: "",
                         label = it.getString(labelIdx) ?: "",
                         content = it.getString(contentIdx) ?: "",
                         sourceText = it.getString(sourceIdx) ?: "",
-                        triggers = getTriggers(db, id),
+                        triggers = ArrayList(),
                         enabled = it.getInt(enabledIdx) == 1,
                         createdAt = it.getLong(createdIdx),
                         updatedAt = it.getLong(updatedIdx)
@@ -478,28 +525,36 @@ class LoreBookStore private constructor(context: Context, password: ByteArray) :
                 )
             }
         }
-
         return entries
     }
 
-    private fun getTriggers(db: SQLiteDatabase, memoryId: String): ArrayList<String> {
-        val triggers = ArrayList<String>()
-        val cursor = db.query(
-            TABLE_TRIGGERS,
-            arrayOf(COL_TRIGGER_TEXT),
-            "$COL_TRIGGER_MEMORY_ID = ?",
-            arrayOf(memoryId),
-            null,
-            null,
-            "$COL_TRIGGER_ROW_ID ASC"
-        )
-        cursor.use {
-            val textIdx = it.getColumnIndexOrThrow(COL_TRIGGER_TEXT)
-            while (it.moveToNext()) {
-                triggers.add(it.getString(textIdx))
+    /** Triggers for [entryIds], keyed by entry id and ordered as they were
+     *  entered — one query (chunked for large id lists) instead of one per
+     *  entry. */
+    private fun fetchTriggersForEntries(entryIds: List<String>): Map<String, ArrayList<String>> {
+        val out = HashMap<String, ArrayList<String>>()
+        if (entryIds.isEmpty()) return out
+        val db = readableDatabase
+        var i = 0
+        while (i < entryIds.size) {
+            val chunk = entryIds.subList(i, minOf(i + ID_CHUNK, entryIds.size))
+            val placeholders = chunk.joinToString(",") { "?" }
+            db.query(
+                TABLE_TRIGGERS,
+                arrayOf(COL_TRIGGER_MEMORY_ID, COL_TRIGGER_TEXT),
+                "$COL_TRIGGER_MEMORY_ID IN ($placeholders)",
+                chunk.toTypedArray(),
+                null, null, "$COL_TRIGGER_ROW_ID ASC"
+            ).use {
+                val memIdx = it.getColumnIndexOrThrow(COL_TRIGGER_MEMORY_ID)
+                val textIdx = it.getColumnIndexOrThrow(COL_TRIGGER_TEXT)
+                while (it.moveToNext()) {
+                    out.getOrPut(it.getString(memIdx)) { ArrayList() }.add(it.getString(textIdx))
+                }
             }
+            i += ID_CHUNK
         }
-        return triggers
+        return out
     }
 }
 
