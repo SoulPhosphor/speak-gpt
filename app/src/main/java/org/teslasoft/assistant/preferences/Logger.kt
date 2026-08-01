@@ -387,9 +387,23 @@ class Logger {
          * Trimmed by whole entries to the log's configurable retention. Called
          * off the main thread by the failure handler.
          */
-        fun logProviderFailure(context: Context, provider: String, providerError: String) {
+        fun logProviderFailure(
+            context: Context,
+            apiProvider: String,
+            modelServiceProvider: String,
+            model: String,
+            function: String,
+            providerError: String
+        ) {
             val timestamp = LocalDateTime.now().format(LOG_TIME_FORMAT)
-            val entry = "[$timestamp]\nProvider: $provider\nProvider Error: $providerError\n\n\n"
+            // Same richer detail the user sees under the failed reply (owner
+            // ruling, Aug 1 2026), so the log and the on-screen block match.
+            val entry = "[$timestamp]\n" +
+                "Provider Error: $providerError\n" +
+                "API Provider: $apiProvider\n" +
+                "Model Service Provider: $modelServiceProvider\n" +
+                "Model: $model\n" +
+                "Function: $function\n\n\n"
             val p = Preferences.getPreferences(context, "")
             val log = trimByEntries(
                 "${getProviderFailLog(context)}$entry",

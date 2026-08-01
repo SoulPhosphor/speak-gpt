@@ -61,21 +61,30 @@ fun GenErrorResult.reachedServer(): Boolean = code !in NO_RESPONSE_CODES
 
 /**
  * The raw provider detail shown beneath the app's own failure explanation
- * (owner ruling, July 31 2026): two always-present lines —
+ * (owner ruling, Aug 1 2026). Below the Client Error line the caller prepends,
+ * five lines:
  *
  *   Provider Error: <the server's status and message, verbatim>
- *   Provider: <the upstream provider name>
+ *   API Provider: <the connection profile's name>
+ *   Model Service Provider: <the upstream model service the server reported>
+ *   Model: <the model the request used>
+ *   Function: <what the app was doing — "Chat" for a chat reply>
  *
- * Each line falls back to a truthful placeholder rather than a blank: a request
- * that never reached a server says so, and an absent provider name says so.
- * [rawProviderName] and a parsed body are supplied by the network-capture layer;
- * until then the name shows its placeholder and the message falls back to the
- * exception text.
+ * Each value falls back to a truthful placeholder rather than a blank: a request
+ * that never reached a server still names the connection, model, and function,
+ * and any value the app cannot determine says "Not Reported". [apiProvider] is
+ * the profile name; [modelServiceProvider] is the upstream provider the server
+ * itself reported (aggregators like OpenRouter include it, direct providers do
+ * not — hence "Not Reported" there is normal). Callers pass already-resolved
+ * strings so the on-screen block and the Provider Failure Log entry match.
  */
 fun GenErrorResult.providerDetailBlock(
     context: Context,
     exceptionMessage: String?,
-    rawProviderName: String? = null,
+    apiProvider: String,
+    modelServiceProvider: String,
+    model: String,
+    function: String,
     rawProviderMessage: String? = null
 ): String {
     val detail: String = if (code in NO_RESPONSE_CODES) {
@@ -90,10 +99,11 @@ fun GenErrorResult.providerDetailBlock(
             else -> context.getString(R.string.provider_error_none)
         }
     }
-    val providerName = rawProviderName?.trim()?.ifBlank { null }
-        ?: context.getString(R.string.provider_name_none)
     return context.getString(R.string.provider_error_line, detail) +
-        "\n" + context.getString(R.string.provider_name_line, providerName)
+        "\n" + context.getString(R.string.provider_api_provider_line, apiProvider) +
+        "\n" + context.getString(R.string.provider_model_service_line, modelServiceProvider) +
+        "\n" + context.getString(R.string.provider_model_line, model) +
+        "\n" + context.getString(R.string.provider_function_line, function)
 }
 
 /** Exact explanation for a provider-confirmed capacity system. */

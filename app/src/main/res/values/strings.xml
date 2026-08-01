@@ -775,13 +775,20 @@
     <string name="provider_rate_limit">The reply failed because the service hit a rate or throughput limit. Wait a moment and retry, or switch models.</string>
     <string name="provider_quota_limit">The reply failed because the account reached its usage or spending limit on the service. Check the account\'s usage and billing limits.</string>
     <string name="provider_out_of_credits">The reply failed because the service reports the account is out of credits. Add credits with the service, then retry.</string>
-    <!-- Raw provider detail shown beneath the app's own failure explanation.
-         Labels are Title Case; the placeholder values are full sentences. -->
+    <!-- Raw provider detail shown beneath the app's own failure explanation
+         (owner ruling, Aug 1 2026). Below the Client Error and Provider Error
+         lines it now names the connection, the upstream model service, the
+         model, and the function. Labels are Title Case; unknown values say
+         "Not Reported" rather than blank. -->
     <string name="provider_error_line">Provider Error: %1$s</string>
-    <string name="provider_name_line">Provider: %1$s</string>
+    <string name="provider_api_provider_line">API Provider: %1$s</string>
+    <string name="provider_model_service_line">Model Service Provider: %1$s</string>
+    <string name="provider_model_line">Model: %1$s</string>
+    <string name="provider_function_line">Function: %1$s</string>
     <string name="provider_error_no_response">No response received from the server.</string>
     <string name="provider_error_none">None provided by the server.</string>
-    <string name="provider_name_none">No provider reported.</string>
+    <string name="provider_value_not_reported">Not Reported</string>
+    <string name="provider_function_chat">Chat</string>
     <string name="provider_unknown_limit">The server rejected the request but did not provide enough information to identify which limit was exceeded. Nothing was shortened or retried. Technical details were saved to the Error Log.</string>
     <string name="label_debug">Debug</string>
     <string name="label_permission_denied">Permission denied</string>
