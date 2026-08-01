@@ -233,9 +233,11 @@ class Enforcer private constructor(private val appContext: Context) {
         // the classic path (core-book-first order is preserved from the
         // caller) — both now share LoreBookBudget.select (counterplan Step
         // 1.6) so the two paths can never disagree on what was injected.
-        val loreNotes = LoreBookBudget.select(
+        val loreKept = LoreBookBudget.select(
             input.loreMatches, LoreBookStore.MAX_INJECTED_ENTRIES, LoreBookStore.MAX_INJECTED_CHARS
-        ).kept.map { LoreNote(it.entry.label, it.entry.content) }
+        ).kept
+        val loreNotes = loreKept.map { LoreNote(it.entry.label, it.entry.content) }
+        val loreChars = loreKept.sumOf { it.entry.content.length }
 
         // Freshness cooldown state (§10 / Stage 3.3): the turn clock and the
         // pool's last-injection turns, fetched once. A clock/store failure
