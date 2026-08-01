@@ -191,9 +191,11 @@ import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.SecurePrefs
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.memory.TranscriptRecorder
+import org.teslasoft.assistant.preferences.lorebook.LoreBookBudget
 import org.teslasoft.assistant.preferences.lorebook.LoreBookInjectionLog
 import org.teslasoft.assistant.preferences.lorebook.LoreBookMatch
 import org.teslasoft.assistant.preferences.lorebook.LoreBookStore
+import org.teslasoft.assistant.preferences.lorebook.LoreDedup
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.stt.LocalWhisperEngine
 import org.teslasoft.assistant.stt.SpeechTextFormatter
@@ -7655,6 +7657,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val loreBooksEnabled = preferences?.getChatLoreBooksEnabled() == true
         val allLoreMatches = ArrayList<LoreBookMatch>()
         var activeLoreBookCount = -1
+        var dedupedLoreMatches: List<LoreBookMatch> = emptyList()
         if (loreBooksEnabled) {
             try {
                 val loreStore = LoreBookStore.getInstance(this)
@@ -7671,9 +7674,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 } else {
                     activeBookIds.addAll(checkedIds)
                 }
-                for (bookId in activeBookIds) {
-                    allLoreMatches.addAll(loreStore.findMatches(loreQuery, bookId))
-                }
+                // One batched call across every active book (counterplan Step
+                // 1.6) rather than one query per book.
+                allLoreMatches.addAll(loreStore.findMatches(loreQuery, activeBookIds.toList()))
                 activeLoreBookCount = activeBookIds.size
             } catch (e: Exception) {
                 org.teslasoft.assistant.preferences.memory.MemoryLog.log(
@@ -7683,7 +7686,20 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     "Lorebook unavailable this turn: ${e.message}"
                 )
             }
-            LoreBookInjectionLog.record(loreQuery, allLoreMatches, activeLoreBookCount)
+            // Cross-book dedup (Step 1.6): the same lore content can live in
+            // two active books; first occurrence (core book first) wins. This
+            // path has no entry/character budget of its own, so dedup is the
+            // only thing that can drop a match here.
+            dedupedLoreMatches = LoreDedup.dedup(allLoreMatches)
+            LoreBookInjectionLog.record(
+                userMessage = loreQuery,
+                matched = allLoreMatches,
+                activeBooks = activeLoreBookCount,
+                injected = dedupedLoreMatches,
+                cut = LoreDedup.droppedDuplicates(allLoreMatches).map { (dup, _) ->
+                    LoreBookInjectionLog.Cut(dup, "duplicate content")
+                }
+            )
         }
 
         var memoryAssembly: String? = null
@@ -7729,9 +7745,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             msgs.add(ChatMessage(role = ChatRole.System, content = memoryAssembly))
         }
 
-        if (allLoreMatches.isNotEmpty()) {
+        if (dedupedLoreMatches.isNotEmpty()) {
             val loreText = StringBuilder(getString(R.string.lorebook_injection_header))
-            for (match in allLoreMatches) {
+            for (match in dedupedLoreMatches) {
                 loreText.append("\n- ").append(match.entry.content)
             }
             msgs.add(ChatMessage(role = ChatRole.System, content = loreText.toString()))
@@ -7930,6 +7946,18 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // -1 = the store threw (unavailable); the debug view distinguishes that
         // from "searched N books and matched nothing" and "had no active books".
         var activeLoreBookCount = -1
+        // Cross-book dedup (Step 1.6) applied once here, before either
+        // downstream consumer (the enforcer below or the classic fallback
+        // further down) ever sees the matches — first occurrence (core book
+        // first) wins, so a memory copied into two active books is never
+        // counted, budgeted, or injected twice.
+        var dedupedLoreMatches: List<LoreBookMatch> = emptyList()
+        // The same budget selection the enforcer applies to loreNotes,
+        // precomputed here with the shared, pure LoreBookBudget so the debug
+        // log can report exactly what reached the prompt regardless of
+        // whether the enforcer or the classic fallback below ends up
+        // rendering it — both act on the identical deduped input.
+        var loreBudget = LoreBookBudget.Selection(emptyList(), emptyList())
         if (loreBooksEnabled) {
             try {
                 val loreStore = LoreBookStore.getInstance(this)
@@ -7947,9 +7975,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     activeBookIds.addAll(checkedIds)
                 }
 
-                for (bookId in activeBookIds) {
-                    allLoreMatches.addAll(loreStore.findMatches(lastUserMessageForLore, bookId))
-                }
+                // One batched call across every active book (counterplan Step
+                // 1.6) rather than one query per book.
+                allLoreMatches.addAll(loreStore.findMatches(lastUserMessageForLore, activeBookIds.toList()))
                 activeLoreBookCount = activeBookIds.size
             } catch (e: Exception) {
                 // The lorebook is now SQLCipher-backed; if its key/store is ever
@@ -7957,17 +7985,30 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 // than crash mid-generation (never break the companion).
                 org.teslasoft.assistant.preferences.memory.MemoryLog.log(this, "LoreBook", "error", "Lorebook unavailable this turn: ${e.message}")
             }
+            dedupedLoreMatches = LoreDedup.dedup(allLoreMatches)
+            loreBudget = LoreBookBudget.select(
+                dedupedLoreMatches, LoreBookStore.MAX_INJECTED_ENTRIES, LoreBookStore.MAX_INJECTED_CHARS
+            )
             // Every turn is recorded — zero-match and store-unavailable turns
             // included — so "lore didn't reach the model" is diagnosable from
-            // the debug screen instead of invisible.
-            LoreBookInjectionLog.record(lastUserMessageForLore, allLoreMatches, activeLoreBookCount)
+            // the debug screen instead of invisible. injected/cut reflect what
+            // actually reaches the prompt below, not the raw search results.
+            LoreBookInjectionLog.record(
+                userMessage = lastUserMessageForLore,
+                matched = allLoreMatches,
+                activeBooks = activeLoreBookCount,
+                injected = loreBudget.kept,
+                cut = LoreDedup.droppedDuplicates(allLoreMatches).map { (dup, _) ->
+                    LoreBookInjectionLog.Cut(dup, "duplicate content")
+                } + loreBudget.cut.map { LoreBookInjectionLog.Cut(it.match, it.reason) }
+            )
         }
 
         // Full memory system (Phase 4 enforcer): assemble the per-turn memory
         // message — retrieved memories, lore notes, scene — as ONE separate
         // system message after the stable base prompt. Gated on the per-chat
         // "Use memory" switch alone (Quick Settings is God; the engine tier is
-        // only its default). With lore books off for the chat, allLoreMatches
+        // only its default). With lore books off for the chat, dedupedLoreMatches
         // is empty, so the assembly contains no lore notes — the switches stay
         // independent. ANY failure degrades to the classic lore path below:
         // never block a turn.
@@ -7985,7 +8026,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                                 userMessage = lastUserMessageForLore,
                                 recentContext = recentTurnsContext(),
                                 modelTag = model,
-                                loreMatches = allLoreMatches,
+                                loreMatches = dedupedLoreMatches,
                                 worldId = preferences?.getChatWorldId(),
                                 campaignId = preferences?.getChatCampaignId(),
                                 roleplayCharacterId = preferences?.getChatRoleplayCharacterId(),
@@ -8010,21 +8051,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     content = memoryAssembly
                 )
             )
-        } else if (allLoreMatches.isNotEmpty()) {
+        } else if (loreBudget.kept.isNotEmpty()) {
             // Safety budget: a message that trips many triggers at once must not
             // flood the context. Inject at most MAX_INJECTED_ENTRIES memories /
             // MAX_INJECTED_CHARS characters, in book order (core book first).
-            val loreMatches = ArrayList<LoreBookMatch>()
-            var loreChars = 0
-            for (match in allLoreMatches) {
-                if (loreMatches.size >= LoreBookStore.MAX_INJECTED_ENTRIES) break
-                if (loreMatches.isNotEmpty() && loreChars + match.entry.content.length > LoreBookStore.MAX_INJECTED_CHARS) break
-                loreChars += match.entry.content.length
-                loreMatches.add(match)
-            }
-
+            // Same shared selection the enforcer would have used for loreNotes
+            // had it run (counterplan Step 1.6) — precomputed above as
+            // [loreBudget] so this path and the debug log agree with it.
             val loreText = StringBuilder(getString(R.string.lorebook_injection_header))
-            for (match in loreMatches) {
+            for (match in loreBudget.kept) {
                 loreText.append("\n- ").append(match.entry.content)
             }
             msgs.add(
