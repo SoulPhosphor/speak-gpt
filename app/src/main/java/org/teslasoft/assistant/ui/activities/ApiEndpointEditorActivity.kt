@@ -41,7 +41,6 @@ import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.snackbar.Snackbar
 import com.google.android.material.slider.Slider
 import com.google.android.material.textfield.TextInputEditText
-import com.google.android.material.textfield.TextInputLayout
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.Preferences
@@ -102,7 +101,6 @@ class ApiEndpointEditorActivity : FragmentActivity() {
 
     private var fieldLabel: TextInputEditText? = null
     private var fieldModel: TextInputEditText? = null
-    private var fieldProvider: TextInputEditText? = null
     private var fieldMaxTokens: TextInputEditText? = null
     private var fieldContextWindow: TextInputEditText? = null
     private var fieldTimeout: TextInputEditText? = null
@@ -110,8 +108,8 @@ class ApiEndpointEditorActivity : FragmentActivity() {
     private var fieldEndSeparator: TextInputEditText? = null
     private var fieldPrefix: TextInputEditText? = null
     private var fieldHost: TextInputEditText? = null
-    private var hostInputLayout: TextInputLayout? = null
-    private var labelInputLayout: TextInputLayout? = null
+    private var labelError: TextView? = null
+    private var hostError: TextView? = null
     private var fieldChatEndpoint: TextInputEditText? = null
     private var fieldApiKey: TextInputEditText? = null
     private var fieldAuthType: TextInputEditText? = null
@@ -126,6 +124,11 @@ class ApiEndpointEditorActivity : FragmentActivity() {
     private var oldLabel: String = ""
     private var selectedAuthType: String = ApiEndpointObject.AUTH_BEARER
     private var selectedModel: String = ApiEndpointObject.DEFAULT_MODEL
+
+    /** Stored provider value, preserved through the editor even though the
+     *  Provider box was removed, so saving never wipes a value the profile
+     *  already carries (it is used when routing requests). */
+    private var currentProvider: String = ""
 
     /** The key stored on disk when the screen opened. Preserved unless the user
      *  actually types a new one. */
@@ -181,9 +184,8 @@ class ApiEndpointEditorActivity : FragmentActivity() {
         btnDelete = findViewById(R.id.btn_delete)
         btnSave = findViewById(R.id.btn_save)
         fieldLabel = findViewById(R.id.field_label)
-        labelInputLayout = findViewById(R.id.textInputLayout10)
+        labelError = findViewById(R.id.text_field_label_error)
         fieldModel = findViewById(R.id.field_model)
-        fieldProvider = findViewById(R.id.field_provider)
         fieldMaxTokens = findViewById(R.id.field_max_tokens)
         fieldContextWindow = findViewById(R.id.field_context_window)
         fieldTimeout = findViewById(R.id.field_timeout)
@@ -191,7 +193,7 @@ class ApiEndpointEditorActivity : FragmentActivity() {
         fieldEndSeparator = findViewById(R.id.field_end_separator)
         fieldPrefix = findViewById(R.id.field_prefix)
         fieldHost = findViewById(R.id.field_host)
-        hostInputLayout = findViewById(R.id.textInputLayout11)
+        hostError = findViewById(R.id.text_field_host_error)
         fieldChatEndpoint = findViewById(R.id.field_chat_endpoint)
         fieldApiKey = findViewById(R.id.field_api_key)
         fieldAuthType = findViewById(R.id.field_auth_type)
@@ -239,7 +241,9 @@ class ApiEndpointEditorActivity : FragmentActivity() {
 
     private fun loadValues() {
         val endpoint: ApiEndpointObject = if (position == -1 || endpointId.isEmpty()) {
-            ApiEndpointObject("", "", "")
+            // A new endpoint starts with no model chosen (no gpt-4o pre-load);
+            // one is required before it can be saved.
+            ApiEndpointObject("", "", "", model = "")
         } else {
             apiEndpointPreferences!!.getApiEndpoint(this, endpointId)
         }
@@ -267,10 +271,10 @@ class ApiEndpointEditorActivity : FragmentActivity() {
         selectedAuthType = endpoint.authType.ifBlank { ApiEndpointObject.AUTH_BEARER }
         fieldAuthType?.setText(authLabel(selectedAuthType))
 
-        selectedModel = endpoint.model.ifBlank { ApiEndpointObject.DEFAULT_MODEL }
+        selectedModel = endpoint.model
         fieldModel?.setText(selectedModel)
 
-        fieldProvider?.setText(endpoint.provider)
+        currentProvider = endpoint.provider
 
         sliderTemperature?.value = (endpoint.temperature * 10f).coerceIn(0f, 20f)
         sliderTemperature?.setLabelFormatter { "${it / 10.0}" }
@@ -324,10 +328,9 @@ class ApiEndpointEditorActivity : FragmentActivity() {
         fieldHost?.doAfterTextChanged { updateHostWarning() }
 
         fieldAuthType?.setOnClickListener { showAuthTypeChooser() }
-        findViewById<TextInputLayout>(R.id.textInputLayoutAuth)?.setOnClickListener { showAuthTypeChooser() }
-
         fieldModel?.setOnClickListener { showModelChooser() }
-        findViewById<TextInputLayout>(R.id.textInputLayoutModel)?.setOnClickListener { showModelChooser() }
+
+        initFloatingLabels()
 
         imageCapabilityHeader?.setOnClickListener { toggleCapabilitySection() }
         btnClearImageCapability?.setOnClickListener { confirmClearCapability() }
@@ -348,6 +351,52 @@ class ApiEndpointEditorActivity : FragmentActivity() {
                 }
             }
         }
+    }
+
+    /**
+     * The label behaviour the owner asked for, without Material's embedded
+     * floating hint: every box shows its field name as placeholder while empty,
+     * and the matching top-left title (a Widget.App.Field.Label TextView)
+     * appears only once the box has text. The title follows the box live as the
+     * user types, chooses a model or auth mode, or clears the field. Boxes that
+     * always carry text (Auth Mode, Chat Completions Endpoint, the timeout and
+     * token fields) therefore show their title from the start. The Context
+     * Window box has no title here — its section heading above it is the title.
+     */
+    private fun initFloatingLabels() {
+        bindFloatingLabel(fieldLabel, R.id.label_label)
+        bindFloatingLabel(fieldModel, R.id.label_model)
+        bindFloatingLabel(fieldTimeout, R.id.label_timeout)
+        bindFloatingLabel(fieldResponseTime, R.id.label_response_time)
+        bindFloatingLabel(fieldMaxTokens, R.id.label_max_tokens)
+        bindFloatingLabel(fieldEndSeparator, R.id.label_end_separator)
+        bindFloatingLabel(fieldPrefix, R.id.label_prefix)
+        bindFloatingLabel(fieldHost, R.id.label_host)
+        bindFloatingLabel(fieldChatEndpoint, R.id.label_chat_endpoint)
+        bindFloatingLabel(fieldApiKey, R.id.label_api_key)
+        bindFloatingLabel(fieldAuthType, R.id.label_auth)
+    }
+
+    private fun bindFloatingLabel(box: TextInputEditText?, labelId: Int) {
+        if (box == null) return
+        val label = findViewById<TextView>(labelId) ?: return
+        fun sync() {
+            label.visibility = if (box.text.isNullOrEmpty()) View.GONE else View.VISIBLE
+        }
+        sync()
+        box.doAfterTextChanged { sync() }
+    }
+
+    /** Show a short line of error/warning text beneath a field's box. */
+    private fun setFieldError(view: TextView?, message: String) {
+        view?.text = message
+        view?.visibility = View.VISIBLE
+    }
+
+    /** Hide a field's error/warning line. */
+    private fun clearFieldError(view: TextView?) {
+        view?.text = ""
+        view?.visibility = View.GONE
     }
 
     private fun authLabel(authType: String): String {
@@ -401,7 +450,7 @@ class ApiEndpointEditorActivity : FragmentActivity() {
             apiKey = effectiveApiKey(),
             chatEndpoint = normalizedChatEndpoint(),
             authType = selectedAuthType,
-            model = selectedModel.ifBlank { ApiEndpointObject.DEFAULT_MODEL },
+            model = selectedModel,
             temperature = (sliderTemperature?.value ?: (ApiEndpointObject.DEFAULT_TEMPERATURE * 10f)) / 10f,
             topP = (sliderTopP?.value ?: (ApiEndpointObject.DEFAULT_TOP_P * 10f)) / 10f,
             frequencyPenalty = (sliderFrequencyPenalty?.value ?: (ApiEndpointObject.DEFAULT_FREQUENCY_PENALTY * 10f)) / 10f,
@@ -409,7 +458,7 @@ class ApiEndpointEditorActivity : FragmentActivity() {
             maxTokens = fieldMaxTokens?.text.toString().toIntOrNull() ?: ApiEndpointObject.DEFAULT_MAX_TOKENS,
             endSeparator = fieldEndSeparator?.text.toString(),
             prefix = fieldPrefix?.text.toString(),
-            provider = fieldProvider?.text.toString().trim(),
+            provider = currentProvider,
             connectTimeoutSeconds = ApiEndpointObject.coerceConnectTimeoutSeconds(
                 fieldTimeout?.text.toString().toIntOrNull() ?: ApiEndpointObject.DEFAULT_CONNECT_TIMEOUT_SECONDS
             ),
@@ -435,10 +484,10 @@ class ApiEndpointEditorActivity : FragmentActivity() {
 
     private fun updateHostWarning() {
         val host = fieldHost?.text.toString().trim()
-        hostInputLayout?.error = if (host.startsWith("http://")) {
-            getString(R.string.warning_http_endpoint_inline)
+        if (host.startsWith("http://")) {
+            setFieldError(hostError, getString(R.string.warning_http_endpoint_inline))
         } else {
-            null
+            clearFieldError(hostError)
         }
     }
 
@@ -455,20 +504,27 @@ class ApiEndpointEditorActivity : FragmentActivity() {
         val label = fieldLabel?.text.toString().trim()
         val host = fieldHost?.text.toString().trim()
 
-        labelInputLayout?.error = null
+        clearFieldError(labelError)
 
         if (label.isEmpty()) {
-            labelInputLayout?.error = getString(R.string.label_error_api_endpoint_empty)
+            setFieldError(labelError, getString(R.string.label_error_api_endpoint_empty))
             return
         }
 
         if (host.isEmpty()) {
-            hostInputLayout?.error = getString(R.string.label_error_api_endpoint_empty)
+            setFieldError(hostError, getString(R.string.label_error_api_endpoint_empty))
             return
         }
 
         if (!isValidEndpointUrl(host)) {
-            hostInputLayout?.error = getString(R.string.label_error_api_endpoint_invalid_url)
+            setFieldError(hostError, getString(R.string.label_error_api_endpoint_invalid_url))
+            return
+        }
+
+        // A preferred model is required; a new endpoint no longer defaults to
+        // one silently. Nothing is saved until the user chooses.
+        if (selectedModel.isBlank()) {
+            showNoticeDialog(getString(R.string.api_endpoint_model_required_message))
             return
         }
 
@@ -629,7 +685,6 @@ class ApiEndpointEditorActivity : FragmentActivity() {
             normalizedChatEndpoint(),
             selectedAuthType,
             selectedModel,
-            fieldProvider?.text.toString(),
             sliderTemperature?.value.toString(),
             sliderTopP?.value.toString(),
             sliderFrequencyPenalty?.value.toString(),

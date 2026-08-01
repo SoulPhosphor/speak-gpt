@@ -364,6 +364,7 @@
     <string name="title_api_endpoint_profiles">API Chat Endpoint Profiles</string>
     <string name="title_api_endpoint_new">New API Endpoint</string>
     <string name="title_api_endpoint_named">%1$s API Endpoint</string>
+    <string name="api_endpoint_model_required_message">Preferred model type is required in order to save.\n\nSelecting one does not lock you into one model. It can be changed per chat in the Summoning Circle settings available in each chat.\n\nNothing has been saved.</string>
     <string name="api_endpoint_delete_title">Delete this API endpoint profile?</string>
     <string name="api_endpoint_delete_message">This cannot be undone.</string>
     <string name="message_delete_profile">Delete profile? This can\'t be undone.</string>
