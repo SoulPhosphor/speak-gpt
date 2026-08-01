@@ -36,6 +36,7 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.color.MaterialColors
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.elevation.SurfaceColors
+import com.google.android.material.progressindicator.LinearProgressIndicator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -92,6 +93,9 @@ class MemoryAssistantActivity : FragmentActivity() {
     private var degradedContainer: LinearLayout? = null
     private var btnDegradedRepair: MaterialButton? = null
     private var btnDegradedRevert: MaterialButton? = null
+    private var analysisProgressContainer: LinearLayout? = null
+    private var analysisBar: LinearProgressIndicator? = null
+    private var analysisPercent: TextView? = null
     private var statusLabel: TextView? = null
     private var textRunStatus: TextView? = null
     private var statusDetails: TextView? = null
@@ -120,6 +124,9 @@ class MemoryAssistantActivity : FragmentActivity() {
         notReadyContainer = findViewById(R.id.not_ready_container)
         btnSetup = findViewById(R.id.btn_setup)
         btnAnalyze = findViewById(R.id.btn_analyze)
+        analysisProgressContainer = findViewById(R.id.analysis_progress_container)
+        analysisBar = findViewById(R.id.analysis_bar)
+        analysisPercent = findViewById(R.id.analysis_percent)
         statusLabel = findViewById(R.id.status_label)
         textRunStatus = findViewById(R.id.text_run_status)
         statusDetails = findViewById(R.id.status_details)
@@ -168,6 +175,7 @@ class MemoryAssistantActivity : FragmentActivity() {
     }
 
     private fun clearStatusBlock() {
+        analysisProgressContainer?.visibility = View.GONE
         statusLabel?.visibility = View.GONE
         textRunStatus?.visibility = View.GONE
         statusDetails?.visibility = View.GONE
@@ -318,9 +326,9 @@ class MemoryAssistantActivity : FragmentActivity() {
         running = true
         btnAnalyze?.setText(R.string.memory_assistant_btn_running)
         btnAnalyze?.isEnabled = false
-        clearStatusBlock()
-        textRunStatus?.visibility = View.VISIBLE
-        textRunStatus?.text = ""
+        // Spinner + "Analyzing Conversations" immediately; the determinate bar
+        // and its percent wait until the run reports its fixed total.
+        showAnalyzing(null)
 
         if (!MemoryAnalysisForegroundService.start(this, rerunOfRunId)) {
             running = false
@@ -348,7 +356,7 @@ class MemoryAssistantActivity : FragmentActivity() {
                         running = true
                         btnAnalyze?.setText(R.string.memory_assistant_btn_running)
                         btnAnalyze?.isEnabled = false
-                        s.progress?.let { showProgress(it) }
+                        showAnalyzing(s.progress)
                     }
                     is MemoryAnalysisState.Finished -> {
                         running = false
@@ -504,31 +512,32 @@ class MemoryAssistantActivity : FragmentActivity() {
         }
     )
 
-    private fun showProgress(p: Archivist.Progress) {
-        textRunStatus?.visibility = View.VISIBLE
-        textRunStatus?.text = if (p.batchCount <= 1) {
-            // Small run: the design doc's plain form.
-            getString(R.string.memory_assistant_running_moment) + "\n" +
-                getString(R.string.memory_assistant_running_conversation, p.conversationInBatch, p.conversationsInBatch)
+    /**
+     * The live-run surface (approved pattern, plan_one_page.md): an
+     * indeterminate spinner and "Analyzing Conversations" whenever a run is
+     * active; the determinate bar and its **X%** appear only once the run's
+     * fixed total is known. The percentage is completed conversations divided
+     * by the fixed total the run sealed at its start — never invented before
+     * that total exists, and never advanced on a timer. A conversation still
+     * in flight is not yet complete, so the bar reaches 100% only after the
+     * run itself finishes (owner rule: 100% is not success on its own).
+     */
+    private fun showAnalyzing(p: Archivist.Progress?) {
+        clearStatusBlock()
+        analysisProgressContainer?.visibility = View.VISIBLE
+        if (p != null && p.overallCount > 0) {
+            val completed = (p.overallIndex - 1).coerceAtLeast(0)
+            val percent = (completed * 100 / p.overallCount).coerceIn(0, 100)
+            analysisBar?.visibility = View.VISIBLE
+            analysisBar?.isIndeterminate = false
+            analysisBar?.max = 100
+            analysisBar?.setProgressCompat(percent, true)
+            analysisPercent?.visibility = View.VISIBLE
+            analysisPercent?.text = getString(R.string.memory_assistant_analyzing_percent, percent)
         } else {
-            // Size-batched run: the owner's batch wording (answer 4), repeated
-            // per batch with the batch number spelled out ("Batch One").
-            getString(R.string.memory_assistant_running_while) + "\n" +
-                getString(R.string.memory_assistant_running_batched) + "\n" +
-                getString(R.string.memory_assistant_running_batch, batchWord(p.batchIndex)) + "\n" +
-                getString(R.string.memory_assistant_running_batch_conversations, p.conversationInBatch, p.conversationsInBatch)
+            analysisBar?.visibility = View.GONE
+            analysisPercent?.visibility = View.GONE
         }
-    }
-
-    /** "Batch One", "Batch Two"… — the owner wrote the batch number as a word.
-     *  Past twenty (unrealistic) the digit form keeps it honest. */
-    private fun batchWord(n: Int): String {
-        val words = arrayOf(
-            "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten",
-            "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen",
-            "Eighteen", "Nineteen", "Twenty"
-        )
-        return if (n in 1..20) words[n - 1] else n.toString()
     }
 
     /* ---------------- navigation ---------------- */

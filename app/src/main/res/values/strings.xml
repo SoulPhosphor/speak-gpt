@@ -641,12 +641,13 @@
     <string name="generation_notification_text">Tap to return to the chat</string>
     <string name="voice_reading_notification_title">Reading reply aloud…</string>
     <string name="notification_hang_up">Hang up</string>
-    <!-- Memory analysis keep-alive (counterplan Step 1.3, §6 copy A drafts —
-         provisional wording, owner approval pending before release). -->
+    <!-- Memory analysis keep-alive notification (approved progress pattern,
+         Memory System/plan_one_page.md): indeterminate before the run's fixed
+         total is known, then a determinate bar with "X% complete". -->
     <string name="memory_analysis_channel_name">Memory analysis</string>
     <string name="memory_analysis_channel_desc">Shown while Memory Assistant reviews conversations so analysis survives the screen turning off or switching to another app.</string>
     <string name="memory_analysis_notification_title">Analyzing Conversations</string>
-    <string name="memory_analysis_notification_text">Memory Assistant is reviewing %1$d of %2$d conversations.</string>
+    <string name="memory_analysis_notification_progress">%1$d%% complete</string>
     <string name="tile_text_model_title">Text generation model</string>
     <string name="tile_text_generation_model_desc">This feature allows you to set text generation model as well as model\'s params.</string>
     <string name="tile_activation_prompt_title">Activation prompt</string>
@@ -989,12 +990,8 @@
     <string name="memory_assistant_btn_idle">Analyze Conversations</string>
     <string name="memory_assistant_btn_running">Analyzing History…</string>
     <string name="memory_assistant_btn_done">Complete!</string>
-    <string name="memory_assistant_running_moment">This may take a moment.</string>
-    <string name="memory_assistant_running_conversation">Conversation %1$d of %2$d</string>
-    <string name="memory_assistant_running_while">This may take a while.</string>
-    <string name="memory_assistant_running_batched">Conversations will be batched due to size.</string>
-    <string name="memory_assistant_running_batch">Batch %1$s</string>
-    <string name="memory_assistant_running_batch_conversations">%1$d of %2$d Conversations</string>
+    <string name="memory_assistant_analyzing">Analyzing Conversations</string>
+    <string name="memory_assistant_analyzing_percent">%1$d%%</string>
     <string name="memory_assistant_done_found">%1$d memories found.</string>
     <string name="memory_assistant_view_pending">View Pending Memories.</string>
     <!-- "No new memory candidates found." was superseded by the No New

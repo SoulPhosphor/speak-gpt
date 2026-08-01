@@ -65,8 +65,10 @@ sealed interface MemoryAnalysisState {
  * happened: no rows are claimed and no Activity-owned fallback run begins —
  * the caller shows a durable failure and the work stays retryable (§10 1e).
  * Process/service death recovery is the store's durable reconcile, not this
- * class. Notification wording is the §6 copy A draft — provisional until
- * the owner's Phase 1 wording review.
+ * class. Notification wording follows the approved progress pattern
+ * (Memory System/plan_one_page.md): the title "Analyzing Conversations",
+ * indeterminate progress until the run's fixed total is known, then a
+ * determinate bar with "X% complete".
  */
 class MemoryAnalysisForegroundService : Service() {
 
@@ -252,12 +254,18 @@ class MemoryAnalysisForegroundService : Service() {
             .setContentIntent(pi)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
-        if (progress != null && progress.overallCount > 0) {
-            builder.setContentText(getString(
-                R.string.memory_analysis_notification_text,
-                progress.overallIndex, progress.overallCount
-            ))
-            builder.setProgress(progress.overallCount, progress.overallIndex - 1, false)
+        if (progress == null || progress.overallCount <= 0) {
+            // Fixed total not yet known: indeterminate bar, no percentage
+            // (owner rule: never invent a percentage before the total exists).
+            builder.setProgress(0, 0, true)
+        } else {
+            // Determinate bar with "X% complete": completed conversations over
+            // the fixed total the run sealed. The conversation in flight is not
+            // yet complete, so the bar reaches 100% only after the run finishes.
+            val completed = (progress.overallIndex - 1).coerceAtLeast(0)
+            val percent = (completed * 100 / progress.overallCount).coerceIn(0, 100)
+            builder.setContentText(getString(R.string.memory_analysis_notification_progress, percent))
+            builder.setProgress(100, percent, false)
         }
         return builder.build()
     }
