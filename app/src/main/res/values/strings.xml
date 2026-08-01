@@ -1050,6 +1050,38 @@
     <string name="mem_arch_deleted_badge">Some Memories Deleted Later</string>
     <string name="mem_arch_deleted_explain">This run created memories that no longer exist because they were deleted after extraction.</string>
 
+    <!-- Archivist full-failure states (owner-approved wording, Aug 1 2026).
+         Title + subtitle per cause; shown beneath the run button, above the
+         expanded provider-detail block (Function: Archiving) and logged to the
+         Provider Failure Log. Cause-to-state mapping is wired separately. -->
+    <string name="mem_arch_fail_connection_title">Connection Failed</string>
+    <string name="mem_arch_fail_connection_msg">The app could not connect to the selected provider. Check your internet connection and endpoint settings, then try again.</string>
+    <string name="mem_arch_fail_timeout_title">Request Timed Out</string>
+    <string name="mem_arch_fail_timeout_msg">The provider did not finish the request in time. Try again, or choose a model that responds more reliably.</string>
+    <string name="mem_arch_fail_rejected_title">Request Rejected</string>
+    <string name="mem_arch_fail_rejected_msg">The provider rejected the analysis request. Check the provider response and the selected model’s settings before trying again.</string>
+    <string name="mem_arch_fail_usage_limit_title">Usage Limit Reached</string>
+    <string name="mem_arch_fail_usage_limit_msg">The provider would not run the analysis because an account limit, spending limit, or usage cap was reached.</string>
+    <string name="mem_arch_fail_credits_title">Insufficient Credits</string>
+    <string name="mem_arch_fail_credits_msg">The provider could not run the analysis because the account does not have enough credits.</string>
+    <string name="mem_arch_fail_model_unavailable_title">Model Unavailable</string>
+    <string name="mem_arch_fail_model_unavailable_msg">The selected model is currently unavailable or could not be found. Choose another model or check the endpoint’s model list.</string>
+    <string name="mem_arch_fail_config_title">Invalid Configuration</string>
+    <string name="mem_arch_fail_config_msg">The selected model or endpoint is not configured correctly. Check the Memory Assistant settings, then try again.</string>
+    <string name="mem_arch_fail_unreadable_title">Response Could Not Be Read</string>
+    <string name="mem_arch_fail_unreadable_msg">The provider returned a response the app could not understand. No Lorebook suggestions were saved.</string>
+    <string name="mem_arch_fail_invalid_result_title">Invalid Analysis Result</string>
+    <string name="mem_arch_fail_invalid_result_msg">The model completed the request but did not return a usable Lorebook analysis result. No suggestions were saved.</string>
+    <string name="mem_arch_fail_interrupted_title">Analysis Interrupted</string>
+    <string name="mem_arch_fail_interrupted_msg">The analysis stopped before it completed and could not be resumed. Try again to restart the run.</string>
+    <string name="mem_arch_fail_cancelled_title">Analysis Cancelled</string>
+    <string name="mem_arch_fail_cancelled_msg">The Lorebook analysis was cancelled before it completed. No suggestions were saved.</string>
+    <string name="mem_arch_fail_unavailable_title">Lorebook Analysis Unavailable</string>
+    <string name="mem_arch_fail_unavailable_msg">The selected model or endpoint cannot perform this type of analysis. Choose a different model or endpoint.</string>
+    <string name="mem_arch_fail_unknown_title">Unexpected Analysis Error</string>
+    <string name="mem_arch_fail_unknown_msg">The analysis could not be completed, and the app could not determine the specific cause. Try again or review the error details.</string>
+    <string name="mem_arch_function_archiving">Archiving</string>
+
     <!-- Memory Analysis Type control (Step 1.7 — plan_one_page.md, owner
          approved). Two-column settings row on the Memory Assistant screen,
          matching the Memory Engine row. The subtitle is three paragraphs shown
