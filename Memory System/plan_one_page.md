@@ -16,7 +16,7 @@ changes — it must always be true.)*
 
 ## What already works (on main)
 
-- Chats are recorded for review while **Archive this chat** is on.
+- Chats are recorded for review while **Archive This Chat** is on.
 - **API Memory Assistant** reads them and suggests memories. Everything lands
   in **Pending**. Nothing is ever saved, changed, or deleted without your
   approval.
@@ -42,7 +42,7 @@ already works without it.)
   including plurals and compound labels: **Lorebook**, **Lorebooks**,
   **Lorebook Memories**, and **Lorebook Suggestions**. Never display
   **lore book** or **lore books** as two words.
-- Turning **Archive this chat** off pauses archiving without erasing,
+- Turning **Archive This Chat** off pauses archiving without erasing,
   resetting, advancing, or replacing the last truthful archive bookmark.
   Turning it back on silently processes every eligible message not already
   fully processed. Never show an **Include Earlier Messages?** prompt or any
