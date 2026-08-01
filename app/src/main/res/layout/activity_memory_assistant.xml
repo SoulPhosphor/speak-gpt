@@ -145,9 +145,7 @@
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btn_setup"
-                    style="@style/Widget.Material3.Button.TonalButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
+                    style="@style/AppButton.Primary.Inline"
                     android:layout_gravity="center_horizontal"
                     android:layout_marginTop="8dp"
                     android:text="@string/mem_arch_btn_setup" />
@@ -233,13 +231,35 @@
                     android:text="@string/memory_analysis_type_associative" />
             </LinearLayout>
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_analyze"
+            <!-- Analyze + Cancel (owner ruling, Aug 1 2026): the primary Analyze
+                 button fills the row; a destructive Cancel button sits to its
+                 right, shown only while a run is active. Both use the app's
+                 shared button styles (this screen's earlier one-off styles were
+                 not yet migrated). -->
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="24dp"
-                android:text="@string/memory_assistant_btn_idle"
-                android:textSize="16sp" />
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_analyze"
+                    style="@style/AppButton.Primary"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/memory_assistant_btn_idle"
+                    android:textSize="16sp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_cancel"
+                    style="@style/AppButton.Destructive.Inline"
+                    android:layout_marginStart="8dp"
+                    android:text="@string/btn_cancel"
+                    android:textSize="16sp"
+                    android:visibility="gone" />
+            </LinearLayout>
 
             <!-- Live analysis progress (approved pattern,
                  Memory System/plan_one_page.md): an indeterminate spinner and

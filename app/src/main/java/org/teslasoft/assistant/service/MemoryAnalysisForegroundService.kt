@@ -31,6 +31,7 @@ import androidx.core.app.NotificationCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
@@ -78,8 +79,34 @@ class MemoryAnalysisForegroundService : Service() {
         private const val WAKE_LOCK_TAG = "PhosphorShines:MemoryAnalysis"
         private const val EXTRA_RERUN_ID = "rerunOfRunId"
         private const val EXTRA_ANALYSIS_TYPE = "analysisType"
+        private const val ACTION_CANCEL = "org.teslasoft.assistant.action.CANCEL_ANALYSIS"
 
         val state = MutableStateFlow<MemoryAnalysisState?>(null)
+
+        /** True while a cancel came from the user (the Cancel button), false for
+         *  a system-driven stop (the Android 15+ dataSync timeout). It lets the
+         *  finished state distinguish "you cancelled it" (no error) from
+         *  "the system cancelled it" (Analysis Cancelled). */
+        @Volatile
+        private var userCancelRequested = false
+
+        /**
+         * Ask the running analysis to stop at the user's request. Delivered as a
+         * service command so it reaches the live service instance; the run's own
+         * cancellation path keeps any filed drafts and releases its claims. A
+         * no-op when nothing is running.
+         */
+        fun requestCancel(context: Context) {
+            val intent = Intent(context, MemoryAnalysisForegroundService::class.java)
+                .setAction(ACTION_CANCEL)
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(intent)
+                } else {
+                    context.startService(intent)
+                }
+            } catch (_: Exception) { /* nothing running to cancel */ }
+        }
 
         /**
          * Launch an analysis run inside the service. [analysisType] is the
@@ -115,6 +142,7 @@ class MemoryAnalysisForegroundService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val runActive = AtomicBoolean(false)
     private var wakeLock: PowerManager.WakeLock? = null
+    private var runJob: Job? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -143,6 +171,18 @@ class MemoryAnalysisForegroundService : Service() {
             return START_NOT_STICKY
         }
 
+        // Cancel command (the Memory Assistant's Cancel button): mark the stop
+        // as user-driven and cancel the live run. The run's own cancellation
+        // path keeps any filed drafts and releases claims; its completion tail
+        // delivers the finished state and stops the service. If nothing is
+        // running, stop now (startForeground above must be matched by a stop).
+        if (intent?.action == ACTION_CANCEL) {
+            userCancelRequested = true
+            val job = runJob
+            if (job != null && job.isActive) job.cancel() else stopSelf()
+            return START_NOT_STICKY
+        }
+
         // One run per service lifetime: a second start command while a run is
         // live is ignored here (the screen's guard and the Archivist's
         // durable one-run gate both already prevent it — this keeps a
@@ -150,16 +190,17 @@ class MemoryAnalysisForegroundService : Service() {
         // stopping the live one's foreground state).
         if (runActive.compareAndSet(false, true)) {
             acquireWakeLock()
+            userCancelRequested = false
             val rerunOfRunId = intent?.getStringExtra(EXTRA_RERUN_ID)
             val analysisType = intent?.getStringExtra(EXTRA_ANALYSIS_TYPE) ?: "associative"
             state.value = MemoryAnalysisState.Running(null)
-            scope.launch {
+            runJob = scope.launch {
                 val onProgress: (Archivist.Progress) -> Unit = { p ->
                     state.value = MemoryAnalysisState.Running(p)
                     updateNotification(p)
                 }
                 val appContext = applicationContext
-                val outcome = try {
+                var outcome = try {
                     if (rerunOfRunId == null) Archivist.analyze(appContext, analysisType, onProgress)
                     else Archivist.rerun(appContext, rerunOfRunId, analysisType, onProgress)
                 } catch (e: Exception) {
@@ -169,6 +210,13 @@ class MemoryAnalysisForegroundService : Service() {
                         failureReason = ArchivistFailure.classify(e),
                         error = e.message
                     )
+                }
+                // A run the user cancelled is not an error (owner ruling): the
+                // Archivist reports an in-process stop as "cancelled"; when the
+                // user asked for it, mark it so the screen shows a clean stop
+                // instead of the "Analysis Cancelled" (by the system) state.
+                if (outcome.outcome == "cancelled" && userCancelRequested) {
+                    outcome = outcome.copy(outcome = "cancelled_user")
                 }
                 // "already_running" should be unreachable from here (the
                 // gates above), but if it ever happens the LIVE run owns the

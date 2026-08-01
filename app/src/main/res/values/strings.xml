@@ -1075,7 +1075,7 @@
     <string name="mem_arch_fail_interrupted_title">Analysis Interrupted</string>
     <string name="mem_arch_fail_interrupted_msg">The analysis stopped before it completed and could not be resumed. Try again to restart the run.</string>
     <string name="mem_arch_fail_cancelled_title">Analysis Cancelled</string>
-    <string name="mem_arch_fail_cancelled_msg">The Lorebook analysis was cancelled before it completed. No suggestions were saved.</string>
+    <string name="mem_arch_fail_cancelled_msg">The Lorebook analysis was cancelled by the system before it completed. No suggestions were saved.</string>
     <string name="mem_arch_fail_unavailable_title">Lorebook Analysis Unavailable</string>
     <string name="mem_arch_fail_unavailable_msg">The selected model or endpoint cannot perform this type of analysis. Choose a different model or endpoint.</string>
     <string name="mem_arch_fail_unknown_title">Unexpected Analysis Error</string>

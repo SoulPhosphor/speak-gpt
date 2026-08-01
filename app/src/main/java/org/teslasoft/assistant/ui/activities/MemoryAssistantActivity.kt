@@ -88,6 +88,7 @@ class MemoryAssistantActivity : FragmentActivity() {
     private var notReadyContainer: LinearLayout? = null
     private var btnSetup: MaterialButton? = null
     private var btnAnalyze: MaterialButton? = null
+    private var btnCancel: MaterialButton? = null
     private var rowAnalysisType: LinearLayout? = null
     private var textAnalysisTypeValue: TextView? = null
     /** True when the run whose outcome is currently shown was a Lorebook
@@ -131,6 +132,7 @@ class MemoryAssistantActivity : FragmentActivity() {
         notReadyContainer = findViewById(R.id.not_ready_container)
         btnSetup = findViewById(R.id.btn_setup)
         btnAnalyze = findViewById(R.id.btn_analyze)
+        btnCancel = findViewById(R.id.btn_cancel)
         rowAnalysisType = findViewById(R.id.row_analysis_type)
         textAnalysisTypeValue = findViewById(R.id.text_analysis_type_value)
         analysisProgressContainer = findViewById(R.id.analysis_progress_container)
@@ -150,6 +152,13 @@ class MemoryAssistantActivity : FragmentActivity() {
         applyTheme()
         btnBack?.setOnClickListener { finish() }
         btnAnalyze?.setOnClickListener { if (!running) startRun(null) }
+        // Cancel is the user asking to stop the live run (owner ruling, Aug 1
+        // 2026): a clean stop, not an error. It is only visible while a run is
+        // active. Disable it on tap so a second press can't double-fire.
+        btnCancel?.setOnClickListener {
+            btnCancel?.isEnabled = false
+            MemoryAnalysisForegroundService.requestCancel(this)
+        }
         btnSetup?.setOnClickListener { openArchivistSettings() }
         // The View link routes to whichever Pending area the shown run filled:
         // the Memory Browser for saved memories, the Lorebooks area for lore
@@ -188,6 +197,8 @@ class MemoryAssistantActivity : FragmentActivity() {
             btnAnalyze?.setText(R.string.memory_assistant_btn_idle)
             clearStatusBlock()
         }
+        // Cancel only belongs on screen while a run is live.
+        if (!running) btnCancel?.visibility = View.GONE
         refreshFactsAndRuns()
     }
 
@@ -312,6 +323,7 @@ class MemoryAssistantActivity : FragmentActivity() {
         "partial_failed" -> getString(R.string.mem_arch_partial_label)
         "nothing" -> getString(R.string.mem_arch_nothing_label)
         "no_new" -> getString(R.string.mem_arch_nonew_label)
+        "cancelled" -> getString(R.string.mem_arch_fail_cancelled_title)
         "interrupted" -> getString(R.string.mem_arch_interrupted_label)
         else -> when {
             run.status == "failed" -> getString(R.string.mem_arch_full_label)
@@ -343,6 +355,8 @@ class MemoryAssistantActivity : FragmentActivity() {
         running = true
         btnAnalyze?.setText(R.string.memory_assistant_btn_running)
         btnAnalyze?.isEnabled = false
+        btnCancel?.isEnabled = true
+        btnCancel?.visibility = View.VISIBLE
         // Spinner + "Analyzing Conversations" immediately; the determinate bar
         // and its percent wait until the run reports its fixed total.
         showAnalyzing(null)
@@ -374,11 +388,14 @@ class MemoryAssistantActivity : FragmentActivity() {
                         running = true
                         btnAnalyze?.setText(R.string.memory_assistant_btn_running)
                         btnAnalyze?.isEnabled = false
+                        btnCancel?.isEnabled = true
+                        btnCancel?.visibility = View.VISIBLE
                         showAnalyzing(s.progress)
                     }
                     is MemoryAnalysisState.Finished -> {
                         running = false
                         btnAnalyze?.isEnabled = true
+                        btnCancel?.visibility = View.GONE
                         showOutcome(s.outcome)
                         refreshFactsAndRuns()
                         MemoryAnalysisForegroundService.state.value = null
@@ -513,6 +530,37 @@ class MemoryAssistantActivity : FragmentActivity() {
                         MaterialColors.getColor(statusLabel!!, com.google.android.material.R.attr.colorTertiary)
                     ) { startRun(null) }
                 }
+            }
+            "cancelled" -> {
+                // The run was stopped in-process WITHOUT the user asking — the
+                // Android 15+ dataSync timeout (owner ruling, Aug 1 2026). A
+                // Lorebook run shows the approved "Analysis Cancelled" state;
+                // associative keeps its existing interrupted wording.
+                btnAnalyze?.setText(R.string.memory_assistant_btn_idle)
+                if (lastOutcomeLorebook) {
+                    showStatus(
+                        getString(R.string.mem_arch_fail_cancelled_title),
+                        getString(R.string.mem_arch_fail_cancelled_msg),
+                        null,
+                        getString(R.string.mem_arch_btn_try_again),
+                        MaterialColors.getColor(statusLabel!!, com.google.android.material.R.attr.colorTertiary)
+                    ) { startRun(null) }
+                } else {
+                    showStatus(
+                        getString(R.string.mem_arch_interrupted_label),
+                        getString(R.string.mem_arch_interrupted_msg),
+                        if (o.memoriesFound > 0) getString(R.string.mem_arch_interrupted_saved)
+                        else getString(R.string.mem_arch_interrupted_none),
+                        getString(R.string.mem_arch_btn_try_again),
+                        MaterialColors.getColor(statusLabel!!, com.google.android.material.R.attr.colorTertiary)
+                    ) { startRun(null) }
+                }
+            }
+            "cancelled_user" -> {
+                // The user pressed Cancel: a clean stop, never an error (owner
+                // ruling, Aug 1 2026). clearStatusBlock() above already removed
+                // any live progress; the screen simply returns to idle.
+                btnAnalyze?.setText(R.string.memory_assistant_btn_idle)
             }
             "not_configured" -> {
                 btnAnalyze?.setText(R.string.memory_assistant_btn_idle)

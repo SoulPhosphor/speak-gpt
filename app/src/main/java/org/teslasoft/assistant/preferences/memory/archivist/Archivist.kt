@@ -526,7 +526,11 @@ object Archivist {
         // success is never called a full failure; "no new" is not an error.
         val selected = conversations.size
         val outcome = when {
-            interrupted -> "interrupted"
+            // An in-process stop (the Cancel button, or the Android 15+ dataSync
+            // timeout) is reported as "cancelled". A process DEATH is recovered
+            // separately by the startup reconcile as "interrupted" — the two are
+            // kept distinct so the screen can say which happened.
+            interrupted -> "cancelled"
             runError != null -> "full_failed"
             selected == 0 -> "nothing"
             failedChats.size >= selected -> "full_failed"
@@ -557,9 +561,9 @@ object Archivist {
                     "reasons=${failedReasons.map { it.key }.distinct()} selected=$selected " +
                     "processed=${analyzedChatIds.size} skipped=${failedChats.size} " +
                     "memories=${memoryIds.size} failedChats=$failedChats")
-            "interrupted" -> MemoryLog.logAlways(context, "Archivist", "warn",
-                "Run Interrupted — Memory extraction was interrupted before it could finish. " +
-                    "cause=coroutine cancellation (screen closed or system stop) selected=$selected " +
+            "cancelled" -> MemoryLog.logAlways(context, "Archivist", "warn",
+                "Run Cancelled — analysis was stopped before it could finish. " +
+                    "cause=coroutine cancellation (Cancel button or system stop) selected=$selected " +
                     "processed=${analyzedChatIds.size} memories=${memoryIds.size}")
         }
 
@@ -575,7 +579,7 @@ object Archivist {
             store.insertArchivistRun(
                 runningRow.copy(
                     finishedAt = Instant.now().toString(),
-                    status = if (outcome == "full_failed" || outcome == "interrupted") "failed" else "complete",
+                    status = if (outcome == "full_failed" || outcome == "interrupted" || outcome == "cancelled") "failed" else "complete",
                     chatIdsJson = listToJson(analyzedChatIds),
                     transcriptIdsJson = listToJson(fedTranscriptIds),
                     memoryIdsJson = listToJson(memoryIds),
