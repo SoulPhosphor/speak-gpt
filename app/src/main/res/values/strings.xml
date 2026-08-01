@@ -337,8 +337,10 @@
     <string name="label_edit_api_endpoint">Edit profile</string>
     <string name="api_endpoint_friendly_name">Profile name</string>
     <string name="api_endpoint_host">Base URL</string>
-    <!-- Longer Base URL label used only on the Add New API Endpoint screen. -->
-    <string name="api_endpoint_host_add">API Service Endpoint Base URL</string>
+    <!-- Longer Base URL label used on both API Endpoint Editor screens (add and
+         edit). The plain "Base URL" (api_endpoint_host) stays for the legacy
+         in-chat Edit API Endpoint dialog. -->
+    <string name="api_endpoint_host_full">API Service Endpoint Base URL</string>
     <string name="api_endpoint_key_unchanged">API key</string>
     <string name="api_endpoint_chat_endpoint">Chat completions endpoint</string>
     <string name="api_endpoint_chat_endpoint_help">Path added to the Base URL, e.g. /chat/completions. Most OpenAI-compatible providers use this default.</string>

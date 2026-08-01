@@ -420,13 +420,13 @@
                 <TextView
                     android:id="@+id/label_host"
                     style="@style/Widget.App.Field.Label"
-                    android:text="@string/api_endpoint_host"
+                    android:text="@string/api_endpoint_host_full"
                     android:visibility="gone" />
 
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/field_host"
                     style="@style/Widget.App.Field.Box"
-                    android:hint="@string/api_endpoint_host"
+                    android:hint="@string/api_endpoint_host_full"
                     android:singleLine="true"
                     android:textColorHint="?attr/appSubtleTextColor" />
 

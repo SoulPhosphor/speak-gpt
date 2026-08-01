@@ -20,7 +20,7 @@
   Add New API Endpoint variant of activity_api_endpoint_editor.xml. Same
   ApiEndpointEditorActivity, same view ids, same shared styles — only the
   field ORDER differs, and the Base URL label reads the longer
-  api_endpoint_host_add string. ApiEndpointEditorActivity picks this layout
+  api_endpoint_host_full string. ApiEndpointEditorActivity picks this layout
   when adding a new endpoint and the edit layout when opening an existing one
   (owner ruling). A new profile leads with the connection details (Base URL,
   Chat Completions Endpoint, API Key, Auth Mode) before Model, since choosing
@@ -141,13 +141,13 @@
                 <TextView
                     android:id="@+id/label_host"
                     style="@style/Widget.App.Field.Label"
-                    android:text="@string/api_endpoint_host_add"
+                    android:text="@string/api_endpoint_host_full"
                     android:visibility="gone" />
 
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/field_host"
                     style="@style/Widget.App.Field.Box"
-                    android:hint="@string/api_endpoint_host_add"
+                    android:hint="@string/api_endpoint_host_full"
                     android:singleLine="true"
                     android:textColorHint="?attr/appSubtleTextColor" />
 
