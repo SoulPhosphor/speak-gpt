@@ -26,11 +26,15 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.net.wifi.WifiManager
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.PowerManager
+import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Logger
+import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.ui.activities.ChatActivity
 
 /**
@@ -38,7 +42,8 @@ import org.teslasoft.assistant.ui.activities.ChatActivity
  * screen is off. Four jobs:
  *   1. Run as a foregroundServiceType="microphone" service so the OS lets the
  *      mic stay open from the background.
- *   2. Hold a partial wake lock so the CPU doesn't sleep mid-recognition.
+ *   2. Maintain a bounded, renewable partial wake-lock lease so the CPU
+ *      doesn't sleep mid-recognition during long sessions.
  *   3. Hold a Wi-Fi lock for the WHOLE conversation, not just while a reply
  *      streams. GenerationForegroundService's Wi-Fi lock covers each response,
  *      but between turns — while the app just listens with the screen off —
@@ -68,6 +73,23 @@ class HandsFreeService : Service() {
         var isRunning: Boolean = false
             private set
 
+        @Volatile
+        private var activeService: HandsFreeService? = null
+
+        /**
+         * Actual state, not the hands-free preference. Audio Health samples
+         * this at transcription boundaries so a screen-off slowdown can be
+         * read against the CPU protection that existed at that instant.
+         */
+        fun wakeLockDiagnostics(): HandsFreeWakeLockDiagnostics =
+            activeService?.snapshotWakeLockDiagnostics()
+                ?: HandsFreeWakeLockDiagnostics(
+                    serviceRunning = false,
+                    serviceAgeMs = 0L,
+                    wakeLockHeld = false,
+                    leaseAgeMs = 0L
+                )
+
         private const val EXTRA_CHAT_ID = "chatId"
         private const val EXTRA_CHAT_NAME = "chatName"
 
@@ -88,8 +110,13 @@ class HandsFreeService : Service() {
         }
     }
 
-    private var wakeLock: PowerManager.WakeLock? = null
+    @Volatile private var wakeLock: PowerManager.WakeLock? = null
     private var wifiLock: WifiManager.WifiLock? = null
+    private val wakeLockHandler = Handler(Looper.getMainLooper())
+    private var wakeLockRenewal: Runnable? = null
+    private var wakeLockSessionToken = 0L
+    @Volatile private var serviceStartedAtMs = 0L
+    @Volatile private var leaseAcquiredAtMs = 0L
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -135,8 +162,17 @@ class HandsFreeService : Service() {
             return START_NOT_STICKY
         }
 
+        val newSession = !isRunning
         isRunning = true
-        acquireWakeLock()
+        activeService = this
+        if (newSession) {
+            beginWakeLockSession()
+        } else if (wakeLock?.isHeld != true) {
+            // A duplicate start normally only refreshes the notification. If
+            // the service is still alive but its lock is not, restore the CPU
+            // protection and make the loss visible under Audio Health.
+            replaceWakeLock("unexpected loss recovered on service start", unexpectedLoss = true)
+        }
         acquireWifiLock()
         // NOT sticky: if the OS kills this service (or the app is closed), it must
         // stay dead. START_STICKY would have Android resurrect it with a null
@@ -145,15 +181,122 @@ class HandsFreeService : Service() {
         return START_NOT_STICKY
     }
 
-    private fun acquireWakeLock() {
-        if (wakeLock?.isHeld == true) return
-        val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
-        wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKE_LOCK_TAG).apply {
-            setReferenceCounted(false)
-            // 1 hour safety cap; real conversations rarely run that long.
-            // Released in onDestroy() the moment the service stops.
-            acquire(60 * 60 * 1000L)
+    private fun beginWakeLockSession() {
+        wakeLockSessionToken++
+        val token = wakeLockSessionToken
+        serviceStartedAtMs = SystemClock.elapsedRealtime()
+        wakeLockRenewal?.let { wakeLockHandler.removeCallbacks(it) }
+        wakeLockRenewal = null
+        val acquired = replaceWakeLock("acquired", unexpectedLoss = false)
+        scheduleWakeLockRenewal(
+            token,
+            if (acquired) WakeLockLeasePolicy.RENEW_INTERVAL_MS
+            else WakeLockLeasePolicy.RETRY_INTERVAL_MS
+        )
+    }
+
+    /**
+     * Replace the current timed lock with a fresh 60-minute lease. The new
+     * lock is acquired before the old one is released, so the 30-minute
+     * renewal creates no unprotected gap. If acquisition fails, the old lock
+     * is left untouched and the single callback retries shortly.
+     */
+    private fun replaceWakeLock(event: String, unexpectedLoss: Boolean): Boolean {
+        val oldLock = wakeLock
+        val oldHeld = try { oldLock?.isHeld == true } catch (_: Throwable) { false }
+        val replacement = try {
+            val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+            pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKE_LOCK_TAG).apply {
+                setReferenceCounted(false)
+                acquire(WakeLockLeasePolicy.LEASE_MS)
+            }
+        } catch (t: Throwable) {
+            logWakeLockEvent(
+                level = "warning",
+                message = "CPU wake-lock $event failed: ${t.javaClass.simpleName}: ${t.message}; " +
+                        "heldBefore=$oldHeld ${snapshotWakeLockDiagnostics().asLogFields()}"
+            )
+            return false
         }
+
+        val heldAfter = try { replacement.isHeld } catch (_: Throwable) { false }
+        if (!heldAfter) {
+            try { replacement.release() } catch (_: Throwable) {}
+            logWakeLockEvent(
+                level = "warning",
+                message = "CPU wake-lock $event did not become held; heldBefore=$oldHeld " +
+                        snapshotWakeLockDiagnostics().asLogFields()
+            )
+            return false
+        }
+
+        wakeLock = replacement
+        leaseAcquiredAtMs = SystemClock.elapsedRealtime()
+        try {
+            if (oldHeld) oldLock?.release()
+        } catch (_: Throwable) { /* replacement is already held */ }
+
+        val level = if (unexpectedLoss || !oldHeld && event == "renewed") "warning" else "info"
+        val prefix = if (!oldHeld && event == "renewed") {
+            "CPU wake lock was unexpectedly not held before scheduled renewal; renewed"
+        } else {
+            "CPU wake lock $event"
+        }
+        logWakeLockEvent(
+            level = level,
+            message = "$prefix: heldBefore=$oldHeld heldAfter=$heldAfter " +
+                    "lease=${WakeLockLeasePolicy.LEASE_MS}ms " +
+                    "renewEvery=${WakeLockLeasePolicy.RENEW_INTERVAL_MS}ms " +
+                    snapshotWakeLockDiagnostics().asLogFields()
+        )
+        return heldAfter
+    }
+
+    private fun scheduleWakeLockRenewal(token: Long, delayMs: Long) {
+        wakeLockRenewal?.let { wakeLockHandler.removeCallbacks(it) }
+        val task = object : Runnable {
+            override fun run() {
+                if (!WakeLockLeasePolicy.shouldRenew(isRunning, token, wakeLockSessionToken)) return
+                val renewed = replaceWakeLock("renewed", unexpectedLoss = false)
+                if (WakeLockLeasePolicy.shouldRenew(isRunning, token, wakeLockSessionToken)) {
+                    wakeLockHandler.postDelayed(
+                        this,
+                        if (renewed) WakeLockLeasePolicy.RENEW_INTERVAL_MS
+                        else WakeLockLeasePolicy.RETRY_INTERVAL_MS
+                    )
+                }
+            }
+        }
+        wakeLockRenewal = task
+        wakeLockHandler.postDelayed(task, delayMs)
+    }
+
+    private fun cancelWakeLockRenewal() {
+        wakeLockSessionToken++
+        wakeLockRenewal?.let { wakeLockHandler.removeCallbacks(it) }
+        wakeLockRenewal = null
+    }
+
+    private fun snapshotWakeLockDiagnostics(): HandsFreeWakeLockDiagnostics {
+        val now = SystemClock.elapsedRealtime()
+        val started = serviceStartedAtMs
+        val acquired = leaseAcquiredAtMs
+        return HandsFreeWakeLockDiagnostics(
+            serviceRunning = isRunning && activeService === this,
+            serviceAgeMs = if (started > 0L) (now - started).coerceAtLeast(0L) else 0L,
+            wakeLockHeld = try { wakeLock?.isHeld == true } catch (_: Throwable) { false },
+            leaseAgeMs = if (acquired > 0L) (now - acquired).coerceAtLeast(0L) else 0L
+        )
+    }
+
+    private fun logWakeLockEvent(level: String, message: String) {
+        val enabled = try {
+            Preferences.getPreferences(applicationContext, "").getAudioHealthLogging()
+        } catch (_: Throwable) { false }
+        if (!enabled) return
+        try {
+            Logger.logAsync(applicationContext, "event", "AudioHealth", level, message)
+        } catch (_: Throwable) { /* diagnostics must never disturb the service */ }
     }
 
     @Suppress("DEPRECATION")
@@ -242,8 +385,19 @@ class HandsFreeService : Service() {
     }
 
     override fun onDestroy() {
+        val before = snapshotWakeLockDiagnostics()
+        cancelWakeLockRenewal()
         isRunning = false
         releaseLocks()
+        val afterHeld = try { wakeLock?.isHeld == true } catch (_: Throwable) { false }
+        logWakeLockEvent(
+            level = "info",
+            message = "CPU wake lock released: heldBefore=${before.wakeLockHeld} " +
+                    "heldAfter=$afterHeld serviceAge=${before.serviceAgeMs}ms"
+        )
+        if (activeService === this) activeService = null
+        serviceStartedAtMs = 0L
+        leaseAcquiredAtMs = 0L
         super.onDestroy()
     }
 }
