@@ -66,7 +66,10 @@
 
             <!-- Sort/filter dropdowns, in the owner's order. Each value view is
                  the tap target and opens an anchored ListPopupWindow, per the
-                 shared dropdown pattern. -->
+                 shared dropdown pattern. Sorts start internally unset: the
+                 value slot stays empty (no visible "Default" option) and the
+                 row's label names the field. Alphabetical is the exception —
+                 it always shows its current direction, A to Z by default. -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -76,10 +79,42 @@
 
                 <TextView
                     style="@style/Widget.App.Dropdown.Label"
-                    android:text="@string/provider_filter_price" />
+                    android:text="@string/provider_filter_alphabetical" />
 
                 <TextView
-                    android:id="@+id/value_price"
+                    android:id="@+id/value_alphabetical"
+                    style="@style/Widget.App.Dropdown.Value" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingVertical="6dp">
+
+                <TextView
+                    style="@style/Widget.App.Dropdown.Label"
+                    android:text="@string/provider_filter_input_price" />
+
+                <TextView
+                    android:id="@+id/value_input_price"
+                    style="@style/Widget.App.Dropdown.Value" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingVertical="6dp">
+
+                <TextView
+                    style="@style/Widget.App.Dropdown.Label"
+                    android:text="@string/provider_filter_output_price" />
+
+                <TextView
+                    android:id="@+id/value_output_price"
                     style="@style/Widget.App.Dropdown.Value" />
             </LinearLayout>
 

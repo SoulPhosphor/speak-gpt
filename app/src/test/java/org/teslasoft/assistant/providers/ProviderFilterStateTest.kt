@@ -27,13 +27,14 @@ class ProviderFilterStateTest {
         name: String,
         quant: String? = null,
         prompt: Double? = null,
+        completion: Double? = null,
         uptime: Double? = null,
         tools: Boolean? = null,
         caching: Boolean? = null,
         zdr: Boolean? = null
     ) = ProviderEndpointInfo(
         providerName = name, slug = name.lowercase(), quantization = quant,
-        promptPrice = prompt, completionPrice = null, cacheReadPrice = null,
+        promptPrice = prompt, completionPrice = completion, cacheReadPrice = null,
         cacheWritePrice = null, latency = null, throughput = null,
         uptime = uptime, supportsTools = tools, supportsCaching = caching, zdr = zdr
     )
@@ -45,11 +46,20 @@ class ProviderFilterStateTest {
     fun cleanUp() = ProviderFilterState.reset()
 
     @Test
-    fun defaultIsAlphabetical() {
+    fun defaultIsAlphabeticalAToZ() {
         val result = ProviderFilterState.apply(
             listOf(endpoint("Zeta"), endpoint("alpha"), endpoint("Mid"))
         )
         assertEquals(listOf("alpha", "Mid", "Zeta"), result.map { it.providerName })
+    }
+
+    @Test
+    fun alphabeticalCanFlipToZToA() {
+        ProviderFilterState.alphaAToZ = false
+        val result = ProviderFilterState.apply(
+            listOf(endpoint("alpha"), endpoint("Zeta"), endpoint("Mid"))
+        )
+        assertEquals(listOf("Zeta", "Mid", "alpha"), result.map { it.providerName })
     }
 
     @Test
@@ -71,20 +81,20 @@ class ProviderFilterStateTest {
     }
 
     @Test
-    fun priceSortsBothDirectionsWithUnknownLast() {
+    fun inputPriceSortsBothDirectionsWithUnknownLast() {
         val endpoints = listOf(
             endpoint("Cheap", prompt = 0.000001),
             endpoint("Pricey", prompt = 0.00001),
             endpoint("Mystery", prompt = null)
         )
 
-        ProviderFilterState.sortPrice = SortDirection.LOW_TO_HIGH
+        ProviderFilterState.sortInputPrice = SortDirection.LOW_TO_HIGH
         assertEquals(
             listOf("Cheap", "Pricey", "Mystery"),
             ProviderFilterState.apply(endpoints).map { it.providerName }
         )
 
-        ProviderFilterState.sortPrice = SortDirection.HIGH_TO_LOW
+        ProviderFilterState.sortInputPrice = SortDirection.HIGH_TO_LOW
         assertEquals(
             listOf("Pricey", "Cheap", "Mystery"),
             ProviderFilterState.apply(endpoints).map { it.providerName }
@@ -92,8 +102,21 @@ class ProviderFilterStateTest {
     }
 
     @Test
+    fun outputPriceSortsIndependentlyOfInputPrice() {
+        ProviderFilterState.sortOutputPrice = SortDirection.LOW_TO_HIGH
+        val result = ProviderFilterState.apply(
+            listOf(
+                endpoint("A", prompt = 0.000001, completion = 0.00002),
+                endpoint("B", prompt = 0.00001, completion = 0.000001)
+            )
+        )
+        // Cheapest OUTPUT first, even though its input price is higher.
+        assertEquals(listOf("B", "A"), result.map { it.providerName })
+    }
+
+    @Test
     fun tiedPrimarySortFallsThroughToNextKeyThenAlphabetical() {
-        ProviderFilterState.sortPrice = SortDirection.LOW_TO_HIGH
+        ProviderFilterState.sortInputPrice = SortDirection.LOW_TO_HIGH
         ProviderFilterState.sortUptime = SortDirection.HIGH_TO_LOW
         val result = ProviderFilterState.apply(
             listOf(
@@ -107,8 +130,10 @@ class ProviderFilterStateTest {
     }
 
     @Test
-    fun resetRestoresTheDefaultView() {
-        ProviderFilterState.sortPrice = SortDirection.HIGH_TO_LOW
+    fun resetRestoresAlphabeticalAToZAndClearsEverySort() {
+        ProviderFilterState.alphaAToZ = false
+        ProviderFilterState.sortInputPrice = SortDirection.HIGH_TO_LOW
+        ProviderFilterState.sortOutputPrice = SortDirection.LOW_TO_HIGH
         ProviderFilterState.quantization = "fp8"
         ProviderFilterState.requireZdr = true
         ProviderFilterState.reset()

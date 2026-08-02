@@ -194,7 +194,9 @@
             </LinearLayout>
 
             <!-- Preferred mode only: the ordered provider list. Filled by the
-                 checkboxes in the chart's first column; grows with content. -->
+                 checkboxes in the chart's first column; grows with content.
+                 Each line carries up/down arrows so the priority can be
+                 rearranged directly without unchecking providers. -->
             <LinearLayout
                 android:id="@+id/section_preferred_order"
                 android:layout_width="match_parent"
@@ -212,16 +214,29 @@
                     style="@style/Widget.App.Section.Hint"
                     android:text="@string/provider_preferred_order_subtext" />
 
-                <TextView
-                    android:id="@+id/text_preferred_order"
+                <LinearLayout
+                    android:id="@+id/box_preferred_order"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="12dp"
                     android:background="@drawable/bg_field_box"
-                    android:padding="12dp"
-                    android:text="@string/provider_preferred_order_placeholder"
-                    android:textColor="?attr/appSubtleTextColor"
-                    android:textSize="14sp" />
+                    android:orientation="vertical"
+                    android:padding="12dp">
+
+                    <TextView
+                        android:id="@+id/text_preferred_order"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/provider_preferred_order_placeholder"
+                        android:textColor="?attr/appSubtleTextColor"
+                        android:textSize="14sp" />
+
+                    <LinearLayout
+                        android:id="@+id/rows_preferred_order"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical" />
+                </LinearLayout>
             </LinearLayout>
 
             <!-- Provider discovery area. Populated when a model is chosen;

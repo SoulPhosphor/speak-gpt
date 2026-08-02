@@ -27,12 +27,17 @@ enum class SortDirection { NONE, HIGH_TO_LOW, LOW_TO_HIGH }
  * from the default view.
  *
  * Sorting: each set dropdown contributes a sort key, applied in the panel's
- * listed order (Price, Latency, Throughput, Uptime). Endpoints with an unknown
- * value for a key sort after known ones regardless of direction. With no sort
- * set, providers are alphabetical (the chart's default).
+ * listed order (Input Price, Output Price, Latency, Throughput, Uptime).
+ * Endpoints with an unknown value for a key sort after known ones regardless
+ * of direction. Every sort starts internally unset (NONE) — the dropdowns
+ * never show a visible "Default" option. Alphabetical order is the base and
+ * final tiebreak, A to Z unless flipped to Z to A.
  */
 object ProviderFilterState {
-    var sortPrice: SortDirection = SortDirection.NONE
+    /** Base/tiebreak order. True = A to Z (the default), false = Z to A. */
+    var alphaAToZ: Boolean = true
+    var sortInputPrice: SortDirection = SortDirection.NONE
+    var sortOutputPrice: SortDirection = SortDirection.NONE
     var quantization: String? = null
     var sortLatency: SortDirection = SortDirection.NONE
     var sortThroughput: SortDirection = SortDirection.NONE
@@ -42,7 +47,9 @@ object ProviderFilterState {
     var requireZdr: Boolean = false
 
     fun reset() {
-        sortPrice = SortDirection.NONE
+        alphaAToZ = true
+        sortInputPrice = SortDirection.NONE
+        sortOutputPrice = SortDirection.NONE
         quantization = null
         sortLatency = SortDirection.NONE
         sortThroughput = SortDirection.NONE
@@ -62,7 +69,8 @@ object ProviderFilterState {
         if (requireZdr) result = result.filter { it.zdr == true }
 
         val sorts: List<Pair<SortDirection, (ProviderEndpointInfo) -> Double?>> = listOf(
-            sortPrice to { e: ProviderEndpointInfo -> e.promptPrice },
+            sortInputPrice to { e: ProviderEndpointInfo -> e.promptPrice },
+            sortOutputPrice to { e: ProviderEndpointInfo -> e.completionPrice },
             sortLatency to { e: ProviderEndpointInfo -> e.latency },
             sortThroughput to { e: ProviderEndpointInfo -> e.throughput },
             sortUptime to { e: ProviderEndpointInfo -> e.uptime }
@@ -82,7 +90,8 @@ object ProviderFilterState {
                 }
                 if (cmp != 0) return@Comparator cmp
             }
-            a.providerName.compareTo(b.providerName, ignoreCase = true)
+            val alpha = a.providerName.compareTo(b.providerName, ignoreCase = true)
+            if (alphaAToZ) alpha else -alpha
         }
 
         return result.sortedWith(comparator).toList()

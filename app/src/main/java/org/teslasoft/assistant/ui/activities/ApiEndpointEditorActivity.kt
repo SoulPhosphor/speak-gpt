@@ -152,10 +152,12 @@ class ApiEndpointEditorActivity : FragmentActivity() {
     private var fieldAuthType: TextInputEditText? = null
 
     /** OpenRouter-only rows: the Choose Provider navigation row and the whole
-     *  Advanced Options section. Shown only while the Base URL is an OpenRouter
-     *  endpoint; both are presentational this pass (no navigation, no saving). */
+     *  Advanced Options section, shown only while the Base URL is an OpenRouter
+     *  endpoint. The discovery-path field inside Advanced Options is a real
+     *  persisted profile field used by the Choose Provider screen's fetch. */
     private var rowChooseProvider: View? = null
     private var sectionAdvancedOptions: View? = null
+    private var fieldProviderDiscoveryPath: TextInputEditText? = null
     private var sliderTemperature: Slider? = null
     private var sliderTopP: Slider? = null
     private var sliderFrequencyPenalty: Slider? = null
@@ -253,6 +255,7 @@ class ApiEndpointEditorActivity : FragmentActivity() {
         fieldAuthType = findViewById(R.id.field_auth_type)
         rowChooseProvider = findViewById(R.id.row_choose_provider)
         sectionAdvancedOptions = findViewById(R.id.section_advanced_options)
+        fieldProviderDiscoveryPath = findViewById(R.id.field_provider_discovery_path)
         sliderTemperature = findViewById(R.id.slider_temperature)
         sliderTopP = findViewById(R.id.slider_top_p)
         sliderFrequencyPenalty = findViewById(R.id.slider_frequency_penalty)
@@ -331,6 +334,12 @@ class ApiEndpointEditorActivity : FragmentActivity() {
         fieldModel?.setText(selectedModel)
 
         currentProvider = endpoint.provider
+
+        // Prefilled with OpenRouter's default discovery path when the profile
+        // has no custom value; visible only on OpenRouter endpoints.
+        fieldProviderDiscoveryPath?.setText(
+            endpoint.providerDiscoveryPath.ifBlank { ApiEndpointObject.DEFAULT_PROVIDER_DISCOVERY_PATH }
+        )
 
         sliderTemperature?.value = (endpoint.temperature * 10f).coerceIn(0f, 20f)
         sliderTemperature?.setLabelFormatter { "${it / 10.0}" }
@@ -505,6 +514,11 @@ class ApiEndpointEditorActivity : FragmentActivity() {
         intent.putExtra(ChooseProviderActivity.EXTRA_HOST, fieldHost?.text.toString().trim())
         intent.putExtra(ChooseProviderActivity.EXTRA_API_KEY, effectiveApiKey())
         intent.putExtra(ChooseProviderActivity.EXTRA_AUTH_TYPE, selectedAuthType)
+        intent.putExtra(
+            ChooseProviderActivity.EXTRA_DISCOVERY_PATH,
+            fieldProviderDiscoveryPath?.text.toString().trim()
+                .ifBlank { ApiEndpointObject.DEFAULT_PROVIDER_DISCOVERY_PATH }
+        )
         chooseProviderLauncher.launch(intent)
     }
 
@@ -564,7 +578,12 @@ class ApiEndpointEditorActivity : FragmentActivity() {
                 selectedModel
             },
             imageCapabilityByModel = currentCapabilityJson,
-            toolCapabilityByModel = currentToolCapabilityJson
+            toolCapabilityByModel = currentToolCapabilityJson,
+            // The default path is stored as blank so a future default change
+            // reaches profiles that never customized it.
+            providerDiscoveryPath = fieldProviderDiscoveryPath?.text.toString().trim()
+                .takeIf { it != ApiEndpointObject.DEFAULT_PROVIDER_DISCOVERY_PATH }
+                ?: ""
         )
     }
 
@@ -814,6 +833,7 @@ class ApiEndpointEditorActivity : FragmentActivity() {
             fieldEndSeparator?.text.toString(),
             fieldPrefix?.text.toString(),
             if (keyChanged) "key_changed" else "key_same",
+            fieldProviderDiscoveryPath?.text.toString(),
             currentCapabilityJson,
             currentToolCapabilityJson,
             // Choose Provider choices count as unsaved edits once made, so the

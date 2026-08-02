@@ -61,7 +61,9 @@ class ProviderFilterPanelActivity : FragmentActivity() {
     private var actionBar: ConstraintLayout? = null
     private var btnClose: ImageButton? = null
 
-    private var valuePrice: TextView? = null
+    private var valueAlphabetical: TextView? = null
+    private var valueInputPrice: TextView? = null
+    private var valueOutputPrice: TextView? = null
     private var valueQuantization: TextView? = null
     private var valueLatency: TextView? = null
     private var valueThroughput: TextView? = null
@@ -82,7 +84,9 @@ class ProviderFilterPanelActivity : FragmentActivity() {
 
         actionBar = findViewById(R.id.action_bar)
         btnClose = findViewById(R.id.btn_close)
-        valuePrice = findViewById(R.id.value_price)
+        valueAlphabetical = findViewById(R.id.value_alphabetical)
+        valueInputPrice = findViewById(R.id.value_input_price)
+        valueOutputPrice = findViewById(R.id.value_output_price)
         valueQuantization = findViewById(R.id.value_quantization)
         valueLatency = findViewById(R.id.value_latency)
         valueThroughput = findViewById(R.id.value_throughput)
@@ -94,7 +98,9 @@ class ProviderFilterPanelActivity : FragmentActivity() {
         applyTheme()
         btnClose?.setOnClickListener { finish() }
 
-        bindSortDropdown(valuePrice, { ProviderFilterState.sortPrice }) { ProviderFilterState.sortPrice = it }
+        bindAlphabeticalDropdown()
+        bindSortDropdown(valueInputPrice, { ProviderFilterState.sortInputPrice }) { ProviderFilterState.sortInputPrice = it }
+        bindSortDropdown(valueOutputPrice, { ProviderFilterState.sortOutputPrice }) { ProviderFilterState.sortOutputPrice = it }
         bindSortDropdown(valueLatency, { ProviderFilterState.sortLatency }) { ProviderFilterState.sortLatency = it }
         bindSortDropdown(valueThroughput, { ProviderFilterState.sortThroughput }) { ProviderFilterState.sortThroughput = it }
         bindSortDropdown(valueUptime, { ProviderFilterState.sortUptime }) { ProviderFilterState.sortUptime = it }
@@ -121,15 +127,16 @@ class ProviderFilterPanelActivity : FragmentActivity() {
 
     /* ------------------------------ bindings ------------------------------ */
 
+    /** Display for a set sort; an unset sort shows an empty value slot — the
+     *  row's label names the field, and "Default" is never a visible option. */
     private fun sortLabel(direction: SortDirection): String = when (direction) {
         SortDirection.HIGH_TO_LOW -> getString(R.string.provider_filter_sort_high_low)
         SortDirection.LOW_TO_HIGH -> getString(R.string.provider_filter_sort_low_high)
-        else -> getString(R.string.provider_filter_sort_default)
+        else -> ""
     }
 
-    private val sortOptions = listOf(
-        SortDirection.NONE, SortDirection.HIGH_TO_LOW, SortDirection.LOW_TO_HIGH
-    )
+    /** The only options the sort dropdowns visibly contain. */
+    private val sortOptions = listOf(SortDirection.HIGH_TO_LOW, SortDirection.LOW_TO_HIGH)
 
     private fun bindSortDropdown(view: TextView?, current: () -> SortDirection, apply: (SortDirection) -> Unit) {
         view?.setOnClickListener { anchor ->
@@ -140,11 +147,27 @@ class ProviderFilterPanelActivity : FragmentActivity() {
         }
     }
 
+    /** Alphabetical always has a value: A to Z (the default) or Z to A. */
+    private fun bindAlphabeticalDropdown() {
+        valueAlphabetical?.setOnClickListener { anchor ->
+            val labels = listOf(
+                getString(R.string.provider_filter_a_to_z),
+                getString(R.string.provider_filter_z_to_a)
+            )
+            showDropdown(anchor, labels) { index ->
+                ProviderFilterState.alphaAToZ = index == 0
+                refreshAllValues()
+            }
+        }
+    }
+
+    /** Only the quantizations actually present in the loaded provider list.
+     *  Unset by default (empty value slot); Reset Filters clears a choice. */
     private fun bindQuantizationDropdown() {
         valueQuantization?.setOnClickListener { anchor ->
-            val labels = listOf(getString(R.string.provider_filter_any)) + quantizations
-            showDropdown(anchor, labels) { index ->
-                ProviderFilterState.quantization = if (index == 0) null else quantizations[index - 1]
+            if (quantizations.isEmpty()) return@setOnClickListener
+            showDropdown(anchor, quantizations) { index ->
+                ProviderFilterState.quantization = quantizations[index]
                 refreshAllValues()
             }
         }
@@ -172,12 +195,16 @@ class ProviderFilterPanelActivity : FragmentActivity() {
     }
 
     private fun refreshAllValues() {
-        valuePrice?.text = sortLabel(ProviderFilterState.sortPrice)
+        valueAlphabetical?.text = getString(
+            if (ProviderFilterState.alphaAToZ) R.string.provider_filter_a_to_z
+            else R.string.provider_filter_z_to_a
+        )
+        valueInputPrice?.text = sortLabel(ProviderFilterState.sortInputPrice)
+        valueOutputPrice?.text = sortLabel(ProviderFilterState.sortOutputPrice)
         valueLatency?.text = sortLabel(ProviderFilterState.sortLatency)
         valueThroughput?.text = sortLabel(ProviderFilterState.sortThroughput)
         valueUptime?.text = sortLabel(ProviderFilterState.sortUptime)
-        valueQuantization?.text = ProviderFilterState.quantization
-            ?: getString(R.string.provider_filter_any)
+        valueQuantization?.text = ProviderFilterState.quantization ?: ""
         checkToolSupport?.isChecked = ProviderFilterState.requireTools
         checkImplicitCaching?.isChecked = ProviderFilterState.requireCaching
         checkZdr?.isChecked = ProviderFilterState.requireZdr

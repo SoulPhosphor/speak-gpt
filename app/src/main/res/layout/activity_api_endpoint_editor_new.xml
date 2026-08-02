@@ -279,11 +279,10 @@
                     android:textColorHint="?attr/appSubtleTextColor" />
             </LinearLayout>
 
-            <!-- Choose Provider (OpenRouter only). Navigation row that will open
-                 the provider selector; the destination is wired in a later pass,
-                 so tapping is inert for now. Shown only while the Base URL is an
-                 OpenRouter endpoint — ApiEndpointEditorActivity toggles it live
-                 from the host field. -->
+            <!-- Choose Provider (OpenRouter only). Opens ChooseProviderActivity
+                 (routing type, model, provider chart). Shown only while the Base
+                 URL is an OpenRouter endpoint — ApiEndpointEditorActivity
+                 toggles it live from the host field. -->
             <LinearLayout
                 android:id="@+id/row_choose_provider"
                 style="@style/Widget.App.Row.WithSubtitle"
@@ -652,9 +651,10 @@
             <!-- Advanced Options (OpenRouter only). The whole block is shown only
                  while the Base URL is an OpenRouter endpoint —
                  ApiEndpointEditorActivity toggles it live from the host field.
-                 Provider Discovery Path is presentational this pass: the box is
-                 non-editable and shows the default OpenRouter placeholder; saving
-                 is wired in a later pass. -->
+                 Provider Discovery Path is an editable, persisted per-profile
+                 field: the provider fetch on the Choose Provider screen uses the
+                 saved value, prefilled with OpenRouter's default path. Only
+                 changed for custom API proxies. -->
             <LinearLayout
                 android:id="@+id/section_advanced_options"
                 android:layout_width="match_parent"
@@ -688,10 +688,6 @@
                     <com.google.android.material.textfield.TextInputEditText
                         android:id="@+id/field_provider_discovery_path"
                         style="@style/Widget.App.Field.Box"
-                        android:clickable="false"
-                        android:cursorVisible="false"
-                        android:focusable="false"
-                        android:focusableInTouchMode="false"
                         android:hint="@string/endpoint_provider_discovery_path_hint_openrouter"
                         android:singleLine="true"
                         android:textColorHint="?attr/appSubtleTextColor" />

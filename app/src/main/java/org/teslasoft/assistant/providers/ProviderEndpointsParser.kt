@@ -30,11 +30,6 @@ import com.google.gson.JsonObject
  */
 object ProviderEndpointsParser {
 
-    /** The default discovery path for OpenRouter; {model} is replaced with the
-     *  model id. Matches the Provider Discovery Path placeholder on the
-     *  endpoint editor's Advanced Options section. */
-    const val DEFAULT_DISCOVERY_PATH = "/models/{model}/endpoints"
-
     fun parse(body: String): List<ProviderEndpointInfo>? {
         val root = try {
             Gson().fromJson(body, JsonObject::class.java)
@@ -72,22 +67,68 @@ object ProviderEndpointsParser {
                 completionPrice = num(pricing, "completion"),
                 cacheReadPrice = cacheRead,
                 cacheWritePrice = cacheWrite,
-                latency = num(obj, "latency_last_30m") ?: num(obj, "latency"),
-                throughput = num(obj, "throughput_last_30m") ?: num(obj, "throughput"),
-                uptime = num(obj, "uptime_last_30m") ?: num(obj, "uptime"),
+                // latency_last_30m / throughput_last_30m arrive as percentile
+                // objects ({"p50": …}); p50 is the value shown. A plain number
+                // is accepted too for proxies that flatten it.
+                latency = metric(obj, "latency_last_30m") ?: metric(obj, "latency"),
+                throughput = metric(obj, "throughput_last_30m") ?: metric(obj, "throughput"),
+                uptime = metric(obj, "uptime_last_30m") ?: metric(obj, "uptime"),
                 supportsTools = supportedParams?.let { it.contains("tools") },
-                // A provider that prices cache reads implements prompt caching.
-                // No cache pricing does NOT prove absence, so only an explicit
-                // false-y signal would set false — absent stays unknown unless
-                // pricing exists at all (then no cache price = not cached).
-                supportsCaching = when {
-                    cacheRead != null || cacheWrite != null -> true
-                    pricing != null -> false
-                    else -> null
-                },
+                // Only the API's explicit field decides caching support; cache
+                // pricing alone is NOT proof (owner correction, Aug 2 2026).
+                supportsCaching = bool(obj, "supports_implicit_caching"),
+                // ZDR is NOT reported on the model-endpoints response; it comes
+                // from the separate /endpoints/zdr list (parseZdrMatches below),
+                // overlaid by the caller. An explicit field is honored if a
+                // proxy provides one; otherwise unknown here.
                 zdr = bool(obj, "is_zdr") ?: bool(obj, "zdr")
             )
         }
+    }
+
+    /**
+     * Parses the Zero Data Retention endpoint list (OpenRouter:
+     * GET /endpoints/zdr) and returns the lowercase provider identifiers
+     * (tag, provider name) of the ZDR endpoints serving [modelId]. The caller
+     * overlays this on the chart: listed → ZDR yes, absent → ZDR no.
+     *
+     * Records that carry a model identity for a DIFFERENT model are skipped;
+     * records with no recognizable model identity are also skipped rather than
+     * over-claiming ZDR for every model. Returns null when the body carries no
+     * readable data array at all (→ ZDR stays unknown, "?").
+     */
+    fun parseZdrMatches(body: String, modelId: String): Set<String>? {
+        val root = try {
+            Gson().fromJson(body, JsonObject::class.java)
+        } catch (_: Exception) {
+            null
+        } ?: return null
+
+        val data = root.get("data")?.takeIf { it.isJsonArray }?.asJsonArray
+            ?: root.get("endpoints")?.takeIf { it.isJsonArray }?.asJsonArray
+            ?: return null
+
+        val wanted = modelId.trim().lowercase()
+        val matches = mutableSetOf<String>()
+        for (el in data) {
+            if (!el.isJsonObject) continue
+            val obj = el.asJsonObject
+
+            // Model identity: explicit fields first, then the "Provider |
+            // author/model" composite name.
+            val name = str(obj, "name")
+            val recordModel = (
+                str(obj, "model_variant_slug") ?: str(obj, "model_id") ?: str(obj, "model")
+                    ?: name?.substringAfter("|", "")?.trim()?.takeIf { it.contains("/") }
+                )?.lowercase() ?: continue
+            if (recordModel != wanted) continue
+
+            str(obj, "tag")?.let { matches.add(it.lowercase()) }
+            str(obj, "provider_name")?.let { matches.add(it.lowercase()) }
+            name?.substringBefore("|")?.trim()?.takeIf { it.isNotBlank() }
+                ?.let { matches.add(it.lowercase()) }
+        }
+        return matches
     }
 
     private fun str(obj: JsonObject?, key: String): String? =
@@ -95,6 +136,17 @@ object ProviderEndpointsParser {
 
     private fun num(obj: JsonObject?, key: String): Double? =
         obj?.get(key)?.takeIf { it.isJsonPrimitive }?.asString?.toDoubleOrNull()
+
+    /** A stats value that may be a plain number or a percentile object — the
+     *  percentile shape yields its p50. */
+    private fun metric(obj: JsonObject?, key: String): Double? {
+        val el = obj?.get(key) ?: return null
+        return when {
+            el.isJsonPrimitive -> el.asString.toDoubleOrNull()
+            el.isJsonObject -> num(el.asJsonObject, "p50")
+            else -> null
+        }
+    }
 
     private fun bool(obj: JsonObject?, key: String): Boolean? =
         obj?.get(key)?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isBoolean }?.asBoolean

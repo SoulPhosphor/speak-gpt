@@ -86,6 +86,7 @@ class ChooseProviderActivity : FragmentActivity() {
         const val EXTRA_HOST = "host"
         const val EXTRA_API_KEY = "apiKey"
         const val EXTRA_AUTH_TYPE = "authType"
+        const val EXTRA_DISCOVERY_PATH = "discoveryPath"
         const val EXTRA_SELECTED_PROVIDER = "selectedProvider"
         const val EXTRA_ALLOW_FALLBACKS = "allowFallbacks"
         const val EXTRA_PROVIDER_ORDER = "providerOrder"
@@ -130,6 +131,7 @@ class ChooseProviderActivity : FragmentActivity() {
     private var switchAllowFallbacks: MaterialSwitch? = null
     private var sectionPreferredOrder: View? = null
     private var textPreferredOrder: TextView? = null
+    private var rowsPreferredOrder: LinearLayout? = null
     private var btnProviderFilters: MaterialButton? = null
     private var textProviderStatus: TextView? = null
     private var chartScroll: View? = null
@@ -140,6 +142,9 @@ class ChooseProviderActivity : FragmentActivity() {
     private var host: String = ""
     private var apiKey: String = ""
     private var authType: String = ApiEndpointObject.AUTH_BEARER
+    /** Provider-discovery path from the endpoint profile's Advanced Options
+     *  field; {model} is replaced with the model id at fetch time. */
+    private var discoveryPath: String = ApiEndpointObject.DEFAULT_PROVIDER_DISCOVERY_PATH
     private var selectedModel: String = ""
     private var selectedRoutingType: String = FavoriteModelObject.ROUTING_AUTOMATIC
 
@@ -158,10 +163,16 @@ class ChooseProviderActivity : FragmentActivity() {
     /** The fetched provider endpoints for [selectedModel]; null = not loaded. */
     private var providerEndpoints: List<ProviderEndpointInfo>? = null
 
+    /** Lowercase provider identifiers of the ZDR endpoints serving the model,
+     *  from the separate /endpoints/zdr fetch. Null = list not available →
+     *  the ZDR column stays "?"; a loaded list is authoritative (absent = no). */
+    private var zdrMatches: Set<String>? = null
+
     /** slug → display name, from the loaded list (order box shows names). */
     private val displayNames: MutableMap<String, String> = mutableMapOf()
 
     private var requestNetwork: RequestNetwork? = null
+    private var zdrRequestNetwork: RequestNetwork? = null
 
     private val fetchListener = object : RequestNetwork.RequestListener {
         override fun onResponse(tag: String, message: String) {
@@ -174,11 +185,22 @@ class ChooseProviderActivity : FragmentActivity() {
             displayNames.clear()
             parsed.forEach { displayNames[it.slug] = it.providerName }
             renderChart()
+            startZdrFetch()
         }
 
         override fun onErrorResponse(tag: String, message: String) {
             showProviderError(message)
         }
+    }
+
+    /** ZDR list arrives after the chart; failure just leaves the column "?". */
+    private val zdrFetchListener = object : RequestNetwork.RequestListener {
+        override fun onResponse(tag: String, message: String) {
+            zdrMatches = ProviderEndpointsParser.parseZdrMatches(message, selectedModel)
+            if (providerEndpoints != null) renderChart()
+        }
+
+        override fun onErrorResponse(tag: String, message: String) { /* stays unknown */ }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -193,6 +215,8 @@ class ChooseProviderActivity : FragmentActivity() {
         host = intent.getStringExtra(EXTRA_HOST) ?: ""
         apiKey = intent.getStringExtra(EXTRA_API_KEY) ?: ""
         authType = intent.getStringExtra(EXTRA_AUTH_TYPE) ?: ApiEndpointObject.AUTH_BEARER
+        discoveryPath = (intent.getStringExtra(EXTRA_DISCOVERY_PATH) ?: "")
+            .ifBlank { ApiEndpointObject.DEFAULT_PROVIDER_DISCOVERY_PATH }
         selectedModel = intent.getStringExtra(EXTRA_MODEL) ?: ""
         selectedRoutingType = (intent.getStringExtra(EXTRA_ROUTING_TYPE) ?: FavoriteModelObject.ROUTING_AUTOMATIC)
             .takeIf { it in routingTypes } ?: FavoriteModelObject.ROUTING_AUTOMATIC
@@ -228,6 +252,7 @@ class ChooseProviderActivity : FragmentActivity() {
         switchAllowFallbacks = findViewById(R.id.switch_allow_fallbacks)
         sectionPreferredOrder = findViewById(R.id.section_preferred_order)
         textPreferredOrder = findViewById(R.id.text_preferred_order)
+        rowsPreferredOrder = findViewById(R.id.rows_preferred_order)
         btnProviderFilters = findViewById(R.id.btn_provider_filters)
         textProviderStatus = findViewById(R.id.text_provider_status)
         chartScroll = findViewById(R.id.chart_scroll)
@@ -344,6 +369,7 @@ class ChooseProviderActivity : FragmentActivity() {
         selectedModel = model
         updateModelBox()
         providerEndpoints = null
+        zdrMatches = null
         seedProviderStateFromFavorite()
         updateModeViews()
         if (selectedModel.isBlank()) {
@@ -392,17 +418,67 @@ class ChooseProviderActivity : FragmentActivity() {
         if (preferred) updateOrderBox()
     }
 
+    /**
+     * Rebuild the Preferred Provider Order box: the placeholder while empty,
+     * otherwise one line per provider ("1. Name") with up/down arrows so the
+     * priority can be rearranged directly — no unchecking required.
+     */
     private fun updateOrderBox() {
-        val box = textPreferredOrder ?: return
-        if (orderList.isEmpty()) {
-            box.text = getString(R.string.provider_preferred_order_placeholder)
-            box.setTextColor(resolveAttrColor(R.attr.appSubtleTextColor))
-        } else {
-            box.text = orderList.mapIndexed { index, slug ->
-                "${index + 1}. ${displayNames[slug] ?: slug}"
-            }.joinToString("\n")
-            box.setTextColor(resolveAttrColor(R.attr.appTextColor))
+        val rows = rowsPreferredOrder ?: return
+        rows.removeAllViews()
+        textPreferredOrder?.visibility = if (orderList.isEmpty()) View.VISIBLE else View.GONE
+
+        for ((index, slug) in orderList.withIndex()) {
+            val name = displayNames[slug] ?: slug
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { if (index > 0) topMargin = dp(6) }
+            }
+            val label = TextView(this).apply {
+                text = "${index + 1}. $name"
+                textSize = 14f
+                setTextColor(resolveAttrColor(R.attr.appTextColor))
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            }
+            row.addView(label)
+            row.addView(orderArrow(name, up = true, enabled = index > 0) { moveInOrder(index, index - 1) })
+            row.addView(orderArrow(name, up = false, enabled = index < orderList.size - 1) { moveInOrder(index, index + 1) })
+            rows.addView(row)
         }
+    }
+
+    /** Up/down arrow for an order row: the shared chevron glyph, rotated for
+     *  up; dimmed and inert at the list's ends. */
+    private fun orderArrow(name: String, up: Boolean, enabled: Boolean, onClick: () -> Unit): View {
+        return ImageView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(dp(32), dp(32)).apply { marginStart = dp(4) }
+            setPadding(dp(4), dp(4), dp(4), dp(4))
+            setImageDrawable(ContextCompat.getDrawable(this@ChooseProviderActivity, R.drawable.ic_chevron_down))
+            rotation = if (up) 180f else 0f
+            contentDescription = getString(
+                if (up) R.string.provider_move_up_desc else R.string.provider_move_down_desc, name
+            )
+            val outValue = TypedValue()
+            theme.resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, outValue, true)
+            setBackgroundResource(outValue.resourceId)
+            if (enabled) {
+                isClickable = true
+                isFocusable = true
+                setOnClickListener { onClick() }
+            } else {
+                alpha = 0.3f
+            }
+        }
+    }
+
+    private fun moveInOrder(from: Int, to: Int) {
+        if (from !in orderList.indices || to !in orderList.indices) return
+        val slug = orderList.removeAt(from)
+        orderList.add(to, slug)
+        updateOrderBox()
     }
 
     /* ------------------------------ provider fetch ------------------------------ */
@@ -415,20 +491,37 @@ class ChooseProviderActivity : FragmentActivity() {
         textProviderStatus?.text = getString(R.string.provider_status_loading)
         textProviderStatus?.visibility = View.VISIBLE
 
+        // The profile's Provider Discovery Path (Advanced Options), with the
+        // model id substituted in.
         val base = host.trimEnd('/')
-        val path = ProviderEndpointsParser.DEFAULT_DISCOVERY_PATH.replace("{model}", selectedModel)
+        val path = discoveryPath.replace("{model}", selectedModel)
         val url = base + path
 
+        requestNetwork = RequestNetwork(this)
+        requestNetwork?.setHeaders(authHeaders())
+        requestNetwork?.startRequestNetwork("GET", url, "A", fetchListener)
+    }
+
+    /** Fetch the Zero Data Retention endpoint list; its records are matched
+     *  against the model's providers to fill the ZDR column (owner correction,
+     *  Aug 2 2026 — ZDR is not part of the model-endpoints response). */
+    private fun startZdrFetch() {
+        if (host.isBlank() || zdrMatches != null) return
+        zdrRequestNetwork = RequestNetwork(this)
+        zdrRequestNetwork?.setHeaders(authHeaders())
+        zdrRequestNetwork?.startRequestNetwork(
+            "GET", host.trimEnd('/') + "/endpoints/zdr", "A", zdrFetchListener
+        )
+    }
+
+    private fun authHeaders(): HashMap<String, Any> {
         val authHeaders = HashMap<String, Any>()
         when (authType) {
             ApiEndpointObject.AUTH_X_API_KEY -> authHeaders["x-api-key"] = apiKey
             ApiEndpointObject.AUTH_API_KEY -> authHeaders["api-key"] = apiKey
             else -> authHeaders["Authorization"] = "Bearer $apiKey"
         }
-
-        requestNetwork = RequestNetwork(this)
-        requestNetwork?.setHeaders(authHeaders)
-        requestNetwork?.startRequestNetwork("GET", url, "A", fetchListener)
+        return authHeaders
     }
 
     /** Honest failure line: what failed plus what the server actually said. */
@@ -456,8 +549,11 @@ class ChooseProviderActivity : FragmentActivity() {
             return
         }
 
-        // Alphabetical default; the filter state adds its sorts/filters on top.
-        val sorted = ProviderFilterState.apply(all.sortedBy { it.providerName.lowercase() })
+        // Overlay the authoritative ZDR list (when loaded) so the column and
+        // the ZDR filter both see the real values; the filter state then
+        // applies its filters and sorts (alphabetical base order included).
+        val displayed = all.map { it.copy(zdr = effectiveZdr(it)) }
+        val sorted = ProviderFilterState.apply(displayed)
 
         textProviderStatus?.visibility = View.GONE
         btnProviderFilters?.visibility = View.VISIBLE
@@ -517,6 +613,15 @@ class ChooseProviderActivity : FragmentActivity() {
 
         row.addView(buildIgnoreControl(endpoint))
         return row
+    }
+
+    /** ZDR for display: the fetched ZDR list is authoritative once loaded
+     *  (listed → yes, absent → no); until then whatever the endpoint record
+     *  itself carried (usually unknown → "?"). */
+    private fun effectiveZdr(endpoint: ProviderEndpointInfo): Boolean? {
+        val matches = zdrMatches ?: return endpoint.zdr
+        return endpoint.slug.lowercase() in matches ||
+            endpoint.providerName.lowercase() in matches
     }
 
     private fun hasLeadColumn(): Boolean =
