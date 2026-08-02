@@ -98,6 +98,12 @@
         </activity>
 
         <activity
+            android:name=".ui.activities.ProviderFilterPanelActivity"
+            android:exported="false"
+            android:label="@string/provider_filters_title">
+        </activity>
+
+        <activity
             android:name=".ui.activities.PersonasListActivity"
             android:exported="false"
             android:label="@string/title_personas">

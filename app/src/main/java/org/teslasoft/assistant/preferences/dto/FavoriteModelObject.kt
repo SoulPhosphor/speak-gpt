@@ -30,7 +30,18 @@ package org.teslasoft.assistant.preferences.dto
 class FavoriteModelObject(
     var modelId: String,
     var endpointId: String,
-    var routingType: String = ROUTING_AUTOMATIC
+    var routingType: String = ROUTING_AUTOMATIC,
+    /** Provider slug chosen in Only mode (empty = none chosen). */
+    var selectedProvider: String = "",
+    /** Preferred mode: whether the API may fall back to other providers when
+     *  the preferred ones fail. Defaults on. */
+    var allowFallbacks: Boolean = true,
+    /** Preferred mode: provider slugs in priority order (first = most
+     *  preferred; the owner's "lower is less preferred"). */
+    var providerOrder: List<String> = emptyList(),
+    /** Provider slugs the user marked Ignore in the chart. Applies in
+     *  automatic and preferred modes; not sent in Only mode. */
+    var ignoredProviders: List<String> = emptyList()
 ) {
     companion object {
         /** Provider chooses each turn; no specific provider is remembered. The

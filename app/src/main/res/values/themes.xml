@@ -772,6 +772,63 @@
         <item name="android:textColor">?attr/appTextColor</item>
     </style>
 
+    <!-- Provider chart (Choose Provider screen, owner spec Aug 2 2026): a
+         horizontally scrollable table of provider endpoints. One Chart.Row per
+         provider (and one for the header), cells sized by the column table in
+         ChooseProviderActivity; HeaderCell/Cell carry the shared typography.
+         All colors resolve through theme attributes (appTextColor here;
+         the Ignore control uses appSubtleTextColor / colorError / colorOnError
+         via its drawables and runtime tints) so future palettes restyle the
+         whole chart without touching layouts or code. -->
+    <style name="Widget.App.Chart.Row" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:orientation">horizontal</item>
+    </style>
+
+    <style name="Widget.App.Chart.HeaderCell" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:ellipsize">end</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:paddingEnd">8dp</item>
+        <item name="android:textColor">?attr/appTextColor</item>
+        <item name="android:textSize">13sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="Widget.App.Chart.Cell" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:ellipsize">end</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:paddingEnd">8dp</item>
+        <item name="android:textColor">?attr/appTextColor</item>
+        <item name="android:textSize">13sp</item>
+    </style>
+
+    <!-- Plain full-row checkbox option (owner spec, Aug 2 2026 — the provider
+         Filters panel's Tool Support / Implicit Caching / Zero Data Retention
+         lines): the whole row toggles the box, but the row must look like a
+         normal line of text, NOT a button or tile — no background. Distinct
+         from Widget.App.Row.Toggle, which is a switch row with subtitle. -->
+    <style name="Widget.App.CheckOption.Row" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:orientation">horizontal</item>
+        <item name="android:paddingVertical">6dp</item>
+    </style>
+
+    <style name="Widget.App.CheckOption.Label" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginStart">8dp</item>
+        <item name="android:textColor">?attr/appTextColor</item>
+        <item name="android:textSize">15sp</item>
+    </style>
+
     <style name="Widget.App.Field.Box" parent="">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>

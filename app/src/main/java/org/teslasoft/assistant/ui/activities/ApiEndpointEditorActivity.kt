@@ -101,10 +101,15 @@ class ApiEndpointEditorActivity : FragmentActivity() {
     private var chooseProviderVisited: Boolean = false
     private var pendingRoutingType: String = FavoriteModelObject.ROUTING_AUTOMATIC
     private var pendingMakeFavorite: Boolean = false
+    private var pendingSelectedProvider: String = ""
+    private var pendingAllowFallbacks: Boolean = true
+    private var pendingProviderOrder: List<String> = emptyList()
+    private var pendingIgnoredProviders: List<String> = emptyList()
 
     /** Result from the Choose Provider screen: the chosen model becomes the
-     *  endpoint's model (same value the Model box sets), and the routing type +
-     *  favorite flag are applied to the favorites store when the profile saves. */
+     *  endpoint's model (same value the Model box sets), and the routing type,
+     *  provider choices and favorite flag are applied to the favorites store
+     *  when the profile saves. */
     private val chooseProviderLauncher = registerForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -114,6 +119,10 @@ class ApiEndpointEditorActivity : FragmentActivity() {
             pendingRoutingType = data.getStringExtra(ChooseProviderActivity.EXTRA_ROUTING_TYPE)
                 ?: FavoriteModelObject.ROUTING_AUTOMATIC
             pendingMakeFavorite = data.getBooleanExtra(ChooseProviderActivity.EXTRA_MAKE_FAVORITE, true)
+            pendingSelectedProvider = data.getStringExtra(ChooseProviderActivity.EXTRA_SELECTED_PROVIDER) ?: ""
+            pendingAllowFallbacks = data.getBooleanExtra(ChooseProviderActivity.EXTRA_ALLOW_FALLBACKS, true)
+            pendingProviderOrder = data.getStringArrayListExtra(ChooseProviderActivity.EXTRA_PROVIDER_ORDER) ?: emptyList()
+            pendingIgnoredProviders = data.getStringArrayListExtra(ChooseProviderActivity.EXTRA_IGNORED_PROVIDERS) ?: emptyList()
             chooseProviderVisited = true
             if (model != selectedModel) fieldContextWindow?.setText("")
             selectedModel = model
@@ -491,6 +500,11 @@ class ApiEndpointEditorActivity : FragmentActivity() {
         intent.putExtra(ChooseProviderActivity.EXTRA_ENDPOINT_ID, endpointId)
         intent.putExtra(ChooseProviderActivity.EXTRA_MODEL, selectedModel)
         intent.putExtra(ChooseProviderActivity.EXTRA_ROUTING_TYPE, routingType)
+        // Connection details for the provider-discovery fetch, passed live from
+        // the editor's fields so the screen works for an unsaved endpoint too.
+        intent.putExtra(ChooseProviderActivity.EXTRA_HOST, fieldHost?.text.toString().trim())
+        intent.putExtra(ChooseProviderActivity.EXTRA_API_KEY, effectiveApiKey())
+        intent.putExtra(ChooseProviderActivity.EXTRA_AUTH_TYPE, selectedAuthType)
         chooseProviderLauncher.launch(intent)
     }
 
@@ -691,7 +705,11 @@ class ApiEndpointEditorActivity : FragmentActivity() {
         if (chooseProviderVisited) {
             if (pendingMakeFavorite && selectedModel.isNotBlank()) {
                 favoriteModelsPreferences?.addFavoriteModel(
-                    FavoriteModelObject(selectedModel, savedId, pendingRoutingType)
+                    FavoriteModelObject(
+                        selectedModel, savedId, pendingRoutingType,
+                        pendingSelectedProvider, pendingAllowFallbacks,
+                        pendingProviderOrder, pendingIgnoredProviders
+                    )
                 )
             } else if (selectedModel.isNotBlank()) {
                 favoriteModelsPreferences?.removeFavoriteModel(selectedModel, savedId)
@@ -800,7 +818,12 @@ class ApiEndpointEditorActivity : FragmentActivity() {
             currentToolCapabilityJson,
             // Choose Provider choices count as unsaved edits once made, so the
             // discard-changes guard offers to save them.
-            if (chooseProviderVisited) "cp:$pendingRoutingType:$pendingMakeFavorite" else "cp:none"
+            if (chooseProviderVisited) {
+                "cp:$pendingRoutingType:$pendingMakeFavorite:$pendingSelectedProvider:" +
+                    "$pendingAllowFallbacks:$pendingProviderOrder:$pendingIgnoredProviders"
+            } else {
+                "cp:none"
+            }
         ).joinToString("")
     }
 
