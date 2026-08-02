@@ -1752,8 +1752,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val handsFree = preferences?.getHandsFreeMode() == true
         val effModel = preferences?.getEffectiveAudioModel()
         val sttSupported = effModel == "google" || effModel == "whisper-local"
-        val auto = preferences?.autoSend() == true
-        if (handsFree && sttSupported && auto && !cancelState && !handsFreeStopped && !isRecording &&
+        // Auto-send governs only the manual mic button (owner ruling, July
+        // 2026); the hands-free loop always keeps listening after a readback.
+        if (handsFree && sttSupported && !cancelState && !handsFreeStopped && !isRecording &&
             !isFinishing && !isDestroyed
         ) {
             // If audio is somehow still audible (the watchdog can race the real
@@ -1779,7 +1780,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 startRecognition(true)
             }
         } else if (handsFree) {
-            logVoiceEvent("mic NOT reopened after readback: engine=$effModel autoSend=$auto " +
+            logVoiceEvent("mic NOT reopened after readback: engine=$effModel " +
                     "cancelled=$cancelState loopStopped=$handsFreeStopped alreadyRecording=$isRecording")
         }
     }
