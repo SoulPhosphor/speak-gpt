@@ -47,6 +47,35 @@ class LogsActivity : FragmentActivity() {
         private val HEALTH_HEADER = Regex(
             "(?m)^(\\[\\d{4}-\\d{2}-\\d{2} \\d{1,2}:\\d{2}(?::\\d{2})?(?: [AP]M)?]) \\[DatabaseHealth]"
         )
+
+        /** A whole "Outcome: Incomplete" line in a Response Lifecycle entry —
+         *  the only line the owner wants in red, so a cut-off reply is easy to
+         *  spot. Stopped, Cancelled and Complete stay the default color, which
+         *  keeps them visually distinct from a failure. */
+        private val LIFECYCLE_INCOMPLETE = Regex("(?m)^Outcome: Incomplete$")
+    }
+
+    /**
+     * Response Lifecycle rendering: color every "Outcome: Incomplete" line red.
+     * Nothing else is recolored, so intentional Stopped/Cancelled outcomes and
+     * normal Complete outcomes remain plain and clearly not failures.
+     */
+    private fun renderLifecycleLog(raw: String): CharSequence {
+        if (raw.isEmpty() || !raw.contains("Outcome: Incomplete")) return raw
+        return try {
+            val spannable = android.text.SpannableString(raw)
+            val red = androidx.core.content.res.ResourcesCompat.getColor(resources, R.color.light_red, theme)
+            for (match in LIFECYCLE_INCOMPLETE.findAll(raw)) {
+                spannable.setSpan(
+                    android.text.style.ForegroundColorSpan(red),
+                    match.range.first, match.range.last + 1,
+                    android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+            }
+            spannable
+        } catch (_: Exception) {
+            raw
+        }
     }
 
     /**
@@ -162,6 +191,12 @@ class LogsActivity : FragmentActivity() {
                             textLog?.text = Logger.getProviderFailLog(this)
                         }
 
+                        "response_lifecycle" -> {
+                            activityLogsTitle?.text = getString(R.string.title_response_lifecycle_log)
+                            this.title = getString(R.string.title_response_lifecycle_log)
+                            textLog?.text = renderLifecycleLog(Logger.getResponseLifecycleLog(this))
+                        }
+
                         "image_gen_errors" -> {
                             activityLogsTitle?.text = getString(R.string.title_image_gen_errors_log)
                             this.title = getString(R.string.title_image_gen_errors_log)
@@ -219,6 +254,11 @@ class LogsActivity : FragmentActivity() {
                                 "provider_fail" -> {
                                     Logger.clearProviderFailLog(this)
                                     textLog?.text = Logger.getProviderFailLog(this)
+                                }
+
+                                "response_lifecycle" -> {
+                                    Logger.clearResponseLifecycleLog(this)
+                                    textLog?.text = renderLifecycleLog(Logger.getResponseLifecycleLog(this))
                                 }
 
                                 "image_gen_errors" -> {

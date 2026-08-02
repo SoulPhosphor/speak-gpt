@@ -504,6 +504,108 @@
                 </LinearLayout>
             </LinearLayout>
 
+            <!-- ============ Response Lifecycle Log ============
+                 Temporary, opt-in record of how each user-visible reply ended
+                 (completion status, token usage, request limits, termination).
+                 Off by default; logs both completed and cut-off streams so they
+                 can be compared. Same toggle/retention composition as above. -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingTop="20dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/tile_response_lifecycle_title"
+                        android:textColor="@color/text"
+                        android:textSize="16sp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/tile_response_lifecycle_desc"
+                        android:textColor="@color/text_subtitle"
+                        android:textSize="13sp" />
+                </LinearLayout>
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_response_lifecycle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="12dp" />
+            </LinearLayout>
+
+            <!-- Retention for the Response Lifecycle Log. -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingStart="4dp"
+                android:paddingTop="12dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:labelFor="@+id/field_response_lifecycle_max_logs"
+                        android:text="@string/label_max_logs_saved"
+                        android:textColor="@color/text"
+                        android:textSize="15sp" />
+
+                    <EditText
+                        android:id="@+id/field_response_lifecycle_max_logs"
+                        style="@style/Widget.App.Field.NumberBlank"
+                        android:layout_marginStart="12dp"
+                        android:contentDescription="@string/label_max_logs_saved"
+                        android:ems="4"
+                        android:imeOptions="actionDone"
+                        android:maxLength="4"
+                        android:maxLines="1" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingTop="10dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:labelFor="@+id/field_response_lifecycle_max_days"
+                        android:text="@string/label_max_days_saved"
+                        android:textColor="@color/text"
+                        android:textSize="15sp" />
+
+                    <EditText
+                        android:id="@+id/field_response_lifecycle_max_days"
+                        style="@style/Widget.App.Field.NumberBlank"
+                        android:layout_marginStart="12dp"
+                        android:contentDescription="@string/label_max_days_saved"
+                        android:ems="3"
+                        android:imeOptions="actionDone"
+                        android:maxLength="2"
+                        android:maxLines="1" />
+                </LinearLayout>
+            </LinearLayout>
+
             <!-- ============ Image generation logs (plan §13) ============
                  Recording is off until enabled; actionable errors reach chat
                  either way. Successful Image Tracking has its own retention
@@ -878,6 +980,35 @@
                     android:layout_height="24dp"
                     android:layout_marginStart="12dp"
                     android:contentDescription="@string/title_provider_fail_log"
+                    android:src="@drawable/ic_chevron_right"
+                    android:tint="@color/text_subtitle" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/row_response_lifecycle_log"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="?attr/selectableItemBackground"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center_vertical"
+                android:minHeight="56dp"
+                android:orientation="horizontal"
+                android:paddingVertical="12dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/title_response_lifecycle_log"
+                    android:textColor="@color/text"
+                    android:textSize="16sp" />
+
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:layout_marginStart="12dp"
+                    android:contentDescription="@string/title_response_lifecycle_log"
                     android:src="@drawable/ic_chevron_right"
                     android:tint="@color/text_subtitle" />
             </LinearLayout>

@@ -1727,6 +1727,38 @@ class Preferences private constructor(private var preferences: SharedPreferences
         putGlobalBoolean("log_chat_failures", state, false)
     }
 
+    // Response Lifecycle Log: the temporary, opt-in record of how each
+    // user-visible AI reply ended (completion status, token usage, request
+    // limits, termination). Off by default; same configurable retention as the
+    // other diagnostic logs (default 50 entries / 7 days, clamped to the shared
+    // ceilings). Each lifecycle block is trimmed as a whole entry.
+    fun getResponseLifecycleLogMaxEntries() : Int {
+        return coerceLogMaxEntries(getGlobalInt("response_lifecycle_log_max_entries", LOG_DEFAULT_MAX_ENTRIES))
+    }
+
+    fun setResponseLifecycleLogMaxEntries(value: Int) {
+        putGlobalInt("response_lifecycle_log_max_entries", coerceLogMaxEntries(value), LOG_DEFAULT_MAX_ENTRIES)
+    }
+
+    fun getResponseLifecycleLogMaxDays() : Int {
+        return coerceLogMaxDays(getGlobalInt("response_lifecycle_log_max_days", LOG_DEFAULT_MAX_DAYS))
+    }
+
+    fun setResponseLifecycleLogMaxDays(value: Int) {
+        putGlobalInt("response_lifecycle_log_max_days", coerceLogMaxDays(value), LOG_DEFAULT_MAX_DAYS)
+    }
+
+    /** Whether each user-visible reply's lifecycle is recorded to the Response
+     *  Lifecycle Log. Off by default; a temporary diagnostic that logs both
+     *  completed and cut-off streams so they can be compared. */
+    fun getResponseLifecycleLogging() : Boolean {
+        return getGlobalBoolean("response_lifecycle_logging", false)
+    }
+
+    fun setResponseLifecycleLogging(state: Boolean) {
+        putGlobalBoolean("response_lifecycle_logging", state, false)
+    }
+
     /**
      * User exclusion (do-not-review): while excluded, NO further messages are
      * captured into the transcript queue and the chat's existing transcript

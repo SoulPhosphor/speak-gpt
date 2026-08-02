@@ -84,6 +84,11 @@ class AlertDebugMenuActivity : FragmentActivity() {
     private var fieldProviderFailMaxLogs: EditText? = null
     private var fieldProviderFailMaxDays: EditText? = null
     private var rowProviderFailLog: LinearLayout? = null
+    // Response Lifecycle Log: toggle, its own retention pair, and the open row.
+    private var switchResponseLifecycle: MaterialSwitch? = null
+    private var fieldResponseLifecycleMaxLogs: EditText? = null
+    private var fieldResponseLifecycleMaxDays: EditText? = null
+    private var rowResponseLifecycleLog: LinearLayout? = null
     // Image generation logs (image-generation-rebuild-plan.md §13): the two
     // recording toggles and the success log's own retention pair, where
     // ZERO means unlimited (only these two fields — never the error logs).
@@ -134,6 +139,10 @@ class AlertDebugMenuActivity : FragmentActivity() {
         fieldProviderFailMaxLogs = findViewById(R.id.field_provider_fail_max_logs)
         fieldProviderFailMaxDays = findViewById(R.id.field_provider_fail_max_days)
         rowProviderFailLog = findViewById(R.id.row_provider_fail_log)
+        switchResponseLifecycle = findViewById(R.id.switch_response_lifecycle)
+        fieldResponseLifecycleMaxLogs = findViewById(R.id.field_response_lifecycle_max_logs)
+        fieldResponseLifecycleMaxDays = findViewById(R.id.field_response_lifecycle_max_days)
+        rowResponseLifecycleLog = findViewById(R.id.row_response_lifecycle_log)
         switchImageGenErrors = findViewById(R.id.switch_image_gen_errors)
         switchSuccessfulImageTracking = findViewById(R.id.switch_successful_image_tracking)
         fieldImageGenMaxInfo = findViewById(R.id.field_image_gen_max_info)
@@ -191,6 +200,10 @@ class AlertDebugMenuActivity : FragmentActivity() {
         switchLogChatFailures?.isChecked = p.getLogChatFailures()
         fieldProviderFailMaxLogs?.setText(p.getProviderFailLogMaxEntries().toString())
         fieldProviderFailMaxDays?.setText(p.getProviderFailLogMaxDays().toString())
+
+        switchResponseLifecycle?.isChecked = p.getResponseLifecycleLogging()
+        fieldResponseLifecycleMaxLogs?.setText(p.getResponseLifecycleLogMaxEntries().toString())
+        fieldResponseLifecycleMaxDays?.setText(p.getResponseLifecycleLogMaxDays().toString())
 
         switchImageGenErrors?.isChecked = p.getImageGenErrorLogging()
         switchSuccessfulImageTracking?.isChecked = p.getSuccessfulImageTracking()
@@ -252,6 +265,21 @@ class AlertDebugMenuActivity : FragmentActivity() {
         )
         rowProviderFailLog?.setOnClickListener {
             startActivity(Intent(this, LogsActivity::class.java).putExtra("type", "provider_fail").putExtra("chatId", chatId))
+        }
+
+        switchResponseLifecycle?.setOnCheckedChangeListener { _, checked -> p.setResponseLifecycleLogging(checked) }
+        wireRetentionField(
+            fieldResponseLifecycleMaxLogs, Preferences.LOG_MAX_ENTRIES_LIMIT,
+            { p.getResponseLifecycleLogMaxEntries() }, { v -> p.setResponseLifecycleLogMaxEntries(v) },
+            R.string.dialog_max_logs_exceeded
+        )
+        wireRetentionField(
+            fieldResponseLifecycleMaxDays, Preferences.LOG_MAX_DAYS_LIMIT,
+            { p.getResponseLifecycleLogMaxDays() }, { v -> p.setResponseLifecycleLogMaxDays(v) },
+            R.string.dialog_max_days_exceeded
+        )
+        rowResponseLifecycleLog?.setOnClickListener {
+            startActivity(Intent(this, LogsActivity::class.java).putExtra("type", "response_lifecycle").putExtra("chatId", chatId))
         }
 
         rowAudioDebugging?.setOnClickListener {
