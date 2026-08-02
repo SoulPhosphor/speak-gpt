@@ -405,8 +405,13 @@
     <string name="provider_col_ignore">Ignore</string>
     <string name="provider_status_loading">Loading providers…</string>
     <string name="provider_status_empty">No providers were found for this model.</string>
-    <string name="provider_status_error">Couldn\'t load the provider list. The server said:</string>
+    <string name="provider_status_unavailable">Provider information is unavailable for this model. Verify the model ID and Provider Discovery Path.</string>
+    <string name="provider_unavailable">Unavailable</string>
+    <string name="provider_unavailable_warning">One or more saved providers are no longer available for this model.</string>
+    <string name="provider_only_mode_error">Choose an available provider or change the routing mode.</string>
     <string name="provider_ignore_desc">Ignore %1$s</string>
+    <string name="provider_remove_desc">Remove %1$s</string>
+    <string name="provider_filter_quant_any">Any</string>
     <string name="provider_move_up_desc">Move %1$s up</string>
     <string name="provider_move_down_desc">Move %1$s down</string>
     <string name="sampling_label_temperature">Temperature</string>

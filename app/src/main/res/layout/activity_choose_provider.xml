@@ -252,6 +252,21 @@
                 android:text="@string/provider_filters_button"
                 android:visibility="gone" />
 
+            <!-- Shown when a provider referenced by the model's saved routing
+                 settings is absent from a successfully fetched provider list.
+                 Same inline-warning pattern as the editor's field warnings. -->
+            <TextView
+                android:id="@+id/text_provider_warning"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="24dp"
+                android:layout_marginTop="8dp"
+                android:layout_marginEnd="24dp"
+                android:text="@string/provider_unavailable_warning"
+                android:textColor="?attr/colorError"
+                android:textSize="13sp"
+                android:visibility="gone" />
+
             <TextView
                 android:id="@+id/text_provider_status"
                 style="@style/Widget.App.Section.Hint"

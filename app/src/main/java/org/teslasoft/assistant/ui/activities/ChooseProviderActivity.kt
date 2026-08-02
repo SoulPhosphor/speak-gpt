@@ -133,6 +133,7 @@ class ChooseProviderActivity : FragmentActivity() {
     private var textPreferredOrder: TextView? = null
     private var rowsPreferredOrder: LinearLayout? = null
     private var btnProviderFilters: MaterialButton? = null
+    private var textProviderWarning: TextView? = null
     private var textProviderStatus: TextView? = null
     private var chartScroll: View? = null
     private var chartHeader: LinearLayout? = null
@@ -163,6 +164,11 @@ class ChooseProviderActivity : FragmentActivity() {
     /** The fetched provider endpoints for [selectedModel]; null = not loaded. */
     private var providerEndpoints: List<ProviderEndpointInfo>? = null
 
+    /** Lowercase slugs of the providers in a SUCCESSFULLY fetched list. Null
+     *  while unloaded or after a failed fetch — a network or parsing failure
+     *  means availability is unknown, and nothing may be marked Unavailable. */
+    private var availableSlugs: Set<String>? = null
+
     /** Lowercase provider identifiers of the ZDR endpoints serving the model,
      *  from the separate /endpoints/zdr fetch. Null = list not available →
      *  the ZDR column stays "?"; a loaded list is authoritative (absent = no). */
@@ -182,9 +188,12 @@ class ChooseProviderActivity : FragmentActivity() {
                 return
             }
             providerEndpoints = parsed
-            displayNames.clear()
+            availableSlugs = parsed.map { it.slug.lowercase() }.toSet()
+            // Names of currently served providers; saved-but-absent providers
+            // keep whatever name was stored (their slug when none is known).
             parsed.forEach { displayNames[it.slug] = it.providerName }
             renderChart()
+            updateOrderBox()
             startZdrFetch()
         }
 
@@ -254,6 +263,7 @@ class ChooseProviderActivity : FragmentActivity() {
         textPreferredOrder = findViewById(R.id.text_preferred_order)
         rowsPreferredOrder = findViewById(R.id.rows_preferred_order)
         btnProviderFilters = findViewById(R.id.btn_provider_filters)
+        textProviderWarning = findViewById(R.id.text_provider_warning)
         textProviderStatus = findViewById(R.id.text_provider_status)
         chartScroll = findViewById(R.id.chart_scroll)
         chartHeader = findViewById(R.id.chart_header)
@@ -369,11 +379,13 @@ class ChooseProviderActivity : FragmentActivity() {
         selectedModel = model
         updateModelBox()
         providerEndpoints = null
+        availableSlugs = null
         zdrMatches = null
         seedProviderStateFromFavorite()
         updateModeViews()
         if (selectedModel.isBlank()) {
             btnProviderFilters?.visibility = View.GONE
+            textProviderWarning?.visibility = View.GONE
             textProviderStatus?.visibility = View.GONE
             chartScroll?.visibility = View.GONE
         } else {
@@ -430,6 +442,7 @@ class ChooseProviderActivity : FragmentActivity() {
 
         for ((index, slug) in orderList.withIndex()) {
             val name = displayNames[slug] ?: slug
+            val unavailable = isUnavailable(slug)
             val row = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
@@ -438,15 +451,45 @@ class ChooseProviderActivity : FragmentActivity() {
                 ).apply { if (index > 0) topMargin = dp(6) }
             }
             val label = TextView(this).apply {
-                text = "${index + 1}. $name"
+                text = if (unavailable) {
+                    "${index + 1}. $name (${getString(R.string.provider_unavailable)})"
+                } else {
+                    "${index + 1}. $name"
+                }
                 textSize = 14f
-                setTextColor(resolveAttrColor(R.attr.appTextColor))
+                setTextColor(
+                    resolveAttrColor(if (unavailable) R.attr.appSubtleTextColor else R.attr.appTextColor)
+                )
                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
             }
             row.addView(label)
             row.addView(orderArrow(name, up = true, enabled = index > 0) { moveInOrder(index, index - 1) })
             row.addView(orderArrow(name, up = false, enabled = index < orderList.size - 1) { moveInOrder(index, index + 1) })
+            row.addView(orderRemove(name, index))
             rows.addView(row)
+        }
+    }
+
+    /** Direct remove X on every order line — no hunting for the chart row.
+     *  Removal also updates the chart (checkbox state / Unavailable rows). */
+    private fun orderRemove(name: String, index: Int): View {
+        return ImageView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(dp(32), dp(32)).apply { marginStart = dp(4) }
+            setPadding(dp(7), dp(7), dp(7), dp(7))
+            setImageDrawable(ContextCompat.getDrawable(this@ChooseProviderActivity, R.drawable.ic_close))
+            contentDescription = getString(R.string.provider_remove_desc, name)
+            val outValue = TypedValue()
+            theme.resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, outValue, true)
+            setBackgroundResource(outValue.resourceId)
+            isClickable = true
+            isFocusable = true
+            setOnClickListener {
+                if (index in orderList.indices) {
+                    orderList.removeAt(index)
+                    updateOrderBox()
+                    renderChart()
+                }
+            }
         }
     }
 
@@ -487,6 +530,7 @@ class ChooseProviderActivity : FragmentActivity() {
         if (host.isBlank() || selectedModel.isBlank()) return
 
         btnProviderFilters?.visibility = View.GONE
+        textProviderWarning?.visibility = View.GONE
         chartScroll?.visibility = View.GONE
         textProviderStatus?.text = getString(R.string.provider_status_loading)
         textProviderStatus?.visibility = View.VISIBLE
@@ -524,15 +568,22 @@ class ChooseProviderActivity : FragmentActivity() {
         return authHeaders
     }
 
-    /** Honest failure line: what failed plus what the server actually said. */
+    /**
+     * Discovery failed (404, unreadable body, network error). Availability is
+     * UNKNOWN in this state: [availableSlugs] stays null so no saved provider
+     * is marked Unavailable by a failed fetch. The user-facing line stays
+     * plain; the actual server response goes to the log for diagnosis.
+     */
     private fun showProviderError(responseBody: String?) {
+        android.util.Log.w("ProviderDiscovery", "Provider discovery failed for '$selectedModel': " +
+            (responseBody ?: "(empty response)").take(2000))
         if (isFinishing) return
         providerEndpoints = null
+        availableSlugs = null
         btnProviderFilters?.visibility = View.GONE
+        textProviderWarning?.visibility = View.GONE
         chartScroll?.visibility = View.GONE
-        val excerpt = (responseBody ?: "").take(300).trim()
-        textProviderStatus?.text = getString(R.string.provider_status_error) +
-            "\n" + (excerpt.ifBlank { "(empty response)" })
+        textProviderStatus?.text = getString(R.string.provider_status_unavailable)
         textProviderStatus?.visibility = View.VISIBLE
     }
 
@@ -541,8 +592,17 @@ class ChooseProviderActivity : FragmentActivity() {
     private fun renderChart() {
         val all = providerEndpoints ?: return
 
-        if (all.isEmpty()) {
+        // Saved providers (Only choice, preferred order, ignore list) absent
+        // from the successfully fetched list stay visible as Unavailable rows
+        // — never silently deleted. Their controls keep working so they can be
+        // unselected or removed. If the provider returns on a later fetch, the
+        // label clears automatically and the saved position is preserved.
+        val unavailableRefs = referencedSlugs().filter { isUnavailable(it) }
+            .sortedBy { (displayNames[it] ?: it).lowercase() }
+
+        if (all.isEmpty() && unavailableRefs.isEmpty()) {
             btnProviderFilters?.visibility = View.GONE
+            textProviderWarning?.visibility = View.GONE
             chartScroll?.visibility = View.GONE
             textProviderStatus?.text = getString(R.string.provider_status_empty)
             textProviderStatus?.visibility = View.VISIBLE
@@ -556,6 +616,7 @@ class ChooseProviderActivity : FragmentActivity() {
         val sorted = ProviderFilterState.apply(displayed)
 
         textProviderStatus?.visibility = View.GONE
+        textProviderWarning?.visibility = if (unavailableRefs.isEmpty()) View.GONE else View.VISIBLE
         btnProviderFilters?.visibility = View.VISIBLE
         chartScroll?.visibility = View.VISIBLE
 
@@ -566,6 +627,25 @@ class ChooseProviderActivity : FragmentActivity() {
         for (endpoint in sorted) {
             rows.addView(buildChartRow(endpoint))
         }
+        for (slug in unavailableRefs) {
+            rows.addView(buildUnavailableRow(slug))
+        }
+    }
+
+    /** Every provider slug referenced by the model's saved routing settings. */
+    private fun referencedSlugs(): List<String> {
+        return buildList {
+            if (selectedProvider.isNotBlank()) add(selectedProvider)
+            addAll(orderList)
+            addAll(ignored)
+        }.distinct()
+    }
+
+    /** True only when a SUCCESSFUL fetch is loaded and [slug] is not in it.
+     *  Matching uses the stable slug/tag, never the display name. */
+    private fun isUnavailable(slug: String): Boolean {
+        val available = availableSlugs ?: return false
+        return slug.lowercase() !in available
     }
 
     private fun buildChartHeader() {
@@ -611,7 +691,44 @@ class ChooseProviderActivity : FragmentActivity() {
             row.addView(cell)
         }
 
-        row.addView(buildIgnoreControl(endpoint))
+        row.addView(buildIgnoreControl(endpoint.slug, endpoint.providerName))
+        return row
+    }
+
+    /**
+     * Row for a saved provider that a successfully fetched list no longer
+     * contains: name, an "Unavailable" label spanning the data columns, and
+     * live selection/ignore controls so the reference can still be changed or
+     * removed. Never rendered while availability is unknown.
+     */
+    private fun buildUnavailableRow(slug: String): View {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = dp(16) }
+        }
+        if (hasLeadColumn()) row.addView(buildLeadControl(slug))
+
+        val name = displayNames[slug] ?: slug
+        val nameCell = TextView(this, null, 0, R.style.Widget_App_Chart_Cell)
+        nameCell.text = name
+        nameCell.layoutParams = LinearLayout.LayoutParams(
+            dp(CHART_COLUMNS.first().second), LinearLayout.LayoutParams.WRAP_CONTENT
+        )
+        row.addView(nameCell)
+
+        // One label across the data columns instead of a row of "?" cells.
+        val wideCell = TextView(this, null, 0, R.style.Widget_App_Chart_Cell)
+        wideCell.text = getString(R.string.provider_unavailable)
+        wideCell.layoutParams = LinearLayout.LayoutParams(
+            dp(CHART_COLUMNS.subList(1, CHART_COLUMNS.size - 1).sumOf { it.second }),
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        )
+        row.addView(wideCell)
+
+        row.addView(buildIgnoreControl(slug, name))
         return row
     }
 
@@ -658,8 +775,9 @@ class ChooseProviderActivity : FragmentActivity() {
     }
 
     /** The Ignore square: gray outline + gray X unmarked; error-red fill +
-     *  onError (white) X when the provider is ignored. Toggles on tap. */
-    private fun buildIgnoreControl(endpoint: ProviderEndpointInfo): View {
+     *  onError (white) X when the provider is ignored. Toggles on tap. On an
+     *  Unavailable row, un-ignoring drops the row once nothing references it. */
+    private fun buildIgnoreControl(slug: String, providerName: String): View {
         val container = FrameLayout(this).apply {
             layoutParams = LinearLayout.LayoutParams(
                 dp(CHART_COLUMNS.last().second), LinearLayout.LayoutParams.WRAP_CONTENT
@@ -667,7 +785,7 @@ class ChooseProviderActivity : FragmentActivity() {
         }
         val square = FrameLayout(this).apply {
             layoutParams = FrameLayout.LayoutParams(dp(24), dp(24), Gravity.START or Gravity.CENTER_VERTICAL)
-            contentDescription = getString(R.string.provider_ignore_desc, endpoint.providerName)
+            contentDescription = getString(R.string.provider_ignore_desc, providerName)
         }
         val x = ImageView(this).apply {
             layoutParams = FrameLayout.LayoutParams(dp(16), dp(16), Gravity.CENTER)
@@ -677,7 +795,7 @@ class ChooseProviderActivity : FragmentActivity() {
         container.addView(square)
 
         fun style() {
-            val isIgnored = endpoint.slug in ignored
+            val isIgnored = slug in ignored
             square.background = ContextCompat.getDrawable(
                 this,
                 if (isIgnored) R.drawable.bg_ignore_square_on else R.drawable.bg_ignore_square_off
@@ -692,8 +810,11 @@ class ChooseProviderActivity : FragmentActivity() {
         style()
 
         square.setOnClickListener {
-            if (endpoint.slug in ignored) ignored.remove(endpoint.slug) else ignored.add(endpoint.slug)
+            val wasUnavailableRef = isUnavailable(slug)
+            if (slug in ignored) ignored.remove(slug) else ignored.add(slug)
             style()
+            // Ignore changes alter which Unavailable rows/warning exist.
+            if (wasUnavailableRef || isUnavailable(slug)) renderChart()
         }
         return container
     }
@@ -733,7 +854,37 @@ class ChooseProviderActivity : FragmentActivity() {
 
     /* ------------------------------ save / cancel ------------------------------ */
 
+    /**
+     * Save validation (owner plan, Aug 2 2026):
+     * - Only mode requires one currently AVAILABLE provider — no selection or
+     *   an unavailable selection blocks Save. Only is never silently treated
+     *   as Automatic. This same validation must be repeated at request time
+     *   when routing is wired, so stale saved data cannot bypass it.
+     * - Preferred mode with every listed provider unavailable blocks Save when
+     *   Allow Other Providers if Preferred Fail is off (no permitted provider);
+     *   with fallbacks on, saving proceeds and automatic fallback applies.
+     * Unavailable slugs stay in the SAVED lists (position preserved for their
+     * return) — they are filtered out of the API order/ignore payloads at
+     * request time, not here.
+     */
     private fun saveAndFinish() {
+        if (selectedRoutingType == FavoriteModelObject.ROUTING_ONLY &&
+            (selectedProvider.isBlank() || isUnavailable(selectedProvider))
+        ) {
+            showNoticeDialog(getString(R.string.provider_only_mode_error))
+            return
+        }
+
+        if (selectedRoutingType == FavoriteModelObject.ROUTING_PREFERRED &&
+            orderList.isNotEmpty() &&
+            availableSlugs != null &&
+            orderList.all { isUnavailable(it) } &&
+            switchAllowFallbacks?.isChecked == false
+        ) {
+            showNoticeDialog(getString(R.string.provider_only_mode_error))
+            return
+        }
+
         val data = Intent()
         data.putExtra(EXTRA_MODEL, selectedModel)
         data.putExtra(EXTRA_ROUTING_TYPE, selectedRoutingType)
@@ -749,6 +900,13 @@ class ChooseProviderActivity : FragmentActivity() {
     private fun cancelAndFinish() {
         setResult(RESULT_CANCELED)
         finish()
+    }
+
+    private fun showNoticeDialog(message: String) {
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setMessage(message)
+            .setPositiveButton(R.string.okay) { _, _ -> }
+            .show()
     }
 
     /* ------------------------------ helpers ------------------------------ */

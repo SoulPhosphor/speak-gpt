@@ -37,10 +37,15 @@ class FavoriteModelObject(
      *  the preferred ones fail. Defaults on. */
     var allowFallbacks: Boolean = true,
     /** Preferred mode: provider slugs in priority order (first = most
-     *  preferred; the owner's "lower is less preferred"). */
+     *  preferred; the owner's "lower is less preferred"). Slugs currently
+     *  unavailable for the model STAY stored in position (they return when the
+     *  provider does) but must be filtered out of the API order payload at
+     *  request time. */
     var providerOrder: List<String> = emptyList(),
     /** Provider slugs the user marked Ignore in the chart. Applies in
-     *  automatic and preferred modes; not sent in Only mode. */
+     *  automatic and preferred modes; not sent in Only mode. Unavailable
+     *  slugs stay stored but must be filtered out of the API ignore payload
+     *  at request time. */
     var ignoredProviders: List<String> = emptyList()
 ) {
     companion object {

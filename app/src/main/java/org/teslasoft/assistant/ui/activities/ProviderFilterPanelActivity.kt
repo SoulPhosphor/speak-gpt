@@ -163,13 +163,15 @@ class ProviderFilterPanelActivity : FragmentActivity() {
         }
     }
 
-    /** Only the quantizations actually present in the loaded provider list.
-     *  Unset by default (empty value slot); Reset Filters clears a choice. */
+    /** "Any" (the default — clears the filter without Reset) followed by the
+     *  quantizations actually present in the loaded provider list. Called
+     *  "Any", not "None", so it can't read as a provider reporting no
+     *  quantization. */
     private fun bindQuantizationDropdown() {
         valueQuantization?.setOnClickListener { anchor ->
-            if (quantizations.isEmpty()) return@setOnClickListener
-            showDropdown(anchor, quantizations) { index ->
-                ProviderFilterState.quantization = quantizations[index]
+            val labels = listOf(getString(R.string.provider_filter_quant_any)) + quantizations
+            showDropdown(anchor, labels) { index ->
+                ProviderFilterState.quantization = if (index == 0) null else quantizations[index - 1]
                 refreshAllValues()
             }
         }
@@ -206,7 +208,8 @@ class ProviderFilterPanelActivity : FragmentActivity() {
         valueLatency?.text = sortLabel(ProviderFilterState.sortLatency)
         valueThroughput?.text = sortLabel(ProviderFilterState.sortThroughput)
         valueUptime?.text = sortLabel(ProviderFilterState.sortUptime)
-        valueQuantization?.text = ProviderFilterState.quantization ?: ""
+        valueQuantization?.text = ProviderFilterState.quantization
+            ?: getString(R.string.provider_filter_quant_any)
         checkToolSupport?.isChecked = ProviderFilterState.requireTools
         checkImplicitCaching?.isChecked = ProviderFilterState.requireCaching
         checkZdr?.isChecked = ProviderFilterState.requireZdr
