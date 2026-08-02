@@ -1844,13 +1844,25 @@ class Preferences private constructor(private var preferences: SharedPreferences
         putGlobalString("archivist_card_suggestions", value.toString())
     }
 
-    /** Custom extraction prompt; "" = use the built-in ArchivistPrompt.SYSTEM
-     *  (the Reset Prompt action clears back to ""). */
+    /** Custom Associative Memory (extraction) prompt; "" = use the built-in
+     *  ArchivistPrompt.SYSTEM (that type's Reset action clears back to ""). */
     fun getArchivistCustomPrompt(): String =
         getGlobalString("archivist_custom_prompt", "")
 
     fun setArchivistCustomPrompt(value: String) {
         putGlobalString("archivist_custom_prompt", value)
+    }
+
+    /** Custom Lorebook Memory prompt; "" = use the built-in
+     *  ArchivistPrompt.LOREBOOK_SYSTEM (that type's Reset action clears back to
+     *  ""). Stored separately from the Associative prompt because the two
+     *  analysis types require different output schemas — the Associative prompt
+     *  is never used for a Lorebook run. */
+    fun getArchivistLorebookPrompt(): String =
+        getGlobalString("archivist_lorebook_prompt", "")
+
+    fun setArchivistLorebookPrompt(value: String) {
+        putGlobalString("archivist_lorebook_prompt", value)
     }
 
     /**

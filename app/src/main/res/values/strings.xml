@@ -2007,10 +2007,13 @@
     <string name="memory_assistant_adv_reset_temperature">Reset to Recommended</string>
     <string name="memory_assistant_adv_min_importance">Minimum Importance</string>
     <string name="memory_assistant_adv_min_importance_hint">Only create memory drafts at or above this importance level.</string>
-    <string name="memory_assistant_adv_extraction_prompt">Extraction Prompt</string>
+    <!-- Step 1.7: each analysis type has its own editable prompt slot. The two
+         labels are the owner-specified names of the slots. -->
+    <string name="memory_assistant_adv_associative_prompt">Associative Memory Prompt</string>
+    <string name="memory_assistant_adv_lorebook_prompt">Lorebook Memory Prompt</string>
     <string name="memory_assistant_adv_extraction_prompt_hint">Instructs AI how to analyze conversation history.</string>
     <string name="memory_assistant_adv_reset_prompt">Reset Prompt</string>
-    <string name="memory_assistant_adv_reset_prompt_confirm">Restore default extraction prompt?</string>
+    <string name="memory_assistant_adv_reset_prompt_confirm">Restore the default prompt?</string>
     <string name="memory_assistant_adv_saved">Advanced settings saved.</string>
 
     <!-- Advanced Memory Settings (spec §3) -->

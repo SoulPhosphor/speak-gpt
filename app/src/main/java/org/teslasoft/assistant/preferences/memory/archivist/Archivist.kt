@@ -369,11 +369,18 @@ object Archivist {
         val maxSuggestions = prefs.getArchivistMaxSuggestions()
         val minImportance = prefs.getArchivistMinImportance()
         val temperature = prefs.getArchivistTemperature().toDouble()
-        // Lorebook Memories analysis (Step 1.7) always uses the built-in lore
-        // librarian prompt — the user's custom extraction prompt is written for
-        // the standard saved-memory output and would not produce lore entries.
-        val systemPrompt = if (lorebookMode) ArchivistPrompt.LOREBOOK_SYSTEM
-            else prefs.getArchivistCustomPrompt().ifBlank { ArchivistPrompt.SYSTEM }
+        // Each analysis type sends its OWN editable prompt (Step 1.7): the
+        // saved prompt for that type, or its built-in default when the saved
+        // prompt is empty. The two are kept strictly separate — a Lorebook run
+        // never borrows the Associative prompt, because the two require
+        // different output schemas. Whatever text is shown in the matching field
+        // on the Advanced Memory Assistant Settings screen is exactly what is
+        // sent here; nothing is appended or substituted (the cap and importance
+        // floor are response-side filters, not prompt text).
+        val systemPrompt = if (lorebookMode)
+            prefs.getArchivistLorebookPrompt().ifBlank { ArchivistPrompt.LOREBOOK_SYSTEM }
+        else
+            prefs.getArchivistCustomPrompt().ifBlank { ArchivistPrompt.SYSTEM }
         // The card-append toggle (§2, ON by default): off discards any
         // proposed placements — the memories themselves still file.
         val cardSuggestionsOn = prefs.getArchivistCardSuggestions()

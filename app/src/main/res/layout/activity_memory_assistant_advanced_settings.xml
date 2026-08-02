@@ -228,10 +228,10 @@
                     android:layout_width="wrap_content" />
             </LinearLayout>
 
-            <!-- ============ Extraction Prompt ============ -->
+            <!-- ============ Associative Memory Prompt ============ -->
             <TextView
                 style="@style/Widget.App.Section.Title"
-                android:text="@string/memory_assistant_adv_extraction_prompt" />
+                android:text="@string/memory_assistant_adv_associative_prompt" />
 
             <TextView
                 style="@style/Widget.App.Section.Hint"
@@ -256,6 +256,41 @@
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_reset_prompt"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="@string/memory_assistant_adv_reset_prompt" />
+
+            <!-- ============ Lorebook Memory Prompt ============ -->
+            <TextView
+                style="@style/Widget.App.Section.Title"
+                android:layout_marginTop="20dp"
+                android:text="@string/memory_assistant_adv_lorebook_prompt" />
+
+            <TextView
+                style="@style/Widget.App.Section.Hint"
+                android:text="@string/memory_assistant_adv_extraction_prompt_hint" />
+
+            <com.google.android.material.textfield.TextInputLayout
+                style="?attr/textInputOutlinedDenseStyle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/field_lorebook_prompt"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="top"
+                    android:inputType="textMultiLine|textCapSentences"
+                    android:minLines="8"
+                    android:overScrollMode="always"
+                    android:scrollbars="vertical" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_reset_lorebook_prompt"
                 style="@style/Widget.Material3.Button.TextButton"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
