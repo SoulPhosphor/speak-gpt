@@ -533,7 +533,14 @@ data class ArchivistRunRecord(
      *  the startup reconcile auto-releases only dead 'api' claims
      *  (counterplan §4(a)); an exported package's claims wait for import,
      *  cancel, or replacement. */
-    val transport: String = "api"
+    val transport: String = "api",
+    /** Which analysis type produced this run (DB v19, Step 1.7): 'associative'
+     *  (saved-memory drafts) or 'lorebook' (keyword-triggered lore book entry
+     *  suggestions). Stored at run begin and preserved through progress,
+     *  completion, failure, and process-death reconciliation so the Recent
+     *  Memory Analysis list and Rerun use the run's OWN type, never whatever
+     *  the picker currently shows. Legacy rows default to 'associative'. */
+    val analysisType: String = "associative"
 )
 
 /**

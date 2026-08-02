@@ -240,16 +240,22 @@ object Archivist {
             ?: return RunOutcome(
                 null, 0, 0, 0, 0, emptyList(),
                 outcome = "full_failed", failureReason = ArchivistFailure.UNKNOWN,
-                error = "run not found"
+                error = "run not found",
+                analysisType = analysisType
             )
         val ids = jsonToList(past.transcriptIdsJson)
+        // A rerun always re-runs the ORIGINAL run's stored analysis type (owner
+        // ruling, Step 1.7): a Lorebook rerun stays Lorebook even if the picker
+        // now shows Associative, and vice versa — a rerun is never silently
+        // converted. The passed-in type is only the display fallback for the
+        // run-not-found case above.
         return run(context, {
             val liveChats = liveChatNamesById(context)
             store.transcriptsByIds(ids)
                 .filter { it.chatId != null && liveChats.containsKey(it.chatId) }
                 .groupBy { it.chatId!! }
                 .map { (chatId, rows) -> Conversation(chatId, liveChats[chatId] ?: chatId, rows) }
-        }, markProcessed = false, analysisType = analysisType, onProgress = onProgress)
+        }, markProcessed = false, analysisType = past.analysisType, onProgress = onProgress)
     }
 
     private suspend fun run(
@@ -268,13 +274,13 @@ object Archivist {
             MemoryLog.logAlways(context, "Archivist", "warn",
                 "Archivist Not Ready — Memory Archivist needs a model before it can run. " +
                     "Missing: ${if (endpointId.isBlank()) "endpoint profile not selected" else "endpoint host empty"}")
-            return RunOutcome(null, 0, 0, 0, 0, emptyList(), outcome = "not_configured")
+            return RunOutcome(null, 0, 0, 0, 0, emptyList(), outcome = "not_configured", analysisType = analysisType)
         }
         val model = prefs.getArchivistModel().ifBlank { endpoint.model }
         if (model.isBlank()) {
             MemoryLog.logAlways(context, "Archivist", "warn",
                 "Archivist Not Ready — Memory Archivist needs a model before it can run. Missing: model name")
-            return RunOutcome(null, 0, 0, 0, 0, emptyList(), outcome = "not_configured")
+            return RunOutcome(null, 0, 0, 0, 0, emptyList(), outcome = "not_configured", analysisType = analysisType)
         }
 
         // One live run at a time (§4(a)). The in-process gate must be held
@@ -283,7 +289,7 @@ object Archivist {
         if (!liveRun.compareAndSet(false, true)) {
             MemoryLog.logAlways(context, "Archivist", "warn",
                 "duplicate start ignored — an analysis run is already in progress")
-            return RunOutcome(null, 0, 0, 0, 0, emptyList(), outcome = "already_running")
+            return RunOutcome(null, 0, 0, 0, 0, emptyList(), outcome = "already_running", analysisType = analysisType)
         }
         try {
             return runLocked(context, selectConversations, markProcessed, analysisType, onProgress, prefs, endpoint, model)
@@ -338,7 +344,8 @@ object Archivist {
             error = null,
             outcome = null,
             failureReason = null,
-            transport = "api"
+            transport = "api",
+            analysisType = analysisType
         )
         if (markProcessed) {
             val claimed = store.beginAnalysisRun(
@@ -571,15 +578,22 @@ object Archivist {
         // Display outcome (archivist_status_wording_spec.md). A partial
         // success is never called a full failure; "no new" is not an error.
         val selected = conversations.size
+        // A run that saved at least one draft/suggestion before a later failure
+        // is NEVER a full failure (owner ruling, Fix #5): full failure requires
+        // that nothing completed AND nothing was saved. Anything saved before an
+        // engine-level abort or an all-conversations-failed run is reported as a
+        // partial/incomplete run so the saved items are acknowledged, never
+        // denied.
+        val anySaved = memoryIds.isNotEmpty()
         val outcome = when {
             // An in-process stop (the Cancel button, or the Android 15+ dataSync
             // timeout) is reported as "cancelled". A process DEATH is recovered
             // separately by the startup reconcile as "interrupted" — the two are
             // kept distinct so the screen can say which happened.
             interrupted -> "cancelled"
-            runError != null -> "full_failed"
+            runError != null -> if (anySaved) "partial_failed" else "full_failed"
             selected == 0 -> "nothing"
-            failedChats.size >= selected -> "full_failed"
+            failedChats.size >= selected -> if (anySaved) "partial_failed" else "full_failed"
             failedChats.isNotEmpty() -> "partial_failed"
             memoryIds.isEmpty() -> "no_new"
             else -> "completed"

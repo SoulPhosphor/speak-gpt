@@ -61,7 +61,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
 
     companion object {
         const val DATABASE_NAME = "companion_memory.db"
-        private const val DATABASE_VERSION = 18
+        private const val DATABASE_VERSION = 19
 
         // Freshness-cooldown source types (rules §10 / Stage 3.3): the
         // composite key (chat_id, source_type, entry_id) keeps ids from
@@ -560,7 +560,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 "error TEXT, " +
                 "outcome TEXT, " +
                 "failure_reason TEXT, " +
-                "transport TEXT NOT NULL DEFAULT 'api')"
+                "transport TEXT NOT NULL DEFAULT 'api', " +
+                "analysis_type TEXT NOT NULL DEFAULT 'associative')"
         )
 
         // Lorebook suggestions (Step 1.7, DB v18): a Memory Assistant run in
@@ -1393,6 +1394,20 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             db.execSQL(
                 "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                 arrayOf(META_DB_MIGRATION, "18")
+            )
+        }
+        if (oldVersion < 19) {
+            // v19 (Step 1.7): each run row records which analysis type produced
+            // it — 'associative' (saved-memory drafts) or 'lorebook' (keyword-
+            // triggered lore book entry suggestions). The Recent Memory Analysis
+            // list and Rerun read the run's OWN type instead of the picker's
+            // current selection, so a Lorebook run always reads back as one and a
+            // rerun never silently converts. Additive; every pre-existing run
+            // predates the Lorebook type and is therefore 'associative'.
+            db.execSQL("ALTER TABLE archivist_runs ADD COLUMN analysis_type TEXT NOT NULL DEFAULT 'associative'")
+            db.execSQL(
+                "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                arrayOf(META_DB_MIGRATION, "19")
             )
         }
     }
@@ -2912,6 +2927,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         put("outcome", run.outcome)
         put("failure_reason", run.failureReason)
         put("transport", run.transport)
+        put("analysis_type", run.analysisType)
     }
 
     /** Insert-or-replace one run row. Since v17 this is also the incremental
@@ -2920,6 +2936,25 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
     fun insertArchivistRun(run: ArchivistRunRecord) {
         writableDatabase.insertWithOnConflict(
             "archivist_runs", null, archivistRunValues(run), SQLiteDatabase.CONFLICT_REPLACE
+        )
+    }
+
+    /** Persist a refined terminal outcome onto a run the engine already
+     *  finalized (Step 1.7, Fix #6). The engine reports every in-process stop
+     *  as the generic 'cancelled'; only the service knows whether it was the
+     *  user's Cancel ('cancelled_user') or the Android 15+ runtime limit
+     *  ('stopped_time_limit'), and it learns that after the engine returns. This
+     *  writes that distinction back so the Recent Memory Analysis history shows
+     *  what really happened instead of a generic stop. [failureReason] is
+     *  cleared for a neutral user cancel — a user stop is not a failure. */
+    fun updateArchivistRunOutcome(runId: String, outcome: String, failureReason: String?) {
+        writableDatabase.update(
+            "archivist_runs",
+            ContentValues().apply {
+                put("outcome", outcome)
+                put("failure_reason", failureReason)
+            },
+            "run_id = ?", arrayOf(runId)
         )
     }
 
@@ -2947,7 +2982,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                         error = it.getStringOrNull("error"),
                         outcome = it.getStringOrNull("outcome"),
                         failureReason = it.getStringOrNull("failure_reason"),
-                        transport = it.getStringOrNull("transport") ?: "api"
+                        transport = it.getStringOrNull("transport") ?: "api",
+                        analysisType = it.getStringOrNull("analysis_type") ?: "associative"
                     )
                 )
             }

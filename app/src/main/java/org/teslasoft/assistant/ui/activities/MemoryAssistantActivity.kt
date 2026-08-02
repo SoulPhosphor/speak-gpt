@@ -236,6 +236,12 @@ class MemoryAssistantActivity : FragmentActivity() {
             if (storeUsable) {
                 val store = MemoryStore.getInstance(this@MemoryAssistantActivity)
                 for (run in runs) {
+                    // A Lorebook run's stored ids point at pending lore
+                    // suggestions, not memory rows (Fix #4): existingMemoryIds
+                    // would never find them and would flag every Lorebook run as
+                    // "Some Memories Deleted Later". The badge is only about saved
+                    // memories, so Lorebook runs are skipped entirely.
+                    if (run.analysisType == "lorebook") continue
                     val ids = jsonIds(run.memoryIdsJson)
                     if (ids.isNotEmpty() && store.existingMemoryIds(ids).size < ids.size) {
                         deletedLater.add(run.runId)
@@ -292,6 +298,9 @@ class MemoryAssistantActivity : FragmentActivity() {
         for (run in runs) {
             val row = inflater.inflate(R.layout.view_archivist_run_row, container, false)
             row.findViewById<TextView>(R.id.run_date)?.text = formatDate(run.startedAt)
+            // Which analysis produced this run (Fix #4): the same "Associative
+            // Memories" / "Lorebook Memories" wording as the picker.
+            row.findViewById<TextView>(R.id.run_type)?.text = analysisTypeLabel(run.analysisType)
             row.findViewById<TextView>(R.id.run_result)?.text =
                 if (run.foundCount > 0) getString(R.string.memory_assistant_run_found, run.foundCount)
                 else getString(R.string.memory_assistant_run_none)
@@ -311,28 +320,65 @@ class MemoryAssistantActivity : FragmentActivity() {
                 }
             }
             row.findViewById<MaterialButton>(R.id.btn_rerun)?.setOnClickListener {
-                if (!running) startRun(run.runId)
+                // A Rerun re-runs the original run's OWN analysis type (Fix #2),
+                // not whatever the picker currently shows.
+                if (!running) startRun(run.runId, run.analysisType)
             }
             container.addView(row)
         }
     }
 
-    /** Recent-row label per the spec's list. Legacy rows (before the outcome
-     *  column) fall back to a derivation from what they stored. */
-    private fun runStatusLabel(run: ArchivistRunRecord): String = when (run.outcome) {
-        "completed" -> getString(R.string.mem_arch_row_completed)
-        "full_failed" -> getString(R.string.mem_arch_full_label)
-        "partial_failed" -> getString(R.string.mem_arch_partial_label)
-        "nothing" -> getString(R.string.mem_arch_nothing_label)
-        "no_new" -> getString(R.string.mem_arch_nonew_label)
-        "cancelled" -> getString(R.string.mem_arch_fail_cancelled_title)
-        "interrupted" -> getString(R.string.mem_arch_interrupted_label)
-        else -> when {
-            run.status == "failed" -> getString(R.string.mem_arch_full_label)
-            run.foundCount > 0 -> getString(R.string.mem_arch_row_completed)
-            else -> getString(R.string.mem_arch_nonew_label)
+    /** Recent-row label per the spec's list, type-aware (Fix #4). A Lorebook
+     *  run never shows Associative-specific wording ("No New Memories Added",
+     *  "Run Fully Failed"); it reuses the approved live Lorebook titles. The row
+     *  persists only the coarse failure reason, so a Lorebook full failure maps
+     *  that reason to the closest approved Lorebook title. Legacy rows (before
+     *  the outcome column) fall back to a derivation from what they stored. */
+    private fun runStatusLabel(run: ArchivistRunRecord): String {
+        val lore = run.analysisType == "lorebook"
+        return when (run.outcome) {
+            "completed" -> getString(R.string.mem_arch_row_completed)
+            // A Lorebook run that added nothing new still completed cleanly; the
+            // neutral "None found" count carries the nuance, so the row reads
+            // "Completed" instead of the Associative "No New Memories Added".
+            "no_new" -> if (lore) getString(R.string.mem_arch_row_completed)
+                        else getString(R.string.mem_arch_nonew_label)
+            "nothing" -> getString(R.string.mem_arch_nothing_label)
+            "partial_failed" -> if (lore) getString(R.string.mem_arch_part_incomplete_title)
+                                else getString(R.string.mem_arch_partial_label)
+            "full_failed" -> if (lore) getString(loreRowFailureTitle(run.failureReason))
+                             else getString(R.string.mem_arch_full_label)
+            "interrupted" -> if (lore) getString(R.string.mem_arch_part_interrupted_title)
+                             else getString(R.string.mem_arch_interrupted_label)
+            // In-process stops, now persisted with their distinction (Fix #6): a
+            // generic system stop, the runtime limit, and the user's own Cancel.
+            "cancelled" -> getString(R.string.mem_arch_stopped_early_title)
+            "stopped_time_limit" -> getString(R.string.mem_arch_time_limit_title)
+            "cancelled_user" -> getString(R.string.mem_arch_fail_cancelled_title)
+            else -> when {
+                run.status == "failed" -> if (lore) getString(R.string.mem_arch_fail_unknown_title)
+                                          else getString(R.string.mem_arch_full_label)
+                run.foundCount > 0 -> getString(R.string.mem_arch_row_completed)
+                else -> if (lore) getString(R.string.mem_arch_row_completed)
+                        else getString(R.string.mem_arch_nonew_label)
+            }
         }
     }
+
+    /** The closest approved live-Lorebook failure title for a history row,
+     *  chosen from the coarse failure reason the row persists (the fine provider
+     *  category is only known at run time, and is not stored). Never
+     *  Associative-worded. */
+    private fun loreRowFailureTitle(reasonKey: String?): Int =
+        when (ArchivistFailure.fromKey(reasonKey)) {
+            ArchivistFailure.UNREACHABLE -> R.string.mem_arch_fail_connection_title
+            ArchivistFailure.REJECTED -> R.string.mem_arch_fail_rejected_title
+            ArchivistFailure.LIMIT -> R.string.mem_arch_fail_usage_limit_title
+            ArchivistFailure.UNREADABLE -> R.string.mem_arch_fail_invalid_result_title
+            ArchivistFailure.SAVE_FAILED -> R.string.mem_arch_fail_save_title
+            ArchivistFailure.INTERRUPTED -> R.string.mem_arch_fail_interrupted_title
+            else -> R.string.mem_arch_fail_unknown_title
+        }
 
     /* ---------------- the run ---------------- */
 
@@ -345,7 +391,13 @@ class MemoryAssistantActivity : FragmentActivity() {
      * the persistent failure state and leave retry available (never fall
      * back to an Activity-owned run).
      */
-    private fun startRun(rerunOfRunId: String?) {
+    private fun startRun(
+        rerunOfRunId: String?,
+        // A fresh Analyze / Run again uses the picker's current selection; a
+        // Rerun passes the ORIGINAL run's stored analysis type (Fix #2) so a
+        // Lorebook rerun is never silently converted to Associative.
+        analysisType: String = Preferences.getPreferences(this, "").getMemoryAnalysisType()
+    ) {
         // Belt for the A3 hard block: the Analyze/Rerun surfaces are disabled
         // while any database problem exists, but the rule is "the Archivist
         // must NEVER run against a bad database", so the entry point enforces
@@ -363,7 +415,6 @@ class MemoryAssistantActivity : FragmentActivity() {
         // and its percent wait until the run reports its fixed total.
         showAnalyzing(null)
 
-        val analysisType = Preferences.getPreferences(this, "").getMemoryAnalysisType()
         if (!MemoryAnalysisForegroundService.start(this, rerunOfRunId, analysisType)) {
             running = false
             btnAnalyze?.isEnabled = true
@@ -372,7 +423,10 @@ class MemoryAssistantActivity : FragmentActivity() {
                     null, 0, 0, 0, 0, emptyList(),
                     outcome = "full_failed",
                     failureReason = ArchivistFailure.UNKNOWN,
-                    error = "analysis service could not start"
+                    error = "analysis service could not start",
+                    // Carry the requested type through the immediate start
+                    // failure (Fix #3): never default this surface to Associative.
+                    analysisType = analysisType
                 )
             )
             refreshFactsAndRuns()
@@ -475,7 +529,11 @@ class MemoryAssistantActivity : FragmentActivity() {
                     val (titleRes, msgRes) = if (category != null) lorePartialStrings(category)
                         else R.string.mem_arch_part_incomplete_title to R.string.mem_arch_part_incomplete_msg
                     val foundLine = getString(R.string.memory_assistant_lore_found, o.memoriesFound)
-                    val details = if (category == null) foundLine + "\n\n" + loreBreakdown(counts) else foundLine
+                    // A mixed run appends a per-cause breakdown; an engine-level
+                    // abort with saved suggestions (Fix #5) has no per-conversation
+                    // categories, so only the found line is shown — no dangling gap.
+                    val breakdown = if (category == null) loreBreakdown(counts) else ""
+                    val details = if (breakdown.isNotBlank()) foundLine + "\n\n" + breakdown else foundLine
                     val settingsRelated = category != null && category in LORE_FAIL_SETTINGS
                     showStatus(
                         getString(titleRes),
