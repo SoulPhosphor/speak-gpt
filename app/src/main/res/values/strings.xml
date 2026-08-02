@@ -386,6 +386,7 @@
     <string name="provider_filter_latency">Latency</string>
     <string name="provider_filter_throughput">Throughput</string>
     <string name="provider_filter_uptime">Uptime</string>
+    <string name="provider_filter_sort_none">None</string>
     <string name="provider_filter_sort_high_low">Highest to Lowest</string>
     <string name="provider_filter_sort_low_high">Lowest to Highest</string>
     <string name="provider_filter_tool_support">Tool Support</string>

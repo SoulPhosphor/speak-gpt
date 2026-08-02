@@ -127,16 +127,18 @@ class ProviderFilterPanelActivity : FragmentActivity() {
 
     /* ------------------------------ bindings ------------------------------ */
 
-    /** Display for a set sort; an unset sort shows an empty value slot — the
-     *  row's label names the field, and "Default" is never a visible option. */
     private fun sortLabel(direction: SortDirection): String = when (direction) {
         SortDirection.HIGH_TO_LOW -> getString(R.string.provider_filter_sort_high_low)
         SortDirection.LOW_TO_HIGH -> getString(R.string.provider_filter_sort_low_high)
-        else -> ""
+        else -> getString(R.string.provider_filter_sort_none)
     }
 
-    /** The only options the sort dropdowns visibly contain. */
-    private val sortOptions = listOf(SortDirection.HIGH_TO_LOW, SortDirection.LOW_TO_HIGH)
+    /** Every numeric sort dropdown: None (the default, disables just this
+     *  sort), Highest to Lowest, Lowest to Highest. None lets one sort be
+     *  turned off without Reset Filters wiping every other choice. */
+    private val sortOptions = listOf(
+        SortDirection.NONE, SortDirection.HIGH_TO_LOW, SortDirection.LOW_TO_HIGH
+    )
 
     private fun bindSortDropdown(view: TextView?, current: () -> SortDirection, apply: (SortDirection) -> Unit) {
         view?.setOnClickListener { anchor ->

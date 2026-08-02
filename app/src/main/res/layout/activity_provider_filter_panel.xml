@@ -66,10 +66,10 @@
 
             <!-- Sort/filter dropdowns, in the owner's order. Each value view is
                  the tap target and opens an anchored ListPopupWindow, per the
-                 shared dropdown pattern. Sorts start internally unset: the
-                 value slot stays empty (no visible "Default" option) and the
-                 row's label names the field. Alphabetical is the exception —
-                 it always shows its current direction, A to Z by default. -->
+                 shared dropdown pattern. Numeric sorts offer None (default) /
+                 Highest to Lowest / Lowest to Highest — None disables that one
+                 sort without touching the others. Alphabetical offers only
+                 A to Z (the chart default and tie-breaker) / Z to A. -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
