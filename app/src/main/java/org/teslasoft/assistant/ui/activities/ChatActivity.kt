@@ -170,7 +170,6 @@ import org.teslasoft.assistant.preferences.ActivationPromptPreferences
 import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.ChatStorageHealth
 import org.teslasoft.assistant.preferences.MessageCompletionState
-import org.teslasoft.assistant.preferences.Logger
 import org.teslasoft.assistant.preferences.ResponseLifecycle
 import org.teslasoft.assistant.preferences.ResponseLifecycleRecorder
 import org.teslasoft.assistant.preferences.GlobalPreferences
@@ -6148,7 +6147,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             generationId = r.generationId, errorText = errorText
         )
         currentLifecycle = null
-        Logger.logResponseLifecycleAsync(this, body)
+        org.teslasoft.assistant.preferences.Logger.logResponseLifecycleAsync(this, body)
     }
 
     private fun startRecognition(freshTurn: Boolean = true) {
@@ -7035,7 +7034,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                         if (!currentCoroutineContext().isActive) throw CancellationException()
                         val choice = v.choices.firstOrNull()
                         noteLifecycleChunk(
-                            choice?.finishReason, v.id,
+                            choice?.finishReason?.value, v.id,
                             (choice?.text?.takeIf { it != "null" }?.length ?: 0),
                             v.usage?.promptTokens, v.usage?.completionTokens, v.usage?.totalTokens
                         )
