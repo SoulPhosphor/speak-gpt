@@ -45,10 +45,13 @@ object ArchivistFailureCategory {
     const val USAGE_LIMIT = "usage_limit"
     const val CREDITS = "credits"
     const val MODEL_UNAVAILABLE = "model_unavailable"
+    const val REQUEST_TOO_LARGE = "request_too_large"
     const val CONFIG = "config"
+    const val PROVIDER_ERROR = "provider_error"
     const val UNREADABLE = "unreadable"
     const val INVALID_RESULT = "invalid_result"
     const val SAVE_FAILED = "save_failed"
+    const val PROCESS_LOCAL = "process_local"
     const val UNKNOWN = "unknown"
 
     /**
@@ -74,16 +77,19 @@ object ArchivistFailureCategory {
             ProviderLimitKind.RATE_OR_THROUGHPUT -> return RATE_LIMIT
             ProviderLimitKind.QUOTA_OR_SPENDING,
             ProviderLimitKind.UNIDENTIFIED -> return USAGE_LIMIT
-            // A prompt too large for the model's context or the provider's
-            // request-size limit is a configuration problem, per owner judgement.
+            // The submitted content is too large — a distinct state, NOT
+            // Invalid Configuration: the endpoint/model may be correct, the
+            // content is simply over the limit (owner ruling, Aug 1 2026).
             ProviderLimitKind.MODEL_CONTEXT,
             ProviderLimitKind.MODEL_INPUT,
-            ProviderLimitKind.REQUEST_BODY -> return CONFIG
+            ProviderLimitKind.REQUEST_BODY -> return REQUEST_TOO_LARGE
             null -> { /* not a limit */ }
         }
         // 403: the credentials are valid but not allowed here — folded into the
         // single "Request Rejected" state the owner approved.
         if (gen.httpStatus == 403) return REJECTED
+        // A gateway timeout is a timeout, not a generic provider error.
+        if (gen.httpStatus == 504) return TIMEOUT
         return when (gen.code) {
             GenErrorCode.N1, GenErrorCode.N3 -> CONNECTION
             GenErrorCode.N2, GenErrorCode.N4 -> TIMEOUT
@@ -96,9 +102,17 @@ object ArchivistFailureCategory {
             // maps to Invalid Configuration (owner ruling, Aug 1 2026).
             GenErrorCode.M2 -> MODEL_UNAVAILABLE
             GenErrorCode.S1 -> CONFIG
-            GenErrorCode.M3 -> CONFIG
+            // Context-length exceeded is the content being too large.
+            GenErrorCode.M3 -> REQUEST_TOO_LARGE
             GenErrorCode.Q1 -> RATE_LIMIT
-            GenErrorCode.U0 -> UNKNOWN
+            // Unmatched: a 5xx the provider returned is a server-side Provider
+            // Error; no HTTP response at all means the app failed locally before
+            // reaching the provider; anything else is genuinely unexpected.
+            GenErrorCode.U0 -> when {
+                gen.httpStatus != null && gen.httpStatus in 500..599 -> PROVIDER_ERROR
+                gen.httpStatus == null -> PROCESS_LOCAL
+                else -> UNKNOWN
+            }
         }
     }
 }

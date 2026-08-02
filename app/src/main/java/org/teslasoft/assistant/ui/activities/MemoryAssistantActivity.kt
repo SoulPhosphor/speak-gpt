@@ -642,12 +642,20 @@ class MemoryAssistantActivity : FragmentActivity() {
             R.string.mem_arch_fail_credits_title to R.string.mem_arch_fail_credits_msg
         ArchivistFailureCategory.MODEL_UNAVAILABLE ->
             R.string.mem_arch_fail_model_unavailable_title to R.string.mem_arch_fail_model_unavailable_msg
+        ArchivistFailureCategory.REQUEST_TOO_LARGE ->
+            R.string.mem_arch_fail_too_large_title to R.string.mem_arch_fail_too_large_msg
         ArchivistFailureCategory.CONFIG ->
             R.string.mem_arch_fail_config_title to R.string.mem_arch_fail_config_msg
+        ArchivistFailureCategory.PROVIDER_ERROR ->
+            R.string.mem_arch_fail_provider_error_title to R.string.mem_arch_fail_provider_error_msg
         ArchivistFailureCategory.UNREADABLE ->
             R.string.mem_arch_fail_unreadable_title to R.string.mem_arch_fail_unreadable_msg
         ArchivistFailureCategory.INVALID_RESULT ->
             R.string.mem_arch_fail_invalid_result_title to R.string.mem_arch_fail_invalid_result_msg
+        ArchivistFailureCategory.SAVE_FAILED ->
+            R.string.mem_arch_fail_save_title to R.string.mem_arch_fail_save_msg
+        ArchivistFailureCategory.PROCESS_LOCAL ->
+            R.string.mem_arch_fail_process_title to R.string.mem_arch_fail_process_msg
         else ->
             R.string.mem_arch_fail_unknown_title to R.string.mem_arch_fail_unknown_msg
     }
@@ -670,12 +678,18 @@ class MemoryAssistantActivity : FragmentActivity() {
             R.string.mem_arch_part_credits_title to R.string.mem_arch_part_credits_msg
         ArchivistFailureCategory.MODEL_UNAVAILABLE ->
             R.string.mem_arch_part_model_title to R.string.mem_arch_part_model_msg
+        ArchivistFailureCategory.REQUEST_TOO_LARGE ->
+            R.string.mem_arch_part_too_large_title to R.string.mem_arch_part_too_large_msg
+        ArchivistFailureCategory.PROVIDER_ERROR ->
+            R.string.mem_arch_part_provider_error_title to R.string.mem_arch_part_provider_error_msg
         ArchivistFailureCategory.UNREADABLE ->
             R.string.mem_arch_part_unreadable_title to R.string.mem_arch_part_unreadable_msg
         ArchivistFailureCategory.INVALID_RESULT ->
             R.string.mem_arch_part_invalid_title to R.string.mem_arch_part_invalid_msg
         ArchivistFailureCategory.SAVE_FAILED ->
             R.string.mem_arch_part_save_title to R.string.mem_arch_part_save_msg
+        // config, process_local, and unknown all use the "could not be
+        // processed" bucket.
         else ->
             R.string.mem_arch_part_process_title to R.string.mem_arch_part_process_msg
     }
@@ -688,10 +702,13 @@ class MemoryAssistantActivity : FragmentActivity() {
         ArchivistFailureCategory.USAGE_LIMIT -> R.plurals.mem_arch_break_usage_limit
         ArchivistFailureCategory.CREDITS -> R.plurals.mem_arch_break_credits
         ArchivistFailureCategory.MODEL_UNAVAILABLE -> R.plurals.mem_arch_break_model
+        ArchivistFailureCategory.REQUEST_TOO_LARGE -> R.plurals.mem_arch_break_too_large
         ArchivistFailureCategory.CONFIG -> R.plurals.mem_arch_break_config
+        ArchivistFailureCategory.PROVIDER_ERROR -> R.plurals.mem_arch_break_provider_error
         ArchivistFailureCategory.UNREADABLE -> R.plurals.mem_arch_break_unreadable
         ArchivistFailureCategory.INVALID_RESULT -> R.plurals.mem_arch_break_invalid
         ArchivistFailureCategory.SAVE_FAILED -> R.plurals.mem_arch_break_save
+        // process_local and unknown both read as "could not be processed".
         else -> R.plurals.mem_arch_break_unknown
     }
 
@@ -705,9 +722,11 @@ class MemoryAssistantActivity : FragmentActivity() {
             ArchivistFailureCategory.CONNECTION, ArchivistFailureCategory.TIMEOUT,
             ArchivistFailureCategory.REJECTED, ArchivistFailureCategory.RATE_LIMIT,
             ArchivistFailureCategory.USAGE_LIMIT, ArchivistFailureCategory.CREDITS,
-            ArchivistFailureCategory.MODEL_UNAVAILABLE, ArchivistFailureCategory.CONFIG,
+            ArchivistFailureCategory.MODEL_UNAVAILABLE, ArchivistFailureCategory.REQUEST_TOO_LARGE,
+            ArchivistFailureCategory.CONFIG, ArchivistFailureCategory.PROVIDER_ERROR,
             ArchivistFailureCategory.UNREADABLE, ArchivistFailureCategory.INVALID_RESULT,
-            ArchivistFailureCategory.UNKNOWN, ArchivistFailureCategory.SAVE_FAILED
+            ArchivistFailureCategory.PROCESS_LOCAL, ArchivistFailureCategory.UNKNOWN,
+            ArchivistFailureCategory.SAVE_FAILED
         )
         val parts = order.filter { counts.containsKey(it) }.map {
             val n = counts.getValue(it)
@@ -977,7 +996,9 @@ class MemoryAssistantActivity : FragmentActivity() {
         private val LORE_FAIL_SETTINGS = setOf(
             ArchivistFailureCategory.CONFIG,
             ArchivistFailureCategory.MODEL_UNAVAILABLE,
-            ArchivistFailureCategory.REJECTED
+            ArchivistFailureCategory.REJECTED,
+            // Request Too Large: the fix is choosing a larger-context model.
+            ArchivistFailureCategory.REQUEST_TOO_LARGE
         )
     }
 }

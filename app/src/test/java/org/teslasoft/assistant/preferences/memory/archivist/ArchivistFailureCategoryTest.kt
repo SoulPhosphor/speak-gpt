@@ -81,16 +81,33 @@ class ArchivistFailureCategoryTest {
         )
     }
 
-    @Test fun requestTooLargeFoldsIntoConfig() {
+    @Test fun tooLargeIsSeparateFromConfig() {
+        // Content over the limit is its own state; only no-model / bad-URL is
+        // Invalid Configuration.
         assertEquals(
-            ArchivistFailureCategory.CONFIG,
+            ArchivistFailureCategory.REQUEST_TOO_LARGE,
             ArchivistFailureCategory.of(null, gen(GenErrorCode.M3, 400, ProviderLimitKind.MODEL_CONTEXT))
         )
         assertEquals(
-            ArchivistFailureCategory.CONFIG,
+            ArchivistFailureCategory.REQUEST_TOO_LARGE,
             ArchivistFailureCategory.of(null, gen(GenErrorCode.U0, 413, ProviderLimitKind.REQUEST_BODY))
         )
         assertEquals(ArchivistFailureCategory.CONFIG, ArchivistFailureCategory.of(null, gen(GenErrorCode.M1)))
+        assertEquals(ArchivistFailureCategory.CONFIG, ArchivistFailureCategory.of(null, gen(GenErrorCode.S1, 404)))
+    }
+
+    @Test fun serverErrorsAreProviderErrorExceptGatewayTimeout() {
+        assertEquals(ArchivistFailureCategory.PROVIDER_ERROR, ArchivistFailureCategory.of(null, gen(GenErrorCode.U0, 500)))
+        assertEquals(ArchivistFailureCategory.PROVIDER_ERROR, ArchivistFailureCategory.of(null, gen(GenErrorCode.U0, 502)))
+        assertEquals(ArchivistFailureCategory.PROVIDER_ERROR, ArchivistFailureCategory.of(null, gen(GenErrorCode.U0, 503)))
+        // 504 gateway timeout is a timeout, not a generic provider error.
+        assertEquals(ArchivistFailureCategory.TIMEOUT, ArchivistFailureCategory.of(null, gen(GenErrorCode.U0, 504)))
+    }
+
+    @Test fun noHttpResponseIsLocalProcessingFailure() {
+        // An unclassified failure with no HTTP response never reached the
+        // provider — a local read/prepare failure.
+        assertEquals(ArchivistFailureCategory.PROCESS_LOCAL, ArchivistFailureCategory.of(null, gen(GenErrorCode.U0)))
     }
 
     @Test fun modelUnavailableOnlyWhenModelNamed() {
@@ -102,6 +119,8 @@ class ArchivistFailureCategoryTest {
 
     @Test fun transportUnreadableAndUnknown() {
         assertEquals(ArchivistFailureCategory.UNREADABLE, ArchivistFailureCategory.of(null, gen(GenErrorCode.S2)))
-        assertEquals(ArchivistFailureCategory.UNKNOWN, ArchivistFailureCategory.of(null, gen(GenErrorCode.U0)))
+        // An unmatched response WITH an HTTP status (but not 5xx) is genuinely
+        // unexpected; the no-status case is a local processing failure above.
+        assertEquals(ArchivistFailureCategory.UNKNOWN, ArchivistFailureCategory.of(null, gen(GenErrorCode.U0, 418)))
     }
 }

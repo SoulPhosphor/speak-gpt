@@ -1186,6 +1186,30 @@
         <item quantity="one">%1$d request could not be processed</item>
         <item quantity="other">%1$d requests could not be processed</item>
     </plurals>
+    <plurals name="mem_arch_break_provider_error">
+        <item quantity="one">%1$d request returned a server error</item>
+        <item quantity="other">%1$d requests returned a server error</item>
+    </plurals>
+    <plurals name="mem_arch_break_too_large">
+        <item quantity="one">%1$d conversation was too large</item>
+        <item quantity="other">%1$d conversations were too large</item>
+    </plurals>
+
+    <!-- Four additional failure states (owner-approved, Aug 1 2026): a 5xx
+         server error, a request over the input/context limit, and the
+         full-failure counterparts of the save and local-processing partials. -->
+    <string name="mem_arch_fail_provider_error_title">Provider Error</string>
+    <string name="mem_arch_fail_provider_error_msg">The provider encountered a server error and could not complete the analysis. Wait a moment, then try again.</string>
+    <string name="mem_arch_fail_too_large_title">Request Too Large</string>
+    <string name="mem_arch_fail_too_large_msg">The conversation exceeded the selected model or provider\'s input limit and could not be analyzed. Choose a model with a larger context window or reduce the amount of content, then try again.</string>
+    <string name="mem_arch_fail_save_title">Suggestions Could Not Be Saved</string>
+    <string name="mem_arch_fail_save_msg">The analysis produced Lorebook suggestions, but the app could not save them to Pending. Check the device\'s available storage, then try again.</string>
+    <string name="mem_arch_fail_process_title">Conversations Could Not Be Processed</string>
+    <string name="mem_arch_fail_process_msg">The app could not read or prepare the conversations for analysis. No conversations were sent to the provider.</string>
+    <string name="mem_arch_part_provider_error_title">Provider Error During Analysis</string>
+    <string name="mem_arch_part_provider_error_msg">The provider encountered errors before every conversation could be analyzed. Any Lorebook suggestions found before those errors were saved to Pending.</string>
+    <string name="mem_arch_part_too_large_title">Some Conversations Were Too Large</string>
+    <string name="mem_arch_part_too_large_msg">One or more conversations exceeded the selected model or provider\'s input limit. Other conversations were analyzed, and any Lorebook suggestions found were saved to Pending.</string>
 
     <!-- Memory Analysis Type control (Step 1.7 — plan_one_page.md, owner
          approved). Two-column settings row on the Memory Assistant screen,
