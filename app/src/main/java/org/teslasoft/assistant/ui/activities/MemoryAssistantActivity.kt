@@ -680,25 +680,26 @@ class MemoryAssistantActivity : FragmentActivity() {
             R.string.mem_arch_part_process_title to R.string.mem_arch_part_process_msg
     }
 
-    private fun breakdownPhraseRes(category: String): Int = when (category) {
-        ArchivistFailureCategory.CONNECTION -> R.string.mem_arch_break_connection
-        ArchivistFailureCategory.TIMEOUT -> R.string.mem_arch_break_timeout
-        ArchivistFailureCategory.REJECTED -> R.string.mem_arch_break_rejected
-        ArchivistFailureCategory.RATE_LIMIT -> R.string.mem_arch_break_rate_limit
-        ArchivistFailureCategory.USAGE_LIMIT -> R.string.mem_arch_break_usage_limit
-        ArchivistFailureCategory.CREDITS -> R.string.mem_arch_break_credits
-        ArchivistFailureCategory.MODEL_UNAVAILABLE -> R.string.mem_arch_break_model
-        ArchivistFailureCategory.CONFIG -> R.string.mem_arch_break_config
-        ArchivistFailureCategory.UNREADABLE -> R.string.mem_arch_break_unreadable
-        ArchivistFailureCategory.INVALID_RESULT -> R.string.mem_arch_break_invalid
-        ArchivistFailureCategory.SAVE_FAILED -> R.string.mem_arch_break_save
-        else -> R.string.mem_arch_break_unknown
+    private fun breakdownPluralRes(category: String): Int = when (category) {
+        ArchivistFailureCategory.CONNECTION -> R.plurals.mem_arch_break_connection
+        ArchivistFailureCategory.TIMEOUT -> R.plurals.mem_arch_break_timeout
+        ArchivistFailureCategory.REJECTED -> R.plurals.mem_arch_break_rejected
+        ArchivistFailureCategory.RATE_LIMIT -> R.plurals.mem_arch_break_rate_limit
+        ArchivistFailureCategory.USAGE_LIMIT -> R.plurals.mem_arch_break_usage_limit
+        ArchivistFailureCategory.CREDITS -> R.plurals.mem_arch_break_credits
+        ArchivistFailureCategory.MODEL_UNAVAILABLE -> R.plurals.mem_arch_break_model
+        ArchivistFailureCategory.CONFIG -> R.plurals.mem_arch_break_config
+        ArchivistFailureCategory.UNREADABLE -> R.plurals.mem_arch_break_unreadable
+        ArchivistFailureCategory.INVALID_RESULT -> R.plurals.mem_arch_break_invalid
+        ArchivistFailureCategory.SAVE_FAILED -> R.plurals.mem_arch_break_save
+        else -> R.plurals.mem_arch_break_unknown
     }
 
-    /** A short mixed-cause breakdown, e.g. "3 timed out, 2 rejected, and 1
-     *  could not be saved." Save failures are placed last so a lost save is
-     *  the memorable tail (owner ruling: a mixed failure with a save failure
-     *  must explicitly mention it). */
+    /** A short mixed-cause breakdown, each a grammatical counted clause with
+     *  singular/plural agreement, e.g. "1 request timed out, 2 requests were
+     *  rejected, and 1 result could not be saved." Save failures are placed
+     *  last so a lost save is the memorable tail (owner ruling: a mixed failure
+     *  with a save failure must explicitly mention it). */
     private fun loreBreakdown(counts: Map<String, Int>): String {
         val order = listOf(
             ArchivistFailureCategory.CONNECTION, ArchivistFailureCategory.TIMEOUT,
@@ -709,13 +710,15 @@ class MemoryAssistantActivity : FragmentActivity() {
             ArchivistFailureCategory.UNKNOWN, ArchivistFailureCategory.SAVE_FAILED
         )
         val parts = order.filter { counts.containsKey(it) }.map {
-            getString(R.string.mem_arch_break_item, counts[it], getString(breakdownPhraseRes(it)))
+            val n = counts.getValue(it)
+            resources.getQuantityString(breakdownPluralRes(it), n, n)
         }
-        return when {
+        val sentence = when {
             parts.isEmpty() -> ""
             parts.size == 1 -> parts[0]
-            else -> parts.dropLast(1).joinToString(", ") + " and " + parts.last()
+            else -> parts.dropLast(1).joinToString(", ") + ", and " + parts.last()
         }
+        return if (sentence.isEmpty()) sentence else "$sentence."
     }
 
     /** Show the found-count line and the review link when a lorebook outcome

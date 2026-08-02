@@ -1110,7 +1110,7 @@
     <string name="mem_arch_part_incomplete_title">Lorebook Analysis Incomplete</string>
     <string name="mem_arch_part_incomplete_msg">Some conversations were analyzed successfully, but the full run could not be completed.</string>
     <string name="mem_arch_part_connection_title">Connection Failed During Analysis</string>
-    <string name="mem_arch_part_connection_msg">The connection to the selected provider was lost before every conversation could be analyzed. Suggestions completed before the connection failed were saved.</string>
+    <string name="mem_arch_part_connection_msg">The app could not connect to the provider for some requests, or the connection ended before they finished. Any Lorebook suggestions found before those failures were saved to Pending.</string>
     <string name="mem_arch_part_timeout_title">Some Requests Timed Out</string>
     <string name="mem_arch_part_timeout_msg">The provider did not finish one or more analysis requests in time. Suggestions returned successfully by other requests were saved.</string>
     <string name="mem_arch_part_rejected_title">Some Requests Were Rejected</string>
@@ -1134,22 +1134,58 @@
     <string name="mem_arch_part_interrupted_title">Analysis Was Interrupted</string>
     <string name="mem_arch_part_interrupted_msg">The run stopped before every conversation was analyzed and could not resume from where it ended. Suggestions completed before the interruption were saved.</string>
 
-    <!-- Mixed-cause breakdown fragments (owner-approved concept, Aug 1 2026):
-         "%1$d %2$s" per cause, e.g. "3 timed out, 2 rejected, and 1 unusable
-         result." Phrasing is count-neutral to avoid verb-agreement errors. -->
-    <string name="mem_arch_break_item">%1$d %2$s</string>
-    <string name="mem_arch_break_connection">could not connect</string>
-    <string name="mem_arch_break_timeout">timed out</string>
-    <string name="mem_arch_break_rejected">rejected</string>
-    <string name="mem_arch_break_rate_limit">rate-limited</string>
-    <string name="mem_arch_break_usage_limit">hit a usage limit</string>
-    <string name="mem_arch_break_credits">out of credits</string>
-    <string name="mem_arch_break_model">model unavailable</string>
-    <string name="mem_arch_break_config">configuration problem</string>
-    <string name="mem_arch_break_unreadable">unreadable response</string>
-    <string name="mem_arch_break_invalid">unusable result</string>
-    <string name="mem_arch_break_save">could not be saved</string>
-    <string name="mem_arch_break_unknown">could not be processed</string>
+    <!-- Mixed-cause breakdown clauses (owner-approved, Aug 1 2026): each is a
+         grammatical counted clause with singular/plural agreement, joined into
+         e.g. "1 request timed out, 2 requests were rejected, and 1 result could
+         not be saved." -->
+    <plurals name="mem_arch_break_connection">
+        <item quantity="one">%1$d request could not connect</item>
+        <item quantity="other">%1$d requests could not connect</item>
+    </plurals>
+    <plurals name="mem_arch_break_timeout">
+        <item quantity="one">%1$d request timed out</item>
+        <item quantity="other">%1$d requests timed out</item>
+    </plurals>
+    <plurals name="mem_arch_break_rejected">
+        <item quantity="one">%1$d request was rejected</item>
+        <item quantity="other">%1$d requests were rejected</item>
+    </plurals>
+    <plurals name="mem_arch_break_rate_limit">
+        <item quantity="one">%1$d request was rate-limited</item>
+        <item quantity="other">%1$d requests were rate-limited</item>
+    </plurals>
+    <plurals name="mem_arch_break_usage_limit">
+        <item quantity="one">%1$d request hit a usage limit</item>
+        <item quantity="other">%1$d requests hit a usage limit</item>
+    </plurals>
+    <plurals name="mem_arch_break_credits">
+        <item quantity="one">%1$d request ran out of credits</item>
+        <item quantity="other">%1$d requests ran out of credits</item>
+    </plurals>
+    <plurals name="mem_arch_break_model">
+        <item quantity="one">%1$d request found the model unavailable</item>
+        <item quantity="other">%1$d requests found the model unavailable</item>
+    </plurals>
+    <plurals name="mem_arch_break_config">
+        <item quantity="one">%1$d request had a configuration problem</item>
+        <item quantity="other">%1$d requests had a configuration problem</item>
+    </plurals>
+    <plurals name="mem_arch_break_unreadable">
+        <item quantity="one">%1$d response could not be read</item>
+        <item quantity="other">%1$d responses could not be read</item>
+    </plurals>
+    <plurals name="mem_arch_break_invalid">
+        <item quantity="one">%1$d result could not be used</item>
+        <item quantity="other">%1$d results could not be used</item>
+    </plurals>
+    <plurals name="mem_arch_break_save">
+        <item quantity="one">%1$d result could not be saved</item>
+        <item quantity="other">%1$d results could not be saved</item>
+    </plurals>
+    <plurals name="mem_arch_break_unknown">
+        <item quantity="one">%1$d request could not be processed</item>
+        <item quantity="other">%1$d requests could not be processed</item>
+    </plurals>
 
     <!-- Memory Analysis Type control (Step 1.7 — plan_one_page.md, owner
          approved). Two-column settings row on the Memory Assistant screen,
