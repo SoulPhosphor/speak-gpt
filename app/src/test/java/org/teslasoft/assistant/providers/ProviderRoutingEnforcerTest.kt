@@ -126,6 +126,39 @@ class ProviderRoutingEnforcerTest {
     }
 
     @Test
+    fun preferredWithEmptyOrderAndFallbacksOffBlocksEvenWhenAvailabilityKnown() {
+        val decision = ProviderRoutingEnforcer.decide(
+            favorite(FavoriteModelObject.ROUTING_PREFERRED, fallbacks = false, order = emptyList()),
+            setOf("openai", "azure")
+        )
+        assertEquals(RoutingBlock.NO_PREFERRED_AVAILABLE, decision.block)
+        assertFalse(decision.allowed)
+    }
+
+    @Test
+    fun preferredWithEmptyOrderAndFallbacksOffBlocksEvenWhenAvailabilityUnknown() {
+        // No providers selected at all → nothing permitted regardless of what
+        // discovery does or doesn't know.
+        val decision = ProviderRoutingEnforcer.decide(
+            favorite(FavoriteModelObject.ROUTING_PREFERRED, fallbacks = false, order = emptyList()),
+            null
+        )
+        assertEquals(RoutingBlock.NO_PREFERRED_AVAILABLE, decision.block)
+        assertFalse(decision.allowed)
+    }
+
+    @Test
+    fun preferredWithEmptyOrderAndFallbacksOnProceedsWithAutomaticFallback() {
+        val decision = ProviderRoutingEnforcer.decide(
+            favorite(FavoriteModelObject.ROUTING_PREFERRED, fallbacks = true, order = emptyList()),
+            setOf("openai")
+        )
+        assertTrue(decision.allowed)
+        assertTrue(decision.order.isEmpty())
+        assertTrue(decision.allowFallbacks)
+    }
+
+    @Test
     fun preferredWithUnknownAvailabilitySendsSavedConfigurationUnchanged() {
         val saved = listOf("lepton", "openai")
         val decision = ProviderRoutingEnforcer.decide(

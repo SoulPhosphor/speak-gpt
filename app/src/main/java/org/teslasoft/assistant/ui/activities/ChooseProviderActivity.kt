@@ -886,11 +886,14 @@ class ChooseProviderActivity : FragmentActivity() {
             return
         }
 
+        // Preferred with fallbacks off and no permitted provider: an empty
+        // order (nothing selected at all) OR a list whose every provider is
+        // confirmed unavailable. Both leave nothing to route and no fallback,
+        // so Save is blocked — never silently downgraded to Automatic.
         if (selectedRoutingType == FavoriteModelObject.ROUTING_PREFERRED &&
-            orderList.isNotEmpty() &&
-            availableSlugs != null &&
-            orderList.all { isUnavailable(it) } &&
-            switchAllowFallbacks?.isChecked == false
+            switchAllowFallbacks?.isChecked == false &&
+            (orderList.isEmpty() ||
+                (availableSlugs != null && orderList.all { isUnavailable(it) }))
         ) {
             // Distinct from the Only-mode message: names the exact problem and
             // includes enabling fallbacks as a valid fix (owner wording).

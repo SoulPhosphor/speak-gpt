@@ -97,13 +97,16 @@ object ProviderRoutingEnforcer {
         val order = filterAvailable(favorite.providerOrder, available)
         val ignore = filterAvailable(favorite.ignoredProviders, available)
 
-        // Every saved preferred provider confirmed unavailable and fallbacks
-        // off: no permitted provider remains — block. With fallbacks on the
-        // request proceeds and automatic fallback applies.
-        if (favorite.providerOrder.isNotEmpty() &&
-            available != null &&
-            order.isEmpty() &&
-            !favorite.allowFallbacks
+        // Fallbacks off with no permitted provider — block; never downgrade to
+        // Automatic. "No permitted provider" is either an empty preferred list
+        // (nothing selected at all; availability is irrelevant) OR a non-empty
+        // list whose every provider is confirmed unavailable. With fallbacks on
+        // the request proceeds and automatic fallback applies. Unknown
+        // availability on a non-empty list is NOT a block — the saved list is
+        // sent unchanged.
+        if (!favorite.allowFallbacks &&
+            (favorite.providerOrder.isEmpty() ||
+                (available != null && order.isEmpty()))
         ) {
             return RoutingDecision(RoutingBlock.NO_PREFERRED_AVAILABLE)
         }
