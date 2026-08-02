@@ -578,7 +578,10 @@ class ChooseProviderActivity : FragmentActivity() {
                 if (isIgnored) R.drawable.bg_ignore_square_on else R.drawable.bg_ignore_square_off
             )
             x.imageTintList = ColorStateList.valueOf(
-                resolveAttrColor(if (isIgnored) R.attr.colorOnError else R.attr.appSubtleTextColor)
+                resolveAttrColor(
+                    if (isIgnored) com.google.android.material.R.attr.colorOnError
+                    else R.attr.appSubtleTextColor
+                )
             )
         }
         style()
