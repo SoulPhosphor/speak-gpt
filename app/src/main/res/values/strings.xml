@@ -1082,6 +1082,75 @@
     <string name="mem_arch_fail_unknown_msg">The analysis could not be completed, and the app could not determine the specific cause. Try again or review the error details.</string>
     <string name="mem_arch_function_archiving">Archiving</string>
 
+    <!-- Rate limit as a distinct full-failure state (owner ruling, Aug 1 2026):
+         a temporary throttle is kept separate from a usage/spending cap. -->
+    <string name="mem_arch_fail_rate_limit_title">Rate Limit Reached</string>
+    <string name="mem_arch_fail_rate_limit_msg">The provider is temporarily limiting requests. Wait a moment, then try again.</string>
+
+    <!-- Run stopped in-process by the system (owner-approved, Aug 1 2026). The
+         Android 15+ dataSync runtime limit uses the Time Limit variant; any
+         other system stop uses the generic Stopped Early. -->
+    <string name="mem_arch_stopped_early_title">Analysis Stopped Early</string>
+    <string name="mem_arch_stopped_early_msg">The analysis stopped before every conversation could be reviewed. Any Lorebook suggestions found before it stopped were saved to Pending.</string>
+    <string name="mem_arch_time_limit_title">Analysis Time Limit Reached</string>
+    <string name="mem_arch_time_limit_msg">The analysis reached its allowed running time before every conversation could be reviewed. Any Lorebook suggestions found before it stopped were saved to Pending.</string>
+
+    <!-- User cancellation is neutral, never an error (owner ruling). Title
+         reuses mem_arch_fail_cancelled_title ("Analysis Cancelled"); the count
+         is reported on the shared "Potential Lorebook Memories found" line. -->
+    <string name="mem_arch_cancel_saved_msg">The analysis was stopped. Any Lorebook suggestions found before cancellation were saved to Pending.</string>
+    <string name="mem_arch_cancel_none_msg">The analysis was stopped before it finished. No Lorebook suggestions were saved.</string>
+    <string name="mem_arch_btn_done">Done</string>
+
+    <!-- Partial-failure states (owner-approved, Aug 1 2026): some conversations
+         were analyzed and some failed. A specific title is used when every
+         failed conversation shares one cause; a mix uses Lorebook Analysis
+         Incomplete with a short breakdown. The saved count is reported on the
+         shared "Potential Lorebook Memories found" line. -->
+    <string name="mem_arch_part_incomplete_title">Lorebook Analysis Incomplete</string>
+    <string name="mem_arch_part_incomplete_msg">Some conversations were analyzed successfully, but the full run could not be completed.</string>
+    <string name="mem_arch_part_connection_title">Connection Failed During Analysis</string>
+    <string name="mem_arch_part_connection_msg">The connection to the selected provider was lost before every conversation could be analyzed. Suggestions completed before the connection failed were saved.</string>
+    <string name="mem_arch_part_timeout_title">Some Requests Timed Out</string>
+    <string name="mem_arch_part_timeout_msg">The provider did not finish one or more analysis requests in time. Suggestions returned successfully by other requests were saved.</string>
+    <string name="mem_arch_part_rejected_title">Some Requests Were Rejected</string>
+    <string name="mem_arch_part_rejected_msg">The provider rejected one or more requests before the full analysis finished. Suggestions from requests that completed successfully were saved.</string>
+    <string name="mem_arch_part_rate_limit_title">Rate Limit Interrupted Analysis</string>
+    <string name="mem_arch_part_rate_limit_msg">The provider temporarily stopped accepting requests because too many were sent within its allowed time window. Suggestions created before the limit was reached were saved.</string>
+    <string name="mem_arch_part_usage_limit_title">Usage Limit Reached During Analysis</string>
+    <string name="mem_arch_part_usage_limit_msg">The provider stopped the run because an account, spending, or usage limit was reached. Suggestions created before the limit was reached were saved.</string>
+    <string name="mem_arch_part_credits_title">Credits Ran Out During Analysis</string>
+    <string name="mem_arch_part_credits_msg">The provider stopped processing requests because the account ran out of credits. Suggestions created before the balance was exhausted were saved.</string>
+    <string name="mem_arch_part_model_title">Model Unavailable During Analysis</string>
+    <string name="mem_arch_part_model_msg">The provider reported that the selected model was unavailable before the analysis finished. Any Lorebook suggestions found before that were saved to Pending.</string>
+    <string name="mem_arch_part_unreadable_title">Some Responses Could Not Be Read</string>
+    <string name="mem_arch_part_unreadable_msg">The provider returned one or more responses the app could not understand. Suggestions from readable responses were saved.</string>
+    <string name="mem_arch_part_invalid_title">Some Analysis Results Could Not Be Used</string>
+    <string name="mem_arch_part_invalid_msg">One or more responses did not contain valid Lorebook suggestions. Valid suggestions from the rest of the run were saved.</string>
+    <string name="mem_arch_part_process_title">Some Conversations Could Not Be Processed</string>
+    <string name="mem_arch_part_process_msg">The app could not prepare or analyze one or more selected conversations. Suggestions from conversations processed successfully were saved.</string>
+    <string name="mem_arch_part_save_title">Some Suggestions Could Not Be Saved</string>
+    <string name="mem_arch_part_save_msg">The analysis produced additional Lorebook suggestions, but the app could not save all of them to Pending. Suggestions saved successfully are still available.</string>
+    <string name="mem_arch_part_interrupted_title">Analysis Was Interrupted</string>
+    <string name="mem_arch_part_interrupted_msg">The run stopped before every conversation was analyzed and could not resume from where it ended. Suggestions completed before the interruption were saved.</string>
+
+    <!-- Mixed-cause breakdown fragments (owner-approved concept, Aug 1 2026):
+         "%1$d %2$s" per cause, e.g. "3 timed out, 2 rejected, and 1 unusable
+         result." Phrasing is count-neutral to avoid verb-agreement errors. -->
+    <string name="mem_arch_break_item">%1$d %2$s</string>
+    <string name="mem_arch_break_connection">could not connect</string>
+    <string name="mem_arch_break_timeout">timed out</string>
+    <string name="mem_arch_break_rejected">rejected</string>
+    <string name="mem_arch_break_rate_limit">rate-limited</string>
+    <string name="mem_arch_break_usage_limit">hit a usage limit</string>
+    <string name="mem_arch_break_credits">out of credits</string>
+    <string name="mem_arch_break_model">model unavailable</string>
+    <string name="mem_arch_break_config">configuration problem</string>
+    <string name="mem_arch_break_unreadable">unreadable response</string>
+    <string name="mem_arch_break_invalid">unusable result</string>
+    <string name="mem_arch_break_save">could not be saved</string>
+    <string name="mem_arch_break_unknown">could not be processed</string>
+
     <!-- Memory Analysis Type control (Step 1.7 — plan_one_page.md, owner
          approved). Two-column settings row on the Memory Assistant screen,
          matching the Memory Engine row. The subtitle is three paragraphs shown

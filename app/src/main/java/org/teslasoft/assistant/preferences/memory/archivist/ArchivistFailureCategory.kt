@@ -41,12 +41,14 @@ object ArchivistFailureCategory {
     const val CONNECTION = "connection"
     const val TIMEOUT = "timeout"
     const val REJECTED = "rejected"
+    const val RATE_LIMIT = "rate_limit"
     const val USAGE_LIMIT = "usage_limit"
     const val CREDITS = "credits"
     const val MODEL_UNAVAILABLE = "model_unavailable"
     const val CONFIG = "config"
     const val UNREADABLE = "unreadable"
     const val INVALID_RESULT = "invalid_result"
+    const val SAVE_FAILED = "save_failed"
     const val UNKNOWN = "unknown"
 
     /**
@@ -56,17 +58,20 @@ object ArchivistFailureCategory {
      */
     fun of(reason: ArchivistFailure?, gen: GenErrorResult?): String {
         // Archivist-specific tags win: the model answered but the result was
-        // unusable, or the app could not store what it produced.
+        // unusable, or produced suggestions the app could not store.
         when (reason) {
             ArchivistFailure.UNREADABLE -> return INVALID_RESULT
-            ArchivistFailure.SAVE_FAILED -> return UNKNOWN
+            ArchivistFailure.SAVE_FAILED -> return SAVE_FAILED
             else -> { /* fall through to the transport/provider signal */ }
         }
         if (gen == null) return UNKNOWN
         // Provider limits (from status or body) are the most specific signal.
+        // A temporary throttle, a usage/spending cap, and an empty balance are
+        // three distinct actions for the user, so they stay separate (owner
+        // ruling, Aug 1 2026).
         when (gen.providerLimit) {
             ProviderLimitKind.OUT_OF_CREDITS -> return CREDITS
-            ProviderLimitKind.RATE_OR_THROUGHPUT,
+            ProviderLimitKind.RATE_OR_THROUGHPUT -> return RATE_LIMIT
             ProviderLimitKind.QUOTA_OR_SPENDING,
             ProviderLimitKind.UNIDENTIFIED -> return USAGE_LIMIT
             // A prompt too large for the model's context or the provider's
@@ -86,9 +91,13 @@ object ArchivistFailureCategory {
             GenErrorCode.S3 -> REJECTED
             GenErrorCode.S2 -> UNREADABLE
             GenErrorCode.M1 -> CONFIG
-            GenErrorCode.M2, GenErrorCode.S1 -> MODEL_UNAVAILABLE
+            // Only a response that names the MODEL as missing is Model
+            // Unavailable; a bare 404 is most often a wrong endpoint URL, so it
+            // maps to Invalid Configuration (owner ruling, Aug 1 2026).
+            GenErrorCode.M2 -> MODEL_UNAVAILABLE
+            GenErrorCode.S1 -> CONFIG
             GenErrorCode.M3 -> CONFIG
-            GenErrorCode.Q1 -> USAGE_LIMIT
+            GenErrorCode.Q1 -> RATE_LIMIT
             GenErrorCode.U0 -> UNKNOWN
         }
     }

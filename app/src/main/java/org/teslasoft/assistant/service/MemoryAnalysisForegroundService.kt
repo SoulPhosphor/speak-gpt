@@ -90,6 +90,12 @@ class MemoryAnalysisForegroundService : Service() {
         @Volatile
         private var userCancelRequested = false
 
+        /** True when the in-process stop was the Android 15+ dataSync runtime
+         *  limit (onTimeout), so the screen can say "Analysis Time Limit
+         *  Reached" rather than the generic "Analysis Stopped Early". */
+        @Volatile
+        private var timeLimitReached = false
+
         /**
          * Ask the running analysis to stop at the user's request. Delivered as a
          * service command so it reaches the live service instance; the run's own
@@ -191,6 +197,7 @@ class MemoryAnalysisForegroundService : Service() {
         if (runActive.compareAndSet(false, true)) {
             acquireWakeLock()
             userCancelRequested = false
+            timeLimitReached = false
             val rerunOfRunId = intent?.getStringExtra(EXTRA_RERUN_ID)
             val analysisType = intent?.getStringExtra(EXTRA_ANALYSIS_TYPE) ?: "associative"
             state.value = MemoryAnalysisState.Running(null)
@@ -211,12 +218,16 @@ class MemoryAnalysisForegroundService : Service() {
                         error = e.message
                     )
                 }
-                // A run the user cancelled is not an error (owner ruling): the
-                // Archivist reports an in-process stop as "cancelled"; when the
-                // user asked for it, mark it so the screen shows a clean stop
-                // instead of the "Analysis Cancelled" (by the system) state.
-                if (outcome.outcome == "cancelled" && userCancelRequested) {
-                    outcome = outcome.copy(outcome = "cancelled_user")
+                // The Archivist reports any in-process stop as "cancelled".
+                // Refine it (owner rulings, Aug 1 2026): the user's Cancel is a
+                // neutral stop, the dataSync runtime limit is its own state, and
+                // anything else is the generic system stop.
+                if (outcome.outcome == "cancelled") {
+                    outcome = when {
+                        userCancelRequested -> outcome.copy(outcome = "cancelled_user")
+                        timeLimitReached -> outcome.copy(outcome = "stopped_time_limit")
+                        else -> outcome
+                    }
                 }
                 // "already_running" should be unreachable from here (the
                 // gates above), but if it ever happens the LIVE run owns the
@@ -238,9 +249,12 @@ class MemoryAnalysisForegroundService : Service() {
     override fun onTimeout(startId: Int, fgsType: Int) {
         try {
             MemoryLog.logAlways(applicationContext, "Archivist", "warn",
-                "analysis service timed out (system dataSync limit) — run interrupted; " +
-                    "unfinished conversations remain available to analyze again")
+                "analysis service timed out (system dataSync limit) — run stopped at the " +
+                    "runtime limit; unfinished conversations remain available to analyze again")
         } catch (_: Throwable) { /* best effort */ }
+        // This stop is specifically the runtime limit, not a generic system
+        // stop, so the screen can say "Analysis Time Limit Reached".
+        timeLimitReached = true
         scope.cancel()
         stopSelf()
     }

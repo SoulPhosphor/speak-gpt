@@ -36,9 +36,9 @@ class ArchivistFailureCategoryTest {
         )
     }
 
-    @Test fun saveFailureTagIsUnknown() {
+    @Test fun saveFailureTagIsSaveFailed() {
         assertEquals(
-            ArchivistFailureCategory.UNKNOWN,
+            ArchivistFailureCategory.SAVE_FAILED,
             ArchivistFailureCategory.of(ArchivistFailure.SAVE_FAILED, gen(GenErrorCode.S2))
         )
     }
@@ -64,9 +64,11 @@ class ArchivistFailureCategoryTest {
         assertEquals(ArchivistFailureCategory.REJECTED, ArchivistFailureCategory.of(null, gen(GenErrorCode.U0, 403)))
     }
 
-    @Test fun usageLimitAndCredits() {
+    @Test fun rateLimitUsageLimitAndCreditsAreSeparate() {
+        // A temporary throttle, a usage/spending cap, and an empty balance are
+        // three distinct states.
         assertEquals(
-            ArchivistFailureCategory.USAGE_LIMIT,
+            ArchivistFailureCategory.RATE_LIMIT,
             ArchivistFailureCategory.of(null, gen(GenErrorCode.Q1, 429, ProviderLimitKind.RATE_OR_THROUGHPUT))
         )
         assertEquals(
@@ -91,9 +93,11 @@ class ArchivistFailureCategoryTest {
         assertEquals(ArchivistFailureCategory.CONFIG, ArchivistFailureCategory.of(null, gen(GenErrorCode.M1)))
     }
 
-    @Test fun modelUnavailableCauses() {
+    @Test fun modelUnavailableOnlyWhenModelNamed() {
+        // A body that names the model missing (M2) is Model Unavailable; a bare
+        // 404 (S1) is most often a wrong endpoint URL → Invalid Configuration.
         assertEquals(ArchivistFailureCategory.MODEL_UNAVAILABLE, ArchivistFailureCategory.of(null, gen(GenErrorCode.M2, 404)))
-        assertEquals(ArchivistFailureCategory.MODEL_UNAVAILABLE, ArchivistFailureCategory.of(null, gen(GenErrorCode.S1, 404)))
+        assertEquals(ArchivistFailureCategory.CONFIG, ArchivistFailureCategory.of(null, gen(GenErrorCode.S1, 404)))
     }
 
     @Test fun transportUnreadableAndUnknown() {

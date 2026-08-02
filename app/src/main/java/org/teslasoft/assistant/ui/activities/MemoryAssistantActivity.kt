@@ -466,12 +466,26 @@ class MemoryAssistantActivity : FragmentActivity() {
             "partial_failed" -> {
                 btnAnalyze?.setText(R.string.memory_assistant_btn_idle)
                 if (lastOutcomeLorebook) {
-                    // A Lorebook run that finished with some skipped
-                    // conversations: report the run-level outcome plus the
-                    // approved count of suggestions that were filed, and offer
-                    // to review them. The saved-memory-specific reason detail is
-                    // not shown here, since it names "memories".
-                    showLorePartialOrInterrupted(R.string.mem_arch_partial_label, o.memoriesFound)
+                    // Some conversations succeeded and some failed. One specific
+                    // title when every failed conversation shares a cause; a mix
+                    // uses Lorebook Analysis Incomplete with a short breakdown.
+                    // The saved count is reported separately (owner ruling).
+                    val counts = o.failureCategoryCounts
+                    val category = if (counts.keys.size == 1) counts.keys.first() else null
+                    val (titleRes, msgRes) = if (category != null) lorePartialStrings(category)
+                        else R.string.mem_arch_part_incomplete_title to R.string.mem_arch_part_incomplete_msg
+                    val foundLine = getString(R.string.memory_assistant_lore_found, o.memoriesFound)
+                    val details = if (category == null) foundLine + "\n\n" + loreBreakdown(counts) else foundLine
+                    val settingsRelated = category != null && category in LORE_FAIL_SETTINGS
+                    showStatus(
+                        getString(titleRes),
+                        getString(msgRes),
+                        details,
+                        if (settingsRelated) getString(R.string.mem_arch_btn_check_settings)
+                        else getString(R.string.mem_arch_btn_try_again),
+                        loreTertiaryColor()
+                    ) { if (settingsRelated) openArchivistSettings() else startRun(null) }
+                    showLoreCountAndView(o.memoriesFound)
                 } else {
                     val counts = getString(
                         R.string.mem_arch_partial_counts,
@@ -526,50 +540,72 @@ class MemoryAssistantActivity : FragmentActivity() {
                 }
             }
             "interrupted" -> {
+                // Process death the durable run could not resume (owner wording).
                 btnAnalyze?.setText(R.string.memory_assistant_btn_idle)
                 if (lastOutcomeLorebook) {
-                    showLorePartialOrInterrupted(R.string.mem_arch_interrupted_label, o.memoriesFound)
-                } else {
                     showStatus(
-                        getString(R.string.mem_arch_interrupted_label),
-                        getString(R.string.mem_arch_interrupted_msg),
-                        if (o.memoriesFound > 0) getString(R.string.mem_arch_interrupted_saved)
-                        else getString(R.string.mem_arch_interrupted_none),
+                        getString(R.string.mem_arch_part_interrupted_title),
+                        getString(R.string.mem_arch_part_interrupted_msg),
+                        if (o.memoriesFound > 0) getString(R.string.memory_assistant_lore_found, o.memoriesFound) else null,
                         getString(R.string.mem_arch_btn_try_again),
-                        MaterialColors.getColor(statusLabel!!, com.google.android.material.R.attr.colorTertiary)
+                        loreTertiaryColor()
                     ) { startRun(null) }
+                    showLoreCountAndView(o.memoriesFound)
+                } else {
+                    showAssociativeStopped(o)
                 }
             }
             "cancelled" -> {
-                // The run was stopped in-process WITHOUT the user asking — the
-                // Android 15+ dataSync timeout (owner ruling, Aug 1 2026). A
-                // Lorebook run shows the approved "Analysis Cancelled" state;
-                // associative keeps its existing interrupted wording.
+                // A generic in-process system stop (owner wording: Analysis
+                // Stopped Early). The dataSync runtime limit is its own state
+                // below; the user's Cancel is the neutral state after that.
                 btnAnalyze?.setText(R.string.memory_assistant_btn_idle)
                 if (lastOutcomeLorebook) {
                     showStatus(
-                        getString(R.string.mem_arch_fail_cancelled_title),
-                        getString(R.string.mem_arch_fail_cancelled_msg),
-                        null,
+                        getString(R.string.mem_arch_stopped_early_title),
+                        getString(R.string.mem_arch_stopped_early_msg),
+                        if (o.memoriesFound > 0) getString(R.string.memory_assistant_lore_found, o.memoriesFound) else null,
                         getString(R.string.mem_arch_btn_try_again),
-                        MaterialColors.getColor(statusLabel!!, com.google.android.material.R.attr.colorTertiary)
+                        loreTertiaryColor()
                     ) { startRun(null) }
+                    showLoreCountAndView(o.memoriesFound)
                 } else {
+                    showAssociativeStopped(o)
+                }
+            }
+            "stopped_time_limit" -> {
+                // The Android 15+ dataSync runtime limit ended the run.
+                btnAnalyze?.setText(R.string.memory_assistant_btn_idle)
+                if (lastOutcomeLorebook) {
                     showStatus(
-                        getString(R.string.mem_arch_interrupted_label),
-                        getString(R.string.mem_arch_interrupted_msg),
-                        if (o.memoriesFound > 0) getString(R.string.mem_arch_interrupted_saved)
-                        else getString(R.string.mem_arch_interrupted_none),
+                        getString(R.string.mem_arch_time_limit_title),
+                        getString(R.string.mem_arch_time_limit_msg),
+                        if (o.memoriesFound > 0) getString(R.string.memory_assistant_lore_found, o.memoriesFound) else null,
                         getString(R.string.mem_arch_btn_try_again),
-                        MaterialColors.getColor(statusLabel!!, com.google.android.material.R.attr.colorTertiary)
+                        loreTertiaryColor()
                     ) { startRun(null) }
+                    showLoreCountAndView(o.memoriesFound)
+                } else {
+                    showAssociativeStopped(o)
                 }
             }
             "cancelled_user" -> {
-                // The user pressed Cancel: a clean stop, never an error (owner
-                // ruling, Aug 1 2026). clearStatusBlock() above already removed
-                // any live progress; the screen simply returns to idle.
+                // The user pressed Cancel: neutral, never an error (owner ruling,
+                // Aug 1 2026). A Lorebook run confirms what was saved with View +
+                // Done; associative simply returns to idle (clearStatusBlock ran).
                 btnAnalyze?.setText(R.string.memory_assistant_btn_idle)
+                if (lastOutcomeLorebook) {
+                    val saved = o.memoriesFound > 0
+                    showStatus(
+                        getString(R.string.mem_arch_fail_cancelled_title),
+                        if (saved) getString(R.string.mem_arch_cancel_saved_msg)
+                        else getString(R.string.mem_arch_cancel_none_msg),
+                        if (saved) getString(R.string.memory_assistant_lore_found, o.memoriesFound) else null,
+                        getString(R.string.mem_arch_btn_done),
+                        neutralLabelColor()
+                    ) { clearStatusBlock() }
+                    showLoreCountAndView(o.memoriesFound)
+                }
             }
             "not_configured" -> {
                 btnAnalyze?.setText(R.string.memory_assistant_btn_idle)
@@ -598,6 +634,8 @@ class MemoryAssistantActivity : FragmentActivity() {
             R.string.mem_arch_fail_timeout_title to R.string.mem_arch_fail_timeout_msg
         ArchivistFailureCategory.REJECTED ->
             R.string.mem_arch_fail_rejected_title to R.string.mem_arch_fail_rejected_msg
+        ArchivistFailureCategory.RATE_LIMIT ->
+            R.string.mem_arch_fail_rate_limit_title to R.string.mem_arch_fail_rate_limit_msg
         ArchivistFailureCategory.USAGE_LIMIT ->
             R.string.mem_arch_fail_usage_limit_title to R.string.mem_arch_fail_usage_limit_msg
         ArchivistFailureCategory.CREDITS ->
@@ -614,6 +652,84 @@ class MemoryAssistantActivity : FragmentActivity() {
             R.string.mem_arch_fail_unknown_title to R.string.mem_arch_fail_unknown_msg
     }
 
+    /** The partial-failure title + subtitle for a single uniform cause. config
+     *  and unknown have no dedicated partial title, so they use the "could not
+     *  be processed" bucket. */
+    private fun lorePartialStrings(category: String): Pair<Int, Int> = when (category) {
+        ArchivistFailureCategory.CONNECTION ->
+            R.string.mem_arch_part_connection_title to R.string.mem_arch_part_connection_msg
+        ArchivistFailureCategory.TIMEOUT ->
+            R.string.mem_arch_part_timeout_title to R.string.mem_arch_part_timeout_msg
+        ArchivistFailureCategory.REJECTED ->
+            R.string.mem_arch_part_rejected_title to R.string.mem_arch_part_rejected_msg
+        ArchivistFailureCategory.RATE_LIMIT ->
+            R.string.mem_arch_part_rate_limit_title to R.string.mem_arch_part_rate_limit_msg
+        ArchivistFailureCategory.USAGE_LIMIT ->
+            R.string.mem_arch_part_usage_limit_title to R.string.mem_arch_part_usage_limit_msg
+        ArchivistFailureCategory.CREDITS ->
+            R.string.mem_arch_part_credits_title to R.string.mem_arch_part_credits_msg
+        ArchivistFailureCategory.MODEL_UNAVAILABLE ->
+            R.string.mem_arch_part_model_title to R.string.mem_arch_part_model_msg
+        ArchivistFailureCategory.UNREADABLE ->
+            R.string.mem_arch_part_unreadable_title to R.string.mem_arch_part_unreadable_msg
+        ArchivistFailureCategory.INVALID_RESULT ->
+            R.string.mem_arch_part_invalid_title to R.string.mem_arch_part_invalid_msg
+        ArchivistFailureCategory.SAVE_FAILED ->
+            R.string.mem_arch_part_save_title to R.string.mem_arch_part_save_msg
+        else ->
+            R.string.mem_arch_part_process_title to R.string.mem_arch_part_process_msg
+    }
+
+    private fun breakdownPhraseRes(category: String): Int = when (category) {
+        ArchivistFailureCategory.CONNECTION -> R.string.mem_arch_break_connection
+        ArchivistFailureCategory.TIMEOUT -> R.string.mem_arch_break_timeout
+        ArchivistFailureCategory.REJECTED -> R.string.mem_arch_break_rejected
+        ArchivistFailureCategory.RATE_LIMIT -> R.string.mem_arch_break_rate_limit
+        ArchivistFailureCategory.USAGE_LIMIT -> R.string.mem_arch_break_usage_limit
+        ArchivistFailureCategory.CREDITS -> R.string.mem_arch_break_credits
+        ArchivistFailureCategory.MODEL_UNAVAILABLE -> R.string.mem_arch_break_model
+        ArchivistFailureCategory.CONFIG -> R.string.mem_arch_break_config
+        ArchivistFailureCategory.UNREADABLE -> R.string.mem_arch_break_unreadable
+        ArchivistFailureCategory.INVALID_RESULT -> R.string.mem_arch_break_invalid
+        ArchivistFailureCategory.SAVE_FAILED -> R.string.mem_arch_break_save
+        else -> R.string.mem_arch_break_unknown
+    }
+
+    /** A short mixed-cause breakdown, e.g. "3 timed out, 2 rejected, and 1
+     *  could not be saved." Save failures are placed last so a lost save is
+     *  the memorable tail (owner ruling: a mixed failure with a save failure
+     *  must explicitly mention it). */
+    private fun loreBreakdown(counts: Map<String, Int>): String {
+        val order = listOf(
+            ArchivistFailureCategory.CONNECTION, ArchivistFailureCategory.TIMEOUT,
+            ArchivistFailureCategory.REJECTED, ArchivistFailureCategory.RATE_LIMIT,
+            ArchivistFailureCategory.USAGE_LIMIT, ArchivistFailureCategory.CREDITS,
+            ArchivistFailureCategory.MODEL_UNAVAILABLE, ArchivistFailureCategory.CONFIG,
+            ArchivistFailureCategory.UNREADABLE, ArchivistFailureCategory.INVALID_RESULT,
+            ArchivistFailureCategory.UNKNOWN, ArchivistFailureCategory.SAVE_FAILED
+        )
+        val parts = order.filter { counts.containsKey(it) }.map {
+            getString(R.string.mem_arch_break_item, counts[it], getString(breakdownPhraseRes(it)))
+        }
+        return when {
+            parts.isEmpty() -> ""
+            parts.size == 1 -> parts[0]
+            else -> parts.dropLast(1).joinToString(", ") + " and " + parts.last()
+        }
+    }
+
+    /** Show the found-count line and the review link when a lorebook outcome
+     *  saved at least one suggestion. */
+    private fun showLoreCountAndView(found: Int) {
+        if (found > 0) {
+            linkViewPending?.text = getString(R.string.memory_assistant_view_lore_pending)
+            linkViewPending?.visibility = View.VISIBLE
+        }
+    }
+
+    private fun loreTertiaryColor(): Int =
+        MaterialColors.getColor(statusLabel!!, com.google.android.material.R.attr.colorTertiary)
+
     /** The shared provider-detail block for an archivist failure, with
      *  Function: Archiving. Null when the run did not fail against a provider. */
     private fun loreProviderBlock(o: Archivist.RunOutcome): String? {
@@ -629,22 +745,17 @@ class MemoryAssistantActivity : FragmentActivity() {
         )
     }
 
-    /** A Lorebook run that ended partially or was interrupted: show the
-     *  run-level label plus the approved count of suggestions that were filed,
-     *  offering a review link when any exist. Uses only approved and
-     *  content-type-agnostic wording. */
-    private fun showLorePartialOrInterrupted(labelRes: Int, found: Int) {
+    /** Associative run stopped/interrupted before finishing: the existing
+     *  saved-memory wording (Lorebook runs use their own approved states). */
+    private fun showAssociativeStopped(o: Archivist.RunOutcome) {
         showStatus(
-            getString(labelRes),
-            getString(R.string.memory_assistant_lore_found, found),
-            null,
+            getString(R.string.mem_arch_interrupted_label),
+            getString(R.string.mem_arch_interrupted_msg),
+            if (o.memoriesFound > 0) getString(R.string.mem_arch_interrupted_saved)
+            else getString(R.string.mem_arch_interrupted_none),
             getString(R.string.mem_arch_btn_try_again),
             MaterialColors.getColor(statusLabel!!, com.google.android.material.R.attr.colorTertiary)
         ) { startRun(null) }
-        if (found > 0) {
-            linkViewPending?.text = getString(R.string.memory_assistant_view_lore_pending)
-            linkViewPending?.visibility = View.VISIBLE
-        }
     }
 
     private fun showStatus(

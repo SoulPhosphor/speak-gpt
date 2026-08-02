@@ -127,7 +127,11 @@ object Archivist {
         /** The server's own error message, when captured. */
         val providerMessage: String? = null,
         /** The model the run used (Model line). */
-        val model: String? = null
+        val model: String? = null,
+        /** For a partial failure, how many failed conversations fell into each
+         *  ArchivistFailureCategory — the screen uses a specific title when they
+         *  all share one cause, or a mixed-cause breakdown otherwise. */
+        val failureCategoryCounts: Map<String, Int> = emptyMap()
     ) {
         val notConfigured: Boolean get() = outcome == "not_configured"
     }
@@ -598,6 +602,14 @@ object Archivist {
         val providerInfo = ProviderErrorInfo.parse(failureBody)
         val apiProviderName = endpoint.label.trim().ifBlank { null } ?: endpoint.host.trim().ifBlank { null }
         val runModel = model.trim().ifBlank { null } ?: endpoint.model.trim().ifBlank { null }
+        // Per-failed-conversation categories for the partial-failure surface:
+        // one specific title when every failed conversation shares a cause, or
+        // a mixed-cause breakdown otherwise (aligned lists — a reason and a
+        // classified result are recorded together for each failed conversation).
+        val failureCategoryCounts: Map<String, Int> =
+            failedReasons.zip(genResults)
+                .map { ArchivistFailureCategory.of(it.first, it.second) }
+                .groupingBy { it }.eachCount()
 
         // Record archivist provider failures to the SAME Provider Failure Log as
         // chat (owner ruling, Aug 1 2026) — when logging is on and the server
@@ -692,7 +704,8 @@ object Archivist {
             apiProvider = apiProviderName,
             upstreamProvider = providerInfo.providerName?.trim()?.ifBlank { null },
             providerMessage = providerInfo.message?.trim()?.ifBlank { null },
-            model = runModel
+            model = runModel,
+            failureCategoryCounts = failureCategoryCounts
         )
     }
 
