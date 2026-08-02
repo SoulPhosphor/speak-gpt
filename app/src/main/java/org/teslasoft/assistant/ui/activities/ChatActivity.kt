@@ -6115,7 +6115,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private fun finalizeLifecycleSuccess() {
         val r = currentLifecycle ?: return
         if (r.finalized) return
-        val n = ResponseLifecycle.classifyNormalCompletion(r.lastFinishReason)
+        val n = ResponseLifecycle.classifyNormalCompletion(r.lastFinishReason, r.receivedCharacters)
         writeLifecycle(r, n.outcome, n.finishReasonDisplay, n.streamClosed, n.termination, null)
     }
 

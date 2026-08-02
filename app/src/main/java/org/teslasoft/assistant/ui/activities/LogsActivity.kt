@@ -48,24 +48,27 @@ class LogsActivity : FragmentActivity() {
             "(?m)^(\\[\\d{4}-\\d{2}-\\d{2} \\d{1,2}:\\d{2}(?::\\d{2})?(?: [AP]M)?]) \\[DatabaseHealth]"
         )
 
-        /** A whole "Outcome: Incomplete" line in a Response Lifecycle entry —
-         *  the only line the owner wants in red, so a cut-off reply is easy to
-         *  spot. Stopped, Cancelled and Complete stay the default color, which
-         *  keeps them visually distinct from a failure. */
-        private val LIFECYCLE_INCOMPLETE = Regex("(?m)^Outcome: Incomplete$")
+        /** A whole "Outcome: Incomplete" or "Outcome: Empty" line in a Response
+         *  Lifecycle entry — the outcomes the owner wants in red, so a cut-off
+         *  or empty reply is easy to spot. Stopped, Cancelled and Complete stay
+         *  the default color, which keeps them visually distinct from a failure. */
+        private val LIFECYCLE_RED_OUTCOME = Regex("(?m)^Outcome: (?:Incomplete|Empty)$")
     }
 
     /**
-     * Response Lifecycle rendering: color every "Outcome: Incomplete" line red.
-     * Nothing else is recolored, so intentional Stopped/Cancelled outcomes and
-     * normal Complete outcomes remain plain and clearly not failures.
+     * Response Lifecycle rendering: color every "Outcome: Incomplete" and
+     * "Outcome: Empty" line red. Nothing else is recolored, so intentional
+     * Stopped/Cancelled outcomes and normal Complete outcomes remain plain and
+     * clearly not failures.
      */
     private fun renderLifecycleLog(raw: String): CharSequence {
-        if (raw.isEmpty() || !raw.contains("Outcome: Incomplete")) return raw
+        if (raw.isEmpty() ||
+            (!raw.contains("Outcome: Incomplete") && !raw.contains("Outcome: Empty"))
+        ) return raw
         return try {
             val spannable = android.text.SpannableString(raw)
             val red = androidx.core.content.res.ResourcesCompat.getColor(resources, R.color.light_red, theme)
-            for (match in LIFECYCLE_INCOMPLETE.findAll(raw)) {
+            for (match in LIFECYCLE_RED_OUTCOME.findAll(raw)) {
                 spannable.setSpan(
                     android.text.style.ForegroundColorSpan(red),
                     match.range.first, match.range.last + 1,

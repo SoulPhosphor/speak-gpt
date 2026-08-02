@@ -27,7 +27,7 @@ import org.junit.Test
 class ResponseLifecycleTest {
 
     @Test fun noFinishReasonIsIncompleteAndStreamClosed() {
-        val r = ResponseLifecycle.classifyNormalCompletion(null)
+        val r = ResponseLifecycle.classifyNormalCompletion(null, receivedCharacters = 100)
         // A stream that closed without a terminal finish reason is never treated
         // as complete just because text arrived.
         assertEquals(ResponseLifecycle.Outcome.INCOMPLETE, r.outcome)
@@ -37,7 +37,7 @@ class ResponseLifecycleTest {
     }
 
     @Test fun lengthIsIncompleteButProviderEndedTheStream() {
-        val r = ResponseLifecycle.classifyNormalCompletion("length")
+        val r = ResponseLifecycle.classifyNormalCompletion("length", receivedCharacters = 100)
         // Truncated by the token limit: the provider ended normally, but the
         // answer was cut off, so this is Incomplete (and shown in red).
         assertEquals(ResponseLifecycle.Outcome.INCOMPLETE, r.outcome)
@@ -46,16 +46,55 @@ class ResponseLifecycleTest {
         assertEquals(false, r.streamClosed)
     }
 
-    @Test fun stopIsComplete() {
-        val r = ResponseLifecycle.classifyNormalCompletion("stop")
+    @Test fun stopWithTextIsComplete() {
+        val r = ResponseLifecycle.classifyNormalCompletion("stop", receivedCharacters = 100)
         assertEquals(ResponseLifecycle.Outcome.COMPLETE, r.outcome)
         assertEquals(ResponseLifecycle.Termination.PROVIDER_DONE, r.termination)
         assertEquals("stop", r.finishReasonDisplay)
     }
 
-    @Test fun toolCallsTerminalIsComplete() {
-        val r = ResponseLifecycle.classifyNormalCompletion("tool_calls")
+    @Test fun toolCallsWithTextIsComplete() {
+        val r = ResponseLifecycle.classifyNormalCompletion("tool_calls", receivedCharacters = 100)
         assertEquals(ResponseLifecycle.Outcome.COMPLETE, r.outcome)
+    }
+
+    @Test fun emptyStopIsEmptyNotComplete() {
+        // The provider ended cleanly ("stop") but sent no visible text: the
+        // owner wants this called out as Empty, not Complete.
+        val r = ResponseLifecycle.classifyNormalCompletion("stop", receivedCharacters = 0)
+        assertEquals(ResponseLifecycle.Outcome.EMPTY, r.outcome)
+        assertEquals(ResponseLifecycle.Termination.PROVIDER_DONE, r.termination)
+        assertEquals("stop", r.finishReasonDisplay)
+    }
+
+    @Test fun emptyClosedStreamIsEmpty() {
+        // No text AND no finish reason: still Empty (the headline), with the
+        // stream-closed detail preserved in the termination source.
+        val r = ResponseLifecycle.classifyNormalCompletion(null, receivedCharacters = 0)
+        assertEquals(ResponseLifecycle.Outcome.EMPTY, r.outcome)
+        assertEquals(ResponseLifecycle.Termination.STREAM_CLOSED, r.termination)
+        assertTrue(r.streamClosed)
+    }
+
+    @Test fun toolCallWithNoTextIsNotEmpty() {
+        // A tool-call handoff legitimately has no visible text — never Empty.
+        val r = ResponseLifecycle.classifyNormalCompletion("tool_calls", receivedCharacters = 0)
+        assertEquals(ResponseLifecycle.Outcome.COMPLETE, r.outcome)
+    }
+
+    @Test fun emptyOutcomeLineIsRed() {
+        val body = ResponseLifecycle.format(
+            turnId = "T3-1", phase = ResponseLifecycle.PHASE_PRIMARY,
+            provider = "openrouter.ai", model = "LongCat",
+            outcome = ResponseLifecycle.Outcome.EMPTY, finishReasonDisplay = "stop",
+            streamClosed = false, termination = ResponseLifecycle.Termination.PROVIDER_DONE,
+            requestedMaxOutput = 8000, promptTokens = 30, completionTokens = 0,
+            totalTokens = 30, receivedCharacters = 0, durationMs = 600,
+            generationId = "gen-empty", errorText = null
+        )
+        // The viewer reds any whole line matching ^Outcome: (Incomplete|Empty)$.
+        assertTrue(body.contains("Outcome: Empty"))
+        assertTrue(Regex("(?m)^Outcome: (?:Incomplete|Empty)$").containsMatchIn(body))
     }
 
     @Test fun incompleteLineMatchesTheRedRenderExactly() {

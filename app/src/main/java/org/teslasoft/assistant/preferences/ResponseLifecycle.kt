@@ -59,10 +59,14 @@ object ResponseLifecycle {
     const val NOT_REPORTED = "not reported"
     const val NONE_REPORTED = "none reported"
 
-    /** The four terminal outcomes. Only [INCOMPLETE] is shown in red. */
+    /** The terminal outcomes. [INCOMPLETE] and [EMPTY] are shown in red. */
     enum class Outcome(val display: String) {
         COMPLETE("Complete"),
         INCOMPLETE("Incomplete"),
+        // The stream ended on its own but delivered no visible text at all —
+        // the provider returned nothing. Its own outcome (not Complete or
+        // Incomplete) so an empty answer is unmistakable, and shown in red.
+        EMPTY("Empty"),
         STOPPED("Stopped"),
         CANCELLED("Cancelled")
     }
@@ -86,6 +90,10 @@ object ResponseLifecycle {
      * by the caller from the failure it caught and are passed to [format]
      * directly.
      *
+     *  - no visible text at all -> Empty: the provider returned nothing. This
+     *    wins over every finish reason below (a "stop" that delivered zero
+     *    characters is still an empty answer), EXCEPT a tool-call handoff,
+     *    which legitimately has no text and is not an empty reply.
      *  - no finish reason seen  -> Incomplete, the stream just closed. The reply
      *    is NOT treated as complete merely because text arrived or the callback
      *    ended.
@@ -100,9 +108,18 @@ object ResponseLifecycle {
         val streamClosed: Boolean
     )
 
-    fun classifyNormalCompletion(lastFinishReason: String?): NormalResult {
+    fun classifyNormalCompletion(lastFinishReason: String?, receivedCharacters: Int): NormalResult {
         val fr = lastFinishReason?.trim()?.ifBlank { null }
+        // A tool-call finish carries no visible text on purpose (the model
+        // called a tool instead of answering), so it is never "empty".
+        val isToolCallFinish = fr != null && fr.equals("tool_calls", ignoreCase = true)
         return when {
+            receivedCharacters <= 0 && !isToolCallFinish -> {
+                // Nothing reached the user. The termination source still records
+                // whether the provider ended cleanly or the stream just closed.
+                val termination = if (fr == null) Termination.STREAM_CLOSED else Termination.PROVIDER_DONE
+                NormalResult(Outcome.EMPTY, termination, fr ?: "missing", streamClosed = fr == null)
+            }
             fr == null -> NormalResult(Outcome.INCOMPLETE, Termination.STREAM_CLOSED, "missing", streamClosed = true)
             fr.equals("length", ignoreCase = true) ->
                 NormalResult(Outcome.INCOMPLETE, Termination.PROVIDER_DONE, fr, streamClosed = false)
