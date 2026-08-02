@@ -28,9 +28,23 @@ import com.google.gson.JsonObject
  * instead of failing the whole list. Only a response with no readable
  * endpoints array at all counts as a parse failure (null return).
  */
+/**
+ * A parsed provider-discovery response.
+ *
+ * [authoritative] is true only when the response is a single, complete,
+ * unpaginated list — the ONLY state in which a saved provider's absence may
+ * be treated as "Unavailable" (owner rule, Aug 2 2026). Any pagination or
+ * truncation signal, or an empty list, leaves availability unknown: saved
+ * selections must then be preserved unchanged and nothing labeled.
+ */
+data class ProviderDiscoveryResult(
+    val endpoints: List<ProviderEndpointInfo>,
+    val authoritative: Boolean
+)
+
 object ProviderEndpointsParser {
 
-    fun parse(body: String): List<ProviderEndpointInfo>? {
+    fun parse(body: String): ProviderDiscoveryResult? {
         val root = try {
             Gson().fromJson(body, JsonObject::class.java)
         } catch (_: Exception) {
@@ -44,7 +58,7 @@ object ProviderEndpointsParser {
             ?.takeIf { it.isJsonArray }?.asJsonArray
             ?: return null
 
-        return endpoints.mapNotNull { el ->
+        val list = endpoints.mapNotNull { el ->
             if (!el.isJsonObject) return@mapNotNull null
             val obj = el.asJsonObject
 
@@ -84,6 +98,30 @@ object ProviderEndpointsParser {
                 zdr = bool(obj, "is_zdr") ?: bool(obj, "zdr")
             )
         }
+        return ProviderDiscoveryResult(list, isCompleteResult(root, data, list))
+    }
+
+    /**
+     * Completeness check for the authoritative flag. A successful HTTP
+     * response is not proof of a complete list: any pagination/truncation
+     * marker at the root or data level (has_more=true, a non-null
+     * next/next_page/next_cursor/cursor, page/total_pages/pagination
+     * metadata, or a links.next) — or an empty list, which cannot confirm
+     * any absence — makes the result non-authoritative.
+     */
+    private fun isCompleteResult(root: JsonObject, data: JsonObject?, list: List<ProviderEndpointInfo>): Boolean {
+        if (list.isEmpty()) return false
+        for (obj in listOfNotNull(root, data)) {
+            if (bool(obj, "has_more") == true) return false
+            for (key in arrayOf("next", "next_page", "next_cursor", "cursor", "pagination", "page", "total_pages")) {
+                val el = obj.get(key)
+                if (el != null && !el.isJsonNull) return false
+            }
+            val links = obj.get("links")?.takeIf { it.isJsonObject }?.asJsonObject
+            val next = links?.get("next")
+            if (next != null && !next.isJsonNull) return false
+        }
+        return true
     }
 
     /**

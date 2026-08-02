@@ -187,11 +187,19 @@ class ChooseProviderActivity : FragmentActivity() {
                 showProviderError(message)
                 return
             }
-            providerEndpoints = parsed
-            availableSlugs = parsed.map { it.slug.lowercase() }.toSet()
+            providerEndpoints = parsed.endpoints
+            // A saved provider may be marked Unavailable ONLY on a complete,
+            // authoritative list. A partial/paginated/truncated/empty result
+            // leaves availability unknown: no labels, no warning, every saved
+            // selection preserved untouched.
+            availableSlugs = if (parsed.authoritative) {
+                parsed.endpoints.map { it.slug.lowercase() }.toSet()
+            } else {
+                null
+            }
             // Names of currently served providers; saved-but-absent providers
             // keep whatever name was stored (their slug when none is known).
-            parsed.forEach { displayNames[it.slug] = it.providerName }
+            parsed.endpoints.forEach { displayNames[it.slug] = it.providerName }
             renderChart()
             updateOrderBox()
             startZdrFetch()
@@ -858,8 +866,11 @@ class ChooseProviderActivity : FragmentActivity() {
      * Save validation (owner plan, Aug 2 2026):
      * - Only mode requires one currently AVAILABLE provider — no selection or
      *   an unavailable selection blocks Save. Only is never silently treated
-     *   as Automatic. This same validation must be repeated at request time
-     *   when routing is wired, so stale saved data cannot bypass it.
+     *   as Automatic. Save-time validation is NOT sufficient on its own:
+     *   request wiring must independently route every outgoing request's
+     *   provider preferences through ProviderRoutingEnforcer.decide with the
+     *   freshest authoritative discovery data, so stale saved data cannot
+     *   bypass these rules.
      * - Preferred mode with every listed provider unavailable blocks Save when
      *   Allow Other Providers if Preferred Fail is off (no permitted provider);
      *   with fallbacks on, saving proceeds and automatic fallback applies.
@@ -881,7 +892,13 @@ class ChooseProviderActivity : FragmentActivity() {
             orderList.all { isUnavailable(it) } &&
             switchAllowFallbacks?.isChecked == false
         ) {
-            showNoticeDialog(getString(R.string.provider_only_mode_error))
+            // Distinct from the Only-mode message: names the exact problem and
+            // includes enabling fallbacks as a valid fix (owner wording).
+            MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+                .setTitle(R.string.provider_no_preferred_title)
+                .setMessage(R.string.provider_no_preferred_message)
+                .setPositiveButton(R.string.okay) { _, _ -> }
+                .show()
             return
         }
 

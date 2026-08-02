@@ -59,7 +59,7 @@ class ProviderEndpointsParserTest {
 
     @Test
     fun parsesFullEndpointFields() {
-        val list = ProviderEndpointsParser.parse(fullBody)!!
+        val list = ProviderEndpointsParser.parse(fullBody)!!.endpoints
         assertEquals(2, list.size)
 
         val openai = list[0]
@@ -76,7 +76,7 @@ class ProviderEndpointsParserTest {
 
     @Test
     fun latencyAndThroughputReadP50FromPercentileObjects() {
-        val openai = ProviderEndpointsParser.parse(fullBody)!![0]
+        val openai = ProviderEndpointsParser.parse(fullBody)!!.endpoints[0]
         assertEquals(0.45, openai.latency!!, 1e-9)
         assertEquals(55.3, openai.throughput!!, 1e-9)
     }
@@ -84,12 +84,12 @@ class ProviderEndpointsParserTest {
     @Test
     fun plainNumberStatsAreStillAccepted() {
         val body = """{"data":{"endpoints":[{"provider_name":"Flat","latency_last_30m":0.7}]}}"""
-        assertEquals(0.7, ProviderEndpointsParser.parse(body)!![0].latency!!, 1e-9)
+        assertEquals(0.7, ProviderEndpointsParser.parse(body)!!.endpoints[0].latency!!, 1e-9)
     }
 
     @Test
     fun cachingComesOnlyFromTheExplicitField() {
-        val list = ProviderEndpointsParser.parse(fullBody)!!
+        val list = ProviderEndpointsParser.parse(fullBody)!!.endpoints
         // DeepInfra has pricing but no supports_implicit_caching → unknown,
         // NOT inferred from the absence of cache pricing.
         assertNull(list[1].supportsCaching)
@@ -97,7 +97,7 @@ class ProviderEndpointsParserTest {
 
     @Test
     fun missingOptionalFieldsBecomeUnknown() {
-        val deepinfra = ProviderEndpointsParser.parse(fullBody)!![1]
+        val deepinfra = ProviderEndpointsParser.parse(fullBody)!!.endpoints[1]
         assertEquals("fp8", deepinfra.quantization)
         // Parameter list present without "tools" → known false, not unknown.
         assertFalse(deepinfra.supportsTools!!)
@@ -110,7 +110,7 @@ class ProviderEndpointsParserTest {
     @Test
     fun endpointWithoutParameterListHasUnknownToolSupport() {
         val body = """{"data":{"endpoints":[{"provider_name":"Mystery"}]}}"""
-        val list = ProviderEndpointsParser.parse(body)!!
+        val list = ProviderEndpointsParser.parse(body)!!.endpoints
         assertEquals(1, list.size)
         assertNull(list[0].supportsTools)
         assertNull(list[0].supportsCaching)
@@ -128,8 +128,38 @@ class ProviderEndpointsParserTest {
 
     @Test
     fun emptyEndpointsArrayIsAnEmptyListNotAFailure() {
-        val list = ProviderEndpointsParser.parse("""{"data":{"endpoints":[]}}""")
-        assertEquals(0, list!!.size)
+        val result = ProviderEndpointsParser.parse("""{"data":{"endpoints":[]}}""")!!
+        assertEquals(0, result.endpoints.size)
+        // ...but an empty list can never confirm an absence.
+        assertFalse(result.authoritative)
+    }
+
+    /* ------------------------------ completeness ------------------------------ */
+
+    @Test
+    fun completeUnpaginatedResponsesAreAuthoritative() {
+        assertTrue(ProviderEndpointsParser.parse(fullBody)!!.authoritative)
+    }
+
+    @Test
+    fun paginationSignalsMakeTheResultNonAuthoritative() {
+        val hasMore = """{"has_more":true,"data":{"endpoints":[{"provider_name":"A"}]}}"""
+        assertFalse(ProviderEndpointsParser.parse(hasMore)!!.authoritative)
+
+        val nextCursor = """{"data":{"endpoints":[{"provider_name":"A"}],"next_cursor":"abc"}}"""
+        assertFalse(ProviderEndpointsParser.parse(nextCursor)!!.authoritative)
+
+        val paged = """{"page":1,"total_pages":3,"data":{"endpoints":[{"provider_name":"A"}]}}"""
+        assertFalse(ProviderEndpointsParser.parse(paged)!!.authoritative)
+
+        val links = """{"links":{"next":"https://x/page2"},"data":{"endpoints":[{"provider_name":"A"}]}}"""
+        assertFalse(ProviderEndpointsParser.parse(links)!!.authoritative)
+    }
+
+    @Test
+    fun explicitNullNextDoesNotDisqualifyCompleteness() {
+        val body = """{"data":{"endpoints":[{"provider_name":"A"}],"next":null}}"""
+        assertTrue(ProviderEndpointsParser.parse(body)!!.authoritative)
     }
 
     /* ------------------------------ ZDR list ------------------------------ */

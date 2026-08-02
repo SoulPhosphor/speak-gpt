@@ -409,6 +409,8 @@
     <string name="provider_unavailable">Unavailable</string>
     <string name="provider_unavailable_warning">One or more saved providers are no longer available for this model.</string>
     <string name="provider_only_mode_error">Choose an available provider or change the routing mode.</string>
+    <string name="provider_no_preferred_title">No Available Preferred Providers</string>
+    <string name="provider_no_preferred_message">None of the selected preferred providers are currently available. Choose an available provider, allow fallbacks, or change the routing mode.</string>
     <string name="provider_ignore_desc">Ignore %1$s</string>
     <string name="provider_remove_desc">Remove %1$s</string>
     <string name="provider_filter_quant_any">Any</string>
