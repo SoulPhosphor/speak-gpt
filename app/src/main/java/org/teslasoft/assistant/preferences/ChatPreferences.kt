@@ -265,6 +265,13 @@ class ChatPreferences private constructor() {
                 } else {
                     chat["first_message"] = "No messages yet."
                 }
+
+                // Mark chats whose only reply so far failed so the row shows
+                // the error avatar instead of the Companion picture/glyph.
+                // Computed here (this loop already parses each chat's history)
+                // so the list read carries it with no extra store parse.
+                chat["no_good_reply"] =
+                    if (MessageCompletionState.chatShowsErrorAvatar(messagesList)) "true" else "false"
             }
         }
 

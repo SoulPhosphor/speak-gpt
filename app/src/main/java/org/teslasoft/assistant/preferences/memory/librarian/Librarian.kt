@@ -67,6 +67,9 @@ class Librarian private constructor(private val appContext: Context) {
          *  boost, so it breaks ties without overwhelming relevance. */
         private const val TITLE_HIT_BONUS = 0.05
 
+        /** How many lore-overlap vectors to keep cached across turns. */
+        private const val LORE_VECTOR_CACHE_MAX = 256
+
         /** Whole word tokens of [text], lowercased. Pure. */
         fun lexicalTokens(text: String): Set<String> =
             text.lowercase().split(TOKEN_BOUNDARY).filter { it.isNotEmpty() }.toSet()
@@ -208,12 +211,14 @@ class Librarian private constructor(private val appContext: Context) {
             embedQuery: () -> FloatArray?,
             corpus: List<CorpusMemory>,
             weights: Weights,
-            topK: Int
+            topK: Int,
+            onSemantic: ((Boolean) -> Unit)? = null
         ): List<ScoredMemory> {
             if (corpus.isEmpty()) return emptyList()
             if (corpus.all { it.vector != null }) {
                 val queryVec = embedQuery()
                 if (queryVec != null) {
+                    onSemantic?.invoke(true)
                     return rank(
                         queryVec,
                         corpus.map { Candidate(it.memory, it.vector!!, it.recency, it.boost) },
@@ -221,6 +226,7 @@ class Librarian private constructor(private val appContext: Context) {
                     )
                 }
             }
+            onSemantic?.invoke(false)
             return rankLexical(
                 query,
                 corpus.map { LexicalCandidate(it.memory, it.tags, it.recency, it.boost, it.aliases) },
@@ -245,6 +251,19 @@ class Librarian private constructor(private val appContext: Context) {
     }
 
     data class Weights(val similarity: Double, val importance: Double, val recency: Double)
+
+    /** What one [search] turn actually did, for the debug view (counterplan
+     *  Step 1.4 — truthful per-source diagnostics). [eligible] candidates
+     *  passed the store's scope gates; [withVector] of them had a current
+     *  vector; [semantic] is whether semantic ranking ran (false = the
+     *  complete-set lexical fallback, because a model was missing or the
+     *  index was incomplete). */
+    data class RetrievalDiagnostics(
+        val eligible: Int,
+        val withVector: Int,
+        val semantic: Boolean,
+        val hasModel: Boolean
+    )
 
     /** One ranked candidate: the memory, its stored vector, a 0..1 recency
      *  (1 = newest), and the precomputed context boost ([retrievalBoost]). */
@@ -282,6 +301,37 @@ class Librarian private constructor(private val appContext: Context) {
 
     @Volatile private var model: EmbeddingModel? = null
     @Volatile private var modelLoadFailed = false
+
+    // The ONNX model is not thread-safe (OnnxEmbeddingModel: "the Librarian
+    // serializes embed calls"). Every embed — query, reindex, rebuild, lore
+    // overlap, and the background repair below — passes through [embedLocked]
+    // so at most one inference runs at a time. Locking per call, not per batch,
+    // lets a live turn's query embed interleave between a repair's items.
+    private val embedLock = Any()
+
+    private fun embedLocked(m: EmbeddingModel, text: String, isQuery: Boolean): FloatArray =
+        synchronized(embedLock) { m.embed(text, isQuery) }
+
+    // Lore-overlap vectors cached by content + model tag so the same authored
+    // lore note is not re-embedded every turn (counterplan Step 1.4). The key
+    // carries the model tag and the full note text, so an edit (new text) or a
+    // model change (new tag) simply misses; [invalidateModel] clears it on a
+    // model swap. Bounded LRU, guarded by its own lock.
+    private val loreCacheLock = Any()
+    private val loreVectorCache = object : LinkedHashMap<String, FloatArray>(64, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, FloatArray>?): Boolean =
+            size > LORE_VECTOR_CACHE_MAX
+    }
+
+    // Single-flight background missing-vector repair (counterplan Step 1.4 —
+    // "self-repairing search"). Low priority so a live turn's own embed is
+    // never starved; the guard collapses a burst of "index incomplete" turns
+    // into one running pass.
+    private val repairInFlight = java.util.concurrent.atomic.AtomicBoolean(false)
+    private val repairExecutor: java.util.concurrent.ExecutorService =
+        java.util.concurrent.Executors.newSingleThreadExecutor { r ->
+            Thread(r, "memory-vector-repair").apply { isDaemon = true; priority = Thread.MIN_PRIORITY }
+        }
 
     /** The active model's sidecar tag, or null when none is usable. */
     fun activeTag(): String? = EmbeddingModelStorage.activeModel(appContext)?.embeddingTag
@@ -332,11 +382,31 @@ class Librarian private constructor(private val appContext: Context) {
     fun embedOrNull(text: String, isQuery: Boolean): FloatArray? {
         val m = ensureModel() ?: return null
         return try {
-            m.embed(text, isQuery)
+            embedLocked(m, text, isQuery)
         } catch (t: Throwable) {
             MemoryLog.log(appContext, "Librarian", "error", "Embed failed: ${t.message}")
             null
         }
+    }
+
+    /**
+     * Embed a lore-overlap text, reusing a cached vector for the same note and
+     * model tag rather than re-embedding it every turn (counterplan Step 1.4).
+     * Null when no model is usable or inference fails — the enforcer then falls
+     * back to deterministic word-overlap. Serialized like every other embed.
+     */
+    fun embedLoreCached(text: String): FloatArray? {
+        val m = ensureModel() ?: return null
+        val key = m.tag + " " + text
+        synchronized(loreCacheLock) { loreVectorCache[key]?.let { return it } }
+        val vec = try {
+            embedLocked(m, text, false)
+        } catch (t: Throwable) {
+            MemoryLog.log(appContext, "Librarian", "error", "Lore embed failed: ${t.message}")
+            return null
+        }
+        synchronized(loreCacheLock) { loreVectorCache[key] = vec }
+        return vec
     }
 
     /**
@@ -355,7 +425,7 @@ class Librarian private constructor(private val appContext: Context) {
             val doc = RetrievalDocument.semanticDocument(
                 mem.title, mem.content, mem.embeddingText, parseTags(mem.tagsJson)
             )
-            val vec = m.embed(doc, isQuery = false)
+            val vec = embedLocked(m, doc, false)
             store.upsertEmbedding(memoryId, RetrievalDocument.effectiveKey(m.tag), VectorMath.toBlob(vec))
         } catch (t: Throwable) {
             MemoryLog.log(appContext, "Librarian", "error", "Reindex of $memoryId failed: ${t.message}")
@@ -368,6 +438,7 @@ class Librarian private constructor(private val appContext: Context) {
         try { model?.close() } catch (_: Throwable) { }
         model = null
         modelLoadFailed = false
+        synchronized(loreCacheLock) { loreVectorCache.clear() }
     }
 
     /** Stored scoring weights, bounded (counterplan §5.5): a non-finite,
@@ -401,7 +472,8 @@ class Librarian private constructor(private val appContext: Context) {
         scope: RetrievalScope,
         query: String,
         topK: Int,
-        selectedProjectId: String? = null
+        selectedProjectId: String? = null,
+        diag: ((RetrievalDiagnostics) -> Unit)? = null
     ): List<ScoredMemory> {
         if (!MemoryStore.isProvisioned(appContext)) return emptyList()
         val store = MemoryStore.getInstance(appContext)
@@ -425,19 +497,27 @@ class Librarian private constructor(private val appContext: Context) {
         var vectors: Map<String, ByteArray> = emptyMap()
         if (m != null) {
             try {
-                vectors = store.activeEmbeddings(RetrievalDocument.effectiveKey(m.tag))
+                // Scoped load (counterplan Step 1.4): read only the eligible
+                // candidates' vectors, not every active vector in the library.
+                vectors = store.embeddingsForMemories(
+                    candidates.map { it.memoryId }, RetrievalDocument.effectiveKey(m.tag)
+                )
                 val missing = candidates.count { !vectors.containsKey(it.memoryId) }
                 if (missing > 0) {
                     MemoryLog.log(
                         appContext, "Librarian", "info",
                         "Vector index incomplete — $missing of ${candidates.size} eligible memories lack a current ${RetrievalDocument.effectiveKey(m.tag)} vector; lexical retrieval over the complete set this turn"
                     )
+                    // Self-repairing search: fill the gaps in the background so
+                    // later turns can use semantic ranking again.
+                    requestMissingVectorRepair()
                 }
             } catch (t: Throwable) {
                 vectors = emptyMap()
                 MemoryLog.log(appContext, "Librarian", "error", "Vector load failed, using lexical fallback: ${t.message}")
             }
         }
+        val withVector = candidates.count { vectors.containsKey(it.memoryId) }
         val corpus = candidates.map { mem ->
             CorpusMemory(
                 memory = mem,
@@ -460,7 +540,17 @@ class Librarian private constructor(private val appContext: Context) {
                 null
             }
         }
-        return searchCore(query, embedQuery, corpus, weights(store), topK)
+        val result = searchCore(query, embedQuery, corpus, weights(store), topK) { semantic ->
+            diag?.invoke(
+                RetrievalDiagnostics(
+                    eligible = candidates.size,
+                    withVector = withVector,
+                    semantic = semantic,
+                    hasModel = m != null
+                )
+            )
+        }
+        return result
     }
 
     /** tags_json -> list; a garbled column degrades to "no tags", never an error. */
@@ -489,7 +579,7 @@ class Librarian private constructor(private val appContext: Context) {
                 val doc = RetrievalDocument.semanticDocument(
                     mem.title, mem.content, mem.embeddingText, parseTags(mem.tagsJson)
                 )
-                val vec = m.embed(doc, isQuery = false)
+                val vec = embedLocked(m, doc, false)
                 store.upsertEmbedding(mem.memoryId, key, VectorMath.toBlob(vec))
             } catch (t: Throwable) {
                 MemoryLog.log(appContext, "Librarian", "error", "Embed failed for ${mem.memoryId}: ${t.message}")
@@ -499,6 +589,69 @@ class Librarian private constructor(private val appContext: Context) {
         }
         store.setMeta(MemoryStore.META_INDEX_MODEL_TAG, key)
         return done
+    }
+
+    /**
+     * Ask the background repair to fill any missing current-model vectors
+     * (counterplan Step 1.4 — self-repairing search). Fire-and-forget and
+     * single-flight: a no-op when unprovisioned, when no model is installed,
+     * or when a pass is already running, so a burst of incomplete-index turns
+     * schedules one pass, not one per turn. Safe to call from a retrieval turn
+     * — the work runs off the caller's thread.
+     */
+    fun requestMissingVectorRepair() {
+        if (!MemoryStore.isProvisioned(appContext)) return
+        if (activeTag() == null) return
+        if (!repairInFlight.compareAndSet(false, true)) return
+        try {
+            repairExecutor.execute {
+                try { repairMissingVectors() } finally { repairInFlight.set(false) }
+            }
+        } catch (t: Throwable) {
+            // Executor rejected (e.g. shutdown) — release the guard so a later
+            // turn can try again.
+            repairInFlight.set(false)
+            MemoryLog.log(appContext, "Librarian", "error", "Could not schedule missing-vector repair: ${t.message}")
+        }
+    }
+
+    /**
+     * Re-embed every active memory that lacks a current-model vector. The
+     * inventory is read fresh from the store (a derived queue, never a stored
+     * list that could drift). Best-effort per memory: one failure is logged and
+     * skipped, not fatal. Does not stamp the index-model meta — a full model
+     * switch remains [rebuildIndex]'s job, which also drops the old vectors.
+     */
+    private fun repairMissingVectors() {
+        val m = ensureModel() ?: return
+        val key = RetrievalDocument.effectiveKey(m.tag)
+        val store = MemoryStore.getInstance(appContext)
+        val pending = try {
+            store.activeMemoriesMissingEmbedding(key)
+        } catch (t: Throwable) {
+            MemoryLog.log(appContext, "Librarian", "error", "Missing-vector repair could not read the inventory: ${t.message}")
+            return
+        }
+        if (pending.isEmpty()) return
+        var repaired = 0
+        for (mem in pending) {
+            try {
+                val doc = RetrievalDocument.semanticDocument(
+                    mem.title, mem.content, mem.embeddingText, parseTags(mem.tagsJson)
+                )
+                val vec = embedLocked(m, doc, false)
+                store.upsertEmbedding(mem.memoryId, key, VectorMath.toBlob(vec))
+                repaired++
+            } catch (t: Throwable) {
+                MemoryLog.log(appContext, "Librarian", "error", "Missing-vector repair failed for ${mem.memoryId}: ${t.message}")
+            }
+        }
+        if (repaired > 0) {
+            MemoryLog.log(
+                appContext, "Librarian", "info",
+                "Missing-vector repair re-embedded $repaired memory vector(s) for $key"
+            )
+        }
     }
 
     /** True when the installed model's tag or the retrieval document version

@@ -8,6 +8,9 @@
         <item name="colorAccent">@color/accent_900</item>
         <item name="appRowTitleColor">@color/text</item>
         <item name="appRowSubtitleColor">@color/text_subtitle</item>
+        <item name="appTextColor">@color/text</item>
+        <item name="appSubtleTextColor">@color/text_subtitle</item>
+        <item name="appTitleTextColor">@color/text_title</item>
         <item name="android:windowContentTransitions">true</item>
         <item name="android:statusBarColor">@color/window_background</item>
         <item name="android:windowLightStatusBar">true</item>
@@ -184,7 +187,7 @@
         <item name="android:layout_weight">1</item>
         <item name="android:maxLines">1</item>
         <item name="android:ellipsize">middle</item>
-        <item name="android:textColor">@color/text</item>
+        <item name="android:textColor">?attr/appTextColor</item>
         <item name="android:textSize">14sp</item>
     </style>
 
@@ -195,7 +198,7 @@
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_marginStart">8dp</item>
         <item name="android:maxLines">1</item>
-        <item name="android:textColor">@color/text_subtitle</item>
+        <item name="android:textColor">?attr/appSubtleTextColor</item>
         <item name="android:textSize">12sp</item>
     </style>
 
@@ -215,7 +218,7 @@
         <item name="android:paddingStart">46dp</item>
         <item name="android:paddingEnd">12dp</item>
         <item name="android:paddingBottom">6dp</item>
-        <item name="android:textColor">@color/text_subtitle</item>
+        <item name="android:textColor">?attr/appSubtleTextColor</item>
         <item name="android:textSize">13sp</item>
     </style>
 
@@ -423,7 +426,7 @@
     <style name="Widget.App.ActionBar.Title" parent="">
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">wrap_content</item>
-        <item name="android:textColor">@color/text_title</item>
+        <item name="android:textColor">?attr/appTitleTextColor</item>
         <item name="android:textSize">24sp</item>
         <item name="android:textStyle">bold</item>
         <item name="layout_constraintBottom_toBottomOf">parent</item>
@@ -451,7 +454,7 @@
         <item name="android:layout_marginStart">8dp</item>
         <item name="android:ellipsize">end</item>
         <item name="android:maxLines">1</item>
-        <item name="android:textColor">@color/text_title</item>
+        <item name="android:textColor">?attr/appTitleTextColor</item>
         <item name="android:textSize">24sp</item>
         <item name="android:textStyle">bold</item>
         <item name="layout_constraintBottom_toBottomOf">parent</item>
@@ -488,6 +491,33 @@
         <item name="android:background">@drawable/btn_accent_icon_large_100</item>
         <item name="layout_constraintBottom_toBottomOf">parent</item>
         <item name="layout_constraintEnd_toEndOf">parent</item>
+        <item name="layout_constraintTop_toTopOf">parent</item>
+    </style>
+
+    <!-- ADDITIONAL trailing header icons (owner approval, July 30 2026): any
+         header icon that sits BEFORE the end-anchored SecondaryButton. Same
+         geometry/background as SecondaryButton, but with NO end anchor baked
+         in — each instance sets app:layout_constraintEnd_toStartOf pointing
+         at its right-hand neighbor (each screen's neighbor id differs, same
+         reason Title.NearBack leaves its end anchor to the instance). NOT a
+         child of SecondaryButton: a view can't cleanly carry both an
+         inherited layout_constraintEnd_toEndOf and an added
+         layout_constraintEnd_toStartOf (both would apply — ambiguous), the
+         same conflict documented on the Title variants above, so the shared
+         items are duplicated rather than inherited.
+         android:src/contentDescription/tooltipText/visibility stay on the
+         instance. This closes the "two or more trailing icons" gap that had
+         Edit Companion/Edit Persona/API Endpoint Editor/Edit Activation
+         Prompt/Edit System Prompt/Lorebook Entries hand-copying this
+         geometry. -->
+    <style name="Widget.App.ActionBar.ChainedButton" parent="">
+        <item name="android:layout_width">48dp</item>
+        <item name="android:layout_height">48dp</item>
+        <item name="android:layout_marginEnd">8dp</item>
+        <item name="android:layout_marginTop">8dp</item>
+        <item name="android:layout_marginBottom">8dp</item>
+        <item name="android:background">@drawable/btn_accent_icon_large_100</item>
+        <item name="layout_constraintBottom_toBottomOf">parent</item>
         <item name="layout_constraintTop_toTopOf">parent</item>
     </style>
 
@@ -552,7 +582,7 @@
         <item name="android:layout_marginEnd">8dp</item>
         <item name="android:ellipsize">end</item>
         <item name="android:maxLines">1</item>
-        <item name="android:textColor">@color/text_title</item>
+        <item name="android:textColor">?attr/appTitleTextColor</item>
         <item name="android:textSize">20sp</item>
         <item name="android:textStyle">bold</item>
         <item name="layout_constraintBottom_toBottomOf">parent</item>
@@ -594,7 +624,7 @@
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_marginTop">2dp</item>
-        <item name="android:textColor">@color/text_subtitle</item>
+        <item name="android:textColor">?attr/appSubtleTextColor</item>
         <item name="android:textSize">13sp</item>
     </style>
 
@@ -630,7 +660,7 @@
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:paddingTop">8dp</item>
-        <item name="android:textColor">@color/text_subtitle</item>
+        <item name="android:textColor">?attr/appSubtleTextColor</item>
         <item name="android:textSize">13sp</item>
     </style>
 
@@ -643,7 +673,7 @@
     <style name="Widget.App.Screen.Intro" parent="">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
-        <item name="android:textColor">@color/text_title</item>
+        <item name="android:textColor">?attr/appTitleTextColor</item>
         <item name="android:textSize">14sp</item>
     </style>
 
@@ -677,13 +707,13 @@
         <item name="android:clickable">true</item>
         <item name="android:focusable">true</item>
         <item name="android:drawableEnd">@drawable/ic_arrow_drop_down</item>
-        <item name="android:drawableTint">@color/text</item>
+        <item name="android:drawableTint">?attr/appTextColor</item>
         <item name="android:drawablePadding">2dp</item>
         <item name="android:ellipsize">end</item>
         <item name="android:maxLines">1</item>
         <item name="android:paddingVertical">6dp</item>
         <item name="android:paddingStart">4dp</item>
-        <item name="android:textColor">@color/text</item>
+        <item name="android:textColor">?attr/appTextColor</item>
     </style>
 
     <!-- Trailing edit button: opens that category's manager screen. -->
@@ -733,13 +763,70 @@
         <item name="android:clickable">true</item>
         <item name="android:focusable">true</item>
         <item name="android:drawableEnd">@drawable/ic_arrow_drop_down</item>
-        <item name="android:drawableTint">@color/text</item>
+        <item name="android:drawableTint">?attr/appTextColor</item>
         <item name="android:drawablePadding">2dp</item>
         <item name="android:ellipsize">end</item>
         <item name="android:maxLines">1</item>
         <item name="android:paddingVertical">6dp</item>
         <item name="android:paddingStart">4dp</item>
-        <item name="android:textColor">@color/text</item>
+        <item name="android:textColor">?attr/appTextColor</item>
+    </style>
+
+    <!-- Provider chart (Choose Provider screen, owner spec Aug 2 2026): a
+         horizontally scrollable table of provider endpoints. One Chart.Row per
+         provider (and one for the header), cells sized by the column table in
+         ChooseProviderActivity; HeaderCell/Cell carry the shared typography.
+         All colors resolve through theme attributes (appTextColor here;
+         the Ignore control uses appSubtleTextColor / colorError / colorOnError
+         via its drawables and runtime tints) so future palettes restyle the
+         whole chart without touching layouts or code. -->
+    <style name="Widget.App.Chart.Row" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:orientation">horizontal</item>
+    </style>
+
+    <style name="Widget.App.Chart.HeaderCell" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:ellipsize">end</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:paddingEnd">8dp</item>
+        <item name="android:textColor">?attr/appTextColor</item>
+        <item name="android:textSize">13sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="Widget.App.Chart.Cell" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:ellipsize">end</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:paddingEnd">8dp</item>
+        <item name="android:textColor">?attr/appTextColor</item>
+        <item name="android:textSize">13sp</item>
+    </style>
+
+    <!-- Plain full-row checkbox option (owner spec, Aug 2 2026 — the provider
+         Filters panel's Tool Support / Implicit Caching / Zero Data Retention
+         lines): the whole row toggles the box, but the row must look like a
+         normal line of text, NOT a button or tile — no background. Distinct
+         from Widget.App.Row.Toggle, which is a switch row with subtitle. -->
+    <style name="Widget.App.CheckOption.Row" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:orientation">horizontal</item>
+        <item name="android:paddingVertical">6dp</item>
+    </style>
+
+    <style name="Widget.App.CheckOption.Label" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginStart">8dp</item>
+        <item name="android:textColor">?attr/appTextColor</item>
+        <item name="android:textSize">15sp</item>
     </style>
 
     <style name="Widget.App.Field.Box" parent="">
@@ -768,12 +855,12 @@
         <item name="android:paddingVertical">8dp</item>
         <item name="android:gravity">center</item>
         <item name="android:inputType">number</item>
-        <item name="android:textColor">@color/text</item>
+        <item name="android:textColor">?attr/appTextColor</item>
         <item name="android:textSize">16sp</item>
     </style>
 
     <style name="BottomNavigationView.ActiveIndicator" parent="Widget.Material3.BottomNavigationView.ActiveIndicator">
-        <item name="android:color">@color/accent_900</item>
+        <item name="android:color">?attr/colorAccent</item>
     </style>
 
     <style name="Theme.Preview" parent="Theme.App">
@@ -794,6 +881,9 @@
         <item name="colorAccent">@color/accent_900</item>
         <item name="appRowTitleColor">@color/text</item>
         <item name="appRowSubtitleColor">@color/text_subtitle</item>
+        <item name="appTextColor">@color/text</item>
+        <item name="appSubtleTextColor">@color/text_subtitle</item>
+        <item name="appTitleTextColor">@color/text_title</item>
         <item name="android:windowAnimationStyle">@style/AssistantWindowAnimation</item>
         <item name="android:typeface">sans</item>
         <item name="android:fontFamily">@font/default_font</item>
@@ -840,6 +930,9 @@
         <item name="colorPrimaryDark">#ff121212</item>
         <item name="appRowTitleColor">@color/text</item>
         <item name="appRowSubtitleColor">@color/text_subtitle</item>
+        <item name="appTextColor">@color/text</item>
+        <item name="appSubtleTextColor">@color/text_subtitle</item>
+        <item name="appTitleTextColor">@color/text_title</item>
         <item name="android:typeface">sans</item>
         <item name="android:fontFamily">@font/default_font</item>
     </style>
@@ -882,11 +975,11 @@
 
 
     <style name="App.NegativeButtonStyle" parent="Widget.Material3.Button.TextButton.Dialog">
-        <item name="android:textColor">@color/accent_900</item>
+        <item name="android:textColor">?attr/colorAccent</item>
     </style>
 
     <style name="App.PositiveButtonStyle" parent="Widget.Material3.Button.TextButton.Dialog">
-        <item name="android:textColor">@color/accent_900</item>
+        <item name="android:textColor">?attr/colorAccent</item>
     </style>
 
     <style name="App.ExposedTextField" parent="Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu">
@@ -908,11 +1001,16 @@
          Theme.App alone is not enough, since that base layer can sit underneath
          layers that don't carry the attribute forward (this crashed
          CharactersActivity, see git history July 18 2026). Violet reproduces
-         the app's original row colors unchanged; a future palette overlay
-         redefines these same two items (plus the Material color roles) to
-         retheme every canonical row with no layout or style changes. -->
+         the app's original colors unchanged; a future palette overlay — or the
+         future saved custom palette (ui-redesign-plan.md Section 4.5) —
+         redefines these same items (plus the Material color roles) to retheme
+         every shared row, title, hint, and text style with no layout or style
+         changes. Every attribute declared in attrs.xml must be defined here. -->
     <style name="ThemeOverlay.Phosphor.Violet" parent="">
         <item name="appRowTitleColor">@color/text</item>
         <item name="appRowSubtitleColor">@color/text_subtitle</item>
+        <item name="appTextColor">@color/text</item>
+        <item name="appSubtleTextColor">@color/text_subtitle</item>
+        <item name="appTitleTextColor">@color/text_title</item>
     </style>
 </resources>

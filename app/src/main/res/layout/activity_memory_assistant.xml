@@ -199,6 +199,57 @@
                 android:text="@string/memory_assistant_btn_idle"
                 android:textSize="16sp" />
 
+            <!-- Live analysis progress (approved pattern,
+                 Memory System/plan_one_page.md): an indeterminate spinner and
+                 "Analyzing Conversations" show while a run is active; once the
+                 run's fixed conversation total is known, a determinate bar and
+                 its percent appear beneath. Terminal outcomes use the status
+                 block below, never this container. -->
+            <LinearLayout
+                android:id="@+id/analysis_progress_container"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:gravity="center_horizontal"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <com.google.android.material.progressindicator.CircularProgressIndicator
+                    android:id="@+id/analysis_spinner"
+                    style="@style/Widget.Material3.CircularProgressIndicator"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:indeterminate="true" />
+
+                <TextView
+                    android:id="@+id/analysis_heading"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:gravity="center"
+                    android:text="@string/memory_assistant_analyzing"
+                    android:textColor="@color/text_title"
+                    android:textSize="15sp"
+                    android:textStyle="bold" />
+
+                <com.google.android.material.progressindicator.LinearProgressIndicator
+                    android:id="@+id/analysis_bar"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/analysis_percent"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:gravity="center"
+                    android:textColor="@color/text_subtitle"
+                    android:textSize="14sp"
+                    android:visibility="gone" />
+            </LinearLayout>
+
             <!-- Post-run status block (spec: BENEATH the run button): Title
                  Case label (colored by severity, never color alone), the
                  explanation sentence, optional details, and an action button

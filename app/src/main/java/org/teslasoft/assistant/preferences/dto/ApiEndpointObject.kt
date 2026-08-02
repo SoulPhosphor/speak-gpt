@@ -89,7 +89,15 @@ class ApiEndpointObject(
      * [org.teslasoft.assistant.imagegen.ToolCapabilityStore]. Kept at the
      * END of the constructor so existing positional callers stay valid.
      */
-    var toolCapabilityByModel: String = ""
+    var toolCapabilityByModel: String = "",
+    /**
+     * Path appended to the base URL to discover a model's provider endpoints
+     * (OpenRouter provider routing). {model} is replaced with the model id.
+     * Blank means use [DEFAULT_PROVIDER_DISCOVERY_PATH]; editable on the
+     * endpoint editor's Advanced Options section for custom API proxies. Kept
+     * at the END of the constructor so existing positional callers stay valid.
+     */
+    var providerDiscoveryPath: String = ""
 ) {
     companion object {
         /* Reserved, fixed id for the built-in "Default" endpoint. It is NOT a
@@ -101,6 +109,8 @@ class ApiEndpointObject(
         val DEFAULT_ENDPOINT_ID: String = Hash.hash("Default")
 
         const val DEFAULT_CHAT_ENDPOINT = "/chat/completions"
+        /** OpenRouter's provider-discovery path; {model} → the model id. */
+        const val DEFAULT_PROVIDER_DISCOVERY_PATH = "/models/{model}/endpoints"
         const val AUTH_BEARER = "bearer"
         const val AUTH_X_API_KEY = "x-api-key"
         const val AUTH_API_KEY = "api-key"

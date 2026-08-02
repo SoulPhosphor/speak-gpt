@@ -156,6 +156,12 @@ class LogsActivity : FragmentActivity() {
                             textLog?.text = Logger.getMemoryUsageLog(this)
                         }
 
+                        "provider_fail" -> {
+                            activityLogsTitle?.text = getString(R.string.title_provider_fail_log)
+                            this.title = getString(R.string.title_provider_fail_log)
+                            textLog?.text = Logger.getProviderFailLog(this)
+                        }
+
                         "image_gen_errors" -> {
                             activityLogsTitle?.text = getString(R.string.title_image_gen_errors_log)
                             this.title = getString(R.string.title_image_gen_errors_log)
@@ -208,6 +214,11 @@ class LogsActivity : FragmentActivity() {
                                 "memory_usage" -> {
                                     Logger.clearMemoryUsageLog(this)
                                     textLog?.text = Logger.getMemoryUsageLog(this)
+                                }
+
+                                "provider_fail" -> {
+                                    Logger.clearProviderFailLog(this)
+                                    textLog?.text = Logger.getProviderFailLog(this)
                                 }
 
                                 "image_gen_errors" -> {

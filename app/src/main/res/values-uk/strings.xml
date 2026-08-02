@@ -34,7 +34,7 @@
     <string name="setting_change_openai_api_key">Змінити API ключ</string>
     <string name="setting_manage_account_desc">Натисніть, щоб керувати вашим API акаунтом</string>
     <string name="setting_account">Акаунт</string>
-    <string name="setting_default_desc">Зробіть SpeakGPT вашим основним асистентом</string>
+    <string name="setting_default_desc">Зробіть цей додаток вашим основним асистентом</string>
     <string name="setting_default">Налаштування асистента</string>
     <string name="setting_lang_desc">Встановіть мову для голосового виводу</string>
     <string name="setting_lang">Мова асистента</string>
@@ -130,7 +130,7 @@
     <string name="setting_auto_language_detect">Автоматичне виявлення мови</string>
     <string name="setting_auto_language_detect_desc">Встановіть мову TTS з відповіді чату</string>
     <string name="setting_function_calling">Виклик функцій</string>
-    <string name="setting_function_calling_desc">Увімкніть експериментальні функції SpeakGPT</string>
+    <string name="setting_function_calling_desc">Увімкніть експериментальні функції</string>
     <string name="setting_cmd_desc">Увімкніть чатові команди слеш, такі як /imagine</string>
     <string name="setting_cmd">Чатові команди слеш</string>
     <string name="assistant_action_menu">Що ви хочете зробити з цим текстом?</string>
@@ -282,7 +282,7 @@
     <string name="tile_api_endpoint_title">API endpoint</string>
     <string name="tile_api_endpoint_desc">Ця функція дозволяє встановити ваш API endpoint.</string>
     <string name="tile_autosend_title">Автовідправлення</string>
-    <string name="tile_autosend_desc">Ця функція дозволяє включити або відключити автоматичне надсилання повідомлень. Коли автовідправлення включено, SpeakGPT автоматично надсилає повідомлення без натискання кнопки \'Надіслати\' після завершення прослуховування.</string>
+    <string name="tile_autosend_desc">Ця функція дозволяє включити або відключити автоматичне надсилання повідомлень. Коли автовідправлення включено, додаток автоматично надсилає повідомлення без натискання кнопки \'Надіслати\' після завершення прослуховування.</string>
     <string name="tile_tts_voice_title">TTS голос</string>
     <string name="tile_tts_voice_desc">Ця функція дозволяє вибрати ваш TTS голос.</string>
     <string name="tile_voice_lang_title">Мова голосу</string>
@@ -299,9 +299,9 @@
     <string name="tile_google_stt">Використовується Google STT</string>
     <string name="tile_stt_desc">Ця функція дозволяє вибрати STT двигун. Whisper є платним.</string>
     <string name="tile_silent_mode_title">Тихий режим</string>
-    <string name="tile_silent_mode_desc">Ця функція дозволяє встановити, що SpeakGPT ніколи не озвучує відповіді.</string>
+    <string name="tile_silent_mode_desc">Ця функція дозволяє встановити, що додаток ніколи не озвучує відповіді.</string>
     <string name="tile_always_speak_title">Завжди говорити</string>
-    <string name="tile_always_speak_desc">Ця функція дозволяє встановити, що SpeakGPT завжди озвучує відповіді.</string>
+    <string name="tile_always_speak_desc">Ця функція дозволяє встановити, що додаток завжди озвучує відповіді.</string>
     <string name="tile_text_model_title">Модель генерації тексту</string>
     <string name="tile_text_generation_model_desc">Ця функція дозволяє вибрати модель генерації тексту та параметри моделі.</string>
     <string name="tile_activation_prompt_title">Активація напуття</string>
@@ -315,26 +315,26 @@
     <string name="tile_sh_title">Команди /slash</string>
     <string name="tile_sh_desc">Ця функція дозволяє включити команди зі слешом. Зверніть увагу, що ця функція експериментальна та нестабільна. Приклад: /imagine cat.</string>
     <string name="tile_desktop_mode_title">Режим для настільних ПК</string>
-    <string name="tile_desktop_mode_desc">Ця функція дозволяє включити режим для настільних ПК. Коли режим для настільних ПК включено, SpeakGPT використовує гарячі клавіші та автоматично фокусується на вводі повідомлень. Натисніть \'Enter\', щоб надіслати повідомлення, \'Shift + Enter\' для додавання нового рядка та \'Shift+Esc\' для закриття чату. Не рекомендується використовувати на телефонах, якщо ви не хочете, щоб клавіатура відкривалася кожного разу, коли ви відкриваєте чат.</string>
+    <string name="tile_desktop_mode_desc">Ця функція дозволяє включити режим для настільних ПК. Коли режим для настільних ПК включено, додаток використовує гарячі клавіші та автоматично фокусується на вводі повідомлень. Натисніть \'Enter\', щоб надіслати повідомлення, \'Shift + Enter\' для додавання нового рядка та \'Shift+Esc\' для закриття чату. Не рекомендується використовувати на телефонах, якщо ви не хочете, щоб клавіатура відкривалася кожного разу, коли ви відкриваєте чат.</string>
     <string name="tile_new_ui_title">Новий інтерфейс</string>
     <string name="tile_new_ui_desc">Ця функція дозволяє включити новий експериментальний інтерфейс. Новий інтерфейс більш компактний та інтуїтивно зрозумілий.</string>
     <string name="tile_about_app_title">Про додаток</string>
-    <string name="tile_about_app_desc">Ця функція дозволяє відкрити сторінку про додаток SpeakGPT.</string>
+    <string name="tile_about_app_desc">Ця функція дозволяє відкрити сторінку про додаток.</string>
     <string name="tile_documentation_title">Документація</string>
     <string name="tile_documentation_subtitle">Відкрити документацію</string>
-    <string name="tile_documentation_desc">Ця функція дозволяє відкрити документацію SpeakGPT.</string>
+    <string name="tile_documentation_desc">Ця функція дозволяє відкрити документацію.</string>
     <string name="tile_amoled_mode_title">AMOLED режим</string><string name="tile_amoled_mode_desc">Ця функція дозволяє ввімкнути режим AMOLED для підтримуваних дисплеїв. Це може значно заощадити заряд батареї. Режим AMOLED доступний лише в темній темі.</string>
     <string name="tile_crash_log_title">Журнал збоїв</string>
     <string name="tile_crash_log_desc">Ця функція дозволяє переглянути журнал збоїв.</string>
     <string name="tile_events_log_title">Журнал подій</string>
     <string name="tile_events_log_desc">Ця функція дозволяє переглянути журнал подій. Ми не збираємо цей журнал, оскільки він може містити конфіденційну інформацію. Використовуйте цей журнал, якщо ви хочете повідомити про помилку.</string>
     <string name="tile_autosave_title">Автоматичне збереження чатів</string>
-    <string name="tile_autosave_desc">Ця функція дозволяє включити автоматичне збереження чатів у вікні помічника. Коли включено автоматичне збереження чатів, SpeakGPT зберігатиме всі чати в пам\'яті пристрою.</string>
+    <string name="tile_autosave_desc">Ця функція дозволяє включити автоматичне збереження чатів у вікні помічника. Коли включено автоматичне збереження чатів, додаток зберігатиме всі чати в пам\'яті пристрою.</string>
     <string name="tile_show_chat_errors_title">Показувати помилки чату</string>
     <string name="tile_show_chat_errors_desc">Ця функція дозволяє включити помилки чату. Коли помилки чату включені, SpeakGPT покаже помилки у чаті, якщо вони виникнуть.</string>
     <string name="on">Увімкнено</string>
     <string name="off">Вимкнено</string>
-    <string name="tile_about_app_subtitle">Про SpeakGPT</string>
+    <string name="tile_about_app_subtitle">Про додаток</string>
     <string name="cancel">Скасувати</string>
     <string name="btn_reset">Скинути</string>
     <string name="label_provided_by">Надано:</string>
@@ -360,8 +360,8 @@
     <string name="label_permission_denied">Дозвіл відхилено</string>
     <string name="label_use_camera">Використовувати камеру</string>
     <string name="label_use_microphone">Використовувати мікрофон</string>
-    <string name="msg_use_camera">SpeakGPT дозволяє вам взаємодіяти з ChatGPT Vision за допомогою ваших фотографій, зроблених безпосередньо камерою цього додатку. Щоб увімкнути камеру для GPT Vision, будь ласка, дозвольте нам використовувати вашу камеру. Ви все ще можете вибирати свої існуючі зображення з галереї без дозволу на використання камери. Дозволити доступ до камери?</string>
-    <string name="msg_use_microphone">SpeakGPT дозволяє вам взаємодіяти з ChatGPT за допомогою активації голосом. Щоб увімкнути активацію голосом, будь ласка, дозвольте цьому додатку використовувати мікрофон вашого пристрою. Дозволити доступ до мікрофона?</string>
+    <string name="msg_use_camera">Цей додаток дозволяє вам взаємодіяти з ChatGPT Vision за допомогою ваших фотографій, зроблених безпосередньо камерою цього додатку. Щоб увімкнути камеру для GPT Vision, будь ласка, дозвольте нам використовувати вашу камеру. Ви все ще можете вибирати свої існуючі зображення з галереї без дозволу на використання камери. Дозволити доступ до камери?</string>
+    <string name="msg_use_microphone">Цей додаток дозволяє вам взаємодіяти з ChatGPT за допомогою активації голосом. Щоб увімкнути активацію голосом, будь ласка, дозвольте цьому додатку використовувати мікрофон вашого пристрою. Дозволити доступ до мікрофона?</string>
     <string name="btn_allow">Дозволити</string>
     <string name="btn_no_thanks">Ні, дякую</string>
     <string name="msg_camera_denied">Ви не можете використовувати цю функцію, оскільки додаток не має доступу до камери.</string>
@@ -394,7 +394,7 @@
     <string name="msg_delete_message">Ви впевнені, що хочете видалити це повідомлення?</string>
     <string name="btn_post">Опублікувати</string>
     <string name="msg_error_calculating_cost">Вартість: Помилка розрахунку вартості. Будь ласка, перевірте ваше з\'єднання.</string>
-    <string name="msg_cost_not_enough_data"><![CDATA[Вартість: <SpeakGPT не має достатньо даних для розрахунку вартості цієї моделі. Дивіться документацію і розраховуйте вартість вручну на основі вищезазначеного використання.>]]></string>
+    <string name="msg_cost_not_enough_data"><![CDATA[Вартість: <Цей додаток не має достатньо даних для розрахунку вартості цієї моделі. Дивіться документацію і розраховуйте вартість вручну на основі вищезазначеного використання.>]]></string>
     <string name="cost_loading" tools:ignore="TypographyEllipsis">Вартість: Завантаження...</string>
     <string formatted="false" name="cost_counter_usage">Використання (токени): %s вх / %s вих</string>
     <string name="cat_all_new">Всі категорії</string>

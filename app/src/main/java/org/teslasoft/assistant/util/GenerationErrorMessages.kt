@@ -47,6 +47,55 @@ fun GenErrorCode.messageRes(): Int = when (this) {
 fun GenErrorResult.chatMessage(context: Context): String =
     "[${code.code}] " + context.getString(code.messageRes())
 
+/** Transport codes mean the request never reached a server, so there is no
+ *  provider response to quote — the detail block says so explicitly rather than
+ *  inventing one. */
+private val NO_RESPONSE_CODES = setOf(
+    GenErrorCode.N1, GenErrorCode.N2, GenErrorCode.N3, GenErrorCode.N4
+)
+
+/** Whether the request reached a server that actually answered (even with an
+ *  error). A transport failure did not, so nothing can be attributed to a
+ *  provider — the Provider Failure Log skips these. */
+fun GenErrorResult.reachedServer(): Boolean = code !in NO_RESPONSE_CODES
+
+/**
+ * The raw provider detail shown beneath the app's own failure explanation
+ * (owner ruling, July 31 2026): two always-present lines —
+ *
+ *   Provider Error: <the server's status and message, verbatim>
+ *   Provider: <the upstream provider name>
+ *
+ * Each line falls back to a truthful placeholder rather than a blank: a request
+ * that never reached a server says so, and an absent provider name says so.
+ * [rawProviderName] and a parsed body are supplied by the network-capture layer;
+ * until then the name shows its placeholder and the message falls back to the
+ * exception text.
+ */
+fun GenErrorResult.providerDetailBlock(
+    context: Context,
+    exceptionMessage: String?,
+    rawProviderName: String? = null,
+    rawProviderMessage: String? = null
+): String {
+    val detail: String = if (code in NO_RESPONSE_CODES) {
+        context.getString(R.string.provider_error_no_response)
+    } else {
+        val message = rawProviderMessage?.trim()?.ifBlank { null }
+            ?: exceptionMessage?.trim()?.ifBlank { null }
+        when {
+            httpStatus != null && message != null -> "$httpStatus $message"
+            message != null -> message
+            httpStatus != null -> httpStatus.toString()
+            else -> context.getString(R.string.provider_error_none)
+        }
+    }
+    val providerName = rawProviderName?.trim()?.ifBlank { null }
+        ?: context.getString(R.string.provider_name_none)
+    return context.getString(R.string.provider_error_line, detail) +
+        "\n" + context.getString(R.string.provider_name_line, providerName)
+}
+
 /** Exact explanation for a provider-confirmed capacity system. */
 fun GenErrorResult.providerLimitMessage(context: Context): String? =
     when (providerLimit) {
@@ -60,6 +109,8 @@ fun GenErrorResult.providerLimitMessage(context: Context): String? =
             context.getString(R.string.provider_rate_limit)
         ProviderLimitKind.QUOTA_OR_SPENDING ->
             context.getString(R.string.provider_quota_limit)
+        ProviderLimitKind.OUT_OF_CREDITS ->
+            context.getString(R.string.provider_out_of_credits)
         ProviderLimitKind.UNIDENTIFIED ->
             context.getString(R.string.provider_unknown_limit)
         null -> null

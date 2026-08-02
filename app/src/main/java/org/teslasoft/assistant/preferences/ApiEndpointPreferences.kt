@@ -116,6 +116,7 @@ class ApiEndpointPreferences private constructor(
         )
         val imageCapabilityByModel = getString(id + "_image_capability_by_model", "")
         val toolCapabilityByModel = getString(id + "_tool_capability_by_model", "")
+        val providerDiscoveryPath = getString(id + "_provider_discovery_path", "")
 
         return ApiEndpointObject(
             label, host, apiKey, chatEndpoint, authType,
@@ -123,7 +124,8 @@ class ApiEndpointPreferences private constructor(
             maxTokens, endSeparator, prefix, provider,
             connectTimeoutSeconds, responseTimeoutSeconds, id,
             contextWindowTokens, storedContextModel,
-            imageCapabilityByModel, toolCapabilityByModel
+            imageCapabilityByModel, toolCapabilityByModel,
+            providerDiscoveryPath
         )
     }
 
@@ -149,6 +151,7 @@ class ApiEndpointPreferences private constructor(
         preferences.edit { remove(id + "_response_timeout") }
         preferences.edit { remove(id + "_image_capability_by_model") }
         preferences.edit { remove(id + "_tool_capability_by_model") }
+        preferences.edit { remove(id + "_provider_discovery_path") }
         secrets.set(id + "_api_key", "null")
 
         for (listener in listeners) {
@@ -212,6 +215,13 @@ class ApiEndpointPreferences private constructor(
             preferences.edit { remove(id + "_tool_capability_by_model") }
         } else {
             putString(id + "_tool_capability_by_model", toolCapabilityJson)
+        }
+        // Blank means "use the default discovery path" — store nothing so the
+        // record doesn't accumulate an empty placeholder.
+        if (endpoint.providerDiscoveryPath.isBlank()) {
+            preferences.edit { remove(id + "_provider_discovery_path") }
+        } else {
+            putString(id + "_provider_discovery_path", endpoint.providerDiscoveryPath)
         }
         secrets.set(id + "_api_key", endpoint.apiKey)
 

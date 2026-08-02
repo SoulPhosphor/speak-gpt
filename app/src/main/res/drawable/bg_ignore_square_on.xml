@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Marked state of the provider chart's Ignore control: a filled square in
+     the theme's error color (red), holding a white X (ic_ignore_x tinted
+     colorOnError). House 4dp corners. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="?attr/colorError" />
+    <corners android:radius="4dp" />
+</shape>

@@ -48,19 +48,12 @@
              delete yet). -->
         <ImageButton
             android:id="@+id/btn_delete"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:layout_marginEnd="8dp"
-            android:layout_marginTop="8dp"
-            android:layout_marginBottom="8dp"
-            android:background="@drawable/btn_accent_icon_large_100"
+            style="@style/Widget.App.ActionBar.ChainedButton"
             android:contentDescription="@string/btn_delete"
             android:src="@drawable/ic_delete"
             android:tooltipText="@string/btn_delete"
             android:visibility="gone"
-            app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toStartOf="@+id/btn_save"
-            app:layout_constraintTop_toTopOf="parent"
             app:srcCompat="@drawable/ic_delete" />
 
         <ImageButton
@@ -89,136 +82,153 @@
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
-            <com.google.android.material.textfield.TextInputLayout
-                android:id="@+id/textInputLayout10"
+            <!-- Profile name. Empty on a new endpoint: the field name shows as
+                 placeholder inside the box, and the top-left title appears only
+                 once the box has text (see initFloatingLabels in the activity). -->
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="24dp"
                 android:layout_marginTop="24dp"
                 android:layout_marginEnd="24dp"
-                android:textColorHint="@color/text_hint"
-                app:boxCornerRadiusBottomEnd="16dp"
-                app:boxCornerRadiusBottomStart="16dp"
-                app:boxCornerRadiusTopEnd="16dp"
-                app:boxCornerRadiusTopStart="16dp"
-                app:boxStrokeColor="@drawable/box_stroke_color">
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/label_label"
+                    style="@style/Widget.App.Field.Label"
+                    android:text="@string/api_endpoint_friendly_name"
+                    android:visibility="gone" />
 
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/field_label"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
+                    style="@style/Widget.App.Field.Box"
                     android:hint="@string/api_endpoint_friendly_name"
                     android:singleLine="true"
-                    android:textColorHint="@color/text_hint" />
-            </com.google.android.material.textfield.TextInputLayout>
+                    android:textColorHint="?attr/appSubtleTextColor" />
 
-            <!-- Model picker (tap to open dynamic model selector) -->
-            <com.google.android.material.textfield.TextInputLayout
-                android:id="@+id/textInputLayoutModel"
+                <TextView
+                    android:id="@+id/text_field_label_error"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:textColor="?attr/colorError"
+                    android:textSize="13sp"
+                    android:visibility="gone" />
+            </LinearLayout>
+
+            <!-- Model. Tap to open the model selector (focusable=false so a tap
+                 is a click, not the keyboard). Empty on a new endpoint (no gpt-4o
+                 pre-load); a model must be chosen before saving. The guidance
+                 line stays visible whether or not the top title is showing. -->
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="24dp"
-                android:layout_marginTop="12dp"
+                android:layout_marginTop="18dp"
                 android:layout_marginEnd="24dp"
-                android:textColorHint="@color/text_hint"
-                app:boxCornerRadiusBottomEnd="16dp"
-                app:boxCornerRadiusBottomStart="16dp"
-                app:boxCornerRadiusTopEnd="16dp"
-                app:boxCornerRadiusTopStart="16dp"
-                app:boxStrokeColor="@drawable/box_stroke_color"
-                app:helperText="@string/api_endpoint_model_help"
-                app:helperTextEnabled="true">
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/label_model"
+                    style="@style/Widget.App.Field.Label"
+                    android:text="@string/api_endpoint_model"
+                    android:visibility="gone" />
+
+                <TextView
+                    style="@style/Widget.App.Field.Hint"
+                    android:text="@string/api_endpoint_model_help" />
 
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/field_model"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
+                    style="@style/Widget.App.Field.Box"
                     android:clickable="true"
                     android:cursorVisible="false"
                     android:focusable="false"
                     android:focusableInTouchMode="false"
                     android:hint="@string/api_endpoint_model"
                     android:singleLine="true"
-                    android:textColorHint="@color/text_hint" />
-            </com.google.android.material.textfield.TextInputLayout>
+                    android:textColorHint="?attr/appSubtleTextColor" />
+            </LinearLayout>
 
-            <!-- Provider (optional, free text). Sits directly under Model. -->
-            <com.google.android.material.textfield.TextInputLayout
-                android:id="@+id/textInputLayoutProvider"
+            <!-- Choose Provider (OpenRouter only). Opens ChooseProviderActivity
+                 (routing type, model, provider chart). Shown only while the Base
+                 URL is an OpenRouter endpoint — ApiEndpointEditorActivity
+                 toggles it live from the host field. -->
+            <LinearLayout
+                android:id="@+id/row_choose_provider"
+                style="@style/Widget.App.Row.WithSubtitle"
+                android:layout_marginStart="24dp"
+                android:layout_marginTop="18dp"
+                android:layout_marginEnd="24dp"
+                android:visibility="gone">
+
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/endpoint_choose_provider_title" />
+
+                    <TextView
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:maxLines="4"
+                        android:text="@string/endpoint_choose_provider_subtitle" />
+                </LinearLayout>
+
+                <ImageView
+                    style="@style/Widget.App.Row.Chevron"
+                    android:contentDescription="@string/endpoint_choose_provider_title" />
+            </LinearLayout>
+
+            <!-- Connection timeout in seconds. Consumed by ChatActivity.initAI()
+                 as the per-endpoint CONNECT timeout; clamped to 5..300 on save. -->
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="24dp"
-                android:layout_marginTop="12dp"
+                android:layout_marginTop="18dp"
                 android:layout_marginEnd="24dp"
-                android:textColorHint="@color/text_hint"
-                app:boxCornerRadiusBottomEnd="16dp"
-                app:boxCornerRadiusBottomStart="16dp"
-                app:boxCornerRadiusTopEnd="16dp"
-                app:boxCornerRadiusTopStart="16dp"
-                app:boxStrokeColor="@drawable/box_stroke_color">
+                android:orientation="vertical">
 
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/field_provider"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:hint="@string/api_endpoint_provider"
-                    android:singleLine="true"
-                    android:textColorHint="@color/text_hint" />
-            </com.google.android.material.textfield.TextInputLayout>
-
-            <!-- Connection timeout in seconds. Sits directly under Provider.
-                 Consumed by ChatActivity.initAI() as the per-endpoint CONNECT
-                 timeout; clamped to 5..300 on save. -->
-            <com.google.android.material.textfield.TextInputLayout
-                android:id="@+id/textInputLayoutTimeout"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="24dp"
-                android:layout_marginTop="12dp"
-                android:layout_marginEnd="24dp"
-                android:textColorHint="@color/text_hint"
-                app:boxCornerRadiusBottomEnd="16dp"
-                app:boxCornerRadiusBottomStart="16dp"
-                app:boxCornerRadiusTopEnd="16dp"
-                app:boxCornerRadiusTopStart="16dp"
-                app:boxStrokeColor="@drawable/box_stroke_color">
+                <TextView
+                    android:id="@+id/label_timeout"
+                    style="@style/Widget.App.Field.Label"
+                    android:text="@string/api_endpoint_connection_timeout"
+                    android:visibility="gone" />
 
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/field_timeout"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
+                    style="@style/Widget.App.Field.Box"
                     android:hint="@string/api_endpoint_connection_timeout"
                     android:inputType="number"
                     android:singleLine="true"
-                    android:textColorHint="@color/text_hint" />
-            </com.google.android.material.textfield.TextInputLayout>
+                    android:textColorHint="?attr/appSubtleTextColor" />
+            </LinearLayout>
 
-            <!-- Response time in seconds. Sits directly under Connection Timeout.
-                 Consumed by ChatActivity.initAI() as the per-endpoint SOCKET
-                 (response) timeout; floored at 45 on save, no maximum. -->
-            <com.google.android.material.textfield.TextInputLayout
-                android:id="@+id/textInputLayoutResponseTime"
+            <!-- Response time in seconds. Consumed by ChatActivity.initAI() as
+                 the per-endpoint SOCKET (response) timeout; floored at 45 on
+                 save, no maximum. -->
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="24dp"
-                android:layout_marginTop="12dp"
+                android:layout_marginTop="18dp"
                 android:layout_marginEnd="24dp"
-                android:textColorHint="@color/text_hint"
-                app:boxCornerRadiusBottomEnd="16dp"
-                app:boxCornerRadiusBottomStart="16dp"
-                app:boxCornerRadiusTopEnd="16dp"
-                app:boxCornerRadiusTopStart="16dp"
-                app:boxStrokeColor="@drawable/box_stroke_color">
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/label_response_time"
+                    style="@style/Widget.App.Field.Label"
+                    android:text="@string/api_endpoint_response_time"
+                    android:visibility="gone" />
 
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/field_response_time"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
+                    style="@style/Widget.App.Field.Box"
                     android:hint="@string/api_endpoint_response_time"
                     android:inputType="number"
                     android:singleLine="true"
-                    android:textColorHint="@color/text_hint" />
-            </com.google.android.material.textfield.TextInputLayout>
+                    android:textColorHint="?attr/appSubtleTextColor" />
+            </LinearLayout>
 
             <!-- Temperature: shared Widget.App.Section.Title/.Hint (see
                  values/themes.xml + ui-style-guide.md), title then explanation
@@ -322,30 +332,29 @@
                 android:valueFrom="-20.0"
                 android:valueTo="20.0" />
 
-            <!-- Max tokens -->
-            <com.google.android.material.textfield.TextInputLayout
-                android:id="@+id/textInputLayoutMaxTokens"
+            <!-- Maximum response tokens. Pre-filled with the profile's value. -->
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="24dp"
-                android:layout_marginTop="12dp"
+                android:layout_marginTop="18dp"
                 android:layout_marginEnd="24dp"
-                android:textColorHint="@color/text_hint"
-                app:boxCornerRadiusBottomEnd="16dp"
-                app:boxCornerRadiusBottomStart="16dp"
-                app:boxCornerRadiusTopEnd="16dp"
-                app:boxCornerRadiusTopStart="16dp"
-                app:boxStrokeColor="@drawable/box_stroke_color">
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/label_max_tokens"
+                    style="@style/Widget.App.Field.Label"
+                    android:text="@string/label_max_tokens"
+                    android:visibility="gone" />
 
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/field_max_tokens"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
+                    style="@style/Widget.App.Field.Box"
                     android:hint="@string/label_max_tokens"
                     android:inputType="number"
                     android:singleLine="true"
-                    android:textColorHint="@color/text_hint" />
-            </com.google.android.material.textfield.TextInputLayout>
+                    android:textColorHint="?attr/appSubtleTextColor" />
+            </LinearLayout>
 
             <!-- Optional capacity for this exact endpoint profile and model id.
                  Title + hint: shared Widget.App.Section.Title/.Hint, same
@@ -366,179 +375,183 @@
                 android:layout_marginEnd="24dp"
                 android:text="@string/hint_context_window" />
 
-            <com.google.android.material.textfield.TextInputLayout
-                android:id="@+id/textInputLayoutContextWindow"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
+            <!-- Optional capacity for this exact endpoint profile and model id.
+                 The Context Window section title above is this field's heading,
+                 so the box carries no separate top title — it shows the field
+                 name as placeholder until a value is entered. -->
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/field_context_window"
+                style="@style/Widget.App.Field.Box"
                 android:layout_marginStart="24dp"
                 android:layout_marginTop="12dp"
                 android:layout_marginEnd="24dp"
-                android:textColorHint="@color/text_hint"
-                app:boxCornerRadiusBottomEnd="16dp"
-                app:boxCornerRadiusBottomStart="16dp"
-                app:boxCornerRadiusTopEnd="16dp"
-                app:boxCornerRadiusTopStart="16dp"
-                app:boxStrokeColor="@drawable/box_stroke_color"
-                app:suffixText="@string/unit_tokens">
-
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/field_context_window"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:hint="@string/label_context_window"
-                    android:inputType="number"
-                    android:singleLine="true"
-                    android:textColorHint="@color/text_hint" />
-            </com.google.android.material.textfield.TextInputLayout>
+                android:hint="@string/label_context_window"
+                android:inputType="number"
+                android:singleLine="true"
+                android:textColorHint="?attr/appSubtleTextColor" />
 
             <!-- End separator -->
-            <com.google.android.material.textfield.TextInputLayout
-                android:id="@+id/textInputLayoutEndSeparator"
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="24dp"
-                android:layout_marginTop="12dp"
+                android:layout_marginTop="18dp"
                 android:layout_marginEnd="24dp"
-                android:textColorHint="@color/text_hint"
-                app:boxCornerRadiusBottomEnd="16dp"
-                app:boxCornerRadiusBottomStart="16dp"
-                app:boxCornerRadiusTopEnd="16dp"
-                app:boxCornerRadiusTopStart="16dp"
-                app:boxStrokeColor="@drawable/box_stroke_color">
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/label_end_separator"
+                    style="@style/Widget.App.Field.Label"
+                    android:text="@string/label_end_separator"
+                    android:visibility="gone" />
 
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/field_end_separator"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
+                    style="@style/Widget.App.Field.Box"
                     android:hint="@string/label_end_separator"
                     android:singleLine="true"
-                    android:textColorHint="@color/text_hint" />
-            </com.google.android.material.textfield.TextInputLayout>
+                    android:textColorHint="?attr/appSubtleTextColor" />
+            </LinearLayout>
 
             <!-- Prefix -->
-            <com.google.android.material.textfield.TextInputLayout
-                android:id="@+id/textInputLayoutPrefix"
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="24dp"
-                android:layout_marginTop="12dp"
+                android:layout_marginTop="18dp"
                 android:layout_marginEnd="24dp"
-                android:textColorHint="@color/text_hint"
-                app:boxCornerRadiusBottomEnd="16dp"
-                app:boxCornerRadiusBottomStart="16dp"
-                app:boxCornerRadiusTopEnd="16dp"
-                app:boxCornerRadiusTopStart="16dp"
-                app:boxStrokeColor="@drawable/box_stroke_color">
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/label_prefix"
+                    style="@style/Widget.App.Field.Label"
+                    android:text="@string/label_prefix"
+                    android:visibility="gone" />
 
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/field_prefix"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
+                    style="@style/Widget.App.Field.Box"
                     android:hint="@string/label_prefix"
                     android:singleLine="true"
-                    android:textColorHint="@color/text_hint" />
-            </com.google.android.material.textfield.TextInputLayout>
+                    android:textColorHint="?attr/appSubtleTextColor" />
+            </LinearLayout>
 
-            <com.google.android.material.textfield.TextInputLayout
-                android:id="@+id/textInputLayout11"
+            <!-- Base URL. The plain-http security warning and the empty /
+                 invalid-URL save errors show inline beneath the box. -->
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="24dp"
-                android:layout_marginTop="12dp"
+                android:layout_marginTop="18dp"
                 android:layout_marginEnd="24dp"
-                android:textColorHint="@color/text_hint"
-                app:boxCornerRadiusBottomEnd="16dp"
-                app:boxCornerRadiusBottomStart="16dp"
-                app:boxCornerRadiusTopEnd="16dp"
-                app:boxCornerRadiusTopStart="16dp"
-                app:boxStrokeColor="@drawable/box_stroke_color">
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/label_host"
+                    style="@style/Widget.App.Field.Label"
+                    android:text="@string/api_endpoint_host_full"
+                    android:visibility="gone" />
 
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/field_host"
+                    style="@style/Widget.App.Field.Box"
+                    android:hint="@string/api_endpoint_host_full"
+                    android:singleLine="true"
+                    android:textColorHint="?attr/appSubtleTextColor" />
+
+                <TextView
+                    android:id="@+id/text_field_host_error"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:hint="@string/api_endpoint_host"
-                    android:singleLine="true"
-                    android:textColorHint="@color/text_hint" />
-            </com.google.android.material.textfield.TextInputLayout>
+                    android:layout_marginTop="4dp"
+                    android:textColor="?attr/colorError"
+                    android:textSize="13sp"
+                    android:visibility="gone" />
+            </LinearLayout>
 
-            <com.google.android.material.textfield.TextInputLayout
-                android:id="@+id/textInputLayoutChatEndpoint"
+            <!-- Chat completions endpoint. Pre-filled with /chat/completions. -->
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="24dp"
-                android:layout_marginTop="12dp"
+                android:layout_marginTop="18dp"
                 android:layout_marginEnd="24dp"
-                android:textColorHint="@color/text_hint"
-                app:boxCornerRadiusBottomEnd="16dp"
-                app:boxCornerRadiusBottomStart="16dp"
-                app:boxCornerRadiusTopEnd="16dp"
-                app:boxCornerRadiusTopStart="16dp"
-                app:boxStrokeColor="@drawable/box_stroke_color"
-                app:helperText="@string/api_endpoint_chat_endpoint_help"
-                app:helperTextEnabled="true">
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/label_chat_endpoint"
+                    style="@style/Widget.App.Field.Label"
+                    android:text="@string/api_endpoint_chat_endpoint"
+                    android:visibility="gone" />
+
+                <TextView
+                    style="@style/Widget.App.Field.Hint"
+                    android:text="@string/api_endpoint_chat_endpoint_help" />
 
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/field_chat_endpoint"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
+                    style="@style/Widget.App.Field.Box"
                     android:hint="@string/api_endpoint_chat_endpoint"
                     android:singleLine="true"
-                    android:textColorHint="@color/text_hint" />
-            </com.google.android.material.textfield.TextInputLayout>
+                    android:textColorHint="?attr/appSubtleTextColor" />
+            </LinearLayout>
 
-            <com.google.android.material.textfield.TextInputLayout
-                android:id="@+id/textInputLayout12"
+            <!-- API key. Shows a star mask when a key is stored; tapping in
+                 clears it to a blank cursor. -->
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="24dp"
-                android:layout_marginTop="12dp"
+                android:layout_marginTop="18dp"
                 android:layout_marginEnd="24dp"
-                android:textColorHint="@color/text_hint"
-                app:boxCornerRadiusBottomEnd="16dp"
-                app:boxCornerRadiusBottomStart="16dp"
-                app:boxCornerRadiusTopEnd="16dp"
-                app:boxCornerRadiusTopStart="16dp"
-                app:boxStrokeColor="@drawable/box_stroke_color">
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/label_api_key"
+                    style="@style/Widget.App.Field.Label"
+                    android:text="@string/api_endpoint_key_unchanged"
+                    android:visibility="gone" />
 
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/field_api_key"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
+                    style="@style/Widget.App.Field.Box"
                     android:hint="@string/api_endpoint_key_unchanged"
                     android:singleLine="true"
-                    android:textColorHint="@color/text_hint" />
-            </com.google.android.material.textfield.TextInputLayout>
+                    android:textColorHint="?attr/appSubtleTextColor" />
+            </LinearLayout>
 
-            <com.google.android.material.textfield.TextInputLayout
-                android:id="@+id/textInputLayoutAuth"
+            <!-- Auth mode. Tap to choose (focusable=false). Pre-filled with the
+                 Bearer default, so its title shows from the start. -->
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="24dp"
-                android:layout_marginTop="12dp"
+                android:layout_marginTop="18dp"
                 android:layout_marginEnd="24dp"
                 android:layout_marginBottom="8dp"
-                android:textColorHint="@color/text_hint"
-                app:boxCornerRadiusBottomEnd="16dp"
-                app:boxCornerRadiusBottomStart="16dp"
-                app:boxCornerRadiusTopEnd="16dp"
-                app:boxCornerRadiusTopStart="16dp"
-                app:boxStrokeColor="@drawable/box_stroke_color"
-                app:helperText="@string/api_endpoint_auth_help"
-                app:helperTextEnabled="true">
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/label_auth"
+                    style="@style/Widget.App.Field.Label"
+                    android:text="@string/api_endpoint_auth_mode"
+                    android:visibility="gone" />
+
+                <TextView
+                    style="@style/Widget.App.Field.Hint"
+                    android:text="@string/api_endpoint_auth_help" />
 
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/field_auth_type"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
+                    style="@style/Widget.App.Field.Box"
                     android:clickable="true"
                     android:cursorVisible="false"
                     android:focusable="false"
                     android:focusableInTouchMode="false"
                     android:hint="@string/api_endpoint_auth_mode"
                     android:singleLine="true"
-                    android:textColorHint="@color/text_hint" />
-            </com.google.android.material.textfield.TextInputLayout>
+                    android:textColorHint="?attr/appSubtleTextColor" />
+            </LinearLayout>
 
             <!-- Image capability by model — collapsible section.
                  Collapsed by default; chevron rotates 0°/180° on toggle. -->
@@ -624,6 +637,52 @@
                 android:layout_marginBottom="8dp"
                 android:text="@string/tool_capability_clear_action"
                 android:visibility="gone" />
+
+            <!-- Advanced Options (OpenRouter only). The whole block is shown only
+                 while the Base URL is an OpenRouter endpoint —
+                 ApiEndpointEditorActivity toggles it live from the host field.
+                 Provider Discovery Path is an editable, persisted per-profile
+                 field: the provider fetch on the Choose Provider screen uses the
+                 saved value, prefilled with OpenRouter's default path. Only
+                 changed for custom API proxies. -->
+            <LinearLayout
+                android:id="@+id/section_advanced_options"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <TextView
+                    style="@style/Widget.App.Section.Title"
+                    android:layout_marginStart="24dp"
+                    android:layout_marginEnd="24dp"
+                    android:text="@string/endpoint_advanced_options_title" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="24dp"
+                    android:layout_marginTop="18dp"
+                    android:layout_marginEnd="24dp"
+                    android:layout_marginBottom="8dp"
+                    android:orientation="vertical">
+
+                    <TextView
+                        style="@style/Widget.App.Field.Label"
+                        android:text="@string/endpoint_provider_discovery_path_title" />
+
+                    <TextView
+                        style="@style/Widget.App.Field.Hint"
+                        android:text="@string/endpoint_provider_discovery_path_subtitle" />
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/field_provider_discovery_path"
+                        style="@style/Widget.App.Field.Box"
+                        android:hint="@string/endpoint_provider_discovery_path_hint_openrouter"
+                        android:singleLine="true"
+                        android:textColorHint="?attr/appSubtleTextColor" />
+                </LinearLayout>
+            </LinearLayout>
         </LinearLayout>
     </ScrollView>
 </androidx.constraintlayout.widget.ConstraintLayout>

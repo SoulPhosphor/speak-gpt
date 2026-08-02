@@ -105,21 +105,22 @@ object Archivist {
     }
 
     /**
-     * Live progress for the Memory Assistant's running state (owner answer 4,
-     * July 8 2026). One batch → the screen shows the plain "Conversation
-     * x of x"; several → the owner's batch wording ("Conversations will be
-     * batched due to size. / Batch One / x of x Conversations"). Batching is
-     * display grouping only — every conversation still gets its own model
-     * call(s); see [ArchivistBatchPlanner].
+     * Live progress for the Memory Assistant's running state. The approved
+     * surface (Memory System/plan_one_page.md) shows a spinner and
+     * "Analyzing Conversations", then a determinate bar and "X%" computed from
+     * [overallIndex]/[overallCount] once the fixed total is known. The batch
+     * fields below remain the internal size-grouping bookkeeping (every
+     * conversation still gets its own model call(s); see [ArchivistBatchPlanner])
+     * and are no longer presented to the user.
      */
     data class Progress(
         val batchIndex: Int,            // 1-based
         val batchCount: Int,
         val conversationInBatch: Int,   // 1-based, within the current batch
         val conversationsInBatch: Int,
-        /** Whole-run position (1-based) and total across all batches — what
-         *  the foreground-service notification shows ("N of M"), independent
-         *  of the screen's batch presentation. 0 on legacy callers. */
+        /** Whole-run position (1-based) and the fixed total the run sealed at
+         *  its start — the basis for the approved percentage. 0 on legacy
+         *  callers. */
         val overallIndex: Int = 0,
         val overallCount: Int = 0
     )

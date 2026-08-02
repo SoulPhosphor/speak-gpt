@@ -4,12 +4,19 @@ The long counterplan file in this folder is agent machinery. Agents read
 it. The owner never has to open it, and no agent may send her to it,
 quote its section numbers at her, or ask her to manage it.
 
-*(Status recorded 2026-07-30. Agents: update this page whenever the state
+This page is the single source of truth for the current plan and the
+owner's approved wording and behavior rulings. Where it conflicts with the
+long counterplan or any other planning draft in this folder, this page
+wins. `owner_approved_rules.md` remains in force for the underlying memory
+data rules it covers; if a newer ruling recorded here contradicts an older
+rule there, the newer ruling wins.
+
+*(Status recorded 2026-08-01. Agents: update this page whenever the state
 changes — it must always be true.)*
 
 ## What already works (on main)
 
-- Chats are recorded for review while **Archive this chat** is on.
+- Chats are recorded for review while **Archive This Chat** is on.
 - **API Memory Assistant** reads them and suggests memories. Everything lands
   in **Pending**. Nothing is ever saved, changed, or deleted without your
   approval.
@@ -35,7 +42,7 @@ already works without it.)
   including plurals and compound labels: **Lorebook**, **Lorebooks**,
   **Lorebook Memories**, and **Lorebook Suggestions**. Never display
   **lore book** or **lore books** as two words.
-- Turning **Archive this chat** off pauses archiving without erasing,
+- Turning **Archive This Chat** off pauses archiving without erasing,
   resetting, advancing, or replacing the last truthful archive bookmark.
   Turning it back on silently processes every eligible message not already
   fully processed. Never show an **Include Earlier Messages?** prompt or any
@@ -269,6 +276,11 @@ appropriate Pending area based on the result file's declared analysis type:
 - Associative-memory results open **Memories → Pending**.
 - Lorebook-memory results open **Lorebooks → Pending**.
 
+The inline import-error rules listed under **Import Memory Audit Results**
+below apply to this Import section as well: every import error appears
+directly beneath the Import button in plain language and remains visible
+until the user chooses another file or retries.
+
 The import may finish quickly, but the app must still validate the file, IDs,
 placements, evidence, duplicates, and current phone state before creating Pending
 items. The computer never writes directly into the memory store, and nothing is
@@ -292,6 +304,9 @@ Both audit routes inspect the existing associative-memory catalog itself. They
 do not analyze current, new, eligible, unprocessed, or archived conversations
 for new-memory discovery. Lorebooks and roleplay cards may be included only as
 read-only comparison material so overlap can be detected.
+
+Memory Auditor has no **Memory Analysis Type** picker. Both audit routes work
+on associative memories only, so there is no type to choose.
 
 The auditor may flag possible duplicates, contradictions, records that appear
 superseded, unclear wording, weak placement, missing evidence, or memories that
@@ -328,7 +343,14 @@ and Pending staging finish.
 The audit uses the same durable foreground-service pattern as API Memory
 Assistant. The user may leave the screen, continue chatting, or turn the screen
 off without cancelling the audit. A durable run recovers after process
-interruption.
+interruption. If the process is force-stopped or dies, the durable record
+recovers the unfinished audit when the app starts again; the UI must not claim
+that work continued while the process was dead.
+
+Creating an audit package and importing an audit result are also durable
+operations. The screen does not need to stay open, and verified progress and
+completion remain visible when the user returns. A resumed or repeated import
+must not create duplicate Pending proposals.
 
 The Android foreground-service notification uses:
 
@@ -336,6 +358,7 @@ The Android foreground-service notification uses:
 - Indeterminate progress before the total is known.
 - A determinate progress bar with **X% complete** once the total is known.
 - Tapping the notification opens **Memory Auditor**.
+- No separate completion notification.
 
 ### Audit Using AI on Computer
 
@@ -406,6 +429,15 @@ Show **View**, which opens **Memories → Pending**.
 The result file contains proposals only. The phone validates and organizes them
 into Pending cards for the user to review, correct, accept, or reject. Nothing
 is applied automatically.
+
+### Wording still awaiting owner approval
+
+The exact success, no-findings, export-completion, interruption, and failure
+messages for the audit sections and for review-package creation have **not**
+been approved. Suggestions were drafted in chat but the owner has not ruled on
+them. Do not write, implement, or treat any terminal-state wording as decided
+without the owner's approval. The structure and approved text above are
+sufficient to build everything else.
 
 ### Existing-memory housekeeping boundary and package safety
 

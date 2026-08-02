@@ -76,10 +76,73 @@ class FavoriteModelsPreferences private constructor(private val sharedPreference
 
         if (models == null) models = arrayListOf()
 
-        val modelExists: Boolean = models.any { m -> m["modelId"] == model.modelId && m["endpointId"] == model.endpointId }
-        if (!modelExists) {
-            models.add(hashMapOf("modelId" to model.modelId, "endpointId" to model.endpointId))
-            setFavoriteModels(models)
+        // Upsert: a model already favorited keeps its single entry, but its
+        // stored routing/provider memory is refreshed to the latest choice. A
+        // new model is appended. The provider memory lives on the favorite so
+        // removing the favorite removes it too (see removeFavoriteModel).
+        val existingIndex = models.indexOfFirst { m -> m["modelId"] == model.modelId && m["endpointId"] == model.endpointId }
+        val entry = hashMapOf(
+            "modelId" to model.modelId,
+            "endpointId" to model.endpointId,
+            "routingType" to model.routingType,
+            "selectedProvider" to model.selectedProvider,
+            "allowFallbacks" to model.allowFallbacks.toString(),
+            "providerOrder" to Gson().toJson(model.providerOrder),
+            "ignoredProviders" to Gson().toJson(model.ignoredProviders)
+        )
+        if (existingIndex >= 0) {
+            models[existingIndex] = entry
+        } else {
+            models.add(entry)
+        }
+        setFavoriteModels(models)
+    }
+
+    /**
+     * The stored provider-routing type for a favorited model, or
+     * [FavoriteModelObject.ROUTING_AUTOMATIC] when the model is not a favorite
+     * (or is an older favorite saved before routing memory existed). Automatic
+     * is the safe default everywhere: it means "let the provider choose".
+     */
+    fun getRoutingType(modelId: String, endpointId: String): String {
+        val match = getFavoriteModels().firstOrNull { it["modelId"] == modelId && it["endpointId"] == endpointId }
+        return match?.get("routingType")?.takeIf { it.isNotBlank() }
+            ?: FavoriteModelObject.ROUTING_AUTOMATIC
+    }
+
+    /** True when [modelId] is a favorite under [endpointId]. */
+    fun isFavorite(modelId: String, endpointId: String): Boolean {
+        return getFavoriteModels().any { it["modelId"] == modelId && it["endpointId"] == endpointId }
+    }
+
+    /**
+     * The full stored favorite for [modelId] under [endpointId], or null when
+     * the model is not a favorite. Reconstructs the provider memory (routing
+     * type, Only-mode provider, preferred order, fallbacks flag, ignore list)
+     * with safe defaults for entries saved before those fields existed.
+     */
+    fun getFavorite(modelId: String, endpointId: String): FavoriteModelObject? {
+        val entry = getFavoriteModels().firstOrNull {
+            it["modelId"] == modelId && it["endpointId"] == endpointId
+        } ?: return null
+        return FavoriteModelObject(
+            modelId = modelId,
+            endpointId = endpointId,
+            routingType = entry["routingType"]?.takeIf { it.isNotBlank() }
+                ?: FavoriteModelObject.ROUTING_AUTOMATIC,
+            selectedProvider = entry["selectedProvider"] ?: "",
+            allowFallbacks = entry["allowFallbacks"] != "false",
+            providerOrder = parseStringList(entry["providerOrder"]),
+            ignoredProviders = parseStringList(entry["ignoredProviders"])
+        )
+    }
+
+    private fun parseStringList(json: String?): List<String> {
+        if (json.isNullOrBlank()) return emptyList()
+        return try {
+            Gson().fromJson(json, Array<String>::class.java)?.toList() ?: emptyList()
+        } catch (_: Exception) {
+            emptyList()
         }
     }
 

@@ -89,14 +89,19 @@ Do not make an entire screen or behavior shared merely because it is new. Share 
 
 ## Theme and palette contract
 
-Shared styles should resolve colors through theme roles or shared color resources rather than screen-specific values.
+The canonical palette contract is the designer's semantic zone list, recorded in `ui-redesign-plan.md` Section 4.5 (owner ruling, July 30 2026). A palette — whether a compiled preset overlay or a future user-saved custom theme — defines values for those zones. Custom user themes are a committed future goal with restart-to-apply semantics; shared styles must not close that route off.
 
-Every `ThemeOverlay.Phosphor.*` palette must define:
+Shared styles resolve repeated colors through theme attributes (zone attributes or mapped Material roles), never through palette-specific `@color/` values that a palette cannot override. New custom-drawn backgrounds — including the future outline-gradient and glow treatments — must read theme attributes, and exceptional visuals (bubbles, button state lists, icon tints, dialogs) get their colors from shared drawables or one shared code path, never from color-handling code copied into individual screens.
 
-- `appRowTitleColor`
-- `appRowSubtitleColor`
+The zone attributes implemented so far, which every `ThemeOverlay.Phosphor.*` palette must define:
 
-These attributes supply the shared row title, subtitle, and chevron colors.
+- `appRowTitleColor` — shared row titles and chevrons
+- `appRowSubtitleColor` — shared row subtitles
+- `appTextColor` — default text (dropdown/tile values, number fields, attachment names)
+- `appSubtleTextColor` — muted secondary text (field hints, section explanations, size readouts)
+- `appTitleTextColor` — screen and header titles, screen intro paragraphs
+
+Every theme that defines one of these must define all of them, including the night themes and every palette overlay — a style resolving an attribute that no theme layer carries crashes at inflation. They are the pattern the remaining zones follow when theme work resumes.
 
 A change to a shared style or shared layout may alter every screen using it. Treat that as an app-wide visual decision, not a local cleanup.
 
@@ -315,11 +320,14 @@ Use when the header contains one trailing Save, Delete, Help, Debug, Edit, or si
 
 ### Header with two or more trailing action icons
 
-No complete approved shared pattern currently covers additional chained icons. `Widget.App.ActionBar.SecondaryButton` directly covers only the end-anchored icon.
+Use:
 
-Do not copy its geometry into the additional icon and call the header converted. Present the missing shared variant or shared header-layout decision for owner approval.
+- `Widget.App.ActionBar.SecondaryButton` for the last icon, anchored to the bar's end
+- `Widget.App.ActionBar.ChainedButton` for every additional icon before it (owner approval, July 30 2026)
 
-Until that gap is resolved, a screen with locally repeated additional-icon geometry is Partial in `ui-style-adoption.md`.
+`ChainedButton` supplies the same geometry and background as `SecondaryButton` but bakes in no end anchor. Each instance sets `app:layout_constraintEnd_toStartOf` pointing at its right-hand neighbor, and keeps its own icon, content description, tooltip, and visibility.
+
+Do not hand-copy the icon geometry; that is what this style exists to prevent.
 
 ### Close-panel header
 
@@ -417,6 +425,36 @@ The value is the tap target and should open an anchored `ListPopupWindow`. This 
 Use only for the established Summoning Circle tile pattern: category label, current selection, and a separate edit button that opens the manager for that category.
 
 Do not use the QuickTile family as the general app-wide dropdown pattern. General multiple-choice fields use `Widget.App.Dropdown.*`.
+
+## Provider chart
+
+`Widget.App.Chart.Row`
+
+`Widget.App.Chart.HeaderCell`
+
+`Widget.App.Chart.Cell`
+
+Use for the horizontally scrollable provider table on the Choose Provider screen (and any future tabular data chart).
+
+Composition:
+
+1. a `HorizontalScrollView` holding a vertical `LinearLayout`;
+2. one `Chart.Row` of `Chart.HeaderCell` views for the column labels;
+3. one `Chart.Row` per data row of `Chart.Cell` views, built in code.
+
+The header and data rows must take their cell widths from one shared column table in the owning activity so the columns stay aligned. Values render in the default text color (`appTextColor`); unknown values render as `?`. The chart is theme-ready: all colors resolve through theme attributes, so per-column value colors can be added later by extending the cell styles, not by hardcoding colors in code.
+
+The Ignore control at a row's end uses `bg_ignore_square_off` / `bg_ignore_square_on` with `ic_ignore_x`, tinted at runtime via `appSubtleTextColor` (unmarked) and `colorError`/`colorOnError` (marked).
+
+## Plain checkbox option row
+
+`Widget.App.CheckOption.Row`
+
+`Widget.App.CheckOption.Label`
+
+Use for a checkbox option where the whole line is the tap target but must read as a normal line of text — no background, no tile or button look (owner spec, Aug 2 2026; first use: the provider Filters panel's capability checkboxes).
+
+Distinct from `Widget.App.Row.Toggle`, which is a switch row with a subtitle.
 
 ## Attached-document strip
 

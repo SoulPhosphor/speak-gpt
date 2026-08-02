@@ -182,12 +182,23 @@ class LoreBookDebugActivity : FragmentActivity() {
                     else ->
                         sb.append(getString(R.string.lorebook_debug_searched_fmt, record.activeBooks)).append('\n')
                 }
-                sb.append("Injected ").append(record.matches.size).append(" memory(ies):")
-                sb.append('\n')
-                for (match in record.matches) {
-                    sb.append("  • ").append(match.entry.label)
-                    sb.append("  (matched trigger: \"").append(match.matchedTrigger).append("\")")
+                if (record.injected.isNotEmpty()) {
+                    sb.append(getString(R.string.memory_debug_injected_header))
                     sb.append('\n')
+                    for (match in record.injected) {
+                        sb.append("  • ").append(match.entry.label)
+                        sb.append("  (matched trigger: \"").append(match.matchedTrigger).append("\")")
+                        sb.append('\n')
+                    }
+                }
+                if (record.cut.isNotEmpty()) {
+                    sb.append(getString(R.string.memory_debug_cut_header))
+                    sb.append('\n')
+                    for (cut in record.cut) {
+                        sb.append("  • ").append(cut.match.entry.label)
+                        sb.append("  — ").append(cut.reason)
+                        sb.append('\n')
+                    }
                 }
                 sb.append("────────────────────")
                 sb.append('\n')

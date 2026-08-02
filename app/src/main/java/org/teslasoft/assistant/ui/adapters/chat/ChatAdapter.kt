@@ -118,6 +118,10 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
     private var companionImageFile: File? = null
     private var companionImageShape: String = "flower"
 
+    // The chat's current companion name, used only as the display fallback for
+    // assistant messages that carry no stamped [KEY_COMPANION_NAME] of their own.
+    private var companionLabel: String? = null
+
     // User-side picture (owner ruling, July 21 2026), already cascaded by
     // ChatActivity: the active Roleplay Character's picture, else the active My
     // Persona's, else the Default Personal Avatar. Null only when none of those
@@ -131,6 +135,16 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
     fun setCompanionAvatar(file: File?, shape: String) {
         companionImageFile = file
         companionImageShape = shape
+        notifyDataSetChanged()
+    }
+
+    /** Called by ChatActivity with the chat's current companion name. Used
+     *  only as the fallback label for assistant messages that predate the
+     *  per-message stamp (see [KEY_COMPANION_NAME]); stamped messages keep
+     *  their own locked name. Rebinds visible rows so a companion switch is
+     *  reflected on those unstamped rows. */
+    fun setCompanionLabel(label: String?) {
+        companionLabel = label
         notifyDataSetChanged()
     }
 
@@ -167,6 +181,14 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         const val KEY_IMAGE_CONFIRMATION = "imageConfirmationCard"
         const val KEY_IMAGE_CONFIRMATION_PROMPT = "imageConfirmationPrompt"
         const val KEY_IMAGE_CONFIRMATION_COMPANION = "imageConfirmationCompanion"
+
+        // The companion name shown on an assistant message's label. Stamped
+        // onto the message when the reply is created (ChatActivity.putMessage)
+        // so it is LOCKED to the companion that was active for that reply and
+        // a later companion switch never rewrites past labels. Absent on
+        // messages written before this feature; those fall back to the chat's
+        // current companion name at display time.
+        const val KEY_COMPANION_NAME = "companionName"
 
         // Transient inline Creating Image row (plan §5 progress
         // experience): the visible status and Cancel action for a running
@@ -440,7 +462,21 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             btnCopy.setImageResource(R.drawable.ic_copy)
             btnCopy.setOnClickListener {
                 val clipboard: ClipboardManager = context.getSystemService(FragmentActivity.CLIPBOARD_SERVICE) as ClipboardManager
-                val clip = ClipData.newPlainText("response", chatMessage["message"].toString())
+                val messageText = chatMessage["message"].toString()
+                // The failed/interrupted/stopped marker (and, when "Show chat
+                // errors" is on, the coded error beneath it) lives in a separate
+                // TextView from the reply body. Fold it into the copied text so
+                // sharing a failure captures the exact wording shown on screen,
+                // not just whatever partial reply text preceded it.
+                val markerText = statusMarker
+                    ?.takeIf { it.visibility == View.VISIBLE }
+                    ?.text?.toString()?.takeIf { it.isNotBlank() }
+                val fullText = when {
+                    markerText == null -> messageText
+                    messageText.isBlank() -> markerText
+                    else -> "$messageText\n\n$markerText"
+                }
+                val clip = ClipData.newPlainText("response", fullText)
                 clipboard.setPrimaryClip(clip)
                 Toast.makeText(context, context.getString(R.string.label_copy), Toast.LENGTH_SHORT).show()
             }
@@ -750,9 +786,9 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 else -> context.getString(R.string.message_state_incomplete)
             }
             val errorText = chatMessage[MessageCompletionState.KEY_ERROR_TEXT]?.toString().orEmpty()
-            marker.text = if (state == MessageCompletionState.FAILED &&
-                preferences.showChatErrors() && errorText.isNotBlank()
-            ) {
+            // A failed reply always shows its error detail below the marker —
+            // failures are never hidden (owner ruling, July 31 2026).
+            marker.text = if (state == MessageCompletionState.FAILED && errorText.isNotBlank()) {
                 "$label\n$errorText"
             } else {
                 label
@@ -843,7 +879,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             if (chatMessage["isBot"] == true) {
                 displayAvatar()
 
-                username.text = preferences.getAssistantName()
+                username.text = resolveAssistantLabel(chatMessage)
                 ui.setBackgroundColor(getSurfaceColor(context))
             } else {
                 displayUserAvatar()
@@ -851,6 +887,19 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 btnCopy.visibility = View.VISIBLE
                 ui.setBackgroundColor(getSurface2Color(context))
             }
+        }
+
+        /** The name shown on an assistant message: the companion name stamped
+         *  on the message when it was created (locked, so a later companion
+         *  switch never rewrites it), else the chat's current companion name
+         *  for messages written before the stamp existed, else the generic
+         *  "Assistant". Never the app name. */
+        private fun resolveAssistantLabel(chatMessage: HashMap<String, Any>): String {
+            val stamped = chatMessage[KEY_COMPANION_NAME]?.toString()
+            if (!stamped.isNullOrBlank()) return stamped
+            val live = companionLabel
+            if (!live.isNullOrBlank()) return live
+            return context.getString(R.string.chat_role_assistant)
         }
 
         /** Assistant-side precedence (profile-images-plan.md): Companion
@@ -863,6 +912,14 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
          *  original XML background explicitly restored so recycling from a
          *  photo row never leaves it blank. */
         private fun displayAvatar() {
+            // While this chat has only failed replies (no completed reply yet),
+            // the assistant avatar is the red error badge instead of the
+            // Companion picture / glyph (owner ruling, July 31 2026). The first
+            // completed reply clears it and the normal avatar returns.
+            if (MessageCompletionState.chatShowsErrorAvatar(dataArray)) {
+                displayErrorAvatar()
+                return
+            }
             val file = companionImageFile
             if (file != null && file.exists()) {
                 ProfileImageBinder.bind(context, icon, file, companionImageShape) {
@@ -875,6 +932,19 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 icon.imageTintList = null
                 displayLegacyOrBuiltinAvatar()
             }
+        }
+
+        /** Full-bleed red-disc-with-white-X badge shown when the chat has no
+         *  successful reply yet. Self-contained, so the tonal backing and any
+         *  tint are cleared and the view fully reset to avoid recycled-row
+         *  bleed, matching the Companion-photo binder's discipline. */
+        private fun displayErrorAvatar() {
+            icon.background = null
+            icon.imageTintList = null
+            icon.clearColorFilter()
+            icon.scaleType = ImageView.ScaleType.FIT_CENTER
+            icon.setImageResource(R.drawable.ic_avatar_error)
+            icon.contentDescription = context.getString(R.string.chat_avatar_error_desc)
         }
 
         private fun displayLegacyOrBuiltinAvatar() {

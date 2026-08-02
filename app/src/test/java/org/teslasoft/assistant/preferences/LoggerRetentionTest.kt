@@ -64,6 +64,21 @@ class LoggerRetentionTest {
         assertTrue(whole.contains("Baz.kt:2"))
     }
 
+    @Test fun providerFailureTimestampOnlyHeaderSplitsByEntry() {
+        // The Provider Failure Log uses a header line that is just the
+        // timestamp ("[ts]\nProvider: …"), with no tag/level. trimByEntries
+        // must still split it into whole entries via the relaxed header regex.
+        val now = LocalDateTime.now()
+        fun pf(ts: LocalDateTime, provider: String, err: String) =
+            "[${ts.format(fmt)}]\nProvider: $provider\nProvider Error: $err\n\n\n"
+        val log = pf(now.minusSeconds(10), "AlphaProvider", "429 rate") +
+            pf(now, "BetaProvider", "402 credits")
+        val out = Logger.trimByEntries(log, 1, 30)
+        assertFalse(out.contains("AlphaProvider"))
+        assertTrue(out.contains("Provider: BetaProvider"))
+        assertTrue(out.contains("Provider Error: 402 credits"))
+    }
+
     @Test fun cappingToOneKeepsTheWholeLastEntry() {
         val now = LocalDateTime.now()
         val multi = "[${now.format(fmt)}] [GenError] [ERROR] [U0] boom\n" +
