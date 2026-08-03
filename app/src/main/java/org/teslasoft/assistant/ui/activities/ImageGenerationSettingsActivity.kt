@@ -16,7 +16,6 @@
 
 package org.teslasoft.assistant.ui.activities
 
-import android.content.Intent
 import android.content.res.ColorStateList
 import android.os.Build
 import android.os.Bundle
@@ -27,7 +26,6 @@ import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.widget.ListPopupWindow
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.graphics.drawable.toDrawable
@@ -42,12 +40,13 @@ import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.fragments.dialogs.AdvancedModelSelectorDialogFragment
+import org.teslasoft.assistant.ui.util.EndpointProfileDropdown
 
 /**
  * Image Generation settings (image-generation-rebuild-plan.md §5): the
  * app-wide configuration behind the Images row. Every row saves as it is
  * changed, following the Summarizer Settings interaction pattern: the
- * Image Service row opens the existing endpoint list picker, the Image
+ * Image Service row opens the saved-profile dropdown, the Image
  * Model row opens the shared searchable model picker fed by the chosen
  * endpoint (in image mode, without the chat picker's name exclusions), and
  * the Ask Before Creating row is visible only while Let the AI Create
@@ -72,17 +71,6 @@ class ImageGenerationSettingsActivity : FragmentActivity() {
     private var textDefaultShape: TextView? = null
     private var textDefaultQuality: TextView? = null
     private var switchImagineCommand: MaterialSwitch? = null
-
-    private val endpointLauncher = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == RESULT_OK) {
-            val id = result.data?.getStringExtra("apiEndpointId")
-            if (id != null) preferences?.setImageGeneratorEndpointId(id)
-        }
-        refreshServiceAndModelRows()
-        refreshShapeAndQuality()
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -146,8 +134,10 @@ class ImageGenerationSettingsActivity : FragmentActivity() {
         }
 
         refreshServiceAndModelRows()
-        rowImageService?.setOnClickListener { openEndpointPicker() }
+        rowImageService?.setOnClickListener { showEndpointDropdown() }
+        textImageServiceValue?.setOnClickListener { showEndpointDropdown() }
         rowImageModel?.setOnClickListener { openModelChooser() }
+        textImageModelValue?.setOnClickListener { openModelChooser() }
 
         refreshShapeAndQuality()
         // The Dropdown.Value style makes the value clickable, so it consumes
@@ -180,8 +170,14 @@ class ImageGenerationSettingsActivity : FragmentActivity() {
         textImageModelValue?.text = model.ifEmpty { getString(R.string.label_endpoint_none) }
     }
 
-    private fun openEndpointPicker() {
-        endpointLauncher.launch(Intent(this, ApiEndpointsListActivity::class.java))
+    private fun showEndpointDropdown() {
+        val anchor = textImageServiceValue ?: return
+        val endpoints = apiEndpointPreferences?.getApiEndpointsList(this) ?: return
+        EndpointProfileDropdown.show(this, anchor, endpoints) { endpointId ->
+            preferences?.setImageGeneratorEndpointId(endpointId)
+            refreshServiceAndModelRows()
+            refreshShapeAndQuality()
+        }
     }
 
     /** The shared searchable model picker in image mode: the provider's
@@ -191,7 +187,7 @@ class ImageGenerationSettingsActivity : FragmentActivity() {
     private fun openModelChooser() {
         val endpointId = preferences?.getImageGeneratorEndpointId().orEmpty()
         if (endpointId.isEmpty()) {
-            openEndpointPicker()
+            showEndpointDropdown()
             return
         }
 

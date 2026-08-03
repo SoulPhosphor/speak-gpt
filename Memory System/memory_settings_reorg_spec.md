@@ -50,7 +50,8 @@ row counts, entities, directives, modes, raw database status) on this page.
 
 **Section: Memory Assistant Model**
 - Row **"Memory Assistant Endpoint"** — "Choose which saved AI endpoint
-  analyzes history and drafts memory items."
+  analyzes history and drafts memory items." The value opens an anchored
+  dropdown containing all saved endpoint profiles.
 - Row **"Memory Assistant Model"** — "Model name used by Memory Assistant."
 
 **Section: Backups** (never "Seed & Backup")

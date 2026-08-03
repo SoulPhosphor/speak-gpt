@@ -16,7 +16,6 @@
 
 package org.teslasoft.assistant.ui.activities
 
-import android.content.Intent
 import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.os.Build
@@ -31,7 +30,6 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.widget.ListPopupWindow
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
@@ -52,6 +50,7 @@ import org.teslasoft.assistant.preferences.memory.archivist.ArchivistPrompt
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.fragments.dialogs.AdvancedFavoriteModelSelectorDialogFragment
 import org.teslasoft.assistant.ui.fragments.dialogs.AdvancedModelSelectorDialogFragment
+import org.teslasoft.assistant.ui.util.EndpointProfileDropdown
 import java.util.Locale
 
 /**
@@ -100,17 +99,6 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
 
     /** Held until Save (spec §2 has an explicit Save button). */
     private var selectedImportance = 1
-
-    // Opens the full endpoint list (same screen the main chat uses to pick its
-    // own endpoint); picking a profile there makes it the Memory Assistant's
-    // endpoint.
-    private val archivistEndpointLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode == RESULT_OK) {
-            val id = result.data?.getStringExtra("apiEndpointId")
-            if (id != null) preferences?.setArchivistEndpointId(id)
-        }
-        refreshArchivistRows()
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -186,8 +174,8 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
         refreshArchivistRows()
         // The Dropdown.Value style makes the value clickable, so it consumes
         // taps instead of passing them to the row — it needs its own listener.
-        rowArchivistEndpoint?.setOnClickListener { openArchivistEndpointPicker() }
-        textArchivistEndpointValue?.setOnClickListener { openArchivistEndpointPicker() }
+        rowArchivistEndpoint?.setOnClickListener { showArchivistEndpointDropdown() }
+        textArchivistEndpointValue?.setOnClickListener { showArchivistEndpointDropdown() }
         rowArchivistModel?.setOnClickListener { openArchivistModelChooser() }
         textArchivistModelValue?.setOnClickListener { openArchivistModelChooser() }
 
@@ -281,22 +269,25 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
         textArchivistModelValue?.text = model.ifEmpty { getString(R.string.label_archivist_model_none) }
     }
 
-    /** Opens the same full endpoint list the main chat uses to pick its own
-     *  endpoint. Picking a profile there makes it the Memory Assistant's. */
-    private fun openArchivistEndpointPicker() {
-        archivistEndpointLauncher.launch(Intent(this, ApiEndpointsListActivity::class.java))
+    private fun showArchivistEndpointDropdown() {
+        val anchor = textArchivistEndpointValue ?: return
+        val endpoints = apiEndpointPreferences?.getApiEndpointsList(this) ?: return
+        EndpointProfileDropdown.show(this, anchor, endpoints) { endpointId ->
+            preferences?.setArchivistEndpointId(endpointId)
+            refreshArchivistRows()
+        }
     }
 
     /** Opens the same model picker the main chat's Quick Settings uses: your
      *  favorited models first (with a "All models" fallback to search), or
      *  straight to the live searchable list if you have no favorites yet.
      *  Either way it fetches from the Memory Assistant's own endpoint. If no
-     *  endpoint has been chosen yet, there's nothing to fetch models from —
-     *  send the user to pick one first instead. */
+     *  endpoint has been chosen yet, there's nothing to fetch models from,
+     *  so the endpoint dropdown opens first. */
     private fun openArchivistModelChooser() {
         val endpointId = preferences?.getArchivistEndpointId().orEmpty()
         if (endpointId.isEmpty()) {
-            openArchivistEndpointPicker()
+            showArchivistEndpointDropdown()
             return
         }
 

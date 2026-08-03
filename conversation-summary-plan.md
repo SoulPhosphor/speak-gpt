@@ -184,8 +184,9 @@ reduction, more the longer the chat runs.
    subtitle "Settings related to the summarizer feature." The screen
    holds:
    - **Summary Model** — the API endpoint and model picker for summary
-     calls, modeled on the Memory Assistant's endpoint picker (same
-     interaction shape);
+     calls. The endpoint is selected from an anchored dropdown of all saved
+     profiles; the model picker uses the same Favorites / All Models flow as
+     Quick Settings;
    - **Complete Messages** — the default recent-window message count
      (the value new chats start with, so the user doesn't retype it).
      Hint: "Last number of complete messages sent to the model before
