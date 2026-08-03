@@ -8,8 +8,9 @@
 > assembly order, and the old roleplay/card handling are ALL superseded.
 > `owner_approved_rules.md` (Revision 4) and
 > `roleplay_cards_and_tags_spec.md` outrank this file wherever they
-> disagree; `rag_engine_work_order.md` is the current build path, and
-> Stage 3.4's enforcer rework (built) is the actual runtime. Still valid
+> disagree; `rag_engine_work_order.md` (now archived in `legacy/`) was
+> the build path, and Stage 3.4's enforcer rework (built) is the actual
+> runtime — see `project-plan.md` at the repo root for current work. Still valid
 > here: the librarian mechanics, change-set safety, and undo.
 > **Protection-inseparability is NO LONGER a thing** — "Protected" was
 > RETIRED July 8 2026 (see the addendum in `owner_approved_rules.md`):

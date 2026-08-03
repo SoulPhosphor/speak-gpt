@@ -46,7 +46,9 @@ deleting a linked card warns and offers archive, true delete asks
 per-deletion whether memories go too (REPLACING the older
 always-delete teardown language), and surviving references show
 "(archived card)"/"(deleted card)" rather than vanishing. Stage 3.6 of
-`rag_engine_work_order.md` is rescoped to implement the spec.**
+`rag_engine_work_order.md` (now archived in `legacy/`) was rescoped to
+implement the spec — built; see `project-plan.md` at the repo root for
+current remaining work.**
 **Revision 5 — July 7 2026: the owner redesigned Model rules (§11) in
 chat and approved it front to back. The profile/group concept is
 REPLACED by a model-string-primary model with tags for organization (the
@@ -635,7 +637,8 @@ one, it is stale — follow this addendum and fix the stale text.
    cog).
 
 5. **Memory-row icon system (FINAL — supersedes §5 of
-   `phase6_card_suggestions_and_icons_design.md`).** By scope:
+   `phase6_card_suggestions_and_icons_design.md`, now archived in
+   `legacy/`).** By scope:
    real_life → `person`; **global → `borg`** (its own icon); companion →
    `partner_exchange`; project → `draft`; rp_character → `theater_comedy`
    (comedy mask); world/campaign (and unknown) → `public` (globe); **a memory
@@ -661,9 +664,12 @@ one, it is stale — follow this addendum and fix the stale text.
    Assistant with the owner from scratch (a fresh conversation is planned
    before it is built, because the injection/prompt plumbing is fragile). The
    owner's approved layout, wording, and behavior for the page — plus the
-   backend plumbing it implies and the open questions still to settle — are
-   written up in **`Memory System/memory_assistant_design.md`** (July 8 2026).
-   Read it before building the screen.
+   backend plumbing it implies and the open questions still to settle — were
+   written up in **`Memory System/memory_assistant_design.md`** (July 8 2026,
+   now archived in `legacy/`). That design is superseded by the three-way
+   split (API Memory Assistant / Computer Memory Review / Memory Auditor)
+   specified in **`project-plan.md`** at the repo root — read the roadmap,
+   not this archived design, before building any of those screens.
    *(Status note, not a rule change: as of later on July 8 2026, in the
    Phase 6 conversation this item anticipated, the run-engine BACKEND exists
    on the Phase 6 branch — drafts-only, per rules; `origin='archivist'` and
@@ -678,8 +684,10 @@ one, it is stale — follow this addendum and fix the stale text.
    memory linked to several targets can be wrongly hard-deleted or
    mishandled, and the mirror left stale. The verified diagnosis, the exact
    fix logic (query the join table; keep vs delete; reassign the mirror), and
-   the required tests are in
-   **`Memory System/roleplay_memory_deletion_fix.md`**. Confirmed behavior: the
+   the required tests were in
+   **`Memory System/roleplay_memory_deletion_fix.md`** (now archived in
+   `legacy/` — the fix already landed, per the status note below).
+   Confirmed behavior: the
    two-option UI **keeps shared memories** — "also delete this card's memories"
    deletes only memories owned SOLELY by the deleted card; no "delete shared
    too" option is built now (future UI decision only). Was a present bug in

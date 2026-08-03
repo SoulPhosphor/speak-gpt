@@ -12,7 +12,11 @@ The structure of truth is fixed:
   implementation reference only.
 
 No other document may call itself the roadmap, canonical plan, single
-source of truth, current phase list, or execution plan.
+source of truth, current phase list, or execution plan. Superseded
+roadmaps, work orders, and design documents for the same features this
+roadmap now covers are archived in **`legacy/`** at the repository root —
+consult that folder only if something built needs troubleshooting that
+requires the original design reasoning; never as a plan.
 
 ## Ground rules
 

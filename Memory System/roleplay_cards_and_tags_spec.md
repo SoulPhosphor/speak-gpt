@@ -18,10 +18,11 @@ future-dated artifact.)*
 > Every design item below is **RULED** — said or approved by the owner in
 > plain language in chat, July 6–7 2026. The RULED markers throughout
 > show what was decided when; nothing in this file is open design space.
-> Implementing agents: read §9 (do not become the designer) before
-> building, and take the build sequence from `rag_engine_work_order.md`
-> Stage 3.6, rescoped July 7 to implement this spec (the old
-> six-section-ledger 3.6 is superseded).
+> Implementing agents: read §9 (do not become the designer). The build
+> sequence was `rag_engine_work_order.md` Stage 3.6 (now archived in
+> `legacy/`), rescoped July 7 to implement this spec (the old
+> six-section-ledger 3.6 is superseded) — this spec's system is BUILT;
+> see `project-plan.md` at the repo root for current remaining work.
 
 ---
 

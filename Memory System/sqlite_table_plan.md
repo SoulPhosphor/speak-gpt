@@ -4,8 +4,10 @@
 > is the v1.11 baseline; the shipped database is at DB v6 (v4–v6
 > documented in CLAUDE.md and the `MemoryStore` header: seven-category
 > scope, projects, multi-select target join tables, cooldown tables) and
-> the rescoped Stage 3.6 (`rag_engine_work_order.md`) adds the roleplay
-> card + tag tables per `roleplay_cards_and_tags_spec.md`. Note
+> the rescoped Stage 3.6 (`rag_engine_work_order.md`, now archived in
+> `legacy/`) adds the roleplay card + tag tables per
+> `roleplay_cards_and_tags_spec.md` — already built; see `project-plan.md`
+> at the repo root for current remaining work. Note
 > especially: the world/character TEARDOWN recipe below (memories always
 > archived/deleted with the card) is SUPERSEDED by the per-deletion
 > choice and archive/link rules in the spec §5. `owner_approved_rules.md`
