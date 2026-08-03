@@ -61,7 +61,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
 
     companion object {
         const val DATABASE_NAME = "companion_memory.db"
-        private const val DATABASE_VERSION = 19
+        private const val DATABASE_VERSION = 20
 
         // Freshness-cooldown source types (rules §10 / Stage 3.3): the
         // composite key (chat_id, source_type, entry_id) keeps ids from
@@ -438,6 +438,22 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 "PRIMARY KEY (memory_id, project_id))"
         )
 
+        // Possible Match resolution history (Step 1.5): one new memory may
+        // supersede SEVERAL checked old memories (owner ruling), so the single
+        // memories.supersedes column cannot be the source of truth. This
+        // many-to-many table records "new_memory_id superseded old_memory_id".
+        // BOTH sides cascade on delete, so a superseded memory the user later
+        // deletes permanently takes its history rows with it and never blocks
+        // the delete (the legacy supersedes column, a plain reference, is
+        // separately nulled out in deleteMemoryTx).
+        db.execSQL(
+            "CREATE TABLE memory_supersessions (" +
+                "new_memory_id TEXT NOT NULL REFERENCES memories(memory_id) ON DELETE CASCADE, " +
+                "old_memory_id TEXT NOT NULL REFERENCES memories(memory_id) ON DELETE CASCADE, " +
+                "at TEXT NOT NULL, " +
+                "PRIMARY KEY (new_memory_id, old_memory_id))"
+        )
+
         db.execSQL(
             "CREATE TABLE change_log (" +
                 "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
@@ -770,6 +786,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         db.execSQL("CREATE INDEX idx_memcampaigns_campaign ON memory_campaigns(campaign_id)")
         db.execSQL("CREATE INDEX idx_memrpchars_rp ON memory_roleplay_characters(roleplay_character_id)")
         db.execSQL("CREATE INDEX idx_memprojects_project ON memory_projects(project_id)")
+        db.execSQL("CREATE INDEX idx_supersessions_old ON memory_supersessions(old_memory_id)")
         db.execSQL("CREATE INDEX idx_changelog_memory ON change_log(memory_id)")
         db.execSQL("CREATE INDEX idx_transcripts_queue ON transcripts(review_status) WHERE review_status = 'pending'")
         db.execSQL("CREATE INDEX idx_transcripts_chat ON transcripts(chat_id)")
@@ -1408,6 +1425,26 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             db.execSQL(
                 "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                 arrayOf(META_DB_MIGRATION, "19")
+            )
+        }
+        if (oldVersion < 20) {
+            // v20 (Step 1.5): Possible Match resolution history. One new memory
+            // may supersede SEVERAL checked old memories (owner ruling), which
+            // the single memories.supersedes column cannot represent. Additive;
+            // existing installs get an empty table and keep any legacy single
+            // supersedes pointer untouched. Both foreign keys cascade on delete
+            // so a superseded memory stays permanently deletable.
+            db.execSQL(
+                "CREATE TABLE memory_supersessions (" +
+                    "new_memory_id TEXT NOT NULL REFERENCES memories(memory_id) ON DELETE CASCADE, " +
+                    "old_memory_id TEXT NOT NULL REFERENCES memories(memory_id) ON DELETE CASCADE, " +
+                    "at TEXT NOT NULL, " +
+                    "PRIMARY KEY (new_memory_id, old_memory_id))"
+            )
+            db.execSQL("CREATE INDEX idx_supersessions_old ON memory_supersessions(old_memory_id)")
+            db.execSQL(
+                "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                arrayOf(META_DB_MIGRATION, "20")
             )
         }
     }
@@ -5260,29 +5297,338 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         val db = writableDatabase
         db.beginTransaction()
         try {
-            // Deleting a Memory Assistant DRAFT is a rejection (owner
-            // preference, July 9 2026): remember it so a rerun of the same
-            // conversation doesn't refile the exact same draft. Scoped to
-            // the draft's source conversation and exact text — never broad
-            // suppression. Keyed by the rename-safe source chat id (DB v17,
-            // counterplan §4(c)); a legacy draft without one falls back to
-            // hashing its filing-time chat name, which equals the chat id
-            // unless the chat was renamed since filing (the old behavior's
-            // exact limit — no worse). User-authored memories and non-draft
-            // deletions register nothing.
-            val prior = getMemory(memoryId)
-            if (prior != null && prior.status == "draft" && prior.origin == "archivist") {
-                val chatKey = prior.sourceChatId
-                    ?: prior.provenanceContext?.let { Hash.hash(it) } ?: ""
-                db.execSQL(
-                    "INSERT OR REPLACE INTO rejected_drafts (content_hash, chat_key, deleted_at) VALUES (?, ?, ?)",
-                    arrayOf(draftContentHash(prior.title, prior.content), chatKey, nowIso())
+            deleteMemoryTx(db, memoryId)
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    /** The delete body, callable from a resolution transaction (Save & Replace)
+     *  as well as the standalone [deleteMemory]. */
+    private fun deleteMemoryTx(db: SQLiteDatabase, memoryId: String) {
+        // Deleting a Memory Assistant DRAFT is a rejection (owner preference,
+        // July 9 2026): remember it so a rerun of the same conversation doesn't
+        // refile the exact same draft. Scoped to the draft's source
+        // conversation and exact text — never broad suppression. Keyed by the
+        // rename-safe source chat id (DB v17, counterplan §4(c)); a legacy draft
+        // without one falls back to hashing its filing-time chat name, which
+        // equals the chat id unless the chat was renamed since filing (the old
+        // behavior's exact limit — no worse). User-authored memories and
+        // non-draft deletions register nothing.
+        val prior = getMemory(memoryId)
+        if (prior != null && prior.status == "draft" && prior.origin == "archivist") {
+            val chatKey = prior.sourceChatId
+                ?: prior.provenanceContext?.let { Hash.hash(it) } ?: ""
+            db.execSQL(
+                "INSERT OR REPLACE INTO rejected_drafts (content_hash, chat_key, deleted_at) VALUES (?, ?, ?)",
+                arrayOf(draftContentHash(prior.title, prior.content), chatKey, nowIso())
+            )
+        }
+        // Supersession safety (Step 1.5): the legacy memories.supersedes column
+        // is a plain reference with no ON DELETE rule, so a newer memory still
+        // pointing here would block this delete — breaking the rule that a
+        // superseded memory stays permanently deletable. Clear those pointers
+        // first. The memory_supersessions rows cascade on their own foreign
+        // keys and need no manual cleanup.
+        db.execSQL("UPDATE memories SET supersedes = NULL WHERE supersedes = ?", arrayOf(memoryId))
+        db.delete("memories", "memory_id = ?", arrayOf(memoryId))
+        recordDeletionTx(db, "memory", memoryId)
+        clearEntryCooldownTx(db, COOLDOWN_SOURCE_MEMORY, memoryId)
+    }
+
+    /* ---------------------------------------------------------------------- */
+    /* Possible Match detection + resolution (Step 1.5)                        */
+    /* ---------------------------------------------------------------------- */
+
+    /** All target IDs a memory row carries, across every scope's join table —
+     *  the placement half of its Possible Match identity. */
+    private fun allTargetIds(db: SQLiteDatabase, memoryId: String): List<String> =
+        readJoin(db, "memory_companions", "companion_id", memoryId) +
+            readJoin(db, "memory_worlds", "world_id", memoryId) +
+            readJoin(db, "memory_campaigns", "campaign_id", memoryId) +
+            readJoin(db, "memory_roleplay_characters", "roleplay_character_id", memoryId) +
+            readJoin(db, "memory_projects", "project_id", memoryId)
+
+    private fun unionTargets(m: MemoryRecord): List<String> =
+        m.companionIds + m.worldIds + m.campaignIds + m.roleplayCharacterIds + m.projectIds
+
+    /** Every memory in the same scope as the candidate — the only rows that can
+     *  be an exact or (fiction-wall-respecting) near match. [excludeId] drops a
+     *  draft comparing against itself. */
+    private fun loadComparableLibrary(scope: String, excludeId: String?): List<MemoryMatch.Existing> {
+        val db = readableDatabase
+        val out = ArrayList<MemoryMatch.Existing>()
+        db.rawQuery(
+            "SELECT memory_id, content, scope, kind, status FROM memories WHERE scope = ?",
+            arrayOf(scope)
+        ).use {
+            while (it.moveToNext()) {
+                val id = it.getString(0)
+                if (id == excludeId) continue
+                out.add(
+                    MemoryMatch.Existing(
+                        memoryId = id,
+                        content = it.getString(1),
+                        scope = it.getString(2),
+                        kind = it.getString(3),
+                        status = it.getString(4),
+                        targetIds = allTargetIds(db, id)
+                    )
                 )
             }
-            db.delete("memories", "memory_id = ?", arrayOf(memoryId))
-            recordDeletionTx(db, "memory", memoryId)
-            clearEntryCooldownTx(db, COOLDOWN_SOURCE_MEMORY, memoryId)
+        }
+        return out
+    }
+
+    /**
+     * The staging gate (counterplan §5.2(b)): classify a proposed memory against
+     * the library so the runner suppresses a true duplicate and files everything
+     * else. Runs when a suggestion is staged. Lexical similarity only — the
+     * honest signal with or without an embedding model.
+     */
+    fun classifyCandidate(candidate: MemoryMatch.Candidate): MemoryMatch.Outcome =
+        MemoryMatch.classify(candidate, loadComparableLibrary(candidate.scope, excludeId = null))
+
+    /**
+     * The DETERMINISTIC exact Possible Matches for a still-pending draft:
+     * different-type or archived/superseded exact matches. Recomputed on demand
+     * so it is always current, which satisfies the counterplan's "revalidate
+     * when the user resolves it". The differently-worded semantic layer is added
+     * on top by [org.teslasoft.assistant.preferences.memory.PossibleMatchFinder]
+     * using the embedding model; this method never uses similarity. Empty for a
+     * non-existent or non-draft id.
+     */
+    fun deterministicMatchesForDraft(draftId: String): List<MemoryMatch.Match> {
+        val m = getMemory(draftId) ?: return emptyList()
+        if (m.status != "draft") return emptyList()
+        val candidate = MemoryMatch.Candidate(m.content, m.scope, m.kind, unionTargets(m))
+        return when (val o = MemoryMatch.classify(candidate, loadComparableLibrary(m.scope, excludeId = draftId))) {
+            is MemoryMatch.Outcome.Possible -> o.matches
+            else -> emptyList()
+        }
+    }
+
+    /** Active memory ids whose placement is comparable to the draft's (same
+     *  scope, sharing a target or both untargeted) — the bounded working set the
+     *  embedding layer scores for semantic Possible Matches using the STORED
+     *  index. Excludes the draft itself; empty for a non-existent draft. */
+    fun comparableActiveMemoryIds(draftId: String): List<String> {
+        val m = getMemory(draftId) ?: return emptyList()
+        val cTargets = unionTargets(m)
+        val db = readableDatabase
+        val out = ArrayList<String>()
+        db.rawQuery(
+            "SELECT memory_id FROM memories WHERE scope = ? AND status = 'active'",
+            arrayOf(m.scope)
+        ).use {
+            while (it.moveToNext()) {
+                val id = it.getString(0)
+                if (id == draftId) continue
+                if (MemoryMatch.comparablePlacement(m.scope, cTargets, m.scope, allTargetIds(db, id))) {
+                    out.add(id)
+                }
+            }
+        }
+        return out
+    }
+
+    /** Archived and superseded memories whose placement is comparable to the
+     *  draft's — the Possible Match comparison is allowed to reach them (owner
+     *  ruling, Step 1.5), even though they are barred from chat retrieval. They
+     *  hold NO stored vector (the archive rule), so their embedding text rides
+     *  along for the finder to regenerate a vector on demand, purely for
+     *  comparison; nothing is persisted and their retrieval-eligibility is
+     *  untouched. Excludes the draft; empty for a non-existent draft. */
+    fun comparableInactiveDocsForDraft(draftId: String): List<MemoryComparisonDoc> {
+        val m = getMemory(draftId) ?: return emptyList()
+        val cTargets = unionTargets(m)
+        val db = readableDatabase
+        val out = ArrayList<MemoryComparisonDoc>()
+        db.rawQuery(
+            "SELECT memory_id, title, content, embedding_text, tags_json FROM memories " +
+                "WHERE scope = ? AND status IN ('archived','superseded')",
+            arrayOf(m.scope)
+        ).use {
+            while (it.moveToNext()) {
+                val id = it.getString(0)
+                if (id == draftId) continue
+                if (MemoryMatch.comparablePlacement(m.scope, cTargets, m.scope, allTargetIds(db, id))) {
+                    out.add(
+                        MemoryComparisonDoc(
+                            memoryId = id,
+                            title = it.getString(1),
+                            content = it.getString(2),
+                            embeddingText = it.getStringOrNull("embedding_text"),
+                            tagsJson = it.getStringOrNull("tags_json") ?: "[]"
+                        )
+                    )
+                }
+            }
+        }
+        return out
+    }
+
+    /** The old memories a given new memory superseded (resolution history). */
+    fun supersededMemoryIds(newMemoryId: String): List<String> {
+        val out = ArrayList<String>()
+        readableDatabase.rawQuery(
+            "SELECT old_memory_id FROM memory_supersessions WHERE new_memory_id = ? ORDER BY at ASC",
+            arrayOf(newMemoryId)
+        ).use { while (it.moveToNext()) out.add(it.getString(0)) }
+        return out
+    }
+
+    /** Outcome of an atomic Possible Match resolution. */
+    sealed class ResolutionResult {
+        /** Applied. [reindexMemoryIds] are now-active memories whose embeddings
+         *  were dropped and should be re-indexed by the caller (the proposal,
+         *  plus an edited old memory). */
+        data class Applied(val reindexMemoryIds: List<String>) : ResolutionResult()
+
+        /** The proposal no longer exists or was already resolved since the user
+         *  opened Review — nothing was changed. The caller re-reads Pending. */
+        object StaleProposal : ResolutionResult()
+    }
+
+    /** Flip a still-pending proposal to active inside an open transaction.
+     *  Returns false (leaving the transaction to be rolled back) when the
+     *  proposal vanished or is no longer a draft — the resolution-time
+     *  revalidation. Mirrors [setMemoryStatus]'s active-path bookkeeping:
+     *  clears card-placement suggestions, drops embeddings for a fresh re-index,
+     *  logs the activation, and resets the freshness cooldown. */
+    private fun activateProposalTx(db: SQLiteDatabase, proposalId: String): Boolean {
+        val p = getMemory(proposalId) ?: return false
+        if (p.status != "draft") return false
+        db.update("memories", ContentValues().apply {
+            put("status", "active")
+            put("updated_at", nowIso())
+            putNull("suggested_card_type")
+            putNull("suggested_card_id")
+            putNull("suggested_section")
+        }, "memory_id = ?", arrayOf(proposalId))
+        db.delete("embeddings", "memory_id = ?", arrayOf(proposalId))
+        logChange(db, proposalId, "user", "activated", null, snapshotMemoryJson(p))
+        clearEntryCooldownTx(db, COOLDOWN_SOURCE_MEMORY, proposalId)
+        return true
+    }
+
+    /** Mark one old memory superseded inside an open transaction and record the
+     *  many-to-many history link to the new memory. */
+    private fun supersedeMemoryTx(db: SQLiteDatabase, oldId: String, byNewId: String) {
+        val prior = getMemory(oldId) ?: return
+        db.update("memories", ContentValues().apply {
+            put("status", "superseded")
+            put("updated_at", nowIso())
+            putNull("suggested_card_type")
+            putNull("suggested_card_id")
+            putNull("suggested_section")
+        }, "memory_id = ?", arrayOf(oldId))
+        db.delete("embeddings", "memory_id = ?", arrayOf(oldId))
+        logChange(db, oldId, "user", "superseded", null, snapshotMemoryJson(prior))
+        clearEntryCooldownTx(db, COOLDOWN_SOURCE_MEMORY, oldId)
+        db.insertWithOnConflict("memory_supersessions", null, ContentValues().apply {
+            put("new_memory_id", byNewId)
+            put("old_memory_id", oldId)
+            put("at", nowIso())
+        }, SQLiteDatabase.CONFLICT_REPLACE)
+    }
+
+    /**
+     * **Save & Edit Old Memory** (single match): save the proposal as active and
+     * keep the old memory active, applying the user's edits to it. Pass the
+     * edited old memory in [editedOld]; pass null to keep it unchanged. Both
+     * writes happen in one transaction.
+     */
+    fun resolveSaveAndEditOld(proposalId: String, editedOld: MemoryRecord?): ResolutionResult {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            if (!activateProposalTx(db, proposalId)) return ResolutionResult.StaleProposal
+            val reindex = arrayListOf(proposalId)
+            if (editedOld != null) {
+                val prior = getMemory(editedOld.memoryId)
+                if (prior != null) {
+                    // Same rules as updateMemory: a changed source field clears
+                    // the derived embedding_text and drops the vector so the
+                    // corrected memory can never stay discoverable by stale
+                    // wording. The old memory stays active.
+                    val sourceTextChanged = prior.title != editedOld.title ||
+                        prior.content != editedOld.content || prior.tagsJson != editedOld.tagsJson
+                    val updated = editedOld.copy(
+                        status = "active",
+                        updatedAt = nowIso(),
+                        embeddingText = if (sourceTextChanged) null else editedOld.embeddingText
+                    )
+                    db.update("memories", memoryValues(updated), "memory_id = ?", arrayOf(updated.memoryId))
+                    writeMemoryLinks(db, updated)
+                    logChange(db, updated.memoryId, "user", "edited", null, snapshotMemoryJson(prior))
+                    val textChanged = sourceTextChanged ||
+                        (prior.embeddingText ?: "") != (updated.embeddingText ?: "")
+                    if (textChanged) {
+                        db.delete("embeddings", "memory_id = ?", arrayOf(updated.memoryId))
+                        reindex.add(updated.memoryId)
+                    }
+                    clearEntryCooldownTx(db, COOLDOWN_SOURCE_MEMORY, updated.memoryId)
+                }
+            }
             db.setTransactionSuccessful()
+            return ResolutionResult.Applied(reindex)
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    /**
+     * **Save & Replace**: save the proposal as active and permanently delete the
+     * checked old memories. One or several olds; all in one transaction. An old
+     * memory that vanished since Review opened is skipped, never resurrected.
+     */
+    fun resolveReplace(proposalId: String, oldMemoryIds: List<String>): ResolutionResult {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            if (!activateProposalTx(db, proposalId)) return ResolutionResult.StaleProposal
+            for (oldId in oldMemoryIds.distinct()) {
+                if (oldId == proposalId) continue
+                if (getMemory(oldId) == null) continue
+                deleteMemoryTx(db, oldId)
+            }
+            db.setTransactionSuccessful()
+            return ResolutionResult.Applied(listOf(proposalId))
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    /**
+     * **Save & Supersede**: save the proposal as active and mark the checked old
+     * memories superseded, retaining them as history. One or several olds; the
+     * many-to-many [supersededMemoryIds] link records every one. The legacy
+     * single supersedes column is set only when exactly one old is superseded
+     * (best-effort for existing single-pointer readers); the join table is the
+     * source of truth for the multiple case.
+     */
+    fun resolveSupersede(proposalId: String, oldMemoryIds: List<String>): ResolutionResult {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            if (!activateProposalTx(db, proposalId)) return ResolutionResult.StaleProposal
+            val superseded = ArrayList<String>()
+            for (oldId in oldMemoryIds.distinct()) {
+                if (oldId == proposalId) continue
+                if (getMemory(oldId) == null) continue
+                supersedeMemoryTx(db, oldId, proposalId)
+                superseded.add(oldId)
+            }
+            if (superseded.size == 1) {
+                db.execSQL(
+                    "UPDATE memories SET supersedes = ? WHERE memory_id = ?",
+                    arrayOf(superseded[0], proposalId)
+                )
+            }
+            db.setTransactionSuccessful()
+            return ResolutionResult.Applied(listOf(proposalId))
         } finally {
             db.endTransaction()
         }

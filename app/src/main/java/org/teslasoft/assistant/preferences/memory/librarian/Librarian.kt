@@ -70,6 +70,12 @@ class Librarian private constructor(private val appContext: Context) {
         /** How many lore-overlap vectors to keep cached across turns. */
         private const val LORE_VECTOR_CACHE_MAX = 256
 
+        /** How many Possible Match comparison vectors to keep cached (Step 1.5).
+         *  Archived/superseded memories carry no stored vector, so the Pending
+         *  comparison regenerates them on demand; this reuses a temporary vector
+         *  across the drafts compared in one Memory Browser session. */
+        private const val COMPARISON_VECTOR_CACHE_MAX = 256
+
         /** Whole word tokens of [text], lowercased. Pure. */
         fun lexicalTokens(text: String): Set<String> =
             text.lowercase().split(TOKEN_BOUNDARY).filter { it.isNotEmpty() }.toSet()
@@ -323,6 +329,17 @@ class Librarian private constructor(private val appContext: Context) {
             size > LORE_VECTOR_CACHE_MAX
     }
 
+    // Possible Match comparison vectors (Step 1.5), same shape as the lore
+    // cache: keyed by model tag + text so an edit or model swap misses, cleared
+    // on [invalidateModel]. Comparison-only — these vectors are NEVER written to
+    // the embeddings table, so an archived/superseded memory never becomes
+    // eligible for chat retrieval by being compared here.
+    private val comparisonCacheLock = Any()
+    private val comparisonVectorCache = object : LinkedHashMap<String, FloatArray>(64, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, FloatArray>?): Boolean =
+            size > COMPARISON_VECTOR_CACHE_MAX
+    }
+
     // Single-flight background missing-vector repair (counterplan Step 1.4 —
     // "self-repairing search"). Low priority so a live turn's own embed is
     // never starved; the guard collapses a burst of "index incomplete" turns
@@ -410,6 +427,28 @@ class Librarian private constructor(private val appContext: Context) {
     }
 
     /**
+     * Embed a Possible Match comparison text (Step 1.5), reusing a cached vector
+     * for the same text and model tag so an archived/superseded memory is not
+     * re-embedded for every pending draft in a Memory Browser session. Null when
+     * no model is usable or inference fails — the finder then omits the semantic
+     * layer for that memory. The vector is comparison-only and never persisted,
+     * so it can never make an inactive memory eligible for chat retrieval.
+     */
+    fun embedComparisonCached(text: String): FloatArray? {
+        val m = ensureModel() ?: return null
+        val key = m.tag + " " + text
+        synchronized(comparisonCacheLock) { comparisonVectorCache[key]?.let { return it } }
+        val vec = try {
+            embedLocked(m, text, false)
+        } catch (t: Throwable) {
+            MemoryLog.log(appContext, "Librarian", "error", "Comparison embed failed: ${t.message}")
+            return null
+        }
+        synchronized(comparisonCacheLock) { comparisonVectorCache[key] = vec }
+        return vec
+    }
+
+    /**
      * Re-embed a single memory after a hand edit so the librarian matches on
      * its current text, not a stale (or missing) vector. Best-effort: a no-op
      * when there's no usable model or the memory is gone/inactive — the
@@ -439,6 +478,7 @@ class Librarian private constructor(private val appContext: Context) {
         model = null
         modelLoadFailed = false
         synchronized(loreCacheLock) { loreVectorCache.clear() }
+        synchronized(comparisonCacheLock) { comparisonVectorCache.clear() }
     }
 
     /** Stored scoring weights, bounded (counterplan §5.5): a non-finite,

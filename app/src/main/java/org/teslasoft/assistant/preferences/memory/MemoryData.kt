@@ -691,6 +691,22 @@ data class RetrievableMemory(
     val updatedAt: String? = null
 )
 
+/**
+ * The minimum a memory needs to be re-embedded for a Possible Match comparison
+ * (Step 1.5). Archived and superseded memories carry NO stored vector (the
+ * archive rule drops it when a memory leaves active), so the finder regenerates
+ * one on demand from these fields — the same semantic document the active index
+ * is built from — purely for comparison. Nothing here is ever persisted or made
+ * eligible for chat retrieval.
+ */
+data class MemoryComparisonDoc(
+    val memoryId: String,
+    val title: String,
+    val content: String,
+    val embeddingText: String?,
+    val tagsJson: String
+)
+
 /** A scored retrieval hit for the debug view and (later) the enforcer packet. */
 data class ScoredMemory(
     val memory: RetrievableMemory,

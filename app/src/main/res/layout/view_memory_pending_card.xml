@@ -1,0 +1,180 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+/**************************************************************************
+* Copyright (c) 2023-2026 Dmytro Ostapenko. All rights reserved.
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*  http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+**************************************************************************/
+-->
+<!-- Associative Memory Pending card (Step 1.5, owner placement spec):
+     one vertical memory card reusing the normal memory-card visual language.
+       top row:  [ caution (only with possible matches) ]      [ info ]
+       body:     [ scope icon ][ full proposed memory ]
+       actions:  bottom-right — ordinary: [ X ] [ save ];  conflict: [ Review ]
+     While the match check is running only the small spinner shows (top-left);
+     the action row stays empty so a suggestion is never presented as
+     conflict-free before its comparison finishes. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/ui"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginHorizontal="16dp"
+    android:layout_marginVertical="8dp"
+    android:background="@drawable/btn_accent_tonal_selector_v3"
+    android:backgroundTint="?attr/colorSecondaryContainer"
+    android:orientation="vertical"
+    android:paddingHorizontal="14dp"
+    android:paddingVertical="12dp">
+
+        <!-- Top row: caution (top-left, only when matches exist) / spinner while
+             checking; info (top-right, same position on every card). -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <ImageView
+                android:id="@+id/pending_caution"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:contentDescription="@string/mem_pending_caution_desc"
+                android:src="@drawable/ic_report"
+                android:visibility="gone"
+                app:tint="?attr/colorError" />
+
+            <ProgressBar
+                android:id="@+id/pending_loading"
+                style="?android:attr/progressBarStyleSmall"
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:contentDescription="@string/mem_pending_checking"
+                android:visibility="gone" />
+
+            <View
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:layout_weight="1" />
+
+            <ImageButton
+                android:id="@+id/pending_info"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/mem_info_action"
+                android:src="@drawable/ic_info"
+                android:tooltipText="@string/mem_info_action"
+                app:tint="?attr/colorPrimary" />
+        </LinearLayout>
+
+        <!-- Body: the complete proposed memory in the normal card field order
+             (leading scope icon, title, tags, content). No action icon is ever
+             placed beside or inside the memory text. -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <ImageView
+                android:id="@+id/pending_icon"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:layout_marginTop="2dp"
+                android:layout_marginEnd="12dp"
+                android:contentDescription="@string/mem_row_icon"
+                android:src="@drawable/ic_mem_public"
+                app:tint="?attr/colorPrimary" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/pending_title"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:textColor="?attr/colorPrimary"
+                    android:textSize="17sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/pending_tags"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:textColor="@color/text_subtitle"
+                    android:textSize="11sp"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/pending_content"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:textColor="@color/text_subtitle"
+                    android:textSize="13sp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Bottom action row, aligned bottom-right. Ordinary: discard X then
+             save. Conflict: Review only. Failed check: Retry. -->
+        <LinearLayout
+            android:id="@+id/pending_actions"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:gravity="end|center_vertical"
+            android:orientation="horizontal">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/pending_retry"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/mem_pending_retry"
+                android:visibility="gone" />
+
+            <ImageButton
+                android:id="@+id/pending_discard"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:layout_marginEnd="4dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/mem_pending_discard"
+                android:src="@drawable/ic_close"
+                android:tooltipText="@string/mem_pending_discard"
+                android:visibility="gone"
+                app:tint="?attr/colorPrimary" />
+
+            <ImageButton
+                android:id="@+id/pending_save"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/mem_pending_save"
+                android:src="@drawable/ic_save"
+                android:tooltipText="@string/mem_pending_save"
+                android:visibility="gone"
+                app:tint="?attr/colorPrimary" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/pending_review"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/mem_pending_review"
+                android:visibility="gone" />
+        </LinearLayout>
+</LinearLayout>
