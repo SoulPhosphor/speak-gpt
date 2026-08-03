@@ -20,14 +20,22 @@ import java.text.Normalizer
 import java.util.Locale
 
 /**
- * Possible Match detection — the deterministic, placement-aware identity and
- * near-match logic behind the Associative Memory Pending rules
- * (`Memory System/plan_one_page.md`) and the Step 1.5 hygiene behavior
+ * Possible Match detection — the DETERMINISTIC, placement-aware identity layer
+ * behind the Associative Memory Pending rules (`Memory System/plan_one_page.md`)
+ * and the Step 1.5 hygiene behavior
  * (`Memory System/external_memory_analysis_counterplan.md` §5.2(b) / §5.7).
  *
+ * This object decides EXACT identity only: duplicates, placement, type, and
+ * status. It never uses similarity of any kind — the differently-worded,
+ * semantically-related layer is the installed local embedding model, wired in
+ * [PossibleMatchFinder]. Deterministic matching works with or without a model;
+ * semantic matching needs the model and is unavailable without it. Nothing here
+ * (or there) ever merges, deletes, replaces, or supersedes anything — it only
+ * classifies. The user decides.
+ *
  * Pure Kotlin so the required cases run as plain JVM unit tests (the store is
- * SQLCipher and has no JVM harness); [MemoryStore] loads the comparable
- * library, calls in here to classify, then executes the chosen resolution.
+ * SQLCipher and has no JVM harness); [MemoryStore] loads the comparable library
+ * and calls in here to classify.
  *
  * Deterministic identity (counterplan §5.2(b)): compare Unicode-NFKC,
  * locale-independent case-folded, whitespace-collapsed CONTENT — the title is
@@ -35,9 +43,6 @@ import java.util.Locale
  * stripped ("likes X" and "no longer likes X" must stay distinct) — PLUS scope
  * and the sorted stable target IDs (the same sentence in two fictional worlds
  * is legitimately two memories).
- *
- * This service never merges, deletes, replaces, or supersedes anything. It only
- * classifies. The user decides.
  */
 object MemoryMatch {
 
@@ -56,23 +61,14 @@ object MemoryMatch {
          *  the user chooses restore / replace / keep-separate. */
         EXACT_INACTIVE,
 
-        /** Not identical, but text-near enough to compare. Updates, negations,
-         *  and contradictions all land here — similarity cannot tell them
-         *  apart, so the user decides. */
+        /** Differently worded but semantically related, found by the local
+         *  embedding model — NOT produced here (this object is deterministic);
+         *  [PossibleMatchFinder] tags its vector-search candidates with it. */
         SEMANTIC_NEAR,
 
         /** Unrelated. */
         NONE
     }
-
-    /**
-     * Word-overlap (Jaccard) at or above which two memories are near enough to
-     * surface as a Possible Match in the no-embedding-model path. Lexical
-     * overlap is the honest universal signal when no vectors exist; a vector
-     * comparator can be supplied to [relate]/[classify] to raise precision when
-     * a model is installed, without changing this contract.
-     */
-    const val SEMANTIC_TEXT_THRESHOLD = 0.6
 
     /** NFKC, locale-independent case-fold, whitespace-collapse. Punctuation and
      *  negation are preserved on purpose. */
@@ -86,10 +82,10 @@ object MemoryMatch {
     fun placementKey(scope: String, targetIds: Collection<String>): String =
         "$scope|${targetIds.toSortedSet().joinToString(",")}"
 
-    /** Whether two placements can hold comparable (near-match) memories: same
-     *  scope, and either both untargeted or sharing at least one target. Keeps
-     *  the fiction wall intact — World A never near-matches a disjoint World B,
-     *  even for identical text. */
+    /** Whether two placements can hold comparable memories: same scope, and
+     *  either both untargeted or sharing at least one target. Bounds the
+     *  embedding search and keeps the fiction wall intact — World A never
+     *  matches a disjoint World B, even for identical text. */
     fun comparablePlacement(
         scopeA: String, targetsA: Collection<String>,
         scopeB: String, targetsB: Collection<String>
@@ -101,18 +97,6 @@ object MemoryMatch {
 
     private fun sameExactPlacement(a: Candidate, b: Existing): Boolean =
         a.scope == b.scope && a.targetIds.toSortedSet() == b.targetIds.toSortedSet()
-
-    private fun tokens(text: String): Set<String> =
-        normalizeContent(text).split(Regex("\\W+")).filter { it.length > 2 }.toSet()
-
-    /** Jaccard word overlap of two contents in [0,1]. */
-    fun textSimilarity(a: String, b: String): Double {
-        val ta = tokens(a)
-        val tb = tokens(b)
-        if (ta.isEmpty() || tb.isEmpty()) return 0.0
-        val inter = ta.intersect(tb).size.toDouble()
-        return inter / (ta.size + tb.size - inter)
-    }
 
     /** The staged (or edited) memory being checked against the library. */
     data class Candidate(
@@ -133,39 +117,21 @@ object MemoryMatch {
     )
 
     /**
-     * Classify one existing memory against the candidate. Exact identity is
-     * deterministic; [SEMANTIC_NEAR] uses [similarity] (default lexical Jaccard)
-     * only when identity does not match and only within a comparable placement.
-     * Other pending drafts never surface as reviewable near-matches — they can
-     * only trip [ALREADY_PRESENT] suppression.
+     * Classify one existing memory against the candidate — EXACT identity only.
+     * A same-placement, same-content pending draft or active memory of the same
+     * kind is [ALREADY_PRESENT]; the same content with a different active kind is
+     * [EXACT_DIFFERENT_KIND]; the same content on an archived/superseded row is
+     * [EXACT_INACTIVE]. Everything else is [NONE] here — near-matches are the
+     * embedding model's job, not this object's.
      */
-    fun relate(
-        candidate: Candidate,
-        existing: Existing,
-        similarity: (String, String) -> Double = ::textSimilarity
-    ): Relation {
+    fun relate(candidate: Candidate, existing: Existing): Relation {
         val exact = sameExactPlacement(candidate, existing) &&
             normalizeContent(candidate.content) == normalizeContent(existing.content)
-        when (existing.status) {
-            "draft" ->
-                return if (exact && existing.kind == candidate.kind) Relation.ALREADY_PRESENT
-                else Relation.NONE
-            "active" ->
-                if (exact) return if (existing.kind == candidate.kind) Relation.ALREADY_PRESENT
-                else Relation.EXACT_DIFFERENT_KIND
-            else -> // archived | superseded
-                if (exact) return Relation.EXACT_INACTIVE
-        }
-        // Non-identical, non-draft: a near-match only inside a comparable
-        // placement. Similarity cannot assert a duplicate — it only nominates a
-        // pair for the user to compare.
-        if (!comparablePlacement(candidate.scope, candidate.targetIds, existing.scope, existing.targetIds)) {
-            return Relation.NONE
-        }
-        return if (similarity(candidate.content, existing.content) >= SEMANTIC_TEXT_THRESHOLD) {
-            Relation.SEMANTIC_NEAR
-        } else {
-            Relation.NONE
+        if (!exact) return Relation.NONE
+        return when (existing.status) {
+            "draft" -> if (existing.kind == candidate.kind) Relation.ALREADY_PRESENT else Relation.NONE
+            "active" -> if (existing.kind == candidate.kind) Relation.ALREADY_PRESENT else Relation.EXACT_DIFFERENT_KIND
+            else -> Relation.EXACT_INACTIVE // archived | superseded
         }
     }
 
@@ -179,26 +145,24 @@ object MemoryMatch {
          *  can be approved (the Pending caution icon and Review action). */
         data class Possible(val matches: List<Match>) : Outcome()
 
-        /** File the draft; nothing to compare — it can be approved or discarded
-         *  directly from Pending. */
+        /** File the draft; nothing exactly matches — direct approve/discard.
+         *  (The embedding layer may still find a semantic match; that is decided
+         *  in [PossibleMatchFinder], not here.) */
         object Unique : Outcome()
     }
 
     data class Match(val memoryId: String, val relation: Relation)
 
     /**
-     * Classify a candidate against the whole comparable [library]. An
-     * [Outcome.AlreadyPresent] anywhere wins (suppress at staging); otherwise
-     * every [Relation] other than [Relation.NONE] becomes a Possible Match.
+     * Classify a candidate against the whole comparable [library] on exact
+     * identity. An [Outcome.AlreadyPresent] anywhere wins (suppress at staging);
+     * otherwise every exact [Relation] other than [Relation.NONE] becomes a
+     * Possible Match.
      */
-    fun classify(
-        candidate: Candidate,
-        library: List<Existing>,
-        similarity: (String, String) -> Double = ::textSimilarity
-    ): Outcome {
+    fun classify(candidate: Candidate, library: List<Existing>): Outcome {
         val matches = ArrayList<Match>()
         for (e in library) {
-            when (val r = relate(candidate, e, similarity)) {
+            when (val r = relate(candidate, e)) {
                 Relation.ALREADY_PRESENT -> return Outcome.AlreadyPresent
                 Relation.NONE -> Unit
                 else -> matches.add(Match(e.memoryId, r))

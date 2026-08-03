@@ -5391,15 +5391,15 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         MemoryMatch.classify(candidate, loadComparableLibrary(candidate.scope, excludeId = null))
 
     /**
-     * The existing memories a still-pending draft must be compared against (the
-     * Pending caution icon and the Review comparison contents). Recomputed on
-     * demand so it is always current, which also satisfies the counterplan's
-     * "revalidate when the user resolves it": a caller re-reads this immediately
-     * before applying a resolution. Empty means no conflict — the draft can be
-     * approved or discarded directly. Returns empty for a non-existent or
-     * non-draft id.
+     * The DETERMINISTIC exact Possible Matches for a still-pending draft:
+     * different-type or archived/superseded exact matches. Recomputed on demand
+     * so it is always current, which satisfies the counterplan's "revalidate
+     * when the user resolves it". The differently-worded semantic layer is added
+     * on top by [org.teslasoft.assistant.preferences.memory.PossibleMatchFinder]
+     * using the embedding model; this method never uses similarity. Empty for a
+     * non-existent or non-draft id.
      */
-    fun possibleMatchesForDraft(draftId: String): List<MemoryMatch.Match> {
+    fun deterministicMatchesForDraft(draftId: String): List<MemoryMatch.Match> {
         val m = getMemory(draftId) ?: return emptyList()
         if (m.status != "draft") return emptyList()
         val candidate = MemoryMatch.Candidate(m.content, m.scope, m.kind, unionTargets(m))
@@ -5407,6 +5407,32 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             is MemoryMatch.Outcome.Possible -> o.matches
             else -> emptyList()
         }
+    }
+
+    /** Active memory ids whose placement is comparable to the draft's (same
+     *  scope, sharing a target or both untargeted) — the bounded working set the
+     *  embedding layer scores for semantic Possible Matches. Only active rows
+     *  carry current vectors (the archive rule), so archived/superseded matches
+     *  stay the deterministic path's job. Excludes the draft itself; empty for a
+     *  non-existent draft. */
+    fun comparableActiveMemoryIds(draftId: String): List<String> {
+        val m = getMemory(draftId) ?: return emptyList()
+        val cTargets = unionTargets(m)
+        val db = readableDatabase
+        val out = ArrayList<String>()
+        db.rawQuery(
+            "SELECT memory_id FROM memories WHERE scope = ? AND status = 'active'",
+            arrayOf(m.scope)
+        ).use {
+            while (it.moveToNext()) {
+                val id = it.getString(0)
+                if (id == draftId) continue
+                if (MemoryMatch.comparablePlacement(m.scope, cTargets, m.scope, allTargetIds(db, id))) {
+                    out.add(id)
+                }
+            }
+        }
+        return out
     }
 
     /** The old memories a given new memory superseded (resolution history). */

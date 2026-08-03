@@ -533,6 +533,15 @@ the user.
 - the chosen operation applies to the checked memories;
 - there is no second, separate selection screen.
 
+**How matches are found (owner ruling, 2026-08-03).** Exact duplicates and the
+placement, type, and status checks are always found — with or without an
+embedding model. Finding a *differently worded but related* existing memory
+uses the installed on-device embedding model; that semantic part of Possible
+Match is unavailable until an embedding model is installed, though exact
+matching still works without one. No online or external AI is ever used to find
+matches, and a suggested match never merges, replaces, deletes, or supersedes
+anything on its own — it is only shown for you to decide.
+
 ## What's left — in any order, or never
 
 - **Self-repairing search** — background housekeeping so search stays

@@ -110,15 +110,24 @@ class MemoryMatchTest {
         assertEquals(MemoryMatch.Relation.EXACT_INACTIVE, (out as MemoryMatch.Outcome.Possible).matches.single().relation)
     }
 
-    /* -------------------------- near matches -------------------------- */
+    /* ---------- non-exact is NONE here (semantic is embeddings) ---------- */
 
     @Test
-    fun negationContradiction_isPossibleMatchNotDuplicate() {
+    fun negationIsNotAnExactDuplicate_deterministicUnique() {
+        // Different content — deterministically Unique. Detecting that these are
+        // semantically related (a contradiction) is the embedding model's job in
+        // PossibleMatchFinder, never token overlap in this deterministic layer.
         val c = candidate("She no longer likes pineapple pizza.")
         val lib = listOf(existing("m1", "She likes pineapple pizza."))
-        val out = MemoryMatch.classify(c, lib)
-        assertTrue(out is MemoryMatch.Outcome.Possible)
-        assertEquals(MemoryMatch.Relation.SEMANTIC_NEAR, (out as MemoryMatch.Outcome.Possible).matches.single().relation)
+        assertEquals(MemoryMatch.Outcome.Unique, MemoryMatch.classify(c, lib))
+    }
+
+    @Test
+    fun differentlyWordedSameMeaning_isUniqueDeterministically() {
+        // Deterministic identity is exact-only; a paraphrase is not caught here.
+        val c = candidate("Her sister relocated to Denver.")
+        val lib = listOf(existing("m1", "Her sister moved to Denver."))
+        assertEquals(MemoryMatch.Outcome.Unique, MemoryMatch.classify(c, lib))
     }
 
     @Test
@@ -143,16 +152,15 @@ class MemoryMatchTest {
     }
 
     @Test
-    fun nearTextSharingAWorld_isPossibleMatch() {
-        val c = candidate(
-            "A great dragon guards the mountain pass.", scope = "world", targets = listOf("w1")
-        )
-        val lib = listOf(
-            existing("m1", "A dragon guards the mountain pass.", scope = "world", targets = listOf("w1", "w2"))
-        )
-        val out = MemoryMatch.classify(c, lib)
-        assertTrue(out is MemoryMatch.Outcome.Possible)
-        assertEquals(MemoryMatch.Relation.SEMANTIC_NEAR, (out as MemoryMatch.Outcome.Possible).matches.single().relation)
+    fun identicalTextOverlappingWorlds_isUniqueButComparable() {
+        // Same exact content and an overlapping-but-not-identical target set is
+        // NOT the same placement, so it is not an exact duplicate...
+        val c = candidate("A dragon guards the pass.", scope = "world", targets = listOf("w1"))
+        val lib = listOf(existing("m1", "A dragon guards the pass.", scope = "world", targets = listOf("w1", "w2")))
+        assertEquals(MemoryMatch.Outcome.Unique, MemoryMatch.classify(c, lib))
+        // ...but the two placements ARE comparable, so the embedding layer is
+        // allowed to compare them (guarded here by comparablePlacement).
+        assertTrue(MemoryMatch.comparablePlacement("world", listOf("w1"), "world", listOf("w1", "w2")))
     }
 
     /* -------------------------- precedence --------------------------- */
@@ -161,18 +169,18 @@ class MemoryMatchTest {
     fun alreadyPresentWinsOverOtherPossibleMatches() {
         val c = candidate("Allergic to shellfish.")
         val lib = listOf(
-            existing("m1", "Allergic to shellfish once nearly hospitalized her.", status = "archived"),
-            existing("m2", "Allergic to shellfish.") // exact active, same kind
+            existing("m1", "Allergic to shellfish.", status = "archived"), // exact inactive
+            existing("m2", "Allergic to shellfish.")                        // exact active, same kind
         )
         assertEquals(MemoryMatch.Outcome.AlreadyPresent, MemoryMatch.classify(c, lib))
     }
 
     @Test
-    fun multiplePossibleMatchesAreAllReturned() {
-        val c = candidate("Her sister lives in Denver now.")
+    fun multipleExactMatchesAreAllReturned() {
+        val c = candidate("Do not mention her father.", kind = "instruction")
         val lib = listOf(
-            existing("m1", "Her sister lives in Denver.", status = "archived"),
-            existing("m2", "Her sister now lives in Denver.")
+            existing("m1", "Do not mention her father.", kind = "fact", status = "archived"), // exact inactive
+            existing("m2", "Do not mention her father.", kind = "fact")                        // exact different kind
         )
         val out = MemoryMatch.classify(c, lib)
         assertTrue(out is MemoryMatch.Outcome.Possible)
