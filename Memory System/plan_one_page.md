@@ -478,12 +478,70 @@ This file-based computer workflow is separate from any tentative future web or
 desktop client that mirrors the phone app. A custom client may be considered
 later, but it is not required for the first working computer-review route.
 
+## Associative Memory Pending and Possible Match review
+
+*(Owner-approved rulings recorded 2026-08-03. Scope: the Associative
+Memories Pending area and its Possible Match resolution. Lorebook review is
+out of scope and unchanged by this ruling. No Pending or comparison screen is
+built from this ruling yet — it records the approved behavior and governs the
+data and service work that will support it.)*
+
+**Pending shows the full proposed Associative Memory** — the whole proposed
+memory, not a shortened summary.
+
+**A suggestion with no possible conflict:**
+
+- can be approved or discarded directly from Pending;
+- carries an Information control that shows where the suggestion came from
+  (its provenance).
+
+**A suggestion with a possible conflict** (another memory must be compared):
+
+- shows a caution icon — the caution icon appears only when another memory
+  must be compared, and never otherwise;
+- the caution icon is never labeled: no explanatory words are placed beside
+  it;
+- has its direct approve/discard controls replaced by a single labeled
+  Review action.
+
+**Review opens a dedicated comparison screen:**
+
+- the proposed memory appears at the top of the screen but is NOT pinned — it
+  scrolls away with the rest of the content, it does not stay fixed while
+  scrolling;
+- the existing possible matches appear below it, each shown using the normal
+  memory format;
+- the screen may include a short explanation at the top or a help control,
+  but that never changes the Pending caution icon, which remains unlabeled.
+
+**When there is exactly one existing match**, the available resolutions are:
+
+- **Save & Edit Old Memory** — save the proposal as active, keep the old
+  memory active, and allow the old memory to be edited on this screen.
+- **Save & Replace** — save the proposal as active and permanently delete the
+  old memory.
+- **Save & Supersede** — save the proposal as active and mark the old memory
+  superseded.
+
+**Superseded means history only.** A superseded memory is never supplied to a
+chat model, but it remains browsable, restorable, and permanently deletable by
+the user.
+
+**When there are multiple possible matches:**
+
+- each existing memory carries a checkbox;
+- the chosen operation applies to the checked memories;
+- there is no second, separate selection screen.
+
 ## What's left — in any order, or never
 
 - **Self-repairing search** — background housekeeping so search stays
   fast and fixes its own index. Needs nothing from you.
-- **The duplicate screen** — when a new memory looks like one you have,
-  a side-by-side where you pick keep / replace / delete.
+- **Possible Match review** — when a proposed memory may conflict with one
+  you already have, a Review screen to compare and resolve it. The approved
+  behavior is recorded above under *Associative Memory Pending and Possible
+  Match review* (Save & Edit Old Memory, Save & Replace, or Save & Supersede,
+  for one or several matches at once).
 - **Faster Lorebooks** — speed and better logs. Needs nothing from you.
 - **The computer feature** — export eligible chats as a review package, let an
   AI on a computer suggest new Associative Memories or Lorebook Memories, and
