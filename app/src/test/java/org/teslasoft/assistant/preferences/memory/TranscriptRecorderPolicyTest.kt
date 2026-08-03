@@ -21,20 +21,32 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Pins the Step 1.1 capture consent contract (counterplan §4(f), §5.4):
- * storage and injection are independent. Live-capture exclusion depends on
- * companion participation ONLY — the policy function has no injection-switch
- * parameter at all, so "Use memory in this chat" cannot influence whether a
- * captured turn is review-eligible. "Archive this chat" (excludedByUser)
- * stops capture entirely before this policy is even consulted.
+ * Pins the live-capture consent contract: storage and injection are
+ * independent — the policy function has no injection-switch parameter, so
+ * "Use memory in this chat" cannot influence whether a captured turn is
+ * review-eligible. "Archive this chat" off PAUSES archiving (the ruled
+ * Feature 1A semantics): the turn is still captured, marked excluded, so
+ * messages sent while the toggle is off stay stored, unprocessed, and
+ * recoverable when archiving is turned back on. Capture is never skipped
+ * for the archive toggle and there is no prompt of any kind.
  */
 class TranscriptRecorderPolicyTest {
 
     @Test
-    fun onlyNoneParticipationExcludesACapturedTurn() {
-        assertTrue(TranscriptRecorder.liveCaptureMarkedExcluded("none"))
-        assertFalse(TranscriptRecorder.liveCaptureMarkedExcluded("full"))
-        assertFalse(TranscriptRecorder.liveCaptureMarkedExcluded("global_only"))
-        assertFalse(TranscriptRecorder.liveCaptureMarkedExcluded(""))
+    fun archiveOffMarksTheCapturedTurnExcludedNotSkipped() {
+        // Whatever the companion participation, an archive-off turn is
+        // captured excluded — paused, not discarded.
+        assertTrue(TranscriptRecorder.liveCaptureMarkedExcluded(true, "full"))
+        assertTrue(TranscriptRecorder.liveCaptureMarkedExcluded(true, "global_only"))
+        assertTrue(TranscriptRecorder.liveCaptureMarkedExcluded(true, "none"))
+        assertTrue(TranscriptRecorder.liveCaptureMarkedExcluded(true, ""))
+    }
+
+    @Test
+    fun withArchivingOnOnlyNoneParticipationExcludesACapturedTurn() {
+        assertTrue(TranscriptRecorder.liveCaptureMarkedExcluded(false, "none"))
+        assertFalse(TranscriptRecorder.liveCaptureMarkedExcluded(false, "full"))
+        assertFalse(TranscriptRecorder.liveCaptureMarkedExcluded(false, "global_only"))
+        assertFalse(TranscriptRecorder.liveCaptureMarkedExcluded(false, ""))
     }
 }

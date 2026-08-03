@@ -2536,21 +2536,41 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
     }
 
     /**
-     * User exclusion toggle: excluding marks every unprocessed row
-     * do-not-review; re-including re-queues them as pending (processed rows
-     * are history and never change). Capture start/stop is the recorder's job.
+     * "Archive this chat" toggle: excluding pauses review for every
+     * unprocessed pending row; re-including re-queues unprocessed excluded
+     * rows as pending, so the whole paused backlog rejoins the next normal
+     * analysis with no prompt. Processed rows are the archive bookmark —
+     * history the toggle never touches in either direction. Each row moves
+     * (or stays put) per [TranscriptReviewTransitions.statusAfterArchiveToggle].
      */
     fun setChatTranscriptsExcluded(chatId: String, excluded: Boolean) {
-        if (excluded) {
-            writableDatabase.execSQL(
-                "UPDATE transcripts SET review_status = 'excluded' WHERE chat_id = ? AND review_status = 'pending'",
-                arrayOf(chatId)
-            )
-        } else {
-            writableDatabase.execSQL(
-                "UPDATE transcripts SET review_status = 'pending' WHERE chat_id = ? AND review_status = 'excluded' AND processed_at IS NULL",
-                arrayOf(chatId)
-            )
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            val updates = ArrayList<Pair<String, String>>()
+            db.query(
+                "transcripts", arrayOf("transcript_id", "review_status", "processed_at"),
+                "chat_id = ?", arrayOf(chatId), null, null, null
+            ).use {
+                while (it.moveToNext()) {
+                    val next = TranscriptReviewTransitions.statusAfterArchiveToggle(
+                        archiveOff = excluded,
+                        reviewStatus = it.getString(1),
+                        processed = it.getStringOrNull("processed_at") != null
+                    )
+                    if (next != null) updates.add(it.getString(0) to next)
+                }
+            }
+            for ((id, status) in updates) {
+                db.update(
+                    "transcripts",
+                    ContentValues().apply { put("review_status", status) },
+                    "transcript_id = ?", arrayOf(id)
+                )
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
         }
     }
 
@@ -2599,7 +2619,13 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 "AND claim_run_id IS NULL",
             null, null, null, "started_at ASC, transcript_id ASC"
         ).use { while (it.moveToNext()) out.add(readTranscript(it)) }
-        return out
+        // The WHERE clause narrows; the shared eligibility rule is the
+        // authority, so the two can never drift apart silently.
+        return out.filter {
+            TranscriptReviewTransitions.eligibleForAnalysis(
+                it.reviewStatus, it.processedAt, it.claimRunId, it.chatId
+            )
+        }
     }
 
     /** Rerun support: re-fetch exactly the rows a past run fed, regardless of
@@ -2632,6 +2658,11 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         db.beginTransaction()
         try {
             for (id in ids) {
+                val claim = db.query(
+                    "transcripts", arrayOf("claim_run_id"),
+                    "transcript_id = ?", arrayOf(id), null, null, null
+                ).use { if (it.moveToFirst()) it.getStringOrNull("claim_run_id") else null }
+                if (!TranscriptReviewTransitions.advancesOnCompletion(claim, runId)) continue
                 db.update("transcripts", ContentValues().apply {
                     put("review_status", "processed")
                     put("processed_at", now)

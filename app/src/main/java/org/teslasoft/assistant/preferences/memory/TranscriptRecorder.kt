@@ -31,8 +31,12 @@ import org.teslasoft.assistant.util.Hash
  * whether and how that turn is captured:
  *
  *  - Store not provisioned -> no-op (capture never creates the encrypted DB).
- *  - Chat excluded by the user ("Archive this chat" off) -> no capture at
- *    all, from this point forward.
+ *  - Chat excluded by the user ("Archive this chat" off) -> archiving is
+ *    PAUSED, not stopped: the turn is still captured, marked excluded
+ *    (do-not-review), so nothing sent while the toggle is off is lost.
+ *    Re-enabling re-queues the chat's unprocessed excluded rows as pending
+ *    (MemoryStore.setChatTranscriptsExcluded) and the next normal analysis
+ *    run picks the whole backlog up — silently, never via a prompt.
  *  - Companion memory_participation 'none' -> captured but marked excluded
  *    (the spec: such transcripts "arrive pre-excluded"). 'global_only' is a
  *    Archivist-side rule and captures normally.
@@ -41,8 +45,9 @@ import org.teslasoft.assistant.util.Hash
  * live capture (external-memory counterplan §4(f), Step 1.1): storage and
  * injection are independent, so turning "Use memory in this chat" off must
  * not mark new turns excluded from review. Archive consent is the only
- * user capture control. Rows excluded under the old coupling keep their
- * stored state until the user explicitly re-includes them.
+ * user control over review eligibility. Rows excluded under the old
+ * coupling keep their stored state until the user explicitly re-includes
+ * them.
  *
  * Always best-effort and always on the caller's worker thread: a capture
  * failure must never disturb the conversation.
@@ -50,13 +55,17 @@ import org.teslasoft.assistant.util.Hash
 object TranscriptRecorder {
 
     /**
-     * Capture-exclusion policy for a live turn: only a companion whose
-     * memory_participation is 'none' pre-excludes its captured turns. This
-     * function deliberately has no injection-switch parameter — capture
-     * eligibility cannot depend on a value it never receives.
+     * Capture-exclusion policy for a live turn: "Archive this chat" off
+     * pauses review (the turn is captured excluded, staying recoverable and
+     * unprocessed), and a companion whose memory_participation is 'none'
+     * pre-excludes its captured turns. Nothing here ever skips capture and
+     * nothing here ever asks the user anything. This function deliberately
+     * has no injection-switch parameter — storage and injection are
+     * independent, so capture eligibility cannot depend on a value it
+     * never receives.
      */
-    fun liveCaptureMarkedExcluded(companionParticipation: String): Boolean =
-        companionParticipation == "none"
+    fun liveCaptureMarkedExcluded(archiveOff: Boolean, companionParticipation: String): Boolean =
+        archiveOff || companionParticipation == "none"
 
     fun recordTurn(
         context: Context,
@@ -89,11 +98,6 @@ object TranscriptRecorder {
                 MemoryLog.log(context, "Transcript", "info", "skip: memory store not provisioned")
                 return
             }
-            if (excludedByUser) {
-                MemoryLog.log(context, "Transcript", "info", "skip: chat is set to \"Don't archive\"")
-                return
-            }
-
             val store = MemoryStore.getInstance(context)
 
             var companionId: String? = null
@@ -112,7 +116,7 @@ object TranscriptRecorder {
                 }
             }
 
-            val markExcluded = liveCaptureMarkedExcluded(participation)
+            val markExcluded = liveCaptureMarkedExcluded(excludedByUser, participation)
             val outcome = store.appendTranscriptTurn(
                 chatId = chatId,
                 companionId = companionId,
