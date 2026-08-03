@@ -248,7 +248,13 @@ import org.teslasoft.assistant.util.providerLimitMessage
 import org.teslasoft.assistant.util.reachedServer
 import org.teslasoft.assistant.util.ProviderErrorInfo
 import io.ktor.client.plugins.observer.ResponseObserver
+import io.ktor.client.plugins.api.Send
+import io.ktor.client.plugins.api.createClientPlugin
+import io.ktor.client.request.HttpRequestBuilder
+import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
+import io.ktor.http.ContentType
+import io.ktor.http.content.TextContent
 import io.ktor.http.isSuccess
 import java.io.BufferedReader
 import java.io.ByteArrayOutputStream
@@ -4951,6 +4957,53 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         return if (full.endsWith(marker)) full.removeSuffix(marker) else base
     }
 
+    /**
+     * Resolve the OpenRouter `provider` object for [model] on the active
+     * endpoint, or null when nothing should be sent: a non-OpenRouter endpoint,
+     * a model with no saved routing, a blocked configuration, or Automatic with
+     * no exclusions. Availability is unknown at request time, so the enforcer
+     * sends the saved lists as-is and OpenRouter's own rejection is surfaced by
+     * the existing error path. Derives everything from its inputs — no shared
+     * state — so routing can never leak between requests or chats.
+     */
+    private fun resolveProviderRoutingJson(model: String): com.google.gson.JsonObject? {
+        val endpoint = apiEndpointObject ?: return null
+        if (!endpoint.isOpenRouterRouting()) return null
+        val favorite = org.teslasoft.assistant.preferences.FavoriteModelsPreferences
+            .getPreferences(this).getFavorite(model, endpoint.id) ?: return null
+        val decision = org.teslasoft.assistant.providers.ProviderRoutingEnforcer.decide(favorite, null)
+        return if (decision.allowed) {
+            org.teslasoft.assistant.providers.ProviderRoutingSerializer.providerObject(decision)
+        } else {
+            null
+        }
+    }
+
+    /**
+     * Just-before-send hook body: if this is a JSON Chat Completions request on
+     * an OpenRouter-identity endpoint, set the resolved `provider` object on it
+     * (overwriting any existing one, so a re-sent request never carries two).
+     * Anything unexpected returns early and leaves the request untouched.
+     */
+    private fun augmentRequestWithProviderRouting(request: HttpRequestBuilder) {
+        if (apiEndpointObject?.isOpenRouterRouting() != true) return
+        val content = request.body as? TextContent ?: return
+        if (content.contentType?.match(ContentType.Application.Json) != true) return
+        val text = content.text
+        val root = try {
+            com.google.gson.JsonParser.parseString(text).asJsonObject
+        } catch (_: Exception) {
+            return
+        }
+        // Only a chat request carries a messages array; skip anything else.
+        if (!root.has("messages")) return
+        val model = root.get("model")?.takeIf { !it.isJsonNull }?.asString ?: return
+        val providerJson = resolveProviderRoutingJson(model) ?: return
+        val augmented = org.teslasoft.assistant.providers.ProviderRoutingSerializer.augmentBody(text, providerJson)
+        request.setBody(TextContent(augmented, content.contentType ?: ContentType.Application.Json))
+        android.util.Log.d("ProviderRouting", "Attached provider routing for model=$model")
+    }
+
     private fun initAI() {
         if (key == null) {
             startActivity(Intent(this, WelcomeActivity::class.java).setAction(Intent.ACTION_VIEW))
@@ -5010,6 +5063,23 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                             } catch (_: Exception) { /* best effort; never disturb the failure path */ }
                         }
                     }
+                    // OpenRouter provider routing: structurally add the resolved
+                    // `provider` object to the outgoing Chat Completions body just
+                    // before it is sent. Applies to every request on THIS chat
+                    // client — the primary turn, tool-result continuations, and
+                    // no-tools retries — so routing carries through all of them.
+                    // Fully fail-safe: any error, a non-OpenRouter endpoint, a
+                    // non-chat body, or Automatic-with-no-exclusions leaves the
+                    // request byte-for-byte unchanged, so normal chat can never be
+                    // broken by this hook.
+                    install(createClientPlugin("OpenRouterProviderRouting") {
+                        on(Send) { request ->
+                            try {
+                                augmentRequestWithProviderRouting(request)
+                            } catch (_: Exception) { /* leave the request as-is */ }
+                            proceed(request)
+                        }
+                    })
                 }
             )
 
