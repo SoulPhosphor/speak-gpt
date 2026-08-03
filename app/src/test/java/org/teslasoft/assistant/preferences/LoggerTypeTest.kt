@@ -51,7 +51,8 @@ class LoggerTypeTest {
         // "performance" stays routed (the legacy shared log's contents are left
         // untouched); "whisper_perf" and "memory_usage" are the July 23 2026
         // split's two new dedicated channels.
-        for (t in listOf("crash", "event", "memory", "performance", "whisper_perf", "memory_usage")) {
+        for (t in listOf("crash", "event", "memory", "performance", "whisper_perf", "memory_usage",
+                "image_gen_errors", "image_gen", "response_lifecycle")) {
             assertTrue("$t must be routed", Logger.isPersistentType(t))
         }
         for (t in listOf("", "error", "Crash", "warning", "info", "debug")) {

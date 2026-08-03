@@ -1,0 +1,308 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+/**************************************************************************
+* Copyright (c) 2023-2026 Dmytro Ostapenko. All rights reserved.
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*  http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+**************************************************************************/
+-->
+<!--
+  Choose Provider screen (OpenRouter). Reached from the Choose Provider row on
+  the API endpoint editor. Full-screen with a save icon at the trailing edge of
+  the header, the same header shape as the editor. The screen lets the user set
+  a preferred model-provider routing type, pick or change the model (the same
+  model the editor's Model box sets), and choose whether to make the model a
+  favorite — favoriting is what makes the routing choice permanent
+  (ChooseProviderActivity).
+-->
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/action_bar"
+        style="@style/Widget.App.ActionBar">
+
+        <ImageButton
+            android:id="@+id/btn_back"
+            style="@style/Widget.App.ActionBar.BackButton" />
+
+        <TextView
+            android:id="@+id/activity_title"
+            style="@style/Widget.App.ActionBar.Title.NearBack"
+            android:text="@string/endpoint_choose_provider_title"
+            app:layout_constraintEnd_toStartOf="@+id/btn_save" />
+
+        <ImageButton
+            android:id="@+id/btn_save"
+            style="@style/Widget.App.ActionBar.SecondaryButton"
+            android:contentDescription="@string/btn_save"
+            android:src="@drawable/ic_save"
+            android:tooltipText="@string/btn_save"
+            app:srcCompat="@drawable/ic_save" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <ScrollView
+        android:id="@+id/scroll"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:clipToPadding="false"
+        android:fillViewport="true"
+        android:paddingBottom="24dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/action_bar">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <!-- Top explanation for the whole screen. -->
+            <TextView
+                style="@style/Widget.App.Screen.Intro"
+                android:layout_marginStart="24dp"
+                android:layout_marginTop="24dp"
+                android:layout_marginEnd="24dp"
+                android:text="@string/choose_provider_intro" />
+
+            <!-- Preferred routing type: section title, the three-paragraph
+                 explanation, then the tappable chooser box (defaults to
+                 Automatic). -->
+            <TextView
+                style="@style/Widget.App.Section.Title"
+                android:layout_marginStart="24dp"
+                android:layout_marginEnd="24dp"
+                android:text="@string/choose_provider_routing_title" />
+
+            <TextView
+                style="@style/Widget.App.Section.Hint"
+                android:layout_marginStart="24dp"
+                android:layout_marginEnd="24dp"
+                android:text="@string/choose_provider_routing_subtext" />
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/field_routing_type"
+                style="@style/Widget.App.Field.Box"
+                android:layout_marginStart="24dp"
+                android:layout_marginTop="12dp"
+                android:layout_marginEnd="24dp"
+                android:clickable="true"
+                android:cursorVisible="false"
+                android:focusable="false"
+                android:focusableInTouchMode="false"
+                android:singleLine="true" />
+
+            <!-- Choose Model: section title, the favorites chooser box, then the
+                 View All Models button that opens the full model picker. The
+                 model chosen here is the same model the editor's Model box sets. -->
+            <TextView
+                style="@style/Widget.App.Section.Title"
+                android:layout_marginStart="24dp"
+                android:layout_marginEnd="24dp"
+                android:text="@string/choose_provider_choose_model_title" />
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/field_choose_model"
+                style="@style/Widget.App.Field.Box"
+                android:layout_marginStart="24dp"
+                android:layout_marginTop="12dp"
+                android:layout_marginEnd="24dp"
+                android:clickable="true"
+                android:cursorVisible="false"
+                android:focusable="false"
+                android:focusableInTouchMode="false"
+                android:singleLine="true" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_view_all_models"
+                style="@style/AppButton.Primary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="24dp"
+                android:layout_marginTop="12dp"
+                android:layout_marginEnd="24dp"
+                android:text="@string/choose_provider_view_all_models" />
+
+            <!-- Make Favorite? Default on. Favoriting the model is what makes the
+                 routing choice above permanent; removing the favorite later
+                 removes that memory. Shared toggle-row pieces; the subtitle keeps
+                 its own wrapping since the two-sentence text would be cut by the
+                 style's single-line ellipsis. -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="24dp"
+                android:layout_marginEnd="24dp"
+                android:layout_marginBottom="16dp"
+                style="@style/Widget.App.Row.Toggle">
+
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/choose_provider_make_favorite_title" />
+
+                    <TextView
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:ellipsize="none"
+                        android:maxLines="6"
+                        android:text="@string/choose_provider_make_favorite_subtext" />
+                </LinearLayout>
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_make_favorite"
+                    style="@style/Widget.App.Row.Switch"
+                    android:checked="true" />
+            </LinearLayout>
+
+            <!-- Preferred mode only: whether the API may fall back to other
+                 providers when the preferred ones fail. Default on. -->
+            <LinearLayout
+                android:id="@+id/row_allow_fallbacks"
+                style="@style/Widget.App.Row.Toggle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="24dp"
+                android:layout_marginEnd="24dp"
+                android:visibility="gone">
+
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/provider_allow_fallbacks" />
+                </LinearLayout>
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_allow_fallbacks"
+                    style="@style/Widget.App.Row.Switch"
+                    android:checked="true" />
+            </LinearLayout>
+
+            <!-- Preferred mode only: the ordered provider list. Filled by the
+                 checkboxes in the chart's first column; grows with content.
+                 Each line carries up/down arrows so the priority can be
+                 rearranged directly without unchecking providers. -->
+            <LinearLayout
+                android:id="@+id/section_preferred_order"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="24dp"
+                android:layout_marginEnd="24dp"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <TextView
+                    style="@style/Widget.App.Section.Title"
+                    android:text="@string/provider_preferred_order_title" />
+
+                <TextView
+                    style="@style/Widget.App.Section.Hint"
+                    android:text="@string/provider_preferred_order_subtext" />
+
+                <LinearLayout
+                    android:id="@+id/box_preferred_order"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:background="@drawable/bg_field_box"
+                    android:orientation="vertical"
+                    android:padding="12dp">
+
+                    <TextView
+                        android:id="@+id/text_preferred_order"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/provider_preferred_order_placeholder"
+                        android:textColor="?attr/appSubtleTextColor"
+                        android:textSize="14sp" />
+
+                    <LinearLayout
+                        android:id="@+id/rows_preferred_order"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- Provider discovery area. Populated when a model is chosen;
+                 hidden until then. The Filters button opens the pull-out
+                 panel (ProviderFilterPanelActivity); the chart is a
+                 horizontally scrollable table built from Widget.App.Chart.*
+                 styles in ChooseProviderActivity. -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_provider_filters"
+                style="@style/AppButton.Primary.Inline"
+                android:layout_marginStart="24dp"
+                android:layout_marginTop="18dp"
+                android:text="@string/provider_filters_button"
+                android:visibility="gone" />
+
+            <!-- Shown when a provider referenced by the model's saved routing
+                 settings is absent from a successfully fetched provider list.
+                 Same inline-warning pattern as the editor's field warnings. -->
+            <TextView
+                android:id="@+id/text_provider_warning"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="24dp"
+                android:layout_marginTop="8dp"
+                android:layout_marginEnd="24dp"
+                android:text="@string/provider_unavailable_warning"
+                android:textColor="?attr/colorError"
+                android:textSize="13sp"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/text_provider_status"
+                style="@style/Widget.App.Section.Hint"
+                android:layout_marginStart="24dp"
+                android:layout_marginTop="12dp"
+                android:layout_marginEnd="24dp"
+                android:visibility="gone" />
+
+            <HorizontalScrollView
+                android:id="@+id/chart_scroll"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:layout_marginBottom="16dp"
+                android:paddingStart="24dp"
+                android:paddingEnd="24dp"
+                android:clipToPadding="false"
+                android:scrollbars="none"
+                android:visibility="gone">
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+
+                    <LinearLayout
+                        android:id="@+id/chart_header"
+                        style="@style/Widget.App.Chart.Row" />
+
+                    <LinearLayout
+                        android:id="@+id/chart_rows"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical" />
+                </LinearLayout>
+            </HorizontalScrollView>
+        </LinearLayout>
+    </ScrollView>
+</androidx.constraintlayout.widget.ConstraintLayout>

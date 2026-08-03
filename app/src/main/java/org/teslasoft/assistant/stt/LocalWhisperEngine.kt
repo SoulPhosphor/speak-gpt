@@ -36,6 +36,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.teslasoft.assistant.preferences.Logger
 import org.teslasoft.assistant.preferences.Preferences
+import org.teslasoft.assistant.service.HandsFreeService
 import org.teslasoft.assistant.util.MemoryDiagnostics
 
 /**
@@ -803,10 +804,31 @@ class LocalWhisperEngine private constructor() {
         language: String = "en",
         onPhase: ((Phase) -> Unit)? = null
     ): String? {
+        val totalStartMs = SystemClock.elapsedRealtime()
         val capture = activeCapture
         if (!isCapturing && capture == null) {
             return null
         }
+        val captureTurn = capture?.turn ?: turnNumber
+        val appContext = context.applicationContext
+        val prefs = Preferences.getPreferences(appContext, "")
+        val audioHealthLog = prefs.getAudioHealthLogging()
+
+        fun logAudioHealthTiming(level: String = "debug", message: String) {
+            if (!audioHealthLog) return
+            try {
+                Logger.logAsync(appContext, "event", "AudioHealth", level, message)
+            } catch (_: Throwable) { /* diagnostics must never break STT */ }
+        }
+
+        // Write the boundary before stopping capture so a stall in
+        // cancelAndJoin/AudioRecord shutdown still leaves a useful trace.
+        logAudioHealthTiming(
+            message = "Transcription requested: turn=$captureTurn model=$activeModelId " +
+                    HandsFreeService.wakeLockDiagnostics().asLogFields()
+        )
+
+        val captureShutdownStartMs = SystemClock.elapsedRealtime()
         isCapturing = false
         clearVad()
         try { captureJob?.cancelAndJoin() } catch (_: Throwable) {}
@@ -817,7 +839,22 @@ class LocalWhisperEngine private constructor() {
         capture?.let { closeCapture(it, keepBufferAndRouting = true) }
 
         val samples = drainBuffer()
-        if (samples.isEmpty()) return null
+        val captureShutdownMs = SystemClock.elapsedRealtime() - captureShutdownStartMs
+        val audioMs = samples.size * 1000L / SAMPLE_RATE
+        logAudioHealthTiming(
+            message = "Transcription audio ready: turn=$captureTurn audio=${audioMs}ms " +
+                    "captureShutdown=${captureShutdownMs}ms model=$activeModelId " +
+                    HandsFreeService.wakeLockDiagnostics().asLogFields()
+        )
+        if (samples.isEmpty()) {
+            logAudioHealthTiming(
+                message = "Transcription end: turn=$captureTurn outcome=empty-audio " +
+                        "total=${SystemClock.elapsedRealtime() - totalStartMs}ms " +
+                        "captureShutdown=${captureShutdownMs}ms modelPrep=0ms mutexWait=0ms " +
+                        "nativeDecode=0ms " + HandsFreeService.wakeLockDiagnostics().asLogFields()
+            )
+            return null
+        }
 
         // Time the model-load phase separately from decode: a cold load (model
         // not resident yet) can add multiple seconds, and the whole point of the
@@ -825,10 +862,31 @@ class LocalWhisperEngine private constructor() {
         // decode. loadMs is ~0 when the context was already warm.
         val loadStart = SystemClock.elapsedRealtime()
         if (!isModelLoaded(activeModelId)) onPhase?.invoke(Phase.LOADING_MODEL)
-        if (!ensureContext(context, activeModelId)) return null
+        if (!ensureContext(context, activeModelId)) {
+            val modelPrepMs = SystemClock.elapsedRealtime() - loadStart
+            logAudioHealthTiming(
+                level = "warning",
+                message = "Transcription end: turn=$captureTurn outcome=model-unavailable " +
+                        "total=${SystemClock.elapsedRealtime() - totalStartMs}ms " +
+                        "captureShutdown=${captureShutdownMs}ms modelPrep=${modelPrepMs}ms " +
+                        "mutexWait=0ms nativeDecode=0ms " +
+                        HandsFreeService.wakeLockDiagnostics().asLogFields()
+            )
+            return null
+        }
         val loadMs = SystemClock.elapsedRealtime() - loadStart
         val handle = nativeHandle
-        if (handle == 0L) return null
+        if (handle == 0L) {
+            logAudioHealthTiming(
+                level = "warning",
+                message = "Transcription end: turn=$captureTurn outcome=model-handle-missing " +
+                        "total=${SystemClock.elapsedRealtime() - totalStartMs}ms " +
+                        "captureShutdown=${captureShutdownMs}ms modelPrep=${loadMs}ms " +
+                        "mutexWait=0ms nativeDecode=0ms " +
+                        HandsFreeService.wakeLockDiagnostics().asLogFields()
+            )
+            return null
+        }
 
         onPhase?.invoke(Phase.TRANSCRIBING)
 
@@ -836,7 +894,6 @@ class LocalWhisperEngine private constructor() {
         // settings. Read here, in the single funnel every transcription flows
         // through, so the chat, the assistant overlay and any future caller
         // all honour them without per-call-site plumbing.
-        val prefs = Preferences.getPreferences(context.applicationContext, "")
         val useBeam = prefs.getWhisperDecoder() != "greedy"
         val beamSize = prefs.getWhisperBeamSize()
         val temperature = prefs.getWhisperTemperature()
@@ -854,21 +911,24 @@ class LocalWhisperEngine private constructor() {
             // take the lock promptly instead of blocking behind it — and,
             // critically, guarantees we never run two whisper_full calls on
             // the same context at once.
+            val mutexWaitStartMs = SystemClock.elapsedRealtime()
             LocalWhisperNative.signalAbort()
             transcribeMutex.withLock {
+                val mutexWaitMs = SystemClock.elapsedRealtime() - mutexWaitStartMs
                 // We now own the only transcription. Clear the abort flag so
                 // this run isn't cut short by the signal we just raised.
                 LocalWhisperNative.clearAbort()
+                var decodeMs = 0L
+                var outcome = "native-error"
+                val decodeStartedAtMs = SystemClock.elapsedRealtime()
                 try {
-                    val audioMs = samples.size * 1000L / SAMPLE_RATE
-                    val startedAt = SystemClock.elapsedRealtime()
                     val text = LocalWhisperNative.transcribeNative(
                         handle, samples, SAMPLE_RATE, language,
                         useBeam, beamSize, temperature,
                         suppressBlank, singleSegment, noContext, initialPrompt
                     )
-                    val elapsed = SystemClock.elapsedRealtime() - startedAt
-                    val summary = "model=$activeModelId audio=${audioMs}ms decode=${elapsed}ms " +
+                    decodeMs = SystemClock.elapsedRealtime() - decodeStartedAtMs
+                    val summary = "model=$activeModelId audio=${audioMs}ms decode=${decodeMs}ms " +
                             "decoder=${if (useBeam) "beam($beamSize)" else "greedy"} temp=$temperature " +
                             "suppressBlank=$suppressBlank singleSegment=$singleSegment noContext=$noContext " +
                             "prompt=${if (initialPrompt.isBlank()) "none" else "${initialPrompt.length} chars"} " +
@@ -887,11 +947,11 @@ class LocalWhisperEngine private constructor() {
                     // forever" — separate channel so it never buries the voice log.
                     if (perfLog) {
                         try {
-                            val perfLine = "turn=$turnNumber sessionMin=${MemoryDiagnostics.processUptimeMinutes()} " +
-                                    "audio=${audioMs}ms load=${loadMs}ms decode=${elapsed}ms model=$activeModelId " +
+                            val perfLine = "turn=$captureTurn sessionMin=${MemoryDiagnostics.processUptimeMinutes()} " +
+                                    "audio=${audioMs}ms load=${loadMs}ms decode=${decodeMs}ms model=$activeModelId " +
                                     "decoder=${if (useBeam) "beam($beamSize)" else "greedy"} | " +
-                                    MemoryDiagnostics.snapshotCompact(context.applicationContext)
-                            Logger.log(context.applicationContext, "whisper_perf", "WhisperPerf", "info", perfLine)
+                                    MemoryDiagnostics.snapshotCompact(appContext)
+                            Logger.log(appContext, "whisper_perf", "WhisperPerf", "info", perfLine)
                         } catch (_: Throwable) { /* diagnostics must never break STT */ }
                     }
                     // After stripping non-speech markers, Whisper-generated
@@ -900,10 +960,29 @@ class LocalWhisperEngine private constructor() {
                     // empty so hands-free re-arms the mic instead of submitting
                     // bare punctuation as a "real" transcript.
                     val filtered = if (cleanup) filterNonSpeechMarkers(text) else text.trim()
-                    if (filtered.any { it.isLetterOrDigit() }) filtered else null
+                    if (filtered.any { it.isLetterOrDigit() }) {
+                        outcome = "success"
+                        filtered
+                    } else {
+                        outcome = "empty-transcript"
+                        null
+                    }
                 } catch (t: Throwable) {
                     Log.w(TAG, "transcribeNative threw", t)
+                    outcome = "native-error-${t.javaClass.simpleName}"
                     null
+                } finally {
+                    if (decodeMs == 0L) {
+                        decodeMs = SystemClock.elapsedRealtime() - decodeStartedAtMs
+                    }
+                    logAudioHealthTiming(
+                        level = if (outcome.startsWith("native-error")) "warning" else "debug",
+                        message = "Transcription end: turn=$captureTurn outcome=$outcome " +
+                                "total=${SystemClock.elapsedRealtime() - totalStartMs}ms " +
+                                "captureShutdown=${captureShutdownMs}ms modelPrep=${loadMs}ms " +
+                                "mutexWait=${mutexWaitMs}ms nativeDecode=${decodeMs}ms " +
+                                HandsFreeService.wakeLockDiagnostics().asLogFields()
+                    )
                 }
             }
         }

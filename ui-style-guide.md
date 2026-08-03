@@ -426,6 +426,36 @@ Use only for the established Summoning Circle tile pattern: category label, curr
 
 Do not use the QuickTile family as the general app-wide dropdown pattern. General multiple-choice fields use `Widget.App.Dropdown.*`.
 
+## Provider chart
+
+`Widget.App.Chart.Row`
+
+`Widget.App.Chart.HeaderCell`
+
+`Widget.App.Chart.Cell`
+
+Use for the horizontally scrollable provider table on the Choose Provider screen (and any future tabular data chart).
+
+Composition:
+
+1. a `HorizontalScrollView` holding a vertical `LinearLayout`;
+2. one `Chart.Row` of `Chart.HeaderCell` views for the column labels;
+3. one `Chart.Row` per data row of `Chart.Cell` views, built in code.
+
+The header and data rows must take their cell widths from one shared column table in the owning activity so the columns stay aligned. Values render in the default text color (`appTextColor`); unknown values render as `?`. The chart is theme-ready: all colors resolve through theme attributes, so per-column value colors can be added later by extending the cell styles, not by hardcoding colors in code.
+
+The Ignore control at a row's end uses `bg_ignore_square_off` / `bg_ignore_square_on` with `ic_ignore_x`, tinted at runtime via `appSubtleTextColor` (unmarked) and `colorError`/`colorOnError` (marked).
+
+## Plain checkbox option row
+
+`Widget.App.CheckOption.Row`
+
+`Widget.App.CheckOption.Label`
+
+Use for a checkbox option where the whole line is the tap target but must read as a normal line of text — no background, no tile or button look (owner spec, Aug 2 2026; first use: the provider Filters panel's capability checkboxes).
+
+Distinct from `Widget.App.Row.Toggle`, which is a switch row with a subtitle.
+
 ## Attached-document strip
 
 `Widget.App.Include.Container`

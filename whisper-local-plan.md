@@ -349,8 +349,18 @@ seconds of the screen turning off.
 - Manifest needs `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_MICROPHONE`,
   `POST_NOTIFICATIONS`, `WAKE_LOCK`, plus the service declaration with
   `android:foregroundServiceType="microphone"`.
-- Use a `PARTIAL_WAKE_LOCK` while the service is running so the CPU
-  doesn't doze on us. Release it when the call ends.
+- Use a renewable, bounded `PARTIAL_WAKE_LOCK` while the service is
+  running so the CPU doesn't doze on us. Each lease lasts 60 minutes and
+  is renewed every 30 minutes while the same service session remains
+  active. Maintain one renewal callback; a stopped/restarted session makes
+  any stale callback inert. Cancel renewal and release the lock immediately
+  when the call ends — the timeout is a fail-safe, not extra run time after
+  the user stops.
+- When Audio Health is enabled, record wake-lock acquisition, renewal,
+  unexpected loss, release, actual held state and service age. The same
+  toggle records the on-device transcription's total wall time plus capture
+  shutdown, model preparation/loading, transcription-lock wait and native
+  decoding time.
 
 ---
 

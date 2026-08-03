@@ -16,6 +16,17 @@
 * limitations under the License.
 **************************************************************************/
 -->
+<!--
+  Add New API Endpoint variant of activity_api_endpoint_editor.xml. Same
+  ApiEndpointEditorActivity, same view ids, same shared styles — only the
+  field ORDER differs, and the Base URL label reads the longer
+  api_endpoint_host_full string. ApiEndpointEditorActivity picks this layout
+  when adding a new endpoint and the edit layout when opening an existing one
+  (owner ruling). A new profile leads with the connection details (Base URL,
+  Chat Completions Endpoint, API Key, Auth Mode) before Model, since choosing
+  a model before the endpoint does not make sense. Keep the two layouts in
+  step when a field is added or changed.
+-->
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/root"
@@ -116,10 +127,128 @@
                     android:visibility="gone" />
             </LinearLayout>
 
+            <!-- Base URL. Longer label on this Add-New screen. The plain-http
+                 security warning and the empty / invalid-URL save errors show
+                 inline beneath the box. -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="24dp"
+                android:layout_marginTop="18dp"
+                android:layout_marginEnd="24dp"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/label_host"
+                    style="@style/Widget.App.Field.Label"
+                    android:text="@string/api_endpoint_host_full"
+                    android:visibility="gone" />
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/field_host"
+                    style="@style/Widget.App.Field.Box"
+                    android:hint="@string/api_endpoint_host_full"
+                    android:singleLine="true"
+                    android:textColorHint="?attr/appSubtleTextColor" />
+
+                <TextView
+                    android:id="@+id/text_field_host_error"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:textColor="?attr/colorError"
+                    android:textSize="13sp"
+                    android:visibility="gone" />
+            </LinearLayout>
+
+            <!-- Chat completions endpoint. Pre-filled with /chat/completions. -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="24dp"
+                android:layout_marginTop="18dp"
+                android:layout_marginEnd="24dp"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/label_chat_endpoint"
+                    style="@style/Widget.App.Field.Label"
+                    android:text="@string/api_endpoint_chat_endpoint"
+                    android:visibility="gone" />
+
+                <TextView
+                    style="@style/Widget.App.Field.Hint"
+                    android:text="@string/api_endpoint_chat_endpoint_help" />
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/field_chat_endpoint"
+                    style="@style/Widget.App.Field.Box"
+                    android:hint="@string/api_endpoint_chat_endpoint"
+                    android:singleLine="true"
+                    android:textColorHint="?attr/appSubtleTextColor" />
+            </LinearLayout>
+
+            <!-- API key. Empty on a new endpoint. -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="24dp"
+                android:layout_marginTop="18dp"
+                android:layout_marginEnd="24dp"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/label_api_key"
+                    style="@style/Widget.App.Field.Label"
+                    android:text="@string/api_endpoint_key_unchanged"
+                    android:visibility="gone" />
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/field_api_key"
+                    style="@style/Widget.App.Field.Box"
+                    android:hint="@string/api_endpoint_key_unchanged"
+                    android:singleLine="true"
+                    android:textColorHint="?attr/appSubtleTextColor" />
+            </LinearLayout>
+
+            <!-- Auth mode. Tap to choose (focusable=false). Pre-filled with the
+                 Bearer default, so its title shows from the start. -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="24dp"
+                android:layout_marginTop="18dp"
+                android:layout_marginEnd="24dp"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/label_auth"
+                    style="@style/Widget.App.Field.Label"
+                    android:text="@string/api_endpoint_auth_mode"
+                    android:visibility="gone" />
+
+                <TextView
+                    style="@style/Widget.App.Field.Hint"
+                    android:text="@string/api_endpoint_auth_help" />
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/field_auth_type"
+                    style="@style/Widget.App.Field.Box"
+                    android:clickable="true"
+                    android:cursorVisible="false"
+                    android:focusable="false"
+                    android:focusableInTouchMode="false"
+                    android:hint="@string/api_endpoint_auth_mode"
+                    android:singleLine="true"
+                    android:textColorHint="?attr/appSubtleTextColor" />
+            </LinearLayout>
+
             <!-- Model. Tap to open the model selector (focusable=false so a tap
                  is a click, not the keyboard). Empty on a new endpoint (no gpt-4o
-                 pre-load); a model must be chosen before saving. The guidance
-                 line stays visible whether or not the top title is showing. -->
+                 pre-load); a model must be chosen before saving. Placed after the
+                 endpoint details on purpose — a model is chosen for a known
+                 endpoint. The guidance line stays visible whether or not the top
+                 title is showing. -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -359,10 +488,7 @@
             <!-- Optional capacity for this exact endpoint profile and model id.
                  Title + hint: shared Widget.App.Section.Title/.Hint, same
                  pattern as the sampling-parameter sections above (owner
-                 ruling, July 26 2026). title_context_window/hint_context_window
-                 are separate from label_context_window (the field's own
-                 floating hint), which stays untouched since it's also used by
-                 the legacy in-chat "Edit API Endpoint" dialog. -->
+                 ruling, July 26 2026). -->
             <TextView
                 style="@style/Widget.App.Section.Title"
                 android:layout_marginStart="24dp"
@@ -375,8 +501,7 @@
                 android:layout_marginEnd="24dp"
                 android:text="@string/hint_context_window" />
 
-            <!-- Optional capacity for this exact endpoint profile and model id.
-                 The Context Window section title above is this field's heading,
+            <!-- The Context Window section title above is this field's heading,
                  so the box carries no separate top title — it shows the field
                  name as placeholder until a value is entered. -->
             <com.google.android.material.textfield.TextInputEditText
@@ -413,13 +538,15 @@
                     android:textColorHint="?attr/appSubtleTextColor" />
             </LinearLayout>
 
-            <!-- Prefix -->
+            <!-- Prefix. Last field before the collapsible sections, so it carries
+                 the small bottom margin. -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="24dp"
                 android:layout_marginTop="18dp"
                 android:layout_marginEnd="24dp"
+                android:layout_marginBottom="8dp"
                 android:orientation="vertical">
 
                 <TextView
@@ -432,123 +559,6 @@
                     android:id="@+id/field_prefix"
                     style="@style/Widget.App.Field.Box"
                     android:hint="@string/label_prefix"
-                    android:singleLine="true"
-                    android:textColorHint="?attr/appSubtleTextColor" />
-            </LinearLayout>
-
-            <!-- Base URL. The plain-http security warning and the empty /
-                 invalid-URL save errors show inline beneath the box. -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="24dp"
-                android:layout_marginTop="18dp"
-                android:layout_marginEnd="24dp"
-                android:orientation="vertical">
-
-                <TextView
-                    android:id="@+id/label_host"
-                    style="@style/Widget.App.Field.Label"
-                    android:text="@string/api_endpoint_host_full"
-                    android:visibility="gone" />
-
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/field_host"
-                    style="@style/Widget.App.Field.Box"
-                    android:hint="@string/api_endpoint_host_full"
-                    android:singleLine="true"
-                    android:textColorHint="?attr/appSubtleTextColor" />
-
-                <TextView
-                    android:id="@+id/text_field_host_error"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:textColor="?attr/colorError"
-                    android:textSize="13sp"
-                    android:visibility="gone" />
-            </LinearLayout>
-
-            <!-- Chat completions endpoint. Pre-filled with /chat/completions. -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="24dp"
-                android:layout_marginTop="18dp"
-                android:layout_marginEnd="24dp"
-                android:orientation="vertical">
-
-                <TextView
-                    android:id="@+id/label_chat_endpoint"
-                    style="@style/Widget.App.Field.Label"
-                    android:text="@string/api_endpoint_chat_endpoint"
-                    android:visibility="gone" />
-
-                <TextView
-                    style="@style/Widget.App.Field.Hint"
-                    android:text="@string/api_endpoint_chat_endpoint_help" />
-
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/field_chat_endpoint"
-                    style="@style/Widget.App.Field.Box"
-                    android:hint="@string/api_endpoint_chat_endpoint"
-                    android:singleLine="true"
-                    android:textColorHint="?attr/appSubtleTextColor" />
-            </LinearLayout>
-
-            <!-- API key. Shows a star mask when a key is stored; tapping in
-                 clears it to a blank cursor. -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="24dp"
-                android:layout_marginTop="18dp"
-                android:layout_marginEnd="24dp"
-                android:orientation="vertical">
-
-                <TextView
-                    android:id="@+id/label_api_key"
-                    style="@style/Widget.App.Field.Label"
-                    android:text="@string/api_endpoint_key_unchanged"
-                    android:visibility="gone" />
-
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/field_api_key"
-                    style="@style/Widget.App.Field.Box"
-                    android:hint="@string/api_endpoint_key_unchanged"
-                    android:singleLine="true"
-                    android:textColorHint="?attr/appSubtleTextColor" />
-            </LinearLayout>
-
-            <!-- Auth mode. Tap to choose (focusable=false). Pre-filled with the
-                 Bearer default, so its title shows from the start. -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="24dp"
-                android:layout_marginTop="18dp"
-                android:layout_marginEnd="24dp"
-                android:layout_marginBottom="8dp"
-                android:orientation="vertical">
-
-                <TextView
-                    android:id="@+id/label_auth"
-                    style="@style/Widget.App.Field.Label"
-                    android:text="@string/api_endpoint_auth_mode"
-                    android:visibility="gone" />
-
-                <TextView
-                    style="@style/Widget.App.Field.Hint"
-                    android:text="@string/api_endpoint_auth_help" />
-
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/field_auth_type"
-                    style="@style/Widget.App.Field.Box"
-                    android:clickable="true"
-                    android:cursorVisible="false"
-                    android:focusable="false"
-                    android:focusableInTouchMode="false"
-                    android:hint="@string/api_endpoint_auth_mode"
                     android:singleLine="true"
                     android:textColorHint="?attr/appSubtleTextColor" />
             </LinearLayout>

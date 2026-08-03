@@ -186,6 +186,27 @@ class Logger {
         }
 
         /**
+         * Response Lifecycle Log — the temporary, opt-in record of how each
+         * user-visible AI reply ended (completion status, token usage, request
+         * limits, and the termination that closed each stream). Written only
+         * while Response Lifecycle logging is on, via [logResponseLifecycle] in
+         * the owner-specified multi-line shape (not through [log]). Same
+         * configurable retention as the other diagnostic logs; each lifecycle
+         * block is trimmed as a whole entry.
+         */
+        fun getResponseLifecycleLog(context: Context) : String {
+            return EncryptedPreferences.getEncryptedPreference(context, "logs", "response_lifecycle")
+        }
+
+        private fun setResponseLifecycleLog(context: Context, log: String) {
+            EncryptedPreferences.setEncryptedPreference(context, "logs", "response_lifecycle", log)
+        }
+
+        fun clearResponseLifecycleLog(context: Context) {
+            setResponseLifecycleLog(context, "")
+        }
+
+        /**
          * Image Generation Errors log (image-generation-rebuild-plan.md §13,
          * owner ruling 2026-07-29): silent fallbacks, conversation-model tool
          * mistakes, automatic tool-capability changes, and failure
@@ -234,7 +255,8 @@ class Logger {
         fun isPersistentType(type: String): Boolean =
             type == "crash" || type == "event" || type == "memory" || type == "performance" ||
                 type == "whisper_perf" || type == "memory_usage" ||
-                type == "image_gen_errors" || type == "image_gen"
+                type == "image_gen_errors" || type == "image_gen" ||
+                type == "response_lifecycle"
 
         /**
          * @param type - type of log (crash/event/memory/performance)
@@ -317,6 +339,19 @@ class Logger {
                         p.getMemoryUsageLogMaxEntries(), p.getMemoryUsageLogMaxDays().toLong()
                     )
                     setMemoryUsageLog(context, log)
+                }
+
+                // Response Lifecycle: the structured entries are written by
+                // [logResponseLifecycle], but the channel is honored here too so
+                // a plain diagnostic line can share it; same configurable
+                // retention as the other user-tunable logs.
+                "response_lifecycle" -> {
+                    val p = Preferences.getPreferences(context, "")
+                    val log = trimByEntries(
+                        "${getResponseLifecycleLog(context)}$logString",
+                        p.getResponseLifecycleLogMaxEntries(), p.getResponseLifecycleLogMaxDays().toLong()
+                    )
+                    setResponseLifecycleLog(context, log)
                 }
 
                 // Image Generation Errors (§13): the page's existing fixed
@@ -410,6 +445,42 @@ class Logger {
                 p.getProviderFailLogMaxEntries(), p.getProviderFailLogMaxDays().toLong()
             )
             setProviderFailLog(context, log)
+        }
+
+        /**
+         * Append one Response Lifecycle entry. [body] is every line after the
+         * "[timestamp]" header (built by [ResponseLifecycle.format]); this
+         * prepends the header — matching the header-line shape [trimByEntries]
+         * splits on — and separates consecutive blocks with two blank lines so
+         * each multi-line lifecycle record reads and trims as one whole entry.
+         * Trimmed to the log's configurable 50-entry / 7-day (clamped) retention.
+         * Called off the main thread by the generation pipeline.
+         */
+        fun logResponseLifecycle(context: Context, body: String) {
+            val timestamp = LocalDateTime.now().format(LOG_TIME_FORMAT)
+            val entry = "[$timestamp]\n$body\n\n\n"
+            val p = Preferences.getPreferences(context, "")
+            val log = trimByEntries(
+                "${getResponseLifecycleLog(context)}$entry",
+                p.getResponseLifecycleLogMaxEntries(), p.getResponseLifecycleLogMaxDays().toLong()
+            )
+            setResponseLifecycleLog(context, log)
+        }
+
+        /**
+         * Enqueue a Response Lifecycle write on the shared single-thread log
+         * writer. Serializing through it preserves the order of a turn's
+         * records (primary before its continuation) and keeps the encrypted
+         * read/modify/write of this channel from racing another log write.
+         * Best-effort, like every other diagnostic path.
+         */
+        fun logResponseLifecycleAsync(context: Context, body: String) {
+            val appContext = context.applicationContext
+            backgroundLogWriter.execute {
+                try {
+                    logResponseLifecycle(appContext, body)
+                } catch (_: Throwable) { /* diagnostics must never disturb the caller */ }
+            }
         }
 
         private val LOG_TIME_FORMAT: DateTimeFormatter =

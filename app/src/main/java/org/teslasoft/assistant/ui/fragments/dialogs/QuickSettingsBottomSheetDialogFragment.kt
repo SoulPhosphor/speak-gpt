@@ -1345,6 +1345,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
             provider = currentProfile.provider,
             connectTimeoutSeconds = currentProfile.connectTimeoutSeconds,
             responseTimeoutSeconds = currentProfile.responseTimeoutSeconds,
+            providerDiscoveryPath = currentProfile.providerDiscoveryPath,
             // Carry the stable id so this UPDATES the same profile in place;
             // without it setApiEndpoint would mint a new id and duplicate it.
             id = currentProfile.id

@@ -110,6 +110,7 @@ import com.aallam.openai.api.audio.SpeechRequest
 import com.aallam.openai.api.audio.TranscriptionRequest
 import com.aallam.openai.api.chat.ChatCompletionChunk
 import com.aallam.openai.api.chat.ChatCompletionRequest
+import com.aallam.openai.api.chat.StreamOptions
 import com.aallam.openai.api.chat.ChatMessage
 import com.aallam.openai.api.chat.ChatRole
 import com.aallam.openai.api.chat.ContentPart
@@ -169,6 +170,8 @@ import org.teslasoft.assistant.preferences.ActivationPromptPreferences
 import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.ChatStorageHealth
 import org.teslasoft.assistant.preferences.MessageCompletionState
+import org.teslasoft.assistant.preferences.ResponseLifecycle
+import org.teslasoft.assistant.preferences.ResponseLifecycleRecorder
 import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.includes.ChatInclude
 import org.teslasoft.assistant.preferences.includes.DocumentImporter
@@ -1752,8 +1755,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val handsFree = preferences?.getHandsFreeMode() == true
         val effModel = preferences?.getEffectiveAudioModel()
         val sttSupported = effModel == "google" || effModel == "whisper-local"
-        val auto = preferences?.autoSend() == true
-        if (handsFree && sttSupported && auto && !cancelState && !handsFreeStopped && !isRecording &&
+        // Auto-send governs only the manual mic button (owner ruling, July
+        // 2026); the hands-free loop always keeps listening after a readback.
+        if (handsFree && sttSupported && !cancelState && !handsFreeStopped && !isRecording &&
             !isFinishing && !isDestroyed
         ) {
             // If audio is somehow still audible (the watchdog can race the real
@@ -1779,7 +1783,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 startRecognition(true)
             }
         } else if (handsFree) {
-            logVoiceEvent("mic NOT reopened after readback: engine=$effModel autoSend=$auto " +
+            logVoiceEvent("mic NOT reopened after readback: engine=$effModel " +
                     "cancelled=$cancelState loopStopped=$handsFreeStopped alreadyRecording=$isRecording")
         }
     }
@@ -6002,7 +6006,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         frequencyPenalty = original.frequencyPenalty,
         presencePenalty = original.presencePenalty,
         seed = original.seed,
-        logitBias = original.logitBias
+        logitBias = original.logitBias,
+        // Ask supported providers to include token usage in the stream so the
+        // Response Lifecycle Log can record provider-reported counts. Harmless
+        // where unsupported: the field simply stays "not reported".
+        streamOptions = StreamOptions(includeUsage = true)
     )
 
     /** The follow-up response after tool results (§7.7): plain streamed
@@ -6015,11 +6023,18 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         var response = ""
         putMessage("", true)
         markLastAssistantStreaming()
+        startLifecycle(ResponseLifecycle.PHASE_TOOL_CONTINUATION, request.maxTokens)
         val completions: Flow<ChatCompletionChunk> = ai!!.chatCompletions(request)
         scroll(true)
         completions.flowOn(Dispatchers.IO).collect { v ->
             if (!currentCoroutineContext().isActive) throw CancellationException()
-            val delta = v.choices.firstOrNull()?.delta?.content
+            val choice = v.choices.firstOrNull()
+            noteLifecycleChunk(
+                choice?.finishReason?.value, v.id,
+                (choice?.delta?.content?.takeIf { it != "null" }?.length ?: 0),
+                v.usage?.promptTokens, v.usage?.completionTokens, v.usage?.totalTokens
+            )
+            val delta = choice?.delta?.content
             if (delta != null && delta != "null") {
                 response += delta
                 messages[messages.size - 1]["message"] = response
@@ -6027,6 +6042,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 scroll(false)
             }
         }
+        finalizeLifecycleSuccess()
         messages[messages.size - 1]["message"] = "$response\n"
         markLastAssistantDone()
         adapter?.notifyItemChanged(messages.size - 1)
@@ -6040,6 +6056,98 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         progress?.visibility = View.GONE
         messageInput?.requestFocus()
         ChatPreferences.getChatPreferences().putTimestampToChatById(this, chatId)
+    }
+
+    // ===== Response Lifecycle diagnostics (opt-in, off by default) =====
+    // One record is written per streamed VISIBLE generation request — never one
+    // combined record for a whole multi-step turn — so a completed primary
+    // stream and an interrupted continuation are two comparable entries that
+    // share [currentLifecycleTurnId]. Capture is entirely gated on the toggle:
+    // when it is off, [currentLifecycle] stays null and these helpers no-op.
+    private var currentLifecycle: ResponseLifecycleRecorder? = null
+    private var currentLifecycleTurnId: String = ""
+    private var lifecycleTurnCounter: Int = 0
+
+    /** Mint the turn id shared by this turn's primary and continuation streams.
+     *  Always cheap; the actual capture is still gated in [startLifecycle]. */
+    private fun beginLifecycleTurn() {
+        lifecycleTurnCounter++
+        currentLifecycleTurnId = "T" + System.currentTimeMillis().toString() + "-" + lifecycleTurnCounter
+    }
+
+    /** Begin recording one streamed request when Response Lifecycle logging is
+     *  on. A still-pending recorder (e.g. the §8 first attempt that is about to
+     *  be retried) is closed first so its record is never dropped. */
+    private fun startLifecycle(phase: String, requestedMaxOutput: Int?) {
+        currentLifecycle?.let {
+            if (!it.finalized) finalizeLifecycleTerminal(
+                ResponseLifecycle.Outcome.INCOMPLETE, "missing", true,
+                ResponseLifecycle.Termination.STREAM_CLOSED, "superseded by a new request"
+            )
+        }
+        if (preferences?.getResponseLifecycleLogging() != true) {
+            currentLifecycle = null
+            return
+        }
+        if (currentLifecycleTurnId.isBlank()) beginLifecycleTurn()
+        currentLifecycle = ResponseLifecycleRecorder(
+            turnId = currentLifecycleTurnId,
+            phase = phase,
+            provider = apiEndpointObject?.host ?: "",
+            model = model,
+            requestedMaxOutput = requestedMaxOutput,
+            startUptimeMs = android.os.SystemClock.uptimeMillis()
+        )
+    }
+
+    private fun noteLifecycleChunk(
+        finishReason: String?, id: String?, contentLength: Int,
+        promptTokens: Int?, completionTokens: Int?, totalTokens: Int?
+    ) {
+        val r = currentLifecycle ?: return
+        if (r.finalized) return
+        r.noteChunk(finishReason, id, contentLength, promptTokens, completionTokens, totalTokens)
+    }
+
+    /** Finalize a stream that ended on its own (the flow completed without
+     *  throwing): the outcome is decided only from the finish reason actually
+     *  seen — text having arrived is never treated as completion. */
+    private fun finalizeLifecycleSuccess() {
+        val r = currentLifecycle ?: return
+        if (r.finalized) return
+        val n = ResponseLifecycle.classifyNormalCompletion(r.lastFinishReason, r.receivedCharacters)
+        writeLifecycle(r, n.outcome, n.finishReasonDisplay, n.streamClosed, n.termination, null)
+    }
+
+    /** Finalize a stream cut short by an error, a user stop, or an app cancel —
+     *  the terminal values are decided by the caller from what it caught. */
+    private fun finalizeLifecycleTerminal(
+        outcome: ResponseLifecycle.Outcome, finishReasonDisplay: String,
+        streamClosed: Boolean, termination: ResponseLifecycle.Termination, errorText: String?
+    ) {
+        val r = currentLifecycle ?: return
+        if (r.finalized) return
+        writeLifecycle(r, outcome, finishReasonDisplay, streamClosed, termination, errorText)
+    }
+
+    private fun writeLifecycle(
+        r: ResponseLifecycleRecorder, outcome: ResponseLifecycle.Outcome,
+        finishReasonDisplay: String, streamClosed: Boolean,
+        termination: ResponseLifecycle.Termination, errorText: String?
+    ) {
+        r.markFinalized()
+        val durationMs = android.os.SystemClock.uptimeMillis() - r.startUptimeMs
+        val body = ResponseLifecycle.format(
+            turnId = r.turnId, phase = r.phase, provider = r.provider, model = r.model,
+            outcome = outcome, finishReasonDisplay = finishReasonDisplay,
+            streamClosed = streamClosed, termination = termination,
+            requestedMaxOutput = r.requestedMaxOutput, promptTokens = r.promptTokens,
+            completionTokens = r.completionTokens, totalTokens = r.totalTokens,
+            receivedCharacters = r.receivedCharacters, durationMs = durationMs,
+            generationId = r.generationId, errorText = errorText
+        )
+        currentLifecycle = null
+        org.teslasoft.assistant.preferences.Logger.logResponseLifecycleAsync(this, body)
     }
 
     private fun startRecognition(freshTurn: Boolean = true) {
@@ -6865,6 +6973,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // makes its request, so a failure never shows a stale provider.
         capturedProviderErrorBody = null
 
+        // Mint the turn id every streamed request in this visible turn (primary
+        // plus any tool continuation) shares in the Response Lifecycle Log.
+        beginLifecycleTurn()
+
         if (preparedTurn == null && !awaitVisionCapabilityCheck()) {
             restoreUIState()
             return
@@ -6889,6 +7001,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             if (model.contains(":ft") || model.contains("ft:")) {
                 putMessage("", true)
                 markLastAssistantStreaming()
+                startLifecycle(ResponseLifecycle.PHASE_PRIMARY, preferences?.getMaxTokens())
                 val completionRequest = if (preferences?.getLogitBiasesConfigId() == null || preferences?.getLogitBiasesConfigId() == "null" || preferences?.getLogitBiasesConfigId() == "") {
                     CompletionRequest(
                         model = ModelId(model),
@@ -6919,7 +7032,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 completions.flowOn(Dispatchers.IO).collect { v ->
                     run {
                         if (!currentCoroutineContext().isActive) throw CancellationException()
-                        else if (v.choices[0] != null && v.choices[0].text != null && v.choices[0].text.toString() != "null") {
+                        val choice = v.choices.firstOrNull()
+                        noteLifecycleChunk(
+                            choice?.finishReason?.value, v.id,
+                            (choice?.text?.takeIf { it != "null" }?.length ?: 0),
+                            v.usage?.promptTokens, v.usage?.completionTokens, v.usage?.totalTokens
+                        )
+                        if (v.choices[0] != null && v.choices[0].text != null && v.choices[0].text.toString() != "null") {
                             response += v.choices[0].text
                             messages[messages.size - 1]["message"] = response
                             if (messages.size > 2) {
@@ -6932,6 +7051,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     }
                 }
 
+                finalizeLifecycleSuccess()
                 messages[messages.size - 1]["message"] = "$response\n"
                 markLastAssistantDone()
                 if (messages.size > 2) {
@@ -6971,6 +7091,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                             lastRegularRequestCarriedImageTools &&
                             ToolSupportClassifier.isToolsNotSupportedError(toolsError.message)
                         ) {
+                            // The first attempt was a real visible streamed
+                            // request that the provider rejected for carrying
+                            // tools. Close its lifecycle record before the
+                            // without-tools retry opens a fresh primary record.
+                            finalizeLifecycleTerminal(
+                                ResponseLifecycle.Outcome.INCOMPLETE, "error", true,
+                                ResponseLifecycle.Termination.PROVIDER_ERROR, toolsError.message
+                            )
                             val previousState = learnToolsUnsupportedAndNotify()
                             var retrySucceeded = false
                             try {
@@ -7002,6 +7130,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // runs no code here at all). No suspension points below, so this runs
             // even though the coroutine is already cancelled.
             val destroying = isFinishing || isDestroyed
+            // Lifecycle: a user stop while the screen is alive is Stopped (not a
+            // red failure); a cancellation from the screen being torn down is
+            // Cancelled, with the source recorded. Neither is an error.
+            finalizeLifecycleTerminal(
+                if (destroying) ResponseLifecycle.Outcome.CANCELLED else ResponseLifecycle.Outcome.STOPPED,
+                "missing", true,
+                if (destroying) ResponseLifecycle.Termination.APP_CANCEL else ResponseLifecycle.Termination.USER_STOP,
+                if (destroying) "app cancelled: activity teardown" else null
+            )
             finalizeStreamingMessageState(
                 if (destroying) MessageCompletionState.INTERRUPTED else MessageCompletionState.STOPPED,
                 if (destroying) MessageCompletionState.DETAIL_SCREEN_CLOSED else null
@@ -7046,6 +7183,27 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 genError.providerDetailBlock(
                     this, e.message, apiProviderName, modelServiceProvider, modelName, functionLabel, providerInfo.message
                 )
+
+            // Lifecycle: an errored reply is Incomplete. The termination source
+            // separates a provider error (the server answered with an error)
+            // from a dropped connection, a timeout, or a parse failure. The
+            // error text is the raw server error / exception, verbatim.
+            val lifecycleTermination = when {
+                genError.reachedServer() -> ResponseLifecycle.Termination.PROVIDER_ERROR
+                (e::class.java.name + " " + (e.message ?: "")).contains("timeout", ignoreCase = true) ->
+                    ResponseLifecycle.Termination.CLIENT_TIMEOUT
+                (e::class.java.name).contains("Serialization", ignoreCase = true) ->
+                    ResponseLifecycle.Termination.PARSER_ERROR
+                else -> ResponseLifecycle.Termination.NETWORK_ERROR
+            }
+            val lifecycleError = listOfNotNull(
+                genError.httpStatus?.toString(),
+                (providerInfo.message ?: e.message)?.trim()?.ifBlank { null }
+            ).joinToString(" ").ifBlank { e.message ?: "error" }
+            finalizeLifecycleTerminal(
+                ResponseLifecycle.Outcome.INCOMPLETE, "error", true,
+                lifecycleTermination, lifecycleError
+            )
 
             // Record to the Provider Failure Log when enabled AND the server
             // actually answered — a user stop or a request that never reached a
@@ -7847,6 +8005,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         return FrozenRegularRequest(request, payload)
     }
 
+    // streamOptions (include-usage) is beta-gated in the client library, like
+    // the seed read in rebuildRequestWithoutTools; opt in for the primary
+    // request builders below.
+    @OptIn(com.aallam.openai.api.BetaOpenAI::class)
     private suspend fun regularGPTResponse(
         shouldPronounce: Boolean,
         preparedTurn: PreparedRegularTurn? = null,
@@ -8121,7 +8283,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 seed = if (preferences!!.getSeed() != "") preferences!!.getSeed().toInt() else null,
                 logitBias = if (model.contains("gpt-5") || model.contains("o1") || model.contains("o3")) null else logitBiasPreferences?.getLogitBiasesMap(),
                 messages = msgs,
-                tools = legacyPathImageTools
+                tools = legacyPathImageTools,
+                // Ask supported providers to include token usage in the stream
+                // for the Response Lifecycle Log; ignored where unsupported.
+                streamOptions = StreamOptions(includeUsage = true)
             )
         } else {
             ChatCompletionRequest(
@@ -8133,7 +8298,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 presencePenalty = if (preferences!!.getPresencePenalty().toDouble() == 0.0) null else preferences!!.getPresencePenalty().toDouble(),
                 seed = if (preferences!!.getSeed() != "") preferences!!.getSeed().toInt() else null,
                 messages = msgs,
-                tools = legacyPathImageTools
+                tools = legacyPathImageTools,
+                // Ask supported providers to include token usage in the stream
+                // for the Response Lifecycle Log; ignored where unsupported.
+                streamOptions = StreamOptions(includeUsage = true)
             )
         }
         }
@@ -8141,6 +8309,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // §8 retry support: remembered so a failure of THIS request can be
         // judged as a tools rejection by the wrapper in generateResponse.
         lastRegularRequestCarriedImageTools = chatCompletionRequest.tools != null
+
+        startLifecycle(ResponseLifecycle.PHASE_PRIMARY, chatCompletionRequest.maxTokens)
 
         val completions: Flow<ChatCompletionChunk> =
             ai!!.chatCompletions(chatCompletionRequest)
@@ -8156,7 +8326,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         completions.flowOn(Dispatchers.IO).collect { v ->
             run {
                 if (!currentCoroutineContext().isActive) throw CancellationException()
-                v.choices.firstOrNull()?.delta?.toolCalls?.forEach { fragment ->
+                val choice = v.choices.firstOrNull()
+                // A usage-only final chunk (requested via streamOptions) carries
+                // an EMPTY choices list, so every choice access here must be
+                // null-safe — the old v.choices[0] would throw on that chunk.
+                noteLifecycleChunk(
+                    choice?.finishReason?.value, v.id,
+                    (choice?.delta?.content?.takeIf { it != "null" }?.length ?: 0),
+                    v.usage?.promptTokens, v.usage?.completionTokens, v.usage?.totalTokens
+                )
+                choice?.delta?.toolCalls?.forEach { fragment ->
                     toolCallAssembler.accept(
                         fragment.index,
                         fragment.id?.id,
@@ -8164,8 +8343,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                         fragment.function?.argumentsOrNull
                     )
                 }
-                if (v.choices[0].delta != null && v.choices[0].delta?.content != null && v.choices[0].delta?.content.toString() != "null") {
-                    response += v.choices[0].delta?.content
+                val deltaContent = choice?.delta?.content
+                if (deltaContent != null && deltaContent != "null") {
+                    response += deltaContent
                     messages[messages.size - 1]["message"] = response
                     if (messages.size > 2) {
                         adapter?.notifyItemRangeChanged(messages.size - 3, messages.size - 1)
@@ -8188,6 +8368,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 }
             }
         }
+
+        // The primary stream ended on its own. Finalize its lifecycle record
+        // now — before any tool-call continuation opens its own record under
+        // the same turn id — so a completed primary and an interrupted
+        // continuation stay separate, comparable entries.
+        finalizeLifecycleSuccess()
 
         // §8: a completed stream of a tool-bearing request proves the
         // endpoint ACCEPTED tools for this model — whether or not the model

@@ -337,6 +337,10 @@
     <string name="label_edit_api_endpoint">Edit profile</string>
     <string name="api_endpoint_friendly_name">Profile name</string>
     <string name="api_endpoint_host">Base URL</string>
+    <!-- Longer Base URL label used on both API Endpoint Editor screens (add and
+         edit). The plain "Base URL" (api_endpoint_host) stays for the legacy
+         in-chat Edit API Endpoint dialog. -->
+    <string name="api_endpoint_host_full">API Service Endpoint Base URL</string>
     <string name="api_endpoint_key_unchanged">API key</string>
     <string name="api_endpoint_chat_endpoint">Chat completions endpoint</string>
     <string name="api_endpoint_chat_endpoint_help">Path added to the Base URL, e.g. /chat/completions. Most OpenAI-compatible providers use this default.</string>
@@ -347,6 +351,71 @@
     <string name="auth_mode_api_key">API key header (api-key)</string>
     <string name="api_endpoint_model">Model</string>
     <string name="api_endpoint_model_help">Tap to choose from models available on this endpoint.</string>
+    <string name="endpoint_choose_provider_title">Choose Provider</string>
+    <string name="endpoint_choose_provider_subtitle">Optional. Allows you to select what your preferred or required model provider is. Not available on all endpoints.</string>
+    <string name="endpoint_advanced_options_title">Advanced Options</string>
+    <string name="endpoint_provider_discovery_path_title">Provider Discovery Path</string>
+    <string name="endpoint_provider_discovery_path_subtitle">Only change this if using a custom API proxy.</string>
+    <string name="endpoint_provider_discovery_path_hint_openrouter">/models/{model}/endpoints</string>
+    <string name="choose_provider_intro">Here you can select preferred model provider.</string>
+    <string name="choose_provider_routing_title">Select Preferred Routing Type:</string>
+    <string name="choose_provider_routing_picker_title">Select Preferred Routing Type</string>
+    <string name="choose_provider_routing_subtext">Automatic will allow the API service provider to choose for you. This may result in different providers each turn.\n\nPreferred will use this provider whenever possible, while keeping automatic backups active to prevent downtime.\n\nOnly guarantees you will only receive your selected provider. If your chosen provider is having issues, you can change your preferred routing type in the Summoning Circle on each chat.</string>
+    <string name="choose_provider_routing_automatic">Automatic</string>
+    <string name="choose_provider_routing_preferred">Preferred</string>
+    <string name="choose_provider_routing_only">Only</string>
+    <string name="choose_provider_choose_model_title">Choose Model</string>
+    <string name="choose_provider_model_use_none">Use None</string>
+    <string name="choose_provider_model_none_available">None Available</string>
+    <string name="choose_provider_view_all_models">View All Models</string>
+    <string name="choose_provider_make_favorite_title">Make Favorite?</string>
+    <string name="choose_provider_make_favorite_subtext">Model preferences are only permanently saved if they are a favorite. Your decisions will not be remembered if you switch between models using this API service.</string>
+    <string name="provider_allow_fallbacks">Allow Other Providers if Preferred Fail</string>
+    <string name="provider_preferred_order_title">Preferred Provider Order</string>
+    <string name="provider_preferred_order_subtext">Instructs the API to provide you the providers with the priority you specify here. Lower is less preferred.</string>
+    <string name="provider_preferred_order_placeholder">Select providers below to be added to your preferred provider list.</string>
+    <string name="provider_filters_button">Filters</string>
+    <string name="provider_filters_title">Filters</string>
+    <string name="provider_filters_close">Close Filters</string>
+    <string name="provider_filter_alphabetical">Alphabetical</string>
+    <string name="provider_filter_a_to_z">A to Z</string>
+    <string name="provider_filter_z_to_a">Z to A</string>
+    <string name="provider_filter_input_price">Input Price</string>
+    <string name="provider_filter_output_price">Output Price</string>
+    <string name="provider_filter_quantization">Quantization</string>
+    <string name="provider_filter_latency">Latency</string>
+    <string name="provider_filter_throughput">Throughput</string>
+    <string name="provider_filter_uptime">Uptime</string>
+    <string name="provider_filter_sort_none">None</string>
+    <string name="provider_filter_sort_high_low">Highest to Lowest</string>
+    <string name="provider_filter_sort_low_high">Lowest to Highest</string>
+    <string name="provider_filter_tool_support">Tool Support</string>
+    <string name="provider_filter_implicit_caching">Implicit Caching</string>
+    <string name="provider_filter_zdr">Zero Data Retention Endpoint</string>
+    <string name="provider_filter_reset">Reset Filters</string>
+    <string name="provider_col_provider">Provider</string>
+    <string name="provider_col_quant">Quant</string>
+    <string name="provider_col_price">Price In/Out</string>
+    <string name="provider_col_cache">Cache</string>
+    <string name="provider_col_latency">Latency</string>
+    <string name="provider_col_uptime">Uptime</string>
+    <string name="provider_col_tools">Tools</string>
+    <string name="provider_col_zdr">ZDR</string>
+    <string name="provider_col_caching">Caching</string>
+    <string name="provider_col_ignore">Ignore</string>
+    <string name="provider_status_loading">Loading providers…</string>
+    <string name="provider_status_empty">No providers were found for this model.</string>
+    <string name="provider_status_unavailable">Provider information is unavailable for this model. Verify the model ID and Provider Discovery Path.</string>
+    <string name="provider_unavailable">Unavailable</string>
+    <string name="provider_unavailable_warning">One or more saved providers are no longer available for this model.</string>
+    <string name="provider_only_mode_error">Choose an available provider or change the routing mode.</string>
+    <string name="provider_no_preferred_title">No Available Preferred Providers</string>
+    <string name="provider_no_preferred_message">None of the selected preferred providers are currently available. Choose an available provider, allow fallbacks, or change the routing mode.</string>
+    <string name="provider_ignore_desc">Ignore %1$s</string>
+    <string name="provider_remove_desc">Remove %1$s</string>
+    <string name="provider_filter_quant_any">Any</string>
+    <string name="provider_move_up_desc">Move %1$s up</string>
+    <string name="provider_move_down_desc">Move %1$s down</string>
     <string name="sampling_label_temperature">Temperature</string>
     <string name="sampling_hint_temperature">Temperature controls model creativity. Low settings will create more conservative, predictable responses. High temperatures may be more creative. If settings are too high responses may become less coherent.</string>
     <string name="sampling_label_top_p">Top P</string>
@@ -364,6 +433,7 @@
     <string name="title_api_endpoint_profiles">API Chat Endpoint Profiles</string>
     <string name="title_api_endpoint_new">New API Endpoint</string>
     <string name="title_api_endpoint_named">%1$s API Endpoint</string>
+    <string name="api_endpoint_model_required_message">Preferred model type is required in order to save.\n\nSelecting one does not lock you into one model. It can be changed per chat in the Summoning Circle settings available in each chat.\n\nNothing has been saved.</string>
     <string name="api_endpoint_delete_title">Delete this API endpoint profile?</string>
     <string name="api_endpoint_delete_message">This cannot be undone.</string>
     <string name="message_delete_profile">Delete profile? This can\'t be undone.</string>
@@ -430,6 +500,7 @@
     <string name="title_whisper_perf_log">Whisper Performance Log</string>
     <string name="title_memory_usage_log">Memory Usage Log</string>
     <string name="title_provider_fail_log">Provider Failure Log</string>
+    <string name="title_response_lifecycle_log">Response Lifecycle</string>
     <!-- Per-log retention fields (Alerts, Errors & Logs), owner spec July 23 2026. -->
     <string name="label_max_logs_saved">Maximum Logs Saved</string>
     <string name="label_max_days_saved">Maximum Days Saved</string>
@@ -889,7 +960,7 @@
     <string name="tile_vad_log_webrtc_desc">Record voice diagnostics: every hands-free decision (mic opened/closed and why, readback, failures) goes to the Event log in Settings, plus detailed WebRTC VAD state (RMS, voiced frames, timing) to logcat. Turn off when not debugging.</string>
     <string name="tile_vad_log_silero_title">Silero VAD logging</string>
     <string name="audio_health_title">Audio Health</string>
-    <string name="audio_health_desc">When on, records microphone input health for each hands-free turn: frames received, average/max RMS and peak levels, near-silent and clipped frame counts, sample rate, channel count, and the input device — flagging if the mic was (near-)silent, clipping, or the input route changed (e.g. Bluetooth) mid-capture. Writes to the Event log alongside any VAD diagnostics. Turn off when not debugging.</string>
+    <string name="audio_health_desc">When on, records microphone input health for each hands-free turn: received frames, sound levels, clipping, sample format, and input device. It also records hands-free CPU wake-lock status and on-device transcription timing (capture shutdown, model preparation, lock wait, native decoding, and total time). Writes to the Event log alongside any VAD diagnostics. Turn off when not debugging.</string>
 
     <!-- Advanced voice & debugging screen -->
     <string name="title_voice_advanced">Advanced Voice Settings</string>
@@ -1363,6 +1434,8 @@
     <string name="whisper_perf_logging_desc">Write one line per on-device transcription to the Performance Log: how long the recording was, how long the model took to load, and how long it took to transcribe — plus a snapshot of memory use. Off by default; turn on to find out why Whisper is suddenly slow.</string>
     <string name="tile_log_chat_failures_title">Log Chat Failures</string>
     <string name="tile_log_chat_failures_desc">Save each failed reply\'s provider and the raw server error to the Provider Failure Log. This does not change what appears in chat — failures always show there. Off by default.</string>
+    <string name="tile_response_lifecycle_title">Response Lifecycle</string>
+    <string name="tile_response_lifecycle_desc">Records completion status, token usage, request limits, and how each AI response ended for troubleshooting.</string>
     <string name="memory_usage_logging_title">Memory usage logging</string>
     <string name="memory_usage_logging_desc">Write the app\'s memory use to the Performance Log about once a minute (and whenever the system asks the app to free memory). Off by default; leave it on across a long session to spot a memory leak — a steadily rising figure is the tell-tale sign.</string>
 
