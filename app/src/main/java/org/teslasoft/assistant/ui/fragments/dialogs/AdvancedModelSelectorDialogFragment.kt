@@ -31,6 +31,7 @@ import android.widget.ImageButton
 import android.widget.ListView
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.DialogFragment
 import com.aallam.openai.api.http.Timeout
 import com.aallam.openai.api.logging.LogLevel
@@ -160,6 +161,13 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
         }
     }
 
+    /** Return from the Choose Provider screen opened by a favorite's routing
+     *  gear (it persists the favorite itself); refresh so the gear can flip
+     *  outline → filled once routing is set up. */
+    private val chooseProviderLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { reloadFavorites(); render() }
+
     private var favoriteSelectedListener: FavoriteModelListAdapter.OnItemClickListener = object : FavoriteModelListAdapter.OnItemClickListener {
         override fun onItemClick(model: String, endpointId: String) {
             listener?.onModelSelected(model)
@@ -167,16 +175,22 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
         }
 
         override fun onActionClick(model: String, endpointId: String, position: Int) {
-            // The action on a favorite removes it (one entry, whole store).
-            favoriteModelsPreferences?.removeFavoriteModel(model, endpointId)
-            reloadFavorites()
-            render()
+            // Removing a favorite also clears its provider-routing preferences,
+            // so confirm first (owner ruling). "Okay" removes one entry from the
+            // whole store.
+            FavoriteRoutingActions.confirmRemove(requireContext()) {
+                favoriteModelsPreferences?.removeFavoriteModel(model, endpointId)
+                reloadFavorites()
+                render()
+            }
         }
 
-        // The routing gear is not shown in the All Models picker's favorites
-        // section (FavoriteModelListAdapter is created without showRoutingGear),
-        // so this is never invoked here.
-        override fun onSettingsClick(model: String, endpointId: String) { /* unused */ }
+        override fun onSettingsClick(model: String, endpointId: String) {
+            val prefs = apiEndpointPreferences ?: return
+            val favPrefs = favoriteModelsPreferences ?: return
+            FavoriteRoutingActions.buildRoutingIntent(requireActivity(), prefs, favPrefs, model, endpointId)
+                ?.let { chooseProviderLauncher.launch(it) }
+        }
     }
 
     private var requestListener: RequestNetwork.RequestListener = object : RequestNetwork.RequestListener {
@@ -414,7 +428,7 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
             adapter.setOnItemClickListener(modelSelectedListener)
             modelList?.adapter = adapter
         } else {
-            val adapter = FavoriteModelListAdapter(requireContext(), ArrayList(favorites), requireArguments().getString("chatId").toString())
+            val adapter = FavoriteModelListAdapter(requireContext(), ArrayList(favorites), requireArguments().getString("chatId").toString(), showRoutingGear = true)
             adapter.setOnItemClickListener(favoriteSelectedListener)
             modelList?.adapter = adapter
         }
