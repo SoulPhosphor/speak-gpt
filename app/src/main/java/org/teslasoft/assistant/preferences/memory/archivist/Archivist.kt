@@ -39,6 +39,7 @@ import org.teslasoft.assistant.preferences.memory.CardSections
 import org.teslasoft.assistant.preferences.memory.CardType
 import org.teslasoft.assistant.preferences.memory.LorebookSuggestionRecord
 import org.teslasoft.assistant.preferences.memory.MemoryLog
+import org.teslasoft.assistant.preferences.memory.MemoryMatch
 import org.teslasoft.assistant.preferences.memory.MemoryRecord
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.memory.ModelRuleRecord
@@ -812,7 +813,32 @@ object Archivist {
             }
         } else emptyList()
         for (d in drafts) {
-            if (store.memoryExistsWithText(d.title, d.content)) { duplicates++; continue }
+            // Resolve placement once: the target sets are both the Possible
+            // Match identity (scope + sorted target IDs) and the record's links.
+            val worldIds = resolveTarget(d, "world") { store.getAllWorlds().map { it.worldId to it.name } }
+            val rpCharIds = resolveTarget(d, "rp_character") {
+                store.getAllRoleplayCharacters().map { it.roleplayCharacterId to it.name }
+            }
+            val campaignIds = resolveTarget(d, "campaign") { store.getCampaigns().map { it.campaignId to it.name } }
+            val projectIds = resolveTarget(d, "project") { store.getProjects().map { it.projectId to it.name } }
+            val companionIds =
+                if (d.scope == "companion" && companionId != null) listOf(companionId) else emptyList()
+            // Step 1.5 staging gate (counterplan §5.2(b)): only an exact
+            // normalized match with the same placement AND the same kind, on an
+            // active or pending memory, is a true duplicate that must not create
+            // a second draft. Everything else — a different kind, an archived or
+            // superseded exact match, or a semantic near-match — is filed and
+            // surfaces as a Possible Match at review time. Placement-aware and
+            // title-independent, replacing the old exact title+content check.
+            val candidate = MemoryMatch.Candidate(
+                content = d.content,
+                scope = d.scope,
+                kind = d.kind,
+                targetIds = worldIds + rpCharIds + campaignIds + projectIds + companionIds
+            )
+            if (store.classifyCandidate(candidate) is MemoryMatch.Outcome.AlreadyPresent) {
+                duplicates++; continue
+            }
             // A draft the user deleted is a rejection (owner preference,
             // July 9 2026): the exact same draft from the same conversation
             // is not refiled on rerun. Deliberately narrow — different
@@ -848,12 +874,10 @@ object Archivist {
                 embeddingText = null,
                 tagsJson = listToJson(d.tags),
                 importance = d.importance,
-                worldIds = resolveTarget(d, "world") { store.getAllWorlds().map { it.worldId to it.name } },
-                roleplayCharacterIds = resolveTarget(d, "rp_character") {
-                    store.getAllRoleplayCharacters().map { it.roleplayCharacterId to it.name }
-                },
-                campaignIds = resolveTarget(d, "campaign") { store.getCampaigns().map { it.campaignId to it.name } },
-                projectIds = resolveTarget(d, "project") { store.getProjects().map { it.projectId to it.name } },
+                worldIds = worldIds,
+                roleplayCharacterIds = rpCharIds,
+                campaignIds = campaignIds,
+                projectIds = projectIds,
                 protectionJson = null,
                 modeHintsJson = "[]",
                 provenanceSource = if (d.stated) "user_stated" else "inferred",
@@ -869,7 +893,7 @@ object Archivist {
                 updatedAt = null,
                 status = "draft",
                 supersedes = null,
-                companionIds = if (d.scope == "companion" && companionId != null) listOf(companionId) else emptyList(),
+                companionIds = companionIds,
                 entityRefs = emptyList(),
                 changeLog = emptyList(),
                 origin = "archivist",
