@@ -363,19 +363,24 @@ class ChooseProviderActivity : FragmentActivity() {
     }
 
     /**
-     * Quick-pick from this endpoint's favorites. The first entry always clears
-     * the selection ("Use None"); the rest are the favorites. When the endpoint
-     * has no favorites yet the box reads "None Available" and this chooser only
-     * offers "Use None" — the full catalog is reached through View All Models.
+     * Quick-pick from this endpoint's favorite models. "None" is not offered —
+     * this screen sets routing for a chosen model, so the picker only lists real
+     * models. The full catalog is reached through View All Models; when the
+     * endpoint has no favorites yet there is nothing to quick-pick, so this opens
+     * the full picker directly.
      */
     private fun showModelChooser() {
-        val labels = (listOf(getString(R.string.choose_provider_model_use_none)) + favorites).toTypedArray()
-        val current = if (selectedModel.isBlank()) 0 else favorites.indexOf(selectedModel).let { if (it >= 0) it + 1 else -1 }
+        if (favorites.isEmpty()) {
+            openFullModelPicker()
+            return
+        }
+        val labels = favorites.toTypedArray()
+        val current = favorites.indexOf(selectedModel)
 
         MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
             .setTitle(R.string.choose_provider_choose_model_title)
             .setSingleChoiceItems(labels, current) { dialog, which ->
-                onModelChanged(if (which == 0) "" else favorites[which - 1])
+                onModelChanged(favorites[which])
                 dialog.dismiss()
             }
             .setNegativeButton(R.string.btn_cancel) { _, _ -> }
