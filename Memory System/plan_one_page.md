@@ -29,6 +29,10 @@ changes — it must always be true.)*
   embedding model is installed, by keywords when it isn't, and they no
   longer silently vanish from search.
 - The **Memory Engine** picker in Settings chooses what feeds your chats.
+- **No-model mode** works: with no embedding model installed, a notice explains
+  Associative Search can't enter chats yet, and the **Lorebook Memories**
+  analysis type suggests keyword-triggered Lorebook entries into **Pending**
+  instead.
 
 ## The one tap between you and memories in your chats
 
@@ -481,11 +485,6 @@ later, but it is not required for the first working computer-review route.
 - **The duplicate screen** — when a new memory looks like one you have,
   a side-by-side where you pick keep / replace / delete.
 - **Faster Lorebooks** — speed and better logs. Needs nothing from you.
-- **No-model mode** — a notice that Associative Search can't enter chats yet,
-  plus an optional **Lorebook Memories** analysis type that creates Lorebook
-  entry suggestions with trigger keywords instead. The review structure,
-  analysis-type labels, helper wording, row layout, result wording, and Pending
-  navigation are approved.
 - **The computer feature** — export eligible chats as a review package, let an
   AI on a computer suggest new Associative Memories or Lorebook Memories, and
   import the result into the appropriate Pending area.
