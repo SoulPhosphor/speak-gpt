@@ -172,6 +172,11 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
             reloadFavorites()
             render()
         }
+
+        // The routing gear is not shown in the All Models picker's favorites
+        // section (FavoriteModelListAdapter is created without showRoutingGear),
+        // so this is never invoked here.
+        override fun onSettingsClick(model: String, endpointId: String) { /* unused */ }
     }
 
     private var requestListener: RequestNetwork.RequestListener = object : RequestNetwork.RequestListener {

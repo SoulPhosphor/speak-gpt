@@ -100,7 +100,6 @@ class ApiEndpointEditorActivity : FragmentActivity() {
      *  does the endpoint's save apply the favorite/routing choices below. */
     private var chooseProviderVisited: Boolean = false
     private var pendingRoutingType: String = FavoriteModelObject.ROUTING_AUTOMATIC
-    private var pendingMakeFavorite: Boolean = false
     private var pendingSelectedProvider: String = ""
     private var pendingAllowFallbacks: Boolean = true
     private var pendingProviderOrder: List<String> = emptyList()
@@ -118,7 +117,6 @@ class ApiEndpointEditorActivity : FragmentActivity() {
             val model = data.getStringExtra(ChooseProviderActivity.EXTRA_MODEL) ?: ""
             pendingRoutingType = data.getStringExtra(ChooseProviderActivity.EXTRA_ROUTING_TYPE)
                 ?: FavoriteModelObject.ROUTING_AUTOMATIC
-            pendingMakeFavorite = data.getBooleanExtra(ChooseProviderActivity.EXTRA_MAKE_FAVORITE, true)
             pendingSelectedProvider = data.getStringExtra(ChooseProviderActivity.EXTRA_SELECTED_PROVIDER) ?: ""
             pendingAllowFallbacks = data.getBooleanExtra(ChooseProviderActivity.EXTRA_ALLOW_FALLBACKS, true)
             pendingProviderOrder = data.getStringArrayListExtra(ChooseProviderActivity.EXTRA_PROVIDER_ORDER) ?: emptyList()
@@ -718,21 +716,19 @@ class ApiEndpointEditorActivity : FragmentActivity() {
         val savedId = apiEndpointPreferences!!.setApiEndpoint(this, endpoint)
 
         // Choose Provider choices (OpenRouter): applied only if the user visited
-        // that screen and saved. Favoriting the model stores its routing memory;
-        // turning the toggle off removes the favorite AND that memory (owner
-        // ruling — the favorite is the housekeeping unit for provider choices).
-        if (chooseProviderVisited) {
-            if (pendingMakeFavorite && selectedModel.isNotBlank()) {
-                favoriteModelsPreferences?.addFavoriteModel(
-                    FavoriteModelObject(
-                        selectedModel, savedId, pendingRoutingType,
-                        pendingSelectedProvider, pendingAllowFallbacks,
-                        pendingProviderOrder, pendingIgnoredProviders
-                    )
+        // that screen and saved. Favoriting is no longer optional — saving on
+        // that screen always makes the model a favorite, and the favorite is
+        // what stores its routing memory (owner ruling — the favorite is the
+        // housekeeping unit for provider choices). Removal happens by
+        // unfavoriting the model in the Favorite AI Models list, not here.
+        if (chooseProviderVisited && selectedModel.isNotBlank()) {
+            favoriteModelsPreferences?.addFavoriteModel(
+                FavoriteModelObject(
+                    selectedModel, savedId, pendingRoutingType,
+                    pendingSelectedProvider, pendingAllowFallbacks,
+                    pendingProviderOrder, pendingIgnoredProviders
                 )
-            } else if (selectedModel.isNotBlank()) {
-                favoriteModelsPreferences?.removeFavoriteModel(selectedModel, savedId)
-            }
+            )
         }
 
         val data = android.content.Intent()
@@ -839,7 +835,7 @@ class ApiEndpointEditorActivity : FragmentActivity() {
             // Choose Provider choices count as unsaved edits once made, so the
             // discard-changes guard offers to save them.
             if (chooseProviderVisited) {
-                "cp:$pendingRoutingType:$pendingMakeFavorite:$pendingSelectedProvider:" +
+                "cp:$pendingRoutingType:$pendingSelectedProvider:" +
                     "$pendingAllowFallbacks:$pendingProviderOrder:$pendingIgnoredProviders"
             } else {
                 "cp:none"

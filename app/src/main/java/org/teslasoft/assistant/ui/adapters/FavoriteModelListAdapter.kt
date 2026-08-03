@@ -17,6 +17,7 @@
 package org.teslasoft.assistant.ui.adapters
 
 import android.content.Context
+import android.content.res.ColorStateList
 import android.graphics.drawable.Drawable
 import android.view.LayoutInflater
 import android.view.View
@@ -28,10 +29,19 @@ import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.DrawableCompat
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.imagegen.ImageProviderAdapters
+import org.teslasoft.assistant.preferences.ApiEndpointPreferences
+import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
 import org.teslasoft.assistant.preferences.Preferences
+import org.teslasoft.assistant.preferences.dto.FavoriteModelObject
 
 /** ListView adapter to display list of voices */
-class FavoriteModelListAdapter(private val context: Context, private val items: ArrayList<Map<String, String>>, private var chatId: String) : BaseAdapter() {
+/**
+ * [showRoutingGear] turns on the per-row provider-routing gear (OpenRouter
+ * favorites only). Off by default so this shared list looks unchanged wherever
+ * favorites are shown; the dedicated Favorite AI Models list opts in.
+ */
+class FavoriteModelListAdapter(private val context: Context, private val items: ArrayList<Map<String, String>>, private var chatId: String, private val showRoutingGear: Boolean = false) : BaseAdapter() {
 
     private var listener: OnItemClickListener? = null
 
@@ -61,22 +71,27 @@ class FavoriteModelListAdapter(private val context: Context, private val items: 
         }
 
         val item = getItem(position) as Map<String, String>
-        viewHolder.textView.text = item["modelId"]
+        val modelId = item["modelId"]!!
+        val endpointId = item["endpointId"]!!
+        viewHolder.textView.text = modelId
 
         val preferences: Preferences = Preferences.getPreferences(context, chatId)
 
-        if (preferences.getModel() == item["modelId"]) {
+        val rowTextColor: Int
+        if (preferences.getModel() == modelId) {
             viewHolder.voiceBg.background = getDarkAccentDrawableV2(
                 ContextCompat.getDrawable(context, R.drawable.btn_accent_tonal_selector_v4)!!, context)
 
-            viewHolder.textView.setTextColor(ContextCompat.getColor(context, R.color.accent_250))
+            rowTextColor = ContextCompat.getColor(context, R.color.accent_250)
+            viewHolder.textView.setTextColor(rowTextColor)
 
             viewHolder.modelAction.setImageResource(R.drawable.ic_close_item_inv)
         } else {
             viewHolder.voiceBg.background = getDarkAccentDrawable(
                 ContextCompat.getDrawable(context, R.drawable.btn_accent_tonal_selector_v3)!!, context)
 
-            viewHolder.textView.setTextColor(ContextCompat.getColor(context, R.color.text))
+            rowTextColor = ContextCompat.getColor(context, R.color.text)
+            viewHolder.textView.setTextColor(rowTextColor)
 
             viewHolder.modelAction.setImageResource(R.drawable.ic_close_item)
         }
@@ -84,15 +99,58 @@ class FavoriteModelListAdapter(private val context: Context, private val items: 
         viewHolder.modelAction.tooltipText = context.getString(R.string.label_remove_from_favorites)
         viewHolder.modelAction.contentDescription = context.getString(R.string.label_remove_from_favorites)
 
+        bindRoutingGear(viewHolder, modelId, endpointId, rowTextColor)
+
         viewHolder.voiceBg.setOnClickListener {
-            listener?.onItemClick(item["modelId"]!!, item["endpointId"]!!)
+            listener?.onItemClick(modelId, endpointId)
         }
 
         viewHolder.modelAction.setOnClickListener {
-            listener?.onActionClick(item["modelId"]!!, item["endpointId"]!!, position)
+            listener?.onActionClick(modelId, endpointId, position)
         }
 
         return view
+    }
+
+    /**
+     * The provider-routing gear, shown only for a favorite whose endpoint is an
+     * OpenRouter endpoint. A FILLED gear means the model already has routing set
+     * up — Only mode, Preferred mode, or at least one banned (ignored) provider;
+     * an OUTLINE gear means it is still on the plain Automatic default with no
+     * banned providers. Tapping it opens the Choose Provider screen for the
+     * model with those settings loaded. Non-OpenRouter favorites show no gear.
+     */
+    private fun bindRoutingGear(viewHolder: ViewHolder, modelId: String, endpointId: String, tintColor: Int) {
+        if (!showRoutingGear) {
+            viewHolder.routingSettings.visibility = View.GONE
+            viewHolder.routingSettings.setOnClickListener(null)
+            return
+        }
+
+        val endpoint = ApiEndpointPreferences.getApiEndpointPreferences(context).getApiEndpoint(context, endpointId)
+        if (!ImageProviderAdapters.isOpenRouter(endpoint)) {
+            viewHolder.routingSettings.visibility = View.GONE
+            viewHolder.routingSettings.setOnClickListener(null)
+            return
+        }
+
+        val favorite = FavoriteModelsPreferences.getPreferences(context).getFavorite(modelId, endpointId)
+        val routingSetUp = favorite != null && (
+            favorite.routingType == FavoriteModelObject.ROUTING_ONLY ||
+            favorite.routingType == FavoriteModelObject.ROUTING_PREFERRED ||
+            favorite.ignoredProviders.isNotEmpty()
+        )
+
+        viewHolder.routingSettings.setImageResource(
+            if (routingSetUp) R.drawable.ic_settings else R.drawable.ic_settings_outline
+        )
+        viewHolder.routingSettings.imageTintList = ColorStateList.valueOf(tintColor)
+        viewHolder.routingSettings.tooltipText = context.getString(R.string.favorite_routing_settings_desc, modelId)
+        viewHolder.routingSettings.contentDescription = context.getString(R.string.favorite_routing_settings_desc, modelId)
+        viewHolder.routingSettings.visibility = View.VISIBLE
+        viewHolder.routingSettings.setOnClickListener {
+            listener?.onSettingsClick(modelId, endpointId)
+        }
     }
 
     private fun getDarkAccentDrawable(drawable: Drawable, context: Context) : Drawable {
@@ -117,11 +175,15 @@ class FavoriteModelListAdapter(private val context: Context, private val items: 
         val textView: TextView = view.findViewById(R.id.voice_name)
         val voiceBg: ConstraintLayout = view.findViewById(R.id.voice_bg)
         val modelAction: ImageButton = view.findViewById(R.id.btn_action)
+        val routingSettings: ImageButton = view.findViewById(R.id.btn_routing_settings)
     }
 
     interface OnItemClickListener {
         fun onItemClick(model: String, endpointId: String)
         fun onActionClick(model: String, endpointId: String, position: Int)
+
+        /** The provider-routing gear was tapped (OpenRouter favorites only). */
+        fun onSettingsClick(model: String, endpointId: String)
     }
 
     fun setOnItemClickListener(listener: OnItemClickListener) {

@@ -42,9 +42,25 @@
             android:textColor="@color/text"
             android:textSize="16sp"
             app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toStartOf="@+id/btn_action"
+            app:layout_constraintEnd_toStartOf="@+id/btn_routing_settings"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
+
+        <!-- Provider-routing gear. Shown only for OpenRouter favorites
+             (FavoriteModelListAdapter); a filled gear when routing is set up,
+             an outline gear when it is not. Sits directly to the left of the
+             remove (X) action. -->
+        <ImageButton
+            android:id="@+id/btn_routing_settings"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="@color/transparent"
+            android:contentDescription="@null"
+            android:visibility="gone"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@+id/btn_action"
+            app:layout_constraintTop_toTopOf="parent"
+            app:srcCompat="@drawable/ic_settings_outline" />
 
         <ImageButton
             android:id="@+id/btn_action"
