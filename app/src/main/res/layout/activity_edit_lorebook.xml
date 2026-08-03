@@ -82,92 +82,132 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content">
 
-            <com.google.android.material.textfield.TextInputLayout
-                android:id="@+id/textInputLayoutName"
+            <!-- Name: Title / Subtext / Box, matching the Companion editor's
+                 shared field styles. text_field_name_error is a persistent
+                 inline error (house rule: field errors on the input itself,
+                 never a toast/dialog) shown by EditLoreBookActivity.save() when
+                 the name is empty. -->
+            <TextView
+                android:id="@+id/label_field_name"
+                style="@style/Widget.App.Field.Label"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
                 android:layout_marginStart="24dp"
                 android:layout_marginTop="24dp"
                 android:layout_marginEnd="24dp"
-                android:textColorHint="@color/text_hint"
-                app:boxStrokeColor="@drawable/box_stroke_color"
-                app:boxCornerRadiusBottomEnd="16dp"
-                app:boxCornerRadiusBottomStart="16dp"
-                app:boxCornerRadiusTopEnd="16dp"
-                app:boxCornerRadiusTopStart="16dp"
-                app:helperTextEnabled="true"
-                app:helperText="@string/lorebook_name_help"
+                android:text="@string/lorebook_name_hint"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toTopOf="parent">
+                app:layout_constraintTop_toTopOf="parent" />
 
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/field_name"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:hint="@string/lorebook_name_hint"
-                    android:singleLine="true"
-                    android:textColorHint="@color/text_hint" />
-            </com.google.android.material.textfield.TextInputLayout>
-
-            <com.google.android.material.textfield.TextInputLayout
-                android:id="@+id/textInputLayoutDescription"
+            <TextView
+                android:id="@+id/hint_field_name"
+                style="@style/Widget.App.Field.Hint"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
                 android:layout_marginStart="24dp"
-                android:layout_marginTop="12dp"
                 android:layout_marginEnd="24dp"
-                android:textColorHint="@color/text_hint"
-                app:boxStrokeColor="@drawable/box_stroke_color"
-                app:boxCornerRadiusBottomEnd="16dp"
-                app:boxCornerRadiusBottomStart="16dp"
-                app:boxCornerRadiusTopEnd="16dp"
-                app:boxCornerRadiusTopStart="16dp"
-                app:helperTextEnabled="true"
-                app:helperText="@string/lorebook_description_help"
+                android:text="@string/lorebook_name_help"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toBottomOf="@+id/textInputLayoutName">
+                app:layout_constraintTop_toBottomOf="@+id/label_field_name" />
 
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/field_description"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:gravity="top|start"
-                    android:hint="@string/lorebook_description_hint"
-                    android:inputType="textMultiLine|textCapSentences"
-                    android:minLines="2"
-                    android:textColorHint="@color/text_hint" />
-            </com.google.android.material.textfield.TextInputLayout>
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/field_name"
+                style="@style/Widget.App.Field.Box"
+                android:layout_width="0dp"
+                android:layout_marginStart="24dp"
+                android:layout_marginEnd="24dp"
+                android:singleLine="true"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/hint_field_name" />
 
-            <com.google.android.material.textfield.TextInputLayout
-                android:id="@+id/textInputLayoutTag"
+            <TextView
+                android:id="@+id/text_field_name_error"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="24dp"
-                android:layout_marginTop="12dp"
+                android:layout_marginTop="4dp"
+                android:layout_marginEnd="24dp"
+                android:textColor="?attr/colorError"
+                android:textSize="13sp"
+                android:visibility="gone"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/field_name" />
+
+            <!-- Description: Title / Subtext / Box. -->
+            <TextView
+                android:id="@+id/label_field_description"
+                style="@style/Widget.App.Field.Label"
+                android:layout_width="0dp"
+                android:layout_marginStart="24dp"
+                android:layout_marginTop="18dp"
+                android:layout_marginEnd="24dp"
+                android:text="@string/lorebook_description_hint"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/text_field_name_error" />
+
+            <TextView
+                android:id="@+id/hint_field_description"
+                style="@style/Widget.App.Field.Hint"
+                android:layout_width="0dp"
+                android:layout_marginStart="24dp"
+                android:layout_marginEnd="24dp"
+                android:text="@string/lorebook_description_help"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/label_field_description" />
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/field_description"
+                style="@style/Widget.App.Field.Box"
+                android:layout_width="0dp"
+                android:layout_marginStart="24dp"
+                android:layout_marginEnd="24dp"
+                android:gravity="top|start"
+                android:inputType="textMultiLine|textCapSentences"
+                android:minLines="2"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/hint_field_description" />
+
+            <!-- Tag: Title / Subtext / Box. -->
+            <TextView
+                android:id="@+id/label_field_tag"
+                style="@style/Widget.App.Field.Label"
+                android:layout_width="0dp"
+                android:layout_marginStart="24dp"
+                android:layout_marginTop="18dp"
+                android:layout_marginEnd="24dp"
+                android:text="@string/lorebook_tag_hint"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/field_description" />
+
+            <TextView
+                android:id="@+id/hint_field_tag"
+                style="@style/Widget.App.Field.Hint"
+                android:layout_width="0dp"
+                android:layout_marginStart="24dp"
+                android:layout_marginEnd="24dp"
+                android:text="@string/lorebook_tag_help"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/label_field_tag" />
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/field_tag"
+                style="@style/Widget.App.Field.Box"
+                android:layout_width="0dp"
+                android:layout_marginStart="24dp"
                 android:layout_marginEnd="24dp"
                 android:layout_marginBottom="24dp"
-                android:textColorHint="@color/text_hint"
-                app:boxStrokeColor="@drawable/box_stroke_color"
-                app:boxCornerRadiusBottomEnd="16dp"
-                app:boxCornerRadiusBottomStart="16dp"
-                app:boxCornerRadiusTopEnd="16dp"
-                app:boxCornerRadiusTopStart="16dp"
-                app:helperTextEnabled="true"
-                app:helperText="@string/lorebook_tag_help"
+                android:singleLine="true"
+                app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toBottomOf="@+id/textInputLayoutDescription">
-
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/field_tag"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:hint="@string/lorebook_tag_hint"
-                    android:singleLine="true"
-                    android:textColorHint="@color/text_hint" />
-            </com.google.android.material.textfield.TextInputLayout>
+                app:layout_constraintTop_toBottomOf="@+id/hint_field_tag" />
         </androidx.constraintlayout.widget.ConstraintLayout>
     </ScrollView>
 </androidx.constraintlayout.widget.ConstraintLayout>

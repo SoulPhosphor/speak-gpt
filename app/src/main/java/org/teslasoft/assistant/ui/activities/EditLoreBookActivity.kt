@@ -36,7 +36,6 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.textfield.TextInputEditText
-import com.google.android.material.textfield.TextInputLayout
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.dto.LoreBook
@@ -106,7 +105,7 @@ class EditLoreBookActivity : FragmentActivity() {
     private var btnSave: ImageButton? = null
     private var btnDelete: ImageButton? = null
     private var activityTitle: TextView? = null
-    private var nameLayout: TextInputLayout? = null
+    private var fieldNameError: TextView? = null
     private var fieldName: TextInputEditText? = null
     private var fieldDescription: TextInputEditText? = null
     private var fieldTag: TextInputEditText? = null
@@ -139,7 +138,7 @@ class EditLoreBookActivity : FragmentActivity() {
         btnSave = findViewById(R.id.btn_save)
         btnDelete = findViewById(R.id.btn_delete)
         activityTitle = findViewById(R.id.activity_title)
-        nameLayout = findViewById(R.id.textInputLayoutName)
+        fieldNameError = findViewById(R.id.text_field_name_error)
         fieldName = findViewById(R.id.field_name)
         fieldDescription = findViewById(R.id.field_description)
         fieldTag = findViewById(R.id.field_tag)
@@ -155,10 +154,9 @@ class EditLoreBookActivity : FragmentActivity() {
         fieldDescription?.setText(intent.getStringExtra(EXTRA_DESCRIPTION))
         fieldTag?.setText(intent.getStringExtra(EXTRA_TAG))
 
-        // A blank name clears itself off the field's error the moment the user
-        // starts fixing it (house rule: field errors live on the input, never a
-        // toast/dialog).
-        fieldName?.setOnFocusChangeListener { _, _ -> nameLayout?.error = null }
+        // A blank-name error clears itself the moment the user starts fixing it
+        // (house rule: field errors live on the input, never a toast/dialog).
+        fieldName?.setOnFocusChangeListener { _, _ -> fieldNameError?.visibility = View.GONE }
 
         activityTitle?.text =
             if (position == -1) getString(R.string.title_create_lorebook)
@@ -190,7 +188,8 @@ class EditLoreBookActivity : FragmentActivity() {
     private fun save() {
         if (fieldName?.text.toString().isBlank()) {
             // Inline field error keeps the user on the screen (no lost work).
-            nameLayout?.error = getString(R.string.label_error_lorebook_empty)
+            fieldNameError?.text = getString(R.string.label_error_lorebook_empty)
+            fieldNameError?.visibility = View.VISIBLE
             return
         }
 
