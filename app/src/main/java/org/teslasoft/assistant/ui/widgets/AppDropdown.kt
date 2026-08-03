@@ -24,9 +24,9 @@ import kotlin.math.min
  * Shared behavior for the app's canonical dropdown control.
  *
  * Visual properties live in Widget.App.Dropdown.* and its theme roles. This
- * helper owns the behavior styles cannot express: measuring the longest option,
- * joining the open anchor to its menu, bolding the selected option, and removing
- * all list/pressed feedback.
+ * helper owns the behavior styles cannot express: measuring standalone controls,
+ * joining the open anchor to its menu, keeping the selected value in the anchor,
+ * and removing all list/pressed feedback.
  */
 object AppDropdown {
 
@@ -59,21 +59,33 @@ object AppDropdown {
     ) {
         if (labels.isEmpty() || !anchor.isEnabled) return
 
+        // The anchor is the selected top option while the control is open. Do
+        // not repeat that value immediately below it as though the anchor were
+        // a field label. Keep original indices so callbacks still address the
+        // caller's unfiltered value/id lists.
+        val menuOptions = labels.mapIndexed { index, label -> index to label }
+            .filterNot { (index, _) -> index == selectedIndex }
+        if (menuOptions.isEmpty()) return
+
         val context = anchor.context
         val popup = ListPopupWindow(context)
         val adapter = object : ArrayAdapter<String>(
             context,
             R.layout.view_dropdown_option,
-            labels
+            menuOptions.map { it.second }
         ) {
             override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
                 val textView = super.getView(position, convertView, parent) as TextView
-                textView.setTypeface(textView.typeface, if (position == selectedIndex) Typeface.BOLD else Typeface.NORMAL)
+                textView.setTypeface(textView.typeface, Typeface.NORMAL)
                 return textView
             }
         }
 
+        val closedTypeface = anchor.typeface
         anchor.background = AppCompatResources.getDrawable(context, R.drawable.bg_dropdown_open_anchor)
+        if (selectedIndex in labels.indices) {
+            anchor.setTypeface(closedTypeface, Typeface.BOLD)
+        }
         popup.anchorView = anchor
         popup.isModal = true
         popup.width = anchor.width
@@ -82,10 +94,11 @@ object AppDropdown {
         popup.setAdapter(adapter)
         popup.setOnItemClickListener { _, _, position, _ ->
             popup.dismiss()
-            onPick(position)
+            onPick(menuOptions[position].first)
         }
         popup.setOnDismissListener {
             anchor.background = AppCompatResources.getDrawable(context, R.drawable.bg_dropdown_closed)
+            anchor.typeface = closedTypeface
         }
         popup.show()
 

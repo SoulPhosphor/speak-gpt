@@ -442,10 +442,13 @@ styles the short names.
   `arrow_drop_down` glyph.
 - Provide no ripple, pressed color, row highlight, selection flash, or other
   touch feedback.
-- Size the control to the longest available option plus the shared internal
-  padding and chevron space. Cap that measured width at the available screen
-  width; ellipsize an option that cannot fit within the cap. Do not make a
-  dropdown full width merely to fill its parent.
+- In a labeled row, let the label use its natural width, leave the shared gap,
+  and make the control fill the remaining row width up to the trailing edit
+  action or the row's proper outer edge. This gives every option a stable,
+  predictable text area.
+- Only a standalone dropdown with no label sizes itself to the longest available
+  option plus the shared internal padding and chevron space. Cap that measured
+  width at the available screen width and ellipsize an option that cannot fit.
 - Show the actual current value. When the field has a default, show that default
   from the beginning. Never invent a placeholder in place of a default.
 - Use `Select` only when a single-choice field is genuinely neutral until the
@@ -455,8 +458,8 @@ styles the short names.
 #### Placement
 
 - When a label is present, keep the label and dropdown on the same line. Align
-  the label to the left and the dropdown to the right, with shared outer spacing
-  so neither touches the screen edge.
+  the label to the left, leave the shared gap after it, and fill the rest of the
+  line with the dropdown up to a trailing edit action or the proper right edge.
 - When no label belongs on the line, center the correctly measured dropdown.
   Choose Provider is an example of this standalone arrangement.
 - Layout containers may differ to support a trailing edit action or other
@@ -473,8 +476,11 @@ The anchor and its option list read as one continuous outlined rectangle:
 - draw the bottom stroke and bottom corners only beneath the final option;
 - do not draw borders or divider lines between individual options;
 - give options the same background as the closed control;
-- render the currently selected option with slightly bolder text and no
-  background highlight;
+- keep the currently selected value in the anchor as the top option, render it
+  with slightly bolder text and no background highlight, and do not repeat it
+  in the attached option list or treat it as a field label;
+- keep every option on one line; ellipsize only when the available row width is
+  genuinely too narrow;
 - provide no ripple, pressed color, highlight flash, or other touch feedback on
   menu options.
 

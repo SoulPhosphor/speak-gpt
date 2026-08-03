@@ -90,6 +90,7 @@
                     <TextView
                         android:id="@+id/text_persona"
                         style="@style/Widget.App.QuickTile.Value"
+                        android:layout_width="0dp"
                         android:text="@string/label_persona_none"
                         app:layout_constraintBottom_toBottomOf="parent"
                         app:layout_constraintEnd_toStartOf="@+id/btn_edit_persona"
@@ -132,6 +133,7 @@
                     <TextView
                         android:id="@+id/text_glamour"
                         style="@style/Widget.App.QuickTile.Value"
+                        android:layout_width="0dp"
                         android:text="@string/label_user_persona_none"
                         app:layout_constraintBottom_toBottomOf="parent"
                         app:layout_constraintEnd_toStartOf="@+id/btn_edit_glamour"
@@ -174,6 +176,7 @@
                     <TextView
                         android:id="@+id/text_activation"
                         style="@style/Widget.App.QuickTile.Value"
+                        android:layout_width="0dp"
                         android:text="@string/label_activation_none"
                         app:layout_constraintBottom_toBottomOf="parent"
                         app:layout_constraintEnd_toStartOf="@+id/btn_edit_activation"
@@ -218,6 +221,7 @@
                     <TextView
                         android:id="@+id/text_system_prompt"
                         style="@style/Widget.App.QuickTile.Value"
+                        android:layout_width="0dp"
                         android:text="@string/system_prompt_none"
                         app:layout_constraintBottom_toBottomOf="parent"
                         app:layout_constraintEnd_toStartOf="@+id/btn_edit_system_prompt"
@@ -451,14 +455,14 @@
                             <TextView
                                 android:id="@+id/label_chat_world"
                                 style="@style/Widget.App.Dropdown.CanonicalLabel"
-                                android:layout_width="0dp"
-                                android:layout_weight="1"
                                 android:text="@string/label_chat_world" />
 
                             <TextView
                                 android:id="@+id/text_chat_world"
                                 style="@style/Widget.App.Dropdown.CanonicalValue"
+                                android:layout_width="0dp"
                                 android:layout_marginStart="12dp"
+                                android:layout_weight="1"
                                 android:text="@string/label_world_none" />
                         </LinearLayout>
 
@@ -475,14 +479,14 @@
                             <TextView
                                 android:id="@+id/label_chat_campaign"
                                 style="@style/Widget.App.Dropdown.CanonicalLabel"
-                                android:layout_width="0dp"
-                                android:layout_weight="1"
                                 android:text="@string/label_chat_campaign" />
 
                             <TextView
                                 android:id="@+id/text_chat_campaign"
                                 style="@style/Widget.App.Dropdown.CanonicalValue"
+                                android:layout_width="0dp"
                                 android:layout_marginStart="12dp"
+                                android:layout_weight="1"
                                 android:text="@string/label_campaign_none" />
                         </LinearLayout>
 
@@ -499,14 +503,14 @@
                             <TextView
                                 android:id="@+id/label_chat_playing_as"
                                 style="@style/Widget.App.Dropdown.CanonicalLabel"
-                                android:layout_width="0dp"
-                                android:layout_weight="1"
                                 android:text="@string/label_chat_playing_as" />
 
                             <TextView
                                 android:id="@+id/text_chat_roleplay_character"
                                 style="@style/Widget.App.Dropdown.CanonicalValue"
+                                android:layout_width="0dp"
                                 android:layout_marginStart="12dp"
+                                android:layout_weight="1"
                                 android:text="@string/label_roleplay_character_none" />
                         </LinearLayout>
 
@@ -524,14 +528,14 @@
                             <TextView
                                 android:id="@+id/label_chat_project"
                                 style="@style/Widget.App.Dropdown.CanonicalLabel"
-                                android:layout_width="0dp"
-                                android:layout_weight="1"
                                 android:text="@string/label_chat_project" />
 
                             <TextView
                                 android:id="@+id/text_chat_project"
                                 style="@style/Widget.App.Dropdown.CanonicalValue"
+                                android:layout_width="0dp"
                                 android:layout_marginStart="12dp"
+                                android:layout_weight="1"
                                 android:text="@string/label_project_none" />
                         </LinearLayout>
                     </LinearLayout>
@@ -1051,11 +1055,13 @@
                     <TextView
                         android:id="@+id/dropdown_provider_mode"
                         style="@style/Widget.App.Dropdown.CanonicalValue"
+                        android:layout_width="0dp"
                         android:layout_marginStart="12dp"
                         android:layout_marginEnd="16dp"
                         android:text="@string/choose_provider_routing_automatic"
                         app:layout_constraintBottom_toBottomOf="parent"
                         app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintStart_toEndOf="@+id/provider_mode_text_col"
                         app:layout_constraintTop_toTopOf="parent" />
                 </androidx.constraintlayout.widget.ConstraintLayout>
 
