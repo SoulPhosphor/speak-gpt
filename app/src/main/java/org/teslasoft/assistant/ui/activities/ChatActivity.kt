@@ -259,6 +259,7 @@ import io.ktor.client.plugins.api.Send
 import io.ktor.client.plugins.api.createClientPlugin
 import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.setBody
+import io.ktor.client.statement.bodyAsChannel
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.content.TextContent
@@ -5144,7 +5145,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                                     val recorder = response.call.attributes[responseLifecycleRecorderAttribute]
                                     try {
                                         while (true) {
-                                            val line = response.content.readUTF8Line() ?: break
+                                            val line = response.bodyAsChannel().readUTF8Line() ?: break
                                             val reported = ReportedProviderParser.fromResponseLine(line)
                                             if (reported != null) {
                                                 // Response-derived only. Never
