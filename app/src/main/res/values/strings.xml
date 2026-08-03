@@ -224,6 +224,13 @@
     <string name="btn_new_lorebook">Add lorebook</string>
     <string name="label_add_lorebook">Add lorebook</string>
     <string name="label_edit_lorebook">Edit lorebook</string>
+    <!-- Full-screen lorebook editor (header titles and its delete confirm).
+         The edit title carries the book's name; the delete confirm carries it
+         in the title with a short subtext beneath. -->
+    <string name="title_create_lorebook">Create Lorebook</string>
+    <string name="title_edit_lorebook_fmt">Edit %1$s</string>
+    <string name="lorebook_delete_title_fmt">Delete %1$s?</string>
+    <string name="lorebook_delete_body">This can\'t be undone.</string>
     <string name="label_delete_lorebook">Delete lorebook</string>
     <string name="message_delete_lorebook">Delete this lorebook and all of its memories? This cannot be undone.</string>
     <string name="lorebook_name_hint">Name</string>

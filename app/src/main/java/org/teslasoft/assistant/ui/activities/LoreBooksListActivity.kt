@@ -30,6 +30,7 @@ import android.widget.ListView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.addCallback
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
@@ -54,7 +55,6 @@ import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.adapters.LoreBookAdapter
 import org.teslasoft.assistant.ui.adapters.LoreSuggestionAdapter
-import org.teslasoft.assistant.ui.fragments.dialogs.EditLoreBookDialogFragment
 
 /**
  * Lists all lorebooks, searchable by keyword and filterable by type tag.
@@ -118,10 +118,7 @@ class LoreBooksListActivity : FragmentActivity() {
 
     private fun openEditDialog(position: Int) {
         val book = if (position == -1) LoreBook() else list[position]
-        val dialog = EditLoreBookDialogFragment.newInstance(book, position)
-        dialog.setListener(editDialogListener)
-        dialog.setCancelable(false)
-        dialog.show(supportFragmentManager, "EditLoreBookDialogFragment")
+        editBookLauncher.launch(EditLoreBookActivity.createIntent(this, book, position))
     }
 
     private var onSelectListener: LoreBookAdapter.OnSelectListener = object : LoreBookAdapter.OnSelectListener {
@@ -134,33 +131,32 @@ class LoreBooksListActivity : FragmentActivity() {
         }
     }
 
-    private var editDialogListener: EditLoreBookDialogFragment.StateChangesListener = object : EditLoreBookDialogFragment.StateChangesListener {
-        override fun onAdd(book: LoreBook) {
-            val saved = store!!.saveBook(book)
-            // In pick mode a book created on the spot is what the user came to
-            // link, so it starts checked.
-            if (pickMode) selectedIds.add(saved.id)
-            reloadList()
-        }
-
-        override fun onEdit(book: LoreBook, position: Int) {
-            store!!.saveBook(book)
-            reloadList()
-        }
-
-        override fun onDelete(position: Int, id: String) {
-            if (id.isNotEmpty()) {
-                store!!.deleteBook(id)
-                // No persona may keep referencing a book that no longer exists.
-                PersonaPreferences.getPersonaPreferences(this@LoreBooksListActivity).removeLoreBookFromAllPersonas(id)
-                selectedIds.remove(id)
+    /** Result from the full-screen book editor for the normal edit/create flow
+     *  (the settings cog and the New-Lorebook actions). Applies the save or
+     *  delete exactly as the old dialog listener did. */
+    private val editBookLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode != RESULT_OK) return@registerForActivityResult
+        val data = result.data ?: return@registerForActivityResult
+        when (EditLoreBookActivity.readResultAction(data)) {
+            EditLoreBookActivity.ACTION_SAVE -> {
+                val saved = store!!.saveBook(EditLoreBookActivity.readResultBook(data))
+                // In pick mode a book created on the spot (position -1) is what
+                // the user came to link, so it starts checked.
+                if (EditLoreBookActivity.readResultPosition(data) == -1 && pickMode) {
+                    selectedIds.add(saved.id)
+                }
+                reloadList()
             }
-            reloadList()
-        }
-
-        override fun onError(message: String, position: Int) {
-            Toast.makeText(this@LoreBooksListActivity, message, Toast.LENGTH_SHORT).show()
-            openEditDialog(position)
+            EditLoreBookActivity.ACTION_DELETE -> {
+                val id = EditLoreBookActivity.readResultId(data)
+                if (id.isNotEmpty()) {
+                    store!!.deleteBook(id)
+                    // No persona may keep referencing a book that no longer exists.
+                    PersonaPreferences.getPersonaPreferences(this@LoreBooksListActivity).removeLoreBookFromAllPersonas(id)
+                    selectedIds.remove(id)
+                }
+                reloadList()
+            }
         }
     }
 
@@ -198,25 +194,32 @@ class LoreBooksListActivity : FragmentActivity() {
             .show()
     }
 
+    /** The suggestion whose "Create new Lorebook…" flow is in flight, so its
+     *  result callback knows which suggestion to assign the new book to. */
+    private var pendingSuggestionId: String = ""
+
     /** Create a new lore book through the normal full-page flow, then assign
      *  the just-created book as this suggestion's destination. */
     private fun openCreateBookForSuggestion(suggestionId: String) {
-        val dialog = EditLoreBookDialogFragment.newInstance(LoreBook(), -1)
-        dialog.setListener(object : EditLoreBookDialogFragment.StateChangesListener {
-            override fun onAdd(book: LoreBook) {
-                val saved = store!!.saveBook(book)
-                memStore().assignLorebookSuggestion(suggestionId, saved.id)
-                reloadList()
+        pendingSuggestionId = suggestionId
+        createForSuggestionLauncher.launch(EditLoreBookActivity.createIntent(this, LoreBook(), -1))
+    }
+
+    /** Result from the create-for-suggestion flow: a save writes the new book
+     *  and assigns it as the suggestion's destination (a new book can't be
+     *  deleted, so only the save path matters). */
+    private val createForSuggestionLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == RESULT_OK) {
+            val data = result.data
+            if (data != null && EditLoreBookActivity.readResultAction(data) == EditLoreBookActivity.ACTION_SAVE) {
+                val saved = store!!.saveBook(EditLoreBookActivity.readResultBook(data))
+                if (pendingSuggestionId.isNotEmpty()) {
+                    memStore().assignLorebookSuggestion(pendingSuggestionId, saved.id)
+                }
             }
-            override fun onEdit(book: LoreBook, position: Int) { store!!.saveBook(book); reloadList() }
-            override fun onDelete(position: Int, id: String) { reloadList() }
-            override fun onError(message: String, position: Int) {
-                Toast.makeText(this@LoreBooksListActivity, message, Toast.LENGTH_SHORT).show()
-                openCreateBookForSuggestion(suggestionId)
-            }
-        })
-        dialog.setCancelable(false)
-        dialog.show(supportFragmentManager, "EditLoreBookDialogFragment")
+        }
+        pendingSuggestionId = ""
+        reloadList()
     }
 
     /** Edit a suggestion's proposed text and trigger keywords before approval.

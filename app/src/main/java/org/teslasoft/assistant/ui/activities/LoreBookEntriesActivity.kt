@@ -27,6 +27,7 @@ import android.widget.ImageButton
 import android.widget.ListView
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
@@ -38,12 +39,10 @@ import com.google.android.material.floatingactionbutton.ExtendedFloatingActionBu
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.PersonaPreferences
 import org.teslasoft.assistant.preferences.Preferences
-import org.teslasoft.assistant.preferences.dto.LoreBook
 import org.teslasoft.assistant.preferences.dto.LoreBookEntry
 import org.teslasoft.assistant.preferences.lorebook.LoreBookStore
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.adapters.LoreBookItemAdapter
-import org.teslasoft.assistant.ui.fragments.dialogs.EditLoreBookDialogFragment
 import org.teslasoft.assistant.ui.fragments.dialogs.EditLoreBookEntryDialogFragment
 
 /**
@@ -107,32 +106,31 @@ class LoreBookEntriesActivity : FragmentActivity() {
 
     private fun openBookEditDialog() {
         val book = store?.getBook(lorebookId) ?: return
-        // Position 0 (not -1) so the dialog behaves as "edit existing": Save
-        // routes to onEdit and the Delete button is offered.
-        val dialog = EditLoreBookDialogFragment.newInstance(book, 0)
-        dialog.setListener(bookEditListener)
-        dialog.setCancelable(false)
-        dialog.show(supportFragmentManager, "EditLoreBookDialogFragment")
+        // Position 0 (not -1) so the editor behaves as "edit existing": the
+        // title carries the name and the trashcan is offered.
+        editBookLauncher.launch(EditLoreBookActivity.createIntent(this, book, 0))
     }
 
-    private var bookEditListener: EditLoreBookDialogFragment.StateChangesListener = object : EditLoreBookDialogFragment.StateChangesListener {
-        override fun onEdit(book: LoreBook, position: Int) {
-            store!!.saveBook(book)
-            refreshBookHeader()
-        }
-
-        override fun onDelete(position: Int, id: String) {
-            if (id.isNotEmpty()) {
-                store!!.deleteBook(id)
-                // No persona may keep referencing a book that no longer exists.
-                PersonaPreferences.getPersonaPreferences(this@LoreBookEntriesActivity).removeLoreBookFromAllPersonas(id)
+    /** Result from the full-screen book editor: apply the save or delete
+     *  exactly as the old dialog listener did (delete also drops the book from
+     *  every persona, then closes this screen since the book is gone). */
+    private val editBookLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode != RESULT_OK) return@registerForActivityResult
+        val data = result.data ?: return@registerForActivityResult
+        when (EditLoreBookActivity.readResultAction(data)) {
+            EditLoreBookActivity.ACTION_SAVE -> {
+                store!!.saveBook(EditLoreBookActivity.readResultBook(data))
+                refreshBookHeader()
             }
-            finish()
-        }
-
-        override fun onError(message: String, position: Int) {
-            Toast.makeText(this@LoreBookEntriesActivity, message, Toast.LENGTH_SHORT).show()
-            openBookEditDialog()
+            EditLoreBookActivity.ACTION_DELETE -> {
+                val id = EditLoreBookActivity.readResultId(data)
+                if (id.isNotEmpty()) {
+                    store!!.deleteBook(id)
+                    // No persona may keep referencing a book that no longer exists.
+                    PersonaPreferences.getPersonaPreferences(this@LoreBookEntriesActivity).removeLoreBookFromAllPersonas(id)
+                }
+                finish()
+            }
         }
     }
 

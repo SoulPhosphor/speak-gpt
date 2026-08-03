@@ -121,6 +121,12 @@
         </activity>
 
         <activity
+            android:name=".ui.activities.EditLoreBookActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize"
+            android:label="@string/label_edit_lorebook" />
+
+        <activity
             android:name=".ui.activities.ProfileImageFramingActivity"
             android:exported="false"
             android:label="@string/framing_title" />
